@@ -9,6 +9,31 @@ function App() {
   const [limit, setLimit] = useState(20);
 
   useEffect(() => {
+    function handleKeyDown(e) {
+      // voir réponse
+      if (e.key === "Enter") {
+        if (!showAnswer) {
+          setShowAnswer(true);
+        }
+        return;
+      }
+
+      // répondre uniquement si réponse affichée
+      if (showAnswer) {
+        if (e.key === "1") handleAnswer(0);
+        if (e.key === "2") handleAnswer(1);
+        if (e.key === "3") handleAnswer(2);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showAnswer, currentIndex]);
+
+  useEffect(() => {
     getReview(theme, limit).then((data) => {
       const shuffled = data.sort(() => Math.random() - 0.5);
       setQuestions(shuffled);
