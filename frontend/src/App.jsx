@@ -7,6 +7,10 @@ function App() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [theme, setTheme] = useState("global");
   const [limit, setLimit] = useState(20);
+  const [mode, setMode] = useState("menu");
+  const [newQuestion, setNewQuestion] = useState("");
+  const [newAnswer, setNewAnswer] = useState("");
+  const [newTheme, setNewTheme] = useState("");
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -54,13 +58,94 @@ function App() {
     setCurrentIndex(currentIndex + 1);
   }
 
+  async function createQuestion() {
+    await fetch("http://localhost:8000/questions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question: newQuestion,
+        answer: newAnswer,
+        theme: newTheme,
+      }),
+    });
+
+    setNewQuestion("");
+    setNewAnswer("");
+    setNewTheme("");
+
+    alert("Question ajoutée !");
+  }
+
   if (currentIndex >= questions.length) {
     return <div>Session terminée 🎉</div>;
   }
 
+  if (mode === "menu") {
+    return (
+      <div style={{ padding: "40px", textAlign: "center" }}>
+        <h1>Quiz App</h1>
+
+        <div style={{ marginTop: "20px" }}>
+          <button onClick={() => setMode("review")}>
+            Réviser
+          </button>
+        </div>
+
+        <div style={{ marginTop: "10px" }}>
+          <button onClick={() => setMode("add")}>
+            Ajouter des questions
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "add") {
+    return (
+      <div style={{ padding: "40px", maxWidth: "600px", margin: "auto" }}>
+        <button onClick={() => setMode("menu")}>
+          ⬅ Retour
+        </button>
+
+        <h2>Ajouter une question</h2>
+
+        <div>
+          <input
+            placeholder="Question"
+            value={newQuestion}
+            onChange={(e) => setNewQuestion(e.target.value)}
+            style={{ width: "100%", marginBottom: "10px" }}
+          />
+
+          <input
+            placeholder="Réponse"
+            value={newAnswer}
+            onChange={(e) => setNewAnswer(e.target.value)}
+            style={{ width: "100%", marginBottom: "10px" }}
+          />
+
+          <input
+            placeholder="Thème"
+            value={newTheme}
+            onChange={(e) => setNewTheme(e.target.value)}
+            style={{ width: "100%", marginBottom: "10px" }}
+          />
+
+          <button onClick={createQuestion}>
+            Ajouter
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "40px", fontSize: "20px", maxWidth: "600px", margin: "auto" }}>
-
+      <button onClick={() => setMode("menu")}>
+        ⬅ Retour
+      </button>
       {/* 🔽 Sélection thème + limite */}
       <div style={{ marginBottom: "20px" }}>
         <label>Thème : </label>
