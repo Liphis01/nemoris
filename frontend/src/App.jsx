@@ -11,6 +11,9 @@ function App() {
   const [mode, setMode] = useState("menu");
   const [allQuestions, setAllQuestions] = useState([]);
   const questionInputRef = useRef(null);
+  const [search, setSearch] = useState("");
+  const [filterTheme, setFilterTheme] = useState("");
+  const [filterDue, setFilterDue] = useState(false);
   const [newRow, setNewRow] = useState({
     question: "",
     answer: "",
@@ -152,6 +155,31 @@ function App() {
   }
 
   if (mode === "manage") {
+    const filteredQuestions = allQuestions.filter((q) => {
+      // recherche texte
+      const matchesSearch =
+        q.question.toLowerCase().includes(search.toLowerCase()) ||
+        q.answer.toLowerCase().includes(search.toLowerCase());
+
+      // filtre thème
+      const matchesTheme = q.theme
+        .toLowerCase()
+        .includes(filterTheme.toLowerCase());
+
+      // filtre date
+      let matchesDue = true;
+      if (filterDue) {
+        if (!q.next_review) {
+          matchesDue = true;
+        } else {
+          const today = new Date();
+          const reviewDate = new Date(q.next_review);
+          matchesDue = reviewDate <= today;
+        }
+      }
+
+      return matchesSearch && matchesTheme && matchesDue;
+    });
     return (
       <div style={{ padding: "40px" }}>
         <button onClick={() => setMode("menu")}>⬅ Retour</button>
@@ -161,6 +189,32 @@ function App() {
         <button onClick={loadAllQuestions}>
           Charger les questions
         </button>
+
+        <div style={{ marginBottom: "20px" }}>
+          <input
+            placeholder="Recherche..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ marginRight: "10px" }}
+          />
+
+          <input
+            placeholder="Filtrer par thème"
+            value={filterTheme}
+            onChange={(e) => setFilterTheme(e.target.value)}
+            style={{ marginRight: "10px" }}
+          />
+
+          <label>
+            <input
+              type="checkbox"
+              checked={filterDue}
+              onChange={(e) => setFilterDue(e.target.checked)}
+            />
+            À réviser
+          </label>
+        </div>
+        <p>{filteredQuestions.length} résultats</p>
 
         <table border="1" cellPadding="5" style={{ marginTop: "20px" }}>
           <thead>
@@ -220,7 +274,7 @@ function App() {
                 </button>
               </td>
             </tr>
-            {allQuestions.map((q, index) => (
+            {filteredQuestions.map((q, index) => (
               <tr key={q.id}>
                 <td>{q.id}</td>
 
