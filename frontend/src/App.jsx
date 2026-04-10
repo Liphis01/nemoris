@@ -16,6 +16,12 @@ function App() {
   const [filterDue, setFilterDue] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
+  const appStyle = {
+    background: "#121212",
+    color: "#e5e5e5",
+    minHeight: "100vh",
+    padding: "40px"
+  };
   const [newRow, setNewRow] = useState({
     question: "",
     answer: "",
@@ -54,6 +60,12 @@ function App() {
       setCurrentIndex(0);
     });
   }, [theme, limit]);
+
+  useEffect(() => {
+    if (mode === "manage") {
+      loadAllQuestions();
+    }
+  }, [mode]);
 
   if (questions.length === 0) {
     return <div>Chargement...</div>;
@@ -149,7 +161,7 @@ function App() {
 
   if (mode === "menu") {
     return (
-      <div style={{ padding: "40px", textAlign: "center" }}>
+      <div style={appStyle}>
         <h1>Quiz App</h1>
 
         <div style={{ marginTop: "20px" }}>
@@ -215,28 +227,59 @@ function App() {
     
 
     return (
-      <div style={{ padding: "40px" }}>
-        <button onClick={() => setMode("menu")}>⬅ Retour</button>
-
-        <h2>Base de données</h2>
-
-        <button onClick={loadAllQuestions}>
-          Charger les questions
+      <div style={appStyle}>
+        <button
+          onClick={() => setMode("menu")}
+          style={{
+            marginBottom: "20px",
+            background: "#2a2a2a",
+            color: "#eee",
+            border: "1px solid #333",
+            padding: "8px 14px",
+            borderRadius: "6px",
+            cursor: "pointer"
+          }}
+        >
+          ⬅ Retour
         </button>
 
-        <div style={{ marginBottom: "20px" }}>
+        <h2 style={{ marginBottom: "20px" }}>
+          Gestion des questions
+        </h2>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "15px",
+            alignItems: "center",
+            flexWrap: "wrap"
+          }}
+        >
           <input
             placeholder="Recherche..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ marginRight: "10px" }}
+            style={{
+              padding: "8px",
+              borderRadius: "6px",
+              border: "1px solid #333",
+              background: "#1a1a1a",
+              color: "#eee"
+            }}        
           />
 
           <input
             placeholder="Filtrer par thème"
             value={filterTheme}
             onChange={(e) => setFilterTheme(e.target.value)}
-            style={{ marginRight: "10px" }}
+            style={{
+              padding: "8px",
+              borderRadius: "6px",
+              border: "1px solid #333",
+              background: "#1a1a1a",
+              color: "#eee"
+            }}           
           />
 
           <label>
@@ -248,31 +291,76 @@ function App() {
             À réviser
           </label>
         </div>
-        <p>{filteredQuestions.length} résultats</p>
+        <div style={{ marginBottom: "10px", color: "#888" }}>
+          {filteredQuestions.length} résultats
+        </div>
+        
 
-        <table border="1" cellPadding="5" style={{ marginTop: "20px" }}>
-          <thead>
-            <tr>
-              <th style={{ cursor: "pointer" }}
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            backgroundColor: "#1e1e1e",
+            borderRadius: "8px",
+            overflow: "hidden"
+          }}
+        >
+          <thead style={{ backgroundColor: "#2a2a2a" }}>
+            <tr
+              style={{ borderBottom: "1px solid #2a2a2a" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#2a2a2a"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+            >
+              <th style={{
+                padding: "12px",
+                borderBottom: "1px solid #333",
+                cursor: "pointer",
+                textAlign: "left",
+                color: "#aaa"
+              }}    
               onClick={() => handleSort("id")}>
                 ID {sortField === "id" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
               </th>
-              <th style={{ cursor: "pointer" }}
+              <th style={{
+                padding: "12px",
+                borderBottom: "1px solid #333",
+                cursor: "pointer",
+                textAlign: "left",
+                color: "#aaa"
+              }} 
               onClick={() => handleSort("question")}>
                 Question {sortField === "question" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
               </th>
 
-              <th style={{ cursor: "pointer" }}
+              <th style={{
+                padding: "12px",
+                borderBottom: "1px solid #333",
+                cursor: "pointer",
+                textAlign: "left",
+                color: "#aaa"
+              }}        
               onClick={() => handleSort("answer")}>
                 Réponse {sortField === "answer" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
               </th>
 
-              <th style={{ cursor: "pointer" }}
+              <th style={{
+                padding: "12px",
+                borderBottom: "1px solid #333",
+                cursor: "pointer",
+                textAlign: "left",
+                color: "#aaa"
+              }}         
               onClick={() => handleSort("theme")}>
                 Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
               </th>
 
-              <th style={{ cursor: "pointer" }}
+              <th style={{
+                padding: "12px",
+                borderBottom: "1px solid #333",
+                cursor: "pointer",
+                textAlign: "left",
+                color: "#aaa"
+              }}       
               onClick={() => handleSort("next_review")}>
                 Review {sortField === "next_review" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
               </th>
@@ -287,6 +375,15 @@ function App() {
 
               <td>
                 <input
+                  style={{
+                    width: "100%",
+                    padding: "6px",
+                    borderRadius: "4px",
+                    border: "1px solid #333",
+                    background: "#1a1a1a",
+                    color: "#eee",
+                    boxSizing: "border-box"
+                  }}
                   ref={questionInputRef}
                   autoFocus
                   value={newRow.question}
@@ -300,6 +397,15 @@ function App() {
 
               <td>
                 <input
+                  style={{
+                    width: "100%",
+                    padding: "6px",
+                    borderRadius: "4px",
+                    border: "1px solid #333",
+                    background: "#1a1a1a",
+                    color: "#eee",
+                    boxSizing: "border-box"
+                  }}
                   value={newRow.answer}
                   onChange={(e) =>
                     setNewRow({ ...newRow, answer: e.target.value })
@@ -311,6 +417,15 @@ function App() {
 
               <td>
                 <input
+                  style={{
+                    width: "100%",
+                    padding: "6px",
+                    borderRadius: "4px",
+                    border: "1px solid #333",
+                    background: "#1a1a1a",
+                    color: "#eee",
+                    boxSizing: "border-box"
+                  }}
                   value={newRow.theme}
                   onChange={(e) =>
                     setNewRow({ ...newRow, theme: e.target.value })
@@ -323,7 +438,17 @@ function App() {
               <td>-</td>
 
               <td>
-                <button onClick={createQuestion}>
+                <button
+                  onClick={createQuestion}
+                  style={{
+                    background: "#3a7afe",
+                    color: "white",
+                    border: "none",
+                    padding: "6px 10px",
+                    borderRadius: "5px",
+                    cursor: "pointer"
+                  }}
+                >
                   ➕
                 </button>
               </td>
@@ -334,6 +459,15 @@ function App() {
 
                 <td>
                   <input
+                    style={{
+                      width: "100%",
+                      padding: "6px",
+                      borderRadius: "4px",
+                      border: "1px solid #333",
+                      background: "#1a1a1a",
+                      color: "#eee",
+                      boxSizing: "border-box"
+                    }}
                     value={q.question}
                     onChange={(e) => {
                       const updated = [...allQuestions];
@@ -346,6 +480,15 @@ function App() {
 
                 <td>
                   <input
+                    style={{
+                      width: "100%",
+                      padding: "6px",
+                      borderRadius: "4px",
+                      border: "1px solid #333",
+                      background: "#1a1a1a",
+                      color: "#eee",
+                      boxSizing: "border-box"
+                    }}
                     value={q.answer}
                     onChange={(e) => {
                       const updated = [...allQuestions];
@@ -358,6 +501,15 @@ function App() {
 
                 <td>
                   <input
+                    style={{
+                      width: "100%",
+                      padding: "6px",
+                      borderRadius: "4px",
+                      border: "1px solid #333",
+                      background: "#1a1a1a",
+                      color: "#eee",
+                      boxSizing: "border-box"
+                    }}
                     value={q.theme}
                     onChange={(e) => {
                       const updated = [...allQuestions];
@@ -371,7 +523,17 @@ function App() {
                 <td>{q.next_review || "-"}</td>
 
                 <td>
-                  <button onClick={() => deleteQuestion(q.id)}>
+                  <button
+                    onClick={() => deleteQuestion(q.id)}
+                    style={{
+                      background: "#ff4d4f",
+                      color: "white",
+                      border: "none",
+                      padding: "5px 8px",
+                      borderRadius: "5px",
+                      cursor: "pointer"
+                    }}
+                  >
                     🗑
                   </button>
                 </td>
@@ -383,87 +545,89 @@ function App() {
     );
   }
 
-  return (
-    <div style={{ padding: "40px", fontSize: "20px", maxWidth: "600px", margin: "auto" }}>
-      <button onClick={() => setMode("menu")}>
-        ⬅ Retour
-      </button>
-      {/* 🔽 Sélection thème + limite */}
-      <div style={{ marginBottom: "20px" }}>
-        <label>Thème : </label>
-        <select value={theme} onChange={(e) => setTheme(e.target.value)}>
-          <option value="global">Global</option>
-          <option value="géographie">Géographie</option>
-          <option value="histoire">Histoire</option>
-          <option value="littérature">Littérature</option>
-        </select>
+  if (mode === "review") {
+    return (
+      <div style={appStyle}>
+        <button onClick={() => setMode("menu")}>
+          ⬅ Retour
+        </button>
+        {/* 🔽 Sélection thème + limite */}
+        <div style={{ marginBottom: "20px" }}>
+          <label>Thème : </label>
+          <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+            <option value="global">Global</option>
+            <option value="géographie">Géographie</option>
+            <option value="histoire">Histoire</option>
+            <option value="littérature">Littérature</option>
+          </select>
 
-        <label style={{ marginLeft: "20px" }}>Questions : </label>
-        <input
-          type="number"
-          value={limit}
-          onChange={(e) => setLimit(Number(e.target.value))}
-          style={{ width: "60px" }}
-        />
-      </div>
+          <label style={{ marginLeft: "20px" }}>Questions : </label>
+          <input
+            type="number"
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            style={{ width: "60px" }}
+          />
+        </div>
 
-      {/* 🔽 Cas : pas de questions */}
-      {questions.length === 0 && (
-        <div>Aucune question pour aujourd’hui 🎉</div>
-      )}
+        {/* 🔽 Cas : pas de questions */}
+        {questions.length === 0 && (
+          <div>Aucune question pour aujourd’hui 🎉</div>
+        )}
 
-      {/* 🔽 Cas : session terminée */}
-      {currentIndex >= questions.length && questions.length > 0 && (
-        <div>Session terminée 🎉</div>
-      )}
+        {/* 🔽 Cas : session terminée */}
+        {currentIndex >= questions.length && questions.length > 0 && (
+          <div>Session terminée 🎉</div>
+        )}
 
-      {/* 🔽 Cas : question en cours */}
-      {questions.length > 0 && currentIndex < questions.length && (
-        <>
-          <p>
-            Question {currentIndex + 1} / {questions.length}
-          </p>
-
-          <p style={{ color: "gray" }}>
-            Thème : {questions[currentIndex].theme}
-          </p>
-
-          <div>
-            <strong>Question :</strong>
-            <p style={{ fontSize: "24px", fontWeight: "bold" }}>
-              {questions[currentIndex].question}
+        {/* 🔽 Cas : question en cours */}
+        {questions.length > 0 && currentIndex < questions.length && (
+          <>
+            <p>
+              Question {currentIndex + 1} / {questions.length}
             </p>
-          </div>
 
-          {!showAnswer && (
-            <button onClick={() => setShowAnswer(true)}>
-              Voir la réponse
-            </button>
-          )}
+            <p style={{ color: "gray" }}>
+              Thème : {questions[currentIndex].theme}
+            </p>
 
-          {showAnswer && (
             <div>
-              <p>
-                <strong>Réponse :</strong> {questions[currentIndex].answer}
+              <strong>Question :</strong>
+              <p style={{ fontSize: "24px", fontWeight: "bold" }}>
+                {questions[currentIndex].question}
               </p>
-
-              <div style={{ 
-                marginTop: "20px", 
-                display: "flex", 
-                gap: "10px",
-                justifyContent: "center"
-              }}>
-                <button onClick={() => handleAnswer(0)}>❌ Faux</button>
-                <button onClick={() => handleAnswer(1)}>😐 Dur</button>
-                <button onClick={() => handleAnswer(2)}>✅ Facile</button>
-              </div>
             </div>
-          )}
-        </>
-      )}
 
-    </div>
-  );
+            {!showAnswer && (
+              <button onClick={() => setShowAnswer(true)}>
+                Voir la réponse
+              </button>
+            )}
+
+            {showAnswer && (
+              <div>
+                <p>
+                  <strong>Réponse :</strong> {questions[currentIndex].answer}
+                </p>
+
+                <div style={{ 
+                  marginTop: "20px", 
+                  display: "flex", 
+                  gap: "10px",
+                  justifyContent: "center"
+                }}>
+                  <button onClick={() => handleAnswer(0)}>❌ Faux</button>
+                  <button onClick={() => handleAnswer(1)}>😐 Dur</button>
+                  <button onClick={() => handleAnswer(2)}>✅ Facile</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+      </div>
+    );
+  }
 }
 
 export default App;
