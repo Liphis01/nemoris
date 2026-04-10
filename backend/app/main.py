@@ -36,6 +36,10 @@ class QuestionCreate(BaseModel):
     answer: str
     theme: str
 
+class AnswerRequest(BaseModel):
+    question_id: int
+    quality: int
+
 
 # ➕ Ajouter une question
 @app.post("/questions")
@@ -117,15 +121,11 @@ def get_review(
 
 
 @app.post("/answer")
-def answer_question(
-    question_id: int,
-    quality: int,
-    db: Session = Depends(get_db)
-):
-    progress = db.query(Progress).filter(Progress.question_id == question_id).first()
+def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
+    progress = db.query(Progress).filter(Progress.question_id == data.question_id).first()
 
     if not progress:
-        progress = Progress(question_id=question_id)
+        progress = Progress(question_id=data.question_id)
         db.add(progress)
         db.commit()
         db.refresh(progress)
@@ -133,7 +133,7 @@ def answer_question(
     interval, ease, next_review = update_progress(
         progress.interval,
         progress.ease_factor,
-        quality
+        data.quality
     )
 
     progress.interval = interval
@@ -146,3 +146,7 @@ def answer_question(
         "interval": interval,
         "next_review": next_review
     }
+
+@app.get("/hard")
+def get_test(db: Session = Depends(get_db)):
+    return db.query(Progress).filter(Progress.ease_factor != 2.5).all()
