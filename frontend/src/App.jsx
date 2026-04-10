@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getReview, sendAnswer } from "./api/api";
+import { useRef } from "react";
 
 function App() {
   const [questions, setQuestions] = useState([]);
@@ -9,6 +10,7 @@ function App() {
   const [limit, setLimit] = useState(50);
   const [mode, setMode] = useState("menu");
   const [allQuestions, setAllQuestions] = useState([]);
+  const questionInputRef = useRef(null);
   const [newRow, setNewRow] = useState({
     question: "",
     answer: "",
@@ -112,7 +114,18 @@ function App() {
       answer: "",
       theme: "",
     });
+
+    setTimeout(() => {
+      questionInputRef.current?.focus();
+    }, 0);
   }
+
+  function handleNewRowKeyDown(e) {
+  if (e.key === "Enter") {
+    e.preventDefault(); // évite comportements bizarres
+    createQuestion();
+  }
+}
 
   if (currentIndex >= questions.length) {
     return <div>Session terminée 🎉</div>;
@@ -166,11 +179,13 @@ function App() {
 
               <td>
                 <input
+                  ref={questionInputRef}
                   autoFocus
                   value={newRow.question}
                   onChange={(e) =>
                     setNewRow({ ...newRow, question: e.target.value })
                   }
+                  onKeyDown={handleNewRowKeyDown}
                   placeholder="Question"
                 />
               </td>
@@ -181,6 +196,7 @@ function App() {
                   onChange={(e) =>
                     setNewRow({ ...newRow, answer: e.target.value })
                   }
+                  onKeyDown={handleNewRowKeyDown}
                   placeholder="Réponse"
                 />
               </td>
@@ -191,6 +207,7 @@ function App() {
                   onChange={(e) =>
                     setNewRow({ ...newRow, theme: e.target.value })
                   }
+                  onKeyDown={handleNewRowKeyDown}
                   placeholder="Thème"
                 />
               </td>

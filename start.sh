@@ -9,7 +9,7 @@ fuser -k 5173/tcp 2>/dev/null
 echo "Starting backend..."
 cd backend
 source venv/bin/activate
-uvicorn app.main:app &
+uvicorn app.main:app --reload &
 
 echo "Starting frontend..."
 cd ../frontend
