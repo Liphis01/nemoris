@@ -16,17 +16,62 @@ function App() {
   const [filterDue, setFilterDue] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
+  const mainButtonStyle = {
+    background: "#1f1f1f",
+    color: "#eee",
+    border: "1px solid #333",
+    padding: "15px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "16px"
+  };
   const appStyle = {
     background: "#121212",
     color: "#e5e5e5",
     minHeight: "100vh",
-    padding: "40px"
+    padding: "40px",
+    fontFamily: "Arial, sans-serif"
   };
   const [newRow, setNewRow] = useState({
     question: "",
     answer: "",
     theme: "",
   });
+  const secondaryButtonStyle = {
+    background: "#2a2a2a",
+    color: "#eee",
+    border: "1px solid #333",
+    padding: "8px 14px",
+    borderRadius: "6px",
+    cursor: "pointer"
+  };
+
+  const successButton = {
+    background: "#3fb950",
+    color: "white",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "6px",
+    cursor: "pointer"
+  };
+
+  const dangerButton = {
+    background: "#ff4d4f",
+    color: "white",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "6px",
+    cursor: "pointer"
+  };
+
+  const secondaryButton = {
+    background: "#444",
+    color: "white",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "6px",
+    cursor: "pointer"
+  };
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -155,24 +200,27 @@ function App() {
     }
   }
 
-  if (currentIndex >= questions.length) {
-    return <div>Session terminée 🎉</div>;
-  }
 
   if (mode === "menu") {
     return (
-      <div style={appStyle}>
-        <h1>Quiz App</h1>
+      <div style={{ maxWidth: "600px", margin: "auto", textAlign: "center" }}>
+        <h1 style={{ marginBottom: "40px" }}>
+          Quiz App
+        </h1>
 
-        <div style={{ marginTop: "20px" }}>
-          <button onClick={() => setMode("review")}>
-            Réviser
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          <button
+            onClick={() => setMode("quiz")}
+            style={mainButtonStyle}
+          >
+            ▶ Faire les questions
           </button>
-        </div>
 
-        <div style={{ marginTop: "10px" }}>
-          <button onClick={() => setMode("manage")}>
-            Gérer la base de données
+          <button
+            onClick={() => setMode("manage")}
+            style={mainButtonStyle}
+          >
+            🗂 Gérer la base de données
           </button>
         </div>
       </div>
@@ -545,86 +593,173 @@ function App() {
     );
   }
 
-  if (mode === "review") {
+  if (mode === "quiz") {
     return (
-      <div style={appStyle}>
-        <button onClick={() => setMode("menu")}>
+      <div style={{ maxWidth: "800px", margin: "auto" }}>
+
+        {/* 🔙 Retour */}
+        <button
+          onClick={() => setMode("menu")}
+          style={secondaryButtonStyle}
+        >
           ⬅ Retour
         </button>
-        {/* 🔽 Sélection thème + limite */}
-        <div style={{ marginBottom: "20px" }}>
-          <label>Thème : </label>
-          <select value={theme} onChange={(e) => setTheme(e.target.value)}>
-            <option value="global">Global</option>
-            <option value="géographie">Géographie</option>
-            <option value="histoire">Histoire</option>
-            <option value="littérature">Littérature</option>
-          </select>
 
-          <label style={{ marginLeft: "20px" }}>Questions : </label>
-          <input
-            type="number"
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            style={{ width: "60px" }}
-          />
+        {/* 🔽 Filtres */}
+        <div
+          style={{
+            marginTop: "20px",
+            marginBottom: "30px",
+            display: "flex",
+            gap: "15px",
+            alignItems: "center",
+            flexWrap: "wrap"
+          }}
+        >
+          <div>
+            <label style={{ marginRight: "8px", color: "#aaa" }}>
+              Thème
+            </label>
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              style={{
+                padding: "6px",
+                borderRadius: "6px",
+                background: "#1e1e1e",
+                color: "#eee",
+                border: "1px solid #333"
+              }}
+            >
+              <option value="global">Global</option>
+              <option value="géographie">Géographie</option>
+              <option value="histoire">Histoire</option>
+              <option value="littérature">Littérature</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ marginRight: "8px", color: "#aaa" }}>
+              Questions
+            </label>
+            <input
+              type="number"
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              style={{
+                width: "70px",
+                padding: "6px",
+                borderRadius: "6px",
+                background: "#1e1e1e",
+                color: "#eee",
+                border: "1px solid #333"
+              }}
+            />
+          </div>
         </div>
 
-        {/* 🔽 Cas : pas de questions */}
+        {/* 🔽 Aucun résultat */}
         {questions.length === 0 && (
-          <div>Aucune question pour aujourd’hui 🎉</div>
+          <div style={{ color: "#888" }}>
+            Aucune question pour aujourd’hui 🎉
+          </div>
         )}
 
-        {/* 🔽 Cas : session terminée */}
+        {/* 🔽 Session terminée */}
         {currentIndex >= questions.length && questions.length > 0 && (
-          <div>Session terminée 🎉</div>
+          <div style={{ color: "#888" }}>
+            Session terminée 🎉
+          </div>
         )}
 
-        {/* 🔽 Cas : question en cours */}
+        {/* 🔽 Question */}
         {questions.length > 0 && currentIndex < questions.length && (
           <>
-            <p>
+            <div style={{ marginBottom: "15px", color: "#888" }}>
               Question {currentIndex + 1} / {questions.length}
-            </p>
-
-            <p style={{ color: "gray" }}>
-              Thème : {questions[currentIndex].theme}
-            </p>
-
-            <div>
-              <strong>Question :</strong>
-              <p style={{ fontSize: "24px", fontWeight: "bold" }}>
-                {questions[currentIndex].question}
-              </p>
             </div>
 
-            {!showAnswer && (
-              <button onClick={() => setShowAnswer(true)}>
-                Voir la réponse
-              </button>
-            )}
+            <div style={{ marginBottom: "20px", color: "#aaa" }}>
+              {questions[currentIndex].theme}
+            </div>
 
-            {showAnswer && (
-              <div>
-                <p>
-                  <strong>Réponse :</strong> {questions[currentIndex].answer}
-                </p>
-
-                <div style={{ 
-                  marginTop: "20px", 
-                  display: "flex", 
-                  gap: "10px",
-                  justifyContent: "center"
-                }}>
-                  <button onClick={() => handleAnswer(0)}>❌ Faux</button>
-                  <button onClick={() => handleAnswer(1)}>😐 Dur</button>
-                  <button onClick={() => handleAnswer(2)}>✅ Facile</button>
-                </div>
+            {/* 🧠 Carte */}
+            <div
+              style={{
+                background: "#1e1e1e",
+                padding: "30px",
+                borderRadius: "10px",
+                marginBottom: "20px"
+              }}
+            >
+              <div style={{ marginBottom: "10px", color: "#888" }}>
+                Question
               </div>
-            )}
+
+              <div
+                style={{
+                  fontSize: "22px",
+                  fontWeight: "bold"
+                }}
+              >
+                {questions[currentIndex].question}
+              </div>
+
+              {!showAnswer && (
+                <div style={{ marginTop: "25px" }}>
+                  <button
+                    onClick={() => setShowAnswer(true)}
+                    style={mainButtonStyle}
+                  >
+                    Voir la réponse
+                  </button>
+                </div>
+              )}
+
+              {showAnswer && (
+                <div style={{ marginTop: "25px" }}>
+                  <div style={{ color: "#888", marginBottom: "5px" }}>
+                    Réponse
+                  </div>
+
+                  <div style={{ color: "#ccc", marginBottom: "20px" }}>
+                    {questions[currentIndex].answer}
+                  </div>
+
+                  {/* 🔘 Boutons réponse */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "center",
+                      gap: "15px"
+                    }}
+                  >
+                    <button
+                      style={dangerButton}
+                      onClick={() => handleAnswer(0)}
+                    >
+                      ❌ Faux
+                    </button>
+
+                    <button
+                      style={secondaryButton}
+                      onClick={() => handleAnswer(1)}
+                    >
+                      😐 Dur
+                    </button>
+
+                    <button
+                      style={successButton}
+                      onClick={() => handleAnswer(2)}
+                    >
+                      ✅ Facile
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
-
       </div>
     );
   }
