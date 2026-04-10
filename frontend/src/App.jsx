@@ -9,9 +9,11 @@ function App() {
   const [limit, setLimit] = useState(50);
   const [mode, setMode] = useState("menu");
   const [allQuestions, setAllQuestions] = useState([]);
-  const [newQuestion, setNewQuestion] = useState("");
-  const [newAnswer, setNewAnswer] = useState("");
-  const [newTheme, setNewTheme] = useState("");
+  const [newRow, setNewRow] = useState({
+    question: "",
+    answer: "",
+    theme: "",
+  });
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -59,26 +61,6 @@ function App() {
     setCurrentIndex(currentIndex + 1);
   }
 
-  async function createQuestion() {
-    await fetch("http://localhost:8000/questions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        question: newQuestion,
-        answer: newAnswer,
-        theme: newTheme,
-      }),
-    });
-
-    setNewQuestion("");
-    setNewAnswer("");
-    setNewTheme("");
-
-    alert("Question ajoutée !");
-  }
-
   async function loadAllQuestions() {
     const res = await fetch("http://localhost:8000/questions");
     const data = await res.json();
@@ -105,6 +87,31 @@ function App() {
     });
 
     setAllQuestions(allQuestions.filter((q) => q.id !== id));
+    }
+
+    async function createQuestion() {
+    if (!newRow.question || !newRow.answer || !newRow.theme) {
+      alert("Remplis tous les champs");
+      return;
+    }
+
+    const res = await fetch("http://localhost:8000/questions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(newRow),
+    });
+
+    const created = await res.json();
+
+    setAllQuestions([...allQuestions, created]);
+
+    setNewRow({
+      question: "",
+      answer: "",
+      theme: "",
+    });
   }
 
   if (currentIndex >= questions.length) {
@@ -154,6 +161,48 @@ function App() {
           </thead>
 
           <tbody>
+            <tr>
+              <td>new</td>
+
+              <td>
+                <input
+                  autoFocus
+                  value={newRow.question}
+                  onChange={(e) =>
+                    setNewRow({ ...newRow, question: e.target.value })
+                  }
+                  placeholder="Question"
+                />
+              </td>
+
+              <td>
+                <input
+                  value={newRow.answer}
+                  onChange={(e) =>
+                    setNewRow({ ...newRow, answer: e.target.value })
+                  }
+                  placeholder="Réponse"
+                />
+              </td>
+
+              <td>
+                <input
+                  value={newRow.theme}
+                  onChange={(e) =>
+                    setNewRow({ ...newRow, theme: e.target.value })
+                  }
+                  placeholder="Thème"
+                />
+              </td>
+
+              <td>-</td>
+
+              <td>
+                <button onClick={createQuestion}>
+                  ➕
+                </button>
+              </td>
+            </tr>
             {allQuestions.map((q, index) => (
               <tr key={q.id}>
                 <td>{q.id}</td>
@@ -205,45 +254,6 @@ function App() {
             ))}
           </tbody>
         </table>
-      </div>
-    );
-  }
-
-  if (mode === "add") {
-    return (
-      <div style={{ padding: "40px", maxWidth: "600px", margin: "auto" }}>
-        <button onClick={() => setMode("menu")}>
-          ⬅ Retour
-        </button>
-
-        <h2>Ajouter une question</h2>
-
-        <div>
-          <input
-            placeholder="Question"
-            value={newQuestion}
-            onChange={(e) => setNewQuestion(e.target.value)}
-            style={{ width: "100%", marginBottom: "10px" }}
-          />
-
-          <input
-            placeholder="Réponse"
-            value={newAnswer}
-            onChange={(e) => setNewAnswer(e.target.value)}
-            style={{ width: "100%", marginBottom: "10px" }}
-          />
-
-          <input
-            placeholder="Thème"
-            value={newTheme}
-            onChange={(e) => setNewTheme(e.target.value)}
-            style={{ width: "100%", marginBottom: "10px" }}
-          />
-
-          <button onClick={createQuestion}>
-            Ajouter
-          </button>
-        </div>
       </div>
     );
   }
