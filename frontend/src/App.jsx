@@ -14,6 +14,8 @@ function App() {
   const [search, setSearch] = useState("");
   const [filterTheme, setFilterTheme] = useState("");
   const [filterDue, setFilterDue] = useState(false);
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
   const [newRow, setNewRow] = useState({
     question: "",
     answer: "",
@@ -124,11 +126,22 @@ function App() {
   }
 
   function handleNewRowKeyDown(e) {
-  if (e.key === "Enter") {
-    e.preventDefault(); // évite comportements bizarres
-    createQuestion();
+    if (e.key === "Enter") {
+      e.preventDefault(); // évite comportements bizarres
+      createQuestion();
+    }
   }
-}
+
+  function handleSort(field) {
+    if (sortField === field) {
+      // même colonne → inverser
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      // nouvelle colonne → tri asc
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  }
 
   if (currentIndex >= questions.length) {
     return <div>Session terminée 🎉</div>;
@@ -155,31 +168,52 @@ function App() {
   }
 
   if (mode === "manage") {
-    const filteredQuestions = allQuestions.filter((q) => {
-      // recherche texte
-      const matchesSearch =
-        q.question.toLowerCase().includes(search.toLowerCase()) ||
-        q.answer.toLowerCase().includes(search.toLowerCase());
+    const filteredQuestions = allQuestions
+      .filter((q) => {
+        const matchesSearch =
+          q.question.toLowerCase().includes(search.toLowerCase()) ||
+          q.answer.toLowerCase().includes(search.toLowerCase());
 
-      // filtre thème
-      const matchesTheme = q.theme
-        .toLowerCase()
-        .includes(filterTheme.toLowerCase());
+        const matchesTheme = q.theme
+          .toLowerCase()
+          .includes(filterTheme.toLowerCase());
 
-      // filtre date
-      let matchesDue = true;
-      if (filterDue) {
-        if (!q.next_review) {
-          matchesDue = true;
-        } else {
-          const today = new Date();
-          const reviewDate = new Date(q.next_review);
-          matchesDue = reviewDate <= today;
+        let matchesDue = true;
+        if (filterDue) {
+          if (!q.next_review) {
+            matchesDue = true;
+          } else {
+            const today = new Date();
+            const reviewDate = new Date(q.next_review);
+            matchesDue = reviewDate <= today;
+          }
         }
-      }
 
-      return matchesSearch && matchesTheme && matchesDue;
-    });
+        return matchesSearch && matchesTheme && matchesDue;
+      })
+      .slice() // clone pour éviter mutation
+      .sort((a, b) => {
+        let valA = a[sortField];
+        let valB = b[sortField];
+
+        // gérer les dates
+        if (sortField === "next_review") {
+          valA = valA ? new Date(valA) : new Date(0);
+          valB = valB ? new Date(valB) : new Date(0);
+        }
+
+        // gérer texte
+        if (typeof valA === "string") {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+        }
+
+        if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+        if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      });
+    
+
     return (
       <div style={{ padding: "40px" }}>
         <button onClick={() => setMode("menu")}>⬅ Retour</button>
@@ -219,11 +253,31 @@ function App() {
         <table border="1" cellPadding="5" style={{ marginTop: "20px" }}>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Question</th>
-              <th>Réponse</th>
-              <th>Thème</th>
-              <th>Next review</th>
+              <th style={{ cursor: "pointer" }}
+              onClick={() => handleSort("id")}>
+                ID {sortField === "id" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+              </th>
+              <th style={{ cursor: "pointer" }}
+              onClick={() => handleSort("question")}>
+                Question {sortField === "question" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+              </th>
+
+              <th style={{ cursor: "pointer" }}
+              onClick={() => handleSort("answer")}>
+                Réponse {sortField === "answer" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+              </th>
+
+              <th style={{ cursor: "pointer" }}
+              onClick={() => handleSort("theme")}>
+                Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+              </th>
+
+              <th style={{ cursor: "pointer" }}
+              onClick={() => handleSort("next_review")}>
+                Review {sortField === "next_review" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+              </th>
+
+              <th></th>
             </tr>
           </thead>
 
