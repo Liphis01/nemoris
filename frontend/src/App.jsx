@@ -6,8 +6,9 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [theme, setTheme] = useState("global");
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(50);
   const [mode, setMode] = useState("menu");
+  const [allQuestions, setAllQuestions] = useState([]);
   const [newQuestion, setNewQuestion] = useState("");
   const [newAnswer, setNewAnswer] = useState("");
   const [newTheme, setNewTheme] = useState("");
@@ -78,6 +79,12 @@ function App() {
     alert("Question ajoutée !");
   }
 
+  async function loadAllQuestions() {
+    const res = await fetch("http://localhost:8000/questions");
+    const data = await res.json();
+    setAllQuestions(data);
+  }
+
   if (currentIndex >= questions.length) {
     return <div>Session terminée 🎉</div>;
   }
@@ -94,10 +101,48 @@ function App() {
         </div>
 
         <div style={{ marginTop: "10px" }}>
-          <button onClick={() => setMode("add")}>
-            Ajouter des questions
+          <button onClick={() => setMode("manage")}>
+            Gérer la base de données
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (mode === "manage") {
+    return (
+      <div style={{ padding: "40px" }}>
+        <button onClick={() => setMode("menu")}>⬅ Retour</button>
+
+        <h2>Base de données</h2>
+
+        <button onClick={loadAllQuestions}>
+          Charger les questions
+        </button>
+
+        <table border="1" cellPadding="5" style={{ marginTop: "20px" }}>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Question</th>
+              <th>Réponse</th>
+              <th>Thème</th>
+              <th>Next review</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {allQuestions.map((q) => (
+              <tr key={q.id}>
+                <td>{q.id}</td>
+                <td>{q.question}</td>
+                <td>{q.answer}</td>
+                <td>{q.theme}</td>
+                <td>{q.next_review || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }

@@ -58,13 +58,27 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
 # 📥 Récupérer toutes les questions
 @app.get("/questions")
 def get_questions(db: Session = Depends(get_db)):
-    return db.query(Question).all()
+    questions = db.query(Question).all()
+
+    result = []
+    for q in questions:
+        progress = db.query(Progress).filter(Progress.question_id == q.id).first()
+
+        result.append({
+            "id": q.id,
+            "question": q.question,
+            "answer": q.answer,
+            "theme": q.theme,
+            "next_review": progress.next_review if progress else None
+        })
+
+    return result
 
 
 @app.get("/review")
 def get_review(
     theme: Optional[str] = None,
-    limit: int = 20,
+    limit: int = 50,
     db: Session = Depends(get_db)
 ):
     from datetime import date
