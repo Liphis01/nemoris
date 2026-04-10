@@ -85,6 +85,28 @@ function App() {
     setAllQuestions(data);
   }
 
+  async function updateQuestion(q) {
+    await fetch(`http://localhost:8000/questions/${q.id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question: q.question,
+        answer: q.answer,
+        theme: q.theme,
+      }),
+    });
+  }
+
+  async function deleteQuestion(id) {
+    await fetch(`http://localhost:8000/questions/${id}`, {
+      method: "DELETE",
+    });
+
+    setAllQuestions(allQuestions.filter((q) => q.id !== id));
+  }
+
   if (currentIndex >= questions.length) {
     return <div>Session terminée 🎉</div>;
   }
@@ -132,13 +154,53 @@ function App() {
           </thead>
 
           <tbody>
-            {allQuestions.map((q) => (
+            {allQuestions.map((q, index) => (
               <tr key={q.id}>
                 <td>{q.id}</td>
-                <td>{q.question}</td>
-                <td>{q.answer}</td>
-                <td>{q.theme}</td>
+
+                <td>
+                  <input
+                    value={q.question}
+                    onChange={(e) => {
+                      const updated = [...allQuestions];
+                      updated[index].question = e.target.value;
+                      setAllQuestions(updated);
+                    }}
+                    onBlur={() => updateQuestion(q)}
+                  />
+                </td>
+
+                <td>
+                  <input
+                    value={q.answer}
+                    onChange={(e) => {
+                      const updated = [...allQuestions];
+                      updated[index].answer = e.target.value;
+                      setAllQuestions(updated);
+                    }}
+                    onBlur={() => updateQuestion(q)}
+                  />
+                </td>
+
+                <td>
+                  <input
+                    value={q.theme}
+                    onChange={(e) => {
+                      const updated = [...allQuestions];
+                      updated[index].theme = e.target.value;
+                      setAllQuestions(updated);
+                    }}
+                    onBlur={() => updateQuestion(q)}
+                  />
+                </td>
+
                 <td>{q.next_review || "-"}</td>
+
+                <td>
+                  <button onClick={() => deleteQuestion(q.id)}>
+                    🗑
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

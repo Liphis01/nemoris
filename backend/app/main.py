@@ -40,6 +40,39 @@ class AnswerRequest(BaseModel):
     question_id: int
     quality: int
 
+class QuestionUpdate(BaseModel):
+    question: str
+    answer: str
+    theme: str
+
+@app.put("/questions/{question_id}")
+def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
+    q = db.query(Question).filter(Question.id == question_id).first()
+
+    if not q:
+        return {"error": "Question not found"}
+
+    q.question = data.question
+    q.answer = data.answer
+    q.theme = data.theme
+
+    db.commit()
+    return {"status": "ok"}
+
+@app.delete("/questions/{question_id}")
+def delete_question(question_id: int, db: Session = Depends(get_db)):
+    q = db.query(Question).filter(Question.id == question_id).first()
+
+    if not q:
+        return {"error": "Question not found"}
+
+    # supprimer aussi le progress associé
+    db.query(Progress).filter(Progress.question_id == question_id).delete()
+
+    db.delete(q)
+    db.commit()
+
+    return {"status": "deleted"}
 
 # ➕ Ajouter une question
 @app.post("/questions")
