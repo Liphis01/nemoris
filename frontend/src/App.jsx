@@ -16,6 +16,20 @@ function App() {
   const [filterDue, setFilterDue] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
+  const [newRow, setNewRow] = useState({
+    question: "",
+    answer: "",
+    theme: "",
+  });
+
+  const appStyle = {
+    background: "#121212",
+    color: "#e5e5e5",
+    minHeight: "100vh",
+    padding: "40px",
+    fontFamily: "Arial, sans-serif"
+  };
+
   const mainButtonStyle = {
     background: "#1f1f1f",
     color: "#eee",
@@ -25,18 +39,7 @@ function App() {
     cursor: "pointer",
     fontSize: "16px"
   };
-  const appStyle = {
-    background: "#121212",
-    color: "#e5e5e5",
-    minHeight: "100vh",
-    padding: "40px",
-    fontFamily: "Arial, sans-serif"
-  };
-  const [newRow, setNewRow] = useState({
-    question: "",
-    answer: "",
-    theme: "",
-  });
+
   const secondaryButtonStyle = {
     background: "#2a2a2a",
     color: "#eee",
@@ -112,10 +115,6 @@ function App() {
     }
   }, [mode]);
 
-  if (questions.length === 0) {
-    return <div>Chargement...</div>;
-  }
-
   const current = questions[currentIndex];
 
   function handleAnswer(quality) {
@@ -151,9 +150,9 @@ function App() {
     });
 
     setAllQuestions(allQuestions.filter((q) => q.id !== id));
-    }
+  }
 
-    async function createQuestion() {
+  async function createQuestion() {
     if (!newRow.question || !newRow.answer || !newRow.theme) {
       alert("Remplis tous les champs");
       return;
@@ -224,38 +223,38 @@ function App() {
 
       return matchesSearch && matchesTheme && matchesDue;
     })
-    .slice() // clone pour éviter mutation
-    .sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
+      .slice() // clone pour éviter mutation
+      .sort((a, b) => {
+        let valA = a[sortField];
+        let valB = b[sortField];
 
-      // gérer les dates
-      if (sortField === "next_review") {
-        valA = valA ? new Date(valA) : new Date(0);
-        valB = valB ? new Date(valB) : new Date(0);
-      }
+        // gérer les dates
+        if (sortField === "next_review") {
+          valA = valA ? new Date(valA) : new Date(0);
+          valB = valB ? new Date(valB) : new Date(0);
+        }
 
-      // gérer texte
-      if (typeof valA === "string") {
-        valA = valA.toLowerCase();
-        valB = valB.toLowerCase();
-      }
+        // gérer texte
+        if (typeof valA === "string") {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+        }
 
-      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
-      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
-      return 0;
-    });
-  
+        if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+        if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      });
+
 
   return (
-    <div 
+    <div
       style={{
         background: "#121212",
         color: "#e5e5e5",
         minHeight: "100vh",
         padding: "40px"
       }}
-      
+
     >
       {mode === "menu" && (
         <div style={{ maxWidth: "600px", margin: "auto", textAlign: "center" }}>
@@ -491,7 +490,7 @@ function App() {
                 border: "1px solid #333",
                 background: "#1a1a1a",
                 color: "#eee"
-              }}        
+              }}
             />
 
             <input
@@ -504,22 +503,22 @@ function App() {
                 border: "1px solid #333",
                 background: "#1a1a1a",
                 color: "#eee"
-              }}           
-              />
+              }}
+            />
 
             <label>
               <input
                 type="checkbox"
                 checked={filterDue}
                 onChange={(e) => setFilterDue(e.target.checked)}
-                />
+              />
               À réviser
             </label>
           </div>
           <div style={{ marginBottom: "10px", color: "#888" }}>
             {filteredQuestions.length} résultats
           </div>
-          
+
 
           <table
             style={{
@@ -542,7 +541,7 @@ function App() {
                   cursor: "pointer",
                   textAlign: "left",
                   color: "#aaa"
-                  }}    
+                }}
                   onClick={() => handleSort("id")}>
                   ID {sortField === "id" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                 </th>
@@ -552,8 +551,8 @@ function App() {
                   cursor: "pointer",
                   textAlign: "left",
                   color: "#aaa"
-                }} 
-                onClick={() => handleSort("question")}>
+                }}
+                  onClick={() => handleSort("question")}>
                   Question {sortField === "question" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                 </th>
 
@@ -563,8 +562,8 @@ function App() {
                   cursor: "pointer",
                   textAlign: "left",
                   color: "#aaa"
-                }}        
-                onClick={() => handleSort("answer")}>
+                }}
+                  onClick={() => handleSort("answer")}>
                   Réponse {sortField === "answer" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                 </th>
 
@@ -574,7 +573,7 @@ function App() {
                   cursor: "pointer",
                   textAlign: "left",
                   color: "#aaa"
-                  }}         
+                }}
                   onClick={() => handleSort("theme")}>
                   Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                 </th>
@@ -585,8 +584,8 @@ function App() {
                   cursor: "pointer",
                   textAlign: "left",
                   color: "#aaa"
-                }}       
-                onClick={() => handleSort("next_review")}>
+                }}
+                  onClick={() => handleSort("next_review")}>
                   Review {sortField === "next_review" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                 </th>
 
@@ -617,7 +616,7 @@ function App() {
                     }
                     onKeyDown={handleNewRowKeyDown}
                     placeholder="Question"
-                    />
+                  />
                 </td>
 
                 <td>
@@ -634,10 +633,10 @@ function App() {
                     value={newRow.answer}
                     onChange={(e) =>
                       setNewRow({ ...newRow, answer: e.target.value })
-                      }
+                    }
                     onKeyDown={handleNewRowKeyDown}
                     placeholder="Réponse"
-                    />
+                  />
                 </td>
 
                 <td>
@@ -654,10 +653,10 @@ function App() {
                     value={newRow.theme}
                     onChange={(e) =>
                       setNewRow({ ...newRow, theme: e.target.value })
-                      }
+                    }
                     onKeyDown={handleNewRowKeyDown}
                     placeholder="Thème"
-                    />
+                  />
                 </td>
 
                 <td>-</td>
@@ -672,7 +671,7 @@ function App() {
                       padding: "6px 10px",
                       borderRadius: "5px",
                       cursor: "pointer"
-                      }}
+                    }}
                   >
                     ➕
                   </button>
@@ -698,9 +697,9 @@ function App() {
                         const updated = [...allQuestions];
                         updated[index].question = e.target.value;
                         setAllQuestions(updated);
-                        }}
+                      }}
                       onBlur={() => updateQuestion(q)}
-                      />
+                    />
                   </td>
 
                   <td>
@@ -713,7 +712,7 @@ function App() {
                         background: "#1a1a1a",
                         color: "#eee",
                         boxSizing: "border-box"
-                        }}
+                      }}
                       value={q.answer}
                       onChange={(e) => {
                         const updated = [...allQuestions];
