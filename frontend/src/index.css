@@ -1,8 +1,9 @@
 :root {
-  --text: #6b6375;
+  --text: #e5e5e5;
   --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
+  --bg: #121212;
+  --card: #1e1e1e;
+  --border: #333;
   --code-bg: #f4f3ec;
   --accent: #aa3bff;
   --accent-bg: rgba(170, 59, 255, 0.1);
@@ -119,4 +120,10 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #121212;
 }
