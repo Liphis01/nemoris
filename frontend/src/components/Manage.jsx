@@ -1,16 +1,7 @@
 import { useRef } from "react";
 
 
-function handleNewRowKeyDown(e) {
-      if (e.key === "Enter") {
-            e.preventDefault();
-            createQuestion();
-        
-            setTimeout(() => {
-                  questionInputRef.current?.focus();
-                }, 0);
-              }
-}
+
 
 export default function Manage({
     setMode,
@@ -34,6 +25,17 @@ export default function Manage({
 }) {
     const questionInputRef = useRef(null);
 
+    function handleNewRowKeyDown(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            createQuestion();
+
+            setTimeout(() => {
+                questionInputRef.current?.focus();
+            }, 0);
+        }
+    }
+
     return (
         <div style={{ maxWidth: "1200px", margin: "auto" }}>
 
@@ -48,6 +50,10 @@ export default function Manage({
                     borderRadius: "6px",
                     cursor: "pointer"
                 }}
+                onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                onMouseLeave={(e) => e.target.style.opacity = "1"}
+                onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                onMouseUp={(e) => e.target.style.transform = "scale(1)"}
             >
                 ⬅ Retour
             </button>
@@ -62,8 +68,8 @@ export default function Manage({
                     alignItems: "center",
                     justifyContent: "center",
                     flexWrap: "wrap"
-                    }}
-                    >
+                }}
+            >
                 <input
                     placeholder="Recherche..."
                     value={search}
@@ -75,7 +81,7 @@ export default function Manage({
                         background: "#1a1a1a",
                         color: "#eee"
                     }}
-                    />
+                />
 
                 <input
                     placeholder="Filtrer par thème"
@@ -87,15 +93,15 @@ export default function Manage({
                         border: "1px solid #333",
                         background: "#1a1a1a",
                         color: "#eee"
-                        }}
-                        />
+                    }}
+                />
 
                 <label>
                     <input
                         type="checkbox"
                         checked={filterDue}
                         onChange={(e) => setFilterDue(e.target.checked)}
-                        />
+                    />
                     À réviser
                 </label>
             </div>
@@ -112,7 +118,7 @@ export default function Manage({
                     borderRadius: "8px",
                     overflow: "hidden"
                 }}
-                >
+            >
                 <thead style={{ backgroundColor: "#2a2a2a" }}>
                     <tr
                         style={{ borderBottom: "1px solid #2a2a2a" }}
@@ -126,7 +132,7 @@ export default function Manage({
                             textAlign: "left",
                             color: "#aaa"
                         }}
-                        onClick={() => handleSort("id")}>
+                            onClick={() => handleSort("id")}>
                             ID {sortField === "id" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
                         <th style={{
@@ -135,7 +141,7 @@ export default function Manage({
                             cursor: "pointer",
                             textAlign: "left",
                             color: "#aaa"
-                            }}
+                        }}
                             onClick={() => handleSort("question")}>
                             Question {sortField === "question" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
@@ -146,7 +152,7 @@ export default function Manage({
                             cursor: "pointer",
                             textAlign: "left",
                             color: "#aaa"
-                            }}
+                        }}
                             onClick={() => handleSort("answer")}>
                             Réponse {sortField === "answer" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
@@ -157,7 +163,7 @@ export default function Manage({
                             cursor: "pointer",
                             textAlign: "left",
                             color: "#aaa"
-                            }}
+                        }}
                             onClick={() => handleSort("theme")}>
                             Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
@@ -168,7 +174,7 @@ export default function Manage({
                             cursor: "pointer",
                             textAlign: "left",
                             color: "#aaa"
-                            }}
+                        }}
                             onClick={() => handleSort("next_review")}>
                             Review {sortField === "next_review" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
@@ -199,7 +205,7 @@ export default function Manage({
                                 }
                                 onKeyDown={handleNewRowKeyDown}
                                 placeholder="Question"
-                                />
+                            />
                         </td>
 
                         <td>
@@ -216,10 +222,10 @@ export default function Manage({
                                 value={newRow.answer}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, answer: e.target.value })
-                                    }
-                                    onKeyDown={handleNewRowKeyDown}
-                                    placeholder="Réponse"
-                                    />
+                                }
+                                onKeyDown={handleNewRowKeyDown}
+                                placeholder="Réponse"
+                            />
                         </td>
 
                         <td>
@@ -254,8 +260,8 @@ export default function Manage({
                                     padding: "6px 10px",
                                     borderRadius: "5px",
                                     cursor: "pointer"
-                                    }}
-                                    >
+                                }}
+                            >
                                 ➕
                             </button>
                         </td>
@@ -282,7 +288,7 @@ export default function Manage({
                                         setAllQuestions(updated);
                                     }}
                                     onBlur={() => updateQuestion(q)}
-                                    />
+                                />
                             </td>
 
                             <td>

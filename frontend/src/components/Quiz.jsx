@@ -1,3 +1,5 @@
+import { fadeInStyle, buttonBase } from "../styles";
+
 const secondaryButtonStyle = {
     background: "#2a2a2a",
     color: "#eee",
@@ -62,7 +64,11 @@ export default function Quiz({
             {/* 🔙 Retour */}
             <button
                 onClick={() => setMode("menu")}
-                style={secondaryButtonStyle}
+                style={{ ...buttonBase, ...secondaryButtonStyle }}
+                onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                onMouseLeave={(e) => e.target.style.opacity = "1"}
+                onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                onMouseUp={(e) => e.target.style.transform = "scale(1)"}
             >
                 ⬅ Retour
             </button>
@@ -148,11 +154,13 @@ export default function Quiz({
 
                     {/* 🧠 Carte */}
                     <div
+                        key={currentIndex}
                         style={{
                             background: "#1e1e1e",
                             padding: "30px",
                             borderRadius: "10px",
-                            marginBottom: "20px"
+                            marginBottom: "20px",
+                            ...fadeInStyle
                         }}
                     >
                         <div style={{ marginBottom: "10px", color: "#888" }}>
@@ -172,7 +180,11 @@ export default function Quiz({
                             <div style={{ marginTop: "25px" }}>
                                 <button
                                     onClick={() => setShowAnswer(true)}
-                                    style={mainButtonStyle}
+                                    style={{ ...buttonBase, ...mainButtonStyle }}
+                                    onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                                    onMouseLeave={(e) => e.target.style.opacity = "1"}
+                                    onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                                    onMouseUp={(e) => e.target.style.transform = "scale(1)"}
                                 >
                                     Voir la réponse
                                 </button>
@@ -180,7 +192,7 @@ export default function Quiz({
                         )}
 
                         {showAnswer && (
-                            <div style={{ marginTop: "25px" }}>
+                            <div style={{ marginTop: "25px", ...fadeInStyle }}>
                                 <div style={{ color: "#888", marginBottom: "5px" }}>
                                     Réponse
                                 </div>
@@ -200,6 +212,10 @@ export default function Quiz({
                                     <button
                                         style={dangerButton}
                                         onClick={() => handleAnswer(0)}
+                                        onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                                        onMouseLeave={(e) => e.target.style.opacity = "1"}
+                                        onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                                        onMouseUp={(e) => e.target.style.transform = "scale(1)"}
                                     >
                                         ❌ Faux
                                     </button>
@@ -207,6 +223,10 @@ export default function Quiz({
                                     <button
                                         style={secondaryButton}
                                         onClick={() => handleAnswer(1)}
+                                        onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                                        onMouseLeave={(e) => e.target.style.opacity = "1"}
+                                        onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                                        onMouseUp={(e) => e.target.style.transform = "scale(1)"}
                                     >
                                         😐 Dur
                                     </button>
@@ -214,6 +234,10 @@ export default function Quiz({
                                     <button
                                         style={successButton}
                                         onClick={() => handleAnswer(2)}
+                                        onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                                        onMouseLeave={(e) => e.target.style.opacity = "1"}
+                                        onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                                        onMouseUp={(e) => e.target.style.transform = "scale(1)"}
                                     >
                                         ✅ Facile
                                     </button>
