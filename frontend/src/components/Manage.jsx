@@ -1,0 +1,354 @@
+import { useRef } from "react";
+
+
+function handleNewRowKeyDown(e) {
+      if (e.key === "Enter") {
+            e.preventDefault();
+            createQuestion();
+        
+            setTimeout(() => {
+                  questionInputRef.current?.focus();
+                }, 0);
+              }
+}
+
+export default function Manage({
+    setMode,
+    allQuestions,
+    filteredQuestions,
+    setAllQuestions,
+    updateQuestion,
+    deleteQuestion,
+    newRow,
+    setNewRow,
+    createQuestion,
+    search,
+    setSearch,
+    filterTheme,
+    setFilterTheme,
+    filterDue,
+    setFilterDue,
+    handleSort,
+    sortField,
+    sortOrder
+}) {
+    const questionInputRef = useRef(null);
+
+    return (
+        <div style={{ maxWidth: "1200px", margin: "auto" }}>
+
+            <button
+                onClick={() => setMode("menu")}
+                style={{
+                    marginBottom: "20px",
+                    background: "#2a2a2a",
+                    color: "#eee",
+                    border: "1px solid #333",
+                    padding: "8px 14px",
+                    borderRadius: "6px",
+                    cursor: "pointer"
+                }}
+            >
+                ⬅ Retour
+            </button>
+            <h2 style={{ marginBottom: "20px" }}>
+                Gestion des questions
+            </h2>
+            <div
+                style={{
+                    display: "flex",
+                    gap: "10px",
+                    marginBottom: "15px",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexWrap: "wrap"
+                    }}
+                    >
+                <input
+                    placeholder="Recherche..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                        padding: "8px",
+                        borderRadius: "6px",
+                        border: "1px solid #333",
+                        background: "#1a1a1a",
+                        color: "#eee"
+                    }}
+                    />
+
+                <input
+                    placeholder="Filtrer par thème"
+                    value={filterTheme}
+                    onChange={(e) => setFilterTheme(e.target.value)}
+                    style={{
+                        padding: "8px",
+                        borderRadius: "6px",
+                        border: "1px solid #333",
+                        background: "#1a1a1a",
+                        color: "#eee"
+                        }}
+                        />
+
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={filterDue}
+                        onChange={(e) => setFilterDue(e.target.checked)}
+                        />
+                    À réviser
+                </label>
+            </div>
+            <div style={{ marginBottom: "10px", color: "#888" }}>
+                {filteredQuestions.length} résultats
+            </div>
+
+
+            <table
+                style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    backgroundColor: "#1e1e1e",
+                    borderRadius: "8px",
+                    overflow: "hidden"
+                }}
+                >
+                <thead style={{ backgroundColor: "#2a2a2a" }}>
+                    <tr
+                        style={{ borderBottom: "1px solid #2a2a2a" }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "#2a2a2a"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    >
+                        <th style={{
+                            padding: "12px",
+                            borderBottom: "1px solid #333",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            color: "#aaa"
+                        }}
+                        onClick={() => handleSort("id")}>
+                            ID {sortField === "id" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+                        <th style={{
+                            padding: "12px",
+                            borderBottom: "1px solid #333",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            color: "#aaa"
+                            }}
+                            onClick={() => handleSort("question")}>
+                            Question {sortField === "question" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+
+                        <th style={{
+                            padding: "12px",
+                            borderBottom: "1px solid #333",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            color: "#aaa"
+                            }}
+                            onClick={() => handleSort("answer")}>
+                            Réponse {sortField === "answer" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+
+                        <th style={{
+                            padding: "12px",
+                            borderBottom: "1px solid #333",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            color: "#aaa"
+                            }}
+                            onClick={() => handleSort("theme")}>
+                            Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+
+                        <th style={{
+                            padding: "12px",
+                            borderBottom: "1px solid #333",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            color: "#aaa"
+                            }}
+                            onClick={() => handleSort("next_review")}>
+                            Review {sortField === "next_review" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>new</td>
+
+                        <td>
+                            <input
+                                style={{
+                                    width: "100%",
+                                    padding: "6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid #333",
+                                    background: "#1a1a1a",
+                                    color: "#eee",
+                                    boxSizing: "border-box"
+                                }}
+                                ref={questionInputRef}
+                                autoFocus
+                                value={newRow.question}
+                                onChange={(e) =>
+                                    setNewRow({ ...newRow, question: e.target.value })
+                                }
+                                onKeyDown={handleNewRowKeyDown}
+                                placeholder="Question"
+                                />
+                        </td>
+
+                        <td>
+                            <input
+                                style={{
+                                    width: "100%",
+                                    padding: "6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid #333",
+                                    background: "#1a1a1a",
+                                    color: "#eee",
+                                    boxSizing: "border-box"
+                                }}
+                                value={newRow.answer}
+                                onChange={(e) =>
+                                    setNewRow({ ...newRow, answer: e.target.value })
+                                    }
+                                    onKeyDown={handleNewRowKeyDown}
+                                    placeholder="Réponse"
+                                    />
+                        </td>
+
+                        <td>
+                            <input
+                                style={{
+                                    width: "100%",
+                                    padding: "6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid #333",
+                                    background: "#1a1a1a",
+                                    color: "#eee",
+                                    boxSizing: "border-box"
+                                }}
+                                value={newRow.theme}
+                                onChange={(e) =>
+                                    setNewRow({ ...newRow, theme: e.target.value })
+                                }
+                                onKeyDown={handleNewRowKeyDown}
+                                placeholder="Thème"
+                            />
+                        </td>
+
+                        <td>-</td>
+
+                        <td>
+                            <button
+                                onClick={createQuestion}
+                                style={{
+                                    background: "#3a7afe",
+                                    color: "white",
+                                    border: "none",
+                                    padding: "6px 10px",
+                                    borderRadius: "5px",
+                                    cursor: "pointer"
+                                    }}
+                                    >
+                                ➕
+                            </button>
+                        </td>
+                    </tr>
+                    {filteredQuestions.map((q, index) => (
+                        <tr key={q.id}>
+                            <td>{q.id}</td>
+
+                            <td>
+                                <input
+                                    style={{
+                                        width: "100%",
+                                        padding: "6px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #333",
+                                        background: "#1a1a1a",
+                                        color: "#eee",
+                                        boxSizing: "border-box"
+                                    }}
+                                    value={q.question}
+                                    onChange={(e) => {
+                                        const updated = [...allQuestions];
+                                        updated[index].question = e.target.value;
+                                        setAllQuestions(updated);
+                                    }}
+                                    onBlur={() => updateQuestion(q)}
+                                    />
+                            </td>
+
+                            <td>
+                                <input
+                                    style={{
+                                        width: "100%",
+                                        padding: "6px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #333",
+                                        background: "#1a1a1a",
+                                        color: "#eee",
+                                        boxSizing: "border-box"
+                                    }}
+                                    value={q.answer}
+                                    onChange={(e) => {
+                                        const updated = [...allQuestions];
+                                        updated[index].answer = e.target.value;
+                                        setAllQuestions(updated);
+                                    }}
+                                    onBlur={() => updateQuestion(q)}
+                                />
+                            </td>
+
+                            <td>
+                                <input
+                                    style={{
+                                        width: "100%",
+                                        padding: "6px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #333",
+                                        background: "#1a1a1a",
+                                        color: "#eee",
+                                        boxSizing: "border-box"
+                                    }}
+                                    value={q.theme}
+                                    onChange={(e) => {
+                                        const updated = [...allQuestions];
+                                        updated[index].theme = e.target.value;
+                                        setAllQuestions(updated);
+                                    }}
+                                    onBlur={() => updateQuestion(q)}
+                                />
+                            </td>
+
+                            <td>{q.next_review || "-"}</td>
+
+                            <td>
+                                <button
+                                    onClick={() => deleteQuestion(q.id)}
+                                    style={{
+                                        background: "#ff4d4f",
+                                        color: "white",
+                                        border: "none",
+                                        padding: "5px 8px",
+                                        borderRadius: "5px",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    🗑
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+
+        </div>
+    );
+}
