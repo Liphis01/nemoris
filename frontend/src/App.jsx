@@ -17,7 +17,7 @@ function App() {
   const [filterDue, setFilterDue] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
-  
+
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -60,12 +60,23 @@ function App() {
   }, [showAnswer, currentIndex]);
 
   useEffect(() => {
+    if (mode !== "quiz") return;
+
     getReview(theme, limit).then((data) => {
-      const shuffled = data.sort(() => Math.random() - 0.5);
-      setQuestions(shuffled);
+      setQuestions(data);
       setCurrentIndex(0);
+      setShowAnswer(false);
     });
-  }, [theme, limit]);
+  }, [mode, theme, limit]);
+
+  useEffect(() => {
+    if (mode !== "quiz") return;
+
+    setQuestions((prev) =>
+      [...prev].sort(() => Math.random() - 0.5)
+    );
+  }, [mode]);
+
 
   useEffect(() => {
     if (mode === "manage") {
