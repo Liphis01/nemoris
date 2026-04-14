@@ -1,7 +1,4 @@
-import { useRef } from "react";
-
-
-
+import { useRef, useState } from "react";
 
 export default function Manage({
     setMode,
@@ -24,6 +21,8 @@ export default function Manage({
     sortOrder
 }) {
     const questionInputRef = useRef(null);
+    const [hoveredImage, setHoveredImage] = useState(null);
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
     function handleNewRowKeyDown(e) {
         if (e.key === "Enter") {
@@ -424,7 +423,18 @@ export default function Manage({
                                 />
                             </td>
 
-                            <td>
+                            <td
+                                onMouseEnter={(e) => {
+                                    if (q.image_url) {
+                                        setHoveredImage(q.image_url);
+                                        setMousePos({ x: e.clientX, y: e.clientY });
+                                    }
+                                }}
+                                onMouseMove={(e) => {
+                                    setMousePos({ x: e.clientX, y: e.clientY });
+                                }}
+                                onMouseLeave={() => setHoveredImage(null)}
+                            >
                                 <input
                                     style={{
                                         width: "100%",
@@ -466,6 +476,25 @@ export default function Manage({
                     ))}
                 </tbody>
             </table>
+
+            {hoveredImage && (
+                <img
+                    src={hoveredImage}
+                    alt="preview"
+                    style={{
+                        position: "fixed",
+                        top: mousePos.y + 20,
+                        left: mousePos.x + 20,
+                        maxWidth: "300px",
+                        maxHeight: "300px",
+                        borderRadius: "10px",
+                        pointerEvents: "none",
+                        boxShadow: "0 0 15px rgba(0,0,0,0.5)",
+                        zIndex: 9999,
+                        background: "#000"
+                    }}
+                />
+            )}
 
         </div>
     );
