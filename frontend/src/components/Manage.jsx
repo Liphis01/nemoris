@@ -23,6 +23,22 @@ export default function Manage({
     const questionInputRef = useRef(null);
     const [hoveredImage, setHoveredImage] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const headerStyle = {
+        padding: "12px",
+        borderBottom: "1px solid #333",
+        cursor: "pointer",
+        textAlign: "left",
+        color: "#aaa"
+    };
+    const cellStyle = {
+        width: "100%",
+        padding: "6px",
+        borderRadius: "4px",
+        border: "1px solid #333",
+        background: "#1a1a1a",
+        color: "#eee",
+        boxSizing: "border-box"
+    };
 
     function handleNewRowKeyDown(e) {
         if (e.key === "Enter") {
@@ -124,80 +140,36 @@ export default function Manage({
                         onMouseEnter={(e) => e.currentTarget.style.background = "#2a2a2a"}
                         onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                     >
-                        <th style={{
-                            padding: "12px",
-                            borderBottom: "1px solid #333",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            color: "#aaa"
-                        }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("id")}>
                             ID {sortField === "id" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
-                        <th style={{
-                            padding: "12px",
-                            borderBottom: "1px solid #333",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            color: "#aaa"
-                        }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("question")}>
                             Question {sortField === "question" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
 
-                        <th style={{
-                            padding: "12px",
-                            borderBottom: "1px solid #333",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            color: "#aaa"
-                        }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("answer")}>
                             Réponse {sortField === "answer" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
 
-                        <th style={{
-                            padding: "12px",
-                            borderBottom: "1px solid #333",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            color: "#aaa"
-                        }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("theme")}>
                             Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
 
-                        <th
-                            style={{
-                                padding: "12px",
-                                borderBottom: "1px solid #333",
-                                cursor: "pointer",
-                                textAlign: "left",
-                                color: "#aaa"
-                            }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("type_q")}>
                             Type {sortField === "type_q" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
 
-                        <th
-                            style={{
-                                padding: "12px",
-                                borderBottom: "1px solid #333",
-                                cursor: "pointer",
-                                textAlign: "left",
-                                color: "#aaa"
-                            }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("image_url")}>
                             Image URL {sortField === "image_url" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
 
-                        <th style={{
-                            padding: "12px",
-                            borderBottom: "1px solid #333",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            color: "#aaa"
-                        }}
+                        <th style={headerStyle}
                             onClick={() => handleSort("next_review")}>
                             Review {sortField === "next_review" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
@@ -211,15 +183,7 @@ export default function Manage({
 
                         <td>
                             <input
-                                style={{
-                                    width: "100%",
-                                    padding: "6px",
-                                    borderRadius: "4px",
-                                    border: "1px solid #333",
-                                    background: "#1a1a1a",
-                                    color: "#eee",
-                                    boxSizing: "border-box"
-                                }}
+                                style={cellStyle}
                                 ref={questionInputRef}
                                 autoFocus
                                 value={newRow.question}
@@ -233,15 +197,7 @@ export default function Manage({
 
                         <td>
                             <input
-                                style={{
-                                    width: "100%",
-                                    padding: "6px",
-                                    borderRadius: "4px",
-                                    border: "1px solid #333",
-                                    background: "#1a1a1a",
-                                    color: "#eee",
-                                    boxSizing: "border-box"
-                                }}
+                                style={cellStyle}
                                 value={newRow.answer}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, answer: e.target.value })
@@ -253,15 +209,7 @@ export default function Manage({
 
                         <td>
                             <input
-                                style={{
-                                    width: "100%",
-                                    padding: "6px",
-                                    borderRadius: "4px",
-                                    border: "1px solid #333",
-                                    background: "#1a1a1a",
-                                    color: "#eee",
-                                    boxSizing: "border-box"
-                                }}
+                                style={cellStyle}
                                 value={newRow.theme}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, theme: e.target.value })
@@ -274,15 +222,7 @@ export default function Manage({
 
                         <td>
                             <input
-                                style={{
-                                    width: "100%",
-                                    padding: "6px",
-                                    borderRadius: "4px",
-                                    border: "1px solid #333",
-                                    background: "#1a1a1a",
-                                    color: "#eee",
-                                    boxSizing: "border-box"
-                                }}
+                                style={cellStyle}
                                 value={newRow.type_q}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, type_q: e.target.value })
@@ -294,15 +234,7 @@ export default function Manage({
 
                         <td>
                             <input
-                                style={{
-                                    width: "100%",
-                                    padding: "6px",
-                                    borderRadius: "4px",
-                                    border: "1px solid #333",
-                                    background: "#1a1a1a",
-                                    color: "#eee",
-                                    boxSizing: "border-box"
-                                }}
+                                style={cellStyle}
                                 value={newRow.image_url}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, image_url: e.target.value })
@@ -338,15 +270,7 @@ export default function Manage({
 
                             <td>
                                 <input
-                                    style={{
-                                        width: "100%",
-                                        padding: "6px",
-                                        borderRadius: "4px",
-                                        border: "1px solid #333",
-                                        background: "#1a1a1a",
-                                        color: "#eee",
-                                        boxSizing: "border-box"
-                                    }}
+                                    style={cellStyle}
                                     value={q.question}
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
@@ -359,15 +283,7 @@ export default function Manage({
 
                             <td>
                                 <input
-                                    style={{
-                                        width: "100%",
-                                        padding: "6px",
-                                        borderRadius: "4px",
-                                        border: "1px solid #333",
-                                        background: "#1a1a1a",
-                                        color: "#eee",
-                                        boxSizing: "border-box"
-                                    }}
+                                    style={cellStyle}
                                     value={q.answer}
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
@@ -380,15 +296,7 @@ export default function Manage({
 
                             <td>
                                 <input
-                                    style={{
-                                        width: "100%",
-                                        padding: "6px",
-                                        borderRadius: "4px",
-                                        border: "1px solid #333",
-                                        background: "#1a1a1a",
-                                        color: "#eee",
-                                        boxSizing: "border-box"
-                                    }}
+                                    style={cellStyle}
                                     value={q.theme}
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
@@ -401,15 +309,7 @@ export default function Manage({
 
                             <td>
                                 <input
-                                    style={{
-                                        width: "100%",
-                                        padding: "6px",
-                                        borderRadius: "4px",
-                                        border: "1px solid #333",
-                                        background: "#1a1a1a",
-                                        color: "#eee",
-                                        boxSizing: "border-box"
-                                    }}
+                                    style={cellStyle}
                                     value={q.type_q || "text"}
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
@@ -436,15 +336,7 @@ export default function Manage({
                                 onMouseLeave={() => setHoveredImage(null)}
                             >
                                 <input
-                                    style={{
-                                        width: "100%",
-                                        padding: "6px",
-                                        borderRadius: "4px",
-                                        border: "1px solid #333",
-                                        background: "#1a1a1a",
-                                        color: "#eee",
-                                        boxSizing: "border-box"
-                                    }}
+                                    style={cellStyle}
                                     value={q.image_url || ""}
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
