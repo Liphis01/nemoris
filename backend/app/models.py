@@ -9,6 +9,8 @@ class Question(Base):
     question = Column(String)
     answer = Column(String)
     theme = Column(String)
+    type_q = Column(String, default="text")
+    image_url = Column(String, nullable=True)
 
 
 class Progress(Base):

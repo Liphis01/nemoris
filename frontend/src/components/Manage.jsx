@@ -168,6 +168,30 @@ export default function Manage({
                             Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                         </th>
 
+                        <th
+                            style={{
+                                padding: "12px",
+                                borderBottom: "1px solid #333",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                color: "#aaa"
+                            }}
+                            onClick={() => handleSort("type_q")}>
+                            Type {sortField === "type_q" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+
+                        <th
+                            style={{
+                                padding: "12px",
+                                borderBottom: "1px solid #333",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                color: "#aaa"
+                            }}
+                            onClick={() => handleSort("image_url")}>
+                            Image URL {sortField === "image_url" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                        </th>
+
                         <th style={{
                             padding: "12px",
                             borderBottom: "1px solid #333",
@@ -248,6 +272,47 @@ export default function Manage({
                             />
                         </td>
 
+
+                        <td>
+                            <input
+                                style={{
+                                    width: "100%",
+                                    padding: "6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid #333",
+                                    background: "#1a1a1a",
+                                    color: "#eee",
+                                    boxSizing: "border-box"
+                                }}
+                                value={newRow.type_q}
+                                onChange={(e) =>
+                                    setNewRow({ ...newRow, type_q: e.target.value })
+                                }
+                                onKeyDown={handleNewRowKeyDown}
+                                placeholder="Type de question"
+                            />
+                        </td>
+
+                        <td>
+                            <input
+                                style={{
+                                    width: "100%",
+                                    padding: "6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid #333",
+                                    background: "#1a1a1a",
+                                    color: "#eee",
+                                    boxSizing: "border-box"
+                                }}
+                                value={newRow.image_url}
+                                onChange={(e) =>
+                                    setNewRow({ ...newRow, image_url: e.target.value })
+                                }
+                                onKeyDown={handleNewRowKeyDown}
+                                placeholder="URL de l'image"
+                            />
+                        </td>
+
                         <td>-</td>
 
                         <td>
@@ -266,6 +331,8 @@ export default function Manage({
                             </button>
                         </td>
                     </tr>
+
+
                     {filteredQuestions.map((q, index) => (
                         <tr key={q.id}>
                             <td>{q.id}</td>
@@ -327,6 +394,51 @@ export default function Manage({
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
                                         updated[index].theme = e.target.value;
+                                        setAllQuestions(updated);
+                                    }}
+                                    onBlur={() => updateQuestion(q)}
+                                />
+                            </td>
+
+                            <td>
+                                <input
+                                    style={{
+                                        width: "100%",
+                                        padding: "6px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #333",
+                                        background: "#1a1a1a",
+                                        color: "#eee",
+                                        boxSizing: "border-box"
+                                    }}
+                                    value={q.type_q || "text"}
+                                    onChange={(e) => {
+                                        const updated = [...allQuestions];
+                                        updated[index].type_q = e.target.value;
+                                        setAllQuestions(updated);
+                                    }}
+                                    // onChange={(e) =>
+                                    //     updateQuestion(q.id, { type_q: e.target.value })
+                                    // }
+                                    onBlur={() => updateQuestion(q)}
+                                />
+                            </td>
+
+                            <td>
+                                <input
+                                    style={{
+                                        width: "100%",
+                                        padding: "6px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #333",
+                                        background: "#1a1a1a",
+                                        color: "#eee",
+                                        boxSizing: "border-box"
+                                    }}
+                                    value={q.image_url || ""}
+                                    onChange={(e) => {
+                                        const updated = [...allQuestions];
+                                        updated[index].image_url = e.target.value;
                                         setAllQuestions(updated);
                                     }}
                                     onBlur={() => updateQuestion(q)}

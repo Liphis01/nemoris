@@ -35,6 +35,8 @@ class QuestionCreate(BaseModel):
     question: str
     answer: str
     theme: str
+    type_q: str
+    image_url: Optional[str] = None
 
 class AnswerRequest(BaseModel):
     question_id: int
@@ -44,6 +46,8 @@ class QuestionUpdate(BaseModel):
     question: str
     answer: str
     theme: str
+    type_q: str
+    image_url: Optional[str] = None
 
 @app.put("/questions/{question_id}")
 def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
@@ -55,6 +59,8 @@ def update_question(question_id: int, data: QuestionUpdate, db: Session = Depend
     q.question = data.question
     q.answer = data.answer
     q.theme = data.theme
+    q.type_q = data.type_q
+    q.image_url = data.image_url
 
     db.commit()
     return {"status": "ok"}
@@ -80,7 +86,9 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
     q = Question(
         question=data.question,
         answer=data.answer,
-        theme=data.theme
+        theme=data.theme,
+        type_q=data.type_q,
+        image_url=data.image_url
     )
     db.add(q)
     db.commit()
@@ -102,6 +110,8 @@ def get_questions(db: Session = Depends(get_db)):
             "question": q.question,
             "answer": q.answer,
             "theme": q.theme,
+            "type_q": q.type_q,
+            "image_url": q.image_url,
             "next_review": progress.next_review if progress else None
         })
 
@@ -142,7 +152,9 @@ def get_review(
             "answer": q.answer,
             "theme": q.theme,
             "interval": p.interval,
-            "ease": p.ease_factor
+            "ease": p.ease_factor,
+            "type_q": q.type_q,
+            "image_url": q.image_url
         })
 
     # 2. Nouvelles questions
@@ -160,7 +172,9 @@ def get_review(
             "answer": q.answer,
             "theme": q.theme,
             "interval": 1,
-            "ease": 2.5
+            "ease": 2.5,
+            "type_q": q.type_q,
+            "image_url": q.image_url
         })
 
     # 3. Limite
@@ -196,4 +210,4 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
 
 @app.get("/hard")
 def get_test(db: Session = Depends(get_db)):
-    return db.query(Progress).filter(Progress.ease_factor != 2.5).all()
+    return db.query(Progress).filter(Progress.ease_factor < 2.5).all()

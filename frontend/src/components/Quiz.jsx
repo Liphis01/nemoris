@@ -58,6 +58,10 @@ export default function Quiz({
     limit,
     setLimit
 }) {
+    if (!questions[currentIndex]) {
+        return <div style={{ color: "#888" }}>Chargement...</div>;
+    }
+
     return (
         <div style={{ maxWidth: "800px", margin: "auto" }}>
 
@@ -175,6 +179,19 @@ export default function Quiz({
                         >
                             {questions[currentIndex].question}
                         </div>
+
+                        {questions[currentIndex].type_q === "image" &&
+                            questions[currentIndex].image_url && (
+                                <img
+                                    src={questions[currentIndex].image_url}
+                                    alt="question"
+                                    style={{
+                                        maxWidth: "100%",
+                                        borderRadius: "10px",
+                                        marginTop: "15px"
+                                    }}
+                                />
+                            )}
 
                         {!showAnswer && (
                             <div style={{ marginTop: "25px" }}>

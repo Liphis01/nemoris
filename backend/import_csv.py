@@ -11,7 +11,9 @@ with open("questions.csv", newline='', encoding="utf-8") as csvfile:
         q = Question(
             question=row["question"],
             answer=row["answer"],
-            theme=row["theme"]
+            theme=row["theme"],
+            type_q=row["type_q"],
+            image_url=row["image_url"] if row["image_url"] else None
         )
         db.add(q)
 
