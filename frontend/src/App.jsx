@@ -23,6 +23,8 @@ function App() {
     question: "",
     answer: "",
     theme: "",
+    type_q: "",
+    image_url: "",
   });
 
   const appStyle = {
@@ -109,6 +111,8 @@ function App() {
         question: q.question,
         answer: q.answer,
         theme: q.theme,
+        type_q: q.type_q,
+        image_url: q.image_url,
       }),
     });
   }
@@ -143,6 +147,8 @@ function App() {
       question: "",
       answer: "",
       theme: "",
+      type_q: "",
+      image_url: "",
     });
 
     setTimeout(() => {
