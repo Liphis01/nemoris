@@ -11,6 +11,7 @@ export default function Manage({
     setNewRow,
     createQuestion,
     handleUpload,
+    deleteImage,
     search,
     setSearch,
     filterTheme,
@@ -346,12 +347,18 @@ export default function Manage({
                                     }}
                                     onBlur={() => updateQuestion(q, { image_url: q.image_url })}
                                 />
+                                {q.image_url && (
+                                        <button onClick={() => deleteImage(q.id)}>
+                                            ❌
+                                        </button>
+                                    )}
 
                                 <input
                                     type="file"
                                     accept="image/*"
                                     onChange={(e) => handleUpload(e, q)}
                                 />
+                                
                             </td>
 
                             <td>{q.next_review || "-"}</td>

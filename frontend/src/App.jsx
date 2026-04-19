@@ -153,17 +153,17 @@ function App() {
   async function handleUpload(e, q) {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const formData = new FormData();
     formData.append("file", file);
-    
+
     const res = await fetch("http://127.0.0.1:8000/upload", {
       method: "POST",
       body: formData
     });
-    
+
     const data = await res.json();
-    
+
     // 🔥 on met à jour la question avec l'image
     updateQuestion(q, {
       image_url: data.url,
@@ -182,6 +182,20 @@ function App() {
     }
   }
 
+  async function deleteImage(id) {
+    await fetch(`http://127.0.0.1:8000/questions/${id}/image`, {
+      method: "DELETE"
+    });
+
+    // refresh local state
+    setQuestions(prev =>
+      prev.map(q =>
+        q.id === id
+          ? { ...q, image_url: null, type_q: "text" }
+          : q
+      )
+    );
+  }
 
   const filteredQuestions =
     allQuestions.filter((q) => {
@@ -262,6 +276,7 @@ function App() {
           setNewRow={setNewRow}
           createQuestion={createQuestion}
           handleUpload={handleUpload}
+          deleteImage={deleteImage}
           search={search}
           setSearch={setSearch}
           filterTheme={filterTheme}

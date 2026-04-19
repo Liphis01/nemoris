@@ -86,6 +86,36 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
 
     return {"status": "deleted"}
 
+@app.delete("/questions/{question_id}/image")
+def delete_image(question_id: int, db: Session = Depends(get_db)):
+    q = db.query(Question).filter(Question.id == question_id).first()
+
+    
+
+    if not q:
+        return {"error": "Question not found"}
+    
+    if not q.image_url.startswith("http://127.0.0.1:8000/static/"):
+        return {"error": "External image"}
+
+    if q.image_url:
+        # extraire le chemin local
+        file_path = q.image_url.replace("http://127.0.0.1:8000/", "")
+
+        if "static/" not in file_path:
+            return {"error": "wrong file path"}
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    # supprimer dans la DB
+    q.image_url = None
+    q.type_q = "text"
+
+    db.commit()
+
+    return {"status": "image deleted"}
+
 # ➕ Ajouter une question
 @app.post("/questions")
 def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
