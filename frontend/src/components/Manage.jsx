@@ -10,6 +10,7 @@ export default function Manage({
     newRow,
     setNewRow,
     createQuestion,
+    handleUpload,
     search,
     setSearch,
     filterTheme,
@@ -277,7 +278,7 @@ export default function Manage({
                                         updated[index].question = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q)}
+                                    onBlur={() => updateQuestion(q, { question: q.question })}
                                 />
                             </td>
 
@@ -290,7 +291,7 @@ export default function Manage({
                                         updated[index].answer = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q)}
+                                    onBlur={() => updateQuestion(q, { answer: q.answer })}
                                 />
                             </td>
 
@@ -303,7 +304,7 @@ export default function Manage({
                                         updated[index].theme = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q)}
+                                    onBlur={() => updateQuestion(q, { theme: q.theme })}
                                 />
                             </td>
 
@@ -319,7 +320,7 @@ export default function Manage({
                                     // onChange={(e) =>
                                     //     updateQuestion(q.id, { type_q: e.target.value })
                                     // }
-                                    onBlur={() => updateQuestion(q)}
+                                    onBlur={() => updateQuestion(q, { type_q: q.type_q })}
                                 />
                             </td>
 
@@ -343,7 +344,13 @@ export default function Manage({
                                         updated[index].image_url = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q)}
+                                    onBlur={() => updateQuestion(q, { image_url: q.image_url })}
+                                />
+
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleUpload(e, q)}
                                 />
                             </td>
 

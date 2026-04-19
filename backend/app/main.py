@@ -4,6 +4,10 @@ from sqlalchemy.orm import Session
 from datetime import date
 from pydantic import BaseModel
 from typing import Optional
+from fastapi.staticfiles import StaticFiles
+from fastapi import UploadFile, File
+import shutil
+import os
 
 from .database import engine, SessionLocal
 from .models import Base, Question, Progress
@@ -22,6 +26,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Servir les fichiers statiques (images)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 🔌 DB dependency
 def get_db():
@@ -43,10 +50,10 @@ class AnswerRequest(BaseModel):
     quality: int
 
 class QuestionUpdate(BaseModel):
-    question: str
-    answer: str
-    theme: str
-    type_q: str
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    theme: Optional[str] = None
+    type_q: Optional[str] = None
     image_url: Optional[str] = None
 
 @app.put("/questions/{question_id}")
@@ -56,11 +63,10 @@ def update_question(question_id: int, data: QuestionUpdate, db: Session = Depend
     if not q:
         return {"error": "Question not found"}
 
-    q.question = data.question
-    q.answer = data.answer
-    q.theme = data.theme
-    q.type_q = data.type_q
-    q.image_url = data.image_url
+    update_data = data.dict(exclude_unset=True)
+
+    for key, value in update_data.items():
+        setattr(q, key, value)
 
     db.commit()
     return {"status": "ok"}
@@ -95,6 +101,14 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
     db.refresh(q)
     return q
 
+@app.post("/upload")
+def upload_image(file: UploadFile = File(...)):
+    file_path = f"static/{file.filename}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return {"url": f"http://127.0.0.1:8000/{file_path}"}
 
 # 📥 Récupérer toutes les questions
 @app.get("/questions")

@@ -101,19 +101,13 @@ function App() {
     setAllQuestions(data);
   }
 
-  async function updateQuestion(q) {
+  async function updateQuestion(q, updatedFields) {
     await fetch(`http://localhost:8000/questions/${q.id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        question: q.question,
-        answer: q.answer,
-        theme: q.theme,
-        type_q: q.type_q,
-        image_url: q.image_url,
-      }),
+      body: JSON.stringify(updatedFields),
     });
   }
 
@@ -156,6 +150,26 @@ function App() {
     }, 0);
   }
 
+  async function handleUpload(e, q) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const res = await fetch("http://127.0.0.1:8000/upload", {
+      method: "POST",
+      body: formData
+    });
+    
+    const data = await res.json();
+    
+    // 🔥 on met à jour la question avec l'image
+    updateQuestion(q, {
+      image_url: data.url,
+      type_q: "image"
+    });
+  }
 
   function handleSort(field) {
     if (sortField === field) {
@@ -247,6 +261,7 @@ function App() {
           newRow={newRow}
           setNewRow={setNewRow}
           createQuestion={createQuestion}
+          handleUpload={handleUpload}
           search={search}
           setSearch={setSearch}
           filterTheme={filterTheme}
