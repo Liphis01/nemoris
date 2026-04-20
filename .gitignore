@@ -9,6 +9,7 @@ dist/
 
 # Database
 *.db
+backend/static/
 
 # Env
 .env

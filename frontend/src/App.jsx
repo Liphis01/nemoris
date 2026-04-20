@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import { getReview, sendAnswer } from "./api/api";
 import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
@@ -17,6 +17,7 @@ function App() {
   const [filterDue, setFilterDue] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
+  const questionInputRef = useRef(null);
 
 
   const [newRow, setNewRow] = useState({
@@ -269,6 +270,7 @@ function App() {
           setMode={setMode}
           allQuestions={allQuestions}
           filteredQuestions={filteredQuestions}
+          questionInputRef={questionInputRef}
           setAllQuestions={setAllQuestions}
           updateQuestion={updateQuestion}
           deleteQuestion={deleteQuestion}

@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 export default function Manage({
     setMode,
     allQuestions,
     filteredQuestions,
+    questionInputRef,
     setAllQuestions,
     updateQuestion,
     deleteQuestion,
@@ -22,7 +23,6 @@ export default function Manage({
     sortField,
     sortOrder
 }) {
-    const questionInputRef = useRef(null);
     const [hoveredImage, setHoveredImage] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const headerStyle = {
@@ -223,27 +223,60 @@ export default function Manage({
 
 
                         <td>
-                            <input
-                                style={cellStyle}
+                            <select
                                 value={newRow.type_q}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, type_q: e.target.value })
                                 }
                                 onKeyDown={handleNewRowKeyDown}
-                                placeholder="Type de question"
-                            />
+                                style={{
+                                    ...cellStyle,
+                                    padding: "6px",
+                                    background: "#1a1a1a",
+                                    color: "#eee"
+                                }}
+                            >
+                                <option value="text">text</option>
+                                <option value="image">image</option>
+                            </select>
                         </td>
 
-                        <td>
+                        <td
+                            onMouseEnter={(e) => {
+                                if (newRow.image_url) {
+                                    setHoveredImage(newRow.image_url);
+                                    setMousePos({ x: e.clientX, y: e.clientY });
+                                }
+                            }}
+                            onMouseMove={(e) => {
+                                setMousePos({ x: e.clientX, y: e.clientY });
+                            }}
+                            onMouseLeave={() => setHoveredImage(null)}
+                        >
                             <input
                                 style={cellStyle}
-                                value={newRow.image_url}
+                                value={newRow.image_url || ""}
                                 onChange={(e) =>
                                     setNewRow({ ...newRow, image_url: e.target.value })
                                 }
                                 onKeyDown={handleNewRowKeyDown}
                                 placeholder="URL de l'image"
                             />
+
+                            {newRow.image_url && (
+                                <button onClick={() => setNewRow({ ...newRow, image_url: "" })}>
+                                    ❌
+                                </button>
+                            )}
+
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) =>
+                                    setNewRow({ ...newRow, image_url: URL.createObjectURL(e.target.files[0]) })
+                                }
+                            />
+
                         </td>
 
                         <td>-</td>
@@ -310,19 +343,26 @@ export default function Manage({
                             </td>
 
                             <td>
-                                <input
-                                    style={cellStyle}
-                                    value={q.type_q || "text"}
+                                <select
+                                    value={q.type_q}
                                     onChange={(e) => {
+                                        // onChange={(e) =>
+                                        //     updateQuestion(q.id, { type_q: e.target.value })
+                                        // }
                                         const updated = [...allQuestions];
                                         updated[index].type_q = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    // onChange={(e) =>
-                                    //     updateQuestion(q.id, { type_q: e.target.value })
-                                    // }
-                                    onBlur={() => updateQuestion(q, { type_q: q.type_q })}
-                                />
+                                    style={{
+                                        ...cellStyle,
+                                        padding: "6px",
+                                        background: "#1a1a1a",
+                                        color: "#eee"
+                                    }}
+                                >
+                                    <option value="text">text</option>
+                                    <option value="image">image</option>
+                                </select>
                             </td>
 
                             <td
@@ -347,18 +387,19 @@ export default function Manage({
                                     }}
                                     onBlur={() => updateQuestion(q, { image_url: q.image_url })}
                                 />
+
                                 {q.image_url && (
-                                        <button onClick={() => deleteImage(q.id)}>
-                                            ❌
-                                        </button>
-                                    )}
+                                    <button onClick={() => deleteImage(q.id)}>
+                                        ❌
+                                    </button>
+                                )}
 
                                 <input
                                     type="file"
                                     accept="image/*"
                                     onChange={(e) => handleUpload(e, q)}
                                 />
-                                
+
                             </td>
 
                             <td>{q.next_review || "-"}</td>
