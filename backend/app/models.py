@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, Date, JSON
 from datetime import date
 from .database import Base
 
@@ -11,6 +11,7 @@ class Question(Base):
     theme = Column(String)
     type_q = Column(String, default="text")
     image_url = Column(String, nullable=True)
+    data = Column(JSON, nullable=True)
 
 
 class Progress(Base):

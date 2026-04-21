@@ -3,6 +3,7 @@ import { getReview, sendAnswer } from "./api/api";
 import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
 import Manage from "./components/Manage";
+import MapEditor from "./components/MapEditor";
 
 function App() {
   const [questions, setQuestions] = useState([]);
@@ -18,7 +19,7 @@ function App() {
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
   const questionInputRef = useRef(null);
-
+  const [editingQuestion, setEditingQuestion] = useState(null); // pour le menu map edition
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -94,6 +95,11 @@ function App() {
 
     setShowAnswer(false);
     setCurrentIndex(currentIndex + 1);
+  }
+
+  function openEditor(q) {
+    setEditingQuestion(q);
+    setMode("map_editor");
   }
 
   async function loadAllQuestions() {
@@ -288,8 +294,16 @@ function App() {
           handleSort={handleSort}
           sortField={sortField}
           sortOrder={sortOrder}
+          openEditor={openEditor}
+          editingQuestion={editingQuestion}
+          setEditingQuestion={setEditingQuestion}
         />
       )}
+
+      {mode === "map_editor" && editingQuestion && (
+        <MapEditor q={editingQuestion} />
+       )
+      }
     </div>
   )
 }
