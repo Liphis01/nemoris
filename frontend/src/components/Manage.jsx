@@ -306,8 +306,8 @@ export default function Manage({
                     {filteredQuestions.map((q, index) => (
                         <tr
                             key={q.id}
-                            onClick={() => openEditor(q)}
-                            style={{cursor: "pointer"}}
+                            // onClick={() => openEditor(q)}
+                            // style={{cursor: "pointer"}}
                         >
                             <td>{q.id}</td>
 

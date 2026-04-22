@@ -98,6 +98,10 @@ function App() {
   }
 
   function openEditor(q) {
+    if (!q || q.type_q !== "map") {
+      alert("Aucune question map sélectionnée");
+      return;
+    }
     setEditingQuestion(q);
     setMode("map_editor");
   }
@@ -301,8 +305,11 @@ function App() {
       )}
 
       {mode === "map_editor" && editingQuestion && (
-        <MapEditor q={editingQuestion} />
-       )
+        <MapEditor
+          q={editingQuestion}
+          setMode={setMode}
+        />
+      )
       }
     </div>
   )
