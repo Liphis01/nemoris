@@ -97,15 +97,6 @@ function App() {
     setCurrentIndex(currentIndex + 1);
   }
 
-  function openEditor(q) {
-    if (!q || q.type_q !== "map") {
-      alert("Aucune question map sélectionnée");
-      return;
-    }
-    setEditingQuestion(q);
-    setMode("map_editor");
-  }
-
   async function loadAllQuestions() {
     const res = await fetch("http://localhost:8000/questions");
     const data = await res.json();
@@ -298,16 +289,16 @@ function App() {
           handleSort={handleSort}
           sortField={sortField}
           sortOrder={sortOrder}
-          openEditor={openEditor}
           editingQuestion={editingQuestion}
           setEditingQuestion={setEditingQuestion}
         />
       )}
 
-      {mode === "map_editor" && editingQuestion && (
+      {mode === "manage" && editingQuestion && (
         <MapEditor
           q={editingQuestion}
-          setMode={setMode}
+          onClose={() => setEditingQuestion(null)}
+          updateQuestion={updateQuestion}
         />
       )
       }

@@ -1,50 +1,96 @@
 import { useState } from "react";
 
-export default function MapEditor({ q, setMode }) {
-  const [items, setItems] = useState(q.data?.items || []);
+const overlayStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  background: "rgba(0,0,0,0.7)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  zIndex: 1000
+};
 
-  function addItem(value) {
-    setItems([...items, value]);
+const modalStyle = {
+  background: "#1e1e1e",
+  padding: "20px",
+  borderRadius: "10px",
+  width: "400px",
+  color: "white"
+};
+
+const rowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  marginBottom: "5px"
+};
+
+export default function MapEditor({
+  q,
+  onClose,
+  updateQuestion,
+}) {
+  const [items, setItems] = useState(q.data?.items || []);
+  const [input, setInput] = useState("");
+
+  function addItem() {
+    if (!input.trim()) return;
+
+    if (items.includes(input.trim())) return;
+
+    setItems([...items, input.trim()]);
+    setInput("");
+  }
+
+  function removeItem(index) {
+    setItems(items.filter((_, i) => i !== index));
+  }
+
+  function save() {
+    updateQuestion(q, {
+      type_q: "map",
+      data: { items }
+    });
+
+    onClose();
   }
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "auto" }}>
+    <div style={overlayStyle}>
+      <div style={modalStyle}>
+        <h2>🗺 Map Editor</h2>
 
-      <button
-        onClick={() => setMode("manage")}
-        style={{
-          marginBottom: "20px",
-          background: "#2a2a2a",
-          color: "#eee",
-          border: "1px solid #333",
-          padding: "8px 14px",
-          borderRadius: "6px",
-          cursor: "pointer"
-        }}
-        onMouseEnter={(e) => e.target.style.opacity = "0.8"}
-        onMouseLeave={(e) => e.target.style.opacity = "1"}
-        onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
-        onMouseUp={(e) => e.target.style.transform = "scale(1)"}
-      >
-        ⬅ Retour
-      </button>
+        {/* LISTE */}
+        <div style={{ marginBottom: "20px" }}>
+          {items.map((item, i) => (
+            <div key={i} style={rowStyle}>
+              <span>{item}</span>
+              <button onClick={() => removeItem(i)}>❌</button>
+            </div>
+          ))}
+        </div>
 
-      <h2 style={{ marginBottom: "20px" }}>
-        Map Editor - {q.question}
-      </h2>
+        {/* INPUT */}
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addItem()}
+          placeholder="Ajouter un élément..."
+          style={{ width: "100%", marginBottom: "10px" }}
+        />
 
-      {items.map((item, i) => (
-        <div key={i}>{item}</div>
-      ))}
+        <button onClick={addItem}>Ajouter</button>
 
-      <input
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            addItem(e.target.value);
-            e.target.value = "";
-          }
-        }}
-      />
+        {/* ACTIONS */}
+        <div style={{ marginTop: "20px" }}>
+          <button onClick={save}>💾 Sauvegarder</button>
+          <button onClick={onClose} style={{ marginLeft: "10px" }}>
+            ❌ Fermer
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

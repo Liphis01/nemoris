@@ -22,7 +22,6 @@ export default function Manage({
     handleSort,
     sortField,
     sortOrder,
-    openEditor,
     editingQuestion,
     setEditingQuestion
 }) {
@@ -306,10 +305,16 @@ export default function Manage({
                     {filteredQuestions.map((q, index) => (
                         <tr
                             key={q.id}
-                            // onClick={() => openEditor(q)}
-                            // style={{cursor: "pointer"}}
+
                         >
-                            <td>{q.id}</td>
+                            <td
+                                onClick={() => {
+                                    if (q.type_q === "map") {
+                                        setEditingQuestion(q);
+                                    }
+                                }}
+                                style={{ cursor: "pointer" }}
+                            >{q.id}</td>
 
                             <td>
                                 <input

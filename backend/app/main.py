@@ -40,10 +40,10 @@ def get_db():
 
 class QuestionCreate(BaseModel):
     question: str
-    answer: Optional[str] = None
+    answer: Optional[str] = ""
     theme: str
     type_q: str
-    image_url: Optional[str] = None
+    image_url: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
 
 class AnswerRequest(BaseModel):
@@ -51,11 +51,11 @@ class AnswerRequest(BaseModel):
     quality: int
 
 class QuestionUpdate(BaseModel):
-    question: Optional[str] = None
-    answer: Optional[str] = None
-    theme: Optional[str] = None
-    type_q: Optional[str] = None
-    image_url: Optional[str] = None
+    question: Optional[str] = ""
+    answer: Optional[str] = ""
+    theme: Optional[str] = ""
+    type_q: Optional[str] = ""
+    image_url: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
 
 @app.put("/questions/{question_id}")
