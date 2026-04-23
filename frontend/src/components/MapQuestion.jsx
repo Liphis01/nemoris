@@ -1,18 +1,23 @@
 import { useState } from "react";
 
-export default function MapQuestion({ 
-    q,
-}) {
+export default function MapQuestion({ q, onAnswer }) {
+  const items = q.data?.items || [];
+
   const [input, setInput] = useState("");
   const [found, setFound] = useState([]);
 
-  const items = q.data?.items || [];
+  function normalize(str) {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "");
+  }
 
   function handleSubmit() {
-    const normalized = input.trim().toLowerCase();
+    const value = normalize(input);
 
     const match = items.find(
-      (item) => item.toLowerCase() === normalized
+      (item) => normalize(item) === value
     );
 
     if (match && !found.includes(match)) {
@@ -22,32 +27,58 @@ export default function MapQuestion({
     setInput("");
   }
 
+  const progress = `${found.length} / ${items.length}`;
+
   return (
     <div>
-      <h3>{q.question}</h3>
+      <h2>{q.question}</h2>
 
+      {/* Progression */}
+      <p style={{ opacity: 0.7 }}>{progress}</p>
+
+      {/* Input */}
       <input
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-        placeholder="Tape une réponse..."
+        placeholder="Tape ta réponse..."
+        style={{ width: "100%", marginBottom: "15px" }}
       />
 
-      <p>{found.length} / {items.length}</p>
-
-      <div style={{ marginTop: "20px" }}>
+      {/* Liste */}
+      <div style={gridStyle}>
         {items.map((item) => (
-          <span
+          <div
             key={item}
             style={{
-              marginRight: "10px",
-              color: found.includes(item) ? "green" : "gray"
+              padding: "5px",
+              borderRadius: "5px",
+              background: found.includes(item)
+                ? "#2ecc71"
+                : "#444",
+              textAlign: "center"
             }}
           >
             {found.includes(item) ? item : "???"}
-          </span>
+          </div>
         ))}
       </div>
+
+      {/* Fin */}
+      {found.length === items.length && (
+        <div style={{ marginTop: "20px" }}>
+          <p>🎉 Terminé !</p>
+          <button onClick={() => onAnswer(2)}>
+            Continuer
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+const gridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
+  gap: "5px"
+};

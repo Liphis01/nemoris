@@ -12,7 +12,7 @@ export default function QuestionRenderer({
 
     switch (q.type_q) {
         case "map":
-            return <MapQuestion q={q} />;
+            return <MapQuestion q={q} onAnswer={handleAnswer} />;
 
         case "image":
         case "text":
