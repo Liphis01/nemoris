@@ -1,4 +1,5 @@
 import { useState } from "react";
+import WorldMap from "./WorldMap";
 
 export default function MapQuestion({ q, onAnswer }) {
   const items = q.data?.items || [];
@@ -35,6 +36,9 @@ export default function MapQuestion({ q, onAnswer }) {
 
       {/* Progression */}
       <p style={{ opacity: 0.7 }}>{progress}</p>
+
+      {/* Carte */}
+      <WorldMap found={found} items={items} />
 
       {/* Input */}
       <input
