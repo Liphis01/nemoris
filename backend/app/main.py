@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import date
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi.staticfiles import StaticFiles
 from fastapi import UploadFile, File
 import shutil
@@ -40,10 +40,11 @@ def get_db():
 
 class QuestionCreate(BaseModel):
     question: str
-    answer: str
+    answer: Optional[str] = None
     theme: str
     type_q: str
     image_url: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
 
 class AnswerRequest(BaseModel):
     question_id: int
@@ -55,6 +56,7 @@ class QuestionUpdate(BaseModel):
     theme: Optional[str] = None
     type_q: Optional[str] = None
     image_url: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
 
 @app.put("/questions/{question_id}")
 def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
@@ -90,8 +92,6 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
 def delete_image(question_id: int, db: Session = Depends(get_db)):
     q = db.query(Question).filter(Question.id == question_id).first()
 
-    
-
     if not q:
         return {"error": "Question not found"}
     
@@ -124,7 +124,8 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
         answer=data.answer,
         theme=data.theme,
         type_q=data.type_q,
-        image_url=data.image_url
+        image_url=data.image_url,
+        data=data.data
     )
     db.add(q)
     db.commit()
@@ -156,6 +157,7 @@ def get_questions(db: Session = Depends(get_db)):
             "theme": q.theme,
             "type_q": q.type_q,
             "image_url": q.image_url,
+            "data": q.data,
             "next_review": progress.next_review if progress else None
         })
 
@@ -198,7 +200,8 @@ def get_review(
             "interval": p.interval,
             "ease": p.ease_factor,
             "type_q": q.type_q,
-            "image_url": q.image_url
+            "image_url": q.image_url,
+            "data": q.data
         })
 
     # 2. Nouvelles questions
@@ -218,7 +221,8 @@ def get_review(
             "interval": 1,
             "ease": 2.5,
             "type_q": q.type_q,
-            "image_url": q.image_url
+            "image_url": q.image_url,
+            "data": q.data
         })
 
     # 3. Limite
