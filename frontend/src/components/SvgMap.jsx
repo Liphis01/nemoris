@@ -1,7 +1,49 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function SvgMap({ svgPath, found, onSelect }) {
     const containerRef = useRef(null);
+    const [scale, setScale] = useState(1);
+    const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [start, setStart] = useState({ x: 0, y: 0 });
+    const [hasMoved, setHasMoved] = useState(false);
+
+    function handleWheel(e) {
+        e.preventDefault();
+
+        const zoomFactor = 0.1;
+        const newScale = Math.min(
+            Math.max(0.5, scale - e.deltaY * zoomFactor * 0.01),
+            5
+        );
+
+        setScale(newScale);
+    }
+
+    function handleMouseDown(e) {
+        setIsDragging(true);
+        setStart({
+            x: e.clientX - offset.x,
+            y: e.clientY - offset.y
+        });
+        setHasMoved(false);
+    }
+
+    function handleMouseMove(e) {
+        if (!isDragging) return;
+
+        setOffset({
+            x: e.clientX - start.x,
+            y: e.clientY - start.y
+        });
+    }
+
+    function handleMouseUp() {
+        setIsDragging(false);
+        if (isDragging) {
+            setHasMoved(true);
+        }
+    }
 
     useEffect(() => {
         fetch(svgPath)
@@ -39,8 +81,10 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                 // 🖱️ CLICK HANDLER
                 containerRef.current.querySelectorAll("path").forEach((el) => {
                     el.addEventListener("click", () => {
+                        if (hasMoved) return; // Ignorer le clic si c'était un drag
+
                         const code = el.getAttribute("data-code");
-                        if (code) {
+                        if (code && onSelect) {
                             onSelect(code);
                         }
                     });
@@ -57,18 +101,69 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                         }
                     });
                 });
-
             });
     }, [svgPath, found]);
 
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+
+        function wheelHandler(e) {
+            e.preventDefault();
+
+            const rect = el.getBoundingClientRect();
+
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const zoomIntensity = 0.0015;
+            const newScale = Math.min(
+                Math.max(0.5, scale * (1 - e.deltaY * zoomIntensity)),
+                5
+            );
+
+            // 🔥 Ajuster offset pour zoom centré souris
+            const scaleRatio = newScale / scale;
+
+            const newOffset = {
+                x: mouseX - (mouseX - offset.x) * scaleRatio,
+                y: mouseY - (mouseY - offset.y) * scaleRatio
+            };
+
+            setScale(newScale);
+            setOffset(newOffset);
+        }
+
+        el.addEventListener("wheel", wheelHandler, { passive: false });
+
+        return () => {
+            el.removeEventListener("wheel", wheelHandler);
+        };
+    }, [scale, offset]);
+
     return (
         <div
-            ref={containerRef}
             style={{
                 width: "100%",
-                maxWidth: "800px",
-                margin: "0 auto"
+                height: "600px",
+                overflow: "hidden",
+                border: "1px solid #333",
+                position: "relative",
+                userSelect: "none"
             }}
-        />
+        >
+            <div
+                ref={containerRef}
+                style={{
+                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                    transformOrigin: "0 0",
+                    cursor: isDragging ? "grabbing" : "grab"
+                }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+            />
+        </div>
     );
 }
