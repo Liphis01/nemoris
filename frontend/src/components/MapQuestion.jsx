@@ -1,5 +1,5 @@
 import { useState } from "react";
-import WorldMap from "./WorldMap";
+import SvgMap from "./SvgMap";
 
 export default function MapQuestion({ q, onAnswer }) {
   const items = q.data?.items || [];
@@ -38,10 +38,14 @@ export default function MapQuestion({ q, onAnswer }) {
       <p style={{ opacity: 0.7 }}>{progress}</p>
 
       {/* Carte */}
-      <WorldMap found={found} items={items} />
+      <SvgMap
+        svgPath={`/maps/${q.data.svg}`}
+        found={found}
+      />
 
       {/* Input */}
       <input
+        autoFocus
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
