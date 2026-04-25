@@ -3,6 +3,8 @@ import SvgMap from "./SvgMap";
 
 export default function MapQuestion({ q, onAnswer }) {
   const items = q.data?.items || [];
+  const labels = q.data?.labels || {};
+  const aliases = q.data?.aliases || {};
 
   const [input, setInput] = useState("");
   const [found, setFound] = useState([]);
@@ -14,12 +16,17 @@ export default function MapQuestion({ q, onAnswer }) {
       .replace(/\p{Diacritic}/gu, "");
   }
 
+  function matches(code, input) {
+    const name = labels[code] || code;
+    const all = [name, ...(aliases[code] || [])];
+
+    return all.some(v => normalize(v) === normalize(input));
+  }
+
   function handleSubmit() {
     const value = normalize(input);
 
-    const match = items.find(
-      (item) => normalize(item) === value
-    );
+    const match = items.find(code => matches(code, input));
 
     if (match && !found.includes(match)) {
       setFound([...found, match]);
@@ -60,22 +67,27 @@ export default function MapQuestion({ q, onAnswer }) {
 
       {/* Liste */}
       <div style={gridStyle}>
-        {items.map((item) => (
-          <div
-            key={item}
-            style={{
-              padding: "5px",
-              borderRadius: "5px",
-              background: found.includes(item)
-                ? "#2ecc71"
-                : "#444",
-              textAlign: "center"
-            }}
-          >
-            {found.includes(item) ? item : "???"}
-          </div>
-        ))}
+        {items.map(code => {
+          const label = labels[code] || code;
+          return (
+            <div
+              key={code}
+              style={{
+                padding: "5px",
+                borderRadius: "5px",
+                background: found.includes(code)
+                  ? "#2ecc71"
+                  : "#444",
+                textAlign: "center"
+              }}
+            >
+              {found.includes(code) ? label : "???"}
+            </div>
+          );
+        })
+        }
       </div>
+
 
       {/* Fin */}
       {found.length === items.length && (

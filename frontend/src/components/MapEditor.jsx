@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SvgMap from "./SvgMap";
 
 const overlayStyle = {
   position: "fixed",
@@ -33,25 +34,65 @@ export default function MapEditor({
   updateQuestion,
 }) {
   const [items, setItems] = useState(q.data?.items || []);
-  const [input, setInput] = useState("");
+  const [labels, setLabels] = useState(q.data?.labels || {});
+  const [aliases, setAliases] = useState(q.data?.aliases || {});
+  const [selected, setSelected] = useState(null);
+  // const [input, setInput] = useState("");
 
-  function addItem() {
-    if (!input.trim()) return;
+  function handleSelect(code) {
+    setSelected(code);
 
-    if (items.includes(input.trim())) return;
-
-    setItems([...items, input.trim()]);
-    setInput("");
+    if (!items.includes(code)) {
+      setItems([...items, code]);
+    }
   }
 
-  function removeItem(index) {
-    setItems(items.filter((_, i) => i !== index));
+  // function addItem() {
+  //   if (!input.trim()) return;
+
+  //   if (items.includes(input.trim())) return;
+
+  //   setItems([...items, input.trim()]);
+  //   setInput("");
+  // }
+
+  function updateLabel(code, value) {
+    setLabels({ ...labels, [code]: value });
   }
+
+  function updateAliases(code, value) {
+    setAliases({
+      ...aliases,
+      [code]: value.split(",").map((v) => v.trim())
+    });
+  }
+
+  function removeItem(code) {
+    setItems(items.filter((c) => c !== code));
+
+    const newLabels = { ...labels };
+    delete newLabels[code];
+    setLabels(newLabels);
+
+    const newAliases = { ...aliases };
+    delete newAliases[code];
+    setAliases(newAliases);
+  }
+
+  // function removeItem(index) {
+  //   setItems(items.filter((_, i) => i !== index));
+  // }
 
   function save() {
     updateQuestion(q, {
       type_q: "map",
-      data: { svg: q.data.svg, items }
+      data: {
+        svg: q.data.svg,
+        ...q.data,
+        items,
+        labels,
+        aliases
+      }
     });
 
     onClose();
@@ -62,34 +103,50 @@ export default function MapEditor({
       <div style={modalStyle}>
         <h2>🗺 Map Editor</h2>
 
+        {/* CARTE */}
+        <SvgMap
+          svgPath={`/maps/${q.data?.svg}`}
+          found={items}
+          onSelect={handleSelect}
+        />
+
+        {/* SELECTED */}
+        {selected && (
+          <div style={{ marginTop: "15px" }}>
+            <h4>Zone sélectionnée : {selected}</h4>
+
+            <input
+              placeholder="Label (France)"
+              value={labels[selected] || ""}
+              onChange={(e) =>
+                updateLabel(selected, e.target.value)
+              }
+              style={{ width: "100%", marginBottom: "5px" }}
+            />
+
+            <input
+              placeholder="Aliases (séparés par des virgules)"
+              value={(aliases[selected] || []).join(", ")}
+              onChange={(e) =>
+                updateAliases(selected, e.target.value)
+              }
+              style={{ width: "100%" }}
+            />
+          </div>
+        )}
+
         {/* LISTE */}
-        <div style={{ marginBottom: "20px" }}>
-          {items.map((item, i) => (
-            <div key={i} style={rowStyle}>
-              <span>{item}</span>
-              <button onClick={() => removeItem(i)}>❌</button>
+        <div style={{ marginTop: "20px" }}>
+          {items.map((code) => (
+            <div key={code} style={rowStyle}>
+              <span>{code} → {labels[code]}</span>
+              <button onClick={() => removeItem(code)}>❌</button>
             </div>
           ))}
         </div>
 
-        {/* INPUT */}
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addItem()}
-          placeholder="Ajouter un élément..."
-          style={{ width: "100%", marginBottom: "10px" }}
-        />
-
-        <button onClick={addItem}>Ajouter</button>
-
-        {/* ACTIONS */}
-        <div style={{ marginTop: "20px" }}>
-          <button onClick={save}>💾 Sauvegarder</button>
-          <button onClick={onClose} style={{ marginLeft: "10px" }}>
-            ❌ Fermer
-          </button>
-        </div>
+        <button onClick={save}>💾 Sauvegarder</button>
+        <button onClick={onClose}>❌ Fermer</button>
       </div>
     </div>
   );
