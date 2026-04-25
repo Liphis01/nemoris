@@ -51,7 +51,7 @@ export default function MapEditor({
   function save() {
     updateQuestion(q, {
       type_q: "map",
-      data: { items }
+      data: { svg: q.data.svg, items }
     });
 
     onClose();

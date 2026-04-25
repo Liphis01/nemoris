@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export default function SvgMap({ svgPath, found }) {
+export default function SvgMap({ svgPath, found, onSelect }) {
     const containerRef = useRef(null);
 
     useEffect(() => {
@@ -10,11 +10,13 @@ export default function SvgMap({ svgPath, found }) {
                 containerRef.current.innerHTML = svg;
 
                 const svgEl = containerRef.current.querySelector("svg");
-
-                if (svgEl) {
-                    svgEl.style.width = "100%";
-                    svgEl.style.height = "auto";
+                if (!svgEl) {
+                    console.error("SVG non trouvé dans le fichier:", svgPath);
+                    return;
                 }
+
+                svgEl.style.width = "100%";
+                svgEl.style.height = "auto";
 
                 // RESET couleurs
                 containerRef.current.querySelectorAll("path").forEach((el) => {
@@ -39,7 +41,7 @@ export default function SvgMap({ svgPath, found }) {
                     el.addEventListener("click", () => {
                         const code = el.getAttribute("data-code");
                         if (code) {
-                            console.log("clicked:", code);
+                            onSelect(code);
                         }
                     });
 

@@ -41,6 +41,11 @@ export default function MapQuestion({ q, onAnswer }) {
       <SvgMap
         svgPath={`/maps/${q.data.svg}`}
         found={found}
+        onSelect={(code) => {
+          if (items.includes(code) && !found.includes(code)) {
+            setFound([...found, code]);
+          }
+        }}
       />
 
       {/* Input */}
