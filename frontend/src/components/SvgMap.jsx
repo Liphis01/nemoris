@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 export default function SvgMap({ svgPath, found, onSelect }) {
     const containerRef = useRef(null);
+    const wrapperRef = useRef(null);
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
@@ -105,7 +106,7 @@ export default function SvgMap({ svgPath, found, onSelect }) {
     }, [svgPath, found]);
 
     useEffect(() => {
-        const el = containerRef.current;
+        const el = wrapperRef.current;
         if (!el) return;
 
         function wheelHandler(e) {
@@ -113,8 +114,13 @@ export default function SvgMap({ svgPath, found, onSelect }) {
 
             const rect = el.getBoundingClientRect();
 
+            // position souris RELATIVE AU WRAPPER (non transformé)
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
+
+            // coordonnées monde
+            const worldX = (mouseX - offset.x) / scale;
+            const worldY = (mouseY - offset.y) / scale;
 
             const zoomIntensity = 0.0015;
             const newScale = Math.min(
@@ -122,12 +128,9 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                 5
             );
 
-            // 🔥 Ajuster offset pour zoom centré souris
-            const scaleRatio = newScale / scale;
-
             const newOffset = {
-                x: mouseX - (mouseX - offset.x) * scaleRatio,
-                y: mouseY - (mouseY - offset.y) * scaleRatio
+                x: mouseX - worldX * newScale,
+                y: mouseY - worldY * newScale
             };
 
             setScale(newScale);
@@ -143,14 +146,18 @@ export default function SvgMap({ svgPath, found, onSelect }) {
 
     return (
         <div
+            ref={wrapperRef}
             style={{
                 width: "100%",
                 height: "600px",
                 overflow: "hidden",
-                border: "1px solid #333",
                 position: "relative",
                 userSelect: "none"
             }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
         >
             <div
                 ref={containerRef}
@@ -159,10 +166,6 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                     transformOrigin: "0 0",
                     cursor: isDragging ? "grabbing" : "grab"
                 }}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
             />
         </div>
     );
