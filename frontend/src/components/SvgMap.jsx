@@ -7,7 +7,6 @@ export default function SvgMap({ svgPath, found, onSelect }) {
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [start, setStart] = useState({ x: 0, y: 0 });
-    const [hasMoved, setHasMoved] = useState(false);
 
     function handleWheel(e) {
         e.preventDefault();
@@ -22,12 +21,15 @@ export default function SvgMap({ svgPath, found, onSelect }) {
     }
 
     function handleMouseDown(e) {
+        if (e.button !== 2) return; // clic droit uniquement
+
+        e.preventDefault(); // empêche menu contextuel
+
         setIsDragging(true);
         setStart({
             x: e.clientX - offset.x,
             y: e.clientY - offset.y
         });
-        setHasMoved(false);
     }
 
     function handleMouseMove(e) {
@@ -41,9 +43,6 @@ export default function SvgMap({ svgPath, found, onSelect }) {
 
     function handleMouseUp() {
         setIsDragging(false);
-        if (isDragging) {
-            setHasMoved(true);
-        }
     }
 
     useEffect(() => {
@@ -73,7 +72,6 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                         containerRef.current.querySelectorAll(
                             `[data-code="${code}"]`
                         );
-
                     elements.forEach((el) => {
                         el.style.fill = "#2ecc71";
                     });
@@ -81,23 +79,23 @@ export default function SvgMap({ svgPath, found, onSelect }) {
 
                 // 🖱️ CLICK HANDLER
                 containerRef.current.querySelectorAll("path").forEach((el) => {
-                    el.addEventListener("click", () => {
-                        if (hasMoved) return; // Ignorer le clic si c'était un drag
+                    const code = el.getAttribute("data-code");
 
-                        const code = el.getAttribute("data-code");
+                    el.addEventListener("click", () => {
                         if (code && onSelect) {
                             onSelect(code);
+                            console.log("Selected code:", code);
                         }
                     });
 
                     el.addEventListener("mouseenter", () => {
-                        if (!found.includes(el.id)) {
+                        if (!found.includes(code)) {
                             el.style.fill = "#888";
                         }
                     });
 
                     el.addEventListener("mouseleave", () => {
-                        if (!found.includes(el.id)) {
+                        if (!found.includes(code)) {
                             el.style.fill = "#444";
                         }
                     });
@@ -124,8 +122,8 @@ export default function SvgMap({ svgPath, found, onSelect }) {
 
             const zoomIntensity = 0.0015;
             const newScale = Math.min(
-                Math.max(0.5, scale * (1 - e.deltaY * zoomIntensity)),
-                5
+                Math.max(1, scale * (1 - e.deltaY * zoomIntensity)),
+                15
             );
 
             const newOffset = {
@@ -149,7 +147,7 @@ export default function SvgMap({ svgPath, found, onSelect }) {
             ref={wrapperRef}
             style={{
                 width: "100%",
-                height: "600px",
+                height: "450px",
                 overflow: "hidden",
                 position: "relative",
                 userSelect: "none"
@@ -158,13 +156,15 @@ export default function SvgMap({ svgPath, found, onSelect }) {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onContextMenu={(e) => e.preventDefault()}
         >
             <div
                 ref={containerRef}
                 style={{
                     transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                     transformOrigin: "0 0",
-                    cursor: isDragging ? "grabbing" : "grab"
+                    cursor: isDragging ? "grabbing" : "grab",
+                    transition: isDragging ? "none" : "transform 0.15s ease-out"
                 }}
             />
         </div>
