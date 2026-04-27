@@ -39,6 +39,7 @@ export default function MapEditor({
   const [labels, setLabels] = useState(q.data?.labels || {});
   const [aliases, setAliases] = useState(q.data?.aliases || {});
   const [editing, setEditing] = useState(null);
+  const [aliasesInput, setAliasesInput] = useState("");
 
   function handleSelect(code) {
     // Vérifier si editing est dans labels
@@ -55,7 +56,7 @@ export default function MapEditor({
       delete newAliases[editing];
       setAliases(newAliases);
     }
-    
+
     setEditing(code);
 
     setItems(prev =>
@@ -107,6 +108,18 @@ export default function MapEditor({
     onClose();
   }
 
+  function commitAliases(code) {
+    const parsed = aliasesInput
+      .split(",")
+      .map(v => v.trim())
+      .filter(Boolean);
+
+    setAliases(prev => ({
+      ...prev,
+      [code]: parsed
+    }));
+  }
+
   useEffect(() => {
     const scrollBarWidth =
       window.innerWidth - document.documentElement.clientWidth;
@@ -119,6 +132,12 @@ export default function MapEditor({
       document.body.style.paddingRight = "0px";
     };
   }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+
+    setAliasesInput((aliases[editing] || []).join(", "));
+  }, [editing]);
 
   return (
     <div style={overlayStyle} onClick={handleClose}>
@@ -181,11 +200,12 @@ export default function MapEditor({
                 />
 
                 <input
-                  value={(aliases[editing] || []).join(", ")}
+                  value={aliasesInput}
                   onChange={(e) =>
-                    updateAliases(editing, e.target.value)
+                    setAliasesInput(e.target.value)
                   }
-                  placeholder="Aliases"
+                  onBlur={() => commitAliases(editing)}
+                  placeholder="Aliases (séparés par des virgules)"
                   style={{ width: "90%" }}
                 />
               </>

@@ -1,10 +1,10 @@
 # TODO
 
-- on peut pas mettre d'alias avec un espace à cause du séparateur ","
 - vérifier l'enregistrement des labels et alias dans mapeditor lorsque je ferme
 - laisse la possibilité de changer le svg pour chaque question
 - ajouter un timer pour les questions
 - fix l'autofocus sur les inputs de mapEditor
+- auto accepter la réponse si c'est correcte
 
 
 # React + Vite
