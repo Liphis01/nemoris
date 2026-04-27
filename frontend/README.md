@@ -5,6 +5,8 @@
 - ajouter un timer pour les questions
 - fix l'autofocus sur les inputs de mapEditor
 - auto accepter la réponse si c'est correcte
+- le scroll de manage devrait se faire sur la question et pas sur le début de la page
+- arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
 
 
 # React + Vite

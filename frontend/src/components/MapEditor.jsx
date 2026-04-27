@@ -243,7 +243,7 @@ export default function MapEditor({
                     updateLabel(editing, e.target.value)
                   }
                   placeholder="Label"
-                  style={{ width: "90%", marginBottom: "5px" }}
+                  style={{ width: "80%", marginBottom: "5px" }}
                 />
 
                 <div style={{ marginTop: "10px" }}>
@@ -288,7 +288,7 @@ export default function MapEditor({
                     onKeyDown={(e) => handleAliasKeyDown(e, editing)}
                     onBlur={() => addAlias(editing)}
                     placeholder="Ajouter un alias"
-                    style={{ width: "100%" }}
+                    style={{ width: "80%" }}
                   />
 
                 </div>
