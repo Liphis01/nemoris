@@ -103,8 +103,8 @@ function App() {
     setAllQuestions(data);
   }
 
-  async function updateQuestion(q, updatedFields) {
-    await fetch(`http://localhost:8000/questions/${q.id}`, {
+  async function updateQuestion(id, updatedFields) {
+    await fetch(`http://localhost:8000/questions/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -167,7 +167,7 @@ function App() {
     const data = await res.json();
 
     // 🔥 on met à jour la question avec l'image
-    updateQuestion(q, {
+    updateQuestion(q.id, {
       image_url: data.url,
       type_q: "image"
     });

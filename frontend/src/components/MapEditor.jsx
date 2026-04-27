@@ -96,7 +96,7 @@ export default function MapEditor({
   }
 
   function handleClose() {
-    updateQuestion(q, {
+    updateQuestion(q.id, {
       type_q: "map",
       data: {
         ...q.data,
@@ -160,7 +160,7 @@ export default function MapEditor({
       }
     };
 
-    await updateQuestion(q, updated);
+    await updateQuestion(q.id, updated);
 
     updateQuestionInState(updated);
 

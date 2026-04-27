@@ -327,7 +327,7 @@ export default function Manage({
                                         updated[index].question = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q, { question: q.question })}
+                                    onBlur={() => updateQuestion(q.id, { question: q.question })}
                                 />
                             </td>
 
@@ -340,7 +340,7 @@ export default function Manage({
                                         updated[index].answer = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q, { answer: q.answer })}
+                                    onBlur={() => updateQuestion(q.id, { answer: q.answer })}
                                 />
                             </td>
 
@@ -353,7 +353,7 @@ export default function Manage({
                                         updated[index].theme = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q, { theme: q.theme })}
+                                    onBlur={() => updateQuestion(q.id, { theme: q.theme })}
                                 />
                             </td>
 
@@ -401,7 +401,7 @@ export default function Manage({
                                         updated[index].image_url = e.target.value;
                                         setAllQuestions(updated);
                                     }}
-                                    onBlur={() => updateQuestion(q, { image_url: q.image_url })}
+                                    onBlur={() => updateQuestion(q.id, { image_url: q.image_url })}
                                 />
 
                                 {q.image_url && (
