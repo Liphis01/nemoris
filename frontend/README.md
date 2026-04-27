@@ -1,6 +1,5 @@
 # TODO
 
-- dans mapeditor, si je clique sur une zone sans lui ajouter de label ou d'alias, on ne l'ajoute pas à la liste des zones
 - on peut pas mettre d'alias avec un espace à cause du séparateur ","
 - vérifier l'enregistrement des labels et alias dans mapeditor lorsque je ferme
 - laisse la possibilité de changer le svg pour chaque question

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SvgMap from "./SvgMap";
 
 const overlayStyle = {
@@ -41,6 +41,21 @@ export default function MapEditor({
   const [editing, setEditing] = useState(null);
 
   function handleSelect(code) {
+    // Vérifier si editing est dans labels
+    if (editing && !labels[editing]) {
+      // Si non, on le supprime des items
+      setItems(items.filter((c) => c !== editing));
+
+      // Et on supprime aussi de labels et aliases
+      const newLabels = { ...labels };
+      delete newLabels[editing];
+      setLabels(newLabels);
+
+      const newAliases = { ...aliases };
+      delete newAliases[editing];
+      setAliases(newAliases);
+    }
+    
     setEditing(code);
 
     setItems(prev =>
@@ -79,7 +94,6 @@ export default function MapEditor({
   }
 
   function handleClose() {
-    console.log("Saving map question with items:", items);
     updateQuestion(q, {
       type_q: "map",
       data: {
