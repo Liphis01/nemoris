@@ -300,6 +300,7 @@ function App() {
           onClose={() => {
             setEditingQuestion(null);
             loadAllQuestions();
+            console.log("Closed MapEditor, refreshing questions...");
           }}
           updateQuestion={updateQuestion}
         />

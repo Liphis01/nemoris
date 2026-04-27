@@ -334,7 +334,7 @@ export default function Manage({
                             <td>
                                 <input
                                     style={cellStyle}
-                                    value={q.answer}
+                                    value={q.answer === ""? q.data.items.length : q.answer}
                                     onChange={(e) => {
                                         const updated = [...allQuestions];
                                         updated[index].answer = e.target.value;
