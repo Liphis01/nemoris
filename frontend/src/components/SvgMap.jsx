@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function SvgMap({ svgPath, found, onSelect }) {
+export default function SvgMap({ svgPath, found, selected, onSelect }) {
     const containerRef = useRef(null);
     const wrapperRef = useRef(null);
     const [scale, setScale] = useState(1);
@@ -77,6 +77,13 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                     });
                 });
 
+                // 🔥 selected (orange par dessus)
+                if (selected) {
+                    containerRef.current
+                        .querySelectorAll(`[data-code="${selected}"]`)
+                        .forEach(el => el.style.fill = "#f39c12");
+                }
+
                 // 🖱️ CLICK HANDLER
                 containerRef.current.querySelectorAll("path").forEach((el) => {
                     const code = el.getAttribute("data-code");
@@ -101,7 +108,7 @@ export default function SvgMap({ svgPath, found, onSelect }) {
                     });
                 });
             });
-    }, [svgPath, found]);
+    }, [svgPath, found, selected]);
 
     useEffect(() => {
         const el = wrapperRef.current;

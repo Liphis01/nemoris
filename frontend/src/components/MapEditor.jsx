@@ -15,11 +15,13 @@ const overlayStyle = {
 };
 
 const modalStyle = {
+  width: "65vw",
+  height: "70vh",
   background: "#1e1e1e",
-  padding: "20px",
-  borderRadius: "10px",
-  width: "400px",
-  color: "white"
+  borderRadius: "12px",
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr",
+  overflow: "hidden",
 };
 
 const rowStyle = {
@@ -36,35 +38,32 @@ export default function MapEditor({
   const [items, setItems] = useState(q.data?.items || []);
   const [labels, setLabels] = useState(q.data?.labels || {});
   const [aliases, setAliases] = useState(q.data?.aliases || {});
-  const [selected, setSelected] = useState(null);
-  // const [input, setInput] = useState("");
+  const [editing, setEditing] = useState(null);
 
   function handleSelect(code) {
-    setSelected(code);
+    setEditing(code);
 
-    if (!items.includes(code)) {
-      setItems([...items, code]);
-    }
+    setItems(prev =>
+      prev.includes(code) ? prev : [...prev, code]
+    );
   }
 
-  // function addItem() {
-  //   if (!input.trim()) return;
-
-  //   if (items.includes(input.trim())) return;
-
-  //   setItems([...items, input.trim()]);
-  //   setInput("");
-  // }
+  function handleRowClick(code) {
+    setEditing(code);
+  }
 
   function updateLabel(code, value) {
-    setLabels({ ...labels, [code]: value });
+    setLabels(prev => ({
+      ...prev,
+      [code]: value
+    }));
   }
 
   function updateAliases(code, value) {
-    setAliases({
-      ...aliases,
-      [code]: value.split(",").map((v) => v.trim())
-    });
+    setAliases(prev => ({
+      ...prev,
+      [code]: value.split(",").map(v => v.trim())
+    }));
   }
 
   function removeItem(code) {
@@ -79,15 +78,11 @@ export default function MapEditor({
     setAliases(newAliases);
   }
 
-  // function removeItem(index) {
-  //   setItems(items.filter((_, i) => i !== index));
-  // }
-
-  function save() {
+  function handleClose() {
+    console.log("Saving map question with items:", items);
     updateQuestion(q, {
       type_q: "map",
       data: {
-        svg: q.data.svg,
         ...q.data,
         items,
         labels,
@@ -99,55 +94,129 @@ export default function MapEditor({
   }
 
   return (
-    <div style={overlayStyle}>
-      <div style={modalStyle}>
-        <h2>🗺 Map Editor</h2>
+    <div style={overlayStyle} onClick={handleClose}>
+      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
 
-        {/* CARTE */}
-        <SvgMap
-          svgPath={`/maps/${q.data?.svg}`}
-          found={items}
-          onSelect={handleSelect}
-        />
+        {/* 🗺️ GAUCHE */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            borderRight: "1px solid #333",
+            padding: "12px",
+            gap: "10px",
+            boxSizing: "border-box"
+          }}>
 
-        {/* SELECTED */}
-        {selected && (
-          <div style={{ marginTop: "15px" }}>
-            <h4>Zone sélectionnée : {selected}</h4>
-
-            <input
-              placeholder="Label (France)"
-              value={labels[selected] || ""}
-              onChange={(e) =>
-                updateLabel(selected, e.target.value)
-              }
-              style={{ width: "100%", marginBottom: "5px" }}
-            />
-
-            <input
-              placeholder="Aliases (séparés par des virgules)"
-              value={(aliases[selected] || []).join(", ")}
-              onChange={(e) =>
-                updateAliases(selected, e.target.value)
-              }
-              style={{ width: "100%" }}
+          {/* MAP */}
+          <div
+            style={{
+              flex: 2,
+              minHeight: 0,
+              background: "#111",
+              borderRadius: "8px",
+              overflow: "hidden",
+              padding: "8px"
+            }}
+          >
+            <SvgMap
+              svgPath={`/maps/${q.data?.svg}`}
+              found={items}
+              selected={editing}
+              onSelect={handleSelect}
             />
           </div>
-        )}
 
-        {/* LISTE */}
-        <div style={{ marginTop: "20px" }}>
-          {items.map((code) => (
-            <div key={code} style={rowStyle}>
-              <span>{code} → {labels[code]}</span>
-              <button onClick={() => removeItem(code)}>❌</button>
-            </div>
-          ))}
+          {/* INPUTS */}
+          <div
+            style={{
+              flex: 1,
+              borderTop: "1px solid #333",
+              padding: "10px",
+              background: "#181818",
+              borderRadius: "8px"
+            }}
+          >
+            {editing ? (
+              <>
+                <div style={{ marginBottom: "5px" }}>
+                  Code : {editing}
+                </div>
+
+                <input
+                  autoFocus
+                  value={labels[editing] || ""}
+                  onChange={(e) =>
+                    updateLabel(editing, e.target.value)
+                  }
+                  placeholder="Label"
+                  style={{ width: "90%", marginBottom: "5px" }}
+                />
+
+                <input
+                  value={(aliases[editing] || []).join(", ")}
+                  onChange={(e) =>
+                    updateAliases(editing, e.target.value)
+                  }
+                  placeholder="Aliases"
+                  style={{ width: "90%" }}
+                />
+              </>
+            ) : (
+              <div>Sélectionner une zone</div>
+            )}
+          </div>
+
         </div>
 
-        <button onClick={save}>💾 Sauvegarder</button>
-        <button onClick={onClose}>❌ Fermer</button>
+        {/* 📋 DROITE */}
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          padding: "12px",
+          gap: "10px",
+          boxSizing: "border-box"
+        }}>
+
+          <div style={{
+            padding: "10px",
+            borderBottom: "1px solid #333"
+          }}>
+            Zones ({items.length})
+          </div>
+
+          <div style={{
+            flex: 1,
+            overflow: "auto",
+            minHeight: 0,
+            background: "#181818",
+            borderRadius: "0 0 8px 8px"
+          }}>
+            {items.map((code) => (
+              <div
+                key={code}
+                ref={(el) => {
+                  if (editing === code && el) {
+                    el.scrollIntoView({ block: "nearest" });
+                  }
+                }}
+                onClick={() => handleRowClick(code)}
+                style={{
+                  padding: "8px",
+                  cursor: "pointer",
+                  background:
+                    editing === code ? "#2a2a2a" : "transparent"
+                }}
+              >
+                {code} → {labels[code] || "???"}
+              </div>
+            ))}
+          </div>
+
+        </div>
+
       </div>
-    </div>
+    </div >
   );
 }

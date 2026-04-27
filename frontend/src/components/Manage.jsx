@@ -314,7 +314,9 @@ export default function Manage({
                                     }
                                 }}
                                 style={{ cursor: "pointer" }}
-                            >{q.id}</td>
+                            >
+                                {q.id}
+                            </td>
 
                             <td>
                                 <input

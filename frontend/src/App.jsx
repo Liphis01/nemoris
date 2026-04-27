@@ -297,7 +297,10 @@ function App() {
       {mode === "manage" && editingQuestion && (
         <MapEditor
           q={editingQuestion}
-          onClose={() => setEditingQuestion(null)}
+          onClose={() => {
+            setEditingQuestion(null);
+            loadAllQuestions();
+          }}
           updateQuestion={updateQuestion}
         />
       )
