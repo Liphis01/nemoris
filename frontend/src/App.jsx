@@ -184,6 +184,14 @@ function App() {
     }
   }
 
+  function updateQuestionInState(updated) {
+    setAllQuestions(prev =>
+      prev.map(q =>
+        q.id === updated.id ? updated : q
+      )
+    );
+  }
+
   async function deleteImage(id) {
     await fetch(`http://127.0.0.1:8000/questions/${id}/image`, {
       method: "DELETE"
@@ -299,10 +307,9 @@ function App() {
           q={editingQuestion}
           onClose={() => {
             setEditingQuestion(null);
-            loadAllQuestions();
-            console.log("Closed MapEditor, refreshing questions...");
           }}
           updateQuestion={updateQuestion}
+          updateQuestionInState={updateQuestionInState}
         />
       )
       }

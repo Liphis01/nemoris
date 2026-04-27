@@ -34,6 +34,7 @@ export default function MapEditor({
   q,
   onClose,
   updateQuestion,
+  updateQuestionInState
 }) {
   const [items, setItems] = useState(q.data?.items || []);
   const [labels, setLabels] = useState(q.data?.labels || {});
@@ -146,6 +147,25 @@ export default function MapEditor({
   //     [code]: parsed
   //   }));
   // }
+
+  async function handleClose() {
+    const updated = {
+      ...q,
+      type_q: "map",
+      data: {
+        ...q.data,
+        items,
+        labels,
+        aliases
+      }
+    };
+
+    await updateQuestion(q, updated);
+
+    updateQuestionInState(updated);
+
+    onClose();
+  }
 
   useEffect(() => {
     const scrollBarWidth =
