@@ -108,17 +108,44 @@ export default function MapEditor({
     onClose();
   }
 
-  function commitAliases(code) {
-    const parsed = aliasesInput
-      .split(",")
-      .map(v => v.trim())
-      .filter(Boolean);
+  function addAlias(code) {
+    const value = aliasesInput.trim();
+    if (!value) return;
+    if ((aliases[code] || []).includes(value)) return;
 
     setAliases(prev => ({
       ...prev,
-      [code]: parsed
+      [code]: [...(prev[code] || []), value]
+    }));
+
+    setAliasesInput("");
+  }
+
+  function removeAlias(code, index) {
+    setAliases(prev => ({
+      ...prev,
+      [code]: prev[code].filter((_, i) => i !== index)
     }));
   }
+
+  function handleAliasKeyDown(e, code) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addAlias(code);
+    }
+  }
+
+  // function commitAliases(code) {
+  //   const parsed = aliasesInput
+  //     .split(",")
+  //     .map(v => v.trim())
+  //     .filter(Boolean);
+
+  //   setAliases(prev => ({
+  //     ...prev,
+  //     [code]: parsed
+  //   }));
+  // }
 
   useEffect(() => {
     const scrollBarWidth =
@@ -133,11 +160,11 @@ export default function MapEditor({
     };
   }, []);
 
-  useEffect(() => {
-    if (!editing) return;
+  // useEffect(() => {
+  //   if (!editing) return;
 
-    setAliasesInput((aliases[editing] || []).join(", "));
-  }, [editing]);
+  //   setAliasesInput((aliases[editing] || []).join(", "));
+  // }, [editing]);
 
   return (
     <div style={overlayStyle} onClick={handleClose}>
@@ -199,15 +226,52 @@ export default function MapEditor({
                   style={{ width: "90%", marginBottom: "5px" }}
                 />
 
-                <input
-                  value={aliasesInput}
-                  onChange={(e) =>
-                    setAliasesInput(e.target.value)
-                  }
-                  onBlur={() => commitAliases(editing)}
-                  placeholder="Aliases (séparés par des virgules)"
-                  style={{ width: "90%" }}
-                />
+                <div style={{ marginTop: "10px" }}>
+
+                  {/* TAGS */}
+                  <div style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px",
+                    marginBottom: "6px"
+                  }}>
+                    {(aliases[editing] || []).map((alias, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          background: "#333",
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}
+                      >
+                        <span>{alias}</span>
+                        <span
+                          onClick={() => removeAlias(editing, index)}
+                          style={{
+                            cursor: "pointer",
+                            color: "#aaa"
+                          }}
+                        >
+                          ✕
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* INPUT */}
+                  <input
+                    value={aliasesInput}
+                    onChange={(e) => setAliasesInput(e.target.value)}
+                    onKeyDown={(e) => handleAliasKeyDown(e, editing)}
+                    onBlur={() => addAlias(editing)}
+                    placeholder="Ajouter un alias"
+                    style={{ width: "100%" }}
+                  />
+
+                </div>
               </>
             ) : (
               <div>Sélectionner une zone</div>
