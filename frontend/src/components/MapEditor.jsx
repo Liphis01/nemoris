@@ -203,7 +203,7 @@ export default function MapEditor({
             }}
           >
             <SvgMap
-              svgPath={`/maps/${q.data?.svg}`}
+              svgPath={`/maps/${q.fichier}`}
               found={items}
               selected={editing}
               onSelect={handleSelect}

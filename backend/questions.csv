@@ -1,4 +1,4 @@
-question,answer,theme,type_q,image_url
+question,answer,theme,type_q,fichier
 Dans quelle ville est ce monument,Paris,géographie,image,https://upload.wikimedia.org/wikipedia/commons/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg
 Capitale de la France,Paris,géographie,text,
 Capitale de l'Allemagne,Berlin,géographie,text,

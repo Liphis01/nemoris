@@ -26,7 +26,7 @@ function App() {
     answer: "",
     theme: "",
     type_q: "",
-    image_url: "",
+    fichier: "",
   });
 
   const appStyle = {
@@ -88,6 +88,11 @@ function App() {
     }
   }, [mode]);
 
+  useEffect(() => {
+    document.body.style.overflow =
+      mode === "manage" ? "hidden" : "auto";
+  }, [mode]);
+
   const current = questions[currentIndex];
 
   function handleAnswer(quality) {
@@ -127,6 +132,23 @@ function App() {
       return;
     }
 
+    // const json = {
+    //   ...newRow,
+    //   type_q: newRow.type_q || "text"
+    // };
+    // {
+    //   "question": "Pays du monde",
+    //     "answer": "",
+    //       "theme": "géographie",
+    //         "type_q": "map",
+    //           "image_url": "",
+    //             "data": {
+    //     "svg": "world.svg",
+    //       "items": [],
+    //         "labels": []
+    //   }
+    // }
+
     const res = await fetch("http://localhost:8000/questions", {
       method: "POST",
       headers: {
@@ -144,7 +166,7 @@ function App() {
       answer: "",
       theme: "",
       type_q: "",
-      image_url: "",
+      fichier: "",
     });
 
     setTimeout(() => {
@@ -168,7 +190,7 @@ function App() {
 
     // 🔥 on met à jour la question avec l'image
     updateQuestion(q.id, {
-      image_url: data.url,
+      fichier: data.url,
       type_q: "image"
     });
   }
@@ -201,7 +223,7 @@ function App() {
     setQuestions(prev =>
       prev.map(q =>
         q.id === id
-          ? { ...q, image_url: null, type_q: "text" }
+          ? { ...q, fichier: null, type_q: "text" }
           : q
       )
     );

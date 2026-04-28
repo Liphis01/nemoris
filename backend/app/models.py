@@ -11,7 +11,7 @@ class Question(Base):
     theme = Column(String)
 
     type_q = Column(String, default="text")
-    image_url = Column(String, nullable=True)
+    fichier = Column(String, nullable=True)
     
     data = Column(JSON, nullable=True)
 

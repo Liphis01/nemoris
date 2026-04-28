@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Manage({
     setMode,
@@ -73,76 +73,78 @@ export default function Manage({
             // style={{ maxWidth: "1200px", margin: "auto" }}
             style={containerStyle}
         >
-            <button
-                onClick={() => setMode("menu")}
-                style={{
-                    alignSelf: "flex-start",
-                    marginBottom: "20px",
-                    background: "#2a2a2a",
-                    color: "#eee",
-                    border: "1px solid #333",
-                    padding: "8px 14px",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    transition: "all 0.1s"
-                }}
-                onMouseEnter={(e) => e.target.style.opacity = "0.8"}
-                onMouseLeave={(e) => e.target.style.opacity = "1"}
-                onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
-                onMouseUp={(e) => e.target.style.transform = "scale(1)"}
-            >
-                ⬅ Retour
-            </button>
-            <h2 style={{ marginBottom: "20px" }}>
-                Gestion des questions
-            </h2>
-            <div
-                style={{
-                    display: "flex",
-                    gap: "10px",
-                    marginBottom: "15px",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexWrap: "wrap"
-                }}
-            >
-                <input
-                    placeholder="Recherche..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+            <div style = {{flexShrink: 0}}>
+                <button
+                    onClick={() => setMode("menu")}
                     style={{
-                        padding: "8px",
-                        borderRadius: "6px",
+                        alignSelf: "flex-start",
+                        marginBottom: "20px",
+                        background: "#2a2a2a",
+                        color: "#eee",
                         border: "1px solid #333",
-                        background: "#1a1a1a",
-                        color: "#eee"
+                        padding: "8px 14px",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        transition: "all 0.1s"
                     }}
-                />
-
-                <input
-                    placeholder="Filtrer par thème"
-                    value={filterTheme}
-                    onChange={(e) => setFilterTheme(e.target.value)}
+                    onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+                    onMouseLeave={(e) => e.target.style.opacity = "1"}
+                    onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
+                    onMouseUp={(e) => e.target.style.transform = "scale(1)"}
+                >
+                    ⬅ Retour
+                </button>
+                <h2 style={{ marginBottom: "20px" }}>
+                    Gestion des questions
+                </h2>
+                <div
                     style={{
-                        padding: "8px",
-                        borderRadius: "6px",
-                        border: "1px solid #333",
-                        background: "#1a1a1a",
-                        color: "#eee"
+                        display: "flex",
+                        gap: "10px",
+                        marginBottom: "15px",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexWrap: "wrap"
                     }}
-                />
-
-                <label>
+                >
                     <input
-                        type="checkbox"
-                        checked={filterDue}
-                        onChange={(e) => setFilterDue(e.target.checked)}
+                        placeholder="Recherche..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #333",
+                            background: "#1a1a1a",
+                            color: "#eee"
+                        }}
                     />
-                    À réviser
-                </label>
-            </div>
-            <div style={{ marginBottom: "10px", color: "#888" }}>
-                {filteredQuestions.length} résultats
+
+                    <input
+                        placeholder="Filtrer par thème"
+                        value={filterTheme}
+                        onChange={(e) => setFilterTheme(e.target.value)}
+                        style={{
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #333",
+                            background: "#1a1a1a",
+                            color: "#eee"
+                        }}
+                    />
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={filterDue}
+                            onChange={(e) => setFilterDue(e.target.checked)}
+                        />
+                        À réviser
+                    </label>
+                </div>
+                <div style={{ marginBottom: "10px", color: "#888" }}>
+                    {filteredQuestions.length} résultats
+                </div>
             </div>
 
             <div style={{ flex: 1, overflow: "auto", minHeight: "0" }}>
@@ -155,12 +157,12 @@ export default function Manage({
                         overflow: "hidden"
                     }}
                 >
-                    <thead style={{ 
+                    <thead style={{
                         backgroundColor: "#2a2a2a",
                         position: "sticky",
                         top: 0,
                         zIndex: 1
-                        }}>
+                    }}>
                         <tr
                             style={{ borderBottom: "1px solid #2a2a2a" }}
                             onMouseEnter={(e) => e.currentTarget.style.background = "#2a2a2a"}
@@ -191,8 +193,8 @@ export default function Manage({
                             </th>
 
                             <th style={headerStyle}
-                                onClick={() => handleSort("image_url")}>
-                                Image URL {sortField === "image_url" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                                onClick={() => handleSort("fichier")}>
+                                Fichier {sortField === "fichier" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                             </th>
 
                             <th style={headerStyle}
@@ -268,8 +270,8 @@ export default function Manage({
 
                             <td
                                 onMouseEnter={(e) => {
-                                    if (newRow.image_url) {
-                                        setHoveredImage(newRow.image_url);
+                                    if (newRow.fichier) {
+                                        setHoveredImage(newRow.fichier);
                                         setMousePos({ x: e.clientX, y: e.clientY });
                                     }
                                 }}
@@ -278,18 +280,18 @@ export default function Manage({
                                 }}
                                 onMouseLeave={() => setHoveredImage(null)}
                             >
-                                <input
+                                {/* <input
                                     style={cellStyle}
-                                    value={newRow.image_url || ""}
+                                    value={newRow.fichier || ""}
                                     onChange={(e) =>
-                                        setNewRow({ ...newRow, image_url: e.target.value })
+                                        setNewRow({ ...newRow, fichier: e.target.value })
                                     }
                                     onKeyDown={handleNewRowKeyDown}
                                     placeholder="URL de l'image"
-                                />
+                                /> */}
 
-                                {newRow.image_url && (
-                                    <button onClick={() => setNewRow({ ...newRow, image_url: "" })}>
+                                {newRow.fichier && (
+                                    <button onClick={() => setNewRow({ ...newRow, fichier: "" })}>
                                         ❌
                                     </button>
                                 )}
@@ -298,7 +300,7 @@ export default function Manage({
                                     type="file"
                                     accept="image/*"
                                     onChange={(e) =>
-                                        setNewRow({ ...newRow, image_url: URL.createObjectURL(e.target.files[0]) })
+                                        setNewRow({ ...newRow, fichier: URL.createObjectURL(e.target.files[0]) })
                                     }
                                 />
 
@@ -405,8 +407,8 @@ export default function Manage({
 
                                 <td
                                     onMouseEnter={(e) => {
-                                        if (q.image_url) {
-                                            setHoveredImage(q.image_url);
+                                        if (q.type_q === "text" && q.fichier) {
+                                            setHoveredImage(q.fichier);
                                             setMousePos({ x: e.clientX, y: e.clientY });
                                         }
                                     }}
@@ -415,28 +417,28 @@ export default function Manage({
                                     }}
                                     onMouseLeave={() => setHoveredImage(null)}
                                 >
-                                    <input
+                                    {q.type_q === "map" && <input
                                         style={cellStyle}
-                                        value={q.image_url || ""}
+                                        value={q.fichier || ""}
                                         onChange={(e) => {
                                             const updated = [...allQuestions];
-                                            updated[index].image_url = e.target.value;
+                                            updated[index].fichier = e.target.value;
                                             setAllQuestions(updated);
                                         }}
-                                        onBlur={() => updateQuestion(q.id, { image_url: q.image_url })}
-                                    />
+                                        onBlur={() => updateQuestion(q.id, { fichier: q.fichier })}
+                                    />}
 
-                                    {q.image_url && (
+                                    {/* {q.fichier && (
                                         <button onClick={() => deleteImage(q.id)}>
                                             ❌
                                         </button>
-                                    )}
+                                    )} */}
 
-                                    <input
+                                    {q.type_q !== "map" && <input
                                         type="file"
                                         accept="image/*"
                                         onChange={(e) => handleUpload(e, q)}
-                                    />
+                                    />}
 
                                 </td>
 

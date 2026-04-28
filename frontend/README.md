@@ -5,6 +5,7 @@
 - auto accepter la réponse si c'est correcte
 - le scroll de manage devrait se faire sur les questions et pas sur le début de la page
 - arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
+- améliorer le design de manage (bouton pour modifier maps, plus lisible, etc)
 
 
 # React + Vite

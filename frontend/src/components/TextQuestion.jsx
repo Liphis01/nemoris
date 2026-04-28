@@ -72,9 +72,9 @@ export default function TextQuestion({
                 </div>
 
                 {q.type_q === "image" &&
-                    q.image_url && (
+                    q.fichier && (
                         <img
-                            src={q.image_url}
+                            src={q.fichier}
                             alt="question"
                             style={{
                                 maxWidth: "100%",

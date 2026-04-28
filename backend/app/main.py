@@ -43,7 +43,7 @@ class QuestionCreate(BaseModel):
     answer: Optional[str] = ""
     theme: str
     type_q: str
-    image_url: Optional[str] = ""
+    fichier: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
 
 class AnswerRequest(BaseModel):
@@ -55,7 +55,7 @@ class QuestionUpdate(BaseModel):
     answer: Optional[str] = ""
     theme: Optional[str] = ""
     type_q: Optional[str] = ""
-    image_url: Optional[str] = ""
+    fichier: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
 
 @app.put("/questions/{question_id}")
@@ -95,12 +95,12 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
     if not q:
         return {"error": "Question not found"}
     
-    if not q.image_url.startswith("http://127.0.0.1:8000/static/"):
+    if not q.fichier.startswith("http://127.0.0.1:8000/static/"):
         return {"error": "External image"}
 
-    if q.image_url:
+    if q.fichier:
         # extraire le chemin local
-        file_path = q.image_url.replace("http://127.0.0.1:8000/", "")
+        file_path = q.fichier.replace("http://127.0.0.1:8000/", "")
 
         if "static/" not in file_path:
             return {"error": "wrong file path"}
@@ -109,7 +109,7 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
             os.remove(file_path)
 
     # supprimer dans la DB
-    q.image_url = None
+    q.fichier = None
     q.type_q = "text"
 
     db.commit()
@@ -124,7 +124,7 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
         answer=data.answer,
         theme=data.theme,
         type_q=data.type_q,
-        image_url=data.image_url,
+        fichier=data.fichier,
         data=data.data
     )
     db.add(q)
@@ -156,7 +156,7 @@ def get_questions(db: Session = Depends(get_db)):
             "answer": q.answer,
             "theme": q.theme,
             "type_q": q.type_q,
-            "image_url": q.image_url,
+            "fichier": q.fichier,
             "data": q.data,
             "next_review": progress.next_review if progress else None
         })
@@ -200,7 +200,7 @@ def get_review(
             "interval": p.interval,
             "ease": p.ease_factor,
             "type_q": q.type_q,
-            "image_url": q.image_url,
+            "fichier": q.fichier,
             "data": q.data
         })
 
@@ -221,7 +221,7 @@ def get_review(
             "interval": 1,
             "ease": 2.5,
             "type_q": q.type_q,
-            "image_url": q.image_url,
+            "fichier": q.fichier,
             "data": q.data
         })
 

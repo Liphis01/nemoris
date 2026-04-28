@@ -13,7 +13,7 @@ with open("questions.csv", newline='', encoding="utf-8") as csvfile:
             answer=row["answer"],
             theme=row["theme"],
             type_q=row["type_q"],
-            image_url=row["image_url"] if row["image_url"] else None
+            fichier=row["fichier"] if row["fichier"] else None
         )
         db.add(q)
 
