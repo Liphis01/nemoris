@@ -122,7 +122,7 @@ function App() {
   }
 
   async function createQuestion() {
-    if (!newRow.question || !newRow.answer || !newRow.theme) {
+    if (!newRow.question || !newRow.theme) {
       alert("Remplis tous les champs");
       return;
     }
