@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SvgMap from "./SvgMap";
 
 const overlayStyle = {
@@ -41,21 +41,15 @@ export default function MapEditor({
   const [aliases, setAliases] = useState(q.data?.aliases || {});
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
+  const labelInputRef = useRef(null);
 
   function handleSelect(code) {
-    // Vérifier si editing est dans labels
-    if (editing && !labels[editing]) {
-      // Si non, on le supprime des items
-      setItems(items.filter((c) => c !== editing));
+    if (editing) {
+      const currentValue = labelInputRef.current?.value;
 
-      // Et on supprime aussi de labels et aliases
-      const newLabels = { ...labels };
-      delete newLabels[editing];
-      setLabels(newLabels);
-
-      const newAliases = { ...aliases };
-      delete newAliases[editing];
-      setAliases(newAliases);
+      if (!currentValue) {
+        removeItem(editing);
+      }
     }
 
     setEditing(code);
@@ -84,29 +78,19 @@ export default function MapEditor({
   }
 
   function removeItem(code) {
-    setItems(items.filter((c) => c !== code));
+    setItems(prev => prev.filter((c) => c !== code));
 
-    const newLabels = { ...labels };
-    delete newLabels[code];
-    setLabels(newLabels);
-
-    const newAliases = { ...aliases };
-    delete newAliases[code];
-    setAliases(newAliases);
-  }
-
-  function handleClose() {
-    updateQuestion(q.id, {
-      type_q: "map",
-      data: {
-        ...q.data,
-        items,
-        labels,
-        aliases
-      }
+    setLabels(prev => {
+      const copy = { ...prev };
+      delete copy[code];
+      return copy;
     });
 
-    onClose();
+    setAliases(prev => {
+      const copy = { ...prev };
+      delete copy[code];
+      return copy;
+    });
   }
 
   function addAlias(code) {
@@ -180,6 +164,10 @@ export default function MapEditor({
     };
   }, []);
 
+  useEffect(() => {
+    console.log("UseEffect labels", labels);
+  }, [labels]);
+
   // useEffect(() => {
   //   if (!editing) return;
 
@@ -238,6 +226,7 @@ export default function MapEditor({
 
                 <input
                   autoFocus
+                  ref={labelInputRef}
                   value={labels[editing] || ""}
                   onChange={(e) =>
                     updateLabel(editing, e.target.value)
