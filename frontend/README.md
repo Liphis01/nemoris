@@ -1,11 +1,9 @@
 # TODO
 
-- vérifier l'enregistrement des labels et alias dans mapeditor lorsque je ferme
 - laisse la possibilité de changer le svg pour chaque question
 - ajouter un timer pour les questions
-- fix l'autofocus sur les inputs de mapEditor
 - auto accepter la réponse si c'est correcte
-- le scroll de manage devrait se faire sur la question et pas sur le début de la page
+- le scroll de manage devrait se faire sur les questions et pas sur le début de la page
 - arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
 
 

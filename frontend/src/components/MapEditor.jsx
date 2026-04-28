@@ -57,11 +57,6 @@ export default function MapEditor({
     setItems(prev =>
       prev.includes(code) ? prev : [...prev, code]
     );
-
-    // refocus après clic
-    setTimeout(() => {
-      labelInputRef.current?.focus();
-    }, 0);
   }
 
   function handleRowClick(code) {
@@ -170,8 +165,10 @@ export default function MapEditor({
   }, []);
 
   useEffect(() => {
-    console.log("UseEffect labels", labels);
-  }, [labels]);
+    if (editing) {
+      labelInputRef.current?.focus();
+    }
+  }, [editing]);
 
   // useEffect(() => {
   //   if (!editing) return;
