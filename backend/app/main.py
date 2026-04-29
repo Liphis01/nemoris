@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import date
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from fastapi.staticfiles import StaticFiles
 from fastapi import UploadFile, File
 import shutil
@@ -41,7 +41,7 @@ def get_db():
 class QuestionCreate(BaseModel):
     question: str
     answer: Optional[str] = ""
-    theme: str
+    tags: Optional[List[str]] = []
     type_q: str
     fichier: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
@@ -53,7 +53,7 @@ class AnswerRequest(BaseModel):
 class QuestionUpdate(BaseModel):
     question: Optional[str] = ""
     answer: Optional[str] = ""
-    theme: Optional[str] = ""
+    tags: Optional[List[str]] = []
     type_q: Optional[str] = ""
     fichier: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
@@ -122,10 +122,10 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
     q = Question(
         question=data.question,
         answer=data.answer,
-        theme=data.theme,
+        tags=data.tags,
         type_q=data.type_q,
         fichier=data.fichier,
-        data=data.data
+        data=data.data,
     )
     db.add(q)
     db.commit()
@@ -154,7 +154,7 @@ def get_questions(db: Session = Depends(get_db)):
             "id": q.id,
             "question": q.question,
             "answer": q.answer,
-            "theme": q.theme,
+            "tags": q.tags,
             "type_q": q.type_q,
             "fichier": q.fichier,
             "data": q.data,
@@ -166,7 +166,7 @@ def get_questions(db: Session = Depends(get_db)):
 
 @app.get("/review")
 def get_review(
-    theme: Optional[str] = None,
+    tags: Optional[List[str]] = [],
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
@@ -175,10 +175,10 @@ def get_review(
 
     questions = []
 
-    # Filtre de thème
-    def theme_filter(query):
-        if theme and theme != "global":
-            return query.filter(Question.theme == theme)
+    # Filtre de tags
+    def tags_filter(query):
+        if tags and tags != "global":
+            return query.filter(Question.tags == tags)
         return query
 
     # 1. Questions à revoir
@@ -189,14 +189,14 @@ def get_review(
         if not q:
             continue
 
-        if theme and theme != "global" and q.theme != theme:
+        if tags and tags != "global" and q.tags != tags:
             continue
 
         questions.append({
             "question_id": q.id,
             "question": q.question,
             "answer": q.answer,
-            "theme": q.theme,
+            "tags": q.tags,
             "interval": p.interval,
             "ease": p.ease_factor,
             "type_q": q.type_q,
@@ -208,7 +208,7 @@ def get_review(
     seen_ids = [p.question_id for p in db.query(Progress).all()]
 
     new_query = db.query(Question)
-    new_query = theme_filter(new_query)
+    new_query = tags_filter(new_query)
 
     new_questions = new_query.filter(~Question.id.in_(seen_ids)).all()
 
@@ -217,7 +217,7 @@ def get_review(
             "question_id": q.id,
             "question": q.question,
             "answer": q.answer,
-            "theme": q.theme,
+            "tags": q.tags,
             "interval": 1,
             "ease": 2.5,
             "type_q": q.type_q,

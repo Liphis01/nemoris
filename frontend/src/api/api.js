@@ -1,8 +1,13 @@
-export async function getReview(theme = "global", limit = 20) {
-  const res = await fetch(
-    `http://localhost:8000/review?theme=${theme}&limit=${limit}`
-  );
-  return res.json();
+export async function getReview(selectedTags = [], limit = 20) {
+  const res = await fetch("http://localhost:8000/questions");
+  const data = await res.json();
+
+  return data
+    .filter(q =>
+      selectedTags.length === 0 ||
+      selectedTags.every(tag => q.tags?.includes(tag))
+    )
+    .slice(0, limit);
 }
 
 export async function sendAnswer(questionId, quality) {

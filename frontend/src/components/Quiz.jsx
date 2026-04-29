@@ -19,41 +19,6 @@ const secondaryButton = {
     cursor: "pointer"
 };
 
-
-// function MapQuestion({ q }) {
-//     const [input, setInput] = useState("");
-//     const [found, setFound] = useState([]);
-
-//     const items = q.data.items;
-
-//     function handleSubmit() {
-//         if (items.includes(input) && !found.includes(input)) {
-//             setFound([...found, input]);
-//         }
-//         setInput("");
-//     }
-
-//     return (
-//         <div>
-//             <h3>Devine tous les éléments</h3>
-
-//             <input
-//                 value={input}
-//                 onChange={(e) => setInput(e.target.value)}
-//                 onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-//             />
-
-//             <div>
-//                 {items.map((item) => (
-//                     <span key={item}>
-//                         {found.includes(item) ? item : "???"}
-//                     </span>
-//                 ))}
-//             </div>
-//         </div>
-//     );
-// }
-
 export default function Quiz({
     setMode,
     questions,
@@ -61,15 +26,11 @@ export default function Quiz({
     showAnswer,
     setShowAnswer,
     handleAnswer,
-    theme,
-    setTheme,
+    tagInput,
+    setTagInput,
     limit,
     setLimit
 }) {
-    if (!questions[currentIndex]) {
-        return <div style={{ color: "#888" }}>Chargement...</div>;
-    }
-
     return (
         <div style={{ maxWidth: "800px", margin: "auto" }}>
 
@@ -101,7 +62,7 @@ export default function Quiz({
                     <label style={{ marginRight: "8px", color: "#aaa" }}>
                         Thème
                     </label>
-                    <select
+                    {/* <select
                         value={theme}
                         onChange={(e) => setTheme(e.target.value)}
                         style={{
@@ -116,7 +77,12 @@ export default function Quiz({
                         <option value="géographie">Géographie</option>
                         <option value="histoire">Histoire</option>
                         <option value="littérature">Littérature</option>
-                    </select>
+                    </select> */}
+                    <input
+                        placeholder="Filtrer par tags (ex: region/asie)"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                    />
                 </div>
 
                 <div>

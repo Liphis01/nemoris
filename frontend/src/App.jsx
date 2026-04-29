@@ -9,7 +9,6 @@ function App() {
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [theme, setTheme] = useState("global");
   const [limit, setLimit] = useState(50);
   const [mode, setMode] = useState("menu");
   const [allQuestions, setAllQuestions] = useState([]);
@@ -20,6 +19,7 @@ function App() {
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
   const questionInputRef = useRef(null);
   const [editingQuestion, setEditingQuestion] = useState(null); // pour le menu map edition
+  const [tagInput, setTagInput] = useState("");
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -66,12 +66,17 @@ function App() {
   useEffect(() => {
     if (mode !== "quiz") return;
 
-    getReview(theme, limit).then((data) => {
+    const selectedTags = tagInput
+      .split(",")
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    getReview(selectedTags, limit).then((data) => {
       setQuestions(data);
       setCurrentIndex(0);
       setShowAnswer(false);
     });
-  }, [mode, theme, limit]);
+  }, [mode, tagInput, limit]);
 
   useEffect(() => {
     if (mode !== "quiz") return;
@@ -116,6 +121,7 @@ function App() {
       },
       body: JSON.stringify(updatedFields),
     });
+    console.log("update", updatedFields);
   }
 
   async function deleteQuestion(id) {
@@ -127,27 +133,10 @@ function App() {
   }
 
   async function createQuestion() {
-    if (!newRow.question || !newRow.theme) {
-      alert("Remplis tous les champs");
+    if (!newRow.question) {
+      alert("Champs manquants");
       return;
     }
-
-    // const json = {
-    //   ...newRow,
-    //   type_q: newRow.type_q || "text"
-    // };
-    // {
-    //   "question": "Pays du monde",
-    //     "answer": "",
-    //       "theme": "géographie",
-    //         "type_q": "map",
-    //           "image_url": "",
-    //             "data": {
-    //     "svg": "world.svg",
-    //       "items": [],
-    //         "labels": []
-    //   }
-    // }
 
     const res = await fetch("http://localhost:8000/questions", {
       method: "POST",
@@ -164,7 +153,7 @@ function App() {
     setNewRow({
       question: "",
       answer: "",
-      theme: "",
+      tags: [],
       type_q: "",
       fichier: "",
     });
@@ -235,9 +224,10 @@ function App() {
         q.question.toLowerCase().includes(search.toLowerCase()) ||
         q.answer.toLowerCase().includes(search.toLowerCase());
 
-      const matchesTheme = q.theme
-        .toLowerCase()
-        .includes(filterTheme.toLowerCase());
+      const matchesTags = filterTheme === "" ||
+        (q.tags || []).some(tag =>
+          tag.toLowerCase().includes(filterTheme.toLowerCase())
+        );
 
       let matchesDue = true;
       if (filterDue) {
@@ -250,7 +240,7 @@ function App() {
         }
       }
 
-      return matchesSearch && matchesTheme && matchesDue;
+      return matchesSearch && matchesTags && matchesDue;
     })
       .slice() // clone pour éviter mutation
       .sort((a, b) => {
@@ -289,8 +279,8 @@ function App() {
           showAnswer={showAnswer}
           setShowAnswer={setShowAnswer}
           handleAnswer={handleAnswer}
-          theme={theme}
-          setTheme={setTheme}
+          tagInput={tagInput}
+          setTagInput={setTagInput}
           limit={limit}
           setLimit={setLimit}
         />
@@ -321,6 +311,7 @@ function App() {
           sortOrder={sortOrder}
           editingQuestion={editingQuestion}
           setEditingQuestion={setEditingQuestion}
+          updateQuestionInState={updateQuestionInState}
         />
       )}
 

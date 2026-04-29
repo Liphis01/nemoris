@@ -8,7 +8,7 @@ class Question(Base):
     id = Column(Integer, primary_key=True, index=True)
     question = Column(String)
     answer = Column(String)
-    theme = Column(String)
+    tags = Column(JSON, default=[])
 
     type_q = Column(String, default="text")
     fichier = Column(String, nullable=True)

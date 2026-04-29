@@ -23,7 +23,8 @@ export default function Manage({
     sortField,
     sortOrder,
     editingQuestion,
-    setEditingQuestion
+    setEditingQuestion,
+    updateQuestionInState
 }) {
     const [hoveredImage, setHoveredImage] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -73,7 +74,7 @@ export default function Manage({
             // style={{ maxWidth: "1200px", margin: "auto" }}
             style={containerStyle}
         >
-            <div style = {{flexShrink: 0}}>
+            <div style={{ flexShrink: 0 }}>
                 <button
                     onClick={() => setMode("menu")}
                     style={{
@@ -183,8 +184,8 @@ export default function Manage({
                             </th>
 
                             <th style={headerStyle}
-                                onClick={() => handleSort("theme")}>
-                                Thème {sortField === "theme" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                                onClick={() => handleSort("tags")}>
+                                Tags {sortField === "tags" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                             </th>
 
                             <th style={headerStyle}
@@ -236,7 +237,7 @@ export default function Manage({
                             </td>
 
                             <td>
-                                <input
+                                {/* <input
                                     style={cellStyle}
                                     value={newRow.theme}
                                     onChange={(e) =>
@@ -244,7 +245,8 @@ export default function Manage({
                                     }
                                     onKeyDown={handleNewRowKeyDown}
                                     placeholder="Thème"
-                                />
+                                /> */}
+                                {(newRow.tags || []).join(", ")}
                             </td>
 
 
@@ -369,7 +371,7 @@ export default function Manage({
                                 </td>
 
                                 <td>
-                                    <input
+                                    {/* <input
                                         style={cellStyle}
                                         value={q.theme}
                                         onChange={(e) => {
@@ -378,6 +380,25 @@ export default function Manage({
                                             setAllQuestions(updated);
                                         }}
                                         onBlur={() => updateQuestion(q.id, { theme: q.theme })}
+                                    /> */}
+                                    <input
+                                        style={cellStyle}
+                                        value={(q.tags || []).join(", ")}
+                                        onChange={(e) => {
+                                            const newTags = e.target.value
+                                                .split(",")
+                                                .map(t => t.trim());
+
+                                            updateQuestionInState({
+                                                ...q,
+                                                tags: newTags
+                                            });
+                                        }}
+                                        onBlur={() => {
+                                            updateQuestion(q.id, {
+                                                tags: q.tags
+                                            });
+                                        }}
                                     />
                                 </td>
 
