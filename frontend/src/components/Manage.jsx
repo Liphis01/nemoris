@@ -24,7 +24,9 @@ export default function Manage({
     sortOrder,
     editingQuestion,
     setEditingQuestion,
-    updateQuestionInState
+    updateQuestionInState,
+    editingTagsQuestion,
+    setEditingTagsQuestion,
 }) {
     const [hoveredImage, setHoveredImage] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -381,7 +383,7 @@ export default function Manage({
                                         }}
                                         onBlur={() => updateQuestion(q.id, { theme: q.theme })}
                                     /> */}
-                                    <input
+                                    {/* <input
                                         style={cellStyle}
                                         value={(q.tags || []).join(", ")}
                                         onChange={(e) => {
@@ -399,7 +401,12 @@ export default function Manage({
                                                 tags: q.tags
                                             });
                                         }}
-                                    />
+                                    /> */}
+                                    <td>
+                                        <button onClick={() => setEditingTagsQuestion(q)}>
+                                            🏷️
+                                        </button>
+                                    </td>
                                 </td>
 
                                 <td>

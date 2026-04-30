@@ -4,6 +4,7 @@ import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
 import Manage from "./components/Manage";
 import MapEditor from "./components/MapEditor";
+import TagEditor from "./components/TagEditor";
 
 function App() {
   const [questions, setQuestions] = useState([]);
@@ -20,6 +21,7 @@ function App() {
   const questionInputRef = useRef(null);
   const [editingQuestion, setEditingQuestion] = useState(null); // pour le menu map edition
   const [tagInput, setTagInput] = useState("");
+  const [editingTagsQuestion, setEditingTagsQuestion] = useState(null);
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -312,6 +314,8 @@ function App() {
           editingQuestion={editingQuestion}
           setEditingQuestion={setEditingQuestion}
           updateQuestionInState={updateQuestionInState}
+          editingTagsQuestion={editingTagsQuestion}
+          setEditingTagsQuestion={setEditingTagsQuestion}
         />
       )}
 
@@ -324,8 +328,16 @@ function App() {
           updateQuestion={updateQuestion}
           updateQuestionInState={updateQuestionInState}
         />
-      )
-      }
+      )}
+
+      {mode === "manage" && editingTagsQuestion && (
+        <TagEditor
+          q={editingTagsQuestion}
+          onClose={() => setEditingTagsQuestion(null)}
+          updateQuestion={updateQuestion}
+          updateQuestionInState={updateQuestionInState}
+        />
+      )}
     </div>
   )
 }
