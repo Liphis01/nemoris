@@ -46,9 +46,9 @@ export default function TextQuestion({
 }) {
     return (
         <>
-            
+
             {/* //🧠 Carte */}
-            <div 
+            <div
                 key={currentIndex}
                 style={{
                     background: "#1e1e1e",
@@ -71,18 +71,17 @@ export default function TextQuestion({
                     {q.question}
                 </div>
 
-                {q.type_q === "image" &&
-                    q.fichier && (
-                        <img
-                            src={q.fichier}
-                            alt="question"
-                            style={{
-                                maxWidth: "100%",
-                                borderRadius: "10px",
-                                marginTop: "15px"
-                            }}
-                        />
-                    )}
+                {q.fichier && (
+                    <img
+                        src={q.fichier}
+                        alt="question"
+                        style={{
+                            maxWidth: "100%",
+                            borderRadius: "10px",
+                            marginTop: "15px"
+                        }}
+                    />
+                )}
 
                 {!showAnswer && (
                     <div style={{ marginTop: "25px" }}>

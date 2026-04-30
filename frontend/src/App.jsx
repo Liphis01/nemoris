@@ -182,7 +182,7 @@ function App() {
     // 🔥 on met à jour la question avec l'image
     updateQuestion(q.id, {
       fichier: data.url,
-      type_q: "image"
+      type_q: "text"
     });
   }
 

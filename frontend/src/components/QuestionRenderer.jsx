@@ -14,7 +14,6 @@ export default function QuestionRenderer({
         case "map":
             return <MapQuestion q={q} onAnswer={handleAnswer} />;
 
-        case "image":
         case "text":
         default:
             return <TextQuestion

@@ -267,7 +267,6 @@ export default function Manage({
                                     }}
                                 >
                                     <option value="text">text</option>
-                                    <option value="image">image</option>
                                     <option value="map">map</option>
                                 </select>
                             </td>
@@ -402,11 +401,9 @@ export default function Manage({
                                             });
                                         }}
                                     /> */}
-                                    <td>
-                                        <button onClick={() => setEditingTagsQuestion(q)}>
-                                            🏷️
-                                        </button>
-                                    </td>
+                                    <button onClick={() => setEditingTagsQuestion(q)}>
+                                        🏷️
+                                    </button>
                                 </td>
 
                                 <td>
@@ -428,7 +425,6 @@ export default function Manage({
                                         }}
                                     >
                                         <option value="text">text</option>
-                                        <option value="image">image</option>
                                         <option value="map">map</option>
                                     </select>
                                 </td>
