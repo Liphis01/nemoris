@@ -1,11 +1,19 @@
 # TODO
 
-- laisse la possibilité de changer le svg pour chaque question
-- ajouter un timer pour les questions
-- auto accepter la réponse si c'est correcte
+## bugs
+- bug des images
 - le scroll de manage devrait se faire sur les questions et pas sur le début de la page
+- bug des ??? quand on clique sur la liste de droite
+- recentrer les svg
+
+## features
 - arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
 - améliorer le design de manage (bouton pour modifier maps, plus lisible, etc)
+- questions date (frises temporelles)
+- ajouter un timer pour les questions
+- auto accepter la réponse si c'est correct
+- intégrer les questions maps à la review
+- mode entrainement
 
 
 # React + Vite
