@@ -24,3 +24,14 @@ class Progress(Base):
     interval = Column(Integer, default=1)
     ease_factor = Column(Float, default=2.5)
     next_review = Column(Date, default=date.today)
+
+class MapProgress(Base):
+    __tablename__ = "map_progress"
+
+    id = Column(Integer, primary_key=True)
+    question_id = Column(Integer, ForeignKey("questions.id"))
+    item_code = Column(String)
+
+    interval = Column(Integer, default=1)
+    ease_factor = Column(Float, default=2.5)
+    next_review = Column(Date, default=date.today)

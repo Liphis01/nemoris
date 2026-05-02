@@ -10,7 +10,7 @@ import shutil
 import os
 
 from .database import engine, SessionLocal
-from .models import Base, Question, Progress
+from .models import Base, Question, Progress, MapProgress
 from .scheduler import update_progress
 
 # Création des tables
@@ -57,6 +57,10 @@ class QuestionUpdate(BaseModel):
     type_q: Optional[str] = ""
     fichier: Optional[str] = ""
     data: Optional[Dict[str, Any]] = None
+
+class MapAnswerRequest(BaseModel):
+    question_id: int
+    items: Dict[str, int]  # code -> quality
 
 @app.put("/questions/{question_id}")
 def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
@@ -255,6 +259,38 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         "interval": interval,
         "next_review": next_review
     }
+
+@app.post("/answer_map")
+def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
+    for code, quality in data.items.items():
+
+        progress = db.query(MapProgress).filter(
+            MapProgress.question_id == data.question_id,
+            MapProgress.item_code == code
+        ).first()
+
+        if not progress:
+            progress = MapProgress(
+                question_id=data.question_id,
+                item_code=code
+            )
+            db.add(progress)
+            db.commit()
+            db.refresh(progress)
+
+        interval, ease, next_review = update_progress(
+            progress.interval,
+            progress.ease_factor,
+            quality
+        )
+
+        progress.interval = interval
+        progress.ease_factor = ease
+        progress.next_review = next_review
+
+    db.commit()
+
+    return {"status": "ok"}
 
 @app.get("/hard")
 def get_test(db: Session = Depends(get_db)):

@@ -9,11 +9,14 @@
 ## features
 - arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
 - améliorer le design de manage (bouton pour modifier maps, plus lisible, etc)
-- questions date (frises temporelles)
+- questions avec tag date : frise temporelle et on fait toutes les questions date du jour en même temps sur la même frise
 - ajouter un timer pour les questions
 - auto accepter la réponse si c'est correct
-- intégrer les questions maps à la review
+- intégrer les questions maps à la review (chaque question indépendante)
 - mode entrainement
+
+## refactors
+- il faudrait que chaque pays soit sa propre question dans la db plutôt que une seule question ait plein de pays
 
 
 # React + Vite

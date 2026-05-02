@@ -103,7 +103,10 @@ function App() {
   const current = questions[currentIndex];
 
   function handleAnswer(quality) {
-    sendAnswer(current.question_id, quality);
+    // 👉 seulement pour les questions normales
+    if (current.type_q !== "map") {
+      sendAnswer(current.question_id, quality);
+    }
 
     setShowAnswer(false);
     setCurrentIndex(currentIndex + 1);

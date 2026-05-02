@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function SvgMap({ svgPath, found, selected, onSelect }) {
+export default function SvgMap({ svgPath, found, missed = [], selected, onSelect }) {
     const containerRef = useRef(null);
     const wrapperRef = useRef(null);
     const [scale, setScale] = useState(1);
@@ -83,6 +83,16 @@ export default function SvgMap({ svgPath, found, selected, onSelect }) {
                         .querySelectorAll(`[data-code="${selected}"]`)
                         .forEach(el => el.style.fill = "#f39c12");
                 }
+
+                missed.forEach((code) => {
+                    const elements =
+                        containerRef.current.querySelectorAll(
+                            `[data-code="${code}"]`
+                        )
+                    elements.forEach((el) => {
+                        el.style.fill = "#e74c3c"
+                    })
+                })
 
                 // 🖱️ CLICK HANDLER
                 containerRef.current.querySelectorAll("path").forEach((el) => {
