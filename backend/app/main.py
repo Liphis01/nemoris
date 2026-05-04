@@ -10,7 +10,7 @@ import shutil
 import os
 
 from .database import engine, SessionLocal
-from .models import Base, Question, Progress, MapProgress
+from .models import Base, Question, Progress
 from .scheduler import update_progress
 
 # Création des tables
@@ -61,6 +61,12 @@ class QuestionUpdate(BaseModel):
 class MapAnswerRequest(BaseModel):
     question_id: int
     items: Dict[str, int]  # code -> quality
+    
+class MapZoneUpdate(BaseModel):
+    svg: str
+    code: str
+    label: str
+    aliases: List[str] = []
 
 @app.put("/questions/{question_id}")
 def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
@@ -171,66 +177,113 @@ def get_questions(db: Session = Depends(get_db)):
 @app.get("/review")
 def get_review(
     tags: Optional[List[str]] = [],
-    limit: int = 50,
+    limit: int = 200,
     db: Session = Depends(get_db)
 ):
-    from datetime import date
     today = date.today()
 
-    questions = []
+    normal_questions = []
+    map_groups = {}
 
-    # Filtre de tags
-    def tags_filter(query):
-        if tags and tags != "global":
-            return query.filter(Question.tags == tags)
-        return query
-
-    # 1. Questions à revoir
-    due_progress = db.query(Progress).filter(Progress.next_review <= today).all()
+    # 🔹 récupérer toutes les progress dues
+    due_progress = db.query(Progress).filter(
+        Progress.next_review <= today
+    ).all()
 
     for p in due_progress:
         q = db.query(Question).filter(Question.id == p.question_id).first()
         if not q:
             continue
 
-        if tags and tags != "global" and q.tags != tags:
+        # 🔹 filtre tags
+        if tags and tags != ["global"] and not set(tags).intersection(set(q.tags or [])):
             continue
 
-        questions.append({
-            "question_id": q.id,
-            "question": q.question,
-            "answer": q.answer,
-            "tags": q.tags,
-            "interval": p.interval,
-            "ease": p.ease_factor,
-            "type_q": q.type_q,
-            "fichier": q.fichier,
-            "data": q.data
+        # 🔥 MAP → GROUP
+        if q.type_q == "map":
+            svg = q.svg
+
+            if svg not in map_groups:
+                map_groups[svg] = []
+
+            map_groups[svg].append({
+                "id": q.id,
+                "label": q.question,
+                "code": q.code,
+                "aliases": q.data.get("aliases", []) if q.data else [],
+                "interval": p.interval,
+                "ease": p.ease_factor
+            })
+
+        # 🔹 NORMAL
+        else:
+            normal_questions.append({
+                "question_id": q.id,
+                "question": q.question,
+                "answer": q.answer,
+                "tags": q.tags,
+                "interval": p.interval,
+                "ease": p.ease_factor,
+                "type_q": q.type_q,
+                "fichier": q.fichier
+            })
+
+    # 🔹 transformer groupes map → questions
+    map_questions = []
+    for svg, items in map_groups.items():
+        map_questions.append({
+            "type_q": "map",
+            "svg": svg,
+            "items": items
         })
 
-    # 2. Nouvelles questions
+    # 🔹 nouvelles questions (pas encore vues)
     seen_ids = [p.question_id for p in db.query(Progress).all()]
 
     new_query = db.query(Question)
-    new_query = tags_filter(new_query)
+    if tags and tags != ["global"]:
+        new_query = new_query.filter(Question.tags.overlap(tags))
 
     new_questions = new_query.filter(~Question.id.in_(seen_ids)).all()
 
     for q in new_questions:
-        questions.append({
-            "question_id": q.id,
-            "question": q.question,
-            "answer": q.answer,
-            "tags": q.tags,
-            "interval": 1,
-            "ease": 2.5,
-            "type_q": q.type_q,
-            "fichier": q.fichier,
-            "data": q.data
+        if q.type_q == "map":
+            # 🔥 regrouper aussi les nouvelles maps
+            svg = q.svg
+
+            if svg not in map_groups:
+                map_groups[svg] = []
+
+            map_groups[svg].append({
+                "id": q.id,
+                "label": q.question,
+                "code": q.code,
+                "aliases": q.data.get("aliases", []) if q.data else [],
+                "interval": 1,
+                "ease": 2.5
+            })
+        else:
+            normal_questions.append({
+                "question_id": q.id,
+                "question": q.question,
+                "answer": q.answer,
+                "tags": q.tags,
+                "interval": 1,
+                "ease": 2.5,
+                "type_q": q.type_q,
+                "fichier": q.fichier
+            })
+
+    # 🔹 reconstruire map_questions (avec nouvelles incluses)
+    map_questions = []
+    for svg, items in map_groups.items():
+        map_questions.append({
+            "type_q": "map",
+            "svg": svg,
+            "items": items
         })
 
-    # 3. Limite
-    return questions[:limit]
+    return (normal_questions + map_questions)[:limit]
 
 
 @app.post("/answer")
@@ -260,20 +313,21 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         "next_review": next_review
     }
 
+class MapAnswerRequest(BaseModel):
+    items: Dict[int, int]  # question_id → quality
+
+
 @app.post("/answer_map")
 def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
-    for code, quality in data.items.items():
 
-        progress = db.query(MapProgress).filter(
-            MapProgress.question_id == data.question_id,
-            MapProgress.item_code == code
+    for q_id, quality in data.items.items():
+
+        progress = db.query(Progress).filter(
+            Progress.question_id == q_id
         ).first()
 
         if not progress:
-            progress = MapProgress(
-                question_id=data.question_id,
-                item_code=code
-            )
+            progress = Progress(question_id=q_id)
             db.add(progress)
             db.commit()
             db.refresh(progress)
@@ -291,6 +345,37 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "ok"}
+
+@app.post("/map_zone")
+def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
+
+    q = db.query(Question).filter(
+        Question.type_q == "map",
+        Question.svg == data.svg,
+        Question.code == data.code
+    ).first()
+
+    if not q:
+        q = Question(
+            question=data.label,
+            answer=data.label,
+            type_q="map",
+            svg=data.svg,
+            code=data.code,
+            data={
+                "aliases": data.aliases
+            }
+        )
+        db.add(q)
+    else:
+        q.question = data.label
+        q.answer = data.label
+        q.data = {"aliases": data.aliases}
+
+    db.commit()
+    db.refresh(q)
+
+    return q
 
 @app.get("/hard")
 def get_test(db: Session = Depends(get_db)):

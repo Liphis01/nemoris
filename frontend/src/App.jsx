@@ -10,7 +10,7 @@ function App() {
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(200);
   const [mode, setMode] = useState("menu");
   const [allQuestions, setAllQuestions] = useState([]);
   const [search, setSearch] = useState("");
@@ -80,13 +80,13 @@ function App() {
     });
   }, [mode, tagInput, limit]);
 
-  useEffect(() => {
-    if (mode !== "quiz") return;
+  // useEffect(() => {
+  //   if (mode !== "quiz") return;
 
-    setQuestions((prev) =>
-      [...prev].sort(() => Math.random() - 0.5)
-    );
-  }, [mode]);
+  //   setQuestions((prev) =>
+  //     [...prev].sort(() => Math.random() - 0.5)
+  //   );
+  // }, [mode]);
 
 
   useEffect(() => {
@@ -223,11 +223,46 @@ function App() {
     );
   }
 
+  // 🔥 Regroupement des maps pour l'affichage Manage
+  const groupedQuestions = (() => {
+    const normal = [];
+    const mapGroups = {};
+
+    for (const q of allQuestions) {
+      if (q.type_q === "map" && q.svg) {
+        if (!mapGroups[q.svg]) {
+          mapGroups[q.svg] = [];
+        }
+        mapGroups[q.svg].push(q);
+      } else {
+        normal.push(q);
+      }
+    }
+
+    // transformer chaque groupe en "fausse ligne"
+    const maps = Object.entries(mapGroups).map(([svg, zones]) => ({
+      id: "map-" + svg,
+      type_q: "map_group",
+      svg,
+      zones,
+
+      // champs affichage (vide volontairement)
+      question: "",
+      answer: "",
+      tags: [],
+
+      // utile pour filtres
+      next_review: zones.some(z => z.next_review),
+    }));
+
+    return [...normal, ...maps];
+  })();
+
   const filteredQuestions =
-    allQuestions.filter((q) => {
+    groupedQuestions.filter((q) => {
       const matchesSearch =
-        q.question.toLowerCase().includes(search.toLowerCase()) ||
-        q.answer.toLowerCase().includes(search.toLowerCase());
+        (q.question || "").toLowerCase().includes(search.toLowerCase()) ||
+        (q.answer || "").toLowerCase().includes(search.toLowerCase());
 
       const matchesTags = filterTheme === "" ||
         (q.tags || []).some(tag =>

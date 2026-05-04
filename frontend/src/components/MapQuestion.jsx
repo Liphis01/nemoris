@@ -1,16 +1,13 @@
 import { useState } from "react";
-import { sendAnswer } from "../api/api";
 import { sendMapAnswer } from "../api/api";
 import SvgMap from "./SvgMap";
 
 export default function MapQuestion({ q, onAnswer }) {
-  const items = q.data?.items || [];
-  const labels = q.data?.labels || {};
-  const aliases = q.data?.aliases || {};
+
+  const items = q.items || [];
 
   const [input, setInput] = useState("");
-  const [found, setFound] = useState([]);
-  const [missed, setMissed] = useState([]);
+  const [found, setFound] = useState([]); // ids
   const [showRecap, setShowRecap] = useState(false);
   const [itemQuality, setItemQuality] = useState({});
 
@@ -26,102 +23,77 @@ export default function MapQuestion({ q, onAnswer }) {
       .replace(/\p{Diacritic}/gu, "");
   }
 
-  function matches(code, input) {
-    const name = labels[code] || code;
-    const all = [name, ...(aliases[code] || [])];
-
+  function matches(item, input) {
+    const all = [item.label, ...(item.aliases || [])];
     return all.some(v => normalize(v) === normalize(input));
   }
 
   function handleSubmit() {
-    const value = normalize(input);
+    const match = items.find(item => matches(item, input));
 
-    const match = items.find(code => matches(code, input));
-
-    if (match && !found.includes(match)) {
-      setFound(prev => [...prev, match]);
+    if (match && !found.includes(match.id)) {
+      setFound(prev => [...prev, match.id]);
     }
 
     setInput("");
   }
 
   function finishMap() {
-    const allItems = q.data.items;
-
-    const missedItems = allItems.filter(
-      item => !found.includes(item)
-    );
-
-    // ✅ init qualité par défaut
     const initialQuality = {};
-    allItems.forEach(code => {
-      if (found.includes(code)) {
-        initialQuality[code] = 2; // facile
+
+    items.forEach(item => {
+      if (found.includes(item.id)) {
+        initialQuality[item.id] = 2; // facile
       } else {
-        initialQuality[code] = 0; // difficile
+        initialQuality[item.id] = 0; // raté
       }
     });
 
     setItemQuality(initialQuality);
-    setMissed(missedItems);
     setShowRecap(true);
   }
 
   async function sendResult() {
-    await sendMapAnswer(q.id, itemQuality);
-
+    await sendMapAnswer(itemQuality);
 
     setShowRecap(false);
     setFound([]);
-    setMissed([]);
     setItemQuality({});
 
-    onAnswer(); // juste passer à la suite
+    onAnswer();
   }
 
-  function setQuality(code, quality) {
+  function setQuality(id, quality) {
     setItemQuality(prev => ({
       ...prev,
-      [code]: quality
+      [id]: quality
     }));
-  }
-
-  function computeQuality() {
-    const total = items.length;
-
-    const score = items.reduce((acc, code) => {
-      return acc + (itemQuality[code] ?? 0);
-    }, 0);
-
-    const ratio = score / (total * 2);
-
-    if (ratio < 0.5) return 0;
-    if (ratio < 0.8) return 1;
-    return 2;
   }
 
   const progress = `${found.length} / ${items.length}`;
 
   return (
     <div>
-      <h2>{q.question}</h2>
+      <h2>{q.svg}</h2>
 
-      {/* Progression */}
       <p style={{ opacity: 0.7 }}>{progress}</p>
 
-      {/* Carte */}
+      {/* 🗺️ MAP */}
       <SvgMap
-        svgPath={`/maps/${q.fichier}`}
-        found={found}
-        missed={missed}
+        svgPath={`/maps/${q.svg}`}
+        found={items
+          .filter(i => found.includes(i.id))
+          .map(i => i.code)}
+        dueItems={items.map(i => i.code)}
         onSelect={(code) => {
-          if (items.includes(code) && !found.includes(code)) {
-            setFound([...found, code]);
+          const item = items.find(i => i.code === code);
+          if (item && !found.includes(item.id)) {
+            setFound(prev => [...prev, item.id]);
           }
         }}
       />
 
-      {/* Input */}
+      {/* INPUT */}
       <input
         autoFocus
         value={input}
@@ -131,38 +103,33 @@ export default function MapQuestion({ q, onAnswer }) {
         style={{ width: "100%", marginBottom: "15px" }}
       />
 
-      {/* Liste */}
+      {/* LISTE */}
       <div style={gridStyle}>
-        {items.map(code => {
-          const label = labels[code] || code;
+        {items.map(item => {
+          const isFound = found.includes(item.id);
+
           return (
             <div
-              key={code}
+              key={item.id}
               style={{
                 padding: "5px",
                 borderRadius: "5px",
-                background: found.includes(code)
-                  ? "#2ecc71"
-                  : "#444",
+                background: isFound ? "#2ecc71" : "#444",
                 textAlign: "center"
               }}
             >
-              {found.includes(code) ? label : "???"}
+              {isFound ? item.label : "???"}
             </div>
           );
-        })
-        }
+        })}
       </div>
 
-      <button
-        onClick={finishMap}
-        style={{ marginBottom: "10px" }}
-      >
+      {/* ABANDON */}
+      <button onClick={finishMap} style={{ marginBottom: "10px" }}>
         Abandonner
       </button>
 
-
-      {/* Fin */}
+      {/* FIN */}
       {found.length === items.length && !showRecap && (
         <div style={{ marginTop: "20px" }}>
           <p>🎉 Terminé !</p>
@@ -172,6 +139,7 @@ export default function MapQuestion({ q, onAnswer }) {
         </div>
       )}
 
+      {/* RECAP */}
       {showRecap && (
         <div style={{
           position: "absolute",
@@ -184,6 +152,15 @@ export default function MapQuestion({ q, onAnswer }) {
         }}>
           <h2>Résultat</h2>
 
+          {/* 🗺️ MAP RECAP */}
+          <SvgMap
+            svgPath={`/maps/${q.svg}`}
+            found={items
+              .filter(i => found.includes(i.id))
+              .map(i => i.code)}
+            dueItems={[]}
+          />
+
           <table style={{ width: "100%", marginTop: "20px" }}>
             <thead>
               <tr>
@@ -194,48 +171,31 @@ export default function MapQuestion({ q, onAnswer }) {
             </thead>
 
             <tbody>
-              {items.map(code => {
-                const label = labels[code] || code;
-                const isFound = found.includes(code);
+              {items.map(item => {
+                const isFound = found.includes(item.id);
 
                 return (
-                  <tr key={code}>
-                    <td>{label}</td>
+                  <tr key={item.id}>
+                    <td>{item.label}</td>
+
+                    <td>{isFound ? "✅" : "❌"}</td>
 
                     <td>
-                      {isFound ? "✅" : "❌"}
-                    </td>
-
-                    <td>
-                      <button
-                        onClick={() => setQuality(code, 0)}
-                        style={{
-                          background: itemQuality[code] === 0 ? "#2ecc71" : "#333",
-                          ...(itemQuality[code] === 0 ? activeStyle : {})
-                        }}
-                      >
-                        ❌
-                      </button>
-
-                      <button
-                        onClick={() => setQuality(code, 1)}
-                        style={{
-                          background: itemQuality[code] === 1 ? "#2ecc71" : "#333",
-                          ...(itemQuality[code] === 1 ? activeStyle : {})
-                        }}
-                      >
-                        😐
-                      </button>
-
-                      <button
-                        onClick={() => setQuality(code, 2)}
-                        style={{
-                          background: itemQuality[code] === 2 ? "#2ecc71" : "#333",
-                          ...(itemQuality[code] === 2 ? activeStyle : {})
-                        }}
-                      >
-                        ✅
-                      </button>
+                      {[0,1,2].map(qVal => (
+                        <button
+                          key={qVal}
+                          onClick={() => setQuality(item.id, qVal)}
+                          style={{
+                            background:
+                              itemQuality[item.id] === qVal
+                                ? "#2ecc71"
+                                : "#333",
+                            ...(itemQuality[item.id] === qVal ? activeStyle : {})
+                          }}
+                        >
+                          {qVal === 0 ? "❌" : qVal === 1 ? "😐" : "✅"}
+                        </button>
+                      ))}
                     </td>
                   </tr>
                 );
@@ -246,7 +206,6 @@ export default function MapQuestion({ q, onAnswer }) {
           <button onClick={sendResult}>
             Valider
           </button>
-
         </div>
       )}
     </div>

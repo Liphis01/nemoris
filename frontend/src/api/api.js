@@ -23,15 +23,12 @@ export async function sendAnswer(questionId, quality) {
   });
 }
 
-export async function sendMapAnswer(question_id, items) {
+export async function sendMapAnswer(items) {
   await fetch("http://localhost:8000/answer_map", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      question_id,
-      items
-    })
+    body: JSON.stringify({ items })
   });
 }

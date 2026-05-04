@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function SvgMap({ svgPath, found, missed = [], selected, onSelect }) {
+export default function SvgMap({
+    svgPath,
+    found,
+    missed = [],
+    dueItems = [],
+    selected,
+    onSelect
+}) {
     const containerRef = useRef(null);
     const wrapperRef = useRef(null);
     const [scale, setScale] = useState(1);
@@ -51,6 +58,8 @@ export default function SvgMap({ svgPath, found, missed = [], selected, onSelect
             .then((svg) => {
                 containerRef.current.innerHTML = svg;
 
+                console.log(svgPath);
+
                 const svgEl = containerRef.current.querySelector("svg");
                 if (!svgEl) {
                     console.error("SVG non trouvé dans le fichier:", svgPath);
@@ -60,65 +69,41 @@ export default function SvgMap({ svgPath, found, missed = [], selected, onSelect
                 svgEl.style.width = "100%";
                 svgEl.style.height = "auto";
 
-                // RESET couleurs
-                containerRef.current.querySelectorAll("path").forEach((el) => {
-                    el.style.fill = "#444";
-                    el.style.cursor = "pointer";
-                });
+                const getColor = (code) => {
+                    if (selected === code) return "#f39c12"; // orange priorité max
+                    if (found.includes(code)) return "#2ecc71"; // vert
+                    if (missed.includes(code)) return "#e74c3c"; // rouge
+                    if (dueItems.includes(code)) return "#f1c40f"; // jaune
+                    return "#444"; // gris
+                };
 
-                // colorer les éléments trouvés
-                found.forEach((code) => {
-                    const elements =
-                        containerRef.current.querySelectorAll(
-                            `[data-code="${code}"]`
-                        );
-                    elements.forEach((el) => {
-                        el.style.fill = "#2ecc71";
-                    });
-                });
-
-                // 🔥 selected (orange par dessus)
-                if (selected) {
-                    containerRef.current
-                        .querySelectorAll(`[data-code="${selected}"]`)
-                        .forEach(el => el.style.fill = "#f39c12");
-                }
-
-                missed.forEach((code) => {
-                    const elements =
-                        containerRef.current.querySelectorAll(
-                            `[data-code="${code}"]`
-                        )
-                    elements.forEach((el) => {
-                        el.style.fill = "#e74c3c"
-                    })
-                })
-
-                // 🖱️ CLICK HANDLER
+                // RESET + couleur initiale
                 containerRef.current.querySelectorAll("path").forEach((el) => {
                     const code = el.getAttribute("data-code");
 
+                    el.style.fill = getColor(code);
+                    el.style.cursor = "pointer";
+
+                    // CLICK
                     el.addEventListener("click", () => {
                         if (code && onSelect) {
                             onSelect(code);
-                            console.log("Selected code:", code);
                         }
                     });
 
+                    // HOVER
                     el.addEventListener("mouseenter", () => {
-                        if (!found.includes(code)) {
+                        if (!found.includes(code) && selected !== code) {
                             el.style.fill = "#888";
                         }
                     });
 
                     el.addEventListener("mouseleave", () => {
-                        if (!found.includes(code)) {
-                            el.style.fill = "#444";
-                        }
+                        el.style.fill = getColor(code);
                     });
                 });
             });
-    }, [svgPath, found, selected]);
+    }, [svgPath, found, missed, selected, dueItems]);
 
     useEffect(() => {
         const el = wrapperRef.current;

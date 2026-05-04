@@ -13,6 +13,9 @@ class Question(Base):
     type_q = Column(String, default="text")
     fichier = Column(String, nullable=True)
     
+    svg = Column(String, nullable=True, index=True)
+    code = Column(String, nullable=True)
+    
     data = Column(JSON, nullable=True)
 
 

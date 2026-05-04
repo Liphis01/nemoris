@@ -329,162 +329,163 @@ export default function Manage({
                         </tr>
 
 
-                        {filteredQuestions.map((q, index) => (
-                            <tr
-                                key={q.id}
+                        {filteredQuestions.map((q, index) => {
 
-                            >
-                                <td
-                                    onClick={() => {
-                                        if (q.type_q === "map") {
-                                            setEditingQuestion(q);
-                                        }
-                                    }}
-                                    style={{ cursor: "pointer" }}
-                                >
-                                    {q.id}
-                                </td>
+                            // 🗺️ CAS MAP GROUP
+                            if (q.type_q === "map_group") {
+                                return (
+                                    <tr key={q.id}>
+                                        <td>🗺️</td>
 
-                                <td>
-                                    <input
-                                        style={cellStyle}
-                                        value={q.question}
-                                        onChange={(e) => {
-                                            const updated = [...allQuestions];
-                                            updated[index].question = e.target.value;
-                                            setAllQuestions(updated);
-                                        }}
-                                        onBlur={() => updateQuestion(q.id, { question: q.question })}
-                                    />
-                                </td>
+                                        <td colSpan={2}>
+                                            {q.svg} ({q.zones.length} zones)
+                                        </td>
 
-                                <td>
-                                    <input
-                                        style={cellStyle}
-                                        value={q.answer === "" ? q.data.items.length : q.answer}
-                                        onChange={(e) => {
-                                            const updated = [...allQuestions];
-                                            updated[index].answer = e.target.value;
-                                            setAllQuestions(updated);
-                                        }}
-                                        onBlur={() => updateQuestion(q.id, { answer: q.answer })}
-                                    />
-                                </td>
+                                        <td>
+                                            <button onClick={() => setEditingTagsQuestion(q)}>
+                                                🏷️
+                                            </button>
+                                        </td>
 
-                                <td>
-                                    {/* <input
-                                        style={cellStyle}
-                                        value={q.theme}
-                                        onChange={(e) => {
-                                            const updated = [...allQuestions];
-                                            updated[index].theme = e.target.value;
-                                            setAllQuestions(updated);
-                                        }}
-                                        onBlur={() => updateQuestion(q.id, { theme: q.theme })}
-                                    /> */}
-                                    {/* <input
-                                        style={cellStyle}
-                                        value={(q.tags || []).join(", ")}
-                                        onChange={(e) => {
-                                            const newTags = e.target.value
-                                                .split(",")
-                                                .map(t => t.trim());
+                                        <td>map</td>
 
-                                            updateQuestionInState({
-                                                ...q,
-                                                tags: newTags
-                                            });
-                                        }}
-                                        onBlur={() => {
-                                            updateQuestion(q.id, {
-                                                tags: q.tags
-                                            });
-                                        }}
-                                    /> */}
-                                    <button onClick={() => setEditingTagsQuestion(q)}>
-                                        🏷️
-                                    </button>
-                                </td>
+                                        <td>-</td>
 
-                                <td>
-                                    <select
-                                        value={q.type_q}
-                                        onChange={(e) => {
-                                            // onChange={(e) =>
-                                            //     updateQuestion(q.id, { type_q: e.target.value })
-                                            // }
-                                            const updated = [...allQuestions];
-                                            updated[index].type_q = e.target.value;
-                                            setAllQuestions(updated);
+                                        <td>
+                                            {q.zones.filter(z => z.next_review).length} à revoir
+                                        </td>
+
+                                        <td>
+                                            <button
+                                                onClick={() =>
+                                                    setEditingQuestion({
+                                                        type_q: "map",
+                                                        data: { svg: q.svg }
+                                                    })
+                                                }
+                                            >
+                                                ✏️
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            }
+
+                            // CAS NORMAL
+                            return (
+                                <tr key={q.id}>
+                                    <td
+                                        onClick={() => {
+                                            if (q.type_q === "map") {
+                                                setEditingQuestion(q);
+                                            }
                                         }}
-                                        style={{
-                                            ...cellStyle,
-                                            padding: "6px",
-                                            background: "#1a1a1a",
-                                            color: "#eee"
-                                        }}
+                                        style={{ cursor: "pointer" }}
                                     >
-                                        <option value="text">text</option>
-                                        <option value="map">map</option>
-                                    </select>
-                                </td>
+                                        {q.id}
+                                    </td>
 
-                                <td
-                                    onMouseEnter={(e) => {
-                                        if (q.type_q === "text" && q.fichier) {
-                                            setHoveredImage(q.fichier);
-                                            setMousePos({ x: e.clientX, y: e.clientY });
-                                        }
-                                    }}
-                                    onMouseMove={(e) => {
-                                        setMousePos({ x: e.clientX, y: e.clientY });
-                                    }}
-                                    onMouseLeave={() => setHoveredImage(null)}
-                                >
-                                    {q.type_q === "map" && <input
-                                        style={cellStyle}
-                                        value={q.fichier || ""}
-                                        onChange={(e) => {
-                                            const updated = [...allQuestions];
-                                            updated[index].fichier = e.target.value;
-                                            setAllQuestions(updated);
-                                        }}
-                                        onBlur={() => updateQuestion(q.id, { fichier: q.fichier })}
-                                    />}
+                                    <td>
+                                        <input
+                                            style={cellStyle}
+                                            value={q.question}
+                                            onChange={(e) => {
+                                                const updated = [...allQuestions];
+                                                updated[index].question = e.target.value;
+                                                setAllQuestions(updated);
+                                            }}
+                                            onBlur={() => updateQuestion(q.id, { question: q.question })}
+                                        />
+                                    </td>
 
-                                    {/* {q.fichier && (
-                                        <button onClick={() => deleteImage(q.id)}>
-                                            ❌
+                                    <td>
+                                        <input
+                                            style={cellStyle}
+                                            value={q.answer === "" ? (q.data?.items?.length || "") : q.answer}
+                                            onChange={(e) => {
+                                                const updated = [...allQuestions];
+                                                updated[index].answer = e.target.value;
+                                                setAllQuestions(updated);
+                                            }}
+                                            onBlur={() => updateQuestion(q.id, { answer: q.answer })}
+                                        />
+                                    </td>
+
+                                    <td>
+                                        <button onClick={() => setEditingTagsQuestion(q)}>
+                                            🏷️
                                         </button>
-                                    )} */}
+                                    </td>
 
-                                    {q.type_q !== "map" && <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => handleUpload(e, q)}
-                                    />}
+                                    <td>
+                                        <select
+                                            value={q.type_q}
+                                            onChange={(e) => {
+                                                const updated = [...allQuestions];
+                                                updated[index].type_q = e.target.value;
+                                                setAllQuestions(updated);
+                                            }}
+                                            style={cellStyle}
+                                        >
+                                            <option value="text">text</option>
+                                            <option value="map">map</option>
+                                        </select>
+                                    </td>
 
-                                </td>
-
-                                <td>{q.next_review || "-"}</td>
-
-                                <td>
-                                    <button
-                                        onClick={() => deleteQuestion(q.id)}
-                                        style={{
-                                            background: "#ff4d4f",
-                                            color: "white",
-                                            border: "none",
-                                            padding: "5px 8px",
-                                            borderRadius: "5px",
-                                            cursor: "pointer"
+                                    <td
+                                        onMouseEnter={(e) => {
+                                            if (q.type_q === "text" && q.fichier) {
+                                                setHoveredImage(q.fichier);
+                                                setMousePos({ x: e.clientX, y: e.clientY });
+                                            }
                                         }}
+                                        onMouseMove={(e) => {
+                                            setMousePos({ x: e.clientX, y: e.clientY });
+                                        }}
+                                        onMouseLeave={() => setHoveredImage(null)}
                                     >
-                                        🗑
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
+                                        {q.type_q === "map" && (
+                                            <input
+                                                style={cellStyle}
+                                                value={q.svg || ""}
+                                                onChange={(e) => {
+                                                    const updated = [...allQuestions];
+                                                    updated[index].svg = e.target.value;
+                                                    setAllQuestions(updated);
+                                                }}
+                                                onBlur={() => updateQuestion(q.id, { svg: q.svg })}
+                                            />
+                                        )}
+
+                                        {q.type_q !== "map" && (
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => handleUpload(e, q)}
+                                            />
+                                        )}
+                                    </td>
+
+                                    <td>{q.next_review || "-"}</td>
+
+                                    <td>
+                                        <button
+                                            onClick={() => deleteQuestion(q.id)}
+                                            style={{
+                                                background: "#ff4d4f",
+                                                color: "white",
+                                                border: "none",
+                                                padding: "5px 8px",
+                                                borderRadius: "5px",
+                                                cursor: "pointer"
+                                            }}
+                                        >
+                                            🗑
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>

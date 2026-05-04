@@ -133,20 +133,21 @@ export default function MapEditor({
   // }
 
   async function handleClose() {
-    const updated = {
-      ...q,
-      type_q: "map",
-      data: {
-        ...q.data,
-        items,
-        labels,
-        aliases
-      }
-    };
-
-    await updateQuestion(q.id, updated);
-
-    updateQuestionInState(updated);
+    for (const code of items) {
+      console.log(q.svg, code, labels[code], aliases[code]);
+      await fetch("http://localhost:8000/map_zone", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          svg: q.svg,
+          code,
+          label: labels[code],
+          aliases: aliases[code] || []
+        })
+      });
+    }
 
     onClose();
   }
