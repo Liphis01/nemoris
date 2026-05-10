@@ -1,13 +1,13 @@
-export async function getReview(selectedTags = [], limit = 20) {
-  const res = await fetch("http://localhost:8000/questions");
-  const data = await res.json();
+export async function getReview(selectedTags = [], limit = 200, collectionId = null) {
+  const params = new URLSearchParams();
 
-  return data
-    .filter(q =>
-      selectedTags.length === 0 ||
-      selectedTags.every(tag => q.tags?.includes(tag))
-    )
-    .slice(0, limit);
+  selectedTags.forEach(tag => params.append("tags", tag));
+
+  if (limit) params.append("limit", limit);
+  if (collectionId) params.append("collection_id", collectionId);
+
+  const res = await fetch(`http://localhost:8000/review?${params}`);
+  return await res.json();
 }
 
 export async function sendAnswer(questionId, quality) {

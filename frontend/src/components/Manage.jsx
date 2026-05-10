@@ -30,6 +30,7 @@ export default function Manage({
 }) {
     const [hoveredImage, setHoveredImage] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const [collectionTarget, setCollectionTarget] = useState(null);
 
     const containerStyle = {
         height: "100vh",
@@ -196,8 +197,8 @@ export default function Manage({
                             </th>
 
                             <th style={headerStyle}
-                                onClick={() => handleSort("fichier")}>
-                                Fichier {sortField === "fichier" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
+                                onClick={() => handleSort("media")}>
+                                Media {sortField === "media" ? (sortOrder === "asc" ? "⬇️" : "⬆️") : ""}
                             </th>
 
                             <th style={headerStyle}
@@ -273,8 +274,8 @@ export default function Manage({
 
                             <td
                                 onMouseEnter={(e) => {
-                                    if (newRow.fichier) {
-                                        setHoveredImage(newRow.fichier);
+                                    if (newRow.media) {
+                                        setHoveredImage(newRow.media);
                                         setMousePos({ x: e.clientX, y: e.clientY });
                                     }
                                 }}
@@ -285,16 +286,16 @@ export default function Manage({
                             >
                                 {/* <input
                                     style={cellStyle}
-                                    value={newRow.fichier || ""}
+                                    value={newRow.media || ""}
                                     onChange={(e) =>
-                                        setNewRow({ ...newRow, fichier: e.target.value })
+                                        setNewRow({ ...newRow, media: e.target.value })
                                     }
                                     onKeyDown={handleNewRowKeyDown}
                                     placeholder="URL de l'image"
                                 /> */}
 
-                                {newRow.fichier && (
-                                    <button onClick={() => setNewRow({ ...newRow, fichier: "" })}>
+                                {newRow.media && (
+                                    <button onClick={() => setNewRow({ ...newRow, media: "" })}>
                                         ❌
                                     </button>
                                 )}
@@ -303,7 +304,7 @@ export default function Manage({
                                     type="file"
                                     accept="image/*"
                                     onChange={(e) =>
-                                        setNewRow({ ...newRow, fichier: URL.createObjectURL(e.target.files[0]) })
+                                        setNewRow({ ...newRow, media: URL.createObjectURL(e.target.files[0]) })
                                     }
                                 />
 
@@ -338,7 +339,7 @@ export default function Manage({
                                         <td>🗺️</td>
 
                                         <td colSpan={2}>
-                                            {q.svg} ({q.zones.length} zones)
+                                            {q.media} ({q.zones.length} zones)
                                         </td>
 
                                         <td>
@@ -360,7 +361,7 @@ export default function Manage({
                                                 onClick={() =>
                                                     setEditingQuestion({
                                                         type_q: "map",
-                                                        data: { svg: q.svg }
+                                                        media: q.media
                                                     })
                                                 }
                                             >
@@ -378,6 +379,8 @@ export default function Manage({
                                         onClick={() => {
                                             if (q.type_q === "map") {
                                                 setEditingQuestion(q);
+                                            } else {
+                                                setCollectionTarget(q);
                                             }
                                         }}
                                         style={{ cursor: "pointer" }}
@@ -401,7 +404,7 @@ export default function Manage({
                                     <td>
                                         <input
                                             style={cellStyle}
-                                            value={q.answer === "" ? (q.data?.items?.length || "") : q.answer}
+                                            value={q.answer || ""}
                                             onChange={(e) => {
                                                 const updated = [...allQuestions];
                                                 updated[index].answer = e.target.value;
@@ -434,8 +437,8 @@ export default function Manage({
 
                                     <td
                                         onMouseEnter={(e) => {
-                                            if (q.type_q === "text" && q.fichier) {
-                                                setHoveredImage(q.fichier);
+                                            if (q.type_q === "text" && q.media) {
+                                                setHoveredImage(q.media);
                                                 setMousePos({ x: e.clientX, y: e.clientY });
                                             }
                                         }}
@@ -447,13 +450,13 @@ export default function Manage({
                                         {q.type_q === "map" && (
                                             <input
                                                 style={cellStyle}
-                                                value={q.svg || ""}
+                                                value={q.media || ""}
                                                 onChange={(e) => {
                                                     const updated = [...allQuestions];
-                                                    updated[index].svg = e.target.value;
+                                                    updated[index].media = e.target.value;
                                                     setAllQuestions(updated);
                                                 }}
-                                                onBlur={() => updateQuestion(q.id, { svg: q.svg })}
+                                                onBlur={() => updateQuestion(q.id, { media: q.media })}
                                             />
                                         )}
 
@@ -489,6 +492,13 @@ export default function Manage({
                     </tbody>
                 </table>
             </div>
+
+            {collectionTarget && (
+                <CollectionModal
+                    q={collectionTarget}
+                    onClose={() => setCollectionTarget(null)}
+                />
+            )}
 
             {
                 hoveredImage && (

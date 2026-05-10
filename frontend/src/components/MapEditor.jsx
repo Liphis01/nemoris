@@ -24,127 +24,97 @@ const modalStyle = {
   overflow: "hidden",
 };
 
-const rowStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  marginBottom: "5px"
-};
+export default function MapEditor({ q, onClose }) {
 
-export default function MapEditor({
-  q,
-  onClose,
-  updateQuestion,
-  updateQuestionInState
-}) {
-  const [items, setItems] = useState(q.data?.items || []);
-  const [labels, setLabels] = useState(q.data?.labels || {});
-  const [aliases, setAliases] = useState(q.data?.aliases || {});
+  const [zones, setZones] = useState([]); // 🔥 vraies questions map
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
 
-  function handleSelect(code) {
-    if (editing) {
-      const currentValue = labelInputRef.current?.value;
+  // 🔥 charger zones depuis DB
+  useEffect(() => {
+    fetch("http://localhost:8000/questions")
+      .then(res => res.json())
+      .then(data => {
+        const mapZones = data.filter(
+          item => item.type_q === "map" && item.media === q.media
+        );
+        setZones(mapZones);
+      });
+  }, [q.media]);
 
-      if (!currentValue) {
-        removeItem(editing);
-      }
+  function handleSelect(code) {
+    let zone = zones.find(z => z.code === code);
+
+    // 🔥 si zone inexistante → créer localement
+    if (!zone) {
+      zone = {
+        id: "tmp-" + code,
+        code,
+        question: "",
+        aliases: [],
+        media: q.media,
+        type_q: "map"
+      };
+
+      setZones(prev => [...prev, zone]);
     }
 
-    setEditing(code);
+    setEditing(zone);
+  }
 
-    setItems(prev =>
-      prev.includes(code) ? prev : [...prev, code]
+  function updateLabel(value) {
+    setZones(prev =>
+      prev.map(z =>
+        z === editing ? { ...z, question: value, answer: value } : z
+      )
     );
+    setEditing(prev => ({ ...prev, question: value, answer: value }));
   }
 
-  function handleRowClick(code) {
-    setEditing(code);
-  }
-
-  function updateLabel(code, value) {
-    setLabels(prev => ({
-      ...prev,
-      [code]: value
-    }));
-  }
-
-  function updateAliases(code, value) {
-    setAliases(prev => ({
-      ...prev,
-      [code]: value.split(",").map(v => v.trim())
-    }));
-  }
-
-  function removeItem(code) {
-    setItems(prev => prev.filter((c) => c !== code));
-
-    setLabels(prev => {
-      const copy = { ...prev };
-      delete copy[code];
-      return copy;
-    });
-
-    setAliases(prev => {
-      const copy = { ...prev };
-      delete copy[code];
-      return copy;
-    });
-  }
-
-  function addAlias(code) {
+  function addAlias() {
     const value = aliasesInput.trim();
     if (!value) return;
-    if ((aliases[code] || []).includes(value)) return;
 
-    setAliases(prev => ({
-      ...prev,
-      [code]: [...(prev[code] || []), value]
-    }));
+    setZones(prev =>
+      prev.map(z =>
+        z === editing
+          ? {
+            ...z,
+            aliases: [...(z.aliases || []), value]
+          }
+          : z
+      )
+    );
 
     setAliasesInput("");
   }
 
-  function removeAlias(code, index) {
-    setAliases(prev => ({
-      ...prev,
-      [code]: prev[code].filter((_, i) => i !== index)
-    }));
+  function removeAlias(index) {
+    setZones(prev =>
+      prev.map(z =>
+        z === editing
+          ? {
+            ...z,
+            aliases: z.aliases.filter((_, i) => i !== index)
+          }
+          : z
+      )
+    );
   }
-
-  function handleAliasKeyDown(e, code) {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      addAlias(code);
-    }
-  }
-
-  // function commitAliases(code) {
-  //   const parsed = aliasesInput
-  //     .split(",")
-  //     .map(v => v.trim())
-  //     .filter(Boolean);
-
-  //   setAliases(prev => ({
-  //     ...prev,
-  //     [code]: parsed
-  //   }));
-  // }
 
   async function handleClose() {
-    for (const code of items) {
-      console.log(q.svg, code, labels[code], aliases[code]);
+    for (const z of zones) {
       await fetch("http://localhost:8000/map_zone", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          svg: q.svg,
-          code,
-          label: labels[code],
-          aliases: aliases[code] || []
+          media: q.media,
+          code: z.code,
+          label: z.question,
+          aliases: z.aliases || []
         })
       });
     }
@@ -153,193 +123,61 @@ export default function MapEditor({
   }
 
   useEffect(() => {
-    const scrollBarWidth =
-      window.innerWidth - document.documentElement.clientWidth;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.paddingRight = scrollBarWidth + "px";
-
-    return () => {
-      document.body.style.overflow = "auto";
-      document.body.style.paddingRight = "0px";
-    };
-  }, []);
-
-  useEffect(() => {
     if (editing) {
       labelInputRef.current?.focus();
     }
   }, [editing]);
 
-  // useEffect(() => {
-  //   if (!editing) return;
-
-  //   setAliasesInput((aliases[editing] || []).join(", "));
-  // }, [editing]);
-
   return (
     <div style={overlayStyle} onClick={handleClose}>
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
 
-        {/* 🗺️ GAUCHE */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            borderRight: "1px solid #333",
-            padding: "12px",
-            gap: "10px",
-            boxSizing: "border-box"
-          }}>
-
-          {/* MAP */}
-          <div
-            style={{
-              flex: 2,
-              minHeight: 0,
-              background: "#111",
-              borderRadius: "8px",
-              overflow: "hidden",
-              padding: "8px"
-            }}
-          >
-            <SvgMap
-              svgPath={`/maps/${q.fichier}`}
-              found={items}
-              selected={editing}
-              onSelect={handleSelect}
-            />
-          </div>
-
-          {/* INPUTS */}
-          <div
-            style={{
-              flex: 1,
-              borderTop: "1px solid #333",
-              padding: "10px",
-              background: "#181818",
-              borderRadius: "8px"
-            }}
-          >
-            {editing ? (
-              <>
-                <div style={{ marginBottom: "5px" }}>
-                  Code : {editing}
-                </div>
-
-                <input
-                  autoFocus
-                  ref={labelInputRef}
-                  value={labels[editing] || ""}
-                  onChange={(e) =>
-                    updateLabel(editing, e.target.value)
-                  }
-                  placeholder="Label"
-                  style={{ width: "80%", marginBottom: "5px" }}
-                />
-
-                <div style={{ marginTop: "10px" }}>
-
-                  {/* TAGS */}
-                  <div style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "6px",
-                    marginBottom: "6px"
-                  }}>
-                    {(aliases[editing] || []).map((alias, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          background: "#333",
-                          padding: "4px 8px",
-                          borderRadius: "6px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px"
-                        }}
-                      >
-                        <span>{alias}</span>
-                        <span
-                          onClick={() => removeAlias(editing, index)}
-                          style={{
-                            cursor: "pointer",
-                            color: "#aaa"
-                          }}
-                        >
-                          ✕
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* INPUT */}
-                  <input
-                    value={aliasesInput}
-                    onChange={(e) => setAliasesInput(e.target.value)}
-                    onKeyDown={(e) => handleAliasKeyDown(e, editing)}
-                    onBlur={() => addAlias(editing)}
-                    placeholder="Ajouter un alias"
-                    style={{ width: "80%" }}
-                  />
-
-                </div>
-              </>
-            ) : (
-              <div>Sélectionner une zone</div>
-            )}
-          </div>
-
+        {/* 🗺️ MAP */}
+        <div style={{ padding: "12px" }}>
+          <SvgMap
+            svgPath={`/maps/${q.media}`}
+            found={zones.map(z => z.code)}
+            selected={editing?.code}
+            onSelect={handleSelect}
+          />
         </div>
 
-        {/* 📋 DROITE */}
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-          padding: "12px",
-          gap: "10px",
-          boxSizing: "border-box"
-        }}>
+        {/* 📋 PANEL */}
+        <div style={{ padding: "12px" }}>
+          {editing ? (
+            <>
+              <div>Code: {editing.code}</div>
 
-          <div style={{
-            padding: "10px",
-            borderBottom: "1px solid #333"
-          }}>
-            Zones ({items.length})
-          </div>
+              <input
+                ref={labelInputRef}
+                value={editing.question || ""}
+                onChange={(e) => updateLabel(e.target.value)}
+                placeholder="Label"
+              />
 
-          <div style={{
-            flex: 1,
-            overflow: "auto",
-            minHeight: 0,
-            background: "#181818",
-            borderRadius: "0 0 8px 8px"
-          }}>
-            {items.map((code) => (
-              <div
-                key={code}
-                ref={(el) => {
-                  if (editing === code && el) {
-                    el.scrollIntoView({ block: "nearest" });
-                  }
-                }}
-                onClick={() => handleRowClick(code)}
-                style={{
-                  padding: "8px",
-                  cursor: "pointer",
-                  background:
-                    editing === code ? "#2a2a2a" : "transparent"
-                }}
-              >
-                {code} → {labels[code] || "???"}
+              {/* ALIASES */}
+              <div>
+                {(editing.aliases || []).map((a, i) => (
+                  <div key={i}>
+                    {a}
+                    <span onClick={() => removeAlias(i)}>✕</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
+              <input
+                value={aliasesInput}
+                onChange={(e) => setAliasesInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addAlias()}
+                placeholder="Ajouter alias"
+              />
+            </>
+          ) : (
+            <div>Sélectionne une zone</div>
+          )}
         </div>
 
       </div>
-    </div >
+    </div>
   );
 }

@@ -6,22 +6,35 @@ export default function QuestionRenderer({
     currentIndex,
     showAnswer,
     setShowAnswer,
-    handleAnswer
+    handleTextAnswer,
+    handleMapComplete,
 }) {
     if (!q) return null;
 
-    switch (q.type_q) {
-        case "map":
-            return <MapQuestion q={q} onAnswer={handleAnswer} />;
-
-        case "text":
-        default:
-            return <TextQuestion
-                q={q}
-                currentIndex={currentIndex}
-                showAnswer={showAnswer}
-                setShowAnswer={setShowAnswer}
-                handleAnswer={handleAnswer}
-            />;
+    if (q.type_q === "map" && (!q.items || q.items.length === 0)) {
+        return <div>⚠️ Map vide</div>;
     }
+
+    // 🔥 MAP GROUP (nouveau système)
+    if (q.type_q === "map" && q.items) {
+        return (
+            <MapQuestion
+                q={q}
+                items={q.items}
+                media={q.media}
+                onComplete={handleMapComplete}
+            />
+        );
+    }
+
+    // 🔹 QUESTION TEXTE
+    return (
+        <TextQuestion
+            q={q}
+            currentIndex={currentIndex}
+            showAnswer={showAnswer}
+            setShowAnswer={setShowAnswer}
+            handleAnswer={handleTextAnswer}
+        />
+    );
 }

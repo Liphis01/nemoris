@@ -10,7 +10,7 @@ import shutil
 import os
 
 from .database import engine, SessionLocal
-from .models import Base, Question, Progress
+from .models import Base, Question, Progress, Collection, Map
 from .scheduler import update_progress
 
 # Création des tables
@@ -42,31 +42,43 @@ class QuestionCreate(BaseModel):
     question: str
     answer: Optional[str] = ""
     tags: Optional[List[str]] = []
-    type_q: str
-    fichier: Optional[str] = ""
-    data: Optional[Dict[str, Any]] = None
+    type_q: str = "text"
+
+    media: Optional[str] = None
+    code: Optional[str] = None
+    aliases: Optional[List[str]] = []
+    map_id: Optional[int] = None
 
 class AnswerRequest(BaseModel):
     question_id: int
     quality: int
 
 class QuestionUpdate(BaseModel):
-    question: Optional[str] = ""
-    answer: Optional[str] = ""
-    tags: Optional[List[str]] = []
-    type_q: Optional[str] = ""
-    fichier: Optional[str] = ""
-    data: Optional[Dict[str, Any]] = None
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    tags: Optional[List[str]] = None
+    type_q: Optional[str] = None
+
+    media: Optional[str] = None
+    code: Optional[str] = None
+    aliases: Optional[List[str]] = None
+    map_id: Optional[int] = None
 
 class MapAnswerRequest(BaseModel):
-    question_id: int
-    items: Dict[str, int]  # code -> quality
+    items: Dict[int, int]
     
 class MapZoneUpdate(BaseModel):
-    svg: str
+    map_id: int
     code: str
     label: str
     aliases: List[str] = []
+
+class CollectionCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    
+class SetCollections(BaseModel):
+    collection_ids: list[int]
 
 @app.put("/questions/{question_id}")
 def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
@@ -79,6 +91,20 @@ def update_question(question_id: int, data: QuestionUpdate, db: Session = Depend
 
     for key, value in update_data.items():
         setattr(q, key, value)
+
+    db.commit()
+    return {"status": "ok"}
+
+@app.put("/questions/{question_id}/collections")
+def set_collections(question_id: int, data: SetCollections, db: Session = Depends(get_db)):
+    q = db.query(Question).filter(Question.id == question_id).first()
+
+    if not q:
+        return {"error": "not found"}
+
+    collections = db.query(Collection).filter(Collection.id.in_(data.collection_ids)).all()
+
+    q.collections = collections
 
     db.commit()
     return {"status": "ok"}
@@ -104,22 +130,19 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
 
     if not q:
         return {"error": "Question not found"}
-    
-    if not q.fichier.startswith("http://127.0.0.1:8000/static/"):
+
+    if not q.media:
+        return {"error": "No image"}
+
+    if not q.media.startswith("http://127.0.0.1:8000/static/"):
         return {"error": "External image"}
 
-    if q.fichier:
-        # extraire le chemin local
-        file_path = q.fichier.replace("http://127.0.0.1:8000/", "")
+    file_path = q.media.replace("http://127.0.0.1:8000/", "")
 
-        if "static/" not in file_path:
-            return {"error": "wrong file path"}
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-    # supprimer dans la DB
-    q.fichier = None
+    q.media = None
     q.type_q = "text"
 
     db.commit()
@@ -134,8 +157,10 @@ def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
         answer=data.answer,
         tags=data.tags,
         type_q=data.type_q,
-        fichier=data.fichier,
-        data=data.data,
+        media=data.media,
+        code=data.code,
+        aliases=data.aliases,
+        map_id=data.map_id
     )
     db.add(q)
     db.commit()
@@ -166,18 +191,25 @@ def get_questions(db: Session = Depends(get_db)):
             "answer": q.answer,
             "tags": q.tags,
             "type_q": q.type_q,
-            "fichier": q.fichier,
-            "data": q.data,
+            "media": q.media,
+            "code": q.code,
+            "aliases": q.aliases,
+            "map_id": q.map_id,
+            "map_svg": q.map.svg if q.map else None,
+            "collections": [c.id for c in q.collections],
             "next_review": progress.next_review if progress else None
         })
 
     return result
 
 
+from sqlalchemy.orm import joinedload
+
 @app.get("/review")
 def get_review(
-    tags: Optional[List[str]] = [],
+    tags: Optional[List[str]] = None,
     limit: int = 200,
+    collection_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     today = date.today()
@@ -185,32 +217,50 @@ def get_review(
     normal_questions = []
     map_groups = {}
 
-    # 🔹 récupérer toutes les progress dues
-    due_progress = db.query(Progress).filter(
-        Progress.next_review <= today
-    ).all()
+    # 🔹 1. DUE QUESTIONS (JOIN direct)
+    due = (
+        db.query(Question, Progress)
+        .join(Progress, Progress.question_id == Question.id)
+        .options(
+            joinedload(Question.collections),
+            joinedload(Question.map)
+        )
+        .filter(Progress.next_review <= today)
+        .all()
+    )
 
-    for p in due_progress:
-        q = db.query(Question).filter(Question.id == p.question_id).first()
-        if not q:
-            continue
+    seen_ids = set()
 
-        # 🔹 filtre tags
-        if tags and tags != ["global"] and not set(tags).intersection(set(q.tags or [])):
-            continue
+    for q, p in due:
+        seen_ids.add(q.id)
 
-        # 🔥 MAP → GROUP
-        if q.type_q == "map":
-            svg = q.svg
+        # 🔹 filter collection
+        if collection_id:
+            if not any(c.id == collection_id for c in q.collections):
+                continue
 
-            if svg not in map_groups:
-                map_groups[svg] = []
+        # 🔹 filter tags
+        if tags:
+            if not set(tags).intersection(set(q.tags or [])):
+                continue
 
-            map_groups[svg].append({
+        # 🔥 MAP
+        if q.type_q == "map" and q.map:
+            map_id = q.map_id
+
+            if map_id not in map_groups:
+                map_groups[map_id] = {
+                    "type_q": "map",
+                    "map_id": map_id,
+                    "media": q.map.svg,
+                    "items": []
+                }
+
+            map_groups[map_id]["items"].append({
                 "id": q.id,
                 "label": q.question,
                 "code": q.code,
-                "aliases": q.data.get("aliases", []) if q.data else [],
+                "aliases": q.aliases or [],
                 "interval": p.interval,
                 "ease": p.ease_factor
             })
@@ -225,43 +275,53 @@ def get_review(
                 "interval": p.interval,
                 "ease": p.ease_factor,
                 "type_q": q.type_q,
-                "fichier": q.fichier
+                "media": q.media
             })
 
-    # 🔹 transformer groupes map → questions
-    map_questions = []
-    for svg, items in map_groups.items():
-        map_questions.append({
-            "type_q": "map",
-            "svg": svg,
-            "items": items
-        })
-
-    # 🔹 nouvelles questions (pas encore vues)
-    seen_ids = [p.question_id for p in db.query(Progress).all()]
-
-    new_query = db.query(Question)
-    if tags and tags != ["global"]:
-        new_query = new_query.filter(Question.tags.overlap(tags))
-
-    new_questions = new_query.filter(~Question.id.in_(seen_ids)).all()
+    # 🔹 2. NEW QUESTIONS (1 seule query)
+    new_questions = (
+        db.query(Question)
+        .options(
+            joinedload(Question.collections),
+            joinedload(Question.map)
+        )
+        .filter(~Question.id.in_(seen_ids))
+        .all()
+    )
 
     for q in new_questions:
-        if q.type_q == "map":
-            # 🔥 regrouper aussi les nouvelles maps
-            svg = q.svg
 
-            if svg not in map_groups:
-                map_groups[svg] = []
+        # 🔹 filter collection
+        if collection_id:
+            if not any(c.id == collection_id for c in q.collections):
+                continue
 
-            map_groups[svg].append({
+        # 🔹 filter tags
+        if tags:
+            if not set(tags).intersection(set(q.tags or [])):
+                continue
+
+        # 🔥 MAP
+        if q.type_q == "map" and q.map:
+            map_id = q.map_id
+
+            if map_id not in map_groups:
+                map_groups[map_id] = {
+                    "type_q": "map",
+                    "map_id": map_id,
+                    "media": q.map.svg,
+                    "items": []
+                }
+
+            map_groups[map_id]["items"].append({
                 "id": q.id,
                 "label": q.question,
                 "code": q.code,
-                "aliases": q.data.get("aliases", []) if q.data else [],
+                "aliases": q.aliases or [],
                 "interval": 1,
                 "ease": 2.5
             })
+
         else:
             normal_questions.append({
                 "question_id": q.id,
@@ -271,20 +331,14 @@ def get_review(
                 "interval": 1,
                 "ease": 2.5,
                 "type_q": q.type_q,
-                "fichier": q.fichier
+                "media": q.media
             })
 
-    # 🔹 reconstruire map_questions (avec nouvelles incluses)
-    map_questions = []
-    for svg, items in map_groups.items():
-        map_questions.append({
-            "type_q": "map",
-            "svg": svg,
-            "items": items
-        })
+    return (normal_questions + list(map_groups.values()))[:limit]
 
-    return (normal_questions + map_questions)[:limit]
-
+@app.get("/collections")
+def get_collections(db: Session = Depends(get_db)):
+    return db.query(Collection).all()
 
 @app.post("/answer")
 def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
@@ -351,7 +405,7 @@ def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
 
     q = db.query(Question).filter(
         Question.type_q == "map",
-        Question.svg == data.svg,
+        Question.map_id == data.map_id,
         Question.code == data.code
     ).first()
 
@@ -360,22 +414,28 @@ def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
             question=data.label,
             answer=data.label,
             type_q="map",
-            svg=data.svg,
             code=data.code,
-            data={
-                "aliases": data.aliases
-            }
+            aliases=data.aliases,
+            map_id=data.map_id
         )
         db.add(q)
     else:
         q.question = data.label
         q.answer = data.label
-        q.data = {"aliases": data.aliases}
+        q.aliases = data.aliases
 
     db.commit()
     db.refresh(q)
 
     return q
+
+@app.post("/collections")
+def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
+    c = Collection(name=data.name, description=data.description)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
 
 @app.get("/hard")
 def get_test(db: Session = Depends(get_db)):

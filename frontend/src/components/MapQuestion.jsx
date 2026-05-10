@@ -2,19 +2,14 @@ import { useState } from "react";
 import { sendMapAnswer } from "../api/api";
 import SvgMap from "./SvgMap";
 
-export default function MapQuestion({ q, onAnswer }) {
+export default function MapQuestion({ q, onComplete }) {
 
   const items = q.items || [];
 
   const [input, setInput] = useState("");
-  const [found, setFound] = useState([]); // ids
+  const [found, setFound] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
   const [itemQuality, setItemQuality] = useState({});
-
-  const activeStyle = {
-    transform: "scale(1.1)",
-    border: "1px solid #fff"
-  };
 
   function normalize(str) {
     return str
@@ -38,18 +33,15 @@ export default function MapQuestion({ q, onAnswer }) {
     setInput("");
   }
 
+  // 🔥 FIN → initialisation intelligente
   function finishMap() {
-    const initialQuality = {};
+    const initial = {};
 
     items.forEach(item => {
-      if (found.includes(item.id)) {
-        initialQuality[item.id] = 2; // facile
-      } else {
-        initialQuality[item.id] = 0; // raté
-      }
+      initial[item.id] = found.includes(item.id) ? 2 : 1;
     });
 
-    setItemQuality(initialQuality);
+    setItemQuality(initial);
     setShowRecap(true);
   }
 
@@ -60,7 +52,7 @@ export default function MapQuestion({ q, onAnswer }) {
     setFound([]);
     setItemQuality({});
 
-    onAnswer();
+    onComplete(); // passer à la suite
   }
 
   function setQuality(id, quality) {
@@ -74,13 +66,14 @@ export default function MapQuestion({ q, onAnswer }) {
 
   return (
     <div>
-      <h2>{q.svg}</h2>
+
+      <h2>{q.media}</h2>
 
       <p style={{ opacity: 0.7 }}>{progress}</p>
 
       {/* 🗺️ MAP */}
       <SvgMap
-        svgPath={`/maps/${q.svg}`}
+        svgPath={`/maps/${q.media}`}
         found={items
           .filter(i => found.includes(i.id))
           .map(i => i.code)}
@@ -125,36 +118,28 @@ export default function MapQuestion({ q, onAnswer }) {
       </div>
 
       {/* ABANDON */}
-      <button onClick={finishMap} style={{ marginBottom: "10px" }}>
-        Abandonner
-      </button>
+      {!showRecap && (
+        <button onClick={finishMap} style={{ marginTop: "10px" }}>
+          Terminer / Abandonner
+        </button>
+      )}
 
-      {/* FIN */}
+      {/* AUTO FIN */}
       {found.length === items.length && !showRecap && (
-        <div style={{ marginTop: "20px" }}>
-          <p>🎉 Terminé !</p>
-          <button onClick={finishMap}>
-            Voir le résultat
-          </button>
-        </div>
+        <button onClick={finishMap}>
+          Voir le résultat
+        </button>
       )}
 
       {/* RECAP */}
       {showRecap && (
-        <div style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          background: "#111",
-          padding: "20px"
-        }}>
+        <div style={overlayStyle}>
+
           <h2>Résultat</h2>
 
           {/* 🗺️ MAP RECAP */}
           <SvgMap
-            svgPath={`/maps/${q.svg}`}
+            svgPath={`/maps/${q.media}`}
             found={items
               .filter(i => found.includes(i.id))
               .map(i => i.code)}
@@ -166,7 +151,7 @@ export default function MapQuestion({ q, onAnswer }) {
               <tr>
                 <th>Zone</th>
                 <th>Résultat</th>
-                <th>Action</th>
+                <th>Difficulté</th>
               </tr>
             </thead>
 
@@ -178,19 +163,21 @@ export default function MapQuestion({ q, onAnswer }) {
                   <tr key={item.id}>
                     <td>{item.label}</td>
 
-                    <td>{isFound ? "✅" : "❌"}</td>
+                    <td>
+                      {isFound ? "✅" : "❌"}
+                    </td>
 
                     <td>
-                      {[0,1,2].map(qVal => (
+                      {[0, 1, 2].map(qVal => (
                         <button
                           key={qVal}
                           onClick={() => setQuality(item.id, qVal)}
                           style={{
+                            marginRight: "5px",
                             background:
                               itemQuality[item.id] === qVal
                                 ? "#2ecc71"
-                                : "#333",
-                            ...(itemQuality[item.id] === qVal ? activeStyle : {})
+                                : "#333"
                           }}
                         >
                           {qVal === 0 ? "❌" : qVal === 1 ? "😐" : "✅"}
@@ -203,11 +190,12 @@ export default function MapQuestion({ q, onAnswer }) {
             </tbody>
           </table>
 
-          <button onClick={sendResult}>
+          <button onClick={sendResult} style={{ marginTop: "20px" }}>
             Valider
           </button>
         </div>
       )}
+
     </div>
   );
 }
@@ -216,4 +204,15 @@ const gridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
   gap: "5px"
+};
+
+const overlayStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  background: "#111",
+  padding: "20px",
+  overflow: "auto"
 };

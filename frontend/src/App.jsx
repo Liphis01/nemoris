@@ -2,17 +2,17 @@ import { useRef, useEffect, useState } from "react";
 import { getReview, sendAnswer } from "./api/api";
 import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
-import Manage from "./components/Manage";
+import Manage from "./components/manage/Manage";
 import MapEditor from "./components/MapEditor";
 import TagEditor from "./components/TagEditor";
 
 function App() {
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState([]); // questions de la review
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [limit, setLimit] = useState(200);
   const [mode, setMode] = useState("menu");
-  const [allQuestions, setAllQuestions] = useState([]);
+  const [allQuestions, setAllQuestions] = useState([]); // toutes les questions de la database
   const [search, setSearch] = useState("");
   const [filterTheme, setFilterTheme] = useState("");
   const [filterDue, setFilterDue] = useState(false);
@@ -26,9 +26,9 @@ function App() {
   const [newRow, setNewRow] = useState({
     question: "",
     answer: "",
-    theme: "",
-    type_q: "",
-    fichier: "",
+    tags: [],
+    type_q: "text",
+    media: null,
   });
 
   const appStyle = {
@@ -39,7 +39,7 @@ function App() {
     fontFamily: "Arial, sans-serif"
   };
 
-
+  // à déplacer dans quiz à l'occasion
   useEffect(() => {
     function handleKeyDown(e) {
       // voir réponse
@@ -52,9 +52,9 @@ function App() {
 
       // répondre uniquement si réponse affichée
       if (showAnswer) {
-        if (e.key === "1") handleAnswer(0);
-        if (e.key === "2") handleAnswer(1);
-        if (e.key === "3") handleAnswer(2);
+        if (e.key === "1") handleTextAnswer(0);
+        if (e.key === "2") handleTextAnswer(1);
+        if (e.key === "3") handleTextAnswer(2);
       }
     }
 
@@ -73,11 +73,14 @@ function App() {
       .map(t => t.trim())
       .filter(Boolean);
 
+    // const selectedCollection = null;
+    
     getReview(selectedTags, limit).then((data) => {
       setQuestions(data);
       setCurrentIndex(0);
       setShowAnswer(false);
     });
+
   }, [mode, tagInput, limit]);
 
   // useEffect(() => {
@@ -102,14 +105,15 @@ function App() {
 
   const current = questions[currentIndex];
 
-  function handleAnswer(quality) {
-    // 👉 seulement pour les questions normales
-    if (current.type_q !== "map") {
-      sendAnswer(current.question_id, quality);
-    }
+  function handleTextAnswer(quality) {
+    sendAnswer(current.question_id, quality);
 
     setShowAnswer(false);
-    setCurrentIndex(currentIndex + 1);
+    setCurrentIndex(prev => prev + 1);
+  }
+
+  function handleMapComplete() {
+    setCurrentIndex(prev => prev + 1);
   }
 
   async function loadAllQuestions() {
@@ -126,7 +130,11 @@ function App() {
       },
       body: JSON.stringify(updatedFields),
     });
-    console.log("update", updatedFields);
+
+    updateQuestionInState({
+      id,
+      ...updatedFields
+    });
   }
 
   async function deleteQuestion(id) {
@@ -153,14 +161,14 @@ function App() {
 
     const created = await res.json();
 
-    setAllQuestions([...allQuestions, created]);
+    setAllQuestions(prev => [...prev, created]);
 
     setNewRow({
       question: "",
       answer: "",
       tags: [],
-      type_q: "",
-      fichier: "",
+      type_q: "text",
+      media: null,
     });
 
     setTimeout(() => {
@@ -182,10 +190,16 @@ function App() {
 
     const data = await res.json();
 
-    // 🔥 on met à jour la question avec l'image
-    updateQuestion(q.id, {
-      fichier: data.url,
-      type_q: "text"
+    await updateQuestion(q.id, {
+      media: data.url,
+      type_q: "image"
+    });
+
+    // 🔥 sync local
+    updateQuestionInState({
+      ...q,
+      media: data.url,
+      type_q: "image"
     });
   }
 
@@ -213,11 +227,10 @@ function App() {
       method: "DELETE"
     });
 
-    // refresh local state
-    setQuestions(prev =>
+    setAllQuestions(prev =>
       prev.map(q =>
         q.id === id
-          ? { ...q, fichier: null, type_q: "text" }
+          ? { ...q, media: null, type_q: "text" }
           : q
       )
     );
@@ -229,29 +242,26 @@ function App() {
     const mapGroups = {};
 
     for (const q of allQuestions) {
-      if (q.type_q === "map" && q.svg) {
-        if (!mapGroups[q.svg]) {
-          mapGroups[q.svg] = [];
+      if (q.type_q === "map" && q.map_svg) {
+        if (!mapGroups[q.map_svg]) {
+          mapGroups[q.map_svg] = [];
         }
-        mapGroups[q.svg].push(q);
+        mapGroups[q.map_svg].push(q);
       } else {
         normal.push(q);
       }
     }
 
-    // transformer chaque groupe en "fausse ligne"
     const maps = Object.entries(mapGroups).map(([svg, zones]) => ({
       id: "map-" + svg,
       type_q: "map_group",
-      svg,
+      media: svg,
       zones,
 
-      // champs affichage (vide volontairement)
       question: "",
       answer: "",
       tags: [],
 
-      // utile pour filtres
       next_review: zones.some(z => z.next_review),
     }));
 
@@ -318,7 +328,8 @@ function App() {
           currentIndex={currentIndex}
           showAnswer={showAnswer}
           setShowAnswer={setShowAnswer}
-          handleAnswer={handleAnswer}
+          handleTextAnswer={handleTextAnswer}
+          handleMapComplete={handleMapComplete}
           tagInput={tagInput}
           setTagInput={setTagInput}
           limit={limit}

@@ -53,57 +53,63 @@ export default function SvgMap({
     }
 
     useEffect(() => {
-        fetch(svgPath)
-            .then((res) => res.text())
-            .then((svg) => {
-                containerRef.current.innerHTML = svg;
+    let cleanupFns = [];
 
-                console.log(svgPath);
+    fetch(svgPath)
+        .then((res) => res.text())
+        .then((svg) => {
+            containerRef.current.innerHTML = svg;
 
-                const svgEl = containerRef.current.querySelector("svg");
-                if (!svgEl) {
-                    console.error("SVG non trouvé dans le fichier:", svgPath);
-                    return;
-                }
+            const svgEl = containerRef.current.querySelector("svg");
+            if (!svgEl) return;
 
-                svgEl.style.width = "100%";
-                svgEl.style.height = "auto";
+            svgEl.style.width = "100%";
+            svgEl.style.height = "auto";
 
-                const getColor = (code) => {
-                    if (selected === code) return "#f39c12"; // orange priorité max
-                    if (found.includes(code)) return "#2ecc71"; // vert
-                    if (missed.includes(code)) return "#e74c3c"; // rouge
-                    if (dueItems.includes(code)) return "#f1c40f"; // jaune
-                    return "#444"; // gris
+            const getColor = (code) => {
+                if (selected === code) return "#f39c12";
+                if (found.includes(code)) return "#2ecc71";
+                if (missed.includes(code)) return "#e74c3c";
+                if (dueItems.includes(code)) return "#f1c40f";
+                return "#444";
+            };
+
+            containerRef.current.querySelectorAll("path").forEach((el) => {
+                const code = el.getAttribute("data-code");
+
+                el.style.fill = getColor(code);
+                el.style.cursor = "pointer";
+
+                const handleClick = () => {
+                    if (code && onSelect) onSelect(code);
                 };
 
-                // RESET + couleur initiale
-                containerRef.current.querySelectorAll("path").forEach((el) => {
-                    const code = el.getAttribute("data-code");
+                const handleEnter = () => {
+                    if (!found.includes(code) && selected !== code) {
+                        el.style.fill = "#888";
+                    }
+                };
 
+                const handleLeave = () => {
                     el.style.fill = getColor(code);
-                    el.style.cursor = "pointer";
+                };
 
-                    // CLICK
-                    el.addEventListener("click", () => {
-                        if (code && onSelect) {
-                            onSelect(code);
-                        }
-                    });
+                el.addEventListener("click", handleClick);
+                el.addEventListener("mouseenter", handleEnter);
+                el.addEventListener("mouseleave", handleLeave);
 
-                    // HOVER
-                    el.addEventListener("mouseenter", () => {
-                        if (!found.includes(code) && selected !== code) {
-                            el.style.fill = "#888";
-                        }
-                    });
-
-                    el.addEventListener("mouseleave", () => {
-                        el.style.fill = getColor(code);
-                    });
+                cleanupFns.push(() => {
+                    el.removeEventListener("click", handleClick);
+                    el.removeEventListener("mouseenter", handleEnter);
+                    el.removeEventListener("mouseleave", handleLeave);
                 });
             });
-    }, [svgPath, found, missed, selected, dueItems]);
+        });
+
+    return () => {
+        cleanupFns.forEach(fn => fn());
+    };
+}, [svgPath, found, missed, selected, dueItems, onSelect]);
 
     useEffect(() => {
         const el = wrapperRef.current;
