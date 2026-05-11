@@ -11,12 +11,13 @@ export default function QuestionRenderer({
 }) {
     if (!q) return null;
 
-    if (q.type_q === "map" && (!q.items || q.items.length === 0)) {
+    if (q.type_q === "map" && !q.media) {
+        console.log("q", q.items);
         return <div>⚠️ Map vide</div>;
     }
 
     // 🔥 MAP GROUP (nouveau système)
-    if (q.type_q === "map" && q.items) {
+    if (q.type_q === "map" && q.media) {
         return (
             <MapQuestion
                 q={q}

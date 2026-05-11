@@ -1,3 +1,5 @@
+import { cellStyle } from "./styles";
+
 export default function MapRow({
   q,
   setEditingQuestion,
@@ -5,27 +7,27 @@ export default function MapRow({
 }) {
   return (
     <tr>
-      <td>🗺️</td>
+      <td style={cellStyle}>🗺️</td>
 
-      <td colSpan={2}>
+      <td colSpan={2} style={{ ...cellStyle, fontWeight: "600", color: "#aaa" }}>
         {q.media} ({q.zones.length} zones)
       </td>
 
-      <td>
+      <td colSpan={4} style={cellStyle}>
         <button onClick={() => setEditingTagsQuestion(q)}>
           🏷️
         </button>
       </td>
 
-      <td>map</td>
+      <td style={cellStyle}>map</td>
 
-      <td>-</td>
+      <td style={cellStyle}>-</td>
 
-      <td>
+      <td style={cellStyle}>
         {q.zones.filter(z => z.next_review).length} à revoir
       </td>
 
-      <td>
+      <td style={cellStyle}>
         <button
           onClick={() =>
             setEditingQuestion({

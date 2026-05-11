@@ -17,6 +17,7 @@
 - intégrer les questions maps à la review (chaque question indépendante)
 - mode entrainement
 - mode difficile (similaire à jetpunk : on ne voit pas les réponses possibles, pas le droit à l'erreur...)
+- étaler les questions sur plusieurs jours au maximum (éviter d'avoir un jour à 0 puis un jour à 10 questions)
 
 ## refactors
 - refactor général des styles redondants, etc...
