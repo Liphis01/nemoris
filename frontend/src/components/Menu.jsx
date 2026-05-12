@@ -20,14 +20,14 @@ export default function Menu({ setMode }) {
                     onClick={() => setMode("quiz")}
                     style={mainButtonStyle}
                 >
-                    ▶ Faire les questions
+                    ▶ Review du jour
                 </button>
 
                 <button
                     onClick={() => setMode("manage")}
                     style={mainButtonStyle}
                 >
-                    🗂 Gérer la base de données
+                    🗂 Gestionnaire des questions
                 </button>
             </div>
         </div>

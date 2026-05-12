@@ -23,6 +23,7 @@
 - refactor général des styles redondants, etc...
 - il faudrait que chaque pays soit sa propre question dans la db plutôt que une seule question ait plein de pays
 - déplacer la gestion de progress pour les nouvelle questions directement dans create_question (backend)
+- réorganiser le main.py
 
 ## ideas
 - mettre une option de priorité sur les questions pour les faire apparaître plus souvent

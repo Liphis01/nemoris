@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import date
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -10,8 +10,15 @@ import shutil
 import os
 
 from .database import engine, SessionLocal
-from .models import Base, Question, Progress, Collection, Map
+from .models import Base, QuestionGroup, Question, Progress, Collection
 from .scheduler import update_progress
+from .schemas import QuestionCreate, QuestionUpdate, QuestionOut
+
+GROUP_COMPATIBILITY = {
+    "map": ["map_zone"],
+    "timeline": ["timeline_item"],
+    "diagram": ["diagram_label"]
+}
 
 # Création des tables
 Base.metadata.create_all(bind=engine)
@@ -38,62 +45,138 @@ def get_db():
     finally:
         db.close()
 
-class QuestionCreate(BaseModel):
-    question: str
-    answer: Optional[str] = ""
-    tags: Optional[List[str]] = []
-    type_q: str = "text"
 
-    media: Optional[str] = None
-    code: Optional[str] = None
-    aliases: Optional[List[str]] = []
-    map_id: Optional[int] = None
+@app.put(
+    "/questions/{question_id}",
+    response_model=QuestionOut
+)
+def update_question(
+    question_id: int,
+    payload: QuestionUpdate,
+    db: Session = Depends(get_db)
+):
 
-class AnswerRequest(BaseModel):
-    question_id: int
-    quality: int
+    question = (
+        db.query(Question)
+        .options(
+            joinedload(Question.group),
+            joinedload(Question.collections)
+        )
+        .filter(Question.id == question_id)
+        .first()
+    )
 
-class QuestionUpdate(BaseModel):
-    question: Optional[str] = None
-    answer: Optional[str] = None
-    tags: Optional[List[str]] = None
-    type_q: Optional[str] = None
+    if not question:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found"
+        )
 
-    media: Optional[str] = None
-    code: Optional[str] = None
-    aliases: Optional[List[str]] = None
-    map_id: Optional[int] = None
+    # =====================================================
+    # ONLY SENT FIELDS
+    # =====================================================
 
-class MapAnswerRequest(BaseModel):
-    items: Dict[int, int]
-    
-class MapZoneUpdate(BaseModel):
-    map_id: int
-    code: str
-    label: str
-    aliases: List[str] = []
+    updates = payload.model_dump(
+        exclude_unset=True
+    )
 
-class CollectionCreate(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    
-class SetCollections(BaseModel):
-    collection_ids: list[int]
+    # =====================================================
+    # FUTURE TYPE
+    # =====================================================
 
-@app.put("/questions/{question_id}")
-def update_question(question_id: int, data: QuestionUpdate, db: Session = Depends(get_db)):
-    q = db.query(Question).filter(Question.id == question_id).first()
+    future_type = updates.get(
+        "type_q",
+        question.type_q
+    )
 
-    if not q:
-        return {"error": "Question not found"}
+    # =====================================================
+    # FUTURE GROUP
+    # =====================================================
 
-    update_data = data.dict(exclude_unset=True)
+    future_group_id = updates.get(
+        "group_id",
+        question.group_id
+    )
 
-    for key, value in update_data.items():
-        setattr(q, key, value)
+    if future_group_id:
+
+        future_group = (
+            db.query(QuestionGroup)
+            .filter(
+                QuestionGroup.id == future_group_id
+            )
+            .first()
+        )
+
+        if not future_group:
+            raise HTTPException(
+                status_code=404,
+                detail="Group not found"
+            )
+
+        allowed = GROUP_COMPATIBILITY.get(
+            future_group.type_group,
+            []
+        )
+
+        if future_type not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{future_type} incompatible "
+                    f"with group type "
+                    f"{future_group.type_group}"
+                )
+            )
+
+    # =====================================================
+    # SIMPLE FIELDS
+    # =====================================================
+
+    editable_fields = [
+        "type_q",
+        "question",
+        "answer",
+        "media",
+        "tags",
+        "aliases",
+        "data",
+        "code",
+        "group_id"
+    ]
+
+    for field in editable_fields:
+
+        if field in updates:
+
+            setattr(
+                question,
+                field,
+                updates[field]
+            )
+
+    # =====================================================
+    # COLLECTIONS
+    # =====================================================
+
+    if "collection_ids" in updates:
+
+        collections = (
+            db.query(Collection)
+            .filter(
+                Collection.id.in_(
+                    updates["collection_ids"]
+                )
+            )
+            .all()
+        )
+
+        question.collections = collections
 
     db.commit()
-    return {"status": "ok"}
+    db.refresh(question)
+
+    return question
 
 @app.put("/questions/{question_id}/collections")
 def set_collections(question_id: int, data: SetCollections, db: Session = Depends(get_db)):
@@ -109,20 +192,165 @@ def set_collections(question_id: int, data: SetCollections, db: Session = Depend
     db.commit()
     return {"status": "ok"}
 
-@app.delete("/questions/{question_id}")
-def delete_question(question_id: int, db: Session = Depends(get_db)):
-    q = db.query(Question).filter(Question.id == question_id).first()
+@app.post(
+    "/groups",
+    response_model=GroupOut
+)
+def create_group(
+    payload: GroupCreate,
+    db: Session = Depends(get_db)
+):
 
-    if not q:
-        return {"error": "Question not found"}
+    new_group = QuestionGroup(
 
-    # supprimer aussi le progress associé
-    db.query(Progress).filter(Progress.question_id == question_id).delete()
+        type_group=payload.type_group,
 
-    db.delete(q)
+        name=payload.name,
+
+        media=payload.media,
+
+        data=payload.data
+    )
+
+    db.add(new_group)
+
     db.commit()
 
-    return {"status": "deleted"}
+    db.refresh(new_group)
+
+    return new_group
+
+@app.put(
+    "/groups/{group_id}",
+    response_model=GroupOut
+)
+def update_group(
+    group_id: int,
+    payload: GroupUpdate,
+    db: Session = Depends(get_db)
+):
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(
+            QuestionGroup.id == group_id
+        )
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+
+    updates = payload.model_dump(
+        exclude_unset=True
+    )
+
+    editable_fields = [
+        "name",
+        "media",
+        "data"
+    ]
+
+    for field in editable_fields:
+
+        if field in updates:
+
+            setattr(
+                group,
+                field,
+                updates[field]
+            )
+
+    db.commit()
+
+    db.refresh(group)
+
+    return group
+    
+@app.delete("/groups/{group_id}")
+def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(
+            QuestionGroup.id == group_id
+        )
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+
+    if group.questions:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot delete group "
+                "with existing questions"
+            )
+        )
+
+    db.delete(group)
+
+    db.commit()
+
+    return {
+        "status": "deleted"
+    }
+
+@app.delete("/questions/{question_id}")
+def delete_question(
+    question_id: int,
+    db: Session = Depends(get_db)
+):
+    question = (
+        db.query(Question)
+        .options(
+            joinedload(Question.group)
+        )
+        .filter(Question.id == question_id)
+        .first()
+    )
+
+    if not question:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found"
+        )
+
+    group = question.group
+
+    db.delete(question)
+    db.commit()
+
+    # =====================================================
+    # DELETE EMPTY GROUP
+    # =====================================================
+
+    if group:
+
+        remaining = (
+            db.query(Question)
+            .filter(Question.group_id == group.id)
+            .count()
+        )
+
+        if remaining == 0:
+            db.delete(group)
+            db.commit()
+
+    return {
+        "status": "deleted"
+    }
 
 @app.delete("/questions/{question_id}/image")
 def delete_image(question_id: int, db: Session = Depends(get_db)):
@@ -151,21 +379,183 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
 
 # ➕ Ajouter une question
 @app.post("/questions")
-def create_question(data: QuestionCreate, db: Session = Depends(get_db)):
-    q = Question(
-        question=data.question,
-        answer=data.answer,
-        tags=data.tags,
-        type_q=data.type_q,
-        media=data.media,
-        code=data.code,
-        aliases=data.aliases,
-        map_id=data.map_id
+def create_question(
+    payload: QuestionCreate,
+    db: Session = Depends(get_db)
+):
+    # =====================================================
+    # REQUIRED FIELDS
+    # =====================================================
+
+    type_q = payload.type_q
+
+    # =====================================================
+    # OPTIONAL GROUP
+    # =====================================================
+
+    group = None
+    group_id = payload.group_id
+
+    if group_id:
+
+        group = (
+            db.query(QuestionGroup)
+            .filter(QuestionGroup.id == group_id)
+            .first()
+        )
+
+        if not group:
+            raise HTTPException(
+                status_code=404,
+                detail="Group not found"
+            )
+
+        # ================================================
+        # TYPE COMPATIBILITY
+        # ================================================
+
+        allowed = GROUP_COMPATIBILITY.get(
+            group.type_group,
+            []
+        )
+
+        if type_q not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{type_q} incompatible "
+                    f"with group type "
+                    f"{group.type_group}"
+                )
+            )
+
+    # =====================================================
+    # CREATE QUESTION
+    # =====================================================
+
+    question = Question(
+        type_q=type_q,
+
+        question=payload.question,
+
+        answer=payload.answer,
+
+        media=payload.media,
+
+        tags=payload.tags,
+
+        aliases=payload.aliases,
+
+        data=payload.data,
+
+        code=payload.code,
+
+        group_id=group_id
     )
-    db.add(q)
+
+    db.add(question)
+    db.flush()
+
+    # =====================================================
+    # CREATE PROGRESS
+    # =====================================================
+
+    progress = Progress(
+        question_id=question.id,
+
+        interval=0,
+        ease_factor=2.5,
+        repetitions=0,
+
+        next_review=date.today()
+    )
+
+    db.add(progress)
+
+    # =====================================================
+    # COLLECTIONS
+    # =====================================================
+
+    if payload.collection_ids:
+
+        collections = (
+            db.query(Collection)
+            .filter(Collection.id.in_(payload.collection_ids))
+            .all()
+        )
+
+        question.collections = collections
+
     db.commit()
-    db.refresh(q)
-    return q
+    db.refresh(question)
+
+    return question
+
+@app.post("/questions/bulk")
+def create_questions_bulk(
+    questions: List[QuestionCreate],
+    db: Session = Depends(get_db)
+):
+    created = []
+
+    try:
+        for data in questions:
+
+            # 🔹 validation map
+            if data.type_q == "map":
+                if not data.group_id:
+                    raise HTTPException(
+                        400,
+                        "Map question requires group_id"
+                    )
+
+                if not data.code:
+                    raise HTTPException(
+                        400,
+                        "Map question requires code"
+                    )
+
+            # 🔹 group existence
+            if data.group_id:
+                group = db.query(Group).filter(
+                    Group.id == data.group_id
+                ).first()
+
+                if not group:
+                    raise HTTPException(
+                        404,
+                        f"Group {data.group_id} not found"
+                    )
+
+            q = Question(
+                type_q=data.type_q,
+                question=data.question,
+                answer=data.answer,
+                media=data.media,
+                tags=data.tags or [],
+                aliases=data.aliases or [],
+                code=data.code,
+                group_id=data.group_id
+            )
+
+            db.add(q)
+            db.flush()
+
+            progress = Progress(
+                question_id=q.id
+            )
+
+            db.add(progress)
+
+            created.append(q)
+
+        db.commit()
+
+    except:
+        db.rollback()
+        raise
+
+    return created
 
 @app.post("/upload")
 def upload_image(file: UploadFile = File(...)):
@@ -179,31 +569,71 @@ def upload_image(file: UploadFile = File(...)):
 # 📥 Récupérer toutes les questions
 @app.get("/questions")
 def get_questions(db: Session = Depends(get_db)):
-    questions = db.query(Question).all()
+
+    questions = (
+        db.query(Question)
+        .options(
+            joinedload(Question.progress),
+            joinedload(Question.group),
+            joinedload(Question.collections)
+        )
+        .all()
+    )
 
     result = []
-    for q in questions:
-        progress = db.query(Progress).filter(Progress.question_id == q.id).first()
 
+    for q in questions:
         result.append({
             "id": q.id,
+
+            "type_q": q.type_q,
+
             "question": q.question,
             "answer": q.answer,
-            "tags": q.tags,
-            "type_q": q.type_q,
+
             "media": q.media,
+
+            "tags": q.tags or [],
+            "aliases": q.aliases or [],
+
             "code": q.code,
-            "aliases": q.aliases,
-            "map_id": q.map_id,
-            "map_svg": q.map.svg if q.map else None,
-            "collections": [c.id for c in q.collections],
-            "next_review": progress.next_review if progress else None
+
+            "progress": {
+                "interval":
+                    q.progress.interval
+                    if q.progress else 0,
+
+                "ease":
+                    q.progress.ease_factor
+                    if q.progress else 2.5,
+
+                "next_review":
+                    q.progress.next_review.isoformat()
+                    if q.progress and q.progress.next_review
+                    else None
+            },
+
+            "group":
+                {
+                    "id": q.group.id,
+                    "type_group": q.group.type_group,
+                    "name": q.group.name,
+                    "media": q.group.media
+                }
+                if q.group else None,
+
+            "collections": [
+                {
+                    "id": c.id,
+                    "name": c.name
+                }
+                for c in q.collections
+            ]
         })
 
     return result
 
 
-from sqlalchemy.orm import joinedload
 
 @app.get("/review")
 def get_review(
@@ -214,131 +644,238 @@ def get_review(
 ):
     today = date.today()
 
-    normal_questions = []
+    # =====================================================
+    # LOAD QUESTIONS + PROGRESS
+    # =====================================================
+
+    questions = (
+        db.query(Question)
+        .outerjoin(Progress)
+        .options(
+            joinedload(Question.progress),
+            joinedload(Question.group),
+            joinedload(Question.collections)
+        )
+        .all()
+    )
+
+    review_items = []
     map_groups = {}
 
-    # 🔹 1. DUE QUESTIONS (JOIN direct)
-    due = (
-        db.query(Question, Progress)
-        .join(Progress, Progress.question_id == Question.id)
-        .options(
-            joinedload(Question.collections),
-            joinedload(Question.map)
-        )
-        .filter(Progress.next_review <= today)
-        .all()
-    )
+    for q in questions:
 
-    seen_ids = set()
+        # =================================================
+        # FILTER COLLECTION
+        # =================================================
 
-    for q, p in due:
-        seen_ids.add(q.id)
-
-        # 🔹 filter collection
         if collection_id:
             if not any(c.id == collection_id for c in q.collections):
                 continue
 
-        # 🔹 filter tags
+        # =================================================
+        # FILTER TAGS
+        # =================================================
+
         if tags:
             if not set(tags).intersection(set(q.tags or [])):
                 continue
 
-        # 🔥 MAP
-        if q.type_q == "map" and q.map:
-            map_id = q.map_id
+        # =================================================
+        # REVIEW CONDITION
+        # =================================================
 
-            if map_id not in map_groups:
-                map_groups[map_id] = {
-                    "type_q": "map",
-                    "map_id": map_id,
-                    "media": q.map.svg,
+        is_due = (
+            q.progress is None
+            or q.progress.next_review is None
+            or q.progress.next_review <= today
+        )
+
+        if not is_due:
+            continue
+
+        # =================================================
+        # MAP GROUPS
+        # =================================================
+
+        if (
+            q.group
+            and q.group.type_group == "map"
+        ):
+
+            gid = q.group.id
+
+            if gid not in map_groups:
+                map_groups[gid] = {
+                    "type": "map",
+                    "group_id": gid,
+                    "media": q.group.media,
                     "items": []
                 }
 
-            map_groups[map_id]["items"].append({
-                "id": q.id,
-                "label": q.question,
+            map_groups[gid]["items"].append({
+                "question_id": q.id,
                 "code": q.code,
+                "label": q.question,
                 "aliases": q.aliases or [],
-                "interval": p.interval,
-                "ease": p.ease_factor
+                "progress": {
+                    "interval":
+                        q.progress.interval
+                        if q.progress else 0,
+
+                    "ease":
+                        q.progress.ease_factor
+                        if q.progress else 2.5
+                }
             })
 
-        # 🔹 NORMAL
+        # =================================================
+        # NORMAL QUESTIONS
+        # =================================================
+
         else:
-            normal_questions.append({
+            review_items.append({
+                "type": q.type_q,
+
                 "question_id": q.id,
+
                 "question": q.question,
                 "answer": q.answer,
-                "tags": q.tags,
-                "interval": p.interval,
-                "ease": p.ease_factor,
-                "type_q": q.type_q,
-                "media": q.media
+
+                "media": q.media,
+
+                "tags": q.tags or [],
+
+                "progress": {
+                    "interval":
+                        q.progress.interval
+                        if q.progress else 0,
+
+                    "ease":
+                        q.progress.ease_factor
+                        if q.progress else 2.5
+                }
             })
 
-    # 🔹 2. NEW QUESTIONS (1 seule query)
-    new_questions = (
-        db.query(Question)
+    return (
+        review_items +
+        list(map_groups.values())
+    )[:limit]
+
+@app.get("/groups/{group_id}")
+def get_group(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    group = (
+        db.query(Group)
         .options(
-            joinedload(Question.collections),
-            joinedload(Question.map)
+            joinedload(Group.questions),
+            joinedload(Group.map)
         )
-        .filter(~Question.id.in_(seen_ids))
+        .filter(Group.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(404, "Group not found")
+
+    return {
+        "id": group.id,
+        "name": group.name,
+        "type": group.type,
+        "map": (
+            {
+                "id": group.map.id,
+                "name": group.map.name,
+                "svg": group.map.svg
+            }
+            if group.map else None
+        ),
+        "questions": [
+            {
+                "id": q.id,
+                "type_q": q.type_q,
+                "question": q.question,
+                "answer": q.answer,
+                "media": q.media,
+                "tags": q.tags,
+                "aliases": q.aliases,
+                "code": q.code
+            }
+            for q in group.questions
+        ]
+    }
+
+@app.get("/groups")
+def get_groups(db: Session = Depends(get_db)):
+
+    groups = (
+        db.query(QuestionGroup)
+        .options(
+            joinedload(QuestionGroup.questions)
+        )
         .all()
     )
 
-    for q in new_questions:
+    result = []
 
-        # 🔹 filter collection
-        if collection_id:
-            if not any(c.id == collection_id for c in q.collections):
-                continue
+    for g in groups:
+        result.append({
+            "id": g.id,
 
-        # 🔹 filter tags
-        if tags:
-            if not set(tags).intersection(set(q.tags or [])):
-                continue
+            "type_group": g.type_group,
 
-        # 🔥 MAP
-        if q.type_q == "map" and q.map:
-            map_id = q.map_id
+            "name": g.name,
 
-            if map_id not in map_groups:
-                map_groups[map_id] = {
-                    "type_q": "map",
-                    "map_id": map_id,
-                    "media": q.map.svg,
-                    "items": []
-                }
+            "media": g.media,
 
-            map_groups[map_id]["items"].append({
-                "id": q.id,
-                "label": q.question,
-                "code": q.code,
-                "aliases": q.aliases or [],
-                "interval": 1,
-                "ease": 2.5
-            })
+            "question_count": len(g.questions)
+        })
 
-        else:
-            normal_questions.append({
-                "question_id": q.id,
-                "question": q.question,
-                "answer": q.answer,
-                "tags": q.tags,
-                "interval": 1,
-                "ease": 2.5,
-                "type_q": q.type_q,
-                "media": q.media
-            })
-
-    return (normal_questions + list(map_groups.values()))[:limit]
+    return result
 
 @app.get("/collections")
 def get_collections(db: Session = Depends(get_db)):
     return db.query(Collection).all()
+
+
+@app.get("/maps/{group_id}/zones")
+def get_map_zones(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(404)
+
+    return [
+        {
+            "id": q.id,
+
+            "code": q.code,
+
+            "label": q.question,
+
+            "aliases": q.aliases or [],
+
+            "progress": {
+                "interval":
+                    q.progress.interval
+                    if q.progress else 0,
+
+                "ease":
+                    q.progress.ease_factor
+                    if q.progress else 2.5
+            }
+        }
+        for q in group.questions
+    ]
 
 @app.post("/answer")
 def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
@@ -436,7 +973,3 @@ def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(c)
     return c
-
-@app.get("/hard")
-def get_test(db: Session = Depends(get_db)):
-    return db.query(Progress).filter(Progress.ease_factor < 2.5).all()

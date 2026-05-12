@@ -1,34 +1,24 @@
-import Toolbar from "./Toolbar";
-import QuestionTable from "./QuestionTable";
-import { containerStyle } from "./styles";
+import ManageSidebar from "./ManageSidebar";
+import ManageList from "./ManageList";
+import ManagePreview from "./ManagePreview";
 
 export default function Manage(props) {
-  const {
-    setMode,
-    filteredQuestions,
-    search,
-    setSearch,
-    filterTheme,
-    setFilterTheme,
-    filterDue,
-    setFilterDue,
-  } = props;
 
   return (
-    <div style={containerStyle}>
-      
-      <Toolbar
-        setMode={setMode}
-        search={search}
-        setSearch={setSearch}
-        filterTheme={filterTheme}
-        setFilterTheme={setFilterTheme}
-        filterDue={filterDue}
-        setFilterDue={setFilterDue}
-        count={filteredQuestions.length}
-      />
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "260px 380px 1fr",
+        height: "100vh",
+        background: "#121212",
+        color: "#eee"
+      }}
+    >
+      <ManageSidebar {...props} />
 
-      <QuestionTable {...props} />
+      <ManageList {...props} />
+
+      <ManagePreview {...props} />
     </div>
   );
 }

@@ -19,7 +19,7 @@ function App() {
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc"); // asc / desc
   const questionInputRef = useRef(null);
-  const [editingQuestion, setEditingQuestion] = useState(null); // pour le menu map edition
+  const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [tagInput, setTagInput] = useState("");
   const [editingTagsQuestion, setEditingTagsQuestion] = useState(null);
 
@@ -360,19 +360,19 @@ function App() {
           handleSort={handleSort}
           sortField={sortField}
           sortOrder={sortOrder}
-          editingQuestion={editingQuestion}
-          setEditingQuestion={setEditingQuestion}
+          selectedQuestion={selectedQuestion}
+          setSelectedQuestion={setSelectedQuestion}
           updateQuestionInState={updateQuestionInState}
           editingTagsQuestion={editingTagsQuestion}
           setEditingTagsQuestion={setEditingTagsQuestion}
-        />
+        />  
       )}
 
-      {mode === "manage" && editingQuestion && (
+      {mode === "manage" && selectedQuestion && (
         <MapEditor
-          q={editingQuestion}
+          q={selectedQuestion}
           onClose={() => {
-            setEditingQuestion(null);
+            setSelectedQuestion(null);
           }}
           updateQuestion={updateQuestion}
           updateQuestionInState={updateQuestionInState}
