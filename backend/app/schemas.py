@@ -133,3 +133,46 @@ class QuestionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SetCollections(BaseModel):
+    collection_ids: List[int]
+
+
+class AnswerRequest(BaseModel):
+    question_id: int
+
+    quality: int = Field(
+        ge=0,
+        le=2
+    )
+
+
+class MapZoneUpdate(BaseModel):
+
+    group_id: int
+
+    code: str = Field(
+        min_length=1,
+        max_length=100
+    )
+
+    question: str = Field(
+        min_length=1
+    )
+
+    aliases: List[str] = []
+
+
+class CollectionCreate(BaseModel):
+
+    name: str = Field(
+        min_length=1,
+        max_length=100
+    )
+
+    media: Optional[str] = None
+
+    data: dict[str, Any] = Field(
+        default_factory=dict
+    )

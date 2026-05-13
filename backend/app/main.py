@@ -12,7 +12,24 @@ import os
 from .database import engine, SessionLocal
 from .models import Base, QuestionGroup, Question, Progress, Collection
 from .scheduler import update_progress
-from .schemas import QuestionCreate, QuestionUpdate, QuestionOut
+from .schemas import (
+    QuestionCreate, 
+    QuestionUpdate, 
+    QuestionOut,
+    GroupCreate,
+    GroupUpdate,
+    GroupOut,
+    GroupMini,
+    SetCollections,
+    CollectionCreate,
+    AnswerRequest,
+    MapZoneUpdate
+)
+from .serializers import (
+    serialize_review_question,
+    serialize_map_group,
+    serialize_map_item
+)
 
 GROUP_COMPATIBILITY = {
     "map": ["map_zone"],
@@ -183,7 +200,10 @@ def set_collections(question_id: int, data: SetCollections, db: Session = Depend
     q = db.query(Question).filter(Question.id == question_id).first()
 
     if not q:
-        return {"error": "not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found"
+        )
 
     collections = db.query(Collection).filter(Collection.id.in_(data.collection_ids)).all()
 
@@ -499,27 +519,24 @@ def create_questions_bulk(
     created = []
 
     try:
+
         for data in questions:
 
-            # 🔹 validation map
-            if data.type_q == "map":
-                if not data.group_id:
-                    raise HTTPException(
-                        400,
-                        "Map question requires group_id"
-                    )
+            # =================================================
+            # GROUP VALIDATION
+            # =================================================
 
-                if not data.code:
-                    raise HTTPException(
-                        400,
-                        "Map question requires code"
-                    )
+            group = None
 
-            # 🔹 group existence
             if data.group_id:
-                group = db.query(Group).filter(
-                    Group.id == data.group_id
-                ).first()
+
+                group = (
+                    db.query(QuestionGroup)
+                    .filter(
+                        QuestionGroup.id == data.group_id
+                    )
+                    .first()
+                )
 
                 if not group:
                     raise HTTPException(
@@ -527,14 +544,40 @@ def create_questions_bulk(
                         f"Group {data.group_id} not found"
                     )
 
+                allowed = GROUP_COMPATIBILITY.get(
+                    group.type_group,
+                    []
+                )
+
+                if data.type_q not in allowed:
+                    raise HTTPException(
+                        400,
+                        (
+                            f"{data.type_q} incompatible "
+                            f"with group type "
+                            f"{group.type_group}"
+                        )
+                    )
+
+            # =================================================
+            # CREATE QUESTION
+            # =================================================
+
             q = Question(
                 type_q=data.type_q,
+
                 question=data.question,
+
                 answer=data.answer,
+
                 media=data.media,
+
                 tags=data.tags or [],
+
                 aliases=data.aliases or [],
+
                 code=data.code,
+
                 group_id=data.group_id
             )
 
@@ -542,7 +585,13 @@ def create_questions_bulk(
             db.flush()
 
             progress = Progress(
-                question_id=q.id
+                question_id=q.id,
+
+                interval=0,
+                ease_factor=2.5,
+                repetitions=0,
+
+                next_review=date.today()
             )
 
             db.add(progress)
@@ -642,13 +691,10 @@ def get_review(
     collection_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+
     today = date.today()
 
-    # =====================================================
-    # LOAD QUESTIONS + PROGRESS
-    # =====================================================
-
-    questions = (
+    query = (
         db.query(Question)
         .outerjoin(Progress)
         .options(
@@ -656,109 +702,79 @@ def get_review(
             joinedload(Question.group),
             joinedload(Question.collections)
         )
-        .all()
+        .filter(
+            or_(
+                Progress.id == None,
+                Progress.next_review == None,
+                Progress.next_review <= today
+            )
+        )
     )
 
+    questions = query.all()
+
     review_items = []
-    map_groups = {}
+
+    grouped_items = {}
 
     for q in questions:
 
-        # =================================================
-        # FILTER COLLECTION
-        # =================================================
+        # ================================================
+        # COLLECTION FILTER
+        # ================================================
 
         if collection_id:
-            if not any(c.id == collection_id for c in q.collections):
+
+            if not any(
+                c.id == collection_id
+                for c in q.collections
+            ):
                 continue
 
-        # =================================================
-        # FILTER TAGS
-        # =================================================
+        # ================================================
+        # TAG FILTER
+        # ================================================
 
         if tags:
-            if not set(tags).intersection(set(q.tags or [])):
+
+            if not set(tags).intersection(
+                set(q.tags or [])
+            ):
                 continue
 
-        # =================================================
-        # REVIEW CONDITION
-        # =================================================
+        # ================================================
+        # GROUPED TYPES
+        # ================================================
 
-        is_due = (
-            q.progress is None
-            or q.progress.next_review is None
-            or q.progress.next_review <= today
-        )
+        if q.group:
 
-        if not is_due:
-            continue
+            group_type = q.group.type_group
 
-        # =================================================
-        # MAP GROUPS
-        # =================================================
+            # ============================================
+            # MAP
+            # ============================================
 
-        if (
-            q.group
-            and q.group.type_group == "map"
-        ):
+            if group_type == "map":
 
-            gid = q.group.id
+                gid = q.group.id
 
-            if gid not in map_groups:
-                map_groups[gid] = {
-                    "type": "map",
-                    "group_id": gid,
-                    "media": q.group.media,
-                    "items": []
-                }
+                if gid not in grouped_items:
 
-            map_groups[gid]["items"].append({
-                "question_id": q.id,
-                "code": q.code,
-                "label": q.question,
-                "aliases": q.aliases or [],
-                "progress": {
-                    "interval":
-                        q.progress.interval
-                        if q.progress else 0,
+                    grouped_items[gid] = serialize_map_group(q.group)
 
-                    "ease":
-                        q.progress.ease_factor
-                        if q.progress else 2.5
-                }
-            })
+                grouped_items[gid]["items"].append(serialize_map_item(q))
 
-        # =================================================
-        # NORMAL QUESTIONS
-        # =================================================
+                continue
 
-        else:
-            review_items.append({
-                "type": q.type_q,
+        # ================================================
+        # NORMAL QUESTION
+        # ================================================
 
-                "question_id": q.id,
-
-                "question": q.question,
-                "answer": q.answer,
-
-                "media": q.media,
-
-                "tags": q.tags or [],
-
-                "progress": {
-                    "interval":
-                        q.progress.interval
-                        if q.progress else 0,
-
-                    "ease":
-                        q.progress.ease_factor
-                        if q.progress else 2.5
-                }
-            })
+        review_items.append(serialize_review_question(q))
 
     return (
         review_items +
-        list(map_groups.values())
+        list(grouped_items.values())
     )[:limit]
 
 @app.get("/groups/{group_id}")
