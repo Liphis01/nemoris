@@ -54,7 +54,12 @@ export default function ManagePreview({
   updateQuestionInState,
   setSelectedQuestion,
   deleteQuestion,
-  handleUpload
+  handleUpload,
+  isCreating,
+  setIsCreating,
+  newRow,
+  setNewRow,
+  createQuestion
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -78,6 +83,110 @@ export default function ManagePreview({
     setTagInput("");
     setSaveStatus(null);
   }, [selectedQuestion]);
+
+  if (isCreating) {
+    return (
+      <div style={panelStyle}>
+        <div style={{ marginBottom: "22px", color: "#888" }}>
+          Nouvelle question
+        </div>
+
+        <label style={labelStyle}>Question</label>
+        <input
+          style={inputStyle}
+          value={newRow.question}
+          onChange={(e) => setNewRow({ ...newRow, question: e.target.value })}
+        />
+
+        <label style={labelStyle}>Réponse</label>
+        <textarea
+          rows={5}
+          style={{ ...inputStyle, resize: "vertical", minHeight: "140px" }}
+          value={newRow.answer}
+          onChange={(e) => setNewRow({ ...newRow, answer: e.target.value })}
+        />
+
+        <label style={labelStyle}>Type de question</label>
+        <select
+          style={inputStyle}
+          value={newRow.type_q}
+          onChange={(e) => setNewRow({ ...newRow, type_q: e.target.value })}
+        >
+          <option value="text">text</option>
+          <option value="image">image</option>
+          <option value="map">map</option>
+        </select>
+
+        <label style={labelStyle}>Media / URL</label>
+        <input
+          style={inputStyle}
+          value={newRow.media || ""}
+          placeholder="http://..."
+          onChange={(e) => setNewRow({ ...newRow, media: e.target.value })}
+        />
+
+        <div style={{ marginBottom: "18px" }}>
+          <label style={labelStyle}>Importer une image</label>
+          <input type="file" accept="image/*" onChange={(e) => handleUpload(e, { id: "new" })} style={{ color: "#eee" }} />
+        </div>
+
+        <label style={labelStyle}>Tags</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+          {newRow.tags.map((tag) => (
+            <div key={tag} style={tagStyle}>
+              {tag}
+              <button
+                type="button"
+                onClick={() => setNewRow({ ...newRow, tags: newRow.tags.filter((t) => t !== tag) })}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#888",
+                  cursor: "pointer",
+                  padding: 0
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center" }}>
+          <input
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), setNewRow({ ...newRow, tags: [...newRow.tags, tagInput.trim()] }), setTagInput(""))}
+            placeholder="Ajouter un tag"
+            style={inputStyle}
+          />
+          <button type="button" onClick={() => { setNewRow({ ...newRow, tags: [...newRow.tags, tagInput.trim()] }); setTagInput(""); }} style={buttonStyle}>
+            Ajouter
+          </button>
+        </div>
+
+        {newRow.media && (
+          <div style={{ marginBottom: "24px" }}>
+            <div style={{ marginBottom: "10px", color: "#bbb" }}>Aperçu media</div>
+            <img
+              src={newRow.media}
+              alt="preview"
+              style={{ width: "100%", borderRadius: "12px", border: "1px solid #222" }}
+            />
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
+          <button type="button" onClick={async () => { await createQuestion(); setIsCreating(false); }} style={buttonStyle}>
+            Créer
+          </button>
+          <button type="button" onClick={() => { setIsCreating(false); setNewRow({ question: "", answer: "", tags: [], type_q: "text", media: null }); }} style={{ ...buttonStyle, background: "#641c1c" }}>
+            Annuler
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedQuestion) {
     return (

@@ -6,7 +6,10 @@ export default function ManageSidebar({
   setFilterTheme,
   filterDue,
   setFilterDue,
-  filteredQuestions
+  filteredQuestions,
+  isCreating,
+  setIsCreating,
+  setSelectedQuestion
 }) {
   const sidebarStyle = {
     borderRight: "1px solid #2a2a2a",
@@ -43,6 +46,25 @@ export default function ManageSidebar({
         }}
       >
         ⬅ Retour
+      </button>
+
+      <button
+        onClick={() => {
+          setIsCreating(true);
+          setSelectedQuestion(null);
+        }}
+        style={{
+          width: "100%",
+          marginBottom: "20px",
+          padding: "10px",
+          background: "#4a4a4a",
+          color: "#eee",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          cursor: "pointer"
+        }}
+      >
+        ➕ Nouvelle question
       </button>
 
       <h2 style={{ marginTop: 0 }}>

@@ -19,6 +19,7 @@ function App() {
   const questionInputRef = useRef(null);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [tagInput, setTagInput] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -186,6 +187,12 @@ function App() {
     });
 
     const data = await res.json();
+
+    if (q.id === "new") {
+      // Pour la création
+      setNewRow(prev => ({ ...prev, media: data.url, type_q: "image" }));
+      return;
+    }
 
     await updateQuestion(q.id, {
       media: data.url,
@@ -363,6 +370,8 @@ function App() {
           selectedQuestion={selectedQuestion}
           setSelectedQuestion={setSelectedQuestion}
           updateQuestionInState={updateQuestionInState}
+          isCreating={isCreating}
+          setIsCreating={setIsCreating}
         />  
       )}
     </div>
