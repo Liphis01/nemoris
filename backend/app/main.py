@@ -62,340 +62,9 @@ def get_db():
     finally:
         db.close()
 
-
-@app.put(
-    "/questions/{question_id}",
-    response_model=QuestionOut
-)
-def update_question(
-    question_id: int,
-    payload: QuestionUpdate,
-    db: Session = Depends(get_db)
-):
-
-    question = (
-        db.query(Question)
-        .options(
-            joinedload(Question.group),
-            joinedload(Question.collections)
-        )
-        .filter(Question.id == question_id)
-        .first()
-    )
-
-    if not question:
-        raise HTTPException(
-            status_code=404,
-            detail="Question not found"
-        )
-
-    # =====================================================
-    # ONLY SENT FIELDS
-    # =====================================================
-
-    updates = payload.model_dump(
-        exclude_unset=True
-    )
-
-    # =====================================================
-    # FUTURE TYPE
-    # =====================================================
-
-    future_type = updates.get(
-        "type_q",
-        question.type_q
-    )
-
-    # =====================================================
-    # FUTURE GROUP
-    # =====================================================
-
-    future_group_id = updates.get(
-        "group_id",
-        question.group_id
-    )
-
-    if future_group_id:
-
-        future_group = (
-            db.query(QuestionGroup)
-            .filter(
-                QuestionGroup.id == future_group_id
-            )
-            .first()
-        )
-
-        if not future_group:
-            raise HTTPException(
-                status_code=404,
-                detail="Group not found"
-            )
-
-        allowed = GROUP_COMPATIBILITY.get(
-            future_group.type_group,
-            []
-        )
-
-        if future_type not in allowed:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"{future_type} incompatible "
-                    f"with group type "
-                    f"{future_group.type_group}"
-                )
-            )
-
-    # =====================================================
-    # SIMPLE FIELDS
-    # =====================================================
-
-    editable_fields = [
-        "type_q",
-        "question",
-        "answer",
-        "media",
-        "tags",
-        "aliases",
-        "data",
-        "code",
-        "group_id"
-    ]
-
-    for field in editable_fields:
-
-        if field in updates:
-
-            setattr(
-                question,
-                field,
-                updates[field]
-            )
-
-    # =====================================================
-    # COLLECTIONS
-    # =====================================================
-
-    if "collection_ids" in updates:
-
-        collections = (
-            db.query(Collection)
-            .filter(
-                Collection.id.in_(
-                    updates["collection_ids"]
-                )
-            )
-            .all()
-        )
-
-        question.collections = collections
-
-    db.commit()
-    db.refresh(question)
-
-    return question
-
-@app.put("/questions/{question_id}/collections")
-def set_collections(question_id: int, data: SetCollections, db: Session = Depends(get_db)):
-    q = db.query(Question).filter(Question.id == question_id).first()
-
-    if not q:
-        raise HTTPException(
-            status_code=404,
-            detail="Question not found"
-        )
-
-    collections = db.query(Collection).filter(Collection.id.in_(data.collection_ids)).all()
-
-    q.collections = collections
-
-    db.commit()
-    return {"status": "ok"}
-
-@app.post(
-    "/groups",
-    response_model=GroupOut
-)
-def create_group(
-    payload: GroupCreate,
-    db: Session = Depends(get_db)
-):
-
-    new_group = QuestionGroup(
-
-        type_group=payload.type_group,
-
-        name=payload.name,
-
-        media=payload.media,
-
-        data=payload.data
-    )
-
-    db.add(new_group)
-
-    db.commit()
-
-    db.refresh(new_group)
-
-    return new_group
-
-@app.put(
-    "/groups/{group_id}",
-    response_model=GroupOut
-)
-def update_group(
-    group_id: int,
-    payload: GroupUpdate,
-    db: Session = Depends(get_db)
-):
-
-    group = (
-        db.query(QuestionGroup)
-        .filter(
-            QuestionGroup.id == group_id
-        )
-        .first()
-    )
-
-    if not group:
-        raise HTTPException(
-            status_code=404,
-            detail="Group not found"
-        )
-
-    updates = payload.model_dump(
-        exclude_unset=True
-    )
-
-    editable_fields = [
-        "name",
-        "media",
-        "data"
-    ]
-
-    for field in editable_fields:
-
-        if field in updates:
-
-            setattr(
-                group,
-                field,
-                updates[field]
-            )
-
-    db.commit()
-
-    db.refresh(group)
-
-    return group
-    
-@app.delete("/groups/{group_id}")
-def delete_group(
-    group_id: int,
-    db: Session = Depends(get_db)
-):
-
-    group = (
-        db.query(QuestionGroup)
-        .filter(
-            QuestionGroup.id == group_id
-        )
-        .first()
-    )
-
-    if not group:
-        raise HTTPException(
-            status_code=404,
-            detail="Group not found"
-        )
-
-    if group.questions:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot delete group "
-                "with existing questions"
-            )
-        )
-
-    db.delete(group)
-
-    db.commit()
-
-    return {
-        "status": "deleted"
-    }
-
-@app.delete("/questions/{question_id}")
-def delete_question(
-    question_id: int,
-    db: Session = Depends(get_db)
-):
-    question = (
-        db.query(Question)
-        .options(
-            joinedload(Question.group)
-        )
-        .filter(Question.id == question_id)
-        .first()
-    )
-
-    if not question:
-        raise HTTPException(
-            status_code=404,
-            detail="Question not found"
-        )
-
-    group = question.group
-
-    db.delete(question)
-    db.commit()
-
-    # =====================================================
-    # DELETE EMPTY GROUP
-    # =====================================================
-
-    if group:
-
-        remaining = (
-            db.query(Question)
-            .filter(Question.group_id == group.id)
-            .count()
-        )
-
-        if remaining == 0:
-            db.delete(group)
-            db.commit()
-
-    return {
-        "status": "deleted"
-    }
-
-@app.delete("/questions/{question_id}/image")
-def delete_image(question_id: int, db: Session = Depends(get_db)):
-    q = db.query(Question).filter(Question.id == question_id).first()
-
-    if not q:
-        return {"error": "Question not found"}
-
-    if not q.media:
-        return {"error": "No image"}
-
-    if not q.media.startswith("http://127.0.0.1:8000/static/"):
-        return {"error": "External image"}
-
-    file_path = q.media.replace("http://127.0.0.1:8000/", "")
-
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    q.media = None
-    q.type_q = "text"
-
-    db.commit()
-
-    return {"status": "image deleted"}
+# =====================================================
+# QUESTIONS CRUD
+# =====================================================
 
 # ➕ Ajouter une question
 @app.post("/questions")
@@ -606,15 +275,6 @@ def create_questions_bulk(
 
     return created
 
-@app.post("/upload")
-def upload_image(file: UploadFile = File(...)):
-    file_path = f"static/{file.filename}"
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {"url": f"http://127.0.0.1:8000/{file_path}"}
-
 # 📥 Récupérer toutes les questions
 @app.get("/questions")
 def get_questions(db: Session = Depends(get_db)):
@@ -682,7 +342,436 @@ def get_questions(db: Session = Depends(get_db)):
 
     return result
 
+@app.put(
+    "/questions/{question_id}",
+    response_model=QuestionOut
+)
+def update_question(
+    question_id: int,
+    payload: QuestionUpdate,
+    db: Session = Depends(get_db)
+):
 
+    question = (
+        db.query(Question)
+        .options(
+            joinedload(Question.group),
+            joinedload(Question.collections)
+        )
+        .filter(Question.id == question_id)
+        .first()
+    )
+
+    if not question:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found"
+        )
+
+    # =====================================================
+    # ONLY SENT FIELDS
+    # =====================================================
+
+    updates = payload.model_dump(
+        exclude_unset=True
+    )
+
+    # =====================================================
+    # FUTURE TYPE
+    # =====================================================
+
+    future_type = updates.get(
+        "type_q",
+        question.type_q
+    )
+
+    # =====================================================
+    # FUTURE GROUP
+    # =====================================================
+
+    future_group_id = updates.get(
+        "group_id",
+        question.group_id
+    )
+
+    if future_group_id:
+
+        future_group = (
+            db.query(QuestionGroup)
+            .filter(
+                QuestionGroup.id == future_group_id
+            )
+            .first()
+        )
+
+        if not future_group:
+            raise HTTPException(
+                status_code=404,
+                detail="Group not found"
+            )
+
+        allowed = GROUP_COMPATIBILITY.get(
+            future_group.type_group,
+            []
+        )
+
+        if future_type not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{future_type} incompatible "
+                    f"with group type "
+                    f"{future_group.type_group}"
+                )
+            )
+
+    # =====================================================
+    # SIMPLE FIELDS
+    # =====================================================
+
+    editable_fields = [
+        "type_q",
+        "question",
+        "answer",
+        "media",
+        "tags",
+        "aliases",
+        "data",
+        "code",
+        "group_id"
+    ]
+
+    for field in editable_fields:
+
+        if field in updates:
+
+            setattr(
+                question,
+                field,
+                updates[field]
+            )
+
+    # =====================================================
+    # COLLECTIONS
+    # =====================================================
+
+    if "collection_ids" in updates:
+
+        collections = (
+            db.query(Collection)
+            .filter(
+                Collection.id.in_(
+                    updates["collection_ids"]
+                )
+            )
+            .all()
+        )
+
+        question.collections = collections
+
+    db.commit()
+    db.refresh(question)
+
+    return question
+
+@app.put("/questions/{question_id}/collections")
+def set_collections(question_id: int, data: SetCollections, db: Session = Depends(get_db)):
+    q = db.query(Question).filter(Question.id == question_id).first()
+
+    if not q:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found"
+        )
+
+    collections = db.query(Collection).filter(Collection.id.in_(data.collection_ids)).all()
+
+    q.collections = collections
+
+    db.commit()
+    return {"status": "ok"}
+
+@app.delete("/questions/{question_id}")
+def delete_question(
+    question_id: int,
+    db: Session = Depends(get_db)
+):
+    question = (
+        db.query(Question)
+        .options(
+            joinedload(Question.group)
+        )
+        .filter(Question.id == question_id)
+        .first()
+    )
+
+    if not question:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found"
+        )
+
+    group = question.group
+
+    db.delete(question)
+    db.commit()
+
+    # =====================================================
+    # DELETE EMPTY GROUP
+    # =====================================================
+
+    if group:
+
+        remaining = (
+            db.query(Question)
+            .filter(Question.group_id == group.id)
+            .count()
+        )
+
+        if remaining == 0:
+            db.delete(group)
+            db.commit()
+
+    return {
+        "status": "deleted"
+    }
+
+@app.delete("/questions/{question_id}/image")
+def delete_image(question_id: int, db: Session = Depends(get_db)):
+    q = db.query(Question).filter(Question.id == question_id).first()
+
+    if not q:
+        return {"error": "Question not found"}
+
+    if not q.media:
+        return {"error": "No image"}
+
+    if not q.media.startswith("http://127.0.0.1:8000/static/"):
+        return {"error": "External image"}
+
+    file_path = q.media.replace("http://127.0.0.1:8000/", "")
+
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    q.media = None
+    q.type_q = "text"
+
+    db.commit()
+
+    return {"status": "image deleted"}
+
+# =====================================================
+# GROUPS CRUD
+# =====================================================
+
+@app.post(
+    "/groups",
+    response_model=GroupOut
+)
+def create_group(
+    payload: GroupCreate,
+    db: Session = Depends(get_db)
+):
+
+    new_group = QuestionGroup(
+
+        type_group=payload.type_group,
+
+        name=payload.name,
+
+        media=payload.media,
+
+        data=payload.data
+    )
+
+    db.add(new_group)
+
+    db.commit()
+
+    db.refresh(new_group)
+
+    return new_group
+
+@app.get("/groups")
+def get_groups(db: Session = Depends(get_db)):
+
+    groups = (
+        db.query(QuestionGroup)
+        .options(
+            joinedload(QuestionGroup.questions)
+        )
+        .all()
+    )
+
+    result = []
+
+    for g in groups:
+        result.append({
+            "id": g.id,
+
+            "type_group": g.type_group,
+
+            "name": g.name,
+
+            "media": g.media,
+
+            "question_count": len(g.questions)
+        })
+
+    return result
+
+@app.get("/groups/{group_id}")
+def get_group(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    group = (
+        db.query(Group)
+        .options(
+            joinedload(Group.questions),
+            joinedload(Group.map)
+        )
+        .filter(Group.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(404, "Group not found")
+
+    return {
+        "id": group.id,
+        "name": group.name,
+        "type": group.type,
+        "map": (
+            {
+                "id": group.map.id,
+                "name": group.map.name,
+                "svg": group.map.svg
+            }
+            if group.map else None
+        ),
+        "questions": [
+            {
+                "id": q.id,
+                "type_q": q.type_q,
+                "question": q.question,
+                "answer": q.answer,
+                "media": q.media,
+                "tags": q.tags,
+                "aliases": q.aliases,
+                "code": q.code
+            }
+            for q in group.questions
+        ]
+    }
+
+@app.put(
+    "/groups/{group_id}",
+    response_model=GroupOut
+)
+def update_group(
+    group_id: int,
+    payload: GroupUpdate,
+    db: Session = Depends(get_db)
+):
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(
+            QuestionGroup.id == group_id
+        )
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+
+    updates = payload.model_dump(
+        exclude_unset=True
+    )
+
+    editable_fields = [
+        "name",
+        "media",
+        "data"
+    ]
+
+    for field in editable_fields:
+
+        if field in updates:
+
+            setattr(
+                group,
+                field,
+                updates[field]
+            )
+
+    db.commit()
+
+    db.refresh(group)
+
+    return group
+    
+@app.delete("/groups/{group_id}")
+def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(
+            QuestionGroup.id == group_id
+        )
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+
+    if group.questions:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot delete group "
+                "with existing questions"
+            )
+        )
+
+    db.delete(group)
+
+    db.commit()
+
+    return {
+        "status": "deleted"
+    }
+
+# =====================================================
+# COLLECTIONS CRUD
+# =====================================================
+
+@app.post("/collections")
+def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
+    c = Collection(name=data.name, description=data.description)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+@app.get("/collections")
+def get_collections(db: Session = Depends(get_db)):
+    return db.query(Collection).all()
+
+# =====================================================
+# REVIEW & ANSWERS
+# =====================================================
 
 @app.get("/review")
 def get_review(
@@ -777,83 +866,68 @@ def get_review(
         list(grouped_items.values())
     )[:limit]
 
-@app.get("/groups/{group_id}")
-def get_group(
-    group_id: int,
-    db: Session = Depends(get_db)
-):
-    group = (
-        db.query(Group)
-        .options(
-            joinedload(Group.questions),
-            joinedload(Group.map)
-        )
-        .filter(Group.id == group_id)
-        .first()
+@app.post("/answer")
+def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
+    progress = db.query(Progress).filter(Progress.question_id == data.question_id).first()
+
+    if not progress:
+        progress = Progress(question_id=data.question_id)
+        db.add(progress)
+        db.commit()
+        db.refresh(progress)
+
+    interval, ease, next_review = update_progress(
+        progress.interval,
+        progress.ease_factor,
+        data.quality
     )
 
-    if not group:
-        raise HTTPException(404, "Group not found")
+    progress.interval = interval
+    progress.ease_factor = ease
+    progress.next_review = next_review
+
+    db.commit()
 
     return {
-        "id": group.id,
-        "name": group.name,
-        "type": group.type,
-        "map": (
-            {
-                "id": group.map.id,
-                "name": group.map.name,
-                "svg": group.map.svg
-            }
-            if group.map else None
-        ),
-        "questions": [
-            {
-                "id": q.id,
-                "type_q": q.type_q,
-                "question": q.question,
-                "answer": q.answer,
-                "media": q.media,
-                "tags": q.tags,
-                "aliases": q.aliases,
-                "code": q.code
-            }
-            for q in group.questions
-        ]
+        "interval": interval,
+        "next_review": next_review
     }
 
-@app.get("/groups")
-def get_groups(db: Session = Depends(get_db)):
+class MapAnswerRequest(BaseModel):
+    items: Dict[int, int]  # question_id → quality
 
-    groups = (
-        db.query(QuestionGroup)
-        .options(
-            joinedload(QuestionGroup.questions)
+@app.post("/answer_map")
+def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
+
+    for q_id, quality in data.items.items():
+
+        progress = db.query(Progress).filter(
+            Progress.question_id == q_id
+        ).first()
+
+        if not progress:
+            progress = Progress(question_id=q_id)
+            db.add(progress)
+            db.commit()
+            db.refresh(progress)
+
+        interval, ease, next_review = update_progress(
+            progress.interval,
+            progress.ease_factor,
+            quality
         )
-        .all()
-    )
 
-    result = []
+        progress.interval = interval
+        progress.ease_factor = ease
+        progress.next_review = next_review
 
-    for g in groups:
-        result.append({
-            "id": g.id,
+    db.commit()
 
-            "type_group": g.type_group,
+    return {"status": "ok"}
 
-            "name": g.name,
-
-            "media": g.media,
-
-            "question_count": len(g.questions)
-        })
-
-    return result
-
-@app.get("/collections")
-def get_collections(db: Session = Depends(get_db)):
-    return db.query(Collection).all()
-
+# =====================================================
+# MAPS
+# =====================================================
 
 @app.get("/maps/{group_id}/zones")
 def get_map_zones(
@@ -893,66 +967,6 @@ def get_map_zones(
         for q in group.questions
     ]
 
-@app.post("/answer")
-def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
-    progress = db.query(Progress).filter(Progress.question_id == data.question_id).first()
-
-    if not progress:
-        progress = Progress(question_id=data.question_id)
-        db.add(progress)
-        db.commit()
-        db.refresh(progress)
-
-    interval, ease, next_review = update_progress(
-        progress.interval,
-        progress.ease_factor,
-        data.quality
-    )
-
-    progress.interval = interval
-    progress.ease_factor = ease
-    progress.next_review = next_review
-
-    db.commit()
-
-    return {
-        "interval": interval,
-        "next_review": next_review
-    }
-
-class MapAnswerRequest(BaseModel):
-    items: Dict[int, int]  # question_id → quality
-
-
-@app.post("/answer_map")
-def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
-
-    for q_id, quality in data.items.items():
-
-        progress = db.query(Progress).filter(
-            Progress.question_id == q_id
-        ).first()
-
-        if not progress:
-            progress = Progress(question_id=q_id)
-            db.add(progress)
-            db.commit()
-            db.refresh(progress)
-
-        interval, ease, next_review = update_progress(
-            progress.interval,
-            progress.ease_factor,
-            quality
-        )
-
-        progress.interval = interval
-        progress.ease_factor = ease
-        progress.next_review = next_review
-
-    db.commit()
-
-    return {"status": "ok"}
-
 @app.post("/map_zone")
 def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
 
@@ -982,10 +996,16 @@ def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
 
     return q
 
-@app.post("/collections")
-def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
-    c = Collection(name=data.name, description=data.description)
-    db.add(c)
-    db.commit()
-    db.refresh(c)
-    return c
+# =====================================================
+# UPLOAD
+# =====================================================
+
+@app.post("/upload")
+def upload_image(file: UploadFile = File(...)):
+    file_path = f"static/{file.filename}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return {"url": f"http://127.0.0.1:8000/{file_path}"}
+
