@@ -255,7 +255,45 @@ export default function ManagePreview({
           fontSize: "18px"
         }}
       >
-        Sélectionner une question
+        Sélectionner une question ou un groupe
+      </div>
+    );
+  }
+
+  if (selectedQuestion.type_group) {
+    return (
+      <div style={panelStyle}>
+        <div style={{ marginBottom: "22px", color: "#888" }}>
+          Groupe #{selectedQuestion.id}
+        </div>
+
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
+          <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
+            {selectedQuestion.type_group}
+          </div>
+          <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
+            {selectedQuestion.question_count || 0} questions
+          </div>
+        </div>
+
+        <label style={labelStyle}>Nom du groupe</label>
+        <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb" }}>
+          {selectedQuestion.name}
+        </div>
+
+        <label style={labelStyle}>Type</label>
+        <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb" }}>
+          {selectedQuestion.type_group}
+        </div>
+
+        {selectedQuestion.media && (
+          <>
+            <label style={labelStyle}>Media / SVG</label>
+            <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb", wordBreak: "break-all" }}>
+              {selectedQuestion.media}
+            </div>
+          </>
+        )}
       </div>
     );
   }

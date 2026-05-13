@@ -1,10 +1,13 @@
 import QuestionCard from "./QuestionCard";
 import MapCard from "./MapCard";
+import GroupCardItem from "./GroupCardItem";
 
 export default function ManageList({
   filteredQuestions,
+  allGroups,
   selectedQuestion,
-  setSelectedQuestion
+  setSelectedQuestion,
+  viewMode
 }) {
   return (
     <div
@@ -14,7 +17,7 @@ export default function ManageList({
         background: "#141414"
       }}
     >
-      {filteredQuestions.map((q) => {
+      {viewMode === "questions" && filteredQuestions.map((q) => {
 
         if (q.type_q === "map") {
           return (
@@ -36,6 +39,15 @@ export default function ManageList({
           />
         );
       })}
+
+      {viewMode === "groups" && allGroups.map((group) => (
+        <GroupCardItem
+          key={group.id}
+          group={group}
+          selected={selectedQuestion?.id === group.id}
+          onClick={() => setSelectedQuestion(group)}
+        />
+      ))}
     </div>
   );
 }

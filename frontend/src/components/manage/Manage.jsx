@@ -9,9 +9,10 @@ export default function Manage(props) {
       style={{
         display: "grid",
         gridTemplateColumns: "260px 380px 1fr",
-        height: "calc(100vh - 80px)",
+        height: "100%",
         background: "#121212",
-        color: "#eee"
+        color: "#eee",
+        overflow: "hidden"
       }}
     >
       <ManageSidebar {...props} />

@@ -21,6 +21,8 @@ function App() {
   const [tagInput, setTagInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [viewMode, setViewMode] = useState("questions"); // "questions" or "groups"
+  const [allGroups, setAllGroups] = useState([]);
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -106,6 +108,7 @@ function App() {
   useEffect(() => {
     if (mode === "manage") {
       loadAllQuestions();
+      loadAllGroups();
     }
   }, [mode]);
 
@@ -131,6 +134,12 @@ function App() {
     const res = await fetch("http://localhost:8000/questions");
     const data = await res.json();
     setAllQuestions(data);
+  }
+
+  async function loadAllGroups() {
+    const res = await fetch("http://localhost:8000/groups");
+    const data = await res.json();
+    setAllGroups(data);
   }
 
   async function updateQuestion(id, updatedFields) {
@@ -407,6 +416,7 @@ function App() {
         <Manage
           setMode={setMode}
           allQuestions={allQuestions}
+          allGroups={allGroups}
           filteredQuestions={filteredQuestions}
           questionInputRef={questionInputRef}
           setAllQuestions={setAllQuestions}
@@ -437,6 +447,8 @@ function App() {
           setNewGroup={setNewGroup}
           startCreateGroup={startCreateGroup}
           createGroup={createGroup}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
         />
       )}
     </div>
