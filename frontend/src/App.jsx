@@ -3,8 +3,6 @@ import { getReview, sendAnswer } from "./api/api";
 import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
 import Manage from "./components/manage/Manage";
-import MapEditor from "./components/MapEditor";
-import TagEditor from "./components/TagEditor";
 
 function App() {
   const [questions, setQuestions] = useState([]); // questions de la review
@@ -21,7 +19,6 @@ function App() {
   const questionInputRef = useRef(null);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [tagInput, setTagInput] = useState("");
-  const [editingTagsQuestion, setEditingTagsQuestion] = useState(null);
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -195,12 +192,15 @@ function App() {
       type_q: "image"
     });
 
-    // 🔥 sync local
-    updateQuestionInState({
+    const updatedQuestion = {
       ...q,
       media: data.url,
       type_q: "image"
-    });
+    };
+
+    // 🔥 sync local
+    updateQuestionInState(updatedQuestion);
+    return updatedQuestion;
   }
 
   function handleSort(field) {
@@ -363,29 +363,7 @@ function App() {
           selectedQuestion={selectedQuestion}
           setSelectedQuestion={setSelectedQuestion}
           updateQuestionInState={updateQuestionInState}
-          editingTagsQuestion={editingTagsQuestion}
-          setEditingTagsQuestion={setEditingTagsQuestion}
         />  
-      )}
-
-      {mode === "manage" && selectedQuestion && (
-        <MapEditor
-          q={selectedQuestion}
-          onClose={() => {
-            setSelectedQuestion(null);
-          }}
-          updateQuestion={updateQuestion}
-          updateQuestionInState={updateQuestionInState}
-        />
-      )}
-
-      {mode === "manage" && editingTagsQuestion && (
-        <TagEditor
-          q={editingTagsQuestion}
-          onClose={() => setEditingTagsQuestion(null)}
-          updateQuestion={updateQuestion}
-          updateQuestionInState={updateQuestionInState}
-        />
       )}
     </div>
   )

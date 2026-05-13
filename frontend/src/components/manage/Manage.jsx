@@ -9,7 +9,7 @@ export default function Manage(props) {
       style={{
         display: "grid",
         gridTemplateColumns: "260px 380px 1fr",
-        height: "100vh",
+        height: "calc(100vh - 80px)",
         background: "#121212",
         color: "#eee"
       }}
