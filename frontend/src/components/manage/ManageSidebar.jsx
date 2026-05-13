@@ -9,7 +9,8 @@ export default function ManageSidebar({
   filteredQuestions,
   isCreating,
   setIsCreating,
-  setSelectedQuestion
+  setSelectedQuestion,
+  startCreateGroup
 }) {
   const sidebarStyle = {
     borderRight: "1px solid #2a2a2a",
@@ -65,6 +66,22 @@ export default function ManageSidebar({
         }}
       >
         ➕ Nouvelle question
+      </button>
+
+      <button
+        onClick={() => startCreateGroup?.()}
+        style={{
+          width: "100%",
+          marginBottom: "20px",
+          padding: "10px",
+          background: "#3f5b83",
+          color: "#eee",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          cursor: "pointer"
+        }}
+      >
+        📁 Nouveau groupe
       </button>
 
       <h2 style={{ marginTop: 0 }}>

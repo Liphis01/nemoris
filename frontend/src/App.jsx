@@ -20,6 +20,7 @@ function App() {
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [tagInput, setTagInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -29,12 +30,24 @@ function App() {
     media: null,
   });
 
+  const [newGroup, setNewGroup] = useState({
+    name: "",
+    type_group: "map",
+    media: "",
+    data: {}
+  });
+
   const appStyle = {
     background: "#121212",
     color: "#e5e5e5",
-    minHeight: "100vh",
-    padding: "40px",
-    fontFamily: "Arial, sans-serif"
+    minHeight: "100%",
+    height: "100%",
+    padding: "24px",
+    fontFamily: "Arial, sans-serif",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    boxSizing: "border-box"
   };
 
   // à déplacer dans quiz à l'occasion
@@ -175,6 +188,49 @@ function App() {
     setTimeout(() => {
       questionInputRef.current?.focus();
     }, 0);
+  }
+
+  function startCreateGroup() {
+    setIsCreatingGroup(true);
+    setIsCreating(false);
+    setSelectedQuestion(null);
+  }
+
+  async function createGroup() {
+    if (!newGroup.name) {
+      alert("Le nom du groupe est requis.");
+      return;
+    }
+
+    const payload = {
+      type_group: newGroup.type_group,
+      name: newGroup.name,
+      media: newGroup.media || null,
+      data: newGroup.data
+    };
+
+    const res = await fetch("http://localhost:8000/groups", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      alert("Erreur lors de la création du groupe.");
+      return;
+    }
+
+    const createdGroup = await res.json();
+    alert(`Groupe créé : ${createdGroup.name} (#${createdGroup.id})`);
+    setNewGroup({
+      name: "",
+      type_group: "map",
+      media: "",
+      data: {}
+    });
+    setIsCreatingGroup(false);
   }
 
   async function handleUpload(e, q) {
@@ -375,6 +431,12 @@ function App() {
           updateQuestionInState={updateQuestionInState}
           isCreating={isCreating}
           setIsCreating={setIsCreating}
+          isCreatingGroup={isCreatingGroup}
+          setIsCreatingGroup={setIsCreatingGroup}
+          newGroup={newGroup}
+          setNewGroup={setNewGroup}
+          startCreateGroup={startCreateGroup}
+          createGroup={createGroup}
         />
       )}
     </div>

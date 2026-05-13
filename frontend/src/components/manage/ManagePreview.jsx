@@ -57,9 +57,14 @@ export default function ManagePreview({
   handleUpload,
   isCreating,
   setIsCreating,
+  isCreatingGroup,
+  setIsCreatingGroup,
   newRow,
   setNewRow,
-  createQuestion
+  newGroup,
+  setNewGroup,
+  createQuestion,
+  createGroup
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -83,6 +88,57 @@ export default function ManagePreview({
     setTagInput("");
     setSaveStatus(null);
   }, [selectedQuestion]);
+
+  if (isCreatingGroup) {
+    return (
+      <div style={panelStyle}>
+        <div style={{ marginBottom: "22px", color: "#888" }}>
+          Nouveau groupe
+        </div>
+
+        <label style={labelStyle}>Nom du groupe</label>
+        <input
+          style={inputStyle}
+          value={newGroup.name}
+          onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
+          placeholder="Ex : Carte Europe"
+        />
+
+        <label style={labelStyle}>Type de groupe</label>
+        <select
+          style={inputStyle}
+          value={newGroup.type_group}
+          onChange={(e) => setNewGroup({ ...newGroup, type_group: e.target.value })}
+        >
+          <option value="map">map</option>
+        </select>
+
+        <label style={labelStyle}>Media / URL (optionnel)</label>
+        <input
+          style={inputStyle}
+          value={newGroup.media}
+          onChange={(e) => setNewGroup({ ...newGroup, media: e.target.value })}
+          placeholder="http://..."
+        />
+
+        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+          <button type="button" onClick={createGroup} style={buttonStyle}>
+            Créer le groupe
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsCreatingGroup(false);
+              setNewGroup({ name: "", type_group: "map", media: "", data: {} });
+            }}
+            style={{ ...buttonStyle, background: "#641c1c" }}
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isCreating) {
     return (
