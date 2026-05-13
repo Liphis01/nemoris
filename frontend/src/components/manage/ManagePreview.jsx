@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import MapEditor from "../MapEditor";
+import SvgMap from "../SvgMap";
 
 const panelStyle = {
   padding: "28px",
@@ -112,6 +113,37 @@ export default function ManagePreview({
           updateQuestion={updateQuestion}
           updateQuestionInState={updateQuestionInState}
         />
+      </div>
+    );
+  }
+
+  if (selectedQuestion.type_q === "map") {
+    console.log("c'est une question map");
+    return (
+      <div style={panelStyle}>
+        <div style={{ marginBottom: "22px", color: "#888" }}>
+          Question #{selectedQuestion.id} - Carte
+        </div>
+
+        <div style={{ marginBottom: "24px" }}>
+          <div style={{ marginBottom: "10px", color: "#bbb" }}>Carte interactive</div>
+          <SvgMap
+            svgPath={`/maps/${selectedQuestion.media}`}
+            found={[]} // ou les zones trouvées si applicable
+            selected={selectedQuestion.code} // si une zone est sélectionnée
+            onSelect={() => {}} // pas d'action en preview
+          />
+        </div>
+
+        <div style={{ marginTop: "20px" }}>
+          <div style={{ marginBottom: "10px", color: "#bbb" }}>Zone: {selectedQuestion.code}</div>
+          <div style={{ color: "#eee" }}>
+            <strong>Question:</strong> {selectedQuestion.question}
+          </div>
+          <div style={{ color: "#ccc", marginTop: "10px" }}>
+            <strong>Réponse:</strong> {selectedQuestion.answer}
+          </div>
+        </div>
       </div>
     );
   }
