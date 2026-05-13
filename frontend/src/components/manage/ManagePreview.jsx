@@ -204,7 +204,7 @@ export default function ManagePreview({
     );
   }
 
-  if (selectedQuestion.type_q === "map_group") {
+  if (selectedQuestion.type_q === "map") {
     return (
       <div
         style={{
@@ -216,7 +216,8 @@ export default function ManagePreview({
           q={{
             type_q: "map",
             svg: selectedQuestion.media,
-            media: selectedQuestion.media
+            media: selectedQuestion.media,
+            group_id: selectedQuestion.group_id
           }}
           embedded
           updateQuestion={updateQuestion}
@@ -226,36 +227,36 @@ export default function ManagePreview({
     );
   }
 
-  if (selectedQuestion.type_q === "map") {
-    console.log("c'est une question map");
-    return (
-      <div style={panelStyle}>
-        <div style={{ marginBottom: "22px", color: "#888" }}>
-          Question #{selectedQuestion.id} - Carte
-        </div>
+  // if (selectedQuestion.type_q === "map") {
+  //   console.log("c'est une question map");
+  //   return (
+  //     <div style={panelStyle}>
+  //       <div style={{ marginBottom: "22px", color: "#888" }}>
+  //         Question #{selectedQuestion.id} - Carte
+  //       </div>
 
-        <div style={{ marginBottom: "24px" }}>
-          <div style={{ marginBottom: "10px", color: "#bbb" }}>Carte interactive</div>
-          <SvgMap
-            svgPath={`/maps/${selectedQuestion.media}`}
-            found={[]} // ou les zones trouvées si applicable
-            selected={selectedQuestion.code} // si une zone est sélectionnée
-            onSelect={() => {}} // pas d'action en preview
-          />
-        </div>
+  //       <div style={{ marginBottom: "24px" }}>
+  //         <div style={{ marginBottom: "10px", color: "#bbb" }}>Carte interactive</div>
+  //         <SvgMap
+  //           svgPath={`/maps/${selectedQuestion.media}`}
+  //           found={[]} // ou les zones trouvées si applicable
+  //           selected={selectedQuestion.code} // si une zone est sélectionnée
+  //           onSelect={() => {}} // pas d'action en preview
+  //         />
+  //       </div>
 
-        <div style={{ marginTop: "20px" }}>
-          <div style={{ marginBottom: "10px", color: "#bbb" }}>Zone: {selectedQuestion.code}</div>
-          <div style={{ color: "#eee" }}>
-            <strong>Question:</strong> {selectedQuestion.question}
-          </div>
-          <div style={{ color: "#ccc", marginTop: "10px" }}>
-            <strong>Réponse:</strong> {selectedQuestion.answer}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  //       <div style={{ marginTop: "20px" }}>
+  //         <div style={{ marginBottom: "10px", color: "#bbb" }}>Zone: {selectedQuestion.code}</div>
+  //         <div style={{ color: "#eee" }}>
+  //           <strong>Question:</strong> {selectedQuestion.question}
+  //         </div>
+  //         <div style={{ color: "#ccc", marginTop: "10px" }}>
+  //           <strong>Réponse:</strong> {selectedQuestion.answer}
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   function setField(field, value) {
     setDraft((prev) => ({ ...prev, [field]: value }));

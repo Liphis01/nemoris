@@ -19,7 +19,7 @@ export default function MapQuestion({ q, onComplete }) {
   }
 
   function matches(item, input) {
-    const all = [item.label, ...(item.aliases || [])];
+    const all = [item.label, ...(item.data?.aliases || [])];
     return all.some(v => normalize(v) === normalize(input));
   }
 
@@ -76,10 +76,10 @@ export default function MapQuestion({ q, onComplete }) {
         svgPath={`/maps/${q.media}`}
         found={items
           .filter(i => found.includes(i.id))
-          .map(i => i.code)}
-        dueItems={items.map(i => i.code)}
+          .map(i => i.data?.code)}
+        dueItems={items.map(i => i.data?.code)}
         onSelect={(code) => {
-          const item = items.find(i => i.code === code);
+          const item = items.find(i => i.data?.code === code);
           if (item && !found.includes(item.id)) {
             setFound(prev => [...prev, item.id]);
           }
@@ -142,7 +142,7 @@ export default function MapQuestion({ q, onComplete }) {
             svgPath={`/maps/${q.media}`}
             found={items
               .filter(i => found.includes(i.id))
-              .map(i => i.code)}
+              .map(i => i.data?.code)}
             dueItems={[]}
           />
 

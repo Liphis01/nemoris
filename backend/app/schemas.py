@@ -4,7 +4,8 @@ from typing import Optional, List, Literal, Any
 
 QuestionType = Literal[
     "text",
-    "map"
+    "map",
+    "map_zone"
 ]
 
 GroupType = Literal[
@@ -83,11 +84,9 @@ class QuestionCreate(BaseModel):
 
     group_id: Optional[int] = None
 
-    map_id: Optional[int] = None
+    data: dict[str, Any] = Field(default_factory=dict)
 
-    code: Optional[str] = None
-
-    aliases: List[str] = Field(default_factory=list)
+    collection_ids: List[int] = Field(default_factory=list)
 
 
 class QuestionUpdate(BaseModel):
@@ -104,11 +103,9 @@ class QuestionUpdate(BaseModel):
 
     group_id: Optional[int] = None
 
-    map_id: Optional[int] = None
+    data: Optional[dict[str, Any]] = None
 
-    code: Optional[str] = None
-
-    aliases: Optional[List[str]] = None
+    collection_ids: Optional[List[int]] = None
 
 
 class QuestionOut(BaseModel):
@@ -127,9 +124,7 @@ class QuestionOut(BaseModel):
 
     group_id: Optional[int]
 
-    code: Optional[str]
-
-    aliases: List[str]
+    data: Optional[dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -152,16 +147,13 @@ class MapZoneUpdate(BaseModel):
 
     group_id: int
 
-    code: str = Field(
-        min_length=1,
-        max_length=100
-    )
-
     question: str = Field(
         min_length=1
     )
 
-    aliases: List[str] = []
+    data: dict[str, Any] = Field(
+        default_factory=dict
+    )
 
 
 class CollectionCreate(BaseModel):

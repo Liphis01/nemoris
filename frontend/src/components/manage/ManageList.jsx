@@ -16,7 +16,7 @@ export default function ManageList({
     >
       {filteredQuestions.map((q) => {
 
-        if (q.type_q === "map_group") {
+        if (q.type_q === "map") {
           return (
             <MapCard
               key={q.id}

@@ -60,7 +60,7 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True)
 
-    # text / image / audio / map_zone / timeline_item / etc
+    # text / map / etc
     type_q = Column(String)
 
     question = Column(Text)
@@ -69,17 +69,11 @@ class Question(Base):
     # image / audio / etc
     media = Column(String, nullable=True)
 
-    # aliases
-    aliases = Column(JSON, nullable=True)
-
     # tags
     tags = Column(JSON, nullable=True)
 
-    # données custom selon le type
+    # données custom selon le type (ex: {code: "FR", aliases: ["UK", "royaume uni"]} pour map)
     data = Column(JSON, nullable=True)
-
-    # code SVG / timeline id / etc
-    code = Column(String, nullable=True)
 
     # groupe éventuel
     group_id = Column(

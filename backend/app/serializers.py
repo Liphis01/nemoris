@@ -52,11 +52,11 @@ def serialize_map_item(question):
 
         "question_id": question.id,
 
-        "code": question.code,
+        "code": question.data.get("code") if question.data else None,
 
         "label": question.question,
 
-        "aliases": question.aliases or [],
+        "aliases": question.data.get("aliases", []) if question.data else [],
 
         "progress": serialize_progress(
             question.progress

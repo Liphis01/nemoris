@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from datetime import date
@@ -133,11 +133,7 @@ def create_question(
 
         tags=payload.tags,
 
-        aliases=payload.aliases,
-
         data=payload.data,
-
-        code=payload.code,
 
         group_id=group_id
     )
@@ -243,9 +239,7 @@ def create_questions_bulk(
 
                 tags=data.tags or [],
 
-                aliases=data.aliases or [],
-
-                code=data.code,
+                data=data.data,
 
                 group_id=data.group_id
             )
@@ -264,6 +258,14 @@ def create_questions_bulk(
             )
 
             db.add(progress)
+
+            if data.collection_ids:
+                collections = (
+                    db.query(Collection)
+                    .filter(Collection.id.in_(data.collection_ids))
+                    .all()
+                )
+                q.collections = collections
 
             created.append(q)
 
@@ -303,9 +305,8 @@ def get_questions(db: Session = Depends(get_db)):
             "media": q.media,
 
             "tags": q.tags or [],
-            "aliases": q.aliases or [],
 
-            "code": q.code,
+            "data": q.data or {},
 
             "progress": {
                 "interval":
@@ -435,9 +436,7 @@ def update_question(
         "answer",
         "media",
         "tags",
-        "aliases",
         "data",
-        "code",
         "group_id"
     ]
 
@@ -627,12 +626,11 @@ def get_group(
     db: Session = Depends(get_db)
 ):
     group = (
-        db.query(Group)
+        db.query(QuestionGroup)
         .options(
-            joinedload(Group.questions),
-            joinedload(Group.map)
+            joinedload(QuestionGroup.questions)
         )
-        .filter(Group.id == group_id)
+        .filter(QuestionGroup.id == group_id)
         .first()
     )
 
@@ -642,15 +640,9 @@ def get_group(
     return {
         "id": group.id,
         "name": group.name,
-        "type": group.type,
-        "map": (
-            {
-                "id": group.map.id,
-                "name": group.map.name,
-                "svg": group.map.svg
-            }
-            if group.map else None
-        ),
+        "type_group": group.type_group,
+        "media": group.media,
+        "data": group.data or {},
         "questions": [
             {
                 "id": q.id,
@@ -658,9 +650,8 @@ def get_group(
                 "question": q.question,
                 "answer": q.answer,
                 "media": q.media,
-                "tags": q.tags,
-                "aliases": q.aliases,
-                "code": q.code
+                "tags": q.tags or [],
+                "data": q.data or {}
             }
             for q in group.questions
         ]
@@ -948,11 +939,11 @@ def get_map_zones(
         {
             "id": q.id,
 
-            "code": q.code,
+            "code": q.data.get("code") if q.data else None,
 
             "label": q.question,
 
-            "aliases": q.aliases or [],
+            "aliases": q.data.get("aliases", []) if q.data else [],
 
             "progress": {
                 "interval":
@@ -970,26 +961,32 @@ def get_map_zones(
 @app.post("/map_zone")
 def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
 
-    q = db.query(Question).filter(
-        Question.type_q == "map",
-        Question.map_id == data.map_id,
-        Question.code == data.code
-    ).first()
+    # Find existing zone by group_id and data.code
+    code = data.data.get("code") if data.data else None
+
+    # Query all zones for this group and find the matching one
+    zones = db.query(Question).filter(
+        Question.type_q == "map_zone",
+        Question.group_id == data.group_id
+    ).all()
+
+    q = None
+    if code:
+        q = next((z for z in zones if z.data and z.data.get("code") == code), None)
 
     if not q:
         q = Question(
-            question=data.label,
-            answer=data.label,
-            type_q="map",
-            code=data.code,
-            aliases=data.aliases,
-            map_id=data.map_id
+            question=data.question,
+            answer=data.question,
+            type_q="map_zone",
+            data=data.data,
+            group_id=data.group_id
         )
         db.add(q)
     else:
-        q.question = data.label
-        q.answer = data.label
-        q.aliases = data.aliases
+        q.question = data.question
+        q.answer = data.question
+        q.data = data.data
 
     db.commit()
     db.refresh(q)

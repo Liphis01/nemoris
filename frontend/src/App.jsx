@@ -72,7 +72,7 @@ function App() {
       .filter(Boolean);
 
     // const selectedCollection = null;
-    
+
     getReview(selectedTags, limit).then((data) => {
       setQuestions(data);
       setCurrentIndex(0);
@@ -149,13 +149,16 @@ function App() {
       return;
     }
 
-    const res = await fetch("http://localhost:8000/questions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(newRow),
-    });
+    console.log(newRow);
+
+    const res = await fetch("http://localhost:8000/questions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newRow),
+      });
 
     const created = await res.json();
 
@@ -372,7 +375,7 @@ function App() {
           updateQuestionInState={updateQuestionInState}
           isCreating={isCreating}
           setIsCreating={setIsCreating}
-        />  
+        />
       )}
     </div>
   )
