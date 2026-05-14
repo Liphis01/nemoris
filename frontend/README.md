@@ -1,3 +1,22 @@
+
+
+
+
+
+
+
+
+chatgpt: Toujours dans le même style, améliore l'ui de la review pour que ce soit clair, propre, agréable à utiliser, et joli. Actuellement le code c'est ça :
+
+
+
+
+
+
+
+
+
+
 # TODO
 
 
@@ -12,8 +31,13 @@ color: "#ff85c2",
 ## bugs
 - bug des images
 - recentrer les svg
+- ouvrir le map editor depuis une question map le fait buguer
+- les aliases ne fonctionnent pas bien (la sauvegarde)
+- les ids des questions ne se recalculent pas après une suppression
+- créer un groupe fait une alerte moche
 
 ## features
+- filtrer les groupes dans manage
 - arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
 - questions type timeline (en groupe comme maps)
 - ajouter un timer pour les questions
@@ -22,6 +46,9 @@ color: "#ff85c2",
 - mode entrainement
 - mode difficile (similaire à jetpunk : on ne voit pas les réponses possibles, pas le droit à l'erreur...)
 - étaler les questions sur plusieurs jours au maximum (éviter d'avoir un jour à 0 puis un jour à 10 questions)
+- dans manage, afficher toutes les stats d'une question
+- ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
+- Afficher un calendrier pour voir les jours où on a joué et combien de questions on a fait chaque jour + futures questions
 
 ## refactors
 - refactor général des styles redondants, etc...
@@ -31,6 +58,7 @@ color: "#ff85c2",
 - mettre une option de priorité sur les questions pour les faire apparaître plus souvent
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
+- pouvoir manuellement modifier les dates des questions
   
 
 # React + Vite

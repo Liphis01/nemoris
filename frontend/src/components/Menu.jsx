@@ -62,13 +62,13 @@ export default function Menu({ setMode }) {
                     <h1
                         style={{
                             margin: 0,
-                            fontSize: "52px",
+                            fontSize: "70px",
                             lineHeight: 1,
                             fontWeight: "800",
                             marginBottom: "14px"
                         }}
                     >
-                        Quiz App
+                        Nemoris
                     </h1>
                 </div>
 
