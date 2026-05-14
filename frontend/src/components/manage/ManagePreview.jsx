@@ -67,7 +67,9 @@ export default function ManagePreview({
   setNewGroup,
   createQuestion,
   createGroup,
-  reloadAllData
+  reloadAllData,
+  editing,
+  setEditing
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -261,76 +263,57 @@ export default function ManagePreview({
       </div>
     );
   }
-
-  if (selectedQuestion.type_group) {
-    if (selectedQuestion.type_group === "map") {
-      return (
-        <div
-          style={{
-            height: "100%",
-            overflow: "hidden"
-          }}
-        >
-          <MapEditor
-            group={allGroups.find(g => g.id === selectedQuestion.id)}
-            onSave={reloadAllData}
-            onClose={() => {}}
-          />
-        </div>
-      );
-    }
+  if ((selectedQuestion.type_group && selectedQuestion.type_group === "map") || selectedQuestion.type_q === "map") {
+    const groupe = selectedQuestion.type_q === "map" ? selectedQuestion.group : selectedQuestion;
+    return (
+      <div
+        style={{
+          height: "100%",
+          overflow: "hidden"
+        }}
+      >
+        <MapEditor
+          group={allGroups.find(g => g.id === groupe.id)}
+          onSave={reloadAllData}
+          onClose={() => { }}
+          selectedZone={editing}
+        />
+      </div>
+    );
 
     return (
       <div style={panelStyle}>
         <div style={{ marginBottom: "22px", color: "#888" }}>
-          Groupe #{selectedQuestion.id}
+          Groupe #{groupe.id}
         </div>
 
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
           <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-            {selectedQuestion.type_group}
+            {groupe.type_group}
           </div>
           <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-            {selectedQuestion.question_count || 0} questions
+            {groupe.question_count || 0} questions
           </div>
         </div>
 
         <label style={labelStyle}>Nom du groupe</label>
         <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb" }}>
-          {selectedQuestion.name}
+          {groupe.name}
         </div>
 
         <label style={labelStyle}>Type</label>
         <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb" }}>
-          {selectedQuestion.type_group}
+          {groupe.type_group}
         </div>
 
-        {selectedQuestion.media && (
+        {groupe.media && (
           <>
             <label style={labelStyle}>Media / SVG</label>
             <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb", wordBreak: "break-all" }}>
-              {selectedQuestion.media}
+              {groupe.media}
             </div>
           </>
         )}
-      </div>
-    );
-  }
-
-  if (selectedQuestion.type_q === "map") {
-    return (
-      <div
-        style={{
-          height: "100%",
-          overflow: "auto"
-        }}
-      >
-        <MapEditor
-          group={allGroups.find(g => g.id === selectedQuestion.group_id)}
-          onSave={reloadAllData}
-          // onClose={() => setSelectedQuestion(null)}
-          onClose={undefined}
-        />
       </div>
     );
   }

@@ -7,7 +7,9 @@ export default function ManageList({
   allGroups,
   selectedQuestion,
   setSelectedQuestion,
-  viewMode
+  viewMode,
+  editing,
+  setEditing
 }) {
   return (
     <div
@@ -25,7 +27,7 @@ export default function ManageList({
               key={q.id}
               q={q}
               selected={selectedQuestion?.id === q.id}
-              onClick={() => setSelectedQuestion(q)}
+              onClick={() => { setSelectedQuestion(q); setEditing(q.data?.code); }}
             />
           );
         }

@@ -4,7 +4,8 @@ import SvgMap from "./SvgMap";
 export default function MapEditor({
   group,
   onClose,
-  onSave
+  onSave,
+  selectedZone
 }) {
 
   const [items, setItems] = useState([]); // List of zone codes on the map
@@ -38,6 +39,16 @@ export default function MapEditor({
       loadZones();
     }
   }, [group.id]);
+
+  // Set editing when selectedZone changes
+  useEffect(() => {
+    if (selectedZone && zones.length > 0) {
+      const zone = zones.find(z => z.data?.code === selectedZone);
+      if (zone) {
+        setEditing(zone);
+      }
+    }
+  }, [selectedZone, zones]);
 
   function handleSelect(code) {
     let zone = zones.find(z => (z.data?.code || z.code) === code);

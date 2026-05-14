@@ -42,7 +42,7 @@ export default function ManageSidebar({
     borderRadius: "6px",
     cursor: "pointer",
     transition: "all 0.2s",
-    fontWeight: isActive ? "bold" : "normal"
+    // fontWeight: isActive ? "bold" : "normal"
   });
 
   return (

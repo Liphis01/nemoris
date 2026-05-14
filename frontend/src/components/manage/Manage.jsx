@@ -1,8 +1,10 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManagePreview from "./ManagePreview";
+import { useState } from "react";
 
 export default function Manage(props) {
+  const [editing, setEditing] = useState(null);
 
   return (
     <div
@@ -17,9 +19,9 @@ export default function Manage(props) {
     >
       <ManageSidebar {...props} />
 
-      <ManageList {...props} />
+      <ManageList {...props} editing={editing} setEditing={setEditing} />
 
-      <ManagePreview {...props} />
+      <ManagePreview {...props} editing={editing} setEditing={setEditing} />
     </div>
   );
 }
