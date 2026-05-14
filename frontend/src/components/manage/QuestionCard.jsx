@@ -42,16 +42,16 @@ export default function QuestionCard({
         <div
           style={{
             fontSize: "11px",
-            fontWeight: "bold",
-            letterSpacing: "0.08em",
-            color: "#4da3ff",
-            background: "#172434",
-            padding: "3px 7px",
+            fontWeight: "600",
+            padding: "3px 8px",
             borderRadius: "999px",
-            // flexShrink: 0
+            background: "#1f3a5f",
+            color: "#7cc4ff",
+            letterSpacing: "0.5px",
+            flexShrink: 0
           }}
         >
-          TXT
+          TEXT
         </div>
 
         <div
@@ -150,7 +150,7 @@ export default function QuestionCard({
           )}
         </div>
 
-        {/* TYPE INFO */}
+        {/* REVIEW INFO */}
         <div
           style={{
             fontSize: "11px",

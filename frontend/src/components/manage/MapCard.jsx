@@ -4,31 +4,22 @@ export default function MapCard({
   onClick
 }) {
 
-  const zoneName =
-    q.answer ||
-    q.question ||
-    "Unnamed zone";
-
-  const mapName =
-    q.group?.name ||
-    q.media ||
-    "Unknown map";
-
   return (
     <div
       onClick={onClick}
       style={{
-        display: "flex",
-        gap: "14px",
         padding: "14px",
-        borderBottom: "1px solid #262626",
+        borderBottom: "1px solid #2a2a2a",
         cursor: "pointer",
         background: selected ? "#252525" : "transparent",
-        transition: "background 0.15s"
+        transition: "background 0.15s ease",
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px"
       }}
       onMouseEnter={(e) => {
         if (!selected) {
-          e.currentTarget.style.background = "#1d1d1d";
+          e.currentTarget.style.background = "#1f1f1f";
         }
       }}
       onMouseLeave={(e) => {
@@ -38,115 +29,140 @@ export default function MapCard({
       }}
     >
 
-      {/* CONTENT */}
+      {/* HEADER */}
       <div
         style={{
-          flex: 1,
-          minWidth: 0,
           display: "flex",
-          flexDirection: "column",
-          justifyContent: "center"
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "10px"
         }}
       >
 
-        {/* HEADER */}
+        <div
+          style={{
+            fontSize: "11px",
+            fontWeight: "600",
+            padding: "3px 8px",
+            borderRadius: "999px",
+            background: "#3f2f12",
+            color: "#f5c26b",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            flexShrink: 0
+          }}
+        >
+          MAP
+        </div>
+
+        <div
+          style={{
+            color: "#555",
+            fontSize: "11px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          #{q.id}
+        </div>
+      </div>
+
+      {/* QUESTION */}
+      <div
+        style={{
+          fontWeight: "600",
+          color: "#eee",
+          lineHeight: 1.35,
+          overflow: "hidden",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical"
+        }}
+      >
+        {q.answer || q.question || "Unnamed zone"}
+      </div>
+
+      {/* MAP INFO */}
+      <div
+        style={{
+          color: "#888",
+          fontSize: "13px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }}
+      >
+        {q.group?.name || "Map group"}
+      </div>
+
+      {/* FOOTER */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "10px",
+          minWidth: 0
+        }}
+      >
+
+        {/* TAGS */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "8px",
-            marginBottom: "6px"
+            gap: "6px",
+            overflow: "hidden",
+            minWidth: 0
           }}
         >
-          <div
-            style={{
-              fontSize: "11px",
-              fontWeight: "bold",
-              letterSpacing: "0.08em",
-              color: "#4da3ff",
-              background: "#172434",
-              padding: "3px 7px",
-              borderRadius: "999px"
-            }}
-          >
-            MAP
-          </div>
+          {(q.tags || []).slice(0, 2).map(tag => (
+            <div
+              key={tag}
+              title={tag}
+              style={{
+                maxWidth: "90px",
+                padding: "2px 8px",
+                borderRadius: "999px",
+                background: "#2a2a2a",
+                color: "#999",
+                fontSize: "11px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                flexShrink: 0
+              }}
+            >
+              #{tag}
+            </div>
+          ))}
 
-          {/* TAGS */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              overflow: "hidden",
-              minWidth: 0
-            }}
-          >
-            {(q.tags || []).slice(0, 2).map(tag => (
-              <div
-                key={tag}
-                style={{
-                  maxWidth: "90px",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  background: "#2a2a2a",
-                  color: "#999",
-                  fontSize: "11px",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  flexShrink: 0
-                }}
-                title={tag}
-              >
-                #{tag}
-              </div>
-            ))}
-
-            {(q.tags?.length || 0) > 2 && (
-              <div
-                style={{
-                  color: "#666",
-                  fontSize: "11px",
-                  flexShrink: 0
-                }}
-              >
-                +{q.tags.length - 2}
-              </div>
-            )}
-          </div>
+          {(q.tags?.length || 0) > 2 && (
+            <div
+              style={{
+                color: "#666",
+                fontSize: "11px",
+                flexShrink: 0
+              }}
+            >
+              +{q.tags.length - 2}
+            </div>
+          )}
         </div>
 
-        {/* ZONE NAME */}
+        {/* REVIEW INFO */}
         <div
           style={{
-            fontSize: "16px",
-            fontWeight: "600",
-            color: "#eee",
-            marginBottom: "4px",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
+            fontSize: "11px",
+            color: "#555",
+            flexShrink: 0
           }}
         >
-          {zoneName}
-        </div>
-
-        {/* MAP NAME */}
-        <div
-          style={{
-            fontSize: "13px",
-            color: "#777",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }}
-        >
-          {mapName}
+          {q.interval || 0}d
         </div>
 
       </div>
-
     </div>
   );
 }
