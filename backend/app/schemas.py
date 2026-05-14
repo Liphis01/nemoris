@@ -137,6 +137,7 @@ class SetCollections(BaseModel):
 class AnswerRequest(BaseModel):
     question_id: int
 
+    # int between 0 and 2 (0 = wrong, 1 = hard, 2 = easy)
     quality: int = Field(
         ge=0,
         le=2

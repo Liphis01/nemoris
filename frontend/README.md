@@ -33,8 +33,10 @@ color: "#ff85c2",
 - recentrer les svg
 - ouvrir le map editor depuis une question map le fait buguer
 - les aliases ne fonctionnent pas bien (la sauvegarde)
-- les ids des questions ne se recalculent pas après une suppression
+- les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - créer un groupe fait une alerte moche
+- le texte des cards est décalé vers la droite (à cause du MAP)
+- vérifier que supprimer une question supprime aussi le progress associé
 
 ## features
 - filtrer les groupes dans manage
@@ -53,6 +55,7 @@ color: "#ff85c2",
 ## refactors
 - refactor général des styles redondants, etc...
 - déplacer la gestion de progress pour les nouvelle questions directement dans create_question (backend)
+- stocker uniquement l'id des groupes dans les questions
 
 ## ideas
 - mettre une option de priorité sur les questions pour les faire apparaître plus souvent
