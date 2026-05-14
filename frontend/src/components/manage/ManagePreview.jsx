@@ -263,8 +263,14 @@ export default function ManagePreview({
       </div>
     );
   }
-  if ((selectedQuestion.type_group && selectedQuestion.type_group === "map") || selectedQuestion.type_q === "map") {
-    const groupe = selectedQuestion.type_q === "map" ? selectedQuestion.group : selectedQuestion;
+
+  const isMapQuestion = selectedQuestion.type_q === "map";
+  const isMapGroup = selectedQuestion.type_group === "map";
+
+  if (isMapQuestion || isMapGroup) {
+    const groupe = isMapQuestion ? selectedQuestion.group : selectedQuestion;
+    const group = allGroups.find((g) => g.id === groupe.id);
+
     return (
       <div
         style={{
@@ -273,47 +279,11 @@ export default function ManagePreview({
         }}
       >
         <MapEditor
-          group={allGroups.find(g => g.id === groupe.id)}
+          group={group}
           onSave={reloadAllData}
           onClose={() => { }}
           selectedZone={editing}
         />
-      </div>
-    );
-
-    return (
-      <div style={panelStyle}>
-        <div style={{ marginBottom: "22px", color: "#888" }}>
-          Groupe #{groupe.id}
-        </div>
-
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
-          <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-            {groupe.type_group}
-          </div>
-          <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-            {groupe.question_count || 0} questions
-          </div>
-        </div>
-
-        <label style={labelStyle}>Nom du groupe</label>
-        <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb" }}>
-          {groupe.name}
-        </div>
-
-        <label style={labelStyle}>Type</label>
-        <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb" }}>
-          {groupe.type_group}
-        </div>
-
-        {groupe.media && (
-          <>
-            <label style={labelStyle}>Media / SVG</label>
-            <div style={{ ...inputStyle, background: "#1a1a1a", padding: "12px 14px", marginBottom: "18px", color: "#bbb", wordBreak: "break-all" }}>
-              {groupe.media}
-            </div>
-          </>
-        )}
       </div>
     );
   }
