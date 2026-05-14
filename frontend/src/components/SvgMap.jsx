@@ -64,7 +64,8 @@ export default function SvgMap({
             if (!svgEl) return;
 
             svgEl.style.width = "100%";
-            svgEl.style.height = "auto";
+            svgEl.style.height = "100%";
+            svgEl.style.display = "block";
 
             const getColor = (code) => {
                 if (selected === code) return "#f39c12";
@@ -155,7 +156,7 @@ export default function SvgMap({
             ref={wrapperRef}
             style={{
                 width: "100%",
-                height: "450px",
+                height: "100%",
                 overflow: "hidden",
                 position: "relative",
                 userSelect: "none"
@@ -169,6 +170,8 @@ export default function SvgMap({
             <div
                 ref={containerRef}
                 style={{
+                    width: "100%",
+                    height: "100%",
                     transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                     transformOrigin: "0 0",
                     cursor: isDragging ? "grabbing" : "grab",
