@@ -4,7 +4,7 @@ import SvgMap from "../SvgMap";
 
 const panelStyle = {
   padding: "28px",
-  overflow: "auto",
+  overflow: "overlay",
   background: "#141414",
   height: "100%"
 };
@@ -476,7 +476,7 @@ export default function ManagePreview({
         </div>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", paddingBottom: "30px" }}>
         <button type="button" onClick={handleSave} style={buttonStyle}>
           Enregistrer
         </button>
