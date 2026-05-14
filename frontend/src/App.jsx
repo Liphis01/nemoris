@@ -142,6 +142,11 @@ function App() {
     setAllGroups(data);
   }
 
+  async function reloadAllData() {
+    await loadAllGroups();
+    await loadAllQuestions();
+  }
+
   async function updateQuestion(id, updatedFields) {
     await fetch(`http://localhost:8000/questions/${id}`, {
       method: "PUT",
@@ -428,6 +433,7 @@ function App() {
           createQuestion={createQuestion}
           handleUpload={handleUpload}
           deleteImage={deleteImage}
+          reloadAllData={reloadAllData}
           search={search}
           setSearch={setSearch}
           filterTheme={filterTheme}

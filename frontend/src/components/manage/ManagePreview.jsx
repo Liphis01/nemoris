@@ -66,7 +66,8 @@ export default function ManagePreview({
   newGroup,
   setNewGroup,
   createQuestion,
-  createGroup
+  createGroup,
+  reloadAllData
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -272,6 +273,7 @@ export default function ManagePreview({
         >
           <MapEditor
             group={allGroups.find(g => g.id === selectedQuestion.id)}
+            onSave={reloadAllData}
             onClose={() => {}}
           />
         </div>
@@ -325,6 +327,7 @@ export default function ManagePreview({
       >
         <MapEditor
           group={allGroups.find(g => g.id === selectedQuestion.group_id)}
+          onSave={reloadAllData}
           // onClose={() => setSelectedQuestion(null)}
           onClose={undefined}
         />

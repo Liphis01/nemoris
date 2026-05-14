@@ -3,7 +3,8 @@ import SvgMap from "./SvgMap";
 
 export default function MapEditor({
   group,
-  onClose
+  onClose,
+  onSave
 }) {
 
   const [items, setItems] = useState([]); // List of zone codes on the map
@@ -181,6 +182,10 @@ export default function MapEditor({
           })
         });
       }
+    }
+
+    if (onSave) {
+      await onSave();
     }
 
     if (onClose) {
