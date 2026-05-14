@@ -8,18 +8,18 @@ export default function QuestionCard({
     <div
       onClick={onClick}
       style={{
-        padding: "14px",
-        borderBottom: "1px solid #2a2a2a",
+        padding: "10px 12px",
+        borderBottom: "1px solid #262626",
         cursor: "pointer",
         background: selected ? "#252525" : "transparent",
-        transition: "background 0.15s ease",
+        transition: "background 0.12s ease",
         display: "flex",
         flexDirection: "column",
-        gap: "8px"
+        gap: "6px"
       }}
       onMouseEnter={(e) => {
         if (!selected) {
-          e.currentTarget.style.background = "#1f1f1f";
+          e.currentTarget.style.background = "#1d1d1d";
         }
       }}
       onMouseLeave={(e) => {
@@ -29,25 +29,24 @@ export default function QuestionCard({
       }}
     >
 
-      {/* HEADER */}
+      {/* TOP */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: "10px"
+          gap: "8px",
+          minWidth: 0
         }}
       >
 
         <div
           style={{
-            fontSize: "11px",
-            fontWeight: "600",
-            padding: "3px 8px",
+            fontSize: "10px",
+            fontWeight: "700",
+            padding: "2px 6px",
             borderRadius: "999px",
             background: "#1f3a5f",
             color: "#7cc4ff",
-            letterSpacing: "0.5px",
             flexShrink: 0
           }}
         >
@@ -56,52 +55,52 @@ export default function QuestionCard({
 
         <div
           style={{
-            color: "#555",
-            fontSize: "11px",
+            color: "#e5e5e5",
+            fontWeight: "600",
+            fontSize: "14px",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
+            whiteSpace: "nowrap",
+            minWidth: 0,
+            flex: 1
+          }}
+        >
+          {q.question}
+        </div>
+
+        <div
+          style={{
+            color: "#555",
+            fontSize: "10px",
+            flexShrink: 0
           }}
         >
           #{q.id}
         </div>
-      </div>
 
-      {/* QUESTION */}
-      <div
-        style={{
-          fontWeight: "600",
-          color: "#eee",
-          lineHeight: 1.35,
-          overflow: "hidden",
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical"
-        }}
-      >
-        {q.question}
       </div>
 
       {/* ANSWER */}
       <div
         style={{
           color: "#888",
-          fontSize: "13px",
+          fontSize: "12px",
           overflow: "hidden",
           textOverflow: "ellipsis",
-          whiteSpace: "nowrap"
+          whiteSpace: "nowrap",
+          paddingLeft: "2px"
         }}
       >
         {q.answer || "—"}
       </div>
 
-      {/* FOOTER */}
+      {/* BOTTOM */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: "10px",
+          gap: "8px",
           minWidth: 0
         }}
       >
@@ -111,22 +110,22 @@ export default function QuestionCard({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "6px",
+            gap: "4px",
             overflow: "hidden",
             minWidth: 0
           }}
         >
-          {(q.tags || []).slice(0, 2).map(tag => (
+          {(q.tags || []).slice(0, 3).map(tag => (
             <div
               key={tag}
               title={tag}
               style={{
-                maxWidth: "90px",
-                padding: "2px 8px",
+                maxWidth: "80px",
+                padding: "1px 6px",
                 borderRadius: "999px",
                 background: "#2a2a2a",
                 color: "#999",
-                fontSize: "11px",
+                fontSize: "10px",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -137,24 +136,24 @@ export default function QuestionCard({
             </div>
           ))}
 
-          {(q.tags?.length || 0) > 2 && (
+          {(q.tags?.length || 0) > 3 && (
             <div
               style={{
                 color: "#666",
-                fontSize: "11px",
+                fontSize: "10px",
                 flexShrink: 0
               }}
             >
-              +{q.tags.length - 2}
+              +{q.tags.length - 3}
             </div>
           )}
         </div>
 
-        {/* REVIEW INFO */}
+        {/* REVIEW */}
         <div
           style={{
-            fontSize: "11px",
-            color: "#555",
+            color: "#666",
+            fontSize: "10px",
             flexShrink: 0
           }}
         >
@@ -162,6 +161,7 @@ export default function QuestionCard({
         </div>
 
       </div>
+
     </div>
   );
 }
