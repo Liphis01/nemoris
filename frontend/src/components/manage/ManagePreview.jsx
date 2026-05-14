@@ -261,6 +261,28 @@ export default function ManagePreview({
   }
 
   if (selectedQuestion.type_group) {
+    if (selectedQuestion.type_group === "map") {
+      return (
+        <div
+          style={{
+            height: "100%",
+            overflow: "hidden"
+          }}
+        >
+          <MapEditor
+            q={{
+              group_id: selectedQuestion.id,
+              svg: selectedQuestion.media,
+              media: selectedQuestion.media
+            }}
+            embedded={true}
+            updateQuestion={updateQuestion}
+            updateQuestionInState={updateQuestionInState}
+          />
+        </div>
+      );
+    }
+
     return (
       <div style={panelStyle}>
         <div style={{ marginBottom: "22px", color: "#888" }}>
