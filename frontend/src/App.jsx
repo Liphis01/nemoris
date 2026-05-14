@@ -170,6 +170,20 @@ function App() {
     setAllQuestions(allQuestions.filter((q) => q.id !== id));
   }
 
+  async function deleteGroup(id) {
+    const res = await fetch(`http://localhost:8000/groups/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null);
+      alert(payload?.detail || "Impossible de supprimer le groupe.");
+      return;
+    }
+
+    setAllGroups(allGroups.filter((g) => g.id !== id));
+  }
+
   async function createQuestion() {
     if (!newRow.question) {
       alert("Champs manquants");
@@ -428,6 +442,7 @@ function App() {
           setAllQuestions={setAllQuestions}
           updateQuestion={updateQuestion}
           deleteQuestion={deleteQuestion}
+          deleteGroup={deleteGroup}
           newRow={newRow}
           setNewRow={setNewRow}
           createQuestion={createQuestion}
@@ -454,6 +469,7 @@ function App() {
           setNewGroup={setNewGroup}
           startCreateGroup={startCreateGroup}
           createGroup={createGroup}
+          deleteGroup={deleteGroup}
           viewMode={viewMode}
           setViewMode={setViewMode}
         />

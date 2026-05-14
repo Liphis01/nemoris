@@ -1,21 +1,42 @@
 export default function MapCard({
   q,
   selected,
-  onClick
+  onClick,
+  deleteOpen,
+  isRemoving,
+  onDeleteOpen,
+  closeDelete,
+  deleteQuestion
 }) {
 
   return (
     <div
-      onClick={onClick}
+      data-delete-card-id={q.id}
+      onClick={(event) => {
+        if (deleteOpen) {
+          closeDelete?.();
+          return;
+        }
+        onClick?.();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onDeleteOpen?.();
+      }}
       style={{
+        position: "relative",
         padding: "10px 12px",
         borderBottom: "1px solid #262626",
         cursor: "pointer",
         background: selected ? "#252525" : "transparent",
-        transition: "background 0.12s ease",
+        transition: "background 0.12s ease, opacity 0.18s ease, transform 0.18s ease",
         display: "flex",
         flexDirection: "column",
-        gap: "6px"
+        gap: "6px",
+        overflow: "hidden",
+        transform: isRemoving ? "scaleY(0.95)" : "scaleY(1)",
+        opacity: isRemoving ? 0 : 1,
+        transformOrigin: "top"
       }}
       onMouseEnter={(e) => {
         if (!selected) {
@@ -28,6 +49,47 @@ export default function MapCard({
         }
       }}
     >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          height: "100%",
+          width: "52px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transform: deleteOpen ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 0.18s ease",
+          background: "rgba(139, 15, 15, 0.95)",
+          borderLeft: "1px solid rgba(255,255,255,0.05)",
+          zIndex: 1
+        }}
+      >
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            deleteQuestion?.();
+            closeDelete?.();
+          }}
+          style={{
+            width: "36px",
+            height: "36px",
+            borderRadius: "999px",
+            border: "none",
+            background: "#b01d1d",
+            color: "white",
+            cursor: "pointer",
+            fontSize: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          🗑
+        </button>
+      </div>
 
       {/* TOP */}
       <div

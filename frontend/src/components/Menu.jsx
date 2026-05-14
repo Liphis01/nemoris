@@ -70,8 +70,6 @@ export default function Menu({ setMode }) {
                     >
                         Quiz App
                     </h1>
-
-
                 </div>
 
                 {/* MAIN GRID */}
