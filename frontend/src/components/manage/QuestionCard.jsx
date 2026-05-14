@@ -45,8 +45,8 @@ export default function QuestionCard({
             fontWeight: "700",
             padding: "2px 6px",
             borderRadius: "999px",
-            background: "#1f3a5f",
-            color: "#7cc4ff",
+            background: "#163b63",
+            color: "#5eb6ff",
             flexShrink: 0
           }}
         >

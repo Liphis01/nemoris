@@ -45,8 +45,8 @@ export default function MapCard({
             fontWeight: "700",
             padding: "2px 6px",
             borderRadius: "999px",
-            background: "#3f2f12",
-            color: "#f5c26b",
+            background: "#5a3b12",
+            color: "#ffc76b",
             flexShrink: 0
           }}
         >

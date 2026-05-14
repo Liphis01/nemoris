@@ -1,5 +1,14 @@
 # TODO
 
+
+## couleurs pour les types des cards
+background: "#145c46",
+color: "#6ff0c2",
+
+background: "#5a1d3d",
+color: "#ff85c2",
+
+
 ## bugs
 - bug des images
 - recentrer les svg
