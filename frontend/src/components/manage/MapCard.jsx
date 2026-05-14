@@ -11,7 +11,7 @@ export default function MapCard({
   deleteQuestion
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
-  
+
   return (
     <div
       data-delete-card-id={q.id}
@@ -228,8 +228,8 @@ export default function MapCard({
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
-          {q.progress.interval || 0}d
-          {showTooltip && q.progress.next_review && (
+          {q.progress?.interval || 0}d
+          {showTooltip && q.progress?.next_review && (
             <div
               style={{
                 position: "absolute",
@@ -245,7 +245,7 @@ export default function MapCard({
                 border: "1px solid #333"
               }}
             >
-              Next: {new Date(q.progress.next_review).toLocaleDateString()}
+              Next: {new Date(q.progress?.next_review).toLocaleDateString()}
             </div>
           )}
         </div>

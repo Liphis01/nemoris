@@ -225,8 +225,8 @@ export default function QuestionCard({
           onMouseEnter={()=> setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
-          {q.progress.interval || 0}d
-          {showTooltip && q.progress.next_review && (
+          {q.progress?.interval || 0}d
+          {showTooltip && q.progress?.next_review && (
             <div
               style={{
                 position: "absolute",
@@ -242,7 +242,7 @@ export default function QuestionCard({
                 border: "1px solid #333"
               }}
             >
-              Next: {new Date(q.progress.next_review).toLocaleDateString()}
+              Next: {new Date(q.progress?.next_review).toLocaleDateString()}
             </div>
           )}
         </div>
