@@ -109,7 +109,7 @@ export default function SvgMap({
     return () => {
         cleanupFns.forEach(fn => fn());
     };
-}, [svgPath, found, missed, selected, dueItems, onSelect]);
+}, [svgPath, found, missed, selected, dueItems]);
 
     useEffect(() => {
         const el = wrapperRef.current;

@@ -142,7 +142,7 @@ Map-specific data belongs in:
 - Question.data
 
 Examples:
-- SVG code
+- SVG code (unique identifier for map zones)
 - aliases
 - extra metadata
 
@@ -150,11 +150,12 @@ Avoid multiplying dedicated SQL columns unless necessary.
 
 Preferred structure:
 
+```json
 data = {
   "code": "dep_75",
   "aliases": ["paris", "paris city"]
 }
-
+```
 ---
 
 # Frontend Architecture
@@ -168,7 +169,6 @@ Preferred structure:
 components/
   manage/
   quiz/
-  map/
 
 ---
 
@@ -284,6 +284,14 @@ Avoid old names:
 Favor maintainability over cleverness.
 
 ---
+
+# Running the app
+
+To run the app you can use the provided .sh file:
+
+```bash
+./start.sh
+```
 
 # Before Refactoring
 

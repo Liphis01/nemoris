@@ -24,16 +24,16 @@ NOT toward:
 The frontend currently has:
 
 - Menu
-- Quiz
+- Review
 - Manage
 
-Future modes may exist, but Manage and Quiz are the architectural core.
+Future modes may exist, but Manage and Review are the architectural core.
 
 ---
 
-# Quiz Mode
+# Review Mode
 
-Quiz mode focuses on:
+Review mode focuses on:
 - minimal friction
 - fast answering
 - keyboard-first interaction

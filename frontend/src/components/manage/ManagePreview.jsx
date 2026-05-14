@@ -49,6 +49,8 @@ const tagStyle = {
 };
 
 export default function ManagePreview({
+  allGroups,
+  setAllGroups,
   selectedQuestion,
   updateQuestion,
   updateQuestionInState,
@@ -118,7 +120,6 @@ export default function ManagePreview({
           style={inputStyle}
           value={newGroup.media}
           onChange={(e) => setNewGroup({ ...newGroup, media: e.target.value })}
-          placeholder="http://..."
         />
 
         <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
@@ -270,14 +271,8 @@ export default function ManagePreview({
           }}
         >
           <MapEditor
-            q={{
-              group_id: selectedQuestion.id,
-              svg: selectedQuestion.media,
-              media: selectedQuestion.media
-            }}
-            embedded={true}
-            updateQuestion={updateQuestion}
-            updateQuestionInState={updateQuestionInState}
+            group={allGroups.find(g => g.id === selectedQuestion.id)}
+            onClose={() => setSelectedQuestion(null)}
           />
         </div>
       );
@@ -329,15 +324,9 @@ export default function ManagePreview({
         }}
       >
         <MapEditor
-          q={{
-            type_q: "map",
-            svg: selectedQuestion.media,
-            media: selectedQuestion.media,
-            group_id: selectedQuestion.group_id
-          }}
-          embedded
-          updateQuestion={updateQuestion}
-          updateQuestionInState={updateQuestionInState}
+          group={allGroups.find(g => g.id === selectedQuestion.group_id)}
+          // onClose={() => setSelectedQuestion(null)}
+          onClose={undefined}
         />
       </div>
     );

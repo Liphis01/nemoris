@@ -33,7 +33,7 @@ from .serializers import (
 )
 
 GROUP_COMPATIBILITY = {
-    "map": ["map_zone"],
+    "map": ["map"],
     "timeline": ["timeline_item"],
     "diagram": ["diagram_label"]
 }

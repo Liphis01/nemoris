@@ -417,6 +417,7 @@ function App() {
           setMode={setMode}
           allQuestions={allQuestions}
           allGroups={allGroups}
+          setAllGroups={setAllGroups}
           filteredQuestions={filteredQuestions}
           questionInputRef={questionInputRef}
           setAllQuestions={setAllQuestions}

@@ -2,60 +2,49 @@ import { useState, useEffect, useRef } from "react";
 import SvgMap from "./SvgMap";
 
 export default function MapEditor({
-  q,
-  embedded = false,
-  onClose,
-  updateQuestion,
-  updateQuestionInState
+  group,
+  onClose
 }) {
 
-  const [items, setItems] = useState([]);
-  const [zones, setZones] = useState([]);
+  const [items, setItems] = useState([]); // List of zone codes on the map
+  const [zones, setZones] = useState([]); // List of questions linked to this group
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
 
-  // Load zones from API
+  // Load zones from questions
   useEffect(() => {
     async function loadZones() {
       try {
-        const res = await fetch(
-          `http://localhost:8000/maps/${q.group_id}/zones`
-        );
+        const res = await fetch("http://localhost:8000/questions");
         const data = await res.json();
-        setZones(data);
-        setItems(data.map(z => z.code));
+        const mapZones = data.filter(
+          item => item.type_q === "map" && item.group.id === group.id
+        );
+        setZones(mapZones);
+        setItems(mapZones.map(z => z.data?.code || z.code));
       } catch (err) {
         console.error("Error loading zones:", err);
       }
     }
 
-    if (q.group_id) {
+    if (group.id) {
       loadZones();
     }
-  }, [q.group_id]);
-
-  // 🔥 charger zones depuis DB
-  useEffect(() => {
-    fetch("http://localhost:8000/questions")
-      .then(res => res.json())
-      .then(data => {
-        const mapZones = data.filter(
-          item => item.type_q === "map_zone" && item.group_id === q.group_id
-        );
-        setZones(mapZones);
-      });
-  }, [q.group_id]);
+  }, [group.id]);
 
   function handleSelect(code) {
-    let zone = zones.find(z => z.code === code);
+    let zone = zones.find(z => (z.data?.code || z.code) === code);
 
     if (!zone) {
       zone = {
         id: "tmp-" + code,
-        code,
-        label: "",
-        aliases: []
+        type_q: "map",
+        question: "",
+        answer: "",
+        tags: [],
+        group_id: group.id,
+        data: { code, aliases: [] }
       };
       setZones(prev => [...prev, zone]);
     }
@@ -66,22 +55,25 @@ export default function MapEditor({
   function updateLabel(value) {
     setZones(prev =>
       prev.map(z =>
-        z === editing ? { ...z, label: value } : z
+        z.data?.code === editing.data?.code ? { ...z, answer: value } : z
       )
     );
-    setEditing(prev => ({ ...prev, label: value }));
+    setEditing(prev => ({ ...prev, answer: value }));
   }
 
   function addAlias() {
     const value = aliasesInput.trim();
     if (!value) return;
 
+    const currentAliases = editing.data?.aliases || [];
+    const newAliases = [...currentAliases, value];
+
     setZones(prev =>
       prev.map(z =>
-        z === editing
+        z.data?.code === editing.code
           ? {
             ...z,
-            aliases: [...(z.aliases || []), value]
+            data: { ...z.data, aliases: newAliases }
           }
           : z
       )
@@ -89,26 +81,29 @@ export default function MapEditor({
 
     setEditing(prev => ({
       ...prev,
-      aliases: [...(prev.aliases || []), value]
+      data: { ...prev.data, aliases: newAliases }
     }));
 
     setAliasesInput("");
   }
 
   function removeAlias(index) {
+    const currentAliases = editing.data?.aliases || [];
+    const newAliases = currentAliases.filter((_, i) => i !== index);
+
     setZones(prev =>
       prev.map(z =>
-        z === editing
+        z.data?.code === editing.code
           ? {
             ...z,
-            aliases: z.aliases.filter((_, i) => i !== index)
+            data: { ...z.data, aliases: newAliases }
           }
           : z
       )
     );
     setEditing(prev => ({
       ...prev,
-      aliases: prev.aliases.filter((_, i) => i !== index)
+      data: { ...prev.data, aliases: newAliases }
     }));
   }
 
@@ -119,31 +114,49 @@ export default function MapEditor({
     }
   }
 
+  // utile ??
   function handleRowClick(code) {
     handleSelect(code);
   }
 
-  async function handleClose() {
+  async function saveZones() {
     for (const z of zones) {
-      if (!z.id || z.id.startsWith("tmp-")) {
+      const code = z.data?.code;
+      const aliases = z.data?.aliases || [];
+
+      if (!z.id || String(z.id).startsWith("tmp-")) {
         // New zone - create via POST
         await fetch("http://localhost:8000/questions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
+          // body: JSON.stringify({
+          //   type_q: "map",
+          //   question: "",
+          //   answer: z.answer || "",
+          //   tags: [],
+          //   group_id: group.id,
+          //   data: {
+          //     code: code,
+          //     aliases: aliases
+          //   }
+          // })
           body: JSON.stringify({
-            type_q: "map_zone",
-            question: z.label,
-            answer: z.label,
-            tags: [],
-            group_id: q.group_id,
-            data: {
-              code: z.code,
-              aliases: z.aliases || []
-            }
+            "question": group.name + " - " + code,
+            "answer": z.answer || "",
+            "type_q": "map",
+            "media": "",
+            "tags": [],
+            "group_id": group.id,
+            // "map_id": 0,
+            "data": {
+              "code": code,
+              "aliases": aliases
+            },
+            "collection_ids": []
           })
-        });
+        })
       } else {
         // Update existing zone
         await fetch(`http://localhost:8000/questions/${z.id}`, {
@@ -152,11 +165,10 @@ export default function MapEditor({
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            question: z.label,
-            answer: z.label,
+            answer: z.answer || "",
             data: {
-              code: z.code,
-              aliases: z.aliases || []
+              code: code,
+              aliases: aliases
             }
           })
         });
@@ -179,20 +191,20 @@ export default function MapEditor({
       style={{
         width: "100%",
         height: "100%",
-        display: "grid",
-        gridTemplateColumns: "2fr 320px",
+        display: "flex",
+        flexDirection: "column",
         background: "#1e1e1e",
         overflow: "hidden"
       }}
     >
 
-      {/* 🗺️ LEFT */}
+      {/* 🗺️ MAP SECTION */}
       <div
         style={{
+          flex: 1,
           display: "flex",
           flexDirection: "column",
-          borderRight: "1px solid #333",
-          minWidth: 0
+          minHeight: 0
         }}
       >
 
@@ -209,19 +221,13 @@ export default function MapEditor({
         >
           <div>
             <div style={{ fontSize: "18px", fontWeight: "bold" }}>
-              {q.svg}
+              {group.name || "Map Editor"}
             </div>
 
             <div style={{ color: "#777", fontSize: "13px" }}>
               {items.length} zones
             </div>
           </div>
-
-          {!embedded && (
-            <button onClick={handleClose}>
-              Fermer
-            </button>
-          )}
         </div>
 
         {/* MAP */}
@@ -242,9 +248,9 @@ export default function MapEditor({
             }}
           >
             <SvgMap
-              svgPath={`/maps/${q.svg}`}
-              found={items}
-              selected={editing?.code}
+              svgPath={`/maps/${group.media}`}
+              found={zones.map(z => z.data?.code || z.code)}
+              selected={editing?.data.code}
               onSelect={handleSelect}
             />
           </div>
@@ -266,13 +272,13 @@ export default function MapEditor({
                   color: "#888"
                 }}
               >
-                Zone : {editing.code}
+                Zone : {editing.data?.code}
               </div>
 
               <input
                 autoFocus
                 ref={labelInputRef}
-                value={editing.label || ""}
+                value={editing.answer || ""}
                 onChange={(e) =>
                   updateLabel(e.target.value)
                 }
@@ -298,7 +304,7 @@ export default function MapEditor({
                   marginBottom: "10px"
                 }}
               >
-                {(editing.aliases || []).map((alias, index) => (
+                {(editing.data?.aliases || []).map((alias, index) => (
                   <div
                     key={index}
                     style={{
@@ -351,12 +357,14 @@ export default function MapEditor({
 
       </div>
 
-      {/* 📋 RIGHT */}
+      {/* 📋 ZONES LIST */}
       <div
         style={{
+          width: "300px",
           display: "flex",
           flexDirection: "column",
           background: "#161616",
+          borderLeft: "1px solid #333",
           minHeight: 0
         }}
       >
@@ -397,7 +405,7 @@ export default function MapEditor({
                   marginBottom: "4px"
                 }}
               >
-                {zones.find(z => z.code === code)?.label || "???"}
+                {zones.find(z => (z.data?.code || z.code) === code)?.question || zones.find(z => (z.data?.code || z.code) === code)?.label || "???"}
               </div>
 
               <div
@@ -421,7 +429,7 @@ export default function MapEditor({
           }}
         >
           <button
-            onClick={handleClose}
+            onClick={saveZones}
             style={{
               width: "100%",
               padding: "12px",
