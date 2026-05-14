@@ -272,7 +272,7 @@ export default function ManagePreview({
         >
           <MapEditor
             group={allGroups.find(g => g.id === selectedQuestion.id)}
-            onClose={() => setSelectedQuestion(null)}
+            onClose={() => {}}
           />
         </div>
       );

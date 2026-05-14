@@ -11,6 +11,11 @@ export default function MapEditor({
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
+  const [editableGroup, setEditableGroup] = useState({
+    name: group.name || "",
+    type_group: group.type_group || "map",
+    media: group.media || ""
+  });
 
   // Load zones from questions
   useEffect(() => {
@@ -114,12 +119,26 @@ export default function MapEditor({
     }
   }
 
-  // utile ??
-  function handleRowClick(code) {
-    handleSelect(code);
+  function updateGroupField(field, value) {
+    setEditableGroup(prev => ({
+      ...prev,
+      [field]: value
+    }));
   }
 
-  async function saveZones() {
+  async function save() {
+    await fetch(`http://localhost:8000/groups/${group.id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: editableGroup.name,
+        type_group: editableGroup.type_group,
+        media: editableGroup.media
+      })
+    });
+
     for (const z of zones) {
       const code = z.data?.code;
       const aliases = z.data?.aliases || [];
@@ -131,17 +150,6 @@ export default function MapEditor({
           headers: {
             "Content-Type": "application/json"
           },
-          // body: JSON.stringify({
-          //   type_q: "map",
-          //   question: "",
-          //   answer: z.answer || "",
-          //   tags: [],
-          //   group_id: group.id,
-          //   data: {
-          //     code: code,
-          //     aliases: aliases
-          //   }
-          // })
           body: JSON.stringify({
             "question": group.name + " - " + code,
             "answer": z.answer || "",
@@ -214,20 +222,132 @@ export default function MapEditor({
             padding: "14px 18px",
             borderBottom: "1px solid #333",
             display: "flex",
-            justifyContent: "space-between",
+            gap: "14px",
             alignItems: "center",
-            background: "#181818"
+            background: "#181818",
+            flexWrap: "wrap"
           }}
         >
-          <div>
-            <div style={{ fontSize: "18px", fontWeight: "bold" }}>
-              {group.name || "Map Editor"}
-            </div>
 
-            <div style={{ color: "#777", fontSize: "13px" }}>
-              {items.length} zones
-            </div>
+          {/* NAME */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minWidth: "220px",
+              flex: 1
+            }}
+          >
+            <label
+              style={{
+                fontSize: "12px",
+                color: "#777",
+                marginBottom: "4px"
+              }}
+            >
+              Nom du groupe
+            </label>
+
+            <input
+              value={editableGroup.name}
+              onChange={(e) =>
+                updateGroupField("name", e.target.value)
+              }
+              style={{
+                padding: "10px",
+                background: "#111",
+                color: "#eee",
+                border: "1px solid #333",
+                borderRadius: "8px"
+              }}
+            />
           </div>
+
+          {/* TYPE */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              width: "140px"
+            }}
+          >
+            <label
+              style={{
+                fontSize: "12px",
+                color: "#777",
+                marginBottom: "4px"
+              }}
+            >
+              Type
+            </label>
+
+            <select
+              value={editableGroup.type_group}
+              onChange={(e) =>
+                updateGroupField("type_group", e.target.value)
+              }
+              style={{
+                padding: "10px",
+                background: "#111",
+                color: "#eee",
+                border: "1px solid #333",
+                borderRadius: "8px"
+              }}
+            >
+              <option value="map">map</option>
+              <option value="image">image</option>
+              <option value="audio">audio</option>
+              <option value="timeline">timeline</option>
+            </select>
+          </div>
+
+          {/* MEDIA */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minWidth: "260px",
+              flex: 1
+            }}
+          >
+            <label
+              style={{
+                fontSize: "12px",
+                color: "#777",
+                marginBottom: "4px"
+              }}
+            >
+              Media
+            </label>
+
+            <input
+              value={editableGroup.media}
+              onChange={(e) =>
+                updateGroupField("media", e.target.value)
+              }
+              placeholder="world.svg"
+              style={{
+                padding: "10px",
+                background: "#111",
+                color: "#eee",
+                border: "1px solid #333",
+                borderRadius: "8px"
+              }}
+            />
+          </div>
+
+          {/* INFOS */}
+          <div
+            style={{
+              color: "#777",
+              fontSize: "13px",
+              whiteSpace: "nowrap",
+              paddingTop: "18px"
+            }}
+          >
+            {items.length} zones
+          </div>
+
         </div>
 
         {/* MAP */}
@@ -248,7 +368,7 @@ export default function MapEditor({
             }}
           >
             <SvgMap
-              svgPath={`/maps/${group.media}`}
+              svgPath={`/maps/${editableGroup.media}`}
               found={zones.map(z => z.data?.code || z.code)}
               selected={editing?.data.code}
               onSelect={handleSelect}
@@ -353,99 +473,24 @@ export default function MapEditor({
               Sélectionner une zone
             </div>
           )}
-        </div>
-
-      </div>
-
-      {/* 📋 ZONES LIST */}
-      <div
-        style={{
-          width: "300px",
-          display: "flex",
-          flexDirection: "column",
-          background: "#161616",
-          borderLeft: "1px solid #333",
-          minHeight: 0
-        }}
-      >
-
-        <div
-          style={{
-            padding: "14px 18px",
-            borderBottom: "1px solid #333",
-            fontWeight: "bold"
-          }}
-        >
-          Zones
-        </div>
-
-        <div
-          style={{
-            flex: 1,
-            overflow: "auto"
-          }}
-        >
-          {items.map((code) => (
-            <div
-              key={code}
-              onClick={() => handleRowClick(code)}
+          <div style={{ marginTop: "15px" }}>
+            <button
+              onClick={save}
               style={{
-                padding: "10px 14px",
-                cursor: "pointer",
-                borderBottom: "1px solid #222",
-                background:
-                  editing?.code === code
-                    ? "#2a2a2a"
-                    : "transparent"
+                width: "100%",
+                padding: "12px",
+                background: "#3a7afe",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer"
               }}
             >
-              <div
-                style={{
-                  fontWeight: "bold",
-                  marginBottom: "4px"
-                }}
-              >
-                {zones.find(z => (z.data?.code || z.code) === code)?.question || zones.find(z => (z.data?.code || z.code) === code)?.label || "???"}
-              </div>
-
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#777"
-                }}
-              >
-                {code}
-              </div>
-            </div>
-          ))}
+              Sauvegarder
+            </button>
+          </div>
         </div>
-
-        {/* FOOTER */}
-        <div
-          style={{
-            padding: "12px",
-            borderTop: "1px solid #333",
-            background: "#181818"
-          }}
-        >
-          <button
-            onClick={saveZones}
-            style={{
-              width: "100%",
-              padding: "12px",
-              background: "#3a7afe",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer"
-            }}
-          >
-            Sauvegarder
-          </button>
-        </div>
-
       </div>
-
     </div>
   );
 }
