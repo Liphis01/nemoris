@@ -13,11 +13,11 @@ color: "#ff85c2",
 - bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
 - ouvrir le map editor depuis une question map le fait buguer
-- les aliases ne fonctionnent pas bien (la sauvegarde)
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - créer un groupe fait une alerte moche
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - vérifier que supprimer une question supprime aussi le progress associé
+- vérifier que supprimer un groupe supprime aussi les questions associées
 
 ## features
 - filtrer les groupes dans manage
@@ -39,6 +39,7 @@ color: "#ff85c2",
 - faire le hover next review avec chatgpt pour voir si c'est mieux
 - dans le recap, afficher toutes les stats intéressantes des questions pour voir les progrès
 - dans le recap, cliquer sur une question fait un zoom sur la zone et inversement
+- mettre des tags sur les groupes les propage aux questions
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

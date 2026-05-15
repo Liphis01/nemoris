@@ -145,7 +145,6 @@ export default function ManageList({
         {viewMode === "questions" && filteredQuestions.map((q) => {
 
           const sharedProps = {
-            key: q.id,
             selected: selectedQuestion?.id === q.id,
             deleteOpen: openDeleteId === q.id,
             isRemoving: removingId === q.id

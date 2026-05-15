@@ -13,6 +13,7 @@ export default function MapEditor({
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
+  const aliasesInputRef = useRef(null);
   const [editableGroup, setEditableGroup] = useState({
     name: group.name || "",
     type_group: group.type_group || "map",
@@ -78,16 +79,18 @@ export default function MapEditor({
     setEditing(prev => ({ ...prev, answer: value }));
   }
 
-  function addAlias() {
+  function addAlias(focusAfter = false) {
     const value = aliasesInput.trim();
     if (!value) return;
 
     const currentAliases = editing.data?.aliases || [];
     const newAliases = [...currentAliases, value];
 
+    console.log(newAliases);
+
     setZones(prev =>
       prev.map(z =>
-        z.data?.code === editing.code
+        z.data?.code === editing.data?.code
           ? {
             ...z,
             data: { ...z.data, aliases: newAliases }
@@ -102,6 +105,10 @@ export default function MapEditor({
     }));
 
     setAliasesInput("");
+
+    if (focusAfter) {
+      aliasesInputRef.current?.focus();
+    }
   }
 
   function removeAlias(index) {
@@ -110,7 +117,7 @@ export default function MapEditor({
 
     setZones(prev =>
       prev.map(z =>
-        z.data?.code === editing.code
+        z.data?.code === editing.data?.code
           ? {
             ...z,
             data: { ...z.data, aliases: newAliases }
@@ -127,7 +134,7 @@ export default function MapEditor({
   function handleAliasKeyDown(e) {
     if (e.key === "Enter") {
       e.preventDefault();
-      addAlias();
+      addAlias(true);
     }
   }
 
@@ -206,6 +213,9 @@ export default function MapEditor({
 
   useEffect(() => {
     if (editing) {
+      if (document.activeElement === aliasesInputRef.current) {
+        return;
+      }
       labelInputRef.current?.focus();
     }
   }, [editing]);
@@ -468,6 +478,7 @@ export default function MapEditor({
               </div>
 
               <input
+                ref={aliasesInputRef}
                 value={aliasesInput}
                 onChange={(e) => setAliasesInput(e.target.value)}
                 onKeyDown={handleAliasKeyDown}
