@@ -1,6 +1,67 @@
 import { useState } from "react";
 import { sendMapAnswer } from "../api/api";
+import { fadeInStyle } from "../styles";
 import SvgMap from "./SvgMap";
+
+const typeBadgeStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  padding: "5px 10px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: "600",
+  background: "rgba(56, 189, 248, 0.16)",
+  color: "#7dd3fc",
+  border: "1px solid rgba(56, 189, 248, 0.28)"
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "14px 16px",
+  background: "#101010",
+  color: "#eee",
+  border: "1px solid #2d2d2d",
+  borderRadius: "12px",
+  boxSizing: "border-box",
+  outline: "none",
+  fontSize: "15px"
+};
+
+const buttonStyle = {
+  padding: "12px 18px",
+  borderRadius: "10px",
+  border: "1px solid #333",
+  background: "#232323",
+  color: "#eee",
+  cursor: "pointer",
+  fontWeight: "600"
+};
+
+const successButton = {
+  ...buttonStyle,
+  background: "#1d3a29",
+  border: "1px solid #2c5c3e",
+  color: "#7ee2a8"
+};
+
+const qualityButtonStyles = {
+  0: {
+    background: "#3a1f22",
+    border: "1px solid #6b2b31",
+    color: "#ff8c94"
+  },
+  1: {
+    background: "#3a3420",
+    border: "1px solid #6f6434",
+    color: "#f3d36a"
+  },
+  2: {
+    background: "#1d3a29",
+    border: "1px solid #2c5c3e",
+    color: "#7ee2a8"
+  }
+};
 
 export default function MapQuestion({ q, onComplete }) {
 
@@ -33,7 +94,6 @@ export default function MapQuestion({ q, onComplete }) {
     setInput("");
   }
 
-  // 🔥 FIN → initialisation intelligente
   function finishMap() {
     const initial = {};
 
@@ -52,7 +112,7 @@ export default function MapQuestion({ q, onComplete }) {
     setFound([]);
     setItemQuality({});
 
-    onComplete(); // passer à la suite
+    onComplete();
   }
 
   function setQuality(id, quality) {
@@ -62,157 +122,425 @@ export default function MapQuestion({ q, onComplete }) {
     }));
   }
 
-  const progress = `${found.length} / ${items.length}`;
+  const progressPercent = (found.length / items.length) * 100;
 
   return (
-    <div>
-
-      <h2>{q.media}</h2>
-
-      <p style={{ opacity: 0.7 }}>{progress}</p>
-
-      {/* 🗺️ MAP */}
-      <SvgMap
-        svgPath={`/maps/${q.media}`}
-        found={items
-          .filter(i => found.includes(i.id))
-          .map(i => i.data?.code)}
-        dueItems={items.map(i => i.data?.code)}
-        onSelect={(code) => {
-          const item = items.find(i => i.data?.code === code);
-          if (item && !found.includes(item.id)) {
-            setFound(prev => [...prev, item.id]);
-          }
+    <>
+      <div
+        style={{
+          background: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          borderRadius: "18px",
+          overflow: "hidden",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+          ...fadeInStyle
         }}
-      />
+      >
 
-      {/* INPUT */}
-      <input
-        autoFocus
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-        placeholder="Tape ta réponse..."
-        style={{ width: "100%", marginBottom: "15px" }}
-      />
+        {/* HEADER */}
+        <div
+          style={{
+            padding: "22px 24px 18px",
+            borderBottom: "1px solid #262626",
+            background:
+              "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: "20px",
+              marginBottom: "16px"
+            }}
+          >
+            <div>
+              <div style={typeBadgeStyle}>
+                🗺 MAP
+              </div>
 
-      {/* LISTE */}
-      <div style={gridStyle}>
-        {items.map(item => {
-          const isFound = found.includes(item.id);
+              <div
+                style={{
+                  marginTop: "14px",
+                  fontSize: "28px",
+                  fontWeight: "700",
+                  color: "#f3f3f3"
+                }}
+              >
+                {q.group_name || q.media}
+              </div>
+            </div>
 
-          return (
             <div
-              key={item.id}
               style={{
-                padding: "5px",
-                borderRadius: "5px",
-                background: isFound ? "#2ecc71" : "#444",
-                textAlign: "center"
+                minWidth: "90px",
+                textAlign: "right"
               }}
             >
-              {isFound ? item.label : "???"}
+              <div
+                style={{
+                  fontSize: "28px",
+                  fontWeight: "700",
+                  color: "#fff"
+                }}
+              >
+                {found.length}
+                <span
+                  style={{
+                    color: "#666",
+                    fontSize: "18px",
+                    marginLeft: "4px"
+                  }}
+                >
+                  / {items.length}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#777",
+                  marginTop: "2px"
+                }}
+              >
+                zones trouvées
+              </div>
             </div>
-          );
-        })}
+          </div>
+
+          {/* PROGRESS BAR */}
+          <div>
+            <div
+              style={{
+                height: "10px",
+                borderRadius: "999px",
+                background: "#111",
+                overflow: "hidden",
+                border: "1px solid #2a2a2a"
+              }}
+            >
+              <div
+                style={{
+                  width: `${progressPercent}%`,
+                  height: "100%",
+                  background:
+                    "linear-gradient(90deg, #38bdf8, #60a5fa)",
+                  transition: "0.2s"
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                marginTop: "8px",
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "12px",
+                color: "#777"
+              }}
+            >
+              <span>{items.length - found.length} restantes</span>
+              <span>{Math.round(progressPercent)}%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* MAP */}
+        <div
+          style={{
+            padding: "18px",
+            borderBottom: "1px solid #262626"
+          }}
+        >
+          <div
+            style={{
+              background: "#111",
+              borderRadius: "14px",
+              overflow: "hidden",
+              border: "1px solid #262626"
+            }}
+          >
+            <SvgMap
+              svgPath={`/maps/${q.media}`}
+              found={items
+                .filter(i => found.includes(i.id))
+                .map(i => i.data?.code)}
+              dueItems={items.map(i => i.data?.code)}
+              onSelect={(code) => {
+                const item = items.find(i => i.data?.code === code);
+
+                if (item && !found.includes(item.id)) {
+                  setFound(prev => [...prev, item.id]);
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* INPUT */}
+        <div
+          style={{
+            padding: "20px 24px"
+          }}
+        >
+          <input
+            autoFocus
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            placeholder="Tape une zone..."
+            style={inputStyle}
+          />
+
+          {/* ZONES */}
+          <div style={gridStyle}>
+            {items.map(item => {
+
+              const isFound = found.includes(item.id);
+
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    textAlign: "center",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    border: isFound
+                      ? "1px solid #2c5c3e"
+                      : "1px solid #2a2a2a",
+                    background: isFound
+                      ? "rgba(63, 185, 80, 0.18)"
+                      : "#161616",
+                    color: isFound
+                      ? "#8ee7af"
+                      : "#555",
+                    transition: "0.15s"
+                  }}
+                >
+                  {isFound ? item.label : "???"}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* FOOTER */}
+          {!showRecap && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: "24px"
+              }}
+            >
+              <div
+                style={{
+                  color: "#666",
+                  fontSize: "13px"
+                }}
+              >
+                Clique sur la carte ou tape les réponses.
+              </div>
+
+              <button
+                onClick={finishMap}
+                style={buttonStyle}
+              >
+                Terminer
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* ABANDON */}
-      {!showRecap && (
-        <button onClick={finishMap} style={{ marginTop: "10px" }}>
-          Terminer / Abandonner
-        </button>
-      )}
-
-      {/* AUTO FIN */}
-      {found.length === items.length && !showRecap && (
-        <button onClick={finishMap}>
-          Voir le résultat
-        </button>
-      )}
 
       {/* RECAP */}
       {showRecap && (
         <div style={overlayStyle}>
 
-          <h2>Résultat</h2>
+          <div style={recapCardStyle}>
 
-          {/* 🗺️ MAP RECAP */}
-          <SvgMap
-            svgPath={`/maps/${q.media}`}
-            found={items
-              .filter(i => found.includes(i.id))
-              .map(i => i.data?.code)}
-            dueItems={[]}
-          />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "22px"
+              }}
+            >
+              <div>
+                <div style={typeBadgeStyle}>
+                  🗺 MAP RESULT
+                </div>
 
-          <table style={{ width: "100%", marginTop: "20px" }}>
-            <thead>
-              <tr>
-                <th>Zone</th>
-                <th>Résultat</th>
-                <th>Difficulté</th>
-              </tr>
-            </thead>
+                <div
+                  style={{
+                    marginTop: "12px",
+                    fontSize: "26px",
+                    fontWeight: "700"
+                  }}
+                >
+                  Résultat
+                </div>
+              </div>
 
-            <tbody>
+              <button
+                onClick={sendResult}
+                style={successButton}
+              >
+                Valider
+              </button>
+            </div>
+
+            <div
+              style={{
+                background: "#111",
+                borderRadius: "14px",
+                overflow: "hidden",
+                border: "1px solid #262626",
+                marginBottom: "24px"
+              }}
+            >
+              <SvgMap
+                svgPath={`/maps/${q.media}`}
+                found={items
+                  .filter(i => found.includes(i.id))
+                  .map(i => i.data?.code)}
+                dueItems={[]}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px"
+              }}
+            >
               {items.map(item => {
+
                 const isFound = found.includes(item.id);
 
                 return (
-                  <tr key={item.id}>
-                    <td>{item.label}</td>
+                  <div
+                    key={item.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "16px",
+                      padding: "14px 16px",
+                      borderRadius: "12px",
+                      background: "#181818",
+                      border: "1px solid #262626"
+                    }}
+                  >
 
-                    <td>
-                      {isFound ? "✅" : "❌"}
-                    </td>
+                    <div>
+                      <div
+                        style={{
+                          fontWeight: "600",
+                          marginBottom: "4px"
+                        }}
+                      >
+                        {item.label}
+                      </div>
 
-                    <td>
-                      {[0, 1, 2].map(qVal => (
-                        <button
-                          key={qVal}
-                          onClick={() => setQuality(item.id, qVal)}
-                          style={{
-                            marginRight: "5px",
-                            background:
-                              itemQuality[item.id] === qVal
-                                ? "#2ecc71"
-                                : "#333"
-                          }}
-                        >
-                          {qVal === 0 ? "❌" : qVal === 1 ? "😐" : "✅"}
-                        </button>
-                      ))}
-                    </td>
-                  </tr>
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: isFound
+                            ? "#7ee2a8"
+                            : "#ff8c94"
+                        }}
+                      >
+                        {isFound ? "Trouvé" : "Manqué"}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "8px"
+                      }}
+                    >
+                      {[0, 1, 2].map(qVal => {
+
+                        const selected =
+                          itemQuality[item.id] === qVal;
+
+                        return (
+                          <button
+                            key={qVal}
+                            onClick={() => setQuality(item.id, qVal)}
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: "10px",
+                              cursor: "pointer",
+                              fontWeight: "600",
+                              border: selected
+                                ? qualityButtonStyles[qVal].border
+                                : "1px solid #333",
+                              background: selected
+                                ? qualityButtonStyles[qVal].background
+                                : "#222",
+                              color: selected
+                                ? qualityButtonStyles[qVal].color
+                                : "#999"
+                            }}
+                          >
+                            {qVal === 0
+                              ? "❌"
+                              : qVal === 1
+                                ? "😐"
+                                : "✅"}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
 
-          <button onClick={sendResult} style={{ marginTop: "20px" }}>
-            Valider
-          </button>
+          </div>
+
         </div>
       )}
-
-    </div>
+    </>
   );
 }
 
 const gridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
-  gap: "5px"
+  gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+  gap: "8px",
+  marginTop: "18px"
 };
 
 const overlayStyle = {
   position: "fixed",
-  top: 0,
-  left: 0,
+  inset: 0,
+  background: "rgba(0,0,0,0.75)",
+  backdropFilter: "blur(6px)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: "30px",
+  zIndex: 1000
+};
+
+const recapCardStyle = {
   width: "100%",
-  height: "100%",
-  background: "#111",
-  padding: "20px",
-  overflow: "auto"
+  maxWidth: "1100px",
+  maxHeight: "100%",
+  overflow: "auto",
+  background: "#1a1a1a",
+  border: "1px solid #2a2a2a",
+  borderRadius: "18px",
+  padding: "24px",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.45)"
 };

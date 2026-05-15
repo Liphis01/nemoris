@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
-import { fadeInStyle, buttonBase } from "../styles";
 import QuestionRenderer from "./QuestionRenderer";
 
-const secondaryButtonStyle = {
-  background: "#2a2a2a",
+const inputStyle = {
+  background: "#151515",
+  border: "1px solid #2a2a2a",
   color: "#eee",
-  border: "1px solid #333",
-  padding: "8px 14px",
-  borderRadius: "6px",
-  cursor: "pointer"
+  borderRadius: "10px",
+  padding: "10px 12px",
+  fontSize: "14px",
+  outline: "none"
 };
 
 export default function Quiz({
@@ -28,117 +28,321 @@ export default function Quiz({
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState("");
 
-  // 🔥 load collections
   useEffect(() => {
     fetch("http://localhost:8000/collections")
       .then(res => res.json())
       .then(setCollections);
   }, []);
 
+  const currentQuestion = questions[currentIndex];
+
   return (
-    <div style={{ maxWidth: "800px", margin: "auto" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#111",
+        color: "#eee",
+        padding: "30px 24px 80px"
+      }}
+    >
 
-      {/* 🔙 Retour */}
-      <button
-        onClick={() => setMode("menu")}
-        style={{ ...buttonBase, ...secondaryButtonStyle }}
-      >
-        ⬅ Retour
-      </button>
-
-      {/* 🔽 FILTRES */}
       <div
         style={{
-          marginTop: "20px",
-          marginBottom: "30px",
-          display: "flex",
-          gap: "15px",
-          flexWrap: "wrap",
-          justifyContent: "center"
+          maxWidth: "1050px",
+          margin: "0 auto"
         }}
       >
 
-        {/* TAGS */}
-        <div>
-          <label style={{ color: "#aaa" }}>Tags</label>
-          <input
-            placeholder="ex: geo, asie"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-          />
-        </div>
+        {/* HEADER */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: "28px",
+            gap: "20px"
+          }}
+        >
 
-        {/* COLLECTION */}
-        <div>
-          <label style={{ color: "#aaa" }}>Collection</label>
-          <select
-            value={selectedCollection}
-            onChange={(e) => setSelectedCollection(e.target.value)}
-          >
-            <option value="">Toutes</option>
-            {collections.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div>
 
-        {/* LIMIT */}
-        <div>
-          <label style={{ color: "#aaa" }}>Questions</label>
-          <input
-            type="number"
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
+            <div
+              style={{
+                color: "#666",
+                fontSize: "12px",
+                letterSpacing: "0.08em",
+                marginBottom: "8px"
+              }}
+            >
+              REVIEW SESSION
+            </div>
+
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "38px",
+                lineHeight: 1,
+                marginBottom: "12px"
+              }}
+            >
+              Révision
+            </h1>
+
+            <div
+              style={{
+                color: "#777",
+                fontSize: "14px"
+              }}
+            >
+              {questions.length} questions disponibles
+            </div>
+
+          </div>
+
+          <button
+            onClick={() => setMode("menu")}
             style={{
-              width: "70px",
-              padding: "6px",
-              borderRadius: "6px",
-              background: "#1e1e1e",
-              color: "#eee",
-              border: "1px solid #333"
+              background: "#1a1a1a",
+              border: "1px solid #2a2a2a",
+              color: "#bbb",
+              padding: "10px 14px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontSize: "14px"
             }}
-          />
+          >
+            ← Retour
+          </button>
+
         </div>
+
+        {/* FILTER BAR */}
+        <div
+          style={{
+            background: "#181818",
+            border: "1px solid #262626",
+            borderRadius: "16px",
+            padding: "18px",
+            marginBottom: "26px",
+            display: "flex",
+            gap: "16px",
+            flexWrap: "wrap",
+            alignItems: "flex-end"
+          }}
+        >
+
+          {/* TAGS */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              minWidth: "240px",
+              flex: 1
+            }}
+          >
+            <div
+              style={{
+                color: "#777",
+                fontSize: "12px",
+                fontWeight: "600"
+              }}
+            >
+              TAGS
+            </div>
+
+            <input
+              placeholder="geo, asie..."
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* COLLECTION */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              minWidth: "200px"
+            }}
+          >
+            <div
+              style={{
+                color: "#777",
+                fontSize: "12px",
+                fontWeight: "600"
+              }}
+            >
+              COLLECTION
+            </div>
+
+            <select
+              value={selectedCollection}
+              onChange={(e) => setSelectedCollection(e.target.value)}
+              style={inputStyle}
+            >
+              <option value="">Toutes</option>
+
+              {collections.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* LIMIT */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              width: "110px"
+            }}
+          >
+            <div
+              style={{
+                color: "#777",
+                fontSize: "12px",
+                fontWeight: "600"
+              }}
+            >
+              LIMIT
+            </div>
+
+            <input
+              type="number"
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              style={inputStyle}
+            />
+          </div>
+
+        </div>
+
+        {/* EMPTY */}
+        {questions.length === 0 && (
+          <div
+            style={{
+              background: "#181818",
+              border: "1px solid #262626",
+              borderRadius: "18px",
+              padding: "60px",
+              textAlign: "center",
+              color: "#777"
+            }}
+          >
+            🎉 Aucune question pour aujourd’hui
+          </div>
+        )}
+
+        {/* FINISHED */}
+        {currentIndex >= questions.length && questions.length > 0 && (
+          <div
+            style={{
+              background: "#181818",
+              border: "1px solid #262626",
+              borderRadius: "18px",
+              padding: "60px",
+              textAlign: "center"
+            }}
+          >
+
+            <div
+              style={{
+                fontSize: "42px",
+                marginBottom: "16px"
+              }}
+            >
+              🎉
+            </div>
+
+            <div
+              style={{
+                fontSize: "28px",
+                fontWeight: "700",
+                marginBottom: "10px"
+              }}
+            >
+              Session terminée
+            </div>
+
+            <div
+              style={{
+                color: "#777"
+              }}
+            >
+              Toutes les questions ont été révisées.
+            </div>
+
+          </div>
+        )}
+
+        {/* QUESTION */}
+        {currentQuestion && currentIndex < questions.length && (
+          <>
+
+            {/* TOP BAR */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "18px"
+              }}
+            >
+
+              <div
+                style={{
+                  color: "#888",
+                  fontSize: "14px"
+                }}
+              >
+                Question {currentIndex + 1} / {questions.length}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end"
+                }}
+              >
+                {(currentQuestion.tags || []).map(tag => (
+                  <div
+                    key={tag}
+                    style={{
+                      background: "#2b2047",
+                      color: "#b69cff",
+                      padding: "4px 10px",
+                      borderRadius: "999px",
+                      fontSize: "11px",
+                      fontWeight: "600"
+                    }}
+                  >
+                    #{tag}
+                  </div>
+                ))}
+              </div>
+
+            </div>
+
+            <QuestionRenderer
+              q={currentQuestion}
+              currentIndex={currentIndex}
+              showAnswer={showAnswer}
+              setShowAnswer={setShowAnswer}
+              handleTextAnswer={handleTextAnswer}
+              handleMapComplete={handleMapComplete}
+            />
+
+          </>
+        )}
+
       </div>
-
-      {/* 🔽 AUCUNE QUESTION */}
-      {questions.length === 0 && (
-        <div style={{ color: "#888" }}>
-          Aucune question pour aujourd’hui 🎉
-        </div>
-      )}
-
-      {/* 🔽 FIN */}
-      {currentIndex >= questions.length && questions.length > 0 && (
-        <div style={{ color: "#888" }}>
-          Session terminée 🎉
-        </div>
-      )}
-
-      {/* 🔽 QUESTION */}
-      {questions.length > 0 && currentIndex < questions.length && (
-        <>
-          <div style={{ marginBottom: "15px", color: "#888" }}>
-            Question {currentIndex + 1} / {questions.length}
-          </div>
-
-          {/* 🔥 TAGS affichés */}
-          <div style={{ marginBottom: "10px", color: "#aaa" }}>
-            {(questions[currentIndex].tags || []).join(", ")}
-          </div>
-
-          <QuestionRenderer
-            q={questions[currentIndex]}
-            currentIndex={currentIndex}
-            showAnswer={showAnswer}
-            setShowAnswer={setShowAnswer}
-            handleTextAnswer={handleTextAnswer}
-            handleMapComplete={handleMapComplete}
-          />
-        </>
-      )}
 
     </div>
   );

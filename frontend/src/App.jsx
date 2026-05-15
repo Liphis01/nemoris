@@ -48,7 +48,7 @@ function App() {
     fontFamily: "Arial, sans-serif",
     display: "flex",
     flexDirection: "column",
-    overflow: "hidden",
+    overflow: "auto",
     boxSizing: "border-box"
   };
 

@@ -1,40 +1,14 @@
-import { fadeInStyle, buttonBase } from "../styles";
+import { fadeInStyle } from "../styles";
 
-const mainButtonStyle = {
-    background: "#1f1f1f",
-    color: "#eee",
-    border: "1px solid #333",
-    padding: "15px",
-    borderRadius: "8px",
+const answerButtonStyle = {
+    flex: 1,
+    border: "none",
+    borderRadius: "12px",
+    padding: "14px",
+    fontWeight: "600",
     cursor: "pointer",
-    fontSize: "16px"
-};
-
-const dangerButton = {
-    background: "#ff4d4f",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "6px",
-    cursor: "pointer"
-};
-
-const secondaryButton = {
-    background: "#444",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "6px",
-    cursor: "pointer"
-};
-
-const successButton = {
-    background: "#3fb950",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "6px",
-    cursor: "pointer"
+    transition: "0.12s ease",
+    fontSize: "15px"
 };
 
 export default function TextQuestion({
@@ -44,99 +18,205 @@ export default function TextQuestion({
     setShowAnswer,
     handleAnswer
 }) {
+
     return (
         <div
             key={currentIndex}
             style={{
-                background: "#1e1e1e",
-                padding: "30px",
-                borderRadius: "10px",
-                marginBottom: "20px",
+                background: "#181818",
+                border: "1px solid #262626",
+                borderRadius: "22px",
+                overflow: "hidden",
                 ...fadeInStyle
             }}
         >
-            <div style={{ marginBottom: "10px", color: "#888" }}>
-                Question
-            </div>
 
+            {/* HEADER */}
             <div
                 style={{
-                    fontSize: "22px",
-                    fontWeight: "bold"
+                    padding: "18px 24px",
+                    borderBottom: "1px solid #262626",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    background: "#161616"
                 }}
             >
-                {q.question}
-            </div>
 
-            {/* ✅ media au lieu de fichier */}
-            {q.media && q.type_q === "text" && (
-                <img
-                    src={q.media}
-                    alt="question"
+                <div
                     style={{
-                        maxWidth: "100%",
-                        borderRadius: "10px",
-                        marginTop: "15px"
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px"
                     }}
-                />
-            )}
+                >
 
-            {!showAnswer && (
-                <div style={{ marginTop: "25px" }}>
-                    <button
-                        onClick={() => setShowAnswer(true)}
-                        style={{ ...buttonBase, ...mainButtonStyle }}
-                        onMouseEnter={(e) => e.target.style.opacity = "0.8"}
-                        onMouseLeave={(e) => e.target.style.opacity = "1"}
-                        onMouseDown={(e) => e.target.style.transform = "scale(0.95)"}
-                        onMouseUp={(e) => e.target.style.transform = "scale(1)"}
-                    >
-                        Voir la réponse
-                    </button>
-                </div>
-            )}
-
-            {showAnswer && (
-                <div style={{ marginTop: "25px", ...fadeInStyle }}>
-                    <div style={{ color: "#888", marginBottom: "5px" }}>
-                        Réponse
-                    </div>
-
-                    <div style={{ color: "#ccc", marginBottom: "20px" }}>
-                        {q.answer}
-                    </div>
-
-                    {/* 🔘 Boutons réponse */}
                     <div
                         style={{
-                            display: "flex",
-                            justifyContent: "center",
-                            gap: "15px"
+                            background: "#2b2047",
+                            color: "#b69cff",
+                            padding: "4px 10px",
+                            borderRadius: "999px",
+                            fontSize: "11px",
+                            fontWeight: "700"
+                        }}
+                    >
+                        TEXT
+                    </div>
+
+                    <div
+                        style={{
+                            color: "#666",
+                            fontSize: "13px"
+                        }}
+                    >
+                        Question #{q.id}
+                    </div>
+
+                </div>
+
+            </div>
+
+            {/* CONTENT */}
+            <div
+                style={{
+                    padding: "34px"
+                }}
+            >
+
+                {/* QUESTION */}
+                <div
+                    style={{
+                        fontSize: "34px",
+                        lineHeight: 1.35,
+                        fontWeight: "700",
+                        color: "#f3f3f3",
+                        marginBottom: q.media ? "24px" : "0"
+                    }}
+                >
+                    {q.question}
+                </div>
+
+                {/* IMAGE */}
+                {q.media && (
+                    <img
+                        src={q.media}
+                        alt="question"
+                        style={{
+                            width: "100%",
+                            borderRadius: "18px",
+                            marginTop: "18px",
+                            border: "1px solid #2a2a2a"
+                        }}
+                    />
+                )}
+
+                {/* SHOW ANSWER */}
+                {!showAnswer && (
+                    <div
+                        style={{
+                            marginTop: "34px"
                         }}
                     >
                         <button
-                            style={dangerButton}
-                            onClick={() => handleAnswer(0)}
+                            onClick={() => setShowAnswer(true)}
+                            style={{
+                                background: "#232323",
+                                border: "1px solid #333",
+                                color: "#eee",
+                                padding: "16px 22px",
+                                borderRadius: "14px",
+                                cursor: "pointer",
+                                fontWeight: "600",
+                                fontSize: "15px"
+                            }}
                         >
-                            ❌ Faux
-                        </button>
-
-                        <button
-                            style={secondaryButton}
-                            onClick={() => handleAnswer(1)}
-                        >
-                            😐 Dur
-                        </button>
-
-                        <button
-                            style={successButton}
-                            onClick={() => handleAnswer(2)}
-                        >
-                            ✅ Facile
+                            Voir la réponse
                         </button>
                     </div>
-                </div>
-            )}
+                )}
+
+                {/* ANSWER */}
+                {showAnswer && (
+                    <div
+                        style={{
+                            marginTop: "36px",
+                            paddingTop: "28px",
+                            borderTop: "1px solid #2a2a2a"
+                        }}
+                    >
+
+                        <div
+                            style={{
+                                color: "#666",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                letterSpacing: "0.08em",
+                                marginBottom: "12px"
+                            }}
+                        >
+                            ANSWER
+                        </div>
+
+                        <div
+                            style={{
+                                color: "#ddd",
+                                fontSize: "26px",
+                                lineHeight: 1.5,
+                                marginBottom: "34px"
+                            }}
+                        >
+                            {q.answer}
+                        </div>
+
+                        {/* BUTTONS */}
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: "14px"
+                            }}
+                        >
+
+                            <button
+                                onClick={() => handleAnswer(0)}
+                                style={{
+                                    ...answerButtonStyle,
+                                    background: "#3a1f24",
+                                    color: "#ff9aa5"
+                                }}
+                            >
+                                ❌ Faux
+                            </button>
+
+                            <button
+                                onClick={() => handleAnswer(1)}
+                                style={{
+                                    ...answerButtonStyle,
+                                    background: "#35311f",
+                                    color: "#ffd36b"
+                                }}
+                            >
+                                😐 Dur
+                            </button>
+
+                            <button
+                                onClick={() => handleAnswer(2)}
+                                style={{
+                                    ...answerButtonStyle,
+                                    background: "#1d3a2b",
+                                    color: "#7ee2a8"
+                                }}
+                            >
+                                ✅ Facile
+                            </button>
+
+                        </div>
+
+                    </div>
+                )}
+
+            </div>
+
         </div>
     );
 }

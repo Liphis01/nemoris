@@ -9,7 +9,7 @@
 chatgpt: Toujours dans le même style, améliore l'ui de la review pour que ce soit clair, propre, agréable à utiliser, et joli. Actuellement le code c'est ça :
 
 
-
+puis faire le hover next review avec chatgpt pour voir si c'est mieux
 
 
 
@@ -51,9 +51,10 @@ color: "#ff85c2",
 - dans manage, afficher toutes les stats d'une question
 - ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
 - Afficher un calendrier pour voir les jours où on a joué et combien de questions on a fait chaque jour + futures questions
+- trier les questions dans manage par thème, par groupe, par progression, etc...
 
 ## refactors
-- refactor général des styles redondants, etc...
+- refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
 - déplacer la gestion de progress pour les nouvelle questions directement dans create_question (backend)
 - stocker uniquement l'id des groupes dans les questions
 
@@ -62,6 +63,7 @@ color: "#ff85c2",
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - pouvoir manuellement modifier les dates des questions
+- ia pour proposer des qcm si on a pas la réponse (TLMVPSP)
   
 
 # React + Vite
