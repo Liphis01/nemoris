@@ -52,7 +52,14 @@ export default function MapEditor({
   }, [selectedZone, zones]);
 
   function handleSelect(code) {
-    let zone = zones.find(z => (z.data?.code || z.code) === code);
+    let nextZones = zones;
+
+    if (editing && !editing.answer) {
+      nextZones = zones.filter(z => z.id !== editing.id);
+      setZones(nextZones);
+    }
+
+    let zone = nextZones.find(z => (z.data?.code || z.code) === code);
 
     if (!zone) {
       zone = {
