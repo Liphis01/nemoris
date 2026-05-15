@@ -10,6 +10,7 @@ export default function MapEditor({
 
   const [items, setItems] = useState([]); // List of zone codes on the map
   const [zones, setZones] = useState([]); // List of questions linked to this group
+  const initialZonesRef = useRef([]);
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
@@ -30,6 +31,7 @@ export default function MapEditor({
           item => item.type_q === "map" && item.group.id === group.id
         );
         setZones(mapZones);
+        initialZonesRef.current = mapZones;
         setItems(mapZones.map(z => z.data?.code || z.code));
       } catch (err) {
         console.error("Error loading zones:", err);
@@ -153,6 +155,17 @@ export default function MapEditor({
   }
 
   async function save() {
+    // Remove any currently editing zone that has an empty answer
+    const zonesToSave = editing && !editing.answer
+      ? zones.filter((z) => z.id !== editing.id)
+      : zones;
+
+    if (editing && !editing.answer) {
+      setZones(zonesToSave);
+      setEditing(null);
+      setItems(zonesToSave.map((z) => z.data?.code || z.code));
+    }
+
     await fetch(`http://localhost:8000/groups/${group.id}`, {
       method: "PUT",
       headers: {
@@ -165,7 +178,7 @@ export default function MapEditor({
       })
     });
 
-    for (const z of zones) {
+    for (const z of zonesToSave) {
       const code = z.data?.code;
       const aliases = z.data?.aliases || [];
 
@@ -209,8 +222,13 @@ export default function MapEditor({
       }
     }
 
+    // Compute delta between saved zones and initial loaded zones
+    const initialCount = (initialZonesRef.current || []).length;
+    const newCount = zonesToSave.length;
+    const delta = newCount - initialCount;
+
     if (onSave) {
-      await onSave();
+      await onSave(delta);
     }
 
     if (onClose) {

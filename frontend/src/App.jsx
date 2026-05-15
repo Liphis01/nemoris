@@ -264,6 +264,7 @@ function App() {
 
     const createdGroup = await res.json();
     alert(`Groupe créé : ${createdGroup.name} (#${createdGroup.id})`);
+    setAllGroups(prev => [...prev, createdGroup]);
     setNewGroup({
       name: "",
       type_group: "map",

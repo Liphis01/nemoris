@@ -82,7 +82,7 @@ export default function ManagePreview({
       setSaveStatus(null);
       return;
     }
-
+    
     setDraft({
       question: selectedQuestion.question || "",
       answer: selectedQuestion.answer || "",
@@ -280,7 +280,19 @@ export default function ManagePreview({
       >
         <MapEditor
           group={group}
-          onSave={reloadAllData}
+          onSave={async (delta) => {
+            if (typeof delta === "number") {
+              setAllGroups(prev =>
+                prev.map(g =>
+                  g.id === group.id
+                    ? { ...g, question_count: Math.max(0, (g.question_count || 0) + delta) }
+                    : g
+                )
+              );
+            } else {
+              await reloadAllData();
+            }
+          }}
           onClose={() => { }}
           selectedZone={editing}
         />

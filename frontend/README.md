@@ -40,6 +40,7 @@ color: "#ff85c2",
 - dans le recap, afficher toutes les stats intéressantes des questions pour voir les progrès
 - dans le recap, cliquer sur une question fait un zoom sur la zone et inversement
 - mettre des tags sur les groupes les propage aux questions
+- remplacer l'affichage du nombre de zones actuelles dans le header de map editor par le nombre total de zones de la map (même celles sans question) et éventuellement un indicateur du pourcentage de zones créées (un petit cercle qui se remplit par exemple)
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
@@ -52,6 +53,8 @@ color: "#ff85c2",
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - pouvoir manuellement modifier les dates des questions
 - ia pour proposer des qcm si on a pas la réponse (TLMVPSP)
+- faire un executable
+- faire une extension pour chrome pour facilement créer des questions à partir de n'importe quelle page web (ex : pour faire une question sur une ville, aller sur la page wikipedia de la ville et créer la question à partir de là en sélectionnant la zone de la carte) (avec de l'ia éventuellement pour suggérer la question et les réponses à partir du contenu de la page)
   
 
 # React + Vite
