@@ -167,7 +167,19 @@ function App() {
       method: "DELETE",
     });
 
-    setAllQuestions(allQuestions.filter((q) => q.id !== id));
+    const deletedQuestion = allQuestions.find((q) => q.id === id);
+
+    setAllQuestions((prev) => prev.filter((q) => q.id !== id));
+
+    if (deletedQuestion?.group?.id) {
+      setAllGroups((prev) =>
+        prev.map((g) =>
+          g.id === deletedQuestion.group.id
+            ? { ...g, question_count: Math.max(0, (g.question_count || 0) - 1) }
+            : g
+        )
+      );
+    }
   }
 
   async function deleteGroup(id) {
