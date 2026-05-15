@@ -53,64 +53,64 @@ export default function SvgMap({
     }
 
     useEffect(() => {
-    let cleanupFns = [];
+        let cleanupFns = [];
 
-    fetch(svgPath)
-        .then((res) => res.text())
-        .then((svg) => {
-            containerRef.current.innerHTML = svg;
+        fetch(svgPath)
+            .then((res) => res.text())
+            .then((svg) => {
+                containerRef.current.innerHTML = svg;
 
-            const svgEl = containerRef.current.querySelector("svg");
-            if (!svgEl) return;
+                const svgEl = containerRef.current.querySelector("svg");
+                if (!svgEl) return;
 
-            svgEl.style.width = "100%";
-            svgEl.style.height = "100%";
-            svgEl.style.display = "block";
+                svgEl.style.width = "100%";
+                svgEl.style.height = "100%";
+                svgEl.style.display = "block";
 
-            const getColor = (code) => {
-                if (selected === code) return "#f39c12";
-                if (found.includes(code)) return "#2ecc71";
-                if (missed.includes(code)) return "#e74c3c";
-                if (dueItems.includes(code)) return "#f1c40f";
-                return "#444";
-            };
-
-            containerRef.current.querySelectorAll("path").forEach((el) => {
-                const code = el.getAttribute("data-code");
-
-                el.style.fill = getColor(code);
-                el.style.cursor = "pointer";
-
-                const handleClick = () => {
-                    if (code && onSelect) onSelect(code);
+                const getColor = (code) => {
+                    if (selected === code) return "#f39c12";
+                    if (found.includes(code)) return "#21eb75";
+                    if (missed.includes(code)) return "#e93723";
+                    if (dueItems.includes(code)) return "#0e3e5adc";
+                    return "#444";
                 };
 
-                const handleEnter = () => {
-                    if (!found.includes(code) && selected !== code) {
-                        el.style.fill = "#888";
-                    }
-                };
+                containerRef.current.querySelectorAll("path").forEach((el) => {
+                    const code = el.getAttribute("data-code");
 
-                const handleLeave = () => {
                     el.style.fill = getColor(code);
-                };
+                    el.style.cursor = "pointer";
 
-                el.addEventListener("click", handleClick);
-                el.addEventListener("mouseenter", handleEnter);
-                el.addEventListener("mouseleave", handleLeave);
+                    const handleClick = () => {
+                        if (code && onSelect) onSelect(code);
+                    };
 
-                cleanupFns.push(() => {
-                    el.removeEventListener("click", handleClick);
-                    el.removeEventListener("mouseenter", handleEnter);
-                    el.removeEventListener("mouseleave", handleLeave);
+                    const handleEnter = () => {
+                        if (!found.includes(code) && selected !== code) {
+                            el.style.fill = "#888";
+                        }
+                    };
+
+                    const handleLeave = () => {
+                        el.style.fill = getColor(code);
+                    };
+
+                    el.addEventListener("click", handleClick);
+                    el.addEventListener("mouseenter", handleEnter);
+                    el.addEventListener("mouseleave", handleLeave);
+
+                    cleanupFns.push(() => {
+                        el.removeEventListener("click", handleClick);
+                        el.removeEventListener("mouseenter", handleEnter);
+                        el.removeEventListener("mouseleave", handleLeave);
+                    });
                 });
             });
-        });
 
-    return () => {
-        cleanupFns.forEach(fn => fn());
-    };
-}, [svgPath, found, missed, selected, dueItems]);
+        return () => {
+            cleanupFns.forEach(fn => fn());
+        };
+    }, [svgPath, found, missed, selected, dueItems]);
 
     useEffect(() => {
         const el = wrapperRef.current;

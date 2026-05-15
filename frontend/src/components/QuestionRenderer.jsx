@@ -20,7 +20,7 @@ export default function QuestionRenderer({
     if (q.type_q === "map" && q.media) {
         return (
             <MapQuestion
-                q={q}
+                group={q}
                 items={q.items}
                 media={q.media}
                 onComplete={handleMapComplete}

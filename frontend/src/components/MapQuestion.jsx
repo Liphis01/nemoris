@@ -47,7 +47,7 @@ const successButton = {
 
 const qualityButtonStyles = {
   0: {
-    background: "#3a1f22",
+    background: "#3a3420",
     border: "1px solid #6b2b31",
     color: "#ff8c94"
   },
@@ -57,15 +57,13 @@ const qualityButtonStyles = {
     color: "#f3d36a"
   },
   2: {
-    background: "#1d3a29",
+    background: "#3a3420",
     border: "1px solid #2c5c3e",
     color: "#7ee2a8"
   }
 };
 
-export default function MapQuestion({ q, onComplete }) {
-
-  const items = q.items || [];
+export default function MapQuestion({ group, items, media, onComplete }) {
 
   const [input, setInput] = useState("");
   const [found, setFound] = useState([]);
@@ -87,8 +85,8 @@ export default function MapQuestion({ q, onComplete }) {
   function handleSubmit() {
     const match = items.find(item => matches(item, input));
 
-    if (match && !found.includes(match.id)) {
-      setFound(prev => [...prev, match.id]);
+    if (match && !found.includes(match.question_id)) {
+      setFound(prev => [...prev, match.question_id]);
     }
 
     setInput("");
@@ -98,7 +96,7 @@ export default function MapQuestion({ q, onComplete }) {
     const initial = {};
 
     items.forEach(item => {
-      initial[item.id] = found.includes(item.id) ? 2 : 1;
+      initial[item.question_id] = found.includes(item.question_id) ? 2 : 0;
     });
 
     setItemQuality(initial);
@@ -107,6 +105,7 @@ export default function MapQuestion({ q, onComplete }) {
 
   async function sendResult() {
     await sendMapAnswer(itemQuality);
+    console.log("answer sent", itemQuality);
 
     setShowRecap(false);
     setFound([]);
@@ -168,7 +167,7 @@ export default function MapQuestion({ q, onComplete }) {
                   color: "#f3f3f3"
                 }}
               >
-                {q.group_name || q.media}
+                {group.name || group.media}
               </div>
             </div>
 
@@ -262,16 +261,16 @@ export default function MapQuestion({ q, onComplete }) {
             }}
           >
             <SvgMap
-              svgPath={`/maps/${q.media}`}
+              svgPath={`/maps/${group.media}`}
               found={items
-                .filter(i => found.includes(i.id))
-                .map(i => i.data?.code)}
-              dueItems={items.map(i => i.data?.code)}
+                .filter(i => found.includes(i.question_id))
+                .map(i => i.code)}
+              dueItems={items.map(i => i.code)}
               onSelect={(code) => {
-                const item = items.find(i => i.data?.code === code);
+                const item = items.find(i => i.code === code);
 
-                if (item && !found.includes(item.id)) {
-                  setFound(prev => [...prev, item.id]);
+                if (item && !found.includes(item.question_id)) {
+                  setFound(prev => [...prev, item.question_id]);
                 }
               }}
             />
@@ -371,10 +370,13 @@ export default function MapQuestion({ q, onComplete }) {
               }}
             >
               <SvgMap
-                svgPath={`/maps/${q.media}`}
+                svgPath={`/maps/${group.media}`}
                 found={items
-                  .filter(i => found.includes(i.id))
-                  .map(i => i.data?.code)}
+                  .filter(i => found.includes(i.question_id))
+                  .map(i => i.code)}
+                missed={items
+                  .filter(i => !found.includes(i.question_id))
+                  .map(i => i.code)}
                 dueItems={[]}
               />
             </div>
@@ -388,11 +390,11 @@ export default function MapQuestion({ q, onComplete }) {
             >
               {items.map(item => {
 
-                const isFound = found.includes(item.id);
+                const isFound = found.includes(item.question_id);
 
                 return (
                   <div
-                    key={item.id}
+                    key={item.question_id}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -414,17 +416,6 @@ export default function MapQuestion({ q, onComplete }) {
                       >
                         {item.label}
                       </div>
-
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          color: isFound
-                            ? "#7ee2a8"
-                            : "#ff8c94"
-                        }}
-                      >
-                        {isFound ? "Trouvé" : "Manqué"}
-                      </div>
                     </div>
 
                     <div
@@ -436,12 +427,12 @@ export default function MapQuestion({ q, onComplete }) {
                       {[0, 1, 2].map(qVal => {
 
                         const selected =
-                          itemQuality[item.id] === qVal;
+                          itemQuality[item.question_id] === qVal;
 
                         return (
                           <button
                             key={qVal}
-                            onClick={() => setQuality(item.id, qVal)}
+                            onClick={() => setQuality(item.question_id, qVal)}
                             style={{
                               padding: "10px 12px",
                               borderRadius: "10px",

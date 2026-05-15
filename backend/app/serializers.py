@@ -36,9 +36,11 @@ def serialize_review_question(question):
 def serialize_map_group(group):
 
     return {
+        "group_id": group.id,
+        
         "type_q": "map",
 
-        "group_id": group.id,
+        "name": group.name,
 
         "media": group.media,
 
@@ -54,7 +56,7 @@ def serialize_map_item(question):
 
         "code": question.data.get("code") if question.data else None,
 
-        "label": question.question,
+        "label": question.answer,
 
         "aliases": question.data.get("aliases", []) if question.data else [],
 

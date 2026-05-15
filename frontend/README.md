@@ -10,7 +10,7 @@ color: "#ff85c2",
 
 
 ## bugs
-- bug des images
+- bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
 - ouvrir le map editor depuis une question map le fait buguer
 - les aliases ne fonctionnent pas bien (la sauvegarde)
@@ -21,6 +21,7 @@ color: "#ff85c2",
 
 ## features
 - filtrer les groupes dans manage
+- quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
 - arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
 - questions type timeline (en groupe comme maps)
 - ajouter un timer pour les questions
@@ -36,6 +37,8 @@ color: "#ff85c2",
 - mettre les différents modes de jetpunk pour les maps
 - en review : les plus durs d'abord
 - faire le hover next review avec chatgpt pour voir si c'est mieux
+- dans le recap, afficher toutes les stats intéressantes des questions pour voir les progrès
+- dans le recap, cliquer sur une question fait un zoom sur la zone et inversement
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
