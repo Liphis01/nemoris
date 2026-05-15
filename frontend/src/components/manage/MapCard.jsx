@@ -29,7 +29,10 @@ export default function MapCard({
       style={{
         position: "relative",
         padding: "10px 12px",
-        borderBottom: "1px solid #262626",
+        border: selected
+          ? "1px solid #3a3a3a"
+          : "1px solid #262626",
+        borderRadius: "14px",
         cursor: "pointer",
         background: selected ? "#252525" : "transparent",
         transition: "background 0.12s ease, opacity 0.18s ease, transform 0.18s ease",
