@@ -293,39 +293,6 @@ export default function MapQuestion({ q, onComplete }) {
             style={inputStyle}
           />
 
-          {/* ZONES */}
-          <div style={gridStyle}>
-            {items.map(item => {
-
-              const isFound = found.includes(item.id);
-
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "10px",
-                    textAlign: "center",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    border: isFound
-                      ? "1px solid #2c5c3e"
-                      : "1px solid #2a2a2a",
-                    background: isFound
-                      ? "rgba(63, 185, 80, 0.18)"
-                      : "#161616",
-                    color: isFound
-                      ? "#8ee7af"
-                      : "#555",
-                    transition: "0.15s"
-                  }}
-                >
-                  {isFound ? item.label : "???"}
-                </div>
-              );
-            })}
-          </div>
-
           {/* FOOTER */}
           {!showRecap && (
             <div
