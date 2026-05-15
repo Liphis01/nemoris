@@ -14,12 +14,14 @@ export default function ManageList({
   deleteQuestion,
   deleteGroup
 }) {
+
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
 
   function handleDeleteQuestion(id) {
     setRemovingId(id);
     setOpenDeleteId(null);
+
     setTimeout(async () => {
       try {
         await deleteQuestion(id);
@@ -32,6 +34,7 @@ export default function ManageList({
   function handleDeleteGroup(id) {
     setRemovingId(id);
     setOpenDeleteId(null);
+
     setTimeout(async () => {
       try {
         await deleteGroup(id);
@@ -45,9 +48,14 @@ export default function ManageList({
     if (openDeleteId === null) return;
 
     function handlePointerDown(event) {
-      const path = event.composedPath ? event.composedPath() : event.path || [];
+      const path = event.composedPath
+        ? event.composedPath()
+        : event.path || [];
+
       const clickedInside = path.some(
-        (el) => el instanceof HTMLElement && el.dataset?.deleteCardId === String(openDeleteId)
+        (el) =>
+          el instanceof HTMLElement &&
+          el.dataset?.deleteCardId === String(openDeleteId)
       );
 
       if (!clickedInside) {
@@ -64,70 +72,217 @@ export default function ManageList({
     };
   }, [openDeleteId]);
 
+  const items =
+    viewMode === "questions"
+      ? filteredQuestions
+      : allGroups;
+
   return (
     <div
       style={{
-        borderRight: "1px solid #2a2a2a",
-        overflow: "auto",
-        background: "#141414"
+        height: "100%",
+        overflow: "hidden",
+        background: "#111",
+        display: "flex",
+        flexDirection: "column",
+        borderRight: "1px solid #262626"
       }}
     >
-      {viewMode === "questions" && filteredQuestions.map((q) => {
 
-        if (q.type_q === "map") {
+      {/* HEADER */}
+      <div
+        style={{
+          padding: "14px 18px",
+          borderBottom: "1px solid #262626",
+          background: "#151515",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexShrink: 0
+        }}
+      >
+
+        <div>
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#666",
+              fontWeight: "700",
+              letterSpacing: "0.08em",
+              marginBottom: "5px"
+            }}
+          >
+            {viewMode === "questions"
+              ? "QUESTIONS"
+              : "GROUPS"}
+          </div>
+
+          <div
+            style={{
+              fontSize: "18px",
+              fontWeight: "700",
+              color: "#eee"
+            }}
+          >
+            {items.length} éléments
+          </div>
+        </div>
+      </div>
+
+      {/* LIST */}
+      <div
+        style={{
+          flex: 1,
+          overflow: "auto",
+          padding: "14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          minHeight: 0
+        }}
+      >
+
+        {viewMode === "questions" && filteredQuestions.map((q) => {
+
+          const sharedProps = {
+            key: q.id,
+            selected: selectedQuestion?.id === q.id,
+            deleteOpen: openDeleteId === q.id,
+            isRemoving: removingId === q.id
+          };
+
+          if (q.type_q === "map") {
+
+            return (
+              <div
+                key={q.id}
+                style={{
+                  transition: "all 0.18s ease",
+                  opacity: removingId === q.id ? 0 : 1,
+                  transform:
+                    removingId === q.id
+                      ? "scale(0.96)"
+                      : "scale(1)"
+                }}
+              >
+
+                <MapCard
+                  {...sharedProps}
+                  q={q}
+
+                  onClick={() => {
+                    setOpenDeleteId(null);
+                    setSelectedQuestion(q);
+                    setEditing(q.data?.code);
+                  }}
+
+                  onDeleteOpen={() => setOpenDeleteId(q.id)}
+
+                  closeDelete={() => setOpenDeleteId(null)}
+
+                  deleteQuestion={() =>
+                    handleDeleteQuestion(q.id)
+                  }
+                />
+
+              </div>
+            );
+          }
+
           return (
-            <MapCard
+            <div
               key={q.id}
-              q={q}
-              selected={selectedQuestion?.id === q.id}
-              deleteOpen={openDeleteId === q.id}
-              isRemoving={removingId === q.id}
+              style={{
+                transition: "all 0.18s ease",
+                opacity: removingId === q.id ? 0 : 1,
+                transform:
+                  removingId === q.id
+                    ? "scale(0.96)"
+                    : "scale(1)"
+              }}
+            >
+
+              <QuestionCard
+                {...sharedProps}
+                q={q}
+
+                onClick={() => {
+                  setOpenDeleteId(null);
+                  setSelectedQuestion(q);
+                }}
+
+                onDeleteOpen={() => setOpenDeleteId(q.id)}
+
+                closeDelete={() => setOpenDeleteId(null)}
+
+                deleteQuestion={() =>
+                  handleDeleteQuestion(q.id)
+                }
+              />
+
+            </div>
+          );
+        })}
+
+        {viewMode === "groups" && allGroups.map((group) => (
+
+          <div
+            key={group.id}
+            style={{
+              transition: "all 0.18s ease",
+              opacity: removingId === group.id ? 0 : 1,
+              transform:
+                removingId === group.id
+                  ? "scale(0.96)"
+                  : "scale(1)"
+            }}
+          >
+
+            <GroupCardItem
+              group={group}
+              selected={selectedQuestion?.id === group.id}
+              deleteOpen={openDeleteId === group.id}
+              isRemoving={removingId === group.id}
+
               onClick={() => {
                 setOpenDeleteId(null);
-                setSelectedQuestion(q);
-                setEditing(q.data?.code);
+                setSelectedQuestion(group);
               }}
-              onDeleteOpen={() => setOpenDeleteId(q.id)}
-              closeDelete={() => setOpenDeleteId(null)}
-              deleteQuestion={() => handleDeleteQuestion(q.id)}
+
+              onDeleteOpen={() =>
+                setOpenDeleteId(group.id)
+              }
+
+              closeDelete={() =>
+                setOpenDeleteId(null)
+              }
+
+              deleteGroup={() =>
+                handleDeleteGroup(group.id)
+              }
             />
-          );
-        }
 
-        return (
-          <QuestionCard
-            key={q.id}
-            q={q}
-            selected={selectedQuestion?.id === q.id}
-            deleteOpen={openDeleteId === q.id}
-            isRemoving={removingId === q.id}
-            onClick={() => {
-              setOpenDeleteId(null);
-              setSelectedQuestion(q);
+          </div>
+
+        ))}
+
+        {/* EMPTY */}
+        {items.length === 0 && (
+          <div
+            style={{
+              marginTop: "40px",
+              textAlign: "center",
+              color: "#666",
+              fontSize: "14px",
+              padding: "30px"
             }}
-            onDeleteOpen={() => setOpenDeleteId(q.id)}
-            closeDelete={() => setOpenDeleteId(null)}
-            deleteQuestion={() => handleDeleteQuestion(q.id)}
-          />
-        );
-      })}
+          >
+            Aucun élément
+          </div>
+        )}
 
-      {viewMode === "groups" && allGroups.map((group) => (
-        <GroupCardItem
-          key={group.id}
-          group={group}
-          selected={selectedQuestion?.id === group.id}
-          deleteOpen={openDeleteId === group.id}
-          isRemoving={removingId === group.id}
-          onClick={() => {
-            setOpenDeleteId(null);
-            setSelectedQuestion(group);
-          }}
-          onDeleteOpen={() => setOpenDeleteId(group.id)}
-          closeDelete={() => setOpenDeleteId(null)}
-          deleteGroup={() => handleDeleteGroup(group.id)}
-        />
-      ))}
+      </div>
+
     </div>
   );
 }

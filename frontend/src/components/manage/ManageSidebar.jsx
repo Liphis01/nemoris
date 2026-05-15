@@ -15,169 +15,253 @@ export default function ManageSidebar({
   viewMode,
   setViewMode
 }) {
-  const sidebarStyle = {
-    borderRight: "1px solid #2a2a2a",
-    padding: "20px",
-    overflow: "auto",
-    background: "#181818"
-  };
 
   const inputStyle = {
     width: "100%",
-    padding: "10px",
-    marginBottom: "10px",
-    borderRadius: "8px",
-    border: "1px solid #333",
+    padding: "11px 12px",
+    borderRadius: "10px",
+    border: "1px solid #2f2f2f",
     background: "#111",
     color: "#eee",
-    boxSizing: "border-box"
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: "14px"
   };
 
-  const buttonToggleStyle = (isActive) => ({
+  const toggleButtonStyle = (active, color) => ({
     flex: 1,
-    padding: "10px",
-    background: isActive ? "#5a5a8a" : "#2a2a2a",
-    color: "#eee",
-    border: "1px solid #333",
-    borderRadius: "6px",
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: active
+      ? `1px solid ${color}`
+      : "1px solid #2d2d2d",
+    background: active
+      ? `${color}22`
+      : "#181818",
+    color: active
+      ? color
+      : "#888",
     cursor: "pointer",
-    transition: "all 0.2s",
-    // fontWeight: isActive ? "bold" : "normal"
+    transition: "all 0.15s ease",
+    fontWeight: "600",
+    fontSize: "13px"
   });
 
   return (
-    <div style={sidebarStyle}>
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        borderRight: "1px solid #262626",
+        background: "#151515",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden"
+      }}
+    >
 
-      <button
-        onClick={() => setMode("menu")}
+      {/* HEADER */}
+      <div
         style={{
-          width: "100%",
-          marginBottom: "20px",
-          padding: "10px",
-          background: "#2a2a2a",
-          color: "#eee",
-          border: "1px solid #333",
-          borderRadius: "8px",
-          cursor: "pointer"
+          padding: "18px",
+          borderBottom: "1px solid #262626",
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px"
         }}
       >
-        ⬅ Retour
-      </button>
 
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-        <button
-          onClick={() => setViewMode("questions")}
-          style={buttonToggleStyle(viewMode === "questions")}
-        >
-          📋 Questions
-        </button>
-        <button
-          onClick={() => setViewMode("groups")}
-          style={buttonToggleStyle(viewMode === "groups")}
-        >
-          📁 Groupes
-        </button>
-      </div>
-
-      {viewMode === "questions" && (
-        <button
-          onClick={() => {
-            setIsCreating(true);
-            setSelectedQuestion(null);
-          }}
+        {/* TOP BAR */}
+        <div
           style={{
-            width: "100%",
-            marginBottom: "20px",
-            padding: "10px",
-            background: "#4a4a4a",
-            color: "#eee",
-            border: "1px solid #333",
-            borderRadius: "8px",
-            cursor: "pointer"
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center"
           }}
         >
-          ➕ Nouvelle question
-        </button>
-      )}
 
-      {viewMode === "groups" && (
-        <button
-          onClick={() => startCreateGroup?.()}
-          style={{
-            width: "100%",
-            marginBottom: "20px",
-            padding: "10px",
-            background: "#3f5b83",
-            color: "#eee",
-            border: "1px solid #333",
-            borderRadius: "8px",
-            cursor: "pointer"
-          }}
-        >
-          ➕ Nouveau groupe
-        </button>
-      )}
+          <div>
+            <div
+              style={{
+                fontSize: "11px",
+                color: "#666",
+                fontWeight: "700",
+                letterSpacing: "0.08em",
+                marginBottom: "4px"
+              }}
+            >
+              MANAGE
+            </div>
 
-      <h2 style={{ marginTop: 0 }}>
-        {viewMode === "questions" ? "Questions" : "Groupes"}
-      </h2>
+            <div
+              style={{
+                fontSize: "24px",
+                fontWeight: "800",
+                color: "#eee",
+                lineHeight: 1
+              }}
+            >
+              Library
+            </div>
+          </div>
 
-      {viewMode === "questions" && (
-        <>
-          <input
-            placeholder="Recherche..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={inputStyle}
-          />
-
-          <input
-            placeholder="Filtrer tags..."
-            value={filterTheme}
-            onChange={(e) => setFilterTheme(e.target.value)}
-            style={inputStyle}
-          />
-
-          <label
+          <button
+            onClick={() => setMode("menu")}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "10px",
-              color: "#aaa"
+              padding: "8px 10px",
+              background: "#1d1d1d",
+              border: "1px solid #2f2f2f",
+              borderRadius: "10px",
+              color: "#aaa",
+              cursor: "pointer",
+              fontSize: "13px"
             }}
           >
-            <input
-              type="checkbox"
-              checked={filterDue}
-              onChange={(e) => setFilterDue(e.target.checked)}
-            />
-            À réviser
-          </label>
+            ←
+          </button>
 
-          <div
+        </div>
+
+        {/* VIEW TOGGLES */}
+        <div
+          style={{
+            display: "flex",
+            gap: "10px"
+          }}
+        >
+
+          <button
+            onClick={() => setViewMode("questions")}
+            style={toggleButtonStyle(
+              viewMode === "questions",
+              "#b69cff"
+            )}
+          >
+            📋 Questions
+          </button>
+
+          <button
+            onClick={() => setViewMode("groups")}
+            style={toggleButtonStyle(
+              viewMode === "groups",
+              "#ffcc7a"
+            )}
+          >
+            📁 Groupes
+          </button>
+
+        </div>
+
+        {/* CREATE BUTTON */}
+        {viewMode === "questions" ? (
+          <button
+            onClick={() => {
+              setIsCreating(true);
+              setSelectedQuestion(null);
+            }}
             style={{
-              marginTop: "25px",
-              color: "#666",
+              width: "100%",
+              padding: "12px",
+              borderRadius: "12px",
+              border: "1px solid #3a2f5a",
+              background: "#2b2047",
+              color: "#d2c2ff",
+              cursor: "pointer",
+              fontWeight: "700",
               fontSize: "14px"
             }}
           >
-            {filteredQuestions.length} résultats
-          </div>
-        </>
-      )}
+            ＋ Nouvelle question
+          </button>
+        ) : (
+          <button
+            onClick={() => startCreateGroup?.()}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "12px",
+              border: "1px solid #5a4523",
+              background: "#3d2b14",
+              color: "#ffd58a",
+              cursor: "pointer",
+              fontWeight: "700",
+              fontSize: "14px"
+            }}
+          >
+            ＋ Nouveau groupe
+          </button>
+        )}
 
-      {viewMode === "groups" && (
+      </div>
+
+      {/* FILTERS */}
+      <div
+        style={{
+          padding: "18px",
+          borderBottom: "1px solid #262626",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px"
+        }}
+      >
+
         <div
           style={{
-            marginTop: "25px",
+            fontSize: "11px",
             color: "#666",
-            fontSize: "14px"
+            fontWeight: "700",
+            letterSpacing: "0.08em"
           }}
         >
-          {allGroups.length} groupes
+          FILTERS
         </div>
-      )}
+
+        {viewMode === "questions" && (
+          <>
+
+            <input
+              placeholder="Recherche..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              placeholder="Tags..."
+              value={filterTheme}
+              onChange={(e) => setFilterTheme(e.target.value)}
+              style={inputStyle}
+            />
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                color: "#999",
+                fontSize: "14px",
+                marginTop: "2px",
+                cursor: "pointer"
+              }}
+            >
+
+              <input
+                type="checkbox"
+                checked={filterDue}
+                onChange={(e) => setFilterDue(e.target.checked)}
+                style={{
+                  accentColor: "#b69cff"
+                }}
+              />
+
+              Questions dues uniquement
+
+            </label>
+
+          </>
+        )}
+
+      </div>
     </div>
   );
 }

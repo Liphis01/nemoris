@@ -1,22 +1,3 @@
-
-
-
-
-
-
-
-
-chatgpt: Toujours dans le même style, améliore l'ui de la review pour que ce soit clair, propre, agréable à utiliser, et joli. Actuellement le code c'est ça :
-
-
-puis faire le hover next review avec chatgpt pour voir si c'est mieux
-
-
-
-
-
-
-
 # TODO
 
 
@@ -52,6 +33,9 @@ color: "#ff85c2",
 - ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
 - Afficher un calendrier pour voir les jours où on a joué et combien de questions on a fait chaque jour + futures questions
 - trier les questions dans manage par thème, par groupe, par progression, etc...
+- mettre les différents modes de jetpunk pour les maps
+- en review : les plus durs d'abord
+- faire le hover next review avec chatgpt pour voir si c'est mieux
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
