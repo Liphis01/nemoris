@@ -15,6 +15,7 @@ export default function MapEditor({
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
   const aliasesInputRef = useRef(null);
+  const zonesRef = useRef([]);
   const [editableGroup, setEditableGroup] = useState({
     name: group.name || "",
     type_group: group.type_group || "map",
@@ -23,35 +24,69 @@ export default function MapEditor({
 
   // Load zones from questions
   useEffect(() => {
+
     async function loadZones() {
+
       try {
-        const res = await fetch("http://localhost:8000/questions");
-        const data = await res.json();
-        const mapZones = data.filter(
-          item => item.type_q === "map" && item.group.id === group.id
+
+        const res = await fetch(
+          "http://localhost:8000/questions"
         );
+
+        const data = await res.json();
+
+        const mapZones = data.filter(
+          item =>
+            item.type_q === "map" &&
+            item.group.id === group.id
+        );
+
         setZones(mapZones);
+
         initialZonesRef.current = mapZones;
-        setItems(mapZones.map(z => z.data?.code || z.code));
+
+        setItems(
+          mapZones.map(
+            z => z.data?.code || z.code
+          )
+        );
+
       } catch (err) {
-        console.error("Error loading zones:", err);
+
+        console.error(
+          "Error loading zones:",
+          err
+        );
       }
     }
 
     if (group.id) {
       loadZones();
     }
+
   }, [group.id]);
 
-  // Set editing when selectedZone changes
   useEffect(() => {
-    if (selectedZone && zones.length > 0) {
-      const zone = zones.find(z => z.data?.code === selectedZone);
-      if (zone) {
-        setEditing(zone);
-      }
+
+    if (!selectedZone) return;
+    if (zones.length === 0) {
+      setEditing(selectedZone);
     }
-  }, [selectedZone, zones]);
+
+    const zone = zonesRef.current.find(
+      z =>
+        z.data?.code === selectedZone.data?.code
+    );
+
+    if (zone) {
+      setEditing(zone);
+    }
+
+  }, [selectedZone]);
+
+  useEffect(() => {
+    zonesRef.current = zones;
+  }, [zones]);
 
   function handleSelect(code) {
     let nextZones = zones;
@@ -94,8 +129,6 @@ export default function MapEditor({
 
     const currentAliases = editing.data?.aliases || [];
     const newAliases = [...currentAliases, value];
-
-    console.log(newAliases);
 
     setZones(prev =>
       prev.map(z =>

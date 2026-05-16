@@ -172,7 +172,7 @@ export default function ManageList({
                   onClick={() => {
                     setOpenDeleteId(null);
                     setSelectedQuestion(q);
-                    setEditing(q.data?.code);
+                    setEditing(q);
                   }}
 
                   onDeleteOpen={() => setOpenDeleteId(q.id)}
