@@ -41,6 +41,8 @@ color: "#ff85c2",
 - dans le recap, cliquer sur une question fait un zoom sur la zone et inversement
 - mettre des tags sur les groupes les propage aux questions
 - remplacer l'affichage du nombre de zones actuelles dans le header de map editor par le nombre total de zones de la map (même celles sans question) et éventuellement un indicateur du pourcentage de zones créées (un petit cercle qui se remplit par exemple)
+- mettre en évidence les zones trop petites (c.f. jetpunk)
+- collapse les questions de même groupe dans manage ?
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

@@ -66,7 +66,7 @@ export default function MapEditor({
         name: group.name || "",
         type_group: group.type_group || "map",
         media: group.media || ""
-       });
+      });
     }
 
   }, [group.id]);
@@ -187,9 +187,9 @@ export default function MapEditor({
 
     if (editing && !editing.answer) {
       setZones(zonesToSave);
-      setEditing(null);
       setItems(zonesToSave.map((z) => z.data?.code || z.code));
     }
+    setEditing(null);
 
     await fetch(`http://localhost:8000/groups/${group.id}`, {
       method: "PUT",
@@ -207,7 +207,8 @@ export default function MapEditor({
       const code = z.data?.code;
       const aliases = z.data?.aliases || [];
 
-      if (!z.id || String(z.id).startsWith("tmp-")) {
+      if (!z.id) return;
+      if (String(z.id).startsWith("tmp-")) {
         // New zone - create via POST
         await fetch("http://localhost:8000/questions", {
           method: "POST",
@@ -229,6 +230,17 @@ export default function MapEditor({
             "collection_ids": []
           })
         })
+        // retrieve id and update local state to avoid duplicates on next save
+        .then(res => res.json())
+        .then(created => {
+          setZones(prev =>
+            prev.map(zone =>
+              zone.id === z.id ? { ...zone, id: created.id } : zone
+            )
+          );
+        });
+
+
       } else {
         // Update existing zone
         await fetch(`http://localhost:8000/questions/${z.id}`, {
@@ -251,6 +263,8 @@ export default function MapEditor({
     const initialCount = (initialZonesRef.current || []).length;
     const newCount = zonesToSave.length;
     const delta = newCount - initialCount;
+    // update initial zones to avoid duplicates on next save
+    initialZonesRef.current = zonesToSave;
 
     if (onSave) {
       await onSave(delta);
