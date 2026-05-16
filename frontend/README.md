@@ -10,7 +10,6 @@ color: "#ff85c2",
 
 
 ## bugs
-- quand on modifie le nom d'une zone ça ajoute une question au lieu de modifier celle existante
 - bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
@@ -18,6 +17,7 @@ color: "#ff85c2",
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - vérifier que supprimer une question supprime aussi le progress associé
 - vérifier que supprimer un groupe supprime aussi les questions associées
+- quand on modifie le nom d'une zone ça ajoute une question au lieu de modifier celle existante (fixed ?)
 
 ## features
 - filtrer les groupes dans manage
@@ -48,7 +48,7 @@ color: "#ff85c2",
 - stocker uniquement l'id des groupes dans les questions
 
 ## ideas
-- mettre une option de priorité sur les questions pour les faire apparaître plus souvent
+- mettre une option de priorité sur les questions pour les faire apparaître plus souvent / favoris
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - pouvoir manuellement modifier les dates des questions
