@@ -13,7 +13,6 @@ color: "#ff85c2",
 - quand on modifie le nom d'une zone ça ajoute une question au lieu de modifier celle existante
 - bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
-- ouvrir le map editor depuis une question map le fait buguer
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - créer un groupe fait une alerte moche
 - le texte des cards est décalé vers la droite (à cause du MAP)

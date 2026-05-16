@@ -62,26 +62,18 @@ export default function MapEditor({
 
     if (group.id) {
       loadZones();
+      setEditableGroup({
+        name: group.name || "",
+        type_group: group.type_group || "map",
+        media: group.media || ""
+       });
     }
 
   }, [group.id]);
 
   useEffect(() => {
-
     if (!selectedZone) return;
-    if (zones.length === 0) {
-      setEditing(selectedZone);
-    }
-
-    const zone = zonesRef.current.find(
-      z =>
-        z.data?.code === selectedZone.data?.code
-    );
-
-    if (zone) {
-      setEditing(zone);
-    }
-
+    setEditing(selectedZone);
   }, [selectedZone]);
 
   useEffect(() => {
