@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 venv/
+backend/build/
+backend/*.spec
 
 # Node
 node_modules/

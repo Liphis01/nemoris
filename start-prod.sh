@@ -17,30 +17,16 @@ if [ ! -f "$BACKEND_DIR/venv/bin/activate" ]; then
   exit 1
 fi
 
-cleanup() {
-  echo
-  echo "Stopping production servers..."
-  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
-}
+PORT="${QUIZ_APP_PORT:-8000}"
 
-trap cleanup EXIT
-
-echo "Starting backend on http://localhost:8000..."
+echo "Starting app on http://localhost:$PORT..."
 cd "$BACKEND_DIR"
 source venv/bin/activate
-uvicorn app.main:app &
-BACKEND_PID=$!
-
-echo "Serving frontend build on http://localhost:5173..."
-cd "$FRONTEND_DIST_DIR"
-python3 -m http.server 5173 &
-FRONTEND_PID=$!
 
 echo
 echo "Quiz app is running:"
-echo "  Frontend: http://localhost:5173"
-echo "  Backend:  http://localhost:8000"
+echo "  http://localhost:$PORT"
 echo
 echo "Press Ctrl+C to stop."
 
-wait
+uvicorn app.main:app --host 127.0.0.1 --port "$PORT"

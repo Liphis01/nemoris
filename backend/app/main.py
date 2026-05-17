@@ -7,8 +7,11 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from fastapi.staticfiles import StaticFiles
 from fastapi import UploadFile, File
+from fastapi.responses import FileResponse
+from pathlib import Path
 import shutil
 import os
+import sys
 
 from .database import engine, SessionLocal
 from .models import Base, QuestionGroup, Question, Progress, Collection
@@ -38,6 +41,17 @@ GROUP_COMPATIBILITY = {
     "timeline": ["timeline_item"],
     "diagram": ["diagram_label"]
 }
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+PROJECT_DIR = BACKEND_DIR.parent
+BUNDLED_DIR = Path(getattr(sys, "_MEIPASS", PROJECT_DIR))
+APP_DATA_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else BACKEND_DIR
+)
+STATIC_DIR = APP_DATA_DIR / "static"
+FRONTEND_DIST_DIR = BUNDLED_DIR / "frontend" / "dist"
 
 def ensure_progress_schema():
     """
@@ -130,7 +144,8 @@ app.add_middleware(
 )
 
 # Servir les fichiers statiques (images)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+STATIC_DIR.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 🔌 DB dependency
 def get_db():
@@ -594,10 +609,15 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
     if not q.media:
         return {"error": "No image"}
 
-    if not q.media.startswith("http://127.0.0.1:8000/static/"):
+    is_local_static = (
+        q.media.startswith("/static/") or
+        q.media.startswith("http://127.0.0.1:8000/static/")
+    )
+
+    if not is_local_static:
         return {"error": "External image"}
 
-    file_path = q.media.replace("http://127.0.0.1:8000/", "")
+    file_path = STATIC_DIR / os.path.basename(q.media)
 
     if os.path.exists(file_path):
         os.remove(file_path)
@@ -1083,9 +1103,38 @@ def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
 
 @app.post("/upload")
 def upload_image(file: UploadFile = File(...)):
-    file_path = f"static/{file.filename}"
+    filename = os.path.basename(file.filename)
+    file_path = STATIC_DIR / filename
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return {"url": f"http://127.0.0.1:8000/{file_path}"}
+    return {"url": f"/static/{filename}"}
+
+
+# =====================================================
+# FRONTEND BUILD
+# =====================================================
+
+if FRONTEND_DIST_DIR.exists():
+    assets_dir = FRONTEND_DIST_DIR / "assets"
+
+    if assets_dir.exists():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=assets_dir),
+            name="frontend-assets"
+        )
+
+    @app.get("/")
+    def serve_frontend():
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend_route(full_path: str):
+        frontend_file = FRONTEND_DIST_DIR / full_path
+
+        if frontend_file.is_file():
+            return FileResponse(frontend_file)
+
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
