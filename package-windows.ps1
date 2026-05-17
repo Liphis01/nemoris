@@ -6,33 +6,51 @@ $BackendDir = Join-Path $RootDir "backend"
 $AppName = "QuizApp"
 $OutputDir = Join-Path $BackendDir "dist\$AppName"
 
+function Invoke-Checked {
+  param(
+    [Parameter(Mandatory = $true)]
+    [ScriptBlock] $Command,
+    [Parameter(Mandatory = $true)]
+    [string] $Message
+  )
+
+  & $Command
+
+  if ($LASTEXITCODE -ne 0) {
+    throw $Message
+  }
+}
+
 Write-Host "Building frontend..."
 Set-Location $FrontendDir
 
 if (-not (Test-Path "node_modules")) {
-  npm install --legacy-peer-deps
+  Invoke-Checked { npm install --legacy-peer-deps } "npm install failed."
 }
 
-npm run build
+Invoke-Checked { npm run build } "Frontend build failed."
 
 Write-Host "Preparing backend environment..."
 Set-Location $BackendDir
 
 if (-not (Test-Path "venv\Scripts\Activate.ps1")) {
-  python -m venv venv
+  Invoke-Checked { py -3.12 -m venv venv } "Could not create venv with Python 3.12. Install Python 3.12 from python.org, then rerun this script."
 }
 
 & ".\venv\Scripts\Activate.ps1"
-pip install -r requirements.txt
-pip install pyinstaller
+Invoke-Checked { python -m pip install --upgrade pip } "pip upgrade failed."
+Invoke-Checked { python -m pip install -r requirements.txt } "Backend dependency install failed."
+Invoke-Checked { python -m pip install pyinstaller } "PyInstaller install failed."
 
 Write-Host "Building Windows executable..."
-pyinstaller `
-  --name $AppName `
-  --onedir `
-  --noconfirm `
-  --add-data "..\frontend\dist;frontend\dist" `
-  run_desktop.py
+Invoke-Checked {
+  python -m PyInstaller `
+    --name $AppName `
+    --onedir `
+    --noconfirm `
+    --add-data "..\frontend\dist;frontend\dist" `
+    run_desktop.py
+} "PyInstaller build failed."
 
 if (-not (Test-Path $OutputDir)) {
   throw "PyInstaller did not create the expected output folder: $OutputDir"
