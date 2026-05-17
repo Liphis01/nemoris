@@ -145,10 +145,47 @@ export default function MapQuestion({ group, items, onComplete }) {
     }));
   }
 
+  function getHistoryStats(item) {
+    const history = item.progress?.history || [];
+
+    if (history.length > 0) {
+      const successes = history.filter(entry => entry.quality > 0).length;
+
+      return {
+        reviews: history.length,
+        successRate: Math.round((successes / history.length) * 100)
+      };
+    }
+
+    const reps = item.progress?.reps || 0;
+    const lapses = item.progress?.lapses || 0;
+
+    if (reps > 0) {
+      const successes = Math.max(0, reps - lapses);
+
+      return {
+        reviews: reps,
+        successRate: Math.round((successes / reps) * 100)
+      };
+    }
+
+    return {
+      reviews: 0,
+      successRate: null
+    };
+  }
+
   const progressPercent = (found.length / items.length) * 100;
   const isIncorrectFlash = incorrectFlashId > 0;
   const isCorrectFlash = correctFlashId > 0;
   const feedbackTone = isIncorrectFlash ? "incorrect" : isCorrectFlash ? "correct" : null;
+  const recapSuccessCount = Object.values(itemQuality)
+    .filter(quality => quality > 0)
+    .length;
+  const recapMissCount = items.length - recapSuccessCount;
+  const recapSuccessRate = items.length
+    ? Math.round((recapSuccessCount / items.length) * 100)
+    : 0;
 
   return (
     <>
@@ -431,6 +468,33 @@ export default function MapQuestion({ group, items, onComplete }) {
 
             <div
               style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: "10px",
+                marginBottom: "18px"
+              }}
+            >
+              <div style={recapStatStyle}>
+                <div style={recapStatValueStyle}>{recapSuccessRate}%</div>
+                <div style={recapStatLabelStyle}>réussite</div>
+              </div>
+
+              <div style={recapStatStyle}>
+                <div style={recapStatValueStyle}>
+                  {recapSuccessCount}
+                  <span style={recapStatMutedStyle}> / {items.length}</span>
+                </div>
+                <div style={recapStatLabelStyle}>trouvées</div>
+              </div>
+
+              <div style={recapStatStyle}>
+                <div style={recapStatValueStyle}>{recapMissCount}</div>
+                <div style={recapStatLabelStyle}>à revoir</div>
+              </div>
+            </div>
+
+            <div
+              style={{
                 background: "#111",
                 borderRadius: "14px",
                 overflow: "hidden",
@@ -457,7 +521,10 @@ export default function MapQuestion({ group, items, onComplete }) {
                 gap: "10px"
               }}
             >
-              {items.map(item => (
+              {items.map(item => {
+                const historyStats = getHistoryStats(item);
+
+                return (
                   <div
                     key={item.question_id}
                     style={{
@@ -481,6 +548,21 @@ export default function MapQuestion({ group, items, onComplete }) {
                       >
                         {item.label}
                       </div>
+                    </div>
+
+                    <div style={zoneHistoryStyle}>
+                      {historyStats.reviews > 0 ? (
+                        <>
+                          <span style={zoneHistoryRateStyle}>
+                            {historyStats.successRate}%
+                          </span>
+                          <span style={zoneHistoryMetaStyle}>
+                            {historyStats.reviews} revue{historyStats.reviews > 1 ? "s" : ""}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={zoneHistoryMetaStyle}>Nouveau</span>
+                      )}
                     </div>
 
                     <div
@@ -538,7 +620,8 @@ export default function MapQuestion({ group, items, onComplete }) {
                     </div>
 
                   </div>
-              ))}
+                );
+              })}
             </div>
 
           </div>
@@ -571,4 +654,57 @@ const recapCardStyle = {
   borderRadius: "18px",
   padding: "24px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)"
+};
+
+const recapStatStyle = {
+  background: "#181818",
+  border: "1px solid #262626",
+  borderRadius: "12px",
+  padding: "12px 14px",
+  minWidth: 0
+};
+
+const recapStatValueStyle = {
+  color: "#f3f3f3",
+  fontSize: "22px",
+  fontWeight: "700",
+  lineHeight: "26px"
+};
+
+const recapStatMutedStyle = {
+  color: "#666",
+  fontSize: "14px",
+  marginLeft: "3px"
+};
+
+const recapStatLabelStyle = {
+  color: "#777",
+  fontSize: "12px",
+  marginTop: "3px"
+};
+
+const zoneHistoryStyle = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "0 0 96px",
+  minWidth: "96px",
+  textAlign: "center",
+  color: "#777",
+  fontSize: "12px",
+  lineHeight: "16px"
+};
+
+const zoneHistoryRateStyle = {
+  color: "#e5e5e5",
+  fontSize: "18px",
+  fontWeight: "700",
+  lineHeight: "22px"
+};
+
+const zoneHistoryMetaStyle = {
+  color: "#777",
+  fontSize: "11px",
+  whiteSpace: "nowrap"
 };
