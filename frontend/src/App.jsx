@@ -1,8 +1,9 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { getReview, sendAnswer } from "./api/api";
 import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
 import Manage from "./components/manage/Manage";
+import ReviewCalendar from "./components/ReviewCalendar";
 
 function App() {
   const [questions, setQuestions] = useState([]); // questions de la review
@@ -23,6 +24,7 @@ function App() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [viewMode, setViewMode] = useState("questions"); // "questions" or "groups"
   const [allGroups, setAllGroups] = useState([]);
+  const current = questions[currentIndex];
 
   const [newRow, setNewRow] = useState({
     question: "",
@@ -52,9 +54,20 @@ function App() {
     boxSizing: "border-box"
   };
 
+  const handleTextAnswer = useCallback((quality) => {
+    if (!current) return;
+
+    sendAnswer(current.question_id, quality);
+
+    setShowAnswer(false);
+    setCurrentIndex(prev => prev + 1);
+  }, [current]);
+
   // à déplacer dans quiz à l'occasion
   useEffect(() => {
     function handleKeyDown(e) {
+      if (mode !== "quiz") return;
+
       // voir réponse
       if (e.key === "Enter") {
         if (!showAnswer) {
@@ -76,7 +89,7 @@ function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [showAnswer, currentIndex]);
+  }, [mode, showAnswer, handleTextAnswer]);
 
   useEffect(() => {
     if (mode !== "quiz") return;
@@ -106,9 +119,11 @@ function App() {
 
 
   useEffect(() => {
-    if (mode === "manage") {
+    if (mode === "manage" || mode === "calendar") {
       loadAllQuestions();
-      loadAllGroups();
+      if (mode === "manage") {
+        loadAllGroups();
+      }
     }
   }, [mode]);
 
@@ -116,15 +131,6 @@ function App() {
     document.body.style.overflow =
       mode === "manage" ? "hidden" : "auto";
   }, [mode]);
-
-  const current = questions[currentIndex];
-
-  function handleTextAnswer(quality) {
-    sendAnswer(current.question_id, quality);
-
-    setShowAnswer(false);
-    setCurrentIndex(prev => prev + 1);
-  }
 
   function handleMapComplete() {
     setCurrentIndex(prev => prev + 1);
@@ -494,6 +500,13 @@ function App() {
           deleteGroup={deleteGroup}
           viewMode={viewMode}
           setViewMode={setViewMode}
+        />
+      )}
+
+      {mode === "calendar" && (
+        <ReviewCalendar
+          setMode={setMode}
+          questions={allQuestions}
         />
       )}
     </div>

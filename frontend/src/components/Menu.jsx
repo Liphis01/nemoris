@@ -240,6 +240,65 @@ export default function Menu({ setMode }) {
 
                         </div>
 
+                        {/* CALENDAR */}
+                        <div
+                            onClick={() => setMode("calendar")}
+                            style={{
+                                ...cardStyle,
+                                flex: 1,
+                                background:
+                                    "linear-gradient(180deg, #171a18 0%, #141614 100%)"
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform =
+                                    "translateY(-2px)";
+                                e.currentTarget.style.border =
+                                    "1px solid #3a3a3a";
+                                e.currentTarget.style.background =
+                                    "linear-gradient(180deg, #1d241f 0%, #171a18 100%)";
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform =
+                                    "translateY(0px)";
+                                e.currentTarget.style.border =
+                                    "1px solid #2a2a2a";
+                                e.currentTarget.style.background =
+                                    "linear-gradient(180deg, #171a18 0%, #141614 100%)";
+                            }}
+                        >
+
+                            <div
+                                style={{
+                                    ...badgeStyle,
+                                    background: "#163524",
+                                    color: "#7ee2a8"
+                                }}
+                            >
+                                CALENDAR
+                            </div>
+
+                            <div
+                                style={{
+                                    fontSize: "22px",
+                                    fontWeight: "700",
+                                    marginBottom: "10px"
+                                }}
+                            >
+                                Calendrier
+                            </div>
+
+                            <div
+                                style={{
+                                    color: "#888",
+                                    fontSize: "14px",
+                                    lineHeight: 1.5
+                                }}
+                            >
+                                Voir les questions dues par jour et préparer les prochaines reviews.
+                            </div>
+
+                        </div>
+
                         {/* FUTURE BLOCK */}
                         <div
                             style={{
