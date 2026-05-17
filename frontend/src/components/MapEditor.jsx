@@ -208,6 +208,8 @@ export default function MapEditor({
     const savedEditingCode = editing && editing.answer
       ? getZoneCode(editing)
       : null;
+    const createdQuestionIds = [];
+    const createdZoneCodes = [];
 
     if (editing && !editing.answer) {
       setZones(zonesToSave);
@@ -257,6 +259,9 @@ export default function MapEditor({
         // retrieve id and update local state to avoid duplicates on next save
         .then(res => res.json())
         .then(created => {
+          createdQuestionIds.push(created.id);
+          createdZoneCodes.push(code);
+
           setZones(prev =>
             prev.map(zone =>
               zone.id === z.id ? { ...zone, id: created.id } : zone
@@ -291,7 +296,11 @@ export default function MapEditor({
     initialZonesRef.current = zonesToSave;
 
     if (onSave) {
-      await onSave(delta, { selectedZoneCode: savedEditingCode });
+      await onSave(delta, {
+        selectedZoneCode: savedEditingCode,
+        createdQuestionIds,
+        createdZoneCodes
+      });
     }
 
     if (onClose) {

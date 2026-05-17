@@ -3,11 +3,18 @@ export default function GroupCardItem({
   selected,
   deleteOpen,
   isRemoving,
+  isHighlighted,
   onClick,
   onDeleteOpen,
   closeDelete,
   deleteGroup
 }) {
+  const cardBackground = selected
+    ? "#222"
+    : isHighlighted
+      ? "rgba(22, 101, 52, 0.32)"
+      : "transparent";
+
   return (
     <div
       data-delete-card-id={group.id}
@@ -24,10 +31,15 @@ export default function GroupCardItem({
       }}
       style={{
         padding: "14px",
-        borderBottom: "1px solid #2a2a2a",
+        borderBottom: isHighlighted
+          ? "1px solid rgba(134, 239, 172, 0.85)"
+          : "1px solid #2a2a2a",
         cursor: "pointer",
-        background: selected ? "#222" : "transparent",
-        transition: "0.18s ease, background 0.15s",
+        background: cardBackground,
+        boxShadow: isHighlighted
+          ? "0 0 0 4px rgba(134, 239, 172, 0.12), 0 0 26px rgba(34, 197, 94, 0.28)"
+          : "none",
+        transition: "background 0.16s ease, border 0.16s ease, box-shadow 0.16s ease, opacity 0.18s ease, transform 0.18s ease",
         overflow: "hidden",
         position: "relative",
         transform: isRemoving ? "scaleY(0.92)" : "scaleY(1)",

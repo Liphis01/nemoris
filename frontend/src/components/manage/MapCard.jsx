@@ -6,10 +6,22 @@ export default function MapCard({
   onClick,
   deleteOpen,
   isRemoving,
+  isHighlighted,
   onDeleteOpen,
   closeDelete,
   deleteQuestion
 }) {
+  const cardBackground = selected
+    ? "#252525"
+    : isHighlighted
+      ? "rgba(22, 101, 52, 0.32)"
+      : "transparent";
+  const cardBorder = selected
+    ? "1px solid #3a3a3a"
+    : isHighlighted
+      ? "1px solid rgba(134, 239, 172, 0.85)"
+      : "1px solid #262626";
+
   return (
     <div
       data-delete-card-id={q.id}
@@ -27,13 +39,14 @@ export default function MapCard({
       style={{
         position: "relative",
         padding: "10px 12px",
-        border: selected
-          ? "1px solid #3a3a3a"
-          : "1px solid #262626",
+        border: cardBorder,
         borderRadius: "14px",
         cursor: "pointer",
-        background: selected ? "#252525" : "transparent",
-        transition: "background 0.12s ease, opacity 0.18s ease, transform 0.18s ease",
+        background: cardBackground,
+        boxShadow: isHighlighted
+          ? "0 0 0 4px rgba(134, 239, 172, 0.12), 0 0 26px rgba(34, 197, 94, 0.28)"
+          : "none",
+        transition: "background 0.16s ease, border 0.16s ease, box-shadow 0.16s ease, opacity 0.18s ease, transform 0.18s ease",
         display: "flex",
         flexDirection: "column",
         gap: "6px",
@@ -44,12 +57,14 @@ export default function MapCard({
       }}
       onMouseEnter={(e) => {
         if (!selected) {
-          e.currentTarget.style.background = "#1d1d1d";
+          e.currentTarget.style.background = isHighlighted
+            ? "rgba(22, 101, 52, 0.42)"
+            : "#1d1d1d";
         }
       }}
       onMouseLeave={(e) => {
         if (!selected) {
-          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.background = cardBackground;
         }
       }}
     >

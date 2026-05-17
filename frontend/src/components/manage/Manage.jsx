@@ -1,10 +1,51 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManagePreview from "./ManagePreview";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Manage(props) {
   const [editing, setEditing] = useState(null);
+  const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
+  const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
+
+  useEffect(() => {
+    if (highlightedQuestionIds.length === 0 && highlightedGroupIds.length === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedQuestionIds([]);
+      setHighlightedGroupIds([]);
+    }, 2800);
+
+    return () => window.clearTimeout(timeout);
+  }, [highlightedQuestionIds, highlightedGroupIds]);
+
+  async function createQuestionWithHighlight() {
+    const created = await props.createQuestion?.();
+
+    if (created?.id) {
+      props.setViewMode?.("questions");
+      props.setSelectedQuestion?.(created);
+      setEditing(created);
+      setHighlightedQuestionIds([created.id]);
+    }
+
+    return created;
+  }
+
+  async function createGroupWithHighlight() {
+    const created = await props.createGroup?.();
+
+    if (created?.id) {
+      props.setViewMode?.("groups");
+      props.setSelectedQuestion?.(created);
+      setEditing(null);
+      setHighlightedGroupIds([created.id]);
+    }
+
+    return created;
+  }
 
   return (
     <div
@@ -19,9 +60,22 @@ export default function Manage(props) {
     >
       <ManageSidebar {...props} />
 
-      <ManageList {...props} editing={editing} setEditing={setEditing} />
+      <ManageList
+        {...props}
+        editing={editing}
+        setEditing={setEditing}
+        highlightedQuestionIds={highlightedQuestionIds}
+        highlightedGroupIds={highlightedGroupIds}
+      />
 
-      <ManagePreview {...props} editing={editing} setEditing={setEditing} />
+      <ManagePreview
+        {...props}
+        editing={editing}
+        setEditing={setEditing}
+        createQuestion={createQuestionWithHighlight}
+        createGroup={createGroupWithHighlight}
+        setHighlightedQuestionIds={setHighlightedQuestionIds}
+      />
     </div>
   );
 }

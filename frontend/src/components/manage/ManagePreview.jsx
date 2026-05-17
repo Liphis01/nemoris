@@ -70,7 +70,8 @@ export default function ManagePreview({
   createGroup,
   reloadAllData,
   editing,
-  setViewMode
+  setViewMode,
+  setHighlightedQuestionIds
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -272,6 +273,22 @@ export default function ManagePreview({
     const groupe = isMapQuestion ? selectedQuestion.group : selectedQuestion;
     const group = allGroups.find((g) => g.id === groupe.id);
 
+    if (!group) {
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#777",
+            fontSize: "18px"
+          }}
+        >
+          Sélectionner une question ou un groupe
+        </div>
+      );
+    }
+
     return (
       <div
         style={{
@@ -294,6 +311,21 @@ export default function ManagePreview({
 
             const reloaded = await reloadAllData();
             const selectedZoneCode = saveContext?.selectedZoneCode;
+            const createdQuestionIds = saveContext?.createdQuestionIds || [];
+            const createdZoneCodes = saveContext?.createdZoneCodes || [];
+            const highlightedIds = createdQuestionIds.length > 0
+              ? createdQuestionIds
+              : reloaded.questions
+                .filter((question) =>
+                  question.type_q === "map" &&
+                  question.group?.id === group.id &&
+                  createdZoneCodes.includes(question.data?.code || question.code)
+                )
+                .map((question) => question.id);
+
+            if (highlightedIds.length > 0) {
+              setHighlightedQuestionIds?.(highlightedIds);
+            }
 
             if (selectedZoneCode) {
               const savedZone = reloaded.questions.find((question) =>

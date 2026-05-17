@@ -11,7 +11,9 @@ export default function ManageList({
   viewMode,
   setEditing,
   deleteQuestion,
-  deleteGroup
+  deleteGroup,
+  highlightedQuestionIds = [],
+  highlightedGroupIds = []
 }) {
 
   const [openDeleteId, setOpenDeleteId] = useState(null);
@@ -38,6 +40,11 @@ export default function ManageList({
     setTimeout(async () => {
       try {
         await deleteGroup(id);
+
+        if (selectedQuestion?.id === id) {
+          setSelectedQuestion(null);
+          setEditing?.(null);
+        }
       } finally {
         setRemovingId(null);
       }
@@ -78,7 +85,7 @@ export default function ManageList({
       : allGroups;
 
   useEffect(() => {
-    if (viewMode !== "questions" || !selectedQuestion?.id) return;
+    if (!selectedQuestion?.id) return;
 
     selectedCardRef.current?.scrollIntoView({
       block: "center",
@@ -156,7 +163,8 @@ export default function ManageList({
           const sharedProps = {
             selected: selectedQuestion?.id === q.id,
             deleteOpen: openDeleteId === q.id,
-            isRemoving: removingId === q.id
+            isRemoving: removingId === q.id,
+            isHighlighted: highlightedQuestionIds.includes(q.id)
           };
 
           if (q.type_q === "map") {
@@ -238,6 +246,7 @@ export default function ManageList({
 
           <div
             key={group.id}
+            ref={selectedQuestion?.id === group.id ? selectedCardRef : null}
             style={{
               transition: "all 0.18s ease",
               opacity: removingId === group.id ? 0 : 1,
@@ -253,6 +262,7 @@ export default function ManageList({
               selected={selectedQuestion?.id === group.id}
               deleteOpen={openDeleteId === group.id}
               isRemoving={removingId === group.id}
+              isHighlighted={highlightedGroupIds.includes(group.id)}
 
               onClick={() => {
                 setOpenDeleteId(null);

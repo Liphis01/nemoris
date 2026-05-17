@@ -210,7 +210,7 @@ function App() {
       return;
     }
 
-    setAllGroups(allGroups.filter((g) => g.id !== id));
+    setAllGroups(prev => prev.filter((g) => g.id !== id));
   }
 
   async function createQuestion() {
@@ -245,6 +245,8 @@ function App() {
     setTimeout(() => {
       questionInputRef.current?.focus();
     }, 0);
+
+    return created;
   }
 
   function startCreateGroup() {
@@ -289,6 +291,8 @@ function App() {
       data: {}
     });
     setIsCreatingGroup(false);
+
+    return createdGroup;
   }
 
   async function handleUpload(e, q) {
