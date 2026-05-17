@@ -142,6 +142,10 @@ function App() {
     setAllGroups(data);
   }
 
+  function getNextReview(question) {
+    return question.progress?.next_review || question.next_review || null;
+  }
+
   async function reloadAllData() {
     await loadAllGroups();
     await loadAllQuestions();
@@ -369,7 +373,10 @@ function App() {
       answer: "",
       tags: [],
 
-      next_review: zones.some(z => z.next_review),
+      next_review: zones
+        .map(getNextReview)
+        .filter(Boolean)
+        .sort()[0] || null,
     }));
 
     return [...normal, ...maps];
@@ -388,11 +395,13 @@ function App() {
 
       let matchesDue = true;
       if (filterDue) {
-        if (!q.next_review) {
+        const nextReview = getNextReview(q);
+
+        if (!nextReview) {
           matchesDue = true;
         } else {
           const today = new Date();
-          const reviewDate = new Date(q.next_review);
+          const reviewDate = new Date(nextReview);
           matchesDue = reviewDate <= today;
         }
       }
@@ -406,8 +415,8 @@ function App() {
 
         // gérer les dates
         if (sortField === "next_review") {
-          valA = valA ? new Date(valA) : new Date(0);
-          valB = valB ? new Date(valB) : new Date(0);
+          valA = getNextReview(a) ? new Date(getNextReview(a)) : new Date(0);
+          valB = getNextReview(b) ? new Date(getNextReview(b)) : new Date(0);
         }
 
         // gérer texte

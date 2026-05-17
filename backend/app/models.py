@@ -115,11 +115,14 @@ class Progress(Base):
         unique=True
     )
 
+    stability = Column(Float, default=1.0)
+    difficulty = Column(Float, default=5.0)
+    reps = Column(Integer, default=0)
+    lapses = Column(Integer, default=0)
     interval = Column(Integer, default=0)
-    ease_factor = Column(Float, default=2.5)
-    repetitions = Column(Integer, default=0)
-
+    last_review = Column(Date, nullable=True)
     next_review = Column(Date)
+    history = Column(JSON, default=list)
 
     question = relationship(
         "Question",

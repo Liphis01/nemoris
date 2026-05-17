@@ -366,9 +366,9 @@ export default function ManagePreview({
         <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
           {selectedQuestion.type_q || "text"}
         </div>
-        {selectedQuestion.next_review && (
+        {(selectedQuestion.progress?.next_review || selectedQuestion.next_review) && (
           <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-            Review {selectedQuestion.next_review}
+            Review {selectedQuestion.progress?.next_review || selectedQuestion.next_review}
           </div>
         )}
       </div>

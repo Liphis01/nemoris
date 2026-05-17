@@ -27,6 +27,7 @@ from .schemas import (
     MapZoneUpdate
 )
 from .serializers import (
+    serialize_progress,
     serialize_review_question,
     serialize_map_group,
     serialize_map_item
@@ -38,8 +39,84 @@ GROUP_COMPATIBILITY = {
     "diagram": ["diagram_label"]
 }
 
+def ensure_progress_schema():
+    """
+    Keep local SQLite databases usable after Progress model changes.
+    create_all() creates missing tables, but it does not add columns.
+    """
+    with engine.begin() as connection:
+        existing_columns = {
+            row[1]
+            for row in connection.exec_driver_sql(
+                "PRAGMA table_info(progress)"
+            )
+        }
+
+        columns = {
+            "stability": "FLOAT",
+            "difficulty": "FLOAT",
+            "reps": "INTEGER",
+            "lapses": "INTEGER",
+            "last_review": "DATE",
+            "history": "JSON"
+        }
+
+        for column_name, column_type in columns.items():
+            if column_name not in existing_columns:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE progress ADD COLUMN {column_name} {column_type}"
+                )
+
+
+def create_initial_progress(question_id: int):
+    return Progress(
+        question_id=question_id,
+        stability=1.0,
+        difficulty=5.0,
+        reps=0,
+        lapses=0,
+        interval=0,
+        next_review=date.today(),
+        history=[]
+    )
+
+
+def record_answer_history(progress: Progress, quality: int, scheduling: dict):
+    history = list(progress.history or [])
+
+    history.append({
+        "reviewed_on": scheduling["last_review"].isoformat(),
+        "quality": quality,
+        "stability": scheduling["stability"],
+        "difficulty": scheduling["difficulty"],
+        "reps": scheduling["reps"],
+        "lapses": scheduling["lapses"],
+        "interval": scheduling["interval"],
+        "next_review": scheduling["next_review"].isoformat()
+    })
+
+    progress.history = history
+
+
+def apply_scheduling(progress: Progress, quality: int):
+    scheduling = update_progress(progress, quality)
+
+    progress.stability = scheduling["stability"]
+    progress.difficulty = scheduling["difficulty"]
+    progress.reps = scheduling["reps"]
+    progress.lapses = scheduling["lapses"]
+    progress.interval = scheduling["interval"]
+    progress.last_review = scheduling["last_review"]
+    progress.next_review = scheduling["next_review"]
+
+    record_answer_history(progress, quality, scheduling)
+
+    return scheduling
+
+
 # Création des tables
 Base.metadata.create_all(bind=engine)
+ensure_progress_schema()
 
 app = FastAPI()
 
@@ -146,15 +223,7 @@ def create_question(
     # CREATE PROGRESS
     # =====================================================
 
-    progress = Progress(
-        question_id=question.id,
-
-        interval=0,
-        ease_factor=2.5,
-        repetitions=0,
-
-        next_review=date.today()
-    )
+    progress = create_initial_progress(question.id)
 
     db.add(progress)
 
@@ -248,15 +317,7 @@ def create_questions_bulk(
             db.add(q)
             db.flush()
 
-            progress = Progress(
-                question_id=q.id,
-
-                interval=0,
-                ease_factor=2.5,
-                repetitions=0,
-
-                next_review=date.today()
-            )
+            progress = create_initial_progress(q.id)
 
             db.add(progress)
 
@@ -309,20 +370,7 @@ def get_questions(db: Session = Depends(get_db)):
 
             "data": q.data or {},
 
-            "progress": {
-                "interval":
-                    q.progress.interval
-                    if q.progress else 0,
-
-                "ease":
-                    q.progress.ease_factor
-                    if q.progress else 2.5,
-
-                "next_review":
-                    q.progress.next_review.isoformat()
-                    if q.progress and q.progress.next_review
-                    else None
-            },
+            "progress": serialize_progress(q.progress),
 
             "group":
                 {
@@ -859,59 +907,100 @@ def get_review(
     )[:limit]
 
 @app.post("/answer")
-def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
-    progress = db.query(Progress).filter(Progress.question_id == data.question_id).first()
-
-    if not progress:
-        progress = Progress(question_id=data.question_id)
-        db.add(progress)
-        db.commit()
-        db.refresh(progress)
-
-    interval, ease, next_review = update_progress(
-        progress.interval,
-        progress.ease_factor,
-        data.quality
+def answer_question(
+    data: AnswerRequest,
+    db: Session = Depends(get_db)
+):
+    progress = (
+        db.query(Progress)
+        .filter(Progress.question_id == data.question_id)
+        .first()
     )
 
-    progress.interval = interval
-    progress.ease_factor = ease
-    progress.next_review = next_review
+    # =========================================================
+    # CREATE NEW PROGRESS
+    # =========================================================
+
+    if not progress:
+        progress = create_initial_progress(data.question_id)
+
+        db.add(progress)
+
+    # =========================================================
+    # FSRS UPDATE
+    # =========================================================
+
+    apply_scheduling(progress, data.quality)
 
     db.commit()
 
     return {
-        "interval": interval,
-        "next_review": next_review
+        "stability": progress.stability,
+        "difficulty": progress.difficulty,
+        "interval": progress.interval,
+        "last_review": progress.last_review,
+        "next_review": progress.next_review,
+        "reps": progress.reps,
+        "lapses": progress.lapses,
+        "history": progress.history or []
     }
 
+
+# ============================================================
+# MAP ANSWERS
+# ============================================================
+
 class MapAnswerRequest(BaseModel):
-    items: Dict[int, int]  # question_id → quality
+    items: Dict[int, int]  # question_id -> quality
+
 
 @app.post("/answer_map")
-def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
+def answer_map(
+    data: MapAnswerRequest,
+    db: Session = Depends(get_db)
+):
+
+    # =========================================================
+    # LOAD ALL EXISTING PROGRESSES IN ONE QUERY
+    # =========================================================
+
+    question_ids = list(data.items.keys())
+
+    existing_progresses = (
+        db.query(Progress)
+        .filter(Progress.question_id.in_(question_ids))
+        .all()
+    )
+
+    progress_map = {
+        p.question_id: p
+        for p in existing_progresses
+    }
+
+    # =========================================================
+    # PROCESS EACH ANSWER
+    # =========================================================
 
     for q_id, quality in data.items.items():
 
-        progress = db.query(Progress).filter(
-            Progress.question_id == q_id
-        ).first()
+        progress = progress_map.get(q_id)
+
+        # -----------------------------------------------------
+        # CREATE NEW PROGRESS
+        # -----------------------------------------------------
 
         if not progress:
-            progress = Progress(question_id=q_id)
+
+            progress = create_initial_progress(q_id)
+
             db.add(progress)
-            db.commit()
-            db.refresh(progress)
+            progress_map[q_id] = progress
 
-        interval, ease, next_review = update_progress(
-            progress.interval,
-            progress.ease_factor,
-            quality
-        )
+        # -----------------------------------------------------
+        # FSRS UPDATE
+        # -----------------------------------------------------
 
-        progress.interval = interval
-        progress.ease_factor = ease
-        progress.next_review = next_review
+        apply_scheduling(progress, quality)
 
     db.commit()
 
@@ -946,15 +1035,7 @@ def get_map_zones(
 
             "aliases": q.data.get("aliases", []) if q.data else [],
 
-            "progress": {
-                "interval":
-                    q.progress.interval
-                    if q.progress else 0,
-
-                "ease":
-                    q.progress.ease_factor
-                    if q.progress else 2.5
-            }
+            "progress": serialize_progress(q.progress)
         }
         for q in group.questions
     ]
@@ -984,6 +1065,8 @@ def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
             group_id=data.group_id
         )
         db.add(q)
+        db.flush()
+        db.add(create_initial_progress(q.id))
     else:
         q.question = data.question
         q.answer = data.question
@@ -1006,4 +1089,3 @@ def upload_image(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     return {"url": f"http://127.0.0.1:8000/{file_path}"}
-

@@ -1,19 +1,80 @@
 from datetime import date, timedelta
+import math
 
-def update_progress(interval, ease, quality):
-    # quality: 0 = faux, 1 = dur, 2 = facile
+
+DESIRED_RETENTION = 0.9
+
+
+def next_interval(stability):
+    """
+    Convert stability to interval using FSRS forgetting curve
+    """
+    return max(
+        1,
+        round(stability * math.log(DESIRED_RETENTION) / math.log(0.9))
+    )
+
+
+def update_progress(progress, quality):
+
+    today = date.today()
+
+    stability = progress.stability or 1.0
+    difficulty = progress.difficulty or 5.0
+    reps = progress.reps or 0
+    lapses = progress.lapses or 0
+
+    # ============================================
+    # FAIL
+    # ============================================
 
     if quality == 0:
-        return 1, 2.5, date.today() + timedelta(days=1)
 
-    if quality == 1:
-        interval = max(1, int(interval * 1.5))
-        ease -= 0.1
+        difficulty = min(10, difficulty + 0.4)
+
+        stability = max(
+            0.5,
+            stability * 0.45
+        )
+
+        lapses += 1
+
+    # ============================================
+    # HARD
+    # ============================================
+
+    elif quality == 1:
+
+        difficulty = min(10, difficulty + 0.1)
+
+        stability = stability * (
+            1.2 + (10 - difficulty) * 0.03
+        )
+
+    # ============================================
+    # EASY
+    # ============================================
+
     else:
-        interval = int(interval * ease)
-        ease += 0.05
 
-    ease = max(1.3, ease)
-    next_review = date.today() + timedelta(days=interval)
+        difficulty = max(1, difficulty - 0.08)
 
-    return interval, ease, next_review
+        stability = stability * (
+            1.8 + (10 - difficulty) * 0.05
+        )
+
+    reps += 1
+
+    interval = next_interval(stability)
+
+    next_review = today + timedelta(days=interval)
+
+    return {
+        "stability": stability,
+        "difficulty": difficulty,
+        "reps": reps,
+        "lapses": lapses,
+        "interval": interval,
+        "next_review": next_review,
+        "last_review": today
+    }

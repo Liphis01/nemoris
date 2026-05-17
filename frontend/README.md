@@ -17,6 +17,7 @@ color: "#ff85c2",
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - vérifier que supprimer une question supprime aussi le progress associé
 - vérifier que supprimer un groupe supprime aussi les questions associées
+- les intervalles affichés sur les cards sont douteux (ou les dates)
 - quand on modifie le nom d'une zone ça ajoute une question au lieu de modifier celle existante (fixed ?)
 
 ## features

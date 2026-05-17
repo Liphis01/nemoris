@@ -3,12 +3,32 @@ def serialize_progress(progress):
     if not progress:
         return {
             "interval": 0,
-            "ease": 2.5
+            "stability": 1.0,
+            "difficulty": 5.0,
+            "reps": 0,
+            "lapses": 0,
+            "last_review": None,
+            "next_review": None,
+            "history": []
         }
 
     return {
         "interval": progress.interval,
-        "ease": progress.ease_factor
+        "stability": progress.stability,
+        "difficulty": progress.difficulty,
+        "reps": progress.reps,
+        "lapses": progress.lapses,
+        "last_review": (
+            progress.last_review.isoformat()
+            if progress.last_review
+            else None
+        ),
+        "next_review": (
+            progress.next_review.isoformat()
+            if progress.next_review
+            else None
+        ),
+        "history": progress.history or []
     }
 
 
