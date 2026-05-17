@@ -489,25 +489,38 @@ export default function MapQuestion({ group, items, onComplete }) {
 
                         const selected =
                           itemQuality[item.question_id] === qVal;
+                        const wasFound = found.includes(item.question_id);
+                        const disabled =
+                          (wasFound && qVal === 0) ||
+                          (!wasFound && qVal !== 0);
+                        const activeStyle = qualityButtonStyles[qVal];
 
                         return (
                           <button
                             key={qVal}
+                            disabled={disabled}
                             onClick={() => setQuality(item.question_id, qVal)}
                             style={{
                               padding: "10px 12px",
                               borderRadius: "10px",
-                              cursor: "pointer",
+                              cursor: disabled ? "not-allowed" : "pointer",
                               fontWeight: "600",
                               border: selected
-                                ? qualityButtonStyles[qVal].border
-                                : "1px solid #333",
+                                ? activeStyle.border
+                                : disabled
+                                  ? "1px solid #2a2a2a"
+                                  : "1px solid #333",
                               background: selected
-                                ? qualityButtonStyles[qVal].background
-                                : "#222",
+                                ? activeStyle.background
+                                : disabled
+                                  ? "#181818"
+                                  : "#222",
                               color: selected
-                                ? qualityButtonStyles[qVal].color
-                                : "#999"
+                                ? activeStyle.color
+                                : disabled
+                                  ? "#4a4a4a"
+                                  : "#999",
+                              opacity: disabled ? 0.55 : 1
                             }}
                           >
                             {qVal === 0
