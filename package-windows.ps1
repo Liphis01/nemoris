@@ -34,10 +34,18 @@ pyinstaller `
   --add-data "..\frontend\dist;frontend\dist" `
   run_desktop.py
 
+if (-not (Test-Path $OutputDir)) {
+  throw "PyInstaller did not create the expected output folder: $OutputDir"
+}
+
 Write-Host "Copying writable app data..."
+New-Item -ItemType Directory -Force $OutputDir | Out-Null
 Copy-Item "questions.db" (Join-Path $OutputDir "questions.db") -Force
 New-Item -ItemType Directory -Force (Join-Path $OutputDir "static") | Out-Null
-Copy-Item "static\*" (Join-Path $OutputDir "static") -Recurse -Force
+
+if (Test-Path "static") {
+  Copy-Item "static\*" (Join-Path $OutputDir "static") -Recurse -Force
+}
 
 Write-Host ""
 Write-Host "Done. Export this folder:"
