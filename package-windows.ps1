@@ -8,6 +8,11 @@ $OutputDir = Join-Path $BackendDir "dist\$AppName"
 
 Write-Host "Building frontend..."
 Set-Location $FrontendDir
+
+if (-not (Test-Path "node_modules")) {
+  npm install --legacy-peer-deps
+}
+
 npm run build
 
 Write-Host "Preparing backend environment..."

@@ -9,6 +9,11 @@ OUTPUT_DIR="$BACKEND_DIR/dist/$APP_NAME"
 
 echo "Building frontend..."
 cd "$FRONTEND_DIR"
+
+if [ ! -d "node_modules" ]; then
+  npm install --legacy-peer-deps
+fi
+
 npm run build
 
 echo "Preparing backend environment..."
