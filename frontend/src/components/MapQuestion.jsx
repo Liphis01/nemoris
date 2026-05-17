@@ -127,11 +127,15 @@ export default function MapQuestion({ group, items, onComplete }) {
     await sendMapAnswer(itemQuality);
     console.log("answer sent", itemQuality);
 
+    const failedQuestionIds = Object.entries(itemQuality)
+      .filter(([, quality]) => quality === 0)
+      .map(([questionId]) => Number(questionId));
+
     setShowRecap(false);
     setFound([]);
     setItemQuality({});
 
-    onComplete();
+    onComplete(failedQuestionIds);
   }
 
   function setQuality(id, quality) {

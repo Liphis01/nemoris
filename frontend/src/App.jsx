@@ -60,6 +60,10 @@ function App() {
 
     sendAnswer(current.question_id, quality);
 
+    if (quality === 0) {
+      setQuestions(prev => [...prev, current]);
+    }
+
     setShowAnswer(false);
     setCurrentIndex(prev => prev + 1);
   }, [current]);
@@ -133,7 +137,23 @@ function App() {
       mode === "manage" ? "hidden" : "auto";
   }, [mode]);
 
-  function handleMapComplete() {
+  function handleMapComplete(failedQuestionIds = []) {
+    if (current && failedQuestionIds.length > 0) {
+      const failedItems = (current.items || []).filter(item =>
+        failedQuestionIds.includes(item.question_id)
+      );
+
+      if (failedItems.length > 0) {
+        setQuestions(prev => [
+          ...prev,
+          {
+            ...current,
+            items: failedItems
+          }
+        ]);
+      }
+    }
+
     setCurrentIndex(prev => prev + 1);
   }
 
