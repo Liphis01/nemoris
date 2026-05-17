@@ -63,7 +63,7 @@ const qualityButtonStyles = {
   }
 };
 
-export default function MapQuestion({ group, items, media, onComplete }) {
+export default function MapQuestion({ group, items, onComplete }) {
 
   const [input, setInput] = useState("");
   const [found, setFound] = useState([]);
@@ -388,11 +388,7 @@ export default function MapQuestion({ group, items, media, onComplete }) {
                 gap: "10px"
               }}
             >
-              {items.map(item => {
-
-                const isFound = found.includes(item.question_id);
-
-                return (
+              {items.map(item => (
                   <div
                     key={item.question_id}
                     style={{
@@ -460,8 +456,7 @@ export default function MapQuestion({ group, items, media, onComplete }) {
                     </div>
 
                   </div>
-                );
-              })}
+              ))}
             </div>
 
           </div>
@@ -471,13 +466,6 @@ export default function MapQuestion({ group, items, media, onComplete }) {
     </>
   );
 }
-
-const gridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-  gap: "8px",
-  marginTop: "18px"
-};
 
 const overlayStyle = {
   position: "fixed",

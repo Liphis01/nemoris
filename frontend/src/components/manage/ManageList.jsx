@@ -9,7 +9,6 @@ export default function ManageList({
   selectedQuestion,
   setSelectedQuestion,
   viewMode,
-  editing,
   setEditing,
   deleteQuestion,
   deleteGroup

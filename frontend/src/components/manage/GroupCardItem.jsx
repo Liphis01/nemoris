@@ -11,7 +11,7 @@ export default function GroupCardItem({
   return (
     <div
       data-delete-card-id={group.id}
-      onClick={(event) => {
+      onClick={() => {
         if (deleteOpen) {
           closeDelete?.();
           return;

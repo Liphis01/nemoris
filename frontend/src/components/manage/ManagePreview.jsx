@@ -68,8 +68,7 @@ export default function ManagePreview({
   createQuestion,
   createGroup,
   reloadAllData,
-  editing,
-  setEditing
+  editing
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");

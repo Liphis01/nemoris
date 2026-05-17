@@ -15,7 +15,7 @@ export default function MapCard({
   return (
     <div
       data-delete-card-id={q.id}
-      onClick={(event) => {
+      onClick={() => {
         if (deleteOpen) {
           closeDelete?.();
           return;

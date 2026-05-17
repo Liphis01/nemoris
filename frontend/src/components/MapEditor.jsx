@@ -38,7 +38,7 @@ export default function MapEditor({
         const mapZones = data.filter(
           item =>
             item.type_q === "map" &&
-            item.group.id === group.id
+            item.group?.id === group.id
         );
 
         setZones(mapZones);
@@ -69,7 +69,7 @@ export default function MapEditor({
       });
     }
 
-  }, [group.id]);
+  }, [group.id, group.media, group.name, group.type_group]);
 
   useEffect(() => {
     if (!selectedZone) return;

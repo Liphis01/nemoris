@@ -15,18 +15,6 @@ export default function SvgMap({
     const [isDragging, setIsDragging] = useState(false);
     const [start, setStart] = useState({ x: 0, y: 0 });
 
-    function handleWheel(e) {
-        e.preventDefault();
-
-        const zoomFactor = 0.1;
-        const newScale = Math.min(
-            Math.max(0.5, scale - e.deltaY * zoomFactor * 0.01),
-            5
-        );
-
-        setScale(newScale);
-    }
-
     function handleMouseDown(e) {
         if (e.button !== 2) return; // clic droit uniquement
 
@@ -110,7 +98,7 @@ export default function SvgMap({
         return () => {
             cleanupFns.forEach(fn => fn());
         };
-    }, [svgPath, found, missed, selected, dueItems]);
+    }, [svgPath, found, missed, selected, dueItems, onSelect]);
 
     useEffect(() => {
         const el = wrapperRef.current;
