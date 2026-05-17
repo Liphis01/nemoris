@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sendMapAnswer } from "../api/api";
 import { fadeInStyle } from "../styles";
 import SvgMap from "./SvgMap";
@@ -69,6 +69,21 @@ export default function MapQuestion({ group, items, onComplete }) {
   const [found, setFound] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
   const [itemQuality, setItemQuality] = useState({});
+  const [incorrectFlashId, setIncorrectFlashId] = useState(0);
+  const [correctFlashId, setCorrectFlashId] = useState(0);
+
+  useEffect(() => {
+    if (!incorrectFlashId && !correctFlashId) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setIncorrectFlashId(0);
+      setCorrectFlashId(0);
+    }, 800);
+
+    return () => window.clearTimeout(timeout);
+  }, [incorrectFlashId, correctFlashId]);
 
   function normalize(str) {
     return str
@@ -87,6 +102,11 @@ export default function MapQuestion({ group, items, onComplete }) {
 
     if (match && !found.includes(match.question_id)) {
       setFound(prev => [...prev, match.question_id]);
+      setCorrectFlashId(Date.now());
+      setIncorrectFlashId(0);
+    } else if (input.trim()) {
+      setIncorrectFlashId(Date.now());
+      setCorrectFlashId(0);
     }
 
     setInput("");
@@ -122,6 +142,9 @@ export default function MapQuestion({ group, items, onComplete }) {
   }
 
   const progressPercent = (found.length / items.length) * 100;
+  const isIncorrectFlash = incorrectFlashId > 0;
+  const isCorrectFlash = correctFlashId > 0;
+  const feedbackTone = isIncorrectFlash ? "incorrect" : isCorrectFlash ? "correct" : null;
 
   return (
     <>
@@ -214,18 +237,35 @@ export default function MapQuestion({ group, items, onComplete }) {
               style={{
                 height: "10px",
                 borderRadius: "999px",
-                background: "#111",
+                background: feedbackTone === "incorrect"
+                  ? "rgba(127, 29, 29, 0.45)"
+                  : feedbackTone === "correct"
+                    ? "rgba(20, 83, 45, 0.42)"
+                  : "#111",
                 overflow: "hidden",
-                border: "1px solid #2a2a2a"
+                border: feedbackTone === "incorrect"
+                  ? "1px solid rgba(248, 113, 113, 0.9)"
+                  : feedbackTone === "correct"
+                    ? "1px solid rgba(134, 239, 172, 0.85)"
+                  : "1px solid #2a2a2a",
+                boxShadow: feedbackTone === "incorrect"
+                  ? "0 0 0 4px rgba(248, 113, 113, 0.12), 0 0 24px rgba(239, 68, 68, 0.35)"
+                  : feedbackTone === "correct"
+                    ? "0 0 0 4px rgba(134, 239, 172, 0.12), 0 0 24px rgba(34, 197, 94, 0.28)"
+                  : "none",
+                transition: "background 0.18s ease, border 0.18s ease, box-shadow 0.18s ease"
               }}
             >
               <div
                 style={{
                   width: `${progressPercent}%`,
                   height: "100%",
-                  background:
-                    "linear-gradient(90deg, #38bdf8, #60a5fa)",
-                  transition: "0.2s"
+                  background: feedbackTone === "incorrect"
+                    ? "linear-gradient(90deg, #ef4444, #fb7185)"
+                    : feedbackTone === "correct"
+                      ? "linear-gradient(90deg, #86efac, #4ade80)"
+                    : "linear-gradient(90deg, #38bdf8, #60a5fa)",
+                  transition: "width 0.2s ease, background 0.18s ease"
                 }}
               />
             </div>
@@ -271,6 +311,8 @@ export default function MapQuestion({ group, items, onComplete }) {
 
                 if (item && !found.includes(item.question_id)) {
                   setFound(prev => [...prev, item.question_id]);
+                  setCorrectFlashId(Date.now());
+                  setIncorrectFlashId(0);
                 }
               }}
             />
@@ -289,7 +331,20 @@ export default function MapQuestion({ group, items, onComplete }) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             placeholder="Tape une zone..."
-            style={inputStyle}
+            style={{
+              ...inputStyle,
+              border: feedbackTone === "incorrect"
+                ? "1px solid rgba(248, 113, 113, 0.9)"
+                : feedbackTone === "correct"
+                  ? "1px solid rgba(134, 239, 172, 0.85)"
+                : inputStyle.border,
+              boxShadow: feedbackTone === "incorrect"
+                ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
+                : feedbackTone === "correct"
+                  ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
+                : "none",
+              transition: "border 0.18s ease, box-shadow 0.18s ease"
+            }}
           />
 
           {/* FOOTER */}
@@ -299,16 +354,26 @@ export default function MapQuestion({ group, items, onComplete }) {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                gap: "18px",
                 marginTop: "24px"
               }}
             >
               <div
                 style={{
-                  color: "#666",
-                  fontSize: "13px"
+                  color: feedbackTone === "incorrect"
+                    ? "#fca5a5"
+                    : feedbackTone === "correct"
+                      ? "#86efac"
+                      : "#666",
+                  fontSize: "13px",
+                  transition: "color 0.18s ease"
                 }}
               >
-                Clique sur la carte ou tape les réponses.
+                {feedbackTone === "incorrect"
+                  ? "Réponse incorrecte, essaie encore."
+                  : feedbackTone === "correct"
+                    ? "Bonne réponse."
+                    : "Clique sur la carte ou tape les réponses."}
               </div>
 
               <button
