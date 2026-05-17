@@ -1,3 +1,5 @@
+import { apiUrl } from "./config";
+
 export async function getReview(selectedTags = [], limit = 200, collectionId = null) {
   const params = new URLSearchParams();
 
@@ -6,12 +8,12 @@ export async function getReview(selectedTags = [], limit = 200, collectionId = n
   if (limit) params.append("limit", limit);
   if (collectionId) params.append("collection_id", collectionId);
 
-  const res = await fetch(`http://localhost:8000/review?${params}`);
+  const res = await fetch(apiUrl(`/review?${params}`));
   return await res.json();
 }
 
 export async function sendAnswer(questionId, quality) {
-  await fetch("http://localhost:8000/answer", {
+  await fetch(apiUrl("/answer"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -24,7 +26,7 @@ export async function sendAnswer(questionId, quality) {
 }
 
 export async function sendMapAnswer(items) {
-  await fetch("http://localhost:8000/answer_map", {
+  await fetch(apiUrl("/answer_map"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

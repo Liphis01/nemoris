@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { apiUrl } from "../api/config";
 import SvgMap from "./SvgMap";
 
 export default function MapEditor({
@@ -29,9 +30,7 @@ export default function MapEditor({
 
       try {
 
-        const res = await fetch(
-          "http://localhost:8000/questions"
-        );
+        const res = await fetch(apiUrl("/questions"));
 
         const data = await res.json();
 
@@ -191,7 +190,7 @@ export default function MapEditor({
     }
     setEditing(null);
 
-    await fetch(`http://localhost:8000/groups/${group.id}`, {
+    await fetch(apiUrl(`/groups/${group.id}`), {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -210,7 +209,7 @@ export default function MapEditor({
       if (!z.id) return;
       if (String(z.id).startsWith("tmp-")) {
         // New zone - create via POST
-        await fetch("http://localhost:8000/questions", {
+        await fetch(apiUrl("/questions"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -243,7 +242,7 @@ export default function MapEditor({
 
       } else {
         // Update existing zone
-        await fetch(`http://localhost:8000/questions/${z.id}`, {
+        await fetch(apiUrl(`/questions/${z.id}`), {
           method: "PUT",
           headers: {
             "Content-Type": "application/json"

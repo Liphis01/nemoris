@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../api/config";
 
 export default function CollectionModal({ q, onClose }) {
   const [collections, setCollections] = useState([]);
@@ -6,7 +7,7 @@ export default function CollectionModal({ q, onClose }) {
   const [newName, setNewName] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:8000/collections")
+    fetch(apiUrl("/collections"))
       .then(res => res.json())
       .then(setCollections);
   }, []);
@@ -20,7 +21,7 @@ export default function CollectionModal({ q, onClose }) {
   }
 
   async function save() {
-    await fetch(`http://localhost:8000/questions/${q.id}/collections`, {
+    await fetch(apiUrl(`/questions/${q.id}/collections`), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ collection_ids: selected })
@@ -30,7 +31,7 @@ export default function CollectionModal({ q, onClose }) {
   }
 
   async function createCollection() {
-    const res = await fetch("http://localhost:8000/collections", {
+    const res = await fetch(apiUrl("/collections"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json"

@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { getReview, sendAnswer } from "./api/api";
+import { apiUrl } from "./api/config";
 import Menu from "./components/Menu";
 import Quiz from "./components/Quiz";
 import Manage from "./components/manage/Manage";
@@ -137,13 +138,13 @@ function App() {
   }
 
   async function loadAllQuestions() {
-    const res = await fetch("http://localhost:8000/questions");
+    const res = await fetch(apiUrl("/questions"));
     const data = await res.json();
     setAllQuestions(data);
   }
 
   async function loadAllGroups() {
-    const res = await fetch("http://localhost:8000/groups");
+    const res = await fetch(apiUrl("/groups"));
     const data = await res.json();
     setAllGroups(data);
   }
@@ -158,7 +159,7 @@ function App() {
   }
 
   async function updateQuestion(id, updatedFields) {
-    await fetch(`http://localhost:8000/questions/${id}`, {
+    await fetch(apiUrl(`/questions/${id}`), {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -173,7 +174,7 @@ function App() {
   }
 
   async function deleteQuestion(id) {
-    await fetch(`http://localhost:8000/questions/${id}`, {
+    await fetch(apiUrl(`/questions/${id}`), {
       method: "DELETE",
     });
 
@@ -193,7 +194,7 @@ function App() {
   }
 
   async function deleteGroup(id) {
-    const res = await fetch(`http://localhost:8000/groups/${id}`, {
+    const res = await fetch(apiUrl(`/groups/${id}`), {
       method: "DELETE",
     });
 
@@ -214,7 +215,7 @@ function App() {
 
     console.log(newRow);
 
-    const res = await fetch("http://localhost:8000/questions",
+    const res = await fetch(apiUrl("/questions"),
       {
         method: "POST",
         headers: {
@@ -259,7 +260,7 @@ function App() {
       data: newGroup.data
     };
 
-    const res = await fetch("http://localhost:8000/groups", {
+    const res = await fetch(apiUrl("/groups"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -291,7 +292,7 @@ function App() {
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch("http://127.0.0.1:8000/upload", {
+    const res = await fetch(apiUrl("/upload"), {
       method: "POST",
       body: formData
     });
@@ -340,7 +341,7 @@ function App() {
   }
 
   async function deleteImage(id) {
-    await fetch(`http://127.0.0.1:8000/questions/${id}/image`, {
+    await fetch(apiUrl(`/questions/${id}/image`), {
       method: "DELETE"
     });
 

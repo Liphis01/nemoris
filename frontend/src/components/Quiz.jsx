@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { apiUrl } from "../api/config";
 import QuestionRenderer from "./QuestionRenderer";
 
 const inputStyle = {
@@ -29,7 +30,7 @@ export default function Quiz({
   const [selectedCollection, setSelectedCollection] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:8000/collections")
+    fetch(apiUrl("/collections"))
       .then(res => res.json())
       .then(setCollections);
   }, []);
