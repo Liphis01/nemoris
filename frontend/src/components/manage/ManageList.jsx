@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QuestionCard from "./QuestionCard";
 import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
@@ -16,6 +16,7 @@ export default function ManageList({
 
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const selectedCardRef = useRef(null);
 
   function handleDeleteQuestion(id) {
     setRemovingId(id);
@@ -75,6 +76,15 @@ export default function ManageList({
     viewMode === "questions"
       ? filteredQuestions
       : allGroups;
+
+  useEffect(() => {
+    if (viewMode !== "questions" || !selectedQuestion?.id) return;
+
+    selectedCardRef.current?.scrollIntoView({
+      block: "center",
+      behavior: "smooth"
+    });
+  }, [selectedQuestion, viewMode]);
 
   return (
     <div
@@ -154,6 +164,7 @@ export default function ManageList({
             return (
               <div
                 key={q.id}
+                ref={selectedQuestion?.id === q.id ? selectedCardRef : null}
                 style={{
                   transition: "all 0.18s ease",
                   opacity: removingId === q.id ? 0 : 1,
@@ -190,6 +201,7 @@ export default function ManageList({
           return (
             <div
               key={q.id}
+              ref={selectedQuestion?.id === q.id ? selectedCardRef : null}
               style={{
                 transition: "all 0.18s ease",
                 opacity: removingId === q.id ? 0 : 1,

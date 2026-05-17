@@ -141,12 +141,14 @@ function App() {
     const res = await fetch(apiUrl("/questions"));
     const data = await res.json();
     setAllQuestions(data);
+    return data;
   }
 
   async function loadAllGroups() {
     const res = await fetch(apiUrl("/groups"));
     const data = await res.json();
     setAllGroups(data);
+    return data;
   }
 
   function getNextReview(question) {
@@ -154,8 +156,12 @@ function App() {
   }
 
   async function reloadAllData() {
-    await loadAllGroups();
-    await loadAllQuestions();
+    const [groups, questions] = await Promise.all([
+      loadAllGroups(),
+      loadAllQuestions()
+    ]);
+
+    return { groups, questions };
   }
 
   async function updateQuestion(id, updatedFields) {

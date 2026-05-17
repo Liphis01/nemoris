@@ -55,6 +55,7 @@ export default function ManagePreview({
   updateQuestion,
   updateQuestionInState,
   setSelectedQuestion,
+  setEditing,
   deleteQuestion,
   handleUpload,
   isCreating,
@@ -68,7 +69,8 @@ export default function ManagePreview({
   createQuestion,
   createGroup,
   reloadAllData,
-  editing
+  editing,
+  setViewMode
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -279,7 +281,7 @@ export default function ManagePreview({
       >
         <MapEditor
           group={group}
-          onSave={async (delta) => {
+          onSave={async (delta, saveContext) => {
             if (typeof delta === "number") {
               setAllGroups(prev =>
                 prev.map(g =>
@@ -288,8 +290,23 @@ export default function ManagePreview({
                     : g
                 )
               );
-            } else {
-              await reloadAllData();
+            }
+
+            const reloaded = await reloadAllData();
+            const selectedZoneCode = saveContext?.selectedZoneCode;
+
+            if (selectedZoneCode) {
+              const savedZone = reloaded.questions.find((question) =>
+                question.type_q === "map" &&
+                question.group?.id === group.id &&
+                (question.data?.code || question.code) === selectedZoneCode
+              );
+
+              if (savedZone) {
+                setViewMode?.("questions");
+                setSelectedQuestion(savedZone);
+                setEditing?.(savedZone);
+              }
             }
           }}
           onClose={() => { }}

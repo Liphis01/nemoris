@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { apiUrl } from "../api/config";
 import SvgMap from "./SvgMap";
 
+function getZoneCode(zone) {
+  return zone?.data?.code || zone?.code;
+}
+
+function isBlankTemporaryZone(zone) {
+  return String(zone?.id || "").startsWith("tmp-") && !zone?.answer?.trim();
+}
+
 export default function MapEditor({
   group,
   onClose,
@@ -72,6 +80,7 @@ export default function MapEditor({
 
   useEffect(() => {
     if (!selectedZone) return;
+    setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
     setEditing(selectedZone);
   }, [selectedZone]);
 
@@ -82,12 +91,12 @@ export default function MapEditor({
   function handleSelect(code) {
     let nextZones = zones;
 
-    if (editing && !editing.answer) {
+    if (isBlankTemporaryZone(editing)) {
       nextZones = zones.filter(z => z.id !== editing.id);
       setZones(nextZones);
     }
 
-    let zone = nextZones.find(z => (z.data?.code || z.code) === code);
+    let zone = nextZones.find(z => getZoneCode(z) === code);
 
     if (!zone) {
       zone = {
@@ -99,19 +108,32 @@ export default function MapEditor({
         group_id: group.id,
         data: { code, aliases: [] }
       };
-      setZones(prev => [...prev, zone]);
     }
 
     setEditing(zone);
   }
 
   function updateLabel(value) {
-    setZones(prev =>
-      prev.map(z =>
-        z.data?.code === editing.data?.code ? { ...z, answer: value } : z
-      )
-    );
-    setEditing(prev => ({ ...prev, answer: value }));
+    const nextEditing = { ...editing, answer: value };
+
+    setZones(prev => {
+      const code = getZoneCode(editing);
+
+      if (isBlankTemporaryZone(nextEditing)) {
+        return prev.filter(z => z.id !== editing.id);
+      }
+
+      const zoneExists = prev.some(z => getZoneCode(z) === code);
+
+      if (!zoneExists) {
+        return [...prev, nextEditing];
+      }
+
+      return prev.map(z =>
+        getZoneCode(z) === code ? { ...z, answer: value } : z
+      );
+    });
+    setEditing(nextEditing);
   }
 
   function addAlias(focusAfter = false) {
@@ -183,6 +205,9 @@ export default function MapEditor({
     const zonesToSave = editing && !editing.answer
       ? zones.filter((z) => z.id !== editing.id)
       : zones;
+    const savedEditingCode = editing && editing.answer
+      ? getZoneCode(editing)
+      : null;
 
     if (editing && !editing.answer) {
       setZones(zonesToSave);
@@ -266,7 +291,7 @@ export default function MapEditor({
     initialZonesRef.current = zonesToSave;
 
     if (onSave) {
-      await onSave(delta);
+      await onSave(delta, { selectedZoneCode: savedEditingCode });
     }
 
     if (onClose) {
