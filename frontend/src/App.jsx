@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { getReview, sendAnswer } from "./api/api";
 import { apiUrl } from "./api/config";
 import Menu from "./components/Menu";
@@ -171,9 +171,9 @@ function App() {
     return data;
   }
 
-  function getNextReview(question) {
+  const getNextReview = useCallback((question) => {
     return question.progress?.next_review || question.next_review || null;
-  }
+  }, []);
 
   async function reloadAllData() {
     const [groups, questions] = await Promise.all([
@@ -385,7 +385,7 @@ function App() {
   }
 
   // 🔥 Regroupement des maps pour l'affichage Manage
-  const groupedQuestions = (() => {
+  const groupedQuestions = useMemo(() => {
     const normal = [];
     const mapGroups = {};
 
@@ -417,10 +417,10 @@ function App() {
     }));
 
     return [...normal, ...maps];
-  })();
+  }, [allQuestions, getNextReview]);
 
-  const filteredQuestions =
-    groupedQuestions.filter((q) => {
+  const filteredQuestions = useMemo(
+    () => groupedQuestions.filter((q) => {
       const matchesSearch =
         (q.question || "").toLowerCase().includes(search.toLowerCase()) ||
         (q.answer || "").toLowerCase().includes(search.toLowerCase());
@@ -465,7 +465,17 @@ function App() {
         if (valA < valB) return sortOrder === "asc" ? -1 : 1;
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
-      });
+      }),
+    [
+      filterDue,
+      filterTheme,
+      getNextReview,
+      groupedQuestions,
+      search,
+      sortField,
+      sortOrder
+    ]
+  );
 
 
   return (

@@ -10,6 +10,32 @@ function isBlankTemporaryZone(zone) {
   return String(zone?.id || "").startsWith("tmp-") && !zone?.answer?.trim();
 }
 
+function normalizeZone(zone, group) {
+  const code = getZoneCode(zone);
+  const aliases = zone?.data?.aliases || zone?.aliases || [];
+
+  return {
+    ...zone,
+    type_q: "map",
+    question: zone?.question || `${group.name || ""} - ${code}`,
+    answer: zone?.answer || zone?.label || "",
+    media: zone?.media || "",
+    tags: zone?.tags || [],
+    group_id: zone?.group_id || group.id,
+    group: zone?.group || {
+      id: group.id,
+      type_group: group.type_group || "map",
+      name: group.name,
+      media: group.media
+    },
+    data: {
+      ...(zone?.data || {}),
+      code,
+      aliases
+    }
+  };
+}
+
 export default function MapEditor({
   group,
   onClose,
@@ -25,32 +51,42 @@ export default function MapEditor({
   const labelInputRef = useRef(null);
   const aliasesInputRef = useRef(null);
   const zonesRef = useRef([]);
+  const dirtyZoneCodesRef = useRef(new Set());
   const [editableGroup, setEditableGroup] = useState({
     name: group.name || "",
     type_group: group.type_group || "map",
     media: group.media || ""
   });
 
-  // Load zones from questions
+  function markDirty(code) {
+    if (code) {
+      dirtyZoneCodesRef.current.add(code);
+    }
+  }
+
+  function clearDirty(code) {
+    if (code) {
+      dirtyZoneCodesRef.current.delete(code);
+    }
+  }
+
+  // Load zones from the selected map group only.
   useEffect(() => {
 
     async function loadZones() {
 
       try {
 
-        const res = await fetch(apiUrl("/questions"));
+        const res = await fetch(apiUrl(`/maps/${group.id}/zones`));
 
         const data = await res.json();
 
-        const mapZones = data.filter(
-          item =>
-            item.type_q === "map" &&
-            item.group?.id === group.id
-        );
+        const mapZones = data.map(zone => normalizeZone(zone, group));
 
         setZones(mapZones);
 
         initialZonesRef.current = mapZones;
+        dirtyZoneCodesRef.current.clear();
 
       } catch (err) {
 
@@ -70,13 +106,13 @@ export default function MapEditor({
       });
     }
 
-  }, [group.id, group.media, group.name, group.type_group]);
+  }, [group]);
 
   useEffect(() => {
     if (!selectedZone) return;
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
-    setEditing(selectedZone);
-  }, [selectedZone]);
+    setEditing(normalizeZone(selectedZone, group));
+  }, [group, selectedZone]);
 
   useEffect(() => {
     zonesRef.current = zones;
@@ -117,6 +153,7 @@ export default function MapEditor({
     if (isBlankTemporaryZone(editing)) {
       nextZones = zones.filter(z => z.id !== editing.id);
       setZones(nextZones);
+      clearDirty(getZoneCode(editing));
     }
 
     let zone = nextZones.find(z => getZoneCode(z) === code);
@@ -138,20 +175,22 @@ export default function MapEditor({
 
   function updateLabel(value) {
     const nextEditing = { ...editing, answer: value };
+    const code = getZoneCode(editing);
 
     setZones(prev => {
-      const code = getZoneCode(editing);
-
       if (isBlankTemporaryZone(nextEditing)) {
+        clearDirty(code);
         return prev.filter(z => z.id !== editing.id);
       }
 
       const zoneExists = prev.some(z => getZoneCode(z) === code);
 
       if (!zoneExists) {
+        markDirty(code);
         return [...prev, nextEditing];
       }
 
+      markDirty(code);
       return prev.map(z =>
         getZoneCode(z) === code ? { ...z, answer: value } : z
       );
@@ -165,10 +204,12 @@ export default function MapEditor({
 
     const currentAliases = editing.data?.aliases || [];
     const newAliases = [...currentAliases, value];
+    const code = getZoneCode(editing);
+    markDirty(code);
 
     setZones(prev =>
       prev.map(z =>
-        z.data?.code === editing.data?.code
+        getZoneCode(z) === code
           ? {
             ...z,
             data: { ...z.data, aliases: newAliases }
@@ -192,10 +233,12 @@ export default function MapEditor({
   function removeAlias(index) {
     const currentAliases = editing.data?.aliases || [];
     const newAliases = currentAliases.filter((_, i) => i !== index);
+    const code = getZoneCode(editing);
+    markDirty(code);
 
     setZones(prev =>
       prev.map(z =>
-        z.data?.code === editing.data?.code
+        getZoneCode(z) === code
           ? {
             ...z,
             data: { ...z.data, aliases: newAliases }
@@ -231,97 +274,74 @@ export default function MapEditor({
     const savedEditingCode = editing && editing.answer
       ? getZoneCode(editing)
       : null;
-    const createdQuestionIds = [];
-    const createdZoneCodes = [];
+    const dirtyCodes = dirtyZoneCodesRef.current;
+    const changedZones = zonesToSave.filter(z => {
+      const code = getZoneCode(z);
+      return dirtyCodes.has(code) || String(z.id || "").startsWith("tmp-");
+    });
 
     if (editing && !editing.answer) {
+      clearDirty(getZoneCode(editing));
       setZones(zonesToSave);
     }
     setEditing(null);
 
-    await fetch(apiUrl(`/groups/${group.id}`), {
-      method: "PUT",
+    const res = await fetch(apiUrl(`/maps/${group.id}/zones`), {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: editableGroup.name,
-        type_group: editableGroup.type_group,
-        media: editableGroup.media
+        group: {
+          name: editableGroup.name,
+          media: editableGroup.media
+        },
+        zones: changedZones.map(z => ({
+          id: String(z.id || "").startsWith("tmp-") ? null : z.id,
+          code: getZoneCode(z),
+          answer: z.answer || "",
+          aliases: z.data?.aliases || []
+        }))
       })
     });
 
-    for (const z of zonesToSave) {
-      const code = z.data?.code;
-      const aliases = z.data?.aliases || [];
-
-      if (!z.id) return;
-      if (String(z.id).startsWith("tmp-")) {
-        // New zone - create via POST
-        await fetch(apiUrl("/questions"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            "question": group.name + " - " + code,
-            "answer": z.answer || "",
-            "type_q": "map",
-            "media": "",
-            "tags": [],
-            "group_id": group.id,
-            // "map_id": 0,
-            "data": {
-              "code": code,
-              "aliases": aliases
-            },
-            "collection_ids": []
-          })
-        })
-        // retrieve id and update local state to avoid duplicates on next save
-        .then(res => res.json())
-        .then(created => {
-          createdQuestionIds.push(created.id);
-          createdZoneCodes.push(code);
-
-          setZones(prev =>
-            prev.map(zone =>
-              zone.id === z.id ? { ...zone, id: created.id } : zone
-            )
-          );
-        });
-
-
-      } else {
-        // Update existing zone
-        await fetch(apiUrl(`/questions/${z.id}`), {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            answer: z.answer || "",
-            data: {
-              code: code,
-              aliases: aliases
-            }
-          })
-        });
-      }
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null);
+      alert(payload?.detail || "Impossible de sauvegarder la carte.");
+      return;
     }
+
+    const saveResult = await res.json();
+    const savedZones = (saveResult.zones || []).map(zone =>
+      normalizeZone(zone, saveResult.group || group)
+    );
+    const savedByCode = new Map(
+      savedZones.map(zone => [getZoneCode(zone), zone])
+    );
+    const nextZones = zonesToSave.map(zone =>
+      savedByCode.get(getZoneCode(zone)) || zone
+    );
+
+    setZones(nextZones);
+    dirtyZoneCodesRef.current.clear();
 
     // Compute delta between saved zones and initial loaded zones
     const initialCount = (initialZonesRef.current || []).length;
-    const newCount = zonesToSave.length;
+    const newCount = saveResult.question_count ?? nextZones.length;
     const delta = newCount - initialCount;
     // update initial zones to avoid duplicates on next save
-    initialZonesRef.current = zonesToSave;
+    initialZonesRef.current = nextZones;
 
     if (onSave) {
       await onSave(delta, {
         selectedZoneCode: savedEditingCode,
-        createdQuestionIds,
-        createdZoneCodes
+        createdQuestionIds: saveResult.createdQuestionIds || [],
+        createdZoneCodes: saveResult.createdZoneCodes || [],
+        updatedQuestionIds: saveResult.updatedQuestionIds || [],
+        updatedZoneCodes: saveResult.updatedZoneCodes || [],
+        group: saveResult.group,
+        zones: savedZones,
+        questionCount: saveResult.question_count
       });
     }
 
@@ -552,7 +572,7 @@ export default function MapEditor({
             <SvgMap
               svgPath={`/maps/${editableGroup.media}`}
               found={foundCodes}
-              selected={editing?.data.code}
+              selected={editing?.data?.code}
               onSelect={handleSelect}
               onCodesLoaded={handleCodesLoaded}
             />

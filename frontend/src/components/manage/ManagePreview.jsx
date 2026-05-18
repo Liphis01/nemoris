@@ -51,6 +51,7 @@ const tagStyle = {
 export default function ManagePreview({
   allGroups,
   setAllGroups,
+  setAllQuestions,
   selectedQuestion,
   updateQuestion,
   updateQuestionInState,
@@ -68,7 +69,6 @@ export default function ManagePreview({
   setNewGroup,
   createQuestion,
   createGroup,
-  reloadAllData,
   editing,
   setViewMode,
   setHighlightedQuestionIds
@@ -299,7 +299,18 @@ export default function ManagePreview({
         <MapEditor
           group={group}
           onSave={async (delta, saveContext) => {
-            if (typeof delta === "number") {
+            const savedGroup = saveContext?.group;
+            const savedZones = saveContext?.zones || [];
+
+            if (savedGroup) {
+              setAllGroups(prev =>
+                prev.map(g =>
+                  g.id === savedGroup.id
+                    ? { ...g, ...savedGroup }
+                    : g
+                )
+              );
+            } else if (typeof delta === "number") {
               setAllGroups(prev =>
                 prev.map(g =>
                   g.id === group.id
@@ -309,26 +320,32 @@ export default function ManagePreview({
               );
             }
 
-            const reloaded = await reloadAllData();
+            if (savedZones.length > 0) {
+              setAllQuestions?.(prev => {
+                const existingIds = new Set(prev.map(question => question.id));
+                const patched = prev.map(question => {
+                  const savedZone = savedZones.find(zone => zone.id === question.id);
+                  return savedZone || question;
+                });
+                const created = savedZones.filter(zone => !existingIds.has(zone.id));
+
+                return [...patched, ...created];
+              });
+            }
+
             const selectedZoneCode = saveContext?.selectedZoneCode;
             const createdQuestionIds = saveContext?.createdQuestionIds || [];
-            const createdZoneCodes = saveContext?.createdZoneCodes || [];
+            const updatedQuestionIds = saveContext?.updatedQuestionIds || [];
             const highlightedIds = createdQuestionIds.length > 0
               ? createdQuestionIds
-              : reloaded.questions
-                .filter((question) =>
-                  question.type_q === "map" &&
-                  question.group?.id === group.id &&
-                  createdZoneCodes.includes(question.data?.code || question.code)
-                )
-                .map((question) => question.id);
+              : updatedQuestionIds;
 
             if (highlightedIds.length > 0) {
               setHighlightedQuestionIds?.(highlightedIds);
             }
 
             if (selectedZoneCode) {
-              const savedZone = reloaded.questions.find((question) =>
+              const savedZone = savedZones.find((question) =>
                 question.type_q === "map" &&
                 question.group?.id === group.id &&
                 (question.data?.code || question.code) === selectedZoneCode

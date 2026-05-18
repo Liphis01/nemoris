@@ -19,6 +19,8 @@ export default function SvgMap({
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [start, setStart] = useState({ x: 0, y: 0 });
+    const zoneElementsRef = useRef([]);
+    const [svgVersion, setSvgVersion] = useState(0);
 
     function handleMouseDown(e) {
         if (e.button !== 2) return; // clic droit uniquement
@@ -46,11 +48,13 @@ export default function SvgMap({
     }
 
     useEffect(() => {
-        let cleanupFns = [];
+        let cancelled = false;
 
         fetch(svgPath)
             .then((res) => res.text())
             .then((svg) => {
+                if (cancelled || !containerRef.current) return;
+
                 containerRef.current.innerHTML = svg;
 
                 const svgEl = containerRef.current.querySelector("svg");
@@ -60,47 +64,19 @@ export default function SvgMap({
                 svgEl.style.height = "100%";
                 svgEl.style.display = "block";
 
-                const getColor = (code) => {
-                    if (selected === code) return "#f39c12";
-                    if (found.includes(code)) return "#21eb75";
-                    if (missed.includes(code)) return "#e93723";
-                    if (dueItems.includes(code)) return "#0e3e5adc";
-                    return "#444";
-                };
-
                 const mapCodes = new Set();
+                const zoneElements = [];
 
                 containerRef.current.querySelectorAll("[data-code]").forEach((el) => {
                     const code = normalizeCode(el.getAttribute("data-code"));
                     if (code) mapCodes.add(code);
 
-                    el.style.fill = getColor(code);
                     el.style.cursor = "pointer";
-
-                    const handleClick = () => {
-                        if (code && onSelect) onSelect(code);
-                    };
-
-                    const handleEnter = () => {
-                        if (!found.includes(code) && selected !== code) {
-                            el.style.fill = "#888";
-                        }
-                    };
-
-                    const handleLeave = () => {
-                        el.style.fill = getColor(code);
-                    };
-
-                    el.addEventListener("click", handleClick);
-                    el.addEventListener("mouseenter", handleEnter);
-                    el.addEventListener("mouseleave", handleLeave);
-
-                    cleanupFns.push(() => {
-                        el.removeEventListener("click", handleClick);
-                        el.removeEventListener("mouseenter", handleEnter);
-                        el.removeEventListener("mouseleave", handleLeave);
-                    });
+                    zoneElements.push({ el, code });
                 });
+
+                zoneElementsRef.current = zoneElements;
+                setSvgVersion(version => version + 1);
 
                 if (onCodesLoaded) {
                     onCodesLoaded([...mapCodes]);
@@ -108,9 +84,56 @@ export default function SvgMap({
             });
 
         return () => {
+            cancelled = true;
+            zoneElementsRef.current = [];
+        };
+    }, [svgPath, onCodesLoaded]);
+
+    useEffect(() => {
+        const foundSet = new Set(found);
+        const missedSet = new Set(missed);
+        const dueSet = new Set(dueItems);
+
+        const getColor = (code) => {
+            if (selected === code) return "#f39c12";
+            if (foundSet.has(code)) return "#21eb75";
+            if (missedSet.has(code)) return "#e93723";
+            if (dueSet.has(code)) return "#0e3e5adc";
+            return "#444";
+        };
+
+        const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
+            el.style.fill = getColor(code);
+
+            const handleClick = () => {
+                if (code && onSelect) onSelect(code);
+            };
+
+            const handleEnter = () => {
+                if (!foundSet.has(code) && selected !== code) {
+                    el.style.fill = "#888";
+                }
+            };
+
+            const handleLeave = () => {
+                el.style.fill = getColor(code);
+            };
+
+            el.addEventListener("click", handleClick);
+            el.addEventListener("mouseenter", handleEnter);
+            el.addEventListener("mouseleave", handleLeave);
+
+            return () => {
+                el.removeEventListener("click", handleClick);
+                el.removeEventListener("mouseenter", handleEnter);
+                el.removeEventListener("mouseleave", handleLeave);
+            };
+        });
+
+        return () => {
             cleanupFns.forEach(fn => fn());
         };
-    }, [svgPath, found, missed, selected, dueItems, onSelect, onCodesLoaded]);
+    }, [svgVersion, found, missed, selected, dueItems, onSelect]);
 
     useEffect(() => {
         const el = wrapperRef.current;

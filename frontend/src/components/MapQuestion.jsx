@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { sendMapAnswer } from "../api/api";
 import { fadeInStyle } from "../styles";
 import SvgMap from "./SvgMap";
@@ -63,6 +63,13 @@ const qualityButtonStyles = {
   }
 };
 
+function normalize(str = "") {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
 export default function MapQuestion({ group, items, onComplete }) {
 
   const [input, setInput] = useState("");
@@ -85,22 +92,67 @@ export default function MapQuestion({ group, items, onComplete }) {
     return () => window.clearTimeout(timeout);
   }, [incorrectFlashId, correctFlashId]);
 
-  function normalize(str) {
-    return str
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "");
-  }
+  const answerLookup = useMemo(() => {
+    const lookup = new Map();
 
-  function matches(item, input) {
-    const all = [item.label, ...(item.data?.aliases || [])];
-    return all.some(v => normalize(v) === normalize(input));
-  }
+    items.forEach(item => {
+      const aliases = item.aliases || item.data?.aliases || [];
+      const values = [item.label, ...aliases];
+
+      values.forEach(value => {
+        const normalized = normalize(value);
+
+        if (normalized && !lookup.has(normalized)) {
+          lookup.set(normalized, item);
+        }
+      });
+    });
+
+    return lookup;
+  }, [items]);
+
+  const itemByCode = useMemo(() => {
+    const lookup = new Map();
+
+    items.forEach(item => {
+      if (item.code) {
+        lookup.set(item.code, item);
+      }
+    });
+
+    return lookup;
+  }, [items]);
+
+  const foundSet = useMemo(
+    () => new Set(found),
+    [found]
+  );
+
+  const foundCodes = useMemo(
+    () =>
+      items
+        .filter(i => foundSet.has(i.question_id))
+        .map(i => i.code),
+    [foundSet, items]
+  );
+
+  const missedCodes = useMemo(
+    () =>
+      items
+        .filter(i => !foundSet.has(i.question_id))
+        .map(i => i.code),
+    [foundSet, items]
+  );
+
+  const dueCodes = useMemo(
+    () => items.map(i => i.code),
+    [items]
+  );
 
   function handleSubmit() {
-    const match = items.find(item => matches(item, input));
+    const match = answerLookup.get(normalize(input));
 
-    if (match && !found.includes(match.question_id)) {
+    if (match && !foundSet.has(match.question_id)) {
       setFound(prev => [...prev, match.question_id]);
       setCorrectFlashId(Date.now());
       setIncorrectFlashId(0);
@@ -116,7 +168,7 @@ export default function MapQuestion({ group, items, onComplete }) {
     const initial = {};
 
     items.forEach(item => {
-      initial[item.question_id] = found.includes(item.question_id) ? 2 : 0;
+      initial[item.question_id] = foundSet.has(item.question_id) ? 2 : 0;
     });
 
     setItemQuality(initial);
@@ -175,7 +227,9 @@ export default function MapQuestion({ group, items, onComplete }) {
     };
   }
 
-  const progressPercent = (found.length / items.length) * 100;
+  const progressPercent = items.length
+    ? (found.length / items.length) * 100
+    : 0;
   const isIncorrectFlash = incorrectFlashId > 0;
   const isCorrectFlash = correctFlashId > 0;
   const feedbackTone = isIncorrectFlash ? "incorrect" : isCorrectFlash ? "correct" : null;
@@ -343,14 +397,12 @@ export default function MapQuestion({ group, items, onComplete }) {
           >
             <SvgMap
               svgPath={`/maps/${group.media}`}
-              found={items
-                .filter(i => found.includes(i.question_id))
-                .map(i => i.code)}
-              dueItems={items.map(i => i.code)}
+              found={foundCodes}
+              dueItems={dueCodes}
               onSelect={(code) => {
-                const item = items.find(i => i.code === code);
+                const item = itemByCode.get(code);
 
-                if (item && !found.includes(item.question_id)) {
+                if (item && !foundSet.has(item.question_id)) {
                   setFound(prev => [...prev, item.question_id]);
                   setCorrectFlashId(Date.now());
                   setIncorrectFlashId(0);
@@ -504,12 +556,8 @@ export default function MapQuestion({ group, items, onComplete }) {
             >
               <SvgMap
                 svgPath={`/maps/${group.media}`}
-                found={items
-                  .filter(i => found.includes(i.question_id))
-                  .map(i => i.code)}
-                missed={items
-                  .filter(i => !found.includes(i.question_id))
-                  .map(i => i.code)}
+                found={foundCodes}
+                missed={missedCodes}
                 dueItems={[]}
               />
             </div>
@@ -575,7 +623,7 @@ export default function MapQuestion({ group, items, onComplete }) {
 
                         const selected =
                           itemQuality[item.question_id] === qVal;
-                        const wasFound = found.includes(item.question_id);
+                        const wasFound = foundSet.has(item.question_id);
                         const disabled =
                           (wasFound && qVal === 0) ||
                           (!wasFound && qVal !== 0);

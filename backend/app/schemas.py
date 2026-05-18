@@ -157,6 +157,37 @@ class MapZoneUpdate(BaseModel):
     )
 
 
+class MapZoneBulkItem(BaseModel):
+
+    id: Optional[int] = None
+
+    code: str = Field(
+        min_length=1
+    )
+
+    answer: Optional[str] = ""
+
+    aliases: List[str] = Field(
+        default_factory=list
+    )
+
+
+class MapZonesGroupUpdate(BaseModel):
+
+    name: Optional[str] = None
+
+    media: Optional[str] = None
+
+
+class MapZonesBulkUpdate(BaseModel):
+
+    group: Optional[MapZonesGroupUpdate] = None
+
+    zones: List[MapZoneBulkItem] = Field(
+        default_factory=list
+    )
+
+
 class CollectionCreate(BaseModel):
 
     name: str = Field(

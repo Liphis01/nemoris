@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 from datetime import date
 from pydantic import BaseModel
@@ -27,7 +27,8 @@ from .schemas import (
     SetCollections,
     CollectionCreate,
     AnswerRequest,
-    MapZoneUpdate
+    MapZoneUpdate,
+    MapZonesBulkUpdate
 )
 from .serializers import (
     serialize_progress,
@@ -93,6 +94,34 @@ def create_initial_progress(question_id: int):
         next_review=date.today(),
         history=[]
     )
+
+
+def serialize_question_for_manage(q: Question):
+    return {
+        "id": q.id,
+        "type_q": q.type_q,
+        "question": q.question,
+        "answer": q.answer,
+        "media": q.media,
+        "tags": q.tags or [],
+        "data": q.data or {},
+        "progress": serialize_progress(q.progress),
+        "group":
+            {
+                "id": q.group.id,
+                "type_group": q.group.type_group,
+                "name": q.group.name,
+                "media": q.group.media
+            }
+            if q.group else None,
+        "collections": [
+            {
+                "id": c.id,
+                "name": c.name
+            }
+            for c in q.collections
+        ]
+    }
 
 
 def record_answer_history(progress: Progress, quality: int, scheduling: dict):
@@ -371,39 +400,7 @@ def get_questions(db: Session = Depends(get_db)):
     result = []
 
     for q in questions:
-        result.append({
-            "id": q.id,
-
-            "type_q": q.type_q,
-
-            "question": q.question,
-            "answer": q.answer,
-
-            "media": q.media,
-
-            "tags": q.tags or [],
-
-            "data": q.data or {},
-
-            "progress": serialize_progress(q.progress),
-
-            "group":
-                {
-                    "id": q.group.id,
-                    "type_group": q.group.type_group,
-                    "name": q.group.name,
-                    "media": q.group.media
-                }
-                if q.group else None,
-
-            "collections": [
-                {
-                    "id": c.id,
-                    "name": c.name
-                }
-                for c in q.collections
-            ]
-        })
+        result.append(serialize_question_for_manage(q))
 
     return result
 
@@ -665,16 +662,18 @@ def create_group(
 def get_groups(db: Session = Depends(get_db)):
 
     groups = (
-        db.query(QuestionGroup)
-        .options(
-            joinedload(QuestionGroup.questions)
+        db.query(
+            QuestionGroup,
+            func.count(Question.id).label("question_count")
         )
+        .outerjoin(Question)
+        .group_by(QuestionGroup.id)
         .all()
     )
 
     result = []
 
-    for g in groups:
+    for g, question_count in groups:
         result.append({
             "id": g.id,
 
@@ -684,7 +683,7 @@ def get_groups(db: Session = Depends(get_db)):
 
             "media": g.media,
 
-            "question_count": len(g.questions)
+            "question_count": question_count
         })
 
     return result
@@ -860,6 +859,13 @@ def get_review(
         )
     )
 
+    if collection_id:
+        query = (
+            query
+            .join(Question.collections)
+            .filter(Collection.id == collection_id)
+        )
+
     questions = query.all()
 
     review_items = []
@@ -867,18 +873,6 @@ def get_review(
     grouped_items = {}
 
     for q in questions:
-
-        # ================================================
-        # COLLECTION FILTER
-        # ================================================
-
-        if collection_id:
-
-            if not any(
-                c.id == collection_id
-                for c in q.collections
-            ):
-                continue
 
         # ================================================
         # TAG FILTER
@@ -1038,6 +1032,9 @@ def get_map_zones(
 
     group = (
         db.query(QuestionGroup)
+        .options(
+            joinedload(QuestionGroup.questions).joinedload(Question.progress)
+        )
         .filter(QuestionGroup.id == group_id)
         .first()
     )
@@ -1049,16 +1046,198 @@ def get_map_zones(
         {
             "id": q.id,
 
+            "type_q": q.type_q,
+
             "code": q.data.get("code") if q.data else None,
 
-            "label": q.question,
+            "question": q.question,
+
+            "answer": q.answer,
+
+            "label": q.answer,
+
+            "media": q.media,
+
+            "tags": q.tags or [],
+
+            "group_id": q.group_id,
+
+            "data": q.data or {},
 
             "aliases": q.data.get("aliases", []) if q.data else [],
 
             "progress": serialize_progress(q.progress)
         }
         for q in group.questions
+        if q.type_q == "map"
     ]
+
+
+@app.patch("/maps/{group_id}/zones")
+def update_map_zones_bulk(
+    group_id: int,
+    payload: MapZonesBulkUpdate,
+    db: Session = Depends(get_db)
+):
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(404, "Group not found")
+
+    if group.type_group != "map":
+        raise HTTPException(400, "Group is not a map")
+
+    if payload.group:
+        group_updates = payload.group.model_dump(
+            exclude_unset=True
+        )
+
+        for field in ["name", "media"]:
+            if field in group_updates:
+                setattr(group, field, group_updates[field])
+
+    existing_zones = (
+        db.query(Question)
+        .filter(
+            Question.group_id == group_id,
+            Question.type_q == "map"
+        )
+        .all()
+    )
+
+    existing_by_id = {
+        zone.id: zone
+        for zone in existing_zones
+    }
+
+    existing_by_code = {
+        zone.data.get("code"): zone
+        for zone in existing_zones
+        if zone.data and zone.data.get("code")
+    }
+
+    touched_ids = []
+    created_ids = []
+    updated_ids = []
+    created_codes = []
+    updated_codes = []
+
+    try:
+        for zone_payload in payload.zones:
+            code = zone_payload.code.strip()
+
+            if not code:
+                raise HTTPException(400, "Zone code is required")
+
+            aliases = [
+                alias
+                for alias in zone_payload.aliases
+                if alias
+            ]
+
+            zone = None
+
+            if zone_payload.id:
+                zone = existing_by_id.get(zone_payload.id)
+
+                if not zone:
+                    raise HTTPException(
+                        404,
+                        f"Zone {zone_payload.id} not found"
+                    )
+
+            if not zone:
+                zone = existing_by_code.get(code)
+
+            if not zone:
+                zone = Question(
+                    type_q="map",
+                    question=f"{group.name} - {code}",
+                    answer=zone_payload.answer or "",
+                    media="",
+                    tags=[],
+                    data={
+                        "code": code,
+                        "aliases": aliases
+                    },
+                    group_id=group_id
+                )
+
+                db.add(zone)
+                db.flush()
+
+                db.add(create_initial_progress(zone.id))
+
+                existing_by_id[zone.id] = zone
+                existing_by_code[code] = zone
+                created_ids.append(zone.id)
+                created_codes.append(code)
+            else:
+                zone.answer = zone_payload.answer or ""
+                zone.question = f"{group.name} - {code}"
+                zone.data = {
+                    "code": code,
+                    "aliases": aliases
+                }
+
+                updated_ids.append(zone.id)
+                updated_codes.append(code)
+
+            touched_ids.append(zone.id)
+
+        db.commit()
+
+    except:
+        db.rollback()
+        raise
+
+    saved_zones = []
+
+    if touched_ids:
+        saved_zones = (
+            db.query(Question)
+            .options(
+                joinedload(Question.progress),
+                joinedload(Question.group),
+                joinedload(Question.collections)
+            )
+            .filter(Question.id.in_(touched_ids))
+            .all()
+        )
+
+    question_count = (
+        db.query(Question)
+        .filter(
+            Question.group_id == group_id,
+            Question.type_q == "map"
+        )
+        .count()
+    )
+
+    return {
+        "group": {
+            "id": group.id,
+            "type_group": group.type_group,
+            "name": group.name,
+            "media": group.media,
+            "question_count": question_count
+        },
+        "zones": [
+            serialize_question_for_manage(zone)
+            for zone in saved_zones
+        ],
+        "createdQuestionIds": created_ids,
+        "createdZoneCodes": created_codes,
+        "updatedQuestionIds": updated_ids,
+        "updatedZoneCodes": updated_codes,
+        "question_count": question_count
+    }
+
 
 @app.post("/map_zone")
 def upsert_map_zone(data: MapZoneUpdate, db: Session = Depends(get_db)):
