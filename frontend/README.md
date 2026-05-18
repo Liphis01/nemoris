@@ -21,6 +21,7 @@ color: "#ff85c2",
 - quand on modifie le nom d'une zone ça ajoute une question au lieu de modifier celle existante (fixed ?)
 - bouton "ajouter" des tags n'est pas aligné avec le champ de texte
 - on peut ajouter des tags vides ("")
+- à la fin de review on doit boucler sur les questions ratées (donc le schedule doit mettre 0 jours de délai pour les questions ratées)
 
 ## features
 - filtrer les groupes dans manage

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
@@ -102,6 +102,7 @@ export default function ReviewCalendar({
 }) {
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
+  const detailListRef = useRef(null);
   const highlightedQuestionRef = useRef(null);
   const [visibleMonth, setVisibleMonth] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1)
@@ -165,11 +166,24 @@ export default function ReviewCalendar({
     clearOpenQuestionId?.();
   }, [clearOpenQuestionId, openQuestionId, scheduledQuestions]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedQuestionId) return;
 
-    highlightedQuestionRef.current?.scrollIntoView({
-      block: "center",
+    const detailList = detailListRef.current;
+    const highlightedQuestion = highlightedQuestionRef.current;
+    if (!detailList || !highlightedQuestion) return;
+
+    const listRect = detailList.getBoundingClientRect();
+    const questionRect = highlightedQuestion.getBoundingClientRect();
+    const nextTop =
+      detailList.scrollTop +
+      questionRect.top -
+      listRect.top -
+      detailList.clientHeight / 2 +
+      highlightedQuestion.offsetHeight / 2;
+
+    detailList.scrollTo({
+      top: Math.max(0, nextTop),
       behavior: "smooth"
     });
   }, [selectedDateKey, selectedQuestionId]);
@@ -567,6 +581,7 @@ export default function ReviewCalendar({
             </div>
 
             <div
+              ref={detailListRef}
               style={{
                 maxHeight: "620px",
                 overflow: "auto",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import QuestionCard from "./QuestionCard";
 import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
@@ -18,6 +18,7 @@ export default function ManageList({
 
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const listRef = useRef(null);
   const selectedCardRef = useRef(null);
 
   function handleDeleteQuestion(id) {
@@ -84,11 +85,24 @@ export default function ManageList({
       ? filteredQuestions
       : allGroups;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedQuestion?.id) return;
 
-    selectedCardRef.current?.scrollIntoView({
-      block: "center",
+    const list = listRef.current;
+    const selectedCard = selectedCardRef.current;
+    if (!list || !selectedCard) return;
+
+    const listRect = list.getBoundingClientRect();
+    const cardRect = selectedCard.getBoundingClientRect();
+    const nextTop =
+      list.scrollTop +
+      cardRect.top -
+      listRect.top -
+      list.clientHeight / 2 +
+      selectedCard.offsetHeight / 2;
+
+    list.scrollTo({
+      top: Math.max(0, nextTop),
       behavior: "smooth"
     });
   }, [selectedQuestion, viewMode]);
@@ -147,6 +161,7 @@ export default function ManageList({
 
       {/* LIST */}
       <div
+        ref={listRef}
         style={{
           flex: 1,
           overflow: "auto",
