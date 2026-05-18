@@ -58,6 +58,64 @@ const tagStyle = {
   marginBottom: "8px"
 };
 
+function ReviewCalendarAction({ nextReview, onOpen }) {
+  if (!nextReview) return null;
+
+  return (
+    <div
+      style={{
+        padding: "12px",
+        borderRadius: "12px",
+        border: "1px solid #24583a",
+        background: "#151c18",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: "12px",
+        marginBottom: "22px"
+      }}
+    >
+      <div
+        style={{
+          minWidth: 0,
+          textAlign: "left"
+        }}
+      >
+        <div
+          style={{
+            color: "#7ee2a8",
+            fontSize: "11px",
+            fontWeight: "800",
+            letterSpacing: "0.06em",
+            marginBottom: "4px"
+          }}
+        >
+          REVIEW DATE
+        </div>
+        <div
+          style={{
+            color: "#ddd",
+            fontSize: "13px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {nextReview}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        style={calendarButtonStyle}
+      >
+        Calendrier →
+      </button>
+    </div>
+  );
+}
+
 export default function ManagePreview({
   allGroups,
   setAllGroups,
@@ -316,56 +374,17 @@ export default function ManagePreview({
           flexDirection: "column"
         }}
       >
-        {isMapQuestion && selectedNextReview && (
+        {isMapQuestion && (
           <div
             style={{
               flexShrink: 0,
-              padding: "12px 16px",
-              borderBottom: "1px solid #262626",
-              background: "#151515",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "12px"
+              padding: "16px 16px 0"
             }}
           >
-            <div
-              style={{
-                minWidth: 0,
-                textAlign: "left"
-              }}
-            >
-              <div
-                style={{
-                  color: "#666",
-                  fontSize: "11px",
-                  fontWeight: "800",
-                  letterSpacing: "0.06em",
-                  marginBottom: "3px"
-                }}
-              >
-                REVIEW
-              </div>
-              <div
-                style={{
-                  color: "#ccc",
-                  fontSize: "13px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
-                }}
-              >
-                {selectedNextReview}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={openSelectedInCalendar}
-              style={calendarButtonStyle}
-            >
-              Calendrier →
-            </button>
+            <ReviewCalendarAction
+              nextReview={selectedNextReview}
+              onOpen={openSelectedInCalendar}
+            />
           </div>
         )}
 
@@ -500,25 +519,10 @@ export default function ManagePreview({
         Question #{selectedQuestion.id}
       </div>
 
-      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
-        <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-          {selectedQuestion.type_q || "text"}
-        </div>
-        {(selectedQuestion.progress?.next_review || selectedQuestion.next_review) && (
-          <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-            Review {selectedQuestion.progress?.next_review || selectedQuestion.next_review}
-          </div>
-        )}
-        {selectedNextReview && (
-          <button
-            type="button"
-            onClick={openSelectedInCalendar}
-            style={calendarButtonStyle}
-          >
-            Calendrier →
-          </button>
-        )}
-      </div>
+      <ReviewCalendarAction
+        nextReview={selectedNextReview}
+        onOpen={openSelectedInCalendar}
+      />
 
       <label style={labelStyle}>Question</label>
       <input
