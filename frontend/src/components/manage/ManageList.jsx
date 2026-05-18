@@ -3,6 +3,127 @@ import QuestionCard from "./QuestionCard";
 import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
 
+function getQuestionGroupId(question) {
+  const groupId = question?.group_id ?? question?.group?.id;
+
+  if (
+    groupId === null ||
+    groupId === undefined ||
+    groupId === ""
+  ) {
+    return null;
+  }
+
+  return String(groupId);
+}
+
+function getGroupInfo(groupId, question, groupById) {
+  const group = groupById.get(groupId) || question?.group || null;
+
+  return {
+    groupId,
+    group,
+    name: group?.name || question?.group?.name || `Groupe #${groupId}`,
+    type: group?.type_group || question?.group?.type_group || "groupe",
+    questions: [],
+    mapCount: 0,
+    textCount: 0
+  };
+}
+
+function orderGroupQuestionsForDisplay(questions) {
+  const mapQuestions = [];
+  const otherQuestions = [];
+
+  questions.forEach((question) => {
+    if (question.type_q === "map") {
+      mapQuestions.push(question);
+    } else {
+      otherQuestions.push(question);
+    }
+  });
+
+  return [...mapQuestions, ...otherQuestions];
+}
+
+function buildVisibleRows(questions, allGroups, expandedGroupIds) {
+  const groupById = new Map(
+    (allGroups || []).map((group) => [String(group.id), group])
+  );
+  const groupInfoById = new Map();
+  const topRows = [];
+
+  questions.forEach((question) => {
+    const groupId = getQuestionGroupId(question);
+
+    if (!groupId) {
+      topRows.push({
+        type: "question",
+        key: `question:${question.id}`,
+        question,
+        nested: false
+      });
+      return;
+    }
+
+    let groupInfo = groupInfoById.get(groupId);
+
+    if (!groupInfo) {
+      groupInfo = getGroupInfo(groupId, question, groupById);
+      groupInfoById.set(groupId, groupInfo);
+      topRows.push({
+        type: "groupHeader",
+        key: `group:${groupId}`,
+        groupId,
+        groupInfo
+      });
+    }
+
+    groupInfo.questions.push(question);
+
+    if (question.type_q === "map") {
+      groupInfo.mapCount += 1;
+    } else {
+      groupInfo.textCount += 1;
+    }
+  });
+
+  return topRows.flatMap((row) => {
+    if (row.type !== "groupHeader" || !expandedGroupIds.has(row.groupId)) {
+      return [row];
+    }
+
+    return [
+      row,
+      ...orderGroupQuestionsForDisplay(row.groupInfo.questions).map(
+        (question) => ({
+          type: "question",
+          key: `question:${question.id}`,
+          question,
+          nested: true,
+          groupId: row.groupId
+        })
+      )
+    ];
+  });
+}
+
+function centerListItem(list, item) {
+  const listRect = list.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  const nextTop =
+    list.scrollTop +
+    itemRect.top -
+    listRect.top -
+    list.clientHeight / 2 +
+    item.offsetHeight / 2;
+
+  list.scrollTo({
+    top: Math.max(0, nextTop),
+    behavior: "smooth"
+  });
+}
+
 export default function ManageList({
   filteredQuestions,
   allGroups,
@@ -18,8 +139,19 @@ export default function ManageList({
 
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const [expandedGroupIds, setExpandedGroupIds] = useState(() => new Set());
   const listRef = useRef(null);
-  const selectedCardRef = useRef(null);
+  const rowRefs = useRef(new Map());
+  const pendingScrollRef = useRef(null);
+  const lastQuestionScrollSignalRef = useRef({
+    selectedId: null,
+    highlightKey: "",
+    viewMode: null
+  });
+  const lastGroupScrollSignalRef = useRef({
+    selectedId: null,
+    viewMode: null
+  });
 
   function handleDeleteQuestion(id) {
     setRemovingId(id);
@@ -85,27 +217,395 @@ export default function ManageList({
       ? filteredQuestions
       : allGroups;
 
+  const visibleRows =
+    viewMode === "questions"
+      ? buildVisibleRows(filteredQuestions, allGroups, expandedGroupIds)
+      : [];
+  const visibleQuestionRowKey = visibleRows.map((row) => row.key).join("|");
+  const visibleGroupRowKey =
+    viewMode === "groups"
+      ? allGroups.map((group) => `group:${group.id}`).join("|")
+      : "";
+  const renderedRowKey =
+    viewMode === "questions"
+      ? visibleQuestionRowKey
+      : visibleGroupRowKey;
+  const highlightedQuestionKey = highlightedQuestionIds.join("|");
+
   useLayoutEffect(() => {
-    if (!selectedQuestion?.id) return;
+    const previous = lastQuestionScrollSignalRef.current;
+
+    if (viewMode !== "questions") {
+      lastQuestionScrollSignalRef.current = {
+        ...previous,
+        viewMode
+      };
+      return;
+    }
+
+    const selectedListQuestion = selectedQuestion?.type_q
+      ? filteredQuestions.find((question) => selectedQuestion.id === question.id)
+      : null;
+    const highlightedQuestionSet = new Set(highlightedQuestionIds);
+    const firstHighlightedQuestion = filteredQuestions.find((question) =>
+      highlightedQuestionSet.has(question.id)
+    );
+    const selectedId = selectedListQuestion?.id ?? null;
+    const highlightKey = highlightedQuestionIds.join("|");
+    const enteredQuestions = previous.viewMode !== "questions";
+    const selectedChanged = selectedId !== previous.selectedId;
+    const highlightChanged = highlightKey !== "" && highlightKey !== previous.highlightKey;
+    const scrollTarget = selectedListQuestion || firstHighlightedQuestion;
+
+    lastQuestionScrollSignalRef.current = {
+      selectedId,
+      highlightKey,
+      viewMode
+    };
+
+    if (!scrollTarget) {
+      if (pendingScrollRef.current?.viewMode === "questions") {
+        pendingScrollRef.current = null;
+      }
+      return;
+    }
+
+    if (!enteredQuestions && !selectedChanged && !highlightChanged) {
+      return;
+    }
+
+    pendingScrollRef.current = {
+      viewMode: "questions",
+      rowKey: `question:${scrollTarget.id}`
+    };
+
+    const groupId = getQuestionGroupId(scrollTarget);
+    if (!groupId) return;
+
+    setExpandedGroupIds((current) => {
+      if (current.has(groupId)) return current;
+
+      const next = new Set(current);
+      next.add(groupId);
+      return next;
+    });
+  }, [filteredQuestions, highlightedQuestionIds, selectedQuestion?.id, selectedQuestion?.type_q, viewMode]);
+
+  useLayoutEffect(() => {
+    const previous = lastGroupScrollSignalRef.current;
+
+    if (viewMode !== "groups") {
+      lastGroupScrollSignalRef.current = {
+        ...previous,
+        viewMode
+      };
+      return;
+    }
+
+    const selectedGroup = selectedQuestion?.type_group
+      ? allGroups.find((group) => selectedQuestion.id === group.id)
+      : null;
+    const selectedId = selectedGroup?.id ?? null;
+    const enteredGroups = previous.viewMode !== "groups";
+    const selectedChanged = selectedId !== previous.selectedId;
+
+    lastGroupScrollSignalRef.current = {
+      selectedId,
+      viewMode
+    };
+
+    if (!selectedGroup) {
+      if (pendingScrollRef.current?.viewMode === "groups") {
+        pendingScrollRef.current = null;
+      }
+      return;
+    }
+
+    if (!enteredGroups && !selectedChanged) {
+      return;
+    }
+
+    pendingScrollRef.current = {
+      viewMode: "groups",
+      rowKey: `group:${selectedGroup.id}`
+    };
+  }, [allGroups, selectedQuestion?.id, selectedQuestion?.type_group, viewMode]);
+
+  useLayoutEffect(() => {
+    const pendingScroll = pendingScrollRef.current;
+    if (!pendingScroll || pendingScroll.viewMode !== viewMode) return;
 
     const list = listRef.current;
-    const selectedCard = selectedCardRef.current;
-    if (!list || !selectedCard) return;
+    const row = rowRefs.current.get(pendingScroll.rowKey);
+    if (!list || !row) return;
 
-    const listRect = list.getBoundingClientRect();
-    const cardRect = selectedCard.getBoundingClientRect();
-    const nextTop =
-      list.scrollTop +
-      cardRect.top -
-      listRect.top -
-      list.clientHeight / 2 +
-      selectedCard.offsetHeight / 2;
+    centerListItem(list, row);
+    pendingScrollRef.current = null;
+  }, [highlightedQuestionKey, renderedRowKey, selectedQuestion?.id, viewMode]);
 
-    list.scrollTo({
-      top: Math.max(0, nextTop),
-      behavior: "smooth"
+  function setRowRef(rowKey) {
+    return (element) => {
+      if (element) {
+        rowRefs.current.set(rowKey, element);
+      } else {
+        rowRefs.current.delete(rowKey);
+      }
+    };
+  }
+
+  function toggleGroup(groupId) {
+    setOpenDeleteId(null);
+    setExpandedGroupIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+
+      return next;
     });
-  }, [selectedQuestion, viewMode]);
+  }
+
+  function renderQuestionCard(row) {
+    const q = row.question;
+    const sharedProps = {
+      selected: selectedQuestion?.id === q.id,
+      deleteOpen: openDeleteId === q.id,
+      isRemoving: removingId === q.id,
+      isHighlighted: highlightedQuestionIds.includes(q.id)
+    };
+
+    const card = q.type_q === "map"
+      ? (
+        <MapCard
+          {...sharedProps}
+          q={q}
+          onClick={() => {
+            setOpenDeleteId(null);
+            setSelectedQuestion(q);
+            setEditing(q);
+          }}
+          onDeleteOpen={() => setOpenDeleteId(q.id)}
+          closeDelete={() => setOpenDeleteId(null)}
+          deleteQuestion={() =>
+            handleDeleteQuestion(q.id)
+          }
+        />
+      )
+      : (
+        <QuestionCard
+          {...sharedProps}
+          q={q}
+          onClick={() => {
+            setOpenDeleteId(null);
+            setSelectedQuestion(q);
+          }}
+          onDeleteOpen={() => setOpenDeleteId(q.id)}
+          closeDelete={() => setOpenDeleteId(null)}
+          deleteQuestion={() =>
+            handleDeleteQuestion(q.id)
+          }
+        />
+      );
+
+    return (
+      <div
+        key={row.key}
+        ref={setRowRef(row.key)}
+        data-manage-question-id={q.id}
+        style={{
+          transition: "all 0.18s ease",
+          opacity: removingId === q.id ? 0 : 1,
+          transform:
+            removingId === q.id
+              ? "scale(0.96)"
+              : "scale(1)",
+          ...(row.nested
+            ? {
+              display: "grid",
+              gridTemplateColumns: "8px minmax(0, 1fr)",
+              gap: "8px",
+              alignItems: "stretch"
+            }
+            : {})
+        }}
+      >
+        {row.nested && (
+          <span
+            aria-hidden="true"
+            style={{
+              width: "3px",
+              borderRadius: "999px",
+              background: q.type_q === "map" ? "#5a3b12" : "#163b63",
+              opacity: sharedProps.selected || sharedProps.isHighlighted ? 1 : 0.55,
+              margin: "6px 0",
+              justifySelf: "center"
+            }}
+          />
+        )}
+
+        <div style={{ minWidth: 0 }}>
+          {card}
+        </div>
+      </div>
+    );
+  }
+
+  function renderGroupHeader(row) {
+    const { groupId, groupInfo } = row;
+    const isOpen = expandedGroupIds.has(groupId);
+    const selectedInside = groupInfo.questions.some(
+      (question) => selectedQuestion?.type_q && selectedQuestion.id === question.id
+    );
+    const highlightedInside = groupInfo.questions.some(
+      (question) => highlightedQuestionIds.includes(question.id)
+    );
+    const background = isOpen
+      ? "#1a1a1a"
+      : selectedInside
+        ? "#181818"
+        : "transparent";
+    const border = selectedInside
+      ? "1px solid #3a3a3a"
+      : highlightedInside
+        ? "1px solid rgba(134, 239, 172, 0.75)"
+        : "1px solid #262626";
+
+    return (
+      <button
+        key={row.key}
+        ref={setRowRef(row.key)}
+        type="button"
+        onClick={() => toggleGroup(groupId)}
+        aria-expanded={isOpen}
+        style={{
+          width: "100%",
+          border,
+          borderRadius: "12px",
+          background,
+          color: "#eee",
+          padding: "9px 10px",
+          cursor: "pointer",
+          display: "grid",
+          gridTemplateColumns: "18px minmax(0, 1fr) auto",
+          alignItems: "center",
+          gap: "8px",
+          textAlign: "left",
+          boxShadow: highlightedInside
+            ? "0 0 0 4px rgba(134, 239, 172, 0.08), 0 0 22px rgba(34, 197, 94, 0.2)"
+            : "none",
+          transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+        }}
+        onMouseEnter={(event) => {
+          event.currentTarget.style.background = isOpen ? "#1d1d1d" : "#181818";
+        }}
+        onMouseLeave={(event) => {
+          event.currentTarget.style.background = background;
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            color: "#777",
+            fontSize: "14px",
+            lineHeight: 1,
+            transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.14s ease"
+          }}
+        >
+          ▸
+        </span>
+
+        <span
+          style={{
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: "3px"
+          }}
+        >
+          <span
+            style={{
+              color: "#e5e5e5",
+              fontSize: "14px",
+              fontWeight: "700",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {groupInfo.name}
+          </span>
+          <span
+            style={{
+              color: "#777",
+              fontSize: "11px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {groupInfo.type}
+          </span>
+        </span>
+
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            flexWrap: "wrap",
+            gap: "6px",
+            minWidth: 0
+          }}
+        >
+          {groupInfo.mapCount > 0 && (
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                padding: "2px 6px",
+                borderRadius: "999px",
+                background: "#5a3b12",
+                color: "#ffc76b",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {groupInfo.mapCount} MAP
+            </span>
+          )}
+          {groupInfo.textCount > 0 && (
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                padding: "2px 6px",
+                borderRadius: "999px",
+                background: "#163b63",
+                color: "#5eb6ff",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {groupInfo.textCount} TEXT
+            </span>
+          )}
+          <span
+            style={{
+              color: "#777",
+              fontSize: "11px",
+              minWidth: "16px",
+              textAlign: "right",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {groupInfo.questions.length}
+          </span>
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div
@@ -165,103 +665,26 @@ export default function ManageList({
         style={{
           flex: 1,
           overflow: "auto",
-          padding: "14px",
+          padding: "10px",
           display: "flex",
           flexDirection: "column",
-          gap: "10px",
+          gap: "8px",
           minHeight: 0
         }}
       >
 
-        {viewMode === "questions" && filteredQuestions.map((q) => {
-
-          const sharedProps = {
-            selected: selectedQuestion?.id === q.id,
-            deleteOpen: openDeleteId === q.id,
-            isRemoving: removingId === q.id,
-            isHighlighted: highlightedQuestionIds.includes(q.id)
-          };
-
-          if (q.type_q === "map") {
-
-            return (
-              <div
-                key={q.id}
-                ref={selectedQuestion?.id === q.id ? selectedCardRef : null}
-                style={{
-                  transition: "all 0.18s ease",
-                  opacity: removingId === q.id ? 0 : 1,
-                  transform:
-                    removingId === q.id
-                      ? "scale(0.96)"
-                      : "scale(1)"
-                }}
-              >
-
-                <MapCard
-                  {...sharedProps}
-                  q={q}
-
-                  onClick={() => {
-                    setOpenDeleteId(null);
-                    setSelectedQuestion(q);
-                    setEditing(q);
-                  }}
-
-                  onDeleteOpen={() => setOpenDeleteId(q.id)}
-
-                  closeDelete={() => setOpenDeleteId(null)}
-
-                  deleteQuestion={() =>
-                    handleDeleteQuestion(q.id)
-                  }
-                />
-
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={q.id}
-              ref={selectedQuestion?.id === q.id ? selectedCardRef : null}
-              style={{
-                transition: "all 0.18s ease",
-                opacity: removingId === q.id ? 0 : 1,
-                transform:
-                  removingId === q.id
-                    ? "scale(0.96)"
-                    : "scale(1)"
-              }}
-            >
-
-              <QuestionCard
-                {...sharedProps}
-                q={q}
-
-                onClick={() => {
-                  setOpenDeleteId(null);
-                  setSelectedQuestion(q);
-                }}
-
-                onDeleteOpen={() => setOpenDeleteId(q.id)}
-
-                closeDelete={() => setOpenDeleteId(null)}
-
-                deleteQuestion={() =>
-                  handleDeleteQuestion(q.id)
-                }
-              />
-
-            </div>
-          );
-        })}
+        {viewMode === "questions" && visibleRows.map((row) => (
+          row.type === "groupHeader"
+            ? renderGroupHeader(row)
+            : renderQuestionCard(row)
+        ))}
 
         {viewMode === "groups" && allGroups.map((group) => (
 
           <div
             key={group.id}
-            ref={selectedQuestion?.id === group.id ? selectedCardRef : null}
+            ref={setRowRef(`group:${group.id}`)}
+            data-manage-group-id={group.id}
             style={{
               transition: "all 0.18s ease",
               opacity: removingId === group.id ? 0 : 1,
