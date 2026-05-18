@@ -50,6 +50,7 @@ color: "#ff85c2",
 - feedback visuel quand on créé ou update une question (et enlever l'alerte moche de création de groupe)
 - proposer les fichiers .svg quand on commence à taper le nom d'une map dans la création de question map
 - pouvoir sort les questions dans manage
+- mettre un truc addictif de day streaks
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

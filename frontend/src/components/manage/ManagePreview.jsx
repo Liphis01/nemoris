@@ -86,6 +86,11 @@ function formatReviewDate(value) {
   return `${day}-${month}-${year}`;
 }
 
+function hasStartedProgress(question) {
+  const history = question?.progress?.history || [];
+  return (question?.progress?.reps || 0) > 0 || history.length > 0;
+}
+
 function ReviewCalendarAction({ compact = false, nextReview, onOpen }) {
   if (!nextReview) return null;
 
@@ -352,8 +357,9 @@ export default function ManagePreview({
 
   const isMapQuestion = selectedQuestion.type_q === "map";
   const isMapGroup = selectedQuestion.type_group === "map";
-  const selectedNextReview =
-    selectedQuestion.progress?.next_review || selectedQuestion.next_review;
+  const selectedNextReview = hasStartedProgress(selectedQuestion)
+    ? selectedQuestion.progress?.next_review || selectedQuestion.next_review
+    : null;
 
   function openSelectedInCalendar() {
     if (!selectedNextReview) return;

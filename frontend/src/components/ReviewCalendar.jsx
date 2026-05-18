@@ -49,6 +49,11 @@ function getNextReview(question) {
   return question.progress?.next_review || question.next_review || null;
 }
 
+function isNewQuestion(question) {
+  const history = question.progress?.history || [];
+  return (question.progress?.reps || 0) === 0 && history.length === 0;
+}
+
 function buildCalendarDays(monthDate) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
@@ -93,6 +98,234 @@ function typeBadgeStyle(type) {
   };
 }
 
+function historyLabel(quality) {
+  if (quality === 0) return "Raté";
+  if (quality === 1) return "Fragile";
+  if (quality === 2) return "Réussi";
+  return "Revu";
+}
+
+function historyColor(quality) {
+  if (quality === 0) return "#ff9c9c";
+  if (quality === 1) return "#ffcc7a";
+  return "#7ee2a8";
+}
+
+function addEvent(result, event) {
+  if (!result[event.dateKey]) result[event.dateKey] = [];
+  result[event.dateKey].push(event);
+}
+
+function eventSortValue(event, sortMode) {
+  const question = event.question;
+
+  if (sortMode === "title") {
+    return [
+      dueTitle(question),
+      question.group?.name || "",
+      question.type_q || "",
+      String(question.id)
+    ].join("|").toLowerCase();
+  }
+
+  if (sortMode === "quality") {
+    const qualityRank = event.kind === "history"
+      ? event.history?.quality ?? 9
+      : event.dateKey;
+
+    return [
+      String(qualityRank),
+      dueTitle(question),
+      String(question.id)
+    ].join("|").toLowerCase();
+  }
+
+  if (sortMode === "id") {
+    return String(question.id).padStart(8, "0");
+  }
+
+  return [
+    question.type_q || "",
+    question.group?.name || "",
+    dueTitle(question),
+    String(question.id)
+  ].join("|").toLowerCase();
+}
+
+function compareEvents(a, b, sortMode) {
+  return eventSortValue(a, sortMode).localeCompare(eventSortValue(b, sortMode));
+}
+
+function SectionHeader({ count, label }) {
+  if (count === 0) return null;
+
+  return (
+    <div
+      style={{
+        alignItems: "center",
+        color: "#666",
+        display: "flex",
+        fontSize: "10px",
+        fontWeight: "800",
+        gap: "8px",
+        letterSpacing: "0.06em",
+        lineHeight: 1,
+        margin: "7px 2px 6px",
+        textTransform: "uppercase"
+      }}
+    >
+      <span>{label}</span>
+      <span
+        style={{
+          color: "#555",
+          fontVariantNumeric: "tabular-nums"
+        }}
+      >
+        {count}
+      </span>
+      <span
+        style={{
+          background: "#2a2a2a",
+          flex: 1,
+          height: "1px"
+        }}
+      />
+    </div>
+  );
+}
+
+function EventCard({
+  cardRef,
+  event,
+  isSelected,
+  onOpenQuestion,
+  todayKey
+}) {
+  const question = event.question;
+  const isHistory = event.kind === "history";
+
+  return (
+    <button
+      type="button"
+      ref={cardRef}
+      onClick={() => onOpenQuestion?.(question)}
+      style={{
+        width: "100%",
+        padding: "11px 12px",
+        borderRadius: "12px",
+        border: isSelected
+          ? "1px solid rgba(126, 226, 168, 0.85)"
+          : isHistory
+            ? "1px solid #242424"
+            : "1px solid #262626",
+        background: isSelected
+          ? "rgba(22, 53, 36, 0.72)"
+          : isHistory
+            ? "#141414"
+            : "#151515",
+        color: "inherit",
+        boxShadow: isSelected
+          ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
+          : "none",
+        marginBottom: "8px",
+        textAlign: "left",
+        cursor: "pointer",
+        font: "inherit",
+        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+      }}
+      title="Ouvrir dans Manage"
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto minmax(0, 1fr) auto",
+          gap: "8px",
+          alignItems: "center",
+          marginBottom: "7px"
+        }}
+      >
+        <span style={typeBadgeStyle(question.type_q)}>
+          {question.type_q || "text"}
+        </span>
+
+        <span
+          style={{
+            color: "#777",
+            fontSize: "12px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {dueLabel(question)}
+        </span>
+
+        <span
+          style={{
+            background: isHistory ? "#222" : "#2b2047",
+            color: isHistory
+              ? historyColor(event.history?.quality)
+              : "#b69cff",
+            borderRadius: "999px",
+            padding: "3px 8px",
+            fontSize: "10px",
+            fontWeight: "800",
+            letterSpacing: "0.04em",
+            textTransform: "uppercase"
+          }}
+        >
+          {isHistory
+            ? historyLabel(event.history?.quality)
+            : event.dateKey < todayKey
+              ? "Due"
+              : "À revoir"}
+        </span>
+      </div>
+
+      <div
+        style={{
+          color: "#eee",
+          fontSize: "14px",
+          fontWeight: "700",
+          lineHeight: 1.35,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }}
+      >
+        {dueTitle(question)}
+      </div>
+
+      {(question.tags || []).length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "5px",
+            marginTop: "8px"
+          }}
+        >
+          {(question.tags || []).slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              style={{
+                background: "#2a2a2a",
+                color: "#999",
+                borderRadius: "999px",
+                padding: "2px 7px",
+                fontSize: "10px",
+                fontWeight: "700"
+              }}
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </button>
+  );
+}
+
 export default function ReviewCalendar({
   setMode,
   questions,
@@ -109,29 +342,62 @@ export default function ReviewCalendar({
   );
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
   const [selectedQuestionId, setSelectedQuestionId] = useState(null);
+  const [sortMode, setSortMode] = useState("type");
 
-  const scheduledQuestions = useMemo(
-    () =>
-      questions
-        .map((question) => ({
-          ...question,
-          dueKey: getNextReview(question)
-        }))
-        .filter((question) => question.dueKey)
-        .sort((a, b) => a.dueKey.localeCompare(b.dueKey)),
+  const newQuestions = useMemo(
+    () => questions.filter(isNewQuestion),
     [questions]
   );
 
-  const dueByDate = useMemo(() => {
+  const scheduledEvents = useMemo(
+    () => questions
+      .filter((question) => !isNewQuestion(question))
+      .map((question) => ({
+        id: `scheduled-${question.id}`,
+        dateKey: getNextReview(question),
+        kind: "scheduled",
+        question
+      }))
+      .filter((event) => event.dateKey)
+      .sort((a, b) => a.dateKey.localeCompare(b.dateKey)),
+    [questions]
+  );
+
+  const historyEvents = useMemo(
+    () => questions.flatMap((question) =>
+      (question.progress?.history || [])
+        .filter((entry) => entry.reviewed_on)
+        .map((entry, index) => ({
+          id: `history-${question.id}-${entry.reviewed_on}-${index}`,
+          dateKey: entry.reviewed_on,
+          kind: "history",
+          question,
+          history: entry
+        }))
+    ).sort((a, b) => a.dateKey.localeCompare(b.dateKey)),
+    [questions]
+  );
+
+  const eventsByDate = useMemo(() => {
     const result = {};
 
-    for (const question of scheduledQuestions) {
-      if (!result[question.dueKey]) result[question.dueKey] = [];
-      result[question.dueKey].push(question);
+    for (const event of historyEvents) {
+      addEvent(result, event);
+    }
+
+    for (const event of scheduledEvents) {
+      addEvent(result, event);
+    }
+
+    for (const events of Object.values(result)) {
+      events.sort((a, b) => {
+        if (a.kind === b.kind) return a.question.id - b.question.id;
+        return a.kind === "history" ? -1 : 1;
+      });
     }
 
     return result;
-  }, [scheduledQuestions]);
+  }, [historyEvents, scheduledEvents]);
 
   const monthDays = useMemo(
     () => buildCalendarDays(visibleMonth),
@@ -139,32 +405,50 @@ export default function ReviewCalendar({
   );
 
   const selectedDate = parseDateKey(selectedDateKey) || today;
-  const selectedQuestions = dueByDate[selectedDateKey] || [];
-  const overdueCount = scheduledQuestions.filter(
-    (question) => question.dueKey < todayKey
+  const selectedEvents = eventsByDate[selectedDateKey] || [];
+  const selectedScheduledEvents = selectedEvents
+    .filter((event) => event.kind === "scheduled")
+    .sort((a, b) => compareEvents(a, b, sortMode));
+  const selectedHistoryEvents = selectedEvents
+    .filter((event) => event.kind === "history")
+    .sort((a, b) => compareEvents(a, b, sortMode));
+  const selectedHistoryCount = selectedHistoryEvents.length;
+  const selectedScheduledCount = selectedScheduledEvents.length;
+  const overdueCount = scheduledEvents.filter(
+    (event) => event.dateKey < todayKey
   ).length;
-  const todayCount = (dueByDate[todayKey] || []).length;
-  const upcomingCount = scheduledQuestions.filter(
-    (question) => question.dueKey > todayKey
+  const todayCount = (eventsByDate[todayKey] || []).filter(
+    (event) => event.kind === "scheduled"
   ).length;
+  const upcomingCount = scheduledEvents.filter(
+    (event) => event.dateKey > todayKey
+  ).length;
+  const nextScheduledEvent = scheduledEvents.find(
+    (event) => event.dateKey >= todayKey
+  );
+  const selectedPanelLabel = selectedDateKey < todayKey
+    ? "Historique"
+    : selectedDateKey === todayKey
+      ? "Aujourd'hui"
+      : "À venir";
 
   useEffect(() => {
     if (!openQuestionId) return;
 
-    const question = scheduledQuestions.find(
-      (item) => item.id === openQuestionId
+    const event = scheduledEvents.find(
+      (item) => item.question.id === openQuestionId
     );
 
-    if (!question?.dueKey) return;
+    if (!event?.dateKey) return;
 
-    const dueDate = parseDateKey(question.dueKey);
+    const dueDate = parseDateKey(event.dateKey);
     if (!dueDate) return;
 
     setVisibleMonth(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1));
-    setSelectedDateKey(question.dueKey);
-    setSelectedQuestionId(question.id);
+    setSelectedDateKey(event.dateKey);
+    setSelectedQuestionId(event.question.id);
     clearOpenQuestionId?.();
-  }, [clearOpenQuestionId, openQuestionId, scheduledQuestions]);
+  }, [clearOpenQuestionId, openQuestionId, scheduledEvents]);
 
   useLayoutEffect(() => {
     if (!selectedQuestionId) return;
@@ -251,15 +535,6 @@ export default function ReviewCalendar({
             >
               Calendrier
             </h1>
-
-            <div
-              style={{
-                color: "#777",
-                fontSize: "14px"
-              }}
-            >
-              {scheduledQuestions.length} questions planifiées
-            </div>
           </div>
 
           <button
@@ -281,12 +556,13 @@ export default function ReviewCalendar({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
             gap: "12px"
           }}
         >
           {[
             ["En retard", overdueCount, "#ff9c9c", "#3a1d1d"],
+            ["Nouvelles", newQuestions.length, "#b69cff", "#1d1827"],
             ["Aujourd'hui", todayCount, "#ffcc7a", "#3d2b14"],
             ["À venir", upcomingCount, "#7ee2a8", "#163524"]
           ].map(([label, value, color, background]) => (
@@ -422,11 +698,16 @@ export default function ReviewCalendar({
             >
               {monthDays.map((date) => {
                 const dateKey = toDateKey(date);
-                const dayQuestions = dueByDate[dateKey] || [];
+                const dayEvents = eventsByDate[dateKey] || [];
+                const historyCount = dayEvents.filter(
+                  (event) => event.kind === "history"
+                ).length;
+                const scheduledCount = dayEvents.length - historyCount;
                 const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
                 const isToday = dateKey === todayKey;
                 const isSelected = dateKey === selectedDateKey;
                 const isPast = dateKey < todayKey;
+                const hasEvents = dayEvents.length > 0;
 
                 return (
                   <button
@@ -438,15 +719,29 @@ export default function ReviewCalendar({
                       border: "none",
                       borderRight: "1px solid #242424",
                       borderBottom: "1px solid #242424",
-                      background: isSelected
-                        ? "#252525"
-                        : isToday
-                          ? "#1f1b14"
-                          : "#181818",
-                      color: isCurrentMonth ? "#eee" : "#555",
+                      background: isToday
+                        ? isSelected
+                          ? "#332512"
+                          : "#241d12"
+                        : isSelected
+                          ? "#252525"
+                          : isPast
+                            ? "#151515"
+                            : "#181818",
+                      color: isCurrentMonth
+                        ? isPast
+                          ? "#aaa"
+                          : "#eee"
+                        : "#555",
                       cursor: "pointer",
                       textAlign: "left",
-                      boxShadow: isSelected ? "inset 0 0 0 1px #3a3a3a" : "none",
+                      boxShadow: isToday
+                        ? isSelected
+                          ? "inset 0 0 0 2px #ffcc7a, 0 0 0 1px rgba(255, 204, 122, 0.24)"
+                          : "inset 0 0 0 1px rgba(255, 204, 122, 0.72), 0 0 18px rgba(255, 204, 122, 0.08)"
+                        : isSelected
+                          ? "inset 0 0 0 1px #3a3a3a"
+                          : "none",
                       transition: "background 0.12s ease, box-shadow 0.12s ease"
                     }}
                   >
@@ -469,14 +764,22 @@ export default function ReviewCalendar({
                         {date.getDate()}
                       </span>
 
-                      {dayQuestions.length > 0 && (
+                      {hasEvents && (
                         <span
                           style={{
                             minWidth: "22px",
                             height: "22px",
                             borderRadius: "999px",
-                            background: isPast ? "#3a1d1d" : "#2b2047",
-                            color: isPast ? "#ff9c9c" : "#b69cff",
+                            background: scheduledCount > 0
+                              ? isPast
+                                ? "#3a1d1d"
+                                : "#2b2047"
+                              : "#252525",
+                            color: scheduledCount > 0
+                              ? isPast
+                                ? "#ff9c9c"
+                                : "#b69cff"
+                              : "#8f9aa3",
                             display: "inline-flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -484,7 +787,7 @@ export default function ReviewCalendar({
                             fontWeight: "800"
                           }}
                         >
-                          {dayQuestions.length}
+                          {dayEvents.length}
                         </span>
                       )}
                     </div>
@@ -496,20 +799,23 @@ export default function ReviewCalendar({
                         gap: "5px"
                       }}
                     >
-                      {dayQuestions.slice(0, 3).map((question) => (
+                      {dayEvents.slice(0, 4).map((event) => (
                         <div
-                          key={question.id}
+                          key={event.id}
                           style={{
-                            height: "6px",
+                            height: event.kind === "history" ? "4px" : "6px",
                             borderRadius: "999px",
-                            background:
-                              typeColors[question.type_q]?.[1] || "#777",
-                            opacity: isCurrentMonth ? 0.8 : 0.35
+                            background: event.kind === "history"
+                              ? historyColor(event.history?.quality)
+                              : typeColors[event.question.type_q]?.[1] || "#777",
+                            opacity: event.kind === "history"
+                              ? isCurrentMonth ? 0.38 : 0.2
+                              : isCurrentMonth ? 0.85 : 0.35
                           }}
                         />
                       ))}
 
-                      {dayQuestions.length > 3 && (
+                      {dayEvents.length > 4 && (
                         <div
                           style={{
                             color: "#666",
@@ -517,7 +823,7 @@ export default function ReviewCalendar({
                             fontWeight: "700"
                           }}
                         >
-                          +{dayQuestions.length - 3}
+                          +{dayEvents.length - 4}
                         </div>
                       )}
                     </div>
@@ -546,7 +852,7 @@ export default function ReviewCalendar({
             >
               <div
                 style={{
-                  color: selectedDateKey < todayKey ? "#ff9c9c" : "#777",
+                  color: selectedDateKey < todayKey ? "#8f9aa3" : "#777",
                   fontSize: "11px",
                   fontWeight: "800",
                   letterSpacing: "0.06em",
@@ -554,7 +860,7 @@ export default function ReviewCalendar({
                   textTransform: "uppercase"
                 }}
               >
-                {selectedDateKey < todayKey ? "En retard" : "Détails"}
+                {selectedPanelLabel}
               </div>
 
               <div
@@ -575,9 +881,58 @@ export default function ReviewCalendar({
                   marginTop: "8px"
                 }}
               >
-                {selectedQuestions.length} question
-                {selectedQuestions.length > 1 ? "s" : ""} due
+                {selectedHistoryCount > 0 && (
+                  <>{selectedHistoryCount} revue{selectedHistoryCount > 1 ? "s" : ""}</>
+                )}
+                {selectedHistoryCount > 0 && selectedScheduledCount > 0 && " · "}
+                {selectedScheduledCount > 0 && (
+                  <>{selectedScheduledCount} échéance{selectedScheduledCount > 1 ? "s" : ""}</>
+                )}
+                {selectedEvents.length === 0 && "Aucune activité"}
               </div>
+
+              {selectedEvents.length > 1 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginTop: "12px"
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#666",
+                      fontSize: "11px",
+                      fontWeight: "800",
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    Trier
+                  </span>
+                  <select
+                    value={sortMode}
+                    onChange={(event) => setSortMode(event.target.value)}
+                    style={{
+                      flex: 1,
+                      background: "#111",
+                      border: "1px solid #2f2f2f",
+                      borderRadius: "10px",
+                      color: "#ccc",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      outline: "none",
+                      padding: "8px 10px"
+                    }}
+                  >
+                    <option value="type">Type / groupe</option>
+                    <option value="title">Titre</option>
+                    <option value="quality">Résultat</option>
+                    <option value="id">ID</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div
@@ -588,7 +943,7 @@ export default function ReviewCalendar({
                 padding: "10px"
               }}
             >
-              {selectedQuestions.length === 0 ? (
+              {selectedEvents.length === 0 ? (
                 <div
                   style={{
                     padding: "40px 18px",
@@ -598,120 +953,56 @@ export default function ReviewCalendar({
                     lineHeight: 1.5
                   }}
                 >
-                  Rien de prévu pour cette journée.
+                  Rien dans l'historique ou les échéances pour cette journée.
                 </div>
               ) : (
-                selectedQuestions.map((question) => {
-                  const isSelectedQuestion = selectedQuestionId === question.id;
+                <>
+                  <SectionHeader
+                    count={selectedScheduledEvents.length}
+                    label="À revoir"
+                  />
 
-                  return (
-                    <button
-                      type="button"
-                      key={question.id}
-                      ref={isSelectedQuestion ? highlightedQuestionRef : null}
-                      onClick={() => onOpenQuestion?.(question)}
-                      style={{
-                        width: "100%",
-                        padding: "12px",
-                        borderRadius: "12px",
-                        border: isSelectedQuestion
-                          ? "1px solid rgba(126, 226, 168, 0.85)"
-                          : "1px solid #262626",
-                        background: isSelectedQuestion
-                          ? "rgba(22, 53, 36, 0.72)"
-                          : "#151515",
-                        color: "inherit",
-                        boxShadow: isSelectedQuestion
-                          ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
-                          : "none",
-                        marginBottom: "8px",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        font: "inherit",
-                        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
-                      }}
-                      title="Ouvrir dans Manage"
-                    >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        minWidth: 0,
-                        marginBottom: "8px"
-                      }}
-                    >
-                      <span style={typeBadgeStyle(question.type_q)}>
-                        {question.type_q || "text"}
-                      </span>
+                  {selectedScheduledEvents.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      cardRef={
+                        selectedQuestionId === event.question.id
+                          ? highlightedQuestionRef
+                          : null
+                      }
+                      event={event}
+                      isSelected={selectedQuestionId === event.question.id}
+                      onOpenQuestion={onOpenQuestion}
+                      todayKey={todayKey}
+                    />
+                  ))}
 
-                      <span
-                        style={{
-                          color: "#666",
-                          fontSize: "11px",
-                          flexShrink: 0
-                        }}
-                      >
-                        #{question.id}
-                      </span>
+                  <SectionHeader
+                    count={selectedHistoryEvents.length}
+                    label="Historique"
+                  />
 
-                      <span
-                        style={{
-                          color: "#777",
-                          fontSize: "12px",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap"
-                        }}
-                      >
-                        {dueLabel(question)}
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        color: "#eee",
-                        fontSize: "14px",
-                        fontWeight: "700",
-                        lineHeight: 1.35,
-                        marginBottom: "8px"
-                      }}
-                    >
-                      {dueTitle(question)}
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "5px"
-                      }}
-                    >
-                      {(question.tags || []).slice(0, 4).map((tag) => (
-                        <span
-                          key={tag}
-                          style={{
-                            background: "#2a2a2a",
-                            color: "#999",
-                            borderRadius: "999px",
-                            padding: "2px 7px",
-                            fontSize: "10px",
-                            fontWeight: "700"
-                          }}
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                    </button>
-                  );
-                })
+                  {selectedHistoryEvents.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      cardRef={
+                        selectedQuestionId === event.question.id
+                          ? highlightedQuestionRef
+                          : null
+                      }
+                      event={event}
+                      isSelected={selectedQuestionId === event.question.id}
+                      onOpenQuestion={onOpenQuestion}
+                      todayKey={todayKey}
+                    />
+                  ))}
+                </>
               )}
             </div>
           </div>
         </div>
 
-        {scheduledQuestions.length > 0 && (
+        {nextScheduledEvent && (
           <div
             style={{
               color: "#666",
@@ -720,7 +1011,7 @@ export default function ReviewCalendar({
             }}
           >
             Prochaine échéance :{" "}
-            {shortDateFormatter.format(parseDateKey(scheduledQuestions[0].dueKey))}
+            {shortDateFormatter.format(parseDateKey(nextScheduledEvent.dateKey))}
           </div>
         )}
       </div>
