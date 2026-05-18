@@ -38,12 +38,18 @@ const buttonStyle = {
 };
 
 const calendarButtonStyle = {
-  ...buttonStyle,
-  marginRight: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "8px 12px",
+  borderRadius: "999px",
   border: "1px solid #24583a",
-  background: "#163524",
+  background: "#151c18",
   color: "#7ee2a8",
+  cursor: "pointer",
+  fontSize: "13px",
   fontWeight: "700",
+  lineHeight: 1,
   whiteSpace: "nowrap"
 };
 
@@ -58,61 +64,70 @@ const tagStyle = {
   marginBottom: "8px"
 };
 
-function ReviewCalendarAction({ nextReview, onOpen }) {
+function formatReviewDate(value) {
+  if (!value) return "";
+
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+
+  const reviewDate = new Date(Number(year), Number(month) - 1, Number(day));
+  const today = new Date();
+  const todayKey = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  const tomorrowKey = new Date(todayKey);
+  tomorrowKey.setDate(todayKey.getDate() + 1);
+
+  if (reviewDate.getTime() === todayKey.getTime()) return "Aujourd'hui";
+  if (reviewDate.getTime() === tomorrowKey.getTime()) return "Demain";
+
+  return `${day}-${month}-${year}`;
+}
+
+function ReviewCalendarAction({ compact = false, nextReview, onOpen }) {
   if (!nextReview) return null;
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       style={{
-        padding: "12px",
-        borderRadius: "12px",
-        border: "1px solid #24583a",
-        background: "#151c18",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: "12px",
-        marginBottom: "22px"
+        ...calendarButtonStyle,
+        ...(compact
+          ? {
+            alignItems: "flex-start",
+            flexDirection: "column",
+            gap: "3px",
+            padding: "7px 10px",
+            borderRadius: "10px"
+          }
+          : {})
       }}
+      title="Voir cette question dans le calendrier"
     >
-      <div
+      <span
         style={{
-          minWidth: 0,
-          textAlign: "left"
+          color: "#8a8a8a",
+          fontSize: compact ? "10px" : undefined,
+          letterSpacing: compact ? "0.04em" : undefined,
+          textTransform: compact ? "uppercase" : undefined
         }}
       >
-        <div
-          style={{
-            color: "#7ee2a8",
-            fontSize: "11px",
-            fontWeight: "800",
-            letterSpacing: "0.06em",
-            marginBottom: "4px"
-          }}
-        >
-          REVIEW DATE
-        </div>
-        <div
-          style={{
-            color: "#ddd",
-            fontSize: "13px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
-          }}
-        >
-          {nextReview}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onOpen}
-        style={calendarButtonStyle}
+        Review
+      </span>
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px"
+        }}
       >
-        Calendrier →
-      </button>
-    </div>
+        {formatReviewDate(nextReview)}
+        <span aria-hidden="true">→</span>
+      </span>
+    </button>
   );
 }
 
@@ -374,20 +389,6 @@ export default function ManagePreview({
           flexDirection: "column"
         }}
       >
-        {isMapQuestion && (
-          <div
-            style={{
-              flexShrink: 0,
-              padding: "16px 16px 0"
-            }}
-          >
-            <ReviewCalendarAction
-              nextReview={selectedNextReview}
-              onOpen={openSelectedInCalendar}
-            />
-          </div>
-        )}
-
         <MapEditor
           group={group}
           onSave={async (delta, saveContext) => {
@@ -452,6 +453,15 @@ export default function ManagePreview({
           }}
           onClose={() => { }}
           selectedZone={editing}
+          headerAction={
+            isMapQuestion ? (
+              <ReviewCalendarAction
+                compact
+                nextReview={selectedNextReview}
+                onOpen={openSelectedInCalendar}
+              />
+            ) : null
+          }
         />
       </div>
     );
@@ -519,10 +529,16 @@ export default function ManagePreview({
         Question #{selectedQuestion.id}
       </div>
 
-      <ReviewCalendarAction
-        nextReview={selectedNextReview}
-        onOpen={openSelectedInCalendar}
-      />
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", marginBottom: "18px" }}>
+        <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
+          {selectedQuestion.type_q || "text"}
+        </div>
+
+        <ReviewCalendarAction
+          nextReview={selectedNextReview}
+          onOpen={openSelectedInCalendar}
+        />
+      </div>
 
       <label style={labelStyle}>Question</label>
       <input

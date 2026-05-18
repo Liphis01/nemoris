@@ -40,7 +40,8 @@ export default function MapEditor({
   group,
   onClose,
   onSave,
-  selectedZone
+  selectedZone,
+  headerAction
 }) {
 
   const [zones, setZones] = useState([]); // List of questions linked to this group
@@ -501,53 +502,64 @@ export default function MapEditor({
             />
           </div>
 
-          {/* INFOS */}
           <div
-            title={`${savedQuestionCount} saved questions out of ${totalCodeCount} unique SVG codes`}
             style={{
-              width: "54px",
-              height: "54px",
-              borderRadius: "50%",
-              background: `conic-gradient(#21eb75 ${assignmentDegrees}deg, #303030 0deg)`,
-              display: "grid",
-              placeItems: "center",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
               alignSelf: "end",
-              boxShadow: "0 0 0 1px #333, 0 8px 24px rgba(0, 0, 0, 0.28)"
+              flexShrink: 0
             }}
           >
+            {/* INFOS */}
             <div
+              title={`${savedQuestionCount} saved questions out of ${totalCodeCount} unique SVG codes`}
               style={{
-                width: "42px",
-                height: "42px",
+                width: "54px",
+                height: "54px",
                 borderRadius: "50%",
-                background: "#181818",
-                color: "#eee",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "column",
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums"
+                background: `conic-gradient(#21eb75 ${assignmentDegrees}deg, #303030 0deg)`,
+                display: "grid",
+                placeItems: "center",
+                boxShadow: "0 0 0 1px #333, 0 8px 24px rgba(0, 0, 0, 0.28)"
               }}
             >
-              <span
+              <div
                 style={{
-                  fontSize: "13px",
-                  fontWeight: 700
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "50%",
+                  background: "#181818",
+                  color: "#eee",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  lineHeight: 1,
+                  fontVariantNumeric: "tabular-nums"
                 }}
               >
-                {savedQuestionCount}
-              </span>
-              <span
-                style={{
-                  color: "#888",
-                  fontSize: "10px",
-                  marginTop: "3px"
-                }}
-              >
-                / {totalCodeCount}
-              </span>
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700
+                  }}
+                >
+                  {savedQuestionCount}
+                </span>
+                <span
+                  style={{
+                    color: "#888",
+                    fontSize: "10px",
+                    marginTop: "3px"
+                  }}
+                >
+                  / {totalCodeCount}
+                </span>
+              </div>
             </div>
+
+            {headerAction}
           </div>
 
         </div>
