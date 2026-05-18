@@ -7,6 +7,13 @@ export default function Manage(props) {
   const [editing, setEditing] = useState(null);
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
+  const {
+    allQuestions,
+    clearOpenQuestionId,
+    openQuestionId,
+    setSelectedQuestion,
+    setViewMode
+  } = props;
 
   useEffect(() => {
     if (highlightedQuestionIds.length === 0 && highlightedGroupIds.length === 0) {
@@ -20,6 +27,22 @@ export default function Manage(props) {
 
     return () => window.clearTimeout(timeout);
   }, [highlightedQuestionIds, highlightedGroupIds]);
+
+  useEffect(() => {
+    if (!openQuestionId) return;
+
+    const question = allQuestions?.find(
+      (item) => item.id === openQuestionId
+    );
+
+    if (!question) return;
+
+    setViewMode?.("questions");
+    setSelectedQuestion?.(question);
+    setEditing(question.type_q === "map" ? question : null);
+    setHighlightedQuestionIds([question.id]);
+    clearOpenQuestionId?.();
+  }, [allQuestions, clearOpenQuestionId, openQuestionId, setSelectedQuestion, setViewMode]);
 
   async function createQuestionWithHighlight() {
     const created = await props.createQuestion?.();

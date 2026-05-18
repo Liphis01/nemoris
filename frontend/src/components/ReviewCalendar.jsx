@@ -69,6 +69,14 @@ function dueLabel(question) {
   return question.answer || "Question";
 }
 
+function dueTitle(question) {
+  if (question.type_q === "map") {
+    return question.answer || question.question || "Zone sans titre";
+  }
+
+  return question.question || "Question sans titre";
+}
+
 function typeBadgeStyle(type) {
   const [background, color] = typeColors[type] || ["#2a2a2a", "#aaa"];
 
@@ -85,7 +93,7 @@ function typeBadgeStyle(type) {
   };
 }
 
-export default function ReviewCalendar({ setMode, questions }) {
+export default function ReviewCalendar({ setMode, questions, onOpenQuestion }) {
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
   const [visibleMonth, setVisibleMonth] = useState(
@@ -544,16 +552,23 @@ export default function ReviewCalendar({ setMode, questions }) {
                 </div>
               ) : (
                 selectedQuestions.map((question) => (
-                  <div
+                  <button
+                    type="button"
                     key={question.id}
+                    onClick={() => onOpenQuestion?.(question)}
                     style={{
+                      width: "100%",
                       padding: "12px",
                       borderRadius: "12px",
                       border: "1px solid #262626",
                       background: "#151515",
+                      color: "inherit",
                       marginBottom: "8px",
-                      textAlign: "left"
+                      textAlign: "left",
+                      cursor: "pointer",
+                      font: "inherit"
                     }}
+                    title="Ouvrir dans Manage"
                   >
                     <div
                       style={{
@@ -600,7 +615,7 @@ export default function ReviewCalendar({ setMode, questions }) {
                         marginBottom: "8px"
                       }}
                     >
-                      {question.question || "Question sans titre"}
+                      {dueTitle(question)}
                     </div>
 
                     <div
@@ -626,7 +641,7 @@ export default function ReviewCalendar({ setMode, questions }) {
                         </span>
                       ))}
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>

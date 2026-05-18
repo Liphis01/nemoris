@@ -25,6 +25,7 @@ function App() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [viewMode, setViewMode] = useState("questions"); // "questions" or "groups"
   const [allGroups, setAllGroups] = useState([]);
+  const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const current = questions[currentIndex];
 
   const [newRow, setNewRow] = useState({
@@ -182,6 +183,18 @@ function App() {
     ]);
 
     return { groups, questions };
+  }
+
+  function openQuestionInManage(question) {
+    setSearch("");
+    setFilterTheme("");
+    setFilterDue(false);
+    setViewMode("questions");
+    setIsCreating(false);
+    setIsCreatingGroup(false);
+    setSelectedQuestion(question);
+    setManageOpenQuestionId(question.id);
+    setMode("manage");
   }
 
   async function updateQuestion(id, updatedFields) {
@@ -541,6 +554,8 @@ function App() {
           deleteGroup={deleteGroup}
           viewMode={viewMode}
           setViewMode={setViewMode}
+          openQuestionId={manageOpenQuestionId}
+          clearOpenQuestionId={() => setManageOpenQuestionId(null)}
         />
       )}
 
@@ -548,6 +563,7 @@ function App() {
         <ReviewCalendar
           setMode={setMode}
           questions={allQuestions}
+          onOpenQuestion={openQuestionInManage}
         />
       )}
     </div>
