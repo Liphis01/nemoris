@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { apiUrl } from "../api/config";
 import SvgMap from "./SvgMap";
 
@@ -17,8 +17,8 @@ export default function MapEditor({
   selectedZone
 }) {
 
-  const [items, setItems] = useState([]); // List of zone codes on the map
   const [zones, setZones] = useState([]); // List of questions linked to this group
+  const [svgCodes, setSvgCodes] = useState([]);
   const initialZonesRef = useRef([]);
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
@@ -52,12 +52,6 @@ export default function MapEditor({
 
         initialZonesRef.current = mapZones;
 
-        setItems(
-          mapZones.map(
-            z => z.data?.code || z.code
-          )
-        );
-
       } catch (err) {
 
         console.error(
@@ -87,6 +81,35 @@ export default function MapEditor({
   useEffect(() => {
     zonesRef.current = zones;
   }, [zones]);
+
+  // useCallback to prevent unnecessary updates to svgCodes which would cause the SvgMap to reload and lose the current selection
+  const handleCodesLoaded = useCallback((codes) => {
+    setSvgCodes(prev => {
+      if (
+        prev.length === codes.length &&
+        prev.every((code, index) => code === codes[index])
+      ) {
+        return prev;
+      }
+
+      return codes;
+    });
+  }, []);
+
+  const foundCodes = useMemo(
+    () => zones.map(getZoneCode).filter(Boolean),
+    [zones]
+  );
+
+  const savedQuestionCount = useMemo(
+    () => zones.filter(zone => !isBlankTemporaryZone(zone)).length,
+    [zones]
+  );
+  const totalCodeCount = svgCodes.length;
+  const assignmentRatio = totalCodeCount
+    ? Math.min(savedQuestionCount / totalCodeCount, 1)
+    : 0;
+  const assignmentDegrees = Math.round(assignmentRatio * 360);
 
   function handleSelect(code) {
     let nextZones = zones;
@@ -213,7 +236,6 @@ export default function MapEditor({
 
     if (editing && !editing.answer) {
       setZones(zonesToSave);
-      setItems(zonesToSave.map((z) => z.data?.code || z.code));
     }
     setEditing(null);
 
@@ -461,14 +483,51 @@ export default function MapEditor({
 
           {/* INFOS */}
           <div
+            title={`${savedQuestionCount} saved questions out of ${totalCodeCount} unique SVG codes`}
             style={{
-              color: "#777",
-              fontSize: "13px",
-              whiteSpace: "nowrap",
-              paddingTop: "18px"
+              width: "54px",
+              height: "54px",
+              borderRadius: "50%",
+              background: `conic-gradient(#21eb75 ${assignmentDegrees}deg, #303030 0deg)`,
+              display: "grid",
+              placeItems: "center",
+              alignSelf: "end",
+              boxShadow: "0 0 0 1px #333, 0 8px 24px rgba(0, 0, 0, 0.28)"
             }}
           >
-            {items.length} zones
+            <div
+              style={{
+                width: "42px",
+                height: "42px",
+                borderRadius: "50%",
+                background: "#181818",
+                color: "#eee",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "column",
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums"
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 700
+                }}
+              >
+                {savedQuestionCount}
+              </span>
+              <span
+                style={{
+                  color: "#888",
+                  fontSize: "10px",
+                  marginTop: "3px"
+                }}
+              >
+                / {totalCodeCount}
+              </span>
+            </div>
           </div>
 
         </div>
@@ -492,9 +551,10 @@ export default function MapEditor({
           >
             <SvgMap
               svgPath={`/maps/${editableGroup.media}`}
-              found={zones.map(z => z.data?.code || z.code)}
+              found={foundCodes}
               selected={editing?.data.code}
               onSelect={handleSelect}
+              onCodesLoaded={handleCodesLoaded}
             />
           </div>
         </div>

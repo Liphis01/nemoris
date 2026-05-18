@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 
+function normalizeCode(code) {
+    return code?.trim() || "";
+}
+
 export default function SvgMap({
     svgPath,
     found,
     missed = [],
     dueItems = [],
     selected,
-    onSelect
+    onSelect,
+    onCodesLoaded
 }) {
     const containerRef = useRef(null);
     const wrapperRef = useRef(null);
@@ -63,8 +68,11 @@ export default function SvgMap({
                     return "#444";
                 };
 
-                containerRef.current.querySelectorAll("path").forEach((el) => {
-                    const code = el.getAttribute("data-code");
+                const mapCodes = new Set();
+
+                containerRef.current.querySelectorAll("[data-code]").forEach((el) => {
+                    const code = normalizeCode(el.getAttribute("data-code"));
+                    if (code) mapCodes.add(code);
 
                     el.style.fill = getColor(code);
                     el.style.cursor = "pointer";
@@ -93,12 +101,16 @@ export default function SvgMap({
                         el.removeEventListener("mouseleave", handleLeave);
                     });
                 });
+
+                if (onCodesLoaded) {
+                    onCodesLoaded([...mapCodes]);
+                }
             });
 
         return () => {
             cleanupFns.forEach(fn => fn());
         };
-    }, [svgPath, found, missed, selected, dueItems, onSelect]);
+    }, [svgPath, found, missed, selected, dueItems, onSelect, onCodesLoaded]);
 
     useEffect(() => {
         const el = wrapperRef.current;
