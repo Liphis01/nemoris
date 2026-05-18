@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
@@ -93,13 +93,21 @@ function typeBadgeStyle(type) {
   };
 }
 
-export default function ReviewCalendar({ setMode, questions, onOpenQuestion }) {
+export default function ReviewCalendar({
+  setMode,
+  questions,
+  onOpenQuestion,
+  openQuestionId,
+  clearOpenQuestionId
+}) {
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
+  const highlightedQuestionRef = useRef(null);
   const [visibleMonth, setVisibleMonth] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
+  const [selectedQuestionId, setSelectedQuestionId] = useState(null);
 
   const scheduledQuestions = useMemo(
     () =>
@@ -138,6 +146,33 @@ export default function ReviewCalendar({ setMode, questions, onOpenQuestion }) {
   const upcomingCount = scheduledQuestions.filter(
     (question) => question.dueKey > todayKey
   ).length;
+
+  useEffect(() => {
+    if (!openQuestionId) return;
+
+    const question = scheduledQuestions.find(
+      (item) => item.id === openQuestionId
+    );
+
+    if (!question?.dueKey) return;
+
+    const dueDate = parseDateKey(question.dueKey);
+    if (!dueDate) return;
+
+    setVisibleMonth(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1));
+    setSelectedDateKey(question.dueKey);
+    setSelectedQuestionId(question.id);
+    clearOpenQuestionId?.();
+  }, [clearOpenQuestionId, openQuestionId, scheduledQuestions]);
+
+  useEffect(() => {
+    if (!selectedQuestionId) return;
+
+    highlightedQuestionRef.current?.scrollIntoView({
+      block: "center",
+      behavior: "smooth"
+    });
+  }, [selectedDateKey, selectedQuestionId]);
 
   function moveMonth(offset) {
     setVisibleMonth(
@@ -551,25 +586,37 @@ export default function ReviewCalendar({ setMode, questions, onOpenQuestion }) {
                   Rien de prévu pour cette journée.
                 </div>
               ) : (
-                selectedQuestions.map((question) => (
-                  <button
-                    type="button"
-                    key={question.id}
-                    onClick={() => onOpenQuestion?.(question)}
-                    style={{
-                      width: "100%",
-                      padding: "12px",
-                      borderRadius: "12px",
-                      border: "1px solid #262626",
-                      background: "#151515",
-                      color: "inherit",
-                      marginBottom: "8px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      font: "inherit"
-                    }}
-                    title="Ouvrir dans Manage"
-                  >
+                selectedQuestions.map((question) => {
+                  const isSelectedQuestion = selectedQuestionId === question.id;
+
+                  return (
+                    <button
+                      type="button"
+                      key={question.id}
+                      ref={isSelectedQuestion ? highlightedQuestionRef : null}
+                      onClick={() => onOpenQuestion?.(question)}
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: isSelectedQuestion
+                          ? "1px solid rgba(126, 226, 168, 0.85)"
+                          : "1px solid #262626",
+                        background: isSelectedQuestion
+                          ? "rgba(22, 53, 36, 0.72)"
+                          : "#151515",
+                        color: "inherit",
+                        boxShadow: isSelectedQuestion
+                          ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
+                          : "none",
+                        marginBottom: "8px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        font: "inherit",
+                        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+                      }}
+                      title="Ouvrir dans Manage"
+                    >
                     <div
                       style={{
                         display: "flex",
@@ -641,8 +688,9 @@ export default function ReviewCalendar({ setMode, questions, onOpenQuestion }) {
                         </span>
                       ))}
                     </div>
-                  </button>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>

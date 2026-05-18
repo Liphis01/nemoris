@@ -26,6 +26,7 @@ function App() {
   const [viewMode, setViewMode] = useState("questions"); // "questions" or "groups"
   const [allGroups, setAllGroups] = useState([]);
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
+  const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
   const current = questions[currentIndex];
 
   const [newRow, setNewRow] = useState({
@@ -195,6 +196,11 @@ function App() {
     setSelectedQuestion(question);
     setManageOpenQuestionId(question.id);
     setMode("manage");
+  }
+
+  function openQuestionInCalendar(question) {
+    setCalendarOpenQuestionId(question.id);
+    setMode("calendar");
   }
 
   async function updateQuestion(id, updatedFields) {
@@ -556,6 +562,7 @@ function App() {
           setViewMode={setViewMode}
           openQuestionId={manageOpenQuestionId}
           clearOpenQuestionId={() => setManageOpenQuestionId(null)}
+          onOpenInCalendar={openQuestionInCalendar}
         />
       )}
 
@@ -564,6 +571,8 @@ function App() {
           setMode={setMode}
           questions={allQuestions}
           onOpenQuestion={openQuestionInManage}
+          openQuestionId={calendarOpenQuestionId}
+          clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
         />
       )}
     </div>

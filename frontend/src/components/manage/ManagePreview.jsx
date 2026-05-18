@@ -37,6 +37,16 @@ const buttonStyle = {
   marginRight: "12px"
 };
 
+const calendarButtonStyle = {
+  ...buttonStyle,
+  marginRight: 0,
+  border: "1px solid #24583a",
+  background: "#163524",
+  color: "#7ee2a8",
+  fontWeight: "700",
+  whiteSpace: "nowrap"
+};
+
 const tagStyle = {
   display: "inline-flex",
   alignItems: "center",
@@ -71,7 +81,8 @@ export default function ManagePreview({
   createGroup,
   editing,
   setViewMode,
-  setHighlightedQuestionIds
+  setHighlightedQuestionIds,
+  onOpenInCalendar
 }) {
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
@@ -268,6 +279,13 @@ export default function ManagePreview({
 
   const isMapQuestion = selectedQuestion.type_q === "map";
   const isMapGroup = selectedQuestion.type_group === "map";
+  const selectedNextReview =
+    selectedQuestion.progress?.next_review || selectedQuestion.next_review;
+
+  function openSelectedInCalendar() {
+    if (!selectedNextReview) return;
+    onOpenInCalendar?.(selectedQuestion);
+  }
 
   if (isMapQuestion || isMapGroup) {
     const groupe = isMapQuestion ? selectedQuestion.group : selectedQuestion;
@@ -293,9 +311,64 @@ export default function ManagePreview({
       <div
         style={{
           height: "100%",
-          overflow: "hidden"
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column"
         }}
       >
+        {isMapQuestion && selectedNextReview && (
+          <div
+            style={{
+              flexShrink: 0,
+              padding: "12px 16px",
+              borderBottom: "1px solid #262626",
+              background: "#151515",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px"
+            }}
+          >
+            <div
+              style={{
+                minWidth: 0,
+                textAlign: "left"
+              }}
+            >
+              <div
+                style={{
+                  color: "#666",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  letterSpacing: "0.06em",
+                  marginBottom: "3px"
+                }}
+              >
+                REVIEW
+              </div>
+              <div
+                style={{
+                  color: "#ccc",
+                  fontSize: "13px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {selectedNextReview}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={openSelectedInCalendar}
+              style={calendarButtonStyle}
+            >
+              Calendrier →
+            </button>
+          </div>
+        )}
+
         <MapEditor
           group={group}
           onSave={async (delta, saveContext) => {
@@ -435,6 +508,15 @@ export default function ManagePreview({
           <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
             Review {selectedQuestion.progress?.next_review || selectedQuestion.next_review}
           </div>
+        )}
+        {selectedNextReview && (
+          <button
+            type="button"
+            onClick={openSelectedInCalendar}
+            style={calendarButtonStyle}
+          >
+            Calendrier →
+          </button>
         )}
       </div>
 

@@ -19,6 +19,8 @@ color: "#ff85c2",
 - vérifier que supprimer un groupe supprime aussi les questions associées
 - les intervalles affichés sur les cards sont douteux (ou les dates)
 - quand on modifie le nom d'une zone ça ajoute une question au lieu de modifier celle existante (fixed ?)
+- bouton "ajouter" des tags n'est pas aligné avec le champ de texte
+- on peut ajouter des tags vides ("")
 
 ## features
 - filtrer les groupes dans manage
