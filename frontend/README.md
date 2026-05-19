@@ -26,6 +26,7 @@ color: "#ff85c2",
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - quand j'ajoute des zones je veux les garder d'une couleur différente pour les différencier des zones déjà sauvegardées
 - dans la review, quand j'utilise le pad, je vois le chiffre dans l'input de la map après
+- le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
 
 ## features
 - filtrer les groupes dans manage

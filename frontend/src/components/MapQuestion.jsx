@@ -630,10 +630,21 @@ export default function MapQuestion({ group, items, onComplete }) {
                           </div>
                         )}
 
-                        <button
+                        <div
                           className="map-recap-row"
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setFocusedCode(item.code)}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) {
+                              return;
+                            }
+
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setFocusedCode(item.code);
+                            }
+                          }}
                           style={{
                             ...recapRowStyle,
                             ...(isFocused ? recapRowFocusedStyle : {}),
@@ -718,7 +729,7 @@ export default function MapQuestion({ group, items, onComplete }) {
                               );
                             })}
                           </div>
-                        </button>
+                        </div>
                       </Fragment>
                     );
                   })}
