@@ -2,7 +2,8 @@ from .scheduler import preview_intervals
 
 
 def serialize_progress(progress):
-
+    # Frontend components expect a complete progress object even for old rows
+    # that do not yet have a Progress record.
     if not progress:
         return {
             "interval": 0,
@@ -36,6 +37,8 @@ def serialize_progress(progress):
 
 
 def serialize_manage_question(question):
+    # Manage needs the richest question shape: editable fields, progress, group
+    # metadata, and collection memberships in one payload.
     return {
         "id": question.id,
         "type_q": question.type_q,
@@ -65,7 +68,8 @@ def serialize_manage_question(question):
 
 
 def serialize_review_question_item(question):
-
+    # Text review sessions only need the prompt, answer, media, tags, and
+    # progress state for one atomic item.
     return {
         "type_q": question.type_q,
 
@@ -86,7 +90,8 @@ def serialize_review_question_item(question):
 
 
 def serialize_map_review_group(group):
-
+    # Runtime aggregation object: this is intentionally not a database question
+    # type. It groups due map-zone questions for a single review screen.
     return {
         "group_id": group.id,
         
@@ -101,7 +106,8 @@ def serialize_map_review_group(group):
 
 
 def serialize_map_review_zone(question):
-
+    # A map zone is still one Question row. The review UI uses code/aliases to
+    # match typed answers and projected_intervals to label recap choices.
     return {
 
         "question_id": question.id,

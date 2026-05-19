@@ -3,6 +3,7 @@ import { sendMapAnswer } from "../../../api/review";
 
 
 function normalize(str = "") {
+  // Match user input without case or accent sensitivity.
   return str
     .toLowerCase()
     .normalize("NFD")
@@ -11,6 +12,8 @@ function normalize(str = "") {
 
 
 function getHistoryStats(item) {
+  // Prefer detailed history when present; fall back to reps/lapses for older
+  // progress records.
   const history = item.progress?.history || [];
 
   if (history.length > 0) {
@@ -42,6 +45,8 @@ function getHistoryStats(item) {
 
 
 function getDifficultyScore(item, historyStats) {
+  // Recap sorting uses explicit scheduler difficulty when available, otherwise
+  // estimates from success rate.
   const explicitDifficulty = Number(item.progress?.difficulty);
 
   if (Number.isFinite(explicitDifficulty)) {
@@ -57,6 +62,8 @@ function getDifficultyScore(item, historyStats) {
 
 
 export function useMapReview(reviewZones, onComplete) {
+  // This hook turns a runtime map group into an interactive recall session:
+  // matching typed answers, tracking found zones, then sending per-zone grades.
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
@@ -79,6 +86,7 @@ export function useMapReview(reviewZones, onComplete) {
   }, [incorrectFlashId, correctFlashId]);
 
   const zoneByAnswer = useMemo(() => {
+    // Build a normalized lookup from every label and alias to its zone item.
     const lookup = new Map();
 
     reviewZones.forEach(item => {
@@ -136,6 +144,7 @@ export function useMapReview(reviewZones, onComplete) {
   );
 
   function markFound(item) {
+    // Do not count a zone twice if the user types an alias after clicking it.
     if (!item || foundQuestionIdSet.has(item.question_id)) return;
 
     setFoundQuestionIds(prev => [...prev, item.question_id]);
@@ -161,6 +170,8 @@ export function useMapReview(reviewZones, onComplete) {
   }
 
   function finishMap() {
+    // Initial recap grades are optimistic: found zones are easy, missed zones
+    // are failed. The user can adjust before submitting.
     const initial = {};
 
     reviewZones.forEach(item => {
@@ -172,6 +183,8 @@ export function useMapReview(reviewZones, onComplete) {
   }
 
   async function sendResult() {
+    // Send one quality per atomic map question, then tell the parent review
+    // session which zones should be re-queued.
     await sendMapAnswer(qualityByQuestionId);
 
     const failedQuestionIds = Object.entries(qualityByQuestionId)
@@ -207,6 +220,8 @@ export function useMapReview(reviewZones, onComplete) {
     ? Math.round((recapSuccessCount / reviewZones.length) * 100)
     : 0;
   const recapRows = useMemo(() => {
+    // Recap prioritizes found zones first, then harder zones, then alphabetical
+    // labels to make the review summary scannable.
     return reviewZones
       .map(item => {
         const historyStats = getHistoryStats(item);

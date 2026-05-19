@@ -1,4 +1,6 @@
 export function getNextReview(question) {
+  // Manage receives next_review either inside progress or flattened by some
+  // older responses, so keep both supported.
   return question?.progress?.next_review || question?.next_review || null;
 }
 
@@ -29,6 +31,8 @@ function matchesDue(question, dueOnly) {
 
   const nextReview = getNextReview(question);
 
+  // Missing progress means "not scheduled yet", which should be visible when
+  // filtering for due work.
   if (!nextReview) return true;
 
   return new Date(nextReview) <= new Date();
@@ -43,6 +47,8 @@ export function filterAndSortQuestions({
   sortField,
   sortOrder
 }) {
+  // Filtering stays pure and deterministic so Manage can recompute visible rows
+  // from local state after edits without refetching.
   return questions
     .filter(question =>
       matchesSearch(question, search) &&

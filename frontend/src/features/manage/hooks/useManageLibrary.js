@@ -16,6 +16,8 @@ import { filterAndSortQuestions } from "../utils/questionFilters";
 
 
 const initialQuestionDraft = {
+  // Default new questions are text items. Map zones are normally created from
+  // the map editor because they need a data.code value from the SVG.
   question: "",
   answer: "",
   tags: [],
@@ -32,6 +34,8 @@ const initialGroupDraft = {
 
 
 export function useManageLibrary(mode) {
+  // This hook is the Manage data store: it owns loaded questions/groups, local
+  // filters, creation drafts, and cache patches after mutations.
   const [allQuestions, setAllQuestions] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
   const [search, setSearch] = useState("");
@@ -60,6 +64,8 @@ export function useManageLibrary(mode) {
   }, []);
 
   const reloadAllData = useCallback(async () => {
+    // Used after cross-cutting edits when both group counts and question rows
+    // may have changed.
     const [groups, questions] = await Promise.all([
       loadAllGroups(),
       loadAllQuestions()
@@ -70,6 +76,8 @@ export function useManageLibrary(mode) {
 
   useEffect(() => {
     if (mode === "manage" || mode === "calendar") {
+      // Calendar only needs questions; Manage also needs group metadata for the
+      // browser/sidebar and map editor entry points.
       loadAllQuestions().catch(console.error);
 
       if (mode === "manage") {
@@ -95,6 +103,9 @@ export function useManageLibrary(mode) {
   async function updateQuestion(id, updatedFields) {
     await updateQuestionRequest(id, updatedFields);
 
+    // Optimistic local patch keeps spreadsheet interactions quick. For fields
+    // that require server-calculated shape, callers can reload or patch richer
+    // data afterward.
     patchQuestionInCache({
       id,
       ...updatedFields
@@ -109,6 +120,8 @@ export function useManageLibrary(mode) {
     setAllQuestions(prev => prev.filter(question => question.id !== id));
 
     if (deletedQuestion?.group?.id) {
+      // Group counts are denormalized in the frontend list response, so adjust
+      // them locally after deleting a grouped question.
       setAllGroups(prev =>
         prev
           .map(group =>
@@ -181,6 +194,8 @@ export function useManageLibrary(mode) {
     const file = event.target.files[0];
     if (!file) return;
 
+    // New-question uploads update the draft. Existing-question uploads persist
+    // immediately and then patch the local cache.
     const data = await uploadMedia(file);
 
     if (question.id === "new") {
@@ -202,6 +217,8 @@ export function useManageLibrary(mode) {
   }
 
   function handleSort(field) {
+    // Clicking the current column toggles direction; clicking a new column
+    // starts with ascending order.
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -211,6 +228,8 @@ export function useManageLibrary(mode) {
   }
 
   function patchQuestionInCache(updated) {
+    // Small cache patches avoid a full list reload after simple edits and map
+    // zone saves.
     setAllQuestions(prev =>
       prev.map(question =>
         question.id === updated.id

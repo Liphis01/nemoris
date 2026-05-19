@@ -4,6 +4,7 @@ import { getReview, sendAnswer } from "../../../api/review";
 
 
 function parseTags(tagInput) {
+  // Tags are entered as a comma-separated filter in the review toolbar.
   return tagInput
     .split(",")
     .map(tag => tag.trim())
@@ -12,6 +13,8 @@ function parseTags(tagInput) {
 
 
 export function useReviewSession(active) {
+  // Owns one review run: fetching due items, moving through the queue, and
+  // re-queueing failures for another pass.
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -30,6 +33,8 @@ export function useReviewSession(active) {
   const handleTextAnswer = useCallback((quality) => {
     if (!current) return;
 
+    // Fire-and-advance keeps review fast. Failures are appended to the end so
+    // they appear again after the current queue.
     sendAnswer(current.question_id, quality).catch(console.error);
 
     if (quality === 0) {
@@ -41,6 +46,8 @@ export function useReviewSession(active) {
   }, [current]);
 
   function handleMapComplete(failedQuestionIds = []) {
+    // A map screen can contain many atomic zone questions. Only failed zones are
+    // re-queued, wrapped back into the same runtime map group shape.
     if (current && failedQuestionIds.length > 0) {
       const failedItems = (current.items || []).filter(item =>
         failedQuestionIds.includes(item.question_id)
@@ -71,6 +78,8 @@ export function useReviewSession(active) {
   useEffect(() => {
     if (!active) return;
 
+    // Re-fetch whenever filters change so the backend remains responsible for
+    // due selection and runtime grouping.
     getReview(
       selectedTags,
       limit,
@@ -88,6 +97,8 @@ export function useReviewSession(active) {
     if (!active) return;
 
     function handleKeyDown(event) {
+      // Keyboard review flow: Enter reveals, then 1/2/3 grades the visible
+      // answer. Map review handles its own input shortcuts.
       if (event.key === "Enter") {
         if (!showAnswer) {
           setShowAnswer(true);

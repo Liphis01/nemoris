@@ -32,6 +32,12 @@ def ensure_progress_schema():
 
 
 def normalize_legacy_question_types():
+    """
+    Collapse older question type names into the current atomic model.
+
+    The database should not contain a separate map_group/map_zone model; map
+    questions are normal Question rows connected by group_id.
+    """
     with engine.begin() as connection:
         connection.exec_driver_sql(
             "UPDATE questions SET type_q = 'text' WHERE type_q = 'image'"
@@ -43,6 +49,8 @@ def normalize_legacy_question_types():
 
 
 def init_database():
+    # create_all is enough for this local app's initial tables. The helper
+    # functions below handle the small legacy fixes that create_all cannot do.
     Base.metadata.create_all(bind=engine)
     ensure_progress_schema()
     normalize_legacy_question_types()

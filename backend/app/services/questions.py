@@ -7,11 +7,14 @@ from .progress import create_initial_progress
 
 
 GROUP_COMPATIBILITY = {
+    # Group type -> allowed Question.type_q values. Add here before allowing a
+    # new grouped review type through create/update.
     "map": ["map"]
 }
 
 
 def validate_group_compatibility(db, type_q: str, group_id: int | None):
+    # Ungrouped questions are always valid.
     if not group_id:
         return None
 
@@ -47,6 +50,8 @@ def get_collections_by_ids(db, collection_ids):
 
 
 def create_question(db, payload):
+    # Every created question immediately gets its own Progress row. This keeps
+    # grouped map zones independently reviewable.
     validate_group_compatibility(db, payload.type_q, payload.group_id)
 
     question = Question(
@@ -70,6 +75,8 @@ def create_question(db, payload):
 
 
 def create_questions_bulk(db, questions):
+    # Bulk creation is all-or-nothing so CSV/import failures do not leave a
+    # half-created set of review items.
     created = []
 
     try:
@@ -85,6 +92,8 @@ def create_questions_bulk(db, questions):
 
 
 def list_questions_for_manage(db):
+    # Manage renders a spreadsheet/browser view, so fetch related display data
+    # up front instead of relying on lazy relationships.
     questions = (
         db.query(Question)
         .options(
@@ -119,6 +128,8 @@ def update_question(db, question_id: int, payload):
     question = get_question_for_update(db, question_id)
     updates = payload.model_dump(exclude_unset=True)
 
+    # Validate the final type/group combination, not only fields explicitly
+    # present in the payload.
     future_type = updates.get("type_q", question.type_q)
     future_group_id = updates.get("group_id", question.group_id)
     validate_group_compatibility(db, future_type, future_group_id)
@@ -162,12 +173,16 @@ def delete_question(db, question_id: int):
         raise HTTPException(status_code=404, detail="Question not found")
 
     group = question.group
+    # Clear many-to-many links and progress explicitly because cascades are not
+    # enabled on these relationships.
     question.collections = []
     db.query(Progress).filter(Progress.question_id == question.id).delete()
     db.delete(question)
     db.commit()
 
     if group:
+        # Empty groups are removed automatically after their last question is
+        # deleted, keeping the Manage sidebar tidy.
         remaining = (
             db.query(Question)
             .filter(Question.group_id == group.id)

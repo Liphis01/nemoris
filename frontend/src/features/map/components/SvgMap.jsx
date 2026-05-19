@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 function normalizeCode(code) {
+    // SVG data-code attributes are the stable link between drawn zones and
+    // Question.data.code values.
     return code?.trim() || "";
 }
 
@@ -14,6 +16,8 @@ export default function SvgMap({
     onSelect,
     onCodesLoaded
 }) {
+    // SvgMap injects raw SVG markup, then manages interaction by attaching
+    // listeners/styles to elements that declare data-code.
     const containerRef = useRef(null);
     const wrapperRef = useRef(null);
     const [scale, setScale] = useState(1);
@@ -25,6 +29,8 @@ export default function SvgMap({
     const [svgVersion, setSvgVersion] = useState(0);
 
     useEffect(() => {
+        // Keep the latest transform available to effects/event handlers that
+        // should not close over stale scale/offset values.
         transformRef.current = { scale, offset };
     }, [scale, offset]);
 
@@ -56,6 +62,8 @@ export default function SvgMap({
     useEffect(() => {
         let cancelled = false;
 
+        // Vite serves map SVGs from public/maps. After loading, discover every
+        // data-code zone so editors can know which SVG regions are assignable.
         fetch(svgPath)
             .then((res) => res.text())
             .then((svg) => {
@@ -96,6 +104,8 @@ export default function SvgMap({
     }, [svgPath, onCodesLoaded]);
 
     useEffect(() => {
+        // Apply semantic colors to the imported SVG without modifying the SVG
+        // file itself.
         const foundSet = new Set(found);
         const missedSet = new Set(missed);
         const dueSet = new Set(dueItems);
@@ -144,6 +154,8 @@ export default function SvgMap({
     useEffect(() => {
         if (!focusCode || !wrapperRef.current) return;
 
+        // Center and zoom on a selected zone by translating its rendered screen
+        // box back into the map's unscaled coordinate space.
         const target = zoneElementsRef.current.find(({ code }) => code === focusCode);
         if (!target?.el) return;
 
@@ -185,11 +197,11 @@ export default function SvgMap({
 
             const rect = el.getBoundingClientRect();
 
-            // position souris RELATIVE AU WRAPPER (non transformé)
+            // Mouse position relative to the untransformed wrapper.
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
 
-            // coordonnées monde
+            // World coordinate under the cursor before applying the new scale.
             const worldX = (mouseX - offset.x) / scale;
             const worldY = (mouseY - offset.y) / scale;
 

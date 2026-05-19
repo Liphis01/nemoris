@@ -36,6 +36,8 @@ export function deleteQuestion(id) {
 
 
 export function setQuestionCollections(id, collectionIds) {
+  // Collection membership is edited separately from the core question payload
+  // so spreadsheet-style edits do not have to resubmit every field.
   return requestJson(`/questions/${id}/collections`, {
     method: "PUT",
     headers: {
@@ -54,6 +56,8 @@ export function removeQuestionMedia(id) {
 
 
 export function uploadMedia(file) {
+  // File uploads use FormData; do not set Content-Type manually or the browser
+  // will omit the multipart boundary.
   const formData = new FormData();
   formData.append("file", file);
 

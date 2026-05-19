@@ -5,6 +5,8 @@ import GroupCardItem from "./GroupCardItem";
 import { buildVisibleRows, getQuestionGroupId } from "../utils/manageRows";
 
 function centerListItem(list, item) {
+  // Keep cross-screen navigation visible by scrolling the selected/highlighted
+  // row toward the center of the list.
   const listRect = list.getBoundingClientRect();
   const itemRect = item.getBoundingClientRect();
   const nextTop =
@@ -32,7 +34,8 @@ export default function ManageList({
   highlightedQuestionIds = [],
   highlightedGroupIds = []
 }) {
-
+  // This list renders either flat groups or grouped question rows, while also
+  // owning local UI state for delete popovers, expansion, and scroll targets.
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [expandedGroupIds, setExpandedGroupIds] = useState(() => new Set());
@@ -83,6 +86,8 @@ export default function ManageList({
   useEffect(() => {
     if (openDeleteId === null) return;
 
+    // Clicking outside a delete confirmation card closes it without touching
+    // the selected Manage item.
     function handlePointerDown(event) {
       const path = event.composedPath
         ? event.composedPath()
@@ -131,6 +136,8 @@ export default function ManageList({
   useLayoutEffect(() => {
     const previous = lastQuestionScrollSignalRef.current;
 
+    // Selection/highlight changes are translated into a pending row scroll.
+    // If the target is inside a collapsed group, expand it first.
     if (viewMode !== "questions") {
       lastQuestionScrollSignalRef.current = {
         ...previous,
@@ -190,6 +197,8 @@ export default function ManageList({
   useLayoutEffect(() => {
     const previous = lastGroupScrollSignalRef.current;
 
+    // Groups mode has no nested rows, so selected groups can be scrolled
+    // directly after render.
     if (viewMode !== "groups") {
       lastGroupScrollSignalRef.current = {
         ...previous,
@@ -228,6 +237,8 @@ export default function ManageList({
   }, [allGroups, selectedItem?.id, selectedItem?.type_group, viewMode]);
 
   useLayoutEffect(() => {
+    // Execute pending scrolls only after React has committed the matching rows
+    // and refs are available.
     const pendingScroll = pendingScrollRef.current;
     if (!pendingScroll || pendingScroll.viewMode !== viewMode) return;
 

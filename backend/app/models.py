@@ -33,16 +33,18 @@ class QuestionGroup(Base):
 
     id = Column(Integer, primary_key=True)
 
-    # map / timeline / image_set / diagram / etc
+    # Runtime grouping metadata. The actual reviewable items remain Question
+    # rows; this table only says how related questions should be presented.
     type_group = Column(String)
 
-    # nom affiché
+    # Display name shown in Manage/review UIs.
     name = Column(String)
 
-    # ressource principale
+    # Main visual/media resource for the group, for example a map SVG filename.
     media = Column(String, nullable=True)
 
-    # données additionnelles
+    # Open-ended group metadata. Prefer this over adding columns for every
+    # future grouped-review variant.
     data = Column(JSON, nullable=True)
 
     questions = relationship(
@@ -60,22 +62,25 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True)
 
-    # text / map / etc
+    # Question rows are atomic review items. "map" means one map zone, not a
+    # database-level map group.
     type_q = Column(String)
 
     question = Column(Text)
     answer = Column(Text, nullable=True)
 
-    # image / audio / etc
+    # Replaces the old "fichier" field. Can point to image, SVG, audio, video.
     media = Column(String, nullable=True)
 
     # tags
     tags = Column(JSON, nullable=True)
 
-    # données custom selon le type (ex: {code: "FR", aliases: ["UK", "royaume uni"]} pour map)
+    # Type-specific data lives here. For map zones this stores data.code and
+    # data.aliases so the schema stays stable as map features grow.
     data = Column(JSON, nullable=True)
 
-    # groupe éventuel
+    # Optional visual/grouped-review membership. Progress still belongs to this
+    # individual question, not to the group.
     group_id = Column(
         Integer,
         ForeignKey("question_groups.id"),
@@ -122,6 +127,8 @@ class Progress(Base):
     interval = Column(Integer, default=0)
     last_review = Column(Date, nullable=True)
     next_review = Column(Date)
+    # Append-only review snapshots used by the UI for history/stats. The active
+    # scheduling state is stored in the scalar columns above.
     history = Column(JSON, default=list)
 
     question = relationship(

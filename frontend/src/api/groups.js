@@ -2,11 +2,14 @@ import { requestJson } from "./http";
 
 
 export function listGroups() {
+  // Group list includes summary counts used by the Manage browser.
   return requestJson("/groups");
 }
 
 
 export function createGroup(payload) {
+  // Creating a group only creates visual context; questions/zones are added
+  // separately.
   return requestJson("/groups", {
     method: "POST",
     headers: {

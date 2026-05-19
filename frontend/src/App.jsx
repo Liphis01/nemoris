@@ -8,6 +8,8 @@ import { useReviewSession } from "./features/review/hooks/useReviewSession";
 
 
 function App() {
+  // Top-level mode switching is intentionally simple: each feature owns its
+  // internal state through hooks, while App only coordinates cross-feature jumps.
   const [mode, setMode] = useState("menu");
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
@@ -28,11 +30,15 @@ function App() {
   };
 
   useEffect(() => {
+    // Manage is a fixed three-panel workspace, so the body scroll is disabled
+    // there and restored for review/menu/calendar screens.
     document.body.style.overflow =
       mode === "manage" ? "hidden" : "auto";
   }, [mode]);
 
   function openQuestionInManage(question) {
+    // Calendar -> Manage navigation should land on the exact question, without
+    // whatever filters were previously active in Manage.
     manageLibrary.resetManageFilters();
     manageLibrary.setViewMode("questions");
     manageLibrary.setIsCreatingQuestion(false);
@@ -43,6 +49,8 @@ function App() {
   }
 
   function openQuestionInCalendar(question) {
+    // Manage -> Calendar navigation keeps the selected question highlighted
+    // after the calendar screen mounts.
     setCalendarOpenQuestionId(question.id);
     setMode("calendar");
   }

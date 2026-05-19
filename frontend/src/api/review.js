@@ -2,6 +2,8 @@ import { requestJson, requestOk } from "./http";
 
 
 export function getReview(selectedTags = [], limit = 200, collectionId = null) {
+  // Keep review filtering server-side because the backend owns due selection
+  // and runtime map grouping.
   const params = new URLSearchParams();
 
   selectedTags.forEach(tag => params.append("tags", tag));
@@ -28,6 +30,7 @@ export function sendAnswer(questionId, quality) {
 
 
 export function sendMapAnswer(items) {
+  // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestOk("/answer_map", {
     method: "POST",
     headers: {

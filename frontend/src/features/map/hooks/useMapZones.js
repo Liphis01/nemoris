@@ -3,16 +3,22 @@ import { getMapZones, patchMapZones } from "../../../api/maps";
 
 
 export function getZoneCode(zone) {
+  // Saved zones store the SVG identifier in data.code; temporary/editor rows
+  // may also carry code at the top level.
   return zone?.data?.code || zone?.code;
 }
 
 
 export function isBlankTemporaryZone(zone) {
+  // Temporary rows exist only while the user is editing an unsaved SVG zone.
+  // If no answer was entered, there is nothing worth saving.
   return String(zone?.id || "").startsWith("tmp-") && !zone?.answer?.trim();
 }
 
 
 export function normalizeZone(zone, group) {
+  // Keep map zones shaped like normal Manage questions while guaranteeing the
+  // map-specific data.code/data.aliases fields exist.
   const code = getZoneCode(zone);
   const aliases = zone?.data?.aliases || zone?.aliases || [];
 
@@ -40,6 +46,8 @@ export function normalizeZone(zone, group) {
 
 
 export function useMapZones(group) {
+  // Data layer for MapEditor: loads saved zones, tracks SVG codes discovered by
+  // SvgMap, remembers dirty zone codes, and persists changed zones in bulk.
   const [zones, setZones] = useState([]);
   const [svgCodes, setSvgCodes] = useState([]);
   const [editableGroup, setEditableGroup] = useState({
@@ -58,6 +66,8 @@ export function useMapZones(group) {
   useEffect(() => {
     async function loadZones() {
       try {
+        // The backend returns atomic map questions; normalize them into editor
+        // rows before comparing or saving.
         const data = await getMapZones(group.id);
         const mapZones = data.map(zone => normalizeZone(zone, group));
 
@@ -80,6 +90,7 @@ export function useMapZones(group) {
   }, [group]);
 
   const handleCodesLoaded = useCallback((codes) => {
+    // Avoid state churn when the same SVG reports the same code list again.
     setSvgCodes(prev => {
       if (
         prev.length === codes.length &&
@@ -103,6 +114,8 @@ export function useMapZones(group) {
   );
 
   function markDirty(code) {
+    // Track dirtiness by SVG code rather than database id so temporary rows and
+    // existing rows share the same save path.
     if (code) {
       dirtyZoneCodesRef.current.add(code);
     }
@@ -122,6 +135,8 @@ export function useMapZones(group) {
   }
 
   async function saveMapZones({ zonesToSave, changedZones }) {
+    // Send only changed zones, but rebuild local state from the server response
+    // so newly created rows get their real database ids/progress.
     const saveResult = await patchMapZones(group.id, {
       group: {
         name: editableGroup.name,

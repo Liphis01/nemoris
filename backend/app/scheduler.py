@@ -16,6 +16,8 @@ def next_interval(stability):
 
 
 def progress_value(progress, field, default):
+    # Existing rows may have NULLs after schema upgrades; scheduling should
+    # continue from defaults instead of failing or producing None math.
     if not progress:
         return default
 
@@ -23,6 +25,13 @@ def progress_value(progress, field, default):
 
 
 def update_progress(progress, quality):
+    """
+    Apply a compact FSRS-inspired scheduling step.
+
+    quality: 0 = fail, 1 = hard, 2 = easy. The returned dict is written back to
+    Progress by services/progress.py so scheduling stays isolated from database
+    mutation.
+    """
 
     today = date.today()
 
@@ -88,6 +97,8 @@ def update_progress(progress, quality):
 
 
 def preview_intervals(progress):
+    # The map recap can show what each button would schedule before the user
+    # commits a quality choice.
     return {
         quality: update_progress(progress, quality)["interval"]
         for quality in (0, 1, 2)

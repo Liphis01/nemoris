@@ -9,6 +9,9 @@ from .routers import collections, groups, maps, questions, review, uploads
 
 
 def create_app():
+    # The desktop/dev app starts directly from FastAPI, so database setup
+    # happens during app construction instead of through a separate migration
+    # command.
     init_database()
 
     app = FastAPI()
@@ -21,9 +24,13 @@ def create_app():
         allow_headers=["*"],
     )
 
+    # Uploaded media is served from /static. The folder is created lazily so a
+    # fresh checkout can run without manual setup.
     STATIC_DIR.mkdir(exist_ok=True)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+    # Routers keep API concerns separated by feature while still sharing the
+    # same SQLAlchemy session dependency.
     app.include_router(questions.router)
     app.include_router(groups.router)
     app.include_router(collections.router)
@@ -49,6 +56,8 @@ def create_app():
         def serve_frontend_route(full_path: str):
             frontend_file = FRONTEND_DIST_DIR / full_path
 
+            # Prefer real files from the Vite build, then fall back to
+            # index.html so React can handle client-side routes.
             if frontend_file.is_file():
                 return FileResponse(frontend_file)
 

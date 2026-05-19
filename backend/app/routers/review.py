@@ -20,6 +20,8 @@ def get_review(
     collection_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+    # The service handles due filtering and runtime map grouping; the route only
+    # translates query parameters into that call.
     return get_review_items(
         db,
         tags=tags,
@@ -30,6 +32,8 @@ def get_review(
 
 @router.post("/answer")
 def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
+    # Old/imported questions may not have progress yet, so create it lazily on
+    # first answer.
     progress = (
         db.query(Progress)
         .filter(Progress.question_id == data.question_id)
@@ -59,6 +63,8 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
 def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
     question_ids = list(data.items.keys())
 
+    # One map submit can grade many independent zone questions. Fetch existing
+    # progress rows in one query, then create any missing rows while iterating.
     existing_progresses = (
         db.query(Progress)
         .filter(Progress.question_id.in_(question_ids))

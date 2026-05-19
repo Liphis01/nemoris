@@ -64,6 +64,8 @@ const tagStyle = {
 };
 
 function formatReviewDate(value) {
+  // Dates arrive as YYYY-MM-DD from the backend. Build a local Date from parts
+  // to avoid timezone shifts around midnight.
   if (!value) return "";
 
   const [year, month, day] = value.split("-");
@@ -86,6 +88,8 @@ function formatReviewDate(value) {
 }
 
 function hasStartedProgress(question) {
+  // New questions are due immediately, but showing a calendar jump before the
+  // first review is noisy. Only expose it after progress has started.
   const history = question?.progress?.history || [];
   return (question?.progress?.reps || 0) > 0 || history.length > 0;
 }
@@ -161,11 +165,15 @@ export default function ManageInspector({
   setHighlightedQuestionIds,
   onOpenInCalendar
 }) {
+  // Inspector has three modes: create group, create question, or edit selected
+  // item. Map groups/zones delegate their detailed editing to MapEditor.
   const [draft, setDraft] = useState(null);
   const [tagInput, setTagInput] = useState("");
   const [saveStatus, setSaveStatus] = useState(null);
 
   useEffect(() => {
+    // Copy selected item into a local draft so typing does not mutate list cache
+    // until the user saves.
     if (!selectedItem) {
       setDraft(null);
       setTagInput("");
@@ -365,6 +373,8 @@ export default function ManageInspector({
   }
 
   if (selectedIsMapZone || isMapGroup) {
+    // Selecting either a map group or one of its zones opens the full map editor
+    // for that group. A selected zone is passed through as the focused edit row.
     const groupe = selectedIsMapZone ? selectedItem.group : selectedItem;
     const group = allGroups.find((g) => g.id === groupe.id);
 
@@ -396,6 +406,8 @@ export default function ManageInspector({
         <MapEditor
           group={group}
           onSave={async (delta, saveContext) => {
+            // Map saves can change group metadata, create zones, and update
+            // existing zone labels/aliases. Patch each affected local cache.
             const savedGroup = saveContext?.group;
             const savedZones = saveContext?.zones || [];
 
@@ -442,6 +454,8 @@ export default function ManageInspector({
             }
 
             if (selectedZoneCode) {
+              // After saving an edited zone, jump back to the saved question row
+              // so the user sees the persisted item in the browser.
               const savedZone = savedZones.find((question) =>
                 question.type_q === "map" &&
                 question.group?.id === group.id &&
@@ -490,6 +504,8 @@ export default function ManageInspector({
   async function handleSave() {
     if (!draft) return;
 
+    // Only editable scalar fields are sent here. Map-specific fields are saved
+    // through MapEditor so data.code stays tied to the SVG zone.
     const payload = {
       question: draft.question,
       answer: draft.answer,

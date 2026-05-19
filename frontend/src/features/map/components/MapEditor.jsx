@@ -14,7 +14,8 @@ export default function MapEditor({
   selectedZone,
   headerAction
 }) {
-
+  // MapEditor turns SVG zones into atomic map questions. The group is visual
+  // context; each saved zone remains its own reviewable question.
   const [editingZone, setEditingZone] = useState(null);
   const [aliasInput, setAliasInput] = useState("");
   const labelInputRef = useRef(null);
@@ -36,6 +37,8 @@ export default function MapEditor({
 
   useEffect(() => {
     if (!selectedZone) return;
+    // When opened from an existing map question, focus that zone and discard any
+    // unsaved blank temporary row from a previous click.
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
     setEditingZone(normalizeZone(selectedZone, group));
   }, [group, selectedZone, setZones]);
@@ -47,6 +50,8 @@ export default function MapEditor({
   const assignmentDegrees = Math.round(assignmentRatio * 360);
 
   function handleSelect(code) {
+    // Clicking an SVG region either edits its saved question or creates a
+    // temporary unsaved zone row for that data-code.
     let nextZones = zones;
 
     if (isBlankTemporaryZone(editingZone)) {
@@ -73,6 +78,8 @@ export default function MapEditor({
   }
 
   function updateZoneAnswer(value) {
+    // The first non-empty answer promotes a temporary zone into the local zone
+    // list so it will be included in the next save.
     const nextEditing = { ...editingZone, answer: value };
     const code = getZoneCode(editingZone);
 
@@ -98,6 +105,7 @@ export default function MapEditor({
   }
 
   function addAlias(focusAfter = false) {
+    // Aliases are stored under data.aliases and are used by map review matching.
     const value = aliasInput.trim();
     if (!value) return;
 
@@ -167,6 +175,7 @@ export default function MapEditor({
       ? getZoneCode(editingZone)
       : null;
     const dirtyCodes = dirtyZoneCodesRef.current;
+    // Save only dirty existing zones plus temporary zones that need real ids.
     const changedZones = zonesToSave.filter(z => {
       const code = getZoneCode(z);
       return dirtyCodes.has(code) || String(z.id || "").startsWith("tmp-");
@@ -190,6 +199,8 @@ export default function MapEditor({
     const { delta, savedZones, saveResult } = saved;
 
     if (onSave) {
+      // Bubble enough detail to ManageInspector to patch local lists and
+      // highlight newly created/updated question rows.
       await onSave(delta, {
         selectedZoneCode: savedEditingCode,
         createdQuestionIds: saveResult.createdQuestionIds || [],

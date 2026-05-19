@@ -19,6 +19,8 @@ router = APIRouter()
 
 @router.post("/questions")
 def create_question(payload: QuestionCreate, db: Session = Depends(get_db)):
+    # Single-create commits here; bulk-create delegates commit/rollback to the
+    # service so all rows succeed or fail together.
     question = create_question_service(db, payload)
     db.commit()
     db.refresh(question)
@@ -36,6 +38,7 @@ def create_questions_bulk(
 
 @router.get("/questions")
 def get_questions(db: Session = Depends(get_db)):
+    # Manage consumes this rich list for browsing, editing, and filtering.
     return list_questions_for_manage(db)
 
 
@@ -54,6 +57,8 @@ def set_collections(
     data: SetCollections,
     db: Session = Depends(get_db)
 ):
+    # Collection membership changes are isolated from the main question update
+    # payload to keep inline edits small.
     set_question_collections(db, question_id, data.collection_ids)
     return {"status": "ok"}
 

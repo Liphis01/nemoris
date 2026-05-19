@@ -25,11 +25,13 @@ color: "#ff85c2",
 - quand j'ajoute des zones je veux les garder d'une couleur différente pour les différencier des zones déjà sauvegardées
 - dans la review, quand j'utilise le pad, je vois le chiffre dans l'input de la map après
 - le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
+- dans les réponses accepter " " pour "-"
+- hover un nom trop long doit l'afficher
 
 ## features
 - filtrer les groupes dans manage
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
-- arborescence des thèmes pour pouvoir grouper les questions par thème (géographie > pays > capitales par exemple)
+- arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
 - questions type timeline (en groupe comme maps)
 - ajouter un timer pour les questions
 - auto accepter la réponse si c'est correct
@@ -52,20 +54,32 @@ color: "#ff85c2",
 - proposer les fichiers .svg quand on commence à taper le nom d'une map dans la création de question map
 - pouvoir sort les questions dans manage
 - mettre un truc addictif de day streaks
+- quand on met la souris sur une zone déjà trouvée ou qui n'appartient pas à la review, afficher son nom dans un coin
+- montrer un équivalent de recap quand je regarde un groupe fait dans le passé dans le calendrier
+- l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
+- faire une sécurité quand on a modifié une question dans manage pour ne pas perdre les données (ex : si on a modifié une question puis qu'on clique sur une autre question sans sauvegarder, afficher une alerte pour demander si on veut sauvegarder les modifications ou les perdre)
+- dans la liste de manage, quand on expand un groupe, garder le nom en haut pour le collapse sans remonter tout en haut de la page
+- faire tab pour passer à la zone suivante dans la création de question map
+- scraper le site de émilien
+- faire des propositions existantes pour le média et pous les tags
+- décaler la limite de questions par review en paramètre de target pour le scheduler
+- pouvoir revenir à la question précédente dans la review
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
 - stocker uniquement l'id des groupes dans les questions pour alléger
 
 ## ideas
-- mettre une option de priorité sur les questions pour les faire apparaître plus souvent / favoris
+- mettre une option de favoris et de difficile sur les questions (pour les voir plus souvent et aider le scheduler)
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - pouvoir manuellement modifier les dates des questions
 - ia pour proposer des qcm si on a pas la réponse (à la TLMVPSP)
 - faire un executable
 - faire une extension pour chrome pour facilement créer des questions à partir de n'importe quelle page web (ex : pour faire une question sur une ville, aller sur la page wikipedia de la ville et créer la question à partir de là en sélectionnant la zone de la carte) (avec de l'ia éventuellement pour suggérer la question et les réponses à partir du contenu de la page)
-  
+- faire un mode "berserk" où on peut choisir dans la review d'ajouter un chrono pour essayer de battre son record de temps
+- quand on vient d'ajouter une question, ajouter un indicateur et on doit passer la souris sur la card dans la liste pour enlever l'indicateur (à la LoL)
+- faire un menu settings
 
 # React + Vite
 

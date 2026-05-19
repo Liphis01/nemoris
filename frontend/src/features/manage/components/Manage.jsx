@@ -4,6 +4,8 @@ import ManageInspector from "./ManageInspector";
 import { useEffect, useState } from "react";
 
 export default function Manage(props) {
+  // Manage coordinates the three panels. The heavy data/state logic lives in
+  // useManageLibrary; this component handles panel-specific selection effects.
   const [editingZone, setEditingZone] = useState(null);
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
@@ -16,6 +18,7 @@ export default function Manage(props) {
   } = props;
 
   useEffect(() => {
+    // Highlights are transient breadcrumbs after create/save/navigation actions.
     if (highlightedQuestionIds.length === 0 && highlightedGroupIds.length === 0) {
       return;
     }
@@ -31,6 +34,8 @@ export default function Manage(props) {
   useEffect(() => {
     if (!openQuestionId) return;
 
+    // External navigation asks Manage to open a question by id. Once resolved,
+    // consume the signal so normal local selection can continue.
     const question = allQuestions?.find(
       (item) => item.id === openQuestionId
     );
@@ -45,6 +50,8 @@ export default function Manage(props) {
   }, [allQuestions, clearOpenQuestionId, openQuestionId, setSelectedItem, setViewMode]);
 
   async function createQuestionWithHighlight() {
+    // Wrap the shared create action with UI selection/highlight behavior for
+    // this workspace.
     const created = await props.createQuestion?.();
 
     if (created?.id) {

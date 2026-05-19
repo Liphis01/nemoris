@@ -31,6 +31,8 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
         question.media.startswith("http://127.0.0.1:8000/static/")
     )
 
+    # Only delete files that this app owns. External URLs may be referenced by
+    # media but should never be removed from disk.
     if not is_local_static:
         return {"error": "External image"}
 
@@ -49,6 +51,7 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
 
 @router.post("/upload")
 def upload_image(file: UploadFile = File(...)):
+    # Keep the stored URL relative so it works from both dev and packaged builds.
     filename = os.path.basename(file.filename)
     file_path = STATIC_DIR / filename
 

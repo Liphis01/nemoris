@@ -5,6 +5,8 @@ from ..scheduler import update_progress
 
 
 def create_initial_progress(question_id: int):
+    # New questions are due immediately so they appear in review without a
+    # separate scheduling initialization step.
     return Progress(
         question_id=question_id,
         stability=1.0,
@@ -18,6 +20,8 @@ def create_initial_progress(question_id: int):
 
 
 def record_answer_history(progress: Progress, quality: int, scheduling: dict):
+    # SQLAlchemy may not detect in-place mutation on JSON columns reliably, so
+    # build a fresh list before assigning it back.
     history = list(progress.history or [])
 
     history.append({
@@ -35,6 +39,8 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
 
 
 def apply_scheduling(progress: Progress, quality: int):
+    # Central write path for review answers. Keeping history updates here avoids
+    # duplicating scheduling logic between text and map endpoints.
     scheduling = update_progress(progress, quality)
 
     progress.stability = scheduling["stability"]

@@ -1,4 +1,6 @@
 export function getQuestionGroupId(question) {
+  // The backend sometimes sends group_id directly and sometimes nested group
+  // metadata. Normalize both shapes for row grouping.
   const groupId = question?.group_id ?? question?.group?.id;
 
   if (
@@ -29,6 +31,8 @@ function getGroupInfo(groupId, question, groupById) {
 
 
 function orderGroupQuestionsForDisplay(questions) {
+  // Map zones are kept first inside a group because they are usually edited as
+  // a visual set; other question types still remain visible below them.
   const mapQuestions = [];
   const otherQuestions = [];
 
@@ -45,6 +49,8 @@ function orderGroupQuestionsForDisplay(questions) {
 
 
 export function buildVisibleRows(questions, allGroups, expandedGroupIds) {
+  // Convert a flat question list into render rows. Group headers are runtime UI
+  // rows only; they do not represent database questions.
   const groupById = new Map(
     (allGroups || []).map((group) => [String(group.id), group])
   );
@@ -87,6 +93,8 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds) {
   });
 
   return topRows.flatMap((row) => {
+    // Collapsed groups render as one header row. Expanded groups render the
+    // header plus nested atomic questions.
     if (row.type !== "groupHeader" || !expandedGroupIds.has(row.groupId)) {
       return [row];
     }

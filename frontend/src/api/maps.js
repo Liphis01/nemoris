@@ -7,6 +7,8 @@ export function getMapZones(groupId) {
 
 
 export function patchMapZones(groupId, payload) {
+  // Payload contains changed SVG zones; the backend upserts them as individual
+  // map questions linked by group_id.
   return requestJson(`/maps/${groupId}/zones`, {
     method: "PATCH",
     headers: {

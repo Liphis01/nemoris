@@ -7,6 +7,8 @@ from .progress import create_initial_progress
 
 
 def get_map_group_or_404(db, group_id: int):
+    # Map-zone bulk editing is only valid for groups whose presentation type is
+    # map. The individual rows inside are still normal Question rows.
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)
@@ -23,6 +25,8 @@ def get_map_group_or_404(db, group_id: int):
 
 
 def serialize_map_zone_for_editor(question):
+    # The editor wants both the generic Question shape and direct code/alias
+    # fields for fast rendering and form binding.
     return {
         "id": question.id,
         "type_q": question.type_q,
@@ -40,6 +44,8 @@ def serialize_map_zone_for_editor(question):
 
 
 def list_map_group_zones(db, group_id: int):
+    # Load progress beside questions so the editor can show review state without
+    # issuing one query per zone.
     group = (
         db.query(QuestionGroup)
         .options(joinedload(QuestionGroup.questions).joinedload(Question.progress))
@@ -61,6 +67,8 @@ def save_map_group_zones(db, group_id: int, payload):
     group = get_map_group_or_404(db, group_id)
 
     if payload.group:
+        # Group edits travel with zone saves so map title/media changes and zone
+        # labels can be committed from one editor action.
         group_updates = payload.group.model_dump(exclude_unset=True)
 
         for field in ["name", "media"]:
@@ -76,6 +84,8 @@ def save_map_group_zones(db, group_id: int, payload):
         .all()
     )
 
+    # Existing zones can be matched by database id or by SVG code. Matching by
+    # code lets the frontend create temporary rows before the database id exists.
     existing_by_id = {
         zone.id: zone
         for zone in existing_zones
@@ -117,6 +127,8 @@ def save_map_group_zones(db, group_id: int, payload):
                 zone = existing_by_code.get(code)
 
             if not zone:
+                # A new SVG code becomes a new atomic map question with its own
+                # progress row.
                 zone = Question(
                     type_q="map",
                     question=f"{group.name} - {code}",
@@ -139,6 +151,8 @@ def save_map_group_zones(db, group_id: int, payload):
                 created_ids.append(zone.id)
                 created_codes.append(code)
             else:
+                # Updating answer/aliases preserves the existing question id and
+                # progress history for that zone.
                 zone.answer = zone_payload.answer or ""
                 zone.question = f"{group.name} - {code}"
                 zone.data = {
@@ -158,6 +172,8 @@ def save_map_group_zones(db, group_id: int, payload):
     saved_zones = []
 
     if touched_ids:
+        # Re-read saved zones with relationships so the response can patch the
+        # frontend Manage cache using the normal question serializer.
         saved_zones = (
             db.query(Question)
             .options(

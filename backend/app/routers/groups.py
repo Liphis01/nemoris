@@ -12,6 +12,8 @@ router = APIRouter()
 
 @router.post("/groups", response_model=GroupOut)
 def create_group(payload: GroupCreate, db: Session = Depends(get_db)):
+    # Groups describe shared visual context. They do not replace atomic
+    # questions and do not own progress.
     group = QuestionGroup(
         type_group=payload.type_group,
         name=payload.name,
@@ -28,6 +30,8 @@ def create_group(payload: GroupCreate, db: Session = Depends(get_db)):
 
 @router.get("/groups")
 def get_groups(db: Session = Depends(get_db)):
+    # Include question_count for Manage without loading every question in the
+    # sidebar/group list.
     groups = (
         db.query(
             QuestionGroup,
@@ -52,6 +56,7 @@ def get_groups(db: Session = Depends(get_db)):
 
 @router.get("/groups/{group_id}")
 def get_group(group_id: int, db: Session = Depends(get_db)):
+    # Detailed group view includes its atomic questions for inspection/editing.
     group = (
         db.query(QuestionGroup)
         .options(joinedload(QuestionGroup.questions))
@@ -89,6 +94,8 @@ def update_group(
     payload: GroupUpdate,
     db: Session = Depends(get_db)
 ):
+    # Group type is intentionally not mutable here; changing presentation type
+    # would require validating all child questions.
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)
@@ -112,6 +119,8 @@ def update_group(
 
 @router.delete("/groups/{group_id}")
 def delete_group(group_id: int, db: Session = Depends(get_db)):
+    # Deleting non-empty groups would orphan visual relationships, so callers
+    # must delete or move questions first.
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)

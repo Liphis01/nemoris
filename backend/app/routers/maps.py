@@ -11,6 +11,7 @@ router = APIRouter()
 
 @router.get("/maps/{group_id}/zones")
 def get_zones(group_id: int, db: Session = Depends(get_db)):
+    # Returns the atomic map questions for one visual map group.
     return list_map_group_zones(db, group_id)
 
 
@@ -20,4 +21,6 @@ def update_zones_bulk(
     payload: MapZonesBulkUpdate,
     db: Session = Depends(get_db)
 ):
+    # Bulk save keeps the SVG-zone editor fast: one request can create/update
+    # many atomic map questions and the group metadata.
     return save_map_group_zones(db, group_id, payload)
