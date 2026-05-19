@@ -22,14 +22,15 @@ export default function MapEditor({
   const aliasInputRef = useRef(null);
   const {
     clearDirty,
+    dirtyZoneCodes,
     dirtyZoneCodesRef,
     editableGroup,
     foundCodes,
     handleCodesLoaded,
-    markDirty,
     savedQuestionCount,
     saveMapZones,
     setZones,
+    syncDirtyForZone,
     svgCodes,
     updateGroupField,
     zones
@@ -82,21 +83,19 @@ export default function MapEditor({
     // list so it will be included in the next save.
     const nextEditing = { ...editingZone, answer: value };
     const code = getZoneCode(editingZone);
+    syncDirtyForZone(nextEditing);
 
     setZones(prev => {
       if (isBlankTemporaryZone(nextEditing)) {
-        clearDirty(code);
         return prev.filter(z => z.id !== editingZone.id);
       }
 
       const zoneExists = prev.some(z => getZoneCode(z) === code);
 
       if (!zoneExists) {
-        markDirty(code);
         return [...prev, nextEditing];
       }
 
-      markDirty(code);
       return prev.map(z =>
         getZoneCode(z) === code ? { ...z, answer: value } : z
       );
@@ -112,7 +111,11 @@ export default function MapEditor({
     const currentAliases = editingZone.data?.aliases || [];
     const newAliases = [...currentAliases, value];
     const code = getZoneCode(editingZone);
-    markDirty(code);
+    const nextEditing = {
+      ...editingZone,
+      data: { ...editingZone.data, aliases: newAliases }
+    };
+    syncDirtyForZone(nextEditing);
 
     setZones(prev =>
       prev.map(z =>
@@ -125,10 +128,7 @@ export default function MapEditor({
       )
     );
 
-    setEditingZone(prev => ({
-      ...prev,
-      data: { ...prev.data, aliases: newAliases }
-    }));
+    setEditingZone(nextEditing);
 
     setAliasInput("");
 
@@ -141,7 +141,11 @@ export default function MapEditor({
     const currentAliases = editingZone.data?.aliases || [];
     const newAliases = currentAliases.filter((_, i) => i !== index);
     const code = getZoneCode(editingZone);
-    markDirty(code);
+    const nextEditing = {
+      ...editingZone,
+      data: { ...editingZone.data, aliases: newAliases }
+    };
+    syncDirtyForZone(nextEditing);
 
     setZones(prev =>
       prev.map(z =>
@@ -153,10 +157,7 @@ export default function MapEditor({
           : z
       )
     );
-    setEditingZone(prev => ({
-      ...prev,
-      data: { ...prev.data, aliases: newAliases }
-    }));
+    setEditingZone(nextEditing);
   }
 
   function handleAliasKeyDown(e) {
@@ -448,6 +449,7 @@ export default function MapEditor({
             <SvgMap
               svgPath={`/maps/${editableGroup.media}`}
               found={foundCodes}
+              unsaved={dirtyZoneCodes}
               selected={editingZone?.data?.code}
               onSelect={handleSelect}
               onCodesLoaded={handleCodesLoaded}

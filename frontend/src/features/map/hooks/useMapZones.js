@@ -15,6 +15,14 @@ export function isBlankTemporaryZone(zone) {
   return String(zone?.id || "").startsWith("tmp-") && !zone?.answer?.trim();
 }
 
+function arraysMatch(left = [], right = []) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
 
 export function normalizeZone(zone, group) {
   // Keep map zones shaped like normal Manage questions while guaranteeing the
@@ -50,6 +58,7 @@ export function useMapZones(group) {
   // SvgMap, remembers dirty zone codes, and persists changed zones in bulk.
   const [zones, setZones] = useState([]);
   const [svgCodes, setSvgCodes] = useState([]);
+  const [dirtyZoneCodes, setDirtyZoneCodes] = useState([]);
   const [editableGroup, setEditableGroup] = useState({
     name: group.name || "",
     type_group: group.type_group || "map",
@@ -63,6 +72,11 @@ export function useMapZones(group) {
     zonesRef.current = zones;
   }, [zones]);
 
+  const clearAllDirty = useCallback(() => {
+    dirtyZoneCodesRef.current.clear();
+    setDirtyZoneCodes([]);
+  }, []);
+
   useEffect(() => {
     async function loadZones() {
       try {
@@ -73,7 +87,7 @@ export function useMapZones(group) {
 
         setZones(mapZones);
         initialZonesRef.current = mapZones;
-        dirtyZoneCodesRef.current.clear();
+        clearAllDirty();
       } catch (error) {
         console.error("Error loading zones:", error);
       }
@@ -87,7 +101,7 @@ export function useMapZones(group) {
         media: group.media || ""
       });
     }
-  }, [group]);
+  }, [clearAllDirty, group]);
 
   const handleCodesLoaded = useCallback((codes) => {
     // Avoid state churn when the same SVG reports the same code list again.
@@ -116,14 +130,56 @@ export function useMapZones(group) {
   function markDirty(code) {
     // Track dirtiness by SVG code rather than database id so temporary rows and
     // existing rows share the same save path.
-    if (code) {
-      dirtyZoneCodesRef.current.add(code);
+    if (!code || dirtyZoneCodesRef.current.has(code)) {
+      return;
     }
+
+    dirtyZoneCodesRef.current.add(code);
+    setDirtyZoneCodes([...dirtyZoneCodesRef.current]);
   }
 
   function clearDirty(code) {
-    if (code) {
-      dirtyZoneCodesRef.current.delete(code);
+    if (!code || !dirtyZoneCodesRef.current.has(code)) {
+      return;
+    }
+
+    dirtyZoneCodesRef.current.delete(code);
+    setDirtyZoneCodes([...dirtyZoneCodesRef.current]);
+  }
+
+  function zoneDiffersFromSaved(zone) {
+    if (isBlankTemporaryZone(zone)) {
+      return false;
+    }
+
+    const code = getZoneCode(zone);
+    const savedZone = initialZonesRef.current.find(saved =>
+      getZoneCode(saved) === code
+    );
+
+    if (!savedZone) {
+      return Boolean(zone?.answer?.trim());
+    }
+
+    const zoneAliases = zone.data?.aliases || [];
+    const savedAliases = savedZone.data?.aliases || [];
+
+    return (
+      (zone.answer || "") !== (savedZone.answer || "") ||
+      !arraysMatch(zoneAliases, savedAliases)
+    );
+  }
+
+  function syncDirtyForZone(zone) {
+    const code = getZoneCode(zone);
+    if (!code) {
+      return;
+    }
+
+    if (zoneDiffersFromSaved(zone)) {
+      markDirty(code);
+    } else {
+      clearDirty(code);
     }
   }
 
@@ -163,7 +219,7 @@ export function useMapZones(group) {
     const newCount = saveResult.question_count ?? nextZones.length;
 
     setZones(nextZones);
-    dirtyZoneCodesRef.current.clear();
+    clearAllDirty();
     initialZonesRef.current = nextZones;
 
     return {
@@ -176,6 +232,7 @@ export function useMapZones(group) {
 
   return {
     clearDirty,
+    dirtyZoneCodes,
     dirtyZoneCodesRef,
     editableGroup,
     foundCodes,
@@ -185,6 +242,7 @@ export function useMapZones(group) {
     saveMapZones,
     setEditableGroup,
     setZones,
+    syncDirtyForZone,
     svgCodes,
     updateGroupField,
     zones,

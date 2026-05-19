@@ -11,6 +11,7 @@ export default function SvgMap({
     found,
     missed = [],
     dueItems = [],
+    unsaved = [],
     selected,
     focusCode,
     onSelect,
@@ -109,9 +110,11 @@ export default function SvgMap({
         const foundSet = new Set(found);
         const missedSet = new Set(missed);
         const dueSet = new Set(dueItems);
+        const unsavedSet = new Set(unsaved);
 
         const getColor = (code) => {
             if (selected === code) return "#f39c12";
+            if (unsavedSet.has(code)) return "#facc15";
             if (foundSet.has(code)) return "#21eb75";
             if (missedSet.has(code)) return "#e93723";
             if (dueSet.has(code)) return "#0e3e5adc";
@@ -126,7 +129,7 @@ export default function SvgMap({
             };
 
             const handleEnter = () => {
-                if (!foundSet.has(code) && selected !== code) {
+                if (!foundSet.has(code) && !unsavedSet.has(code) && selected !== code) {
                     el.style.fill = "#888";
                 }
             };
@@ -149,7 +152,7 @@ export default function SvgMap({
         return () => {
             cleanupFns.forEach(fn => fn());
         };
-    }, [svgVersion, found, missed, selected, dueItems, onSelect]);
+    }, [svgVersion, found, missed, selected, dueItems, unsaved, onSelect]);
 
     useEffect(() => {
         if (!focusCode || !wrapperRef.current) return;
