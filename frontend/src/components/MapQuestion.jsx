@@ -63,37 +63,11 @@ const qualityButtonStyles = {
   }
 };
 
-const DESIRED_RETENTION = 0.9;
-
 function normalize(str = "") {
   return str
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
-}
-
-function pythonRoundPositive(value) {
-  const floorValue = Math.floor(value);
-  const fraction = value - floorValue;
-
-  if (fraction < 0.5) {
-    return floorValue;
-  }
-
-  if (fraction > 0.5) {
-    return floorValue + 1;
-  }
-
-  return floorValue % 2 === 0
-    ? floorValue
-    : floorValue + 1;
-}
-
-function nextInterval(stability) {
-  return Math.max(
-    1,
-    pythonRoundPositive(stability * Math.log(DESIRED_RETENTION) / Math.log(0.9))
-  );
 }
 
 export default function MapQuestion({ group, items, onComplete }) {
@@ -267,24 +241,6 @@ export default function MapQuestion({ group, items, onComplete }) {
     }
 
     return 5;
-  }
-
-  function getProjectedInterval(item, quality) {
-    const progress = item.progress || {};
-    let stability = progress.stability || 1.0;
-    let difficulty = progress.difficulty || 5.0;
-
-    if (quality === 0) {
-      stability = Math.max(0.5, stability * 0.45);
-    } else if (quality === 1) {
-      difficulty = Math.min(10, difficulty + 0.1);
-      stability = stability * (1.2 + (10 - difficulty) * 0.03);
-    } else {
-      difficulty = Math.max(1, difficulty - 0.08);
-      stability = stability * (1.8 + (10 - difficulty) * 0.05);
-    }
-
-    return quality === 0 ? 0 : nextInterval(stability);
   }
 
   const progressPercent = items.length
@@ -661,7 +617,10 @@ export default function MapQuestion({ group, items, onComplete }) {
                       (index === 0 || recapRows[index - 1].isFound !== isFound);
                     const isFocused = focusedCode === item.code;
                     const selectedQuality = itemQuality[item.question_id] ?? (isFound ? 2 : 0);
-                    const projectedInterval = getProjectedInterval(item, selectedQuality);
+                    const projectedInterval =
+                      item.projected_intervals?.[selectedQuality] ??
+                      item.progress?.interval ??
+                      0;
 
                     return (
                       <Fragment key={item.question_id}>

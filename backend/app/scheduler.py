@@ -15,14 +15,21 @@ def next_interval(stability):
     )
 
 
+def progress_value(progress, field, default):
+    if not progress:
+        return default
+
+    return getattr(progress, field) or default
+
+
 def update_progress(progress, quality):
 
     today = date.today()
 
-    stability = progress.stability or 1.0
-    difficulty = progress.difficulty or 5.0
-    reps = progress.reps or 0
-    lapses = progress.lapses or 0
+    stability = progress_value(progress, "stability", 1.0)
+    difficulty = progress_value(progress, "difficulty", 5.0)
+    reps = progress_value(progress, "reps", 0)
+    lapses = progress_value(progress, "lapses", 0)
 
     # ============================================
     # FAIL
@@ -77,4 +84,11 @@ def update_progress(progress, quality):
         "interval": interval,
         "next_review": next_review,
         "last_review": today
+    }
+
+
+def preview_intervals(progress):
+    return {
+        quality: update_progress(progress, quality)["interval"]
+        for quality in (0, 1, 2)
     }

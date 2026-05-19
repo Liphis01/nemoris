@@ -1,3 +1,6 @@
+from .scheduler import preview_intervals
+
+
 def serialize_progress(progress):
 
     if not progress:
@@ -81,6 +84,10 @@ def serialize_map_item(question):
         "aliases": question.data.get("aliases", []) if question.data else [],
 
         "progress": serialize_progress(
+            question.progress
+        ),
+
+        "projected_intervals": preview_intervals(
             question.progress
         )
     }
