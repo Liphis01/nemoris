@@ -1,5 +1,3 @@
-import { useState, useEffect } from "react";
-import { apiUrl } from "../api/config";
 import QuestionRenderer from "./QuestionRenderer";
 
 const inputStyle = {
@@ -23,18 +21,11 @@ export default function Quiz({
   tagInput,
   setTagInput,
   limit,
-  setLimit
+  setLimit,
+  collections,
+  selectedCollection,
+  setSelectedCollection
 }) {
-
-  const [collections, setCollections] = useState([]);
-  const [selectedCollection, setSelectedCollection] = useState("");
-
-  useEffect(() => {
-    fetch(apiUrl("/collections"))
-      .then(res => res.json())
-      .then(setCollections);
-  }, []);
-
   const currentQuestion = questions[currentIndex];
 
   return (

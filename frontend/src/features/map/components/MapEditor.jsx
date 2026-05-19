@@ -1,40 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { apiUrl } from "../api/config";
+import { useEffect, useRef, useState } from "react";
 import SvgMap from "./SvgMap";
-
-function getZoneCode(zone) {
-  return zone?.data?.code || zone?.code;
-}
-
-function isBlankTemporaryZone(zone) {
-  return String(zone?.id || "").startsWith("tmp-") && !zone?.answer?.trim();
-}
-
-function normalizeZone(zone, group) {
-  const code = getZoneCode(zone);
-  const aliases = zone?.data?.aliases || zone?.aliases || [];
-
-  return {
-    ...zone,
-    type_q: "map",
-    question: zone?.question || `${group.name || ""} - ${code}`,
-    answer: zone?.answer || zone?.label || "",
-    media: zone?.media || "",
-    tags: zone?.tags || [],
-    group_id: zone?.group_id || group.id,
-    group: zone?.group || {
-      id: group.id,
-      type_group: group.type_group || "map",
-      name: group.name,
-      media: group.media
-    },
-    data: {
-      ...(zone?.data || {}),
-      code,
-      aliases
-    }
-  };
-}
+import {
+  getZoneCode,
+  isBlankTemporaryZone,
+  normalizeZone,
+  useMapZones
+} from "../hooks/useMapZones";
 
 export default function MapEditor({
   group,
@@ -44,104 +15,31 @@ export default function MapEditor({
   headerAction
 }) {
 
-  const [zones, setZones] = useState([]); // List of questions linked to this group
-  const [svgCodes, setSvgCodes] = useState([]);
-  const initialZonesRef = useRef([]);
   const [editing, setEditing] = useState(null);
   const [aliasesInput, setAliasesInput] = useState("");
   const labelInputRef = useRef(null);
   const aliasesInputRef = useRef(null);
-  const zonesRef = useRef([]);
-  const dirtyZoneCodesRef = useRef(new Set());
-  const [editableGroup, setEditableGroup] = useState({
-    name: group.name || "",
-    type_group: group.type_group || "map",
-    media: group.media || ""
-  });
-
-  function markDirty(code) {
-    if (code) {
-      dirtyZoneCodesRef.current.add(code);
-    }
-  }
-
-  function clearDirty(code) {
-    if (code) {
-      dirtyZoneCodesRef.current.delete(code);
-    }
-  }
-
-  // Load zones from the selected map group only.
-  useEffect(() => {
-
-    async function loadZones() {
-
-      try {
-
-        const res = await fetch(apiUrl(`/maps/${group.id}/zones`));
-
-        const data = await res.json();
-
-        const mapZones = data.map(zone => normalizeZone(zone, group));
-
-        setZones(mapZones);
-
-        initialZonesRef.current = mapZones;
-        dirtyZoneCodesRef.current.clear();
-
-      } catch (err) {
-
-        console.error(
-          "Error loading zones:",
-          err
-        );
-      }
-    }
-
-    if (group.id) {
-      loadZones();
-      setEditableGroup({
-        name: group.name || "",
-        type_group: group.type_group || "map",
-        media: group.media || ""
-      });
-    }
-
-  }, [group]);
+  const {
+    clearDirty,
+    dirtyZoneCodesRef,
+    editableGroup,
+    foundCodes,
+    handleCodesLoaded,
+    markDirty,
+    savedQuestionCount,
+    saveMapZones,
+    setZones,
+    svgCodes,
+    updateGroupField,
+    zones
+  } = useMapZones(group);
 
   useEffect(() => {
     if (!selectedZone) return;
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
     setEditing(normalizeZone(selectedZone, group));
-  }, [group, selectedZone]);
+  }, [group, selectedZone, setZones]);
 
-  useEffect(() => {
-    zonesRef.current = zones;
-  }, [zones]);
-
-  // useCallback to prevent unnecessary updates to svgCodes which would cause the SvgMap to reload and lose the current selection
-  const handleCodesLoaded = useCallback((codes) => {
-    setSvgCodes(prev => {
-      if (
-        prev.length === codes.length &&
-        prev.every((code, index) => code === codes[index])
-      ) {
-        return prev;
-      }
-
-      return codes;
-    });
-  }, []);
-
-  const foundCodes = useMemo(
-    () => zones.map(getZoneCode).filter(Boolean),
-    [zones]
-  );
-
-  const savedQuestionCount = useMemo(
-    () => zones.filter(zone => !isBlankTemporaryZone(zone)).length,
-    [zones]
-  );
   const totalCodeCount = svgCodes.length;
   const assignmentRatio = totalCodeCount
     ? Math.min(savedQuestionCount / totalCodeCount, 1)
@@ -260,13 +158,6 @@ export default function MapEditor({
     }
   }
 
-  function updateGroupField(field, value) {
-    setEditableGroup(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }
-
   async function save() {
     // Remove any currently editing zone that has an empty answer
     const zonesToSave = editing && !editing.answer
@@ -287,51 +178,16 @@ export default function MapEditor({
     }
     setEditing(null);
 
-    const res = await fetch(apiUrl(`/maps/${group.id}/zones`), {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        group: {
-          name: editableGroup.name,
-          media: editableGroup.media
-        },
-        zones: changedZones.map(z => ({
-          id: String(z.id || "").startsWith("tmp-") ? null : z.id,
-          code: getZoneCode(z),
-          answer: z.answer || "",
-          aliases: z.data?.aliases || []
-        }))
-      })
-    });
+    let saved;
 
-    if (!res.ok) {
-      const payload = await res.json().catch(() => null);
-      alert(payload?.detail || "Impossible de sauvegarder la carte.");
+    try {
+      saved = await saveMapZones({ zonesToSave, changedZones });
+    } catch (error) {
+      alert(error.message || "Impossible de sauvegarder la carte.");
       return;
     }
 
-    const saveResult = await res.json();
-    const savedZones = (saveResult.zones || []).map(zone =>
-      normalizeZone(zone, saveResult.group || group)
-    );
-    const savedByCode = new Map(
-      savedZones.map(zone => [getZoneCode(zone), zone])
-    );
-    const nextZones = zonesToSave.map(zone =>
-      savedByCode.get(getZoneCode(zone)) || zone
-    );
-
-    setZones(nextZones);
-    dirtyZoneCodesRef.current.clear();
-
-    // Compute delta between saved zones and initial loaded zones
-    const initialCount = (initialZonesRef.current || []).length;
-    const newCount = saveResult.question_count ?? nextZones.length;
-    const delta = newCount - initialCount;
-    // update initial zones to avoid duplicates on next save
-    initialZonesRef.current = nextZones;
+    const { delta, savedZones, saveResult } = saved;
 
     if (onSave) {
       await onSave(delta, {
@@ -461,9 +317,6 @@ export default function MapEditor({
               }}
             >
               <option value="map">map</option>
-              <option value="image">image</option>
-              <option value="audio">audio</option>
-              <option value="timeline">timeline</option>
             </select>
           </div>
 

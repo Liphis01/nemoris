@@ -1,11 +1,10 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal, Any
+from typing import Optional, List, Literal, Any, Dict
 
 
 QuestionType = Literal[
     "text",
-    "map",
-    "map_zone"
+    "map"
 ]
 
 GroupType = Literal[
@@ -144,17 +143,8 @@ class AnswerRequest(BaseModel):
     )
 
 
-class MapZoneUpdate(BaseModel):
-
-    group_id: int
-
-    question: str = Field(
-        min_length=1
-    )
-
-    data: dict[str, Any] = Field(
-        default_factory=dict
-    )
+class MapAnswerRequest(BaseModel):
+    items: Dict[int, int]
 
 
 class MapZoneBulkItem(BaseModel):
@@ -193,10 +183,4 @@ class CollectionCreate(BaseModel):
     name: str = Field(
         min_length=1,
         max_length=100
-    )
-
-    media: Optional[str] = None
-
-    data: dict[str, Any] = Field(
-        default_factory=dict
     )

@@ -1,4 +1,4 @@
-import { fadeInStyle } from "../styles";
+import { fadeInStyle } from "../../../shared/styles";
 
 const answerButtonStyle = {
     flex: 1,

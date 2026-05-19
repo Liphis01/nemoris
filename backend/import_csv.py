@@ -2,6 +2,15 @@ import csv
 from app.database import SessionLocal
 from app.models import Question
 
+
+def parse_tags(value):
+    return [
+        tag.strip()
+        for tag in (value or "").replace("|", ",").split(",")
+        if tag.strip()
+    ]
+
+
 db = SessionLocal()
 
 with open("questions.csv", newline='', encoding="utf-8") as csvfile:
@@ -11,9 +20,10 @@ with open("questions.csv", newline='', encoding="utf-8") as csvfile:
         q = Question(
             question=row["question"],
             answer=row["answer"],
-            theme=row["theme"],
             type_q=row["type_q"],
-            fichier=row["fichier"] if row["fichier"] else None
+            media=row["media"] if row["media"] else None,
+            tags=parse_tags(row["tags"]),
+            data={}
         )
         db.add(q)
 

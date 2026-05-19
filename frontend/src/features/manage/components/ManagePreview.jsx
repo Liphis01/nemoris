@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import MapEditor from "../MapEditor";
-import SvgMap from "../SvgMap";
+import MapEditor from "../../map/components/MapEditor";
 
 const panelStyle = {
   padding: "28px",
@@ -264,7 +263,6 @@ export default function ManagePreview({
           onChange={(e) => setNewRow({ ...newRow, type_q: e.target.value })}
         >
           <option value="text">text</option>
-          <option value="image">image</option>
           <option value="map">map</option>
         </select>
 
@@ -568,7 +566,6 @@ export default function ManagePreview({
         onChange={(e) => setField("type_q", e.target.value)}
       >
         <option value="text">text</option>
-        <option value="image">image</option>
         <option value="map">map</option>
       </select>
 

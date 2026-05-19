@@ -16,12 +16,10 @@ The app must support:
 The user must be able to:
 - review efficiently
 - browse knowledge quickly
-- edit questions inline
 - visually inspect grouped content
 
 The Manage UI is intended to progressively evolve toward:
 - Obsidian/Figma-like knowledge management
-- split panels
 - embedded editors
 - fast navigation
 - spreadsheet-level editing speed
@@ -51,8 +49,6 @@ Examples:
 - one capital
 - one map zone
 - one timeline event
-
-Grouped reviews are generated dynamically at runtime.
 
 ---
 
@@ -188,11 +184,6 @@ The UI should progressively evolve toward:
 - embedded editors
 - keyboard-friendly workflows
 - graph-like exploration
-
-NOT toward:
-- complex forms
-- modal-heavy workflows
-- admin-dashboard style UI
 
 ---
 
