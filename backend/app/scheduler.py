@@ -24,7 +24,92 @@ def progress_value(progress, field, default):
     return getattr(progress, field) or default
 
 
-def update_progress(progress, quality):
+def smoothing_radius_days(interval):
+    if interval <= 1:
+        return 0
+    if interval <= 3:
+        return 1
+    if interval <= 13:
+        return 2
+    return 3
+
+
+def candidate_review_dates(today, ideal_next_review, interval):
+    if interval == 0:
+        return [today]
+
+    radius = smoothing_radius_days(interval)
+    first_date = max(
+        today + timedelta(days=1),
+        ideal_next_review - timedelta(days=radius)
+    )
+    last_date = ideal_next_review + timedelta(days=radius)
+    days = (last_date - first_date).days
+
+    return [
+        first_date + timedelta(days=offset)
+        for offset in range(days + 1)
+    ]
+
+
+def choose_smoothed_review_date(today, ideal_next_review, interval, daily_loads):
+    candidates = candidate_review_dates(today, ideal_next_review, interval)
+
+    def candidate_key(candidate):
+        offset = (candidate - ideal_next_review).days
+
+        return (
+            daily_loads.get(candidate, 0),
+            abs(offset),
+            0 if offset >= 0 else 1,
+            candidate
+        )
+
+    return min(candidates, key=candidate_key)
+
+
+def smooth_scheduling(scheduling, daily_loads):
+    today = scheduling["last_review"]
+    ideal_interval = scheduling["interval"]
+    ideal_next_review = scheduling["next_review"]
+    next_review = choose_smoothed_review_date(
+        today,
+        ideal_next_review,
+        ideal_interval,
+        daily_loads
+    )
+
+    if next_review == ideal_next_review:
+        return scheduling
+
+    return {
+        **scheduling,
+        "ideal_interval": ideal_interval,
+        "ideal_next_review": ideal_next_review,
+        "interval": max(0, (next_review - today).days),
+        "next_review": next_review
+    }
+
+
+def assign_smoothed_schedules(schedulings, daily_loads):
+    projected_loads = dict(daily_loads or {})
+    assigned = [None] * len(schedulings)
+    ordered = sorted(
+        enumerate(schedulings),
+        key=lambda item: -item[1]["interval"]
+    )
+
+    for index, scheduling in ordered:
+        smoothed = smooth_scheduling(scheduling, projected_loads)
+        assigned[index] = smoothed
+
+        next_review = smoothed["next_review"]
+        projected_loads[next_review] = projected_loads.get(next_review, 0) + 1
+
+    return assigned
+
+
+def update_progress(progress, quality, today=None):
     """
     Apply a compact FSRS-inspired scheduling step.
 
@@ -33,7 +118,7 @@ def update_progress(progress, quality):
     mutation.
     """
 
-    today = date.today()
+    today = today or date.today()
 
     stability = progress_value(progress, "stability", 1.0)
     difficulty = progress_value(progress, "difficulty", 5.0)

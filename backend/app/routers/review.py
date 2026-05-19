@@ -7,7 +7,11 @@ from ..dependencies import get_db
 from ..models import Progress, Question
 from ..schemas import AnswerRequest, MapAnswerRequest, TimelineAnswerRequest
 from ..serializers import serialize_progress
-from ..services.progress import apply_scheduling, create_initial_progress
+from ..services.progress import (
+    apply_scheduling,
+    apply_scheduling_batch,
+    create_initial_progress
+)
 from ..services.review import get_review_items
 from ..services.timeline import grade_timeline_answer, validate_timeline_data
 
@@ -46,7 +50,7 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         progress = create_initial_progress(data.question_id)
         db.add(progress)
 
-    apply_scheduling(progress, data.quality)
+    apply_scheduling(db, progress, data.quality)
     db.commit()
 
     return {
@@ -78,6 +82,8 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
         for progress in existing_progresses
     }
 
+    progress_quality_pairs = []
+
     for question_id, quality in data.items.items():
         progress = progress_map.get(question_id)
 
@@ -86,7 +92,9 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
             db.add(progress)
             progress_map[question_id] = progress
 
-        apply_scheduling(progress, quality)
+        progress_quality_pairs.append((progress, quality))
+
+    apply_scheduling_batch(db, progress_quality_pairs)
 
     db.commit()
 
@@ -129,6 +137,7 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
         for progress in existing_progresses
     }
     results = []
+    progress_quality_pairs = []
 
     for question_id, guess in data.items.items():
         question = question_map[question_id]
@@ -148,7 +157,7 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
             db.add(progress)
             progress_map[question_id] = progress
 
-        apply_scheduling(progress, grading["quality"])
+        progress_quality_pairs.append((progress, grading["quality"]))
 
         results.append({
             "question_id": question_id,
@@ -156,9 +165,15 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
             "expected": timeline,
             "guess": guess.model_dump(),
             "start": grading["start"],
-            "end": grading["end"],
-            "progress": serialize_progress(progress)
+            "end": grading["end"]
         })
+
+    apply_scheduling_batch(db, progress_quality_pairs)
+
+    for result in results:
+        result["progress"] = serialize_progress(
+            progress_map[result["question_id"]]
+        )
 
     db.commit()
 
