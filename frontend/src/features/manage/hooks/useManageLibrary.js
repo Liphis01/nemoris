@@ -32,6 +32,14 @@ const initialGroupDraft = {
   data: {}
 };
 
+const defaultSortOrders = {
+  id: "asc",
+  title: "asc",
+  group: "asc",
+  next_review: "asc",
+  reps: "asc"
+};
+
 
 export function useManageLibrary(mode) {
   // This hook is the Manage data store: it owns loaded questions/groups, local
@@ -227,6 +235,15 @@ export function useManageLibrary(mode) {
     }
   }
 
+  function selectSortField(field) {
+    setSortField(field);
+    setSortOrder(defaultSortOrders[field] || "asc");
+  }
+
+  function toggleSortOrder() {
+    setSortOrder(current => current === "asc" ? "desc" : "asc");
+  }
+
   function patchQuestionInCache(updated) {
     // Small cache patches avoid a full list reload after simple edits and map
     // zone saves.
@@ -297,6 +314,7 @@ export function useManageLibrary(mode) {
     resetQuestionDraft,
     search,
     selectedItem,
+    selectSortField,
     setAllGroups,
     setAllQuestions,
     setDueOnly,
@@ -311,6 +329,7 @@ export function useManageLibrary(mode) {
     sortField,
     sortOrder,
     startCreateGroup,
+    toggleSortOrder,
     updateQuestion,
     patchQuestionInCache,
     viewMode

@@ -1,3 +1,12 @@
+const sortOptions = [
+  { value: "id", label: "Ajout" },
+  { value: "title", label: "Titre" },
+  { value: "group", label: "Groupe" },
+  { value: "next_review", label: "Prochaine review" },
+  { value: "reps", label: "Moins revues" }
+];
+
+
 export default function ManageSidebar({
   setMode,
   search,
@@ -6,6 +15,10 @@ export default function ManageSidebar({
   setTagFilter,
   dueOnly,
   setDueOnly,
+  sortField,
+  sortOrder,
+  selectSortField,
+  toggleSortOrder,
   setIsCreatingQuestion,
   setSelectedItem,
   startCreateGroup,
@@ -23,6 +36,19 @@ export default function ManageSidebar({
     boxSizing: "border-box",
     outline: "none",
     fontSize: "14px"
+  };
+
+  const sectionLabelStyle = {
+    fontSize: "11px",
+    color: "#666",
+    fontWeight: "700",
+    letterSpacing: "0.08em"
+  };
+
+  const sortControlStyle = {
+    ...inputStyle,
+    cursor: "pointer",
+    height: "40px"
   };
 
   const toggleButtonStyle = (active, color) => ({
@@ -203,12 +229,7 @@ export default function ManageSidebar({
       >
 
         <div
-          style={{
-            fontSize: "11px",
-            color: "#666",
-            fontWeight: "700",
-            letterSpacing: "0.08em"
-          }}
+          style={sectionLabelStyle}
         >
           FILTERS
         </div>
@@ -254,6 +275,73 @@ export default function ManageSidebar({
               Questions dues uniquement
 
             </label>
+
+            <div
+              style={{
+                height: "1px",
+                background: "#242424",
+                margin: "2px 0"
+              }}
+            />
+
+            <div style={sectionLabelStyle}>
+              SORT
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) 74px",
+                gap: "8px"
+              }}
+            >
+              <select
+                value={sortField}
+                onChange={(event) => selectSortField?.(event.target.value)}
+                style={sortControlStyle}
+                aria-label="Critère de tri"
+              >
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => toggleSortOrder?.()}
+                title={
+                  sortOrder === "asc"
+                    ? "Ordre croissant"
+                    : "Ordre décroissant"
+                }
+                style={{
+                  height: "40px",
+                  borderRadius: "10px",
+                  border: "1px solid #342a52",
+                  background: "#211a33",
+                  color: "#cbbcff",
+                  cursor: "pointer",
+                  fontWeight: "800",
+                  fontSize: "13px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "5px"
+                }}
+                aria-label={
+                  sortOrder === "asc"
+                    ? "Tri croissant"
+                    : "Tri décroissant"
+                }
+              >
+                <span aria-hidden="true">
+                  {sortOrder === "asc" ? "↑" : "↓"}
+                </span>
+                {sortOrder === "asc" ? "Asc" : "Desc"}
+              </button>
+            </div>
 
           </>
         )}

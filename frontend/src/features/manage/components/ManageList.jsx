@@ -28,6 +28,7 @@ export default function ManageList({
   selectedItem,
   setSelectedItem,
   viewMode,
+  sortField,
   setEditingZone,
   deleteQuestion,
   deleteGroup,
@@ -120,7 +121,7 @@ export default function ManageList({
 
   const visibleRows =
     viewMode === "questions"
-      ? buildVisibleRows(filteredQuestions, allGroups, expandedGroupIds)
+      ? buildVisibleRows(filteredQuestions, allGroups, expandedGroupIds, sortField)
       : [];
   const visibleQuestionRowKey = visibleRows.map((row) => row.key).join("|");
   const visibleGroupRowKey =

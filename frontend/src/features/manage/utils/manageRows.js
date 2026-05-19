@@ -30,7 +30,11 @@ function getGroupInfo(groupId, question, groupById) {
 }
 
 
-function orderGroupQuestionsForDisplay(questions) {
+function orderGroupQuestionsForDisplay(questions, sortField) {
+  if (sortField !== "id") {
+    return questions;
+  }
+
   // Map zones are kept first inside a group because they are usually edited as
   // a visual set; other question types still remain visible below them.
   const mapQuestions = [];
@@ -48,7 +52,7 @@ function orderGroupQuestionsForDisplay(questions) {
 }
 
 
-export function buildVisibleRows(questions, allGroups, expandedGroupIds) {
+export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortField = "id") {
   // Convert a flat question list into render rows. Group headers are runtime UI
   // rows only; they do not represent database questions.
   const groupById = new Map(
@@ -101,7 +105,7 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds) {
 
     return [
       row,
-      ...orderGroupQuestionsForDisplay(row.groupInfo.questions).map(
+      ...orderGroupQuestionsForDisplay(row.groupInfo.questions, sortField).map(
         (question) => ({
           type: "question",
           key: `question:${question.id}`,
