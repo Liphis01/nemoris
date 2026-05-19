@@ -51,8 +51,6 @@ color: "#ff85c2",
 - montrer un équivalent de recap quand je regarde un groupe fait dans le passé dans le calendrier
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 - faire une sécurité quand on a modifié une question dans manage pour ne pas perdre les données (ex : si on a modifié une question puis qu'on clique sur une autre question sans sauvegarder, afficher une alerte pour demander si on veut sauvegarder les modifications ou les perdre)
-- dans la liste de manage, quand on expand un groupe, garder le nom en haut pour le collapse sans remonter tout en haut de la page
-- faire tab pour passer à la zone suivante dans la création de question map
 - scraper le site de émilien
 - faire des propositions existantes pour le média et pous les tags
 - décaler la limite de questions par review en paramètre de target pour le scheduler

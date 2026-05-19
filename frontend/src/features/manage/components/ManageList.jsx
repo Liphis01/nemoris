@@ -264,6 +264,14 @@ export default function ManageList({
 
   function toggleGroup(groupId) {
     setOpenDeleteId(null);
+
+    if (expandedGroupIds.has(groupId)) {
+      pendingScrollRef.current = {
+        viewMode: "questions",
+        rowKey: `group:${groupId}`
+      };
+    }
+
     setExpandedGroupIds((current) => {
       const next = new Set(current);
 
@@ -363,7 +371,7 @@ export default function ManageList({
     );
   }
 
-  function renderGroupHeader(row) {
+  function renderGroupHeader(row, { sticky = false } = {}) {
     const { groupId, groupInfo } = row;
     const isOpen = expandedGroupIds.has(groupId);
     const selectedInside = groupInfo.questions.some(
@@ -392,6 +400,13 @@ export default function ManageList({
         aria-expanded={isOpen}
         style={{
           width: "100%",
+          ...(sticky
+            ? {
+              position: "sticky",
+              top: 0,
+              zIndex: 3
+            }
+            : {}),
           border,
           borderRadius: "12px",
           background,
@@ -517,6 +532,55 @@ export default function ManageList({
     );
   }
 
+  function renderQuestionRows() {
+    const renderedRows = [];
+
+    for (let index = 0; index < visibleRows.length; index += 1) {
+      const row = visibleRows[index];
+
+      if (row.type !== "groupHeader" || !expandedGroupIds.has(row.groupId)) {
+        renderedRows.push(
+          row.type === "groupHeader"
+            ? renderGroupHeader(row)
+            : renderQuestionCard(row)
+        );
+        continue;
+      }
+
+      const nestedRows = [];
+      let nextIndex = index + 1;
+
+      while (
+        nextIndex < visibleRows.length &&
+        visibleRows[nextIndex].type === "question" &&
+        visibleRows[nextIndex].nested &&
+        visibleRows[nextIndex].groupId === row.groupId
+      ) {
+        nestedRows.push(visibleRows[nextIndex]);
+        nextIndex += 1;
+      }
+
+      renderedRows.push(
+        <div
+          key={`section:${row.groupId}`}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            position: "relative"
+          }}
+        >
+          {renderGroupHeader(row, { sticky: true })}
+          {nestedRows.map(renderQuestionCard)}
+        </div>
+      );
+
+      index = nextIndex - 1;
+    }
+
+    return renderedRows;
+  }
+
   return (
     <div
       style={{
@@ -583,11 +647,7 @@ export default function ManageList({
         }}
       >
 
-        {viewMode === "questions" && visibleRows.map((row) => (
-          row.type === "groupHeader"
-            ? renderGroupHeader(row)
-            : renderQuestionCard(row)
-        ))}
+        {viewMode === "questions" && renderQuestionRows()}
 
         {viewMode === "groups" && filteredGroups.map((group) => (
 

@@ -20,6 +20,7 @@ export default function MapEditor({
   const [aliasInput, setAliasInput] = useState("");
   const labelInputRef = useRef(null);
   const aliasInputRef = useRef(null);
+  const focusLabelAfterZoneChangeRef = useRef(false);
   const {
     clearDirty,
     dirtyZoneCodes,
@@ -50,32 +51,83 @@ export default function MapEditor({
     : 0;
   const assignmentDegrees = Math.round(assignmentRatio * 360);
 
+  function createTemporaryZone(code) {
+    return {
+      id: "tmp-" + code,
+      type_q: "map",
+      question: "",
+      answer: "",
+      tags: [],
+      group_id: group.id,
+      data: { code, aliases: [] }
+    };
+  }
+
+  function discardBlankEditingZone(sourceZones) {
+    if (isBlankTemporaryZone(editingZone)) {
+      clearDirty(getZoneCode(editingZone));
+      return sourceZones.filter(z => z.id !== editingZone.id);
+    }
+
+    return sourceZones;
+  }
+
+  function selectZoneCode(code, sourceZones) {
+    const zone = sourceZones.find(z => getZoneCode(z) === code)
+      || createTemporaryZone(code);
+    setEditingZone(zone);
+  }
+
   function handleSelect(code) {
     // Clicking an SVG region either edits its saved question or creates a
     // temporary unsaved zone row for that data-code.
-    let nextZones = zones;
+    const nextZones = discardBlankEditingZone(zones);
 
-    if (isBlankTemporaryZone(editingZone)) {
-      nextZones = zones.filter(z => z.id !== editingZone.id);
+    if (nextZones !== zones) {
       setZones(nextZones);
-      clearDirty(getZoneCode(editingZone));
     }
 
-    let zone = nextZones.find(z => getZoneCode(z) === code);
+    selectZoneCode(code, nextZones);
+  }
 
-    if (!zone) {
-      zone = {
-        id: "tmp-" + code,
-        type_q: "map",
-        question: "",
-        answer: "",
-        tags: [],
-        group_id: group.id,
-        data: { code, aliases: [] }
-      };
+  function handleZoneTab(e) {
+    if (e.key !== "Tab") return;
+
+    e.preventDefault();
+
+    if (svgCodes.length === 0) {
+      return;
     }
 
-    setEditingZone(zone);
+    const currentCode = getZoneCode(editingZone);
+    const nextZones = discardBlankEditingZone(zones);
+    const occupiedCodes = new Set(
+      nextZones
+        .filter(zone => !isBlankTemporaryZone(zone))
+        .map(getZoneCode)
+        .filter(Boolean)
+    );
+    const currentIndex = svgCodes.indexOf(currentCode);
+    const startIndex = currentIndex >= 0 ? currentIndex : -1;
+    let nextCode = null;
+
+    for (let offset = 1; offset <= svgCodes.length; offset += 1) {
+      const candidate = svgCodes[(startIndex + offset) % svgCodes.length];
+
+      if (!occupiedCodes.has(candidate)) {
+        nextCode = candidate;
+        break;
+      }
+    }
+
+    if (nextZones !== zones) {
+      setZones(nextZones);
+    }
+
+    if (nextCode) {
+      focusLabelAfterZoneChangeRef.current = true;
+      selectZoneCode(nextCode, nextZones);
+    }
   }
 
   function updateZoneAnswer(value) {
@@ -164,7 +216,26 @@ export default function MapEditor({
     if (e.key === "Enter") {
       e.preventDefault();
       addAlias(true);
+      return;
     }
+
+    if (e.key === "Tab") {
+      if (aliasInput.trim()) {
+        addAlias(false);
+      }
+
+      handleZoneTab(e);
+    }
+  }
+
+  function handleZoneAnswerKeyDown(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      aliasInputRef.current?.focus();
+      return;
+    }
+
+    handleZoneTab(e);
   }
 
   async function saveMapEdits() {
@@ -221,9 +292,13 @@ export default function MapEditor({
 
   useEffect(() => {
     if (editingZone) {
-      if (document.activeElement === aliasInputRef.current) {
+      if (
+        !focusLabelAfterZoneChangeRef.current &&
+        document.activeElement === aliasInputRef.current
+      ) {
         return;
       }
+      focusLabelAfterZoneChangeRef.current = false;
       labelInputRef.current?.focus();
     }
   }, [editingZone]);
@@ -450,7 +525,8 @@ export default function MapEditor({
               svgPath={`/maps/${editableGroup.media}`}
               found={foundCodes}
               unsaved={dirtyZoneCodes}
-              selected={editingZone?.data?.code}
+              selected={getZoneCode(editingZone)}
+              focusCode={getZoneCode(editingZone)}
               onSelect={handleSelect}
               onCodesLoaded={handleCodesLoaded}
             />
@@ -483,6 +559,7 @@ export default function MapEditor({
                 onChange={(e) =>
                   updateZoneAnswer(e.target.value)
                 }
+                onKeyDown={handleZoneAnswerKeyDown}
                 placeholder="Nom"
                 style={{
                   width: "100%",
