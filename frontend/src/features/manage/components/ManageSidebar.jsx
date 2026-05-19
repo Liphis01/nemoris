@@ -6,6 +6,14 @@ const sortOptions = [
   { value: "reps", label: "Moins revues" }
 ];
 
+const groupSortOptions = [
+  { value: "id", label: "Ajout" },
+  { value: "name", label: "Nom" },
+  { value: "type", label: "Type" },
+  { value: "question_count", label: "Questions" },
+  { value: "media", label: "Media" }
+];
+
 
 export default function ManageSidebar({
   setMode,
@@ -19,6 +27,16 @@ export default function ManageSidebar({
   sortOrder,
   selectSortField,
   toggleSortOrder,
+  groupSearch,
+  setGroupSearch,
+  groupTypeFilter,
+  setGroupTypeFilter,
+  groupHasMediaOnly,
+  setGroupHasMediaOnly,
+  groupSortField,
+  groupSortOrder,
+  selectGroupSortField,
+  toggleGroupSortOrder,
   setIsCreatingQuestion,
   setSelectedItem,
   startCreateGroup,
@@ -69,6 +87,86 @@ export default function ManageSidebar({
     fontWeight: "600",
     fontSize: "13px"
   });
+
+  function renderSortControls({
+    options,
+    value,
+    order,
+    onSelect,
+    onToggle,
+    accent = "#342a52"
+  }) {
+    return (
+      <>
+        <div
+          style={{
+            height: "1px",
+            background: "#242424",
+            margin: "2px 0"
+          }}
+        />
+
+        <div style={sectionLabelStyle}>
+          SORT
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) 74px",
+            gap: "8px"
+          }}
+        >
+          <select
+            value={value}
+            onChange={(event) => onSelect?.(event.target.value)}
+            style={sortControlStyle}
+            aria-label="Critère de tri"
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => onToggle?.()}
+            title={
+              order === "asc"
+                ? "Ordre croissant"
+                : "Ordre décroissant"
+            }
+            style={{
+              height: "40px",
+              borderRadius: "10px",
+              border: `1px solid ${accent}`,
+              background: "#211a33",
+              color: "#cbbcff",
+              cursor: "pointer",
+              fontWeight: "800",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "5px"
+            }}
+            aria-label={
+              order === "asc"
+                ? "Tri croissant"
+                : "Tri décroissant"
+            }
+          >
+            <span aria-hidden="true">
+              {order === "asc" ? "↑" : "↓"}
+            </span>
+            {order === "asc" ? "Asc" : "Desc"}
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <div
@@ -276,72 +374,67 @@ export default function ManageSidebar({
 
             </label>
 
-            <div
-              style={{
-                height: "1px",
-                background: "#242424",
-                margin: "2px 0"
-              }}
+            {renderSortControls({
+              options: sortOptions,
+              value: sortField,
+              order: sortOrder,
+              onSelect: selectSortField,
+              onToggle: toggleSortOrder
+            })}
+
+          </>
+        )}
+
+        {viewMode === "groups" && (
+          <>
+
+            <input
+              placeholder="Recherche..."
+              value={groupSearch}
+              onChange={(e) => setGroupSearch(e.target.value)}
+              style={inputStyle}
             />
 
-            <div style={sectionLabelStyle}>
-              SORT
-            </div>
+            <input
+              placeholder="Type..."
+              value={groupTypeFilter}
+              onChange={(e) => setGroupTypeFilter(e.target.value)}
+              style={inputStyle}
+            />
 
-            <div
+            <label
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) 74px",
-                gap: "8px"
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                color: "#999",
+                fontSize: "14px",
+                marginTop: "2px",
+                cursor: "pointer"
               }}
             >
-              <select
-                value={sortField}
-                onChange={(event) => selectSortField?.(event.target.value)}
-                style={sortControlStyle}
-                aria-label="Critère de tri"
-              >
-                {sortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
 
-              <button
-                type="button"
-                onClick={() => toggleSortOrder?.()}
-                title={
-                  sortOrder === "asc"
-                    ? "Ordre croissant"
-                    : "Ordre décroissant"
-                }
+              <input
+                type="checkbox"
+                checked={groupHasMediaOnly}
+                onChange={(e) => setGroupHasMediaOnly(e.target.checked)}
                 style={{
-                  height: "40px",
-                  borderRadius: "10px",
-                  border: "1px solid #342a52",
-                  background: "#211a33",
-                  color: "#cbbcff",
-                  cursor: "pointer",
-                  fontWeight: "800",
-                  fontSize: "13px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "5px"
+                  accentColor: "#ffcc7a"
                 }}
-                aria-label={
-                  sortOrder === "asc"
-                    ? "Tri croissant"
-                    : "Tri décroissant"
-                }
-              >
-                <span aria-hidden="true">
-                  {sortOrder === "asc" ? "↑" : "↓"}
-                </span>
-                {sortOrder === "asc" ? "Asc" : "Desc"}
-              </button>
-            </div>
+              />
+
+              Avec media uniquement
+
+            </label>
+
+            {renderSortControls({
+              options: groupSortOptions,
+              value: groupSortField,
+              order: groupSortOrder,
+              onSelect: selectGroupSortField,
+              onToggle: toggleGroupSortOrder,
+              accent: "#5a4523"
+            })}
 
           </>
         )}

@@ -12,6 +12,7 @@ import {
   deleteGroup as deleteGroupRequest,
   listGroups
 } from "../../../api/groups";
+import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
 
@@ -37,7 +38,11 @@ const defaultSortOrders = {
   title: "asc",
   group: "asc",
   next_review: "asc",
-  reps: "asc"
+  reps: "asc",
+  name: "asc",
+  type: "asc",
+  question_count: "asc",
+  media: "asc"
 };
 
 
@@ -51,6 +56,11 @@ export function useManageLibrary(mode) {
   const [dueOnly, setDueOnly] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc");
+  const [groupSearch, setGroupSearch] = useState("");
+  const [groupTypeFilter, setGroupTypeFilter] = useState("");
+  const [groupHasMediaOnly, setGroupHasMediaOnly] = useState(false);
+  const [groupSortField, setGroupSortField] = useState("id");
+  const [groupSortOrder, setGroupSortOrder] = useState("asc");
   const [selectedItem, setSelectedItem] = useState(null);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
@@ -106,6 +116,13 @@ export function useManageLibrary(mode) {
     setSearch("");
     setTagFilter("");
     setDueOnly(false);
+    setSortField("id");
+    setSortOrder("asc");
+    setGroupSearch("");
+    setGroupTypeFilter("");
+    setGroupHasMediaOnly(false);
+    setGroupSortField("id");
+    setGroupSortOrder("asc");
   }
 
   async function updateQuestion(id, updatedFields) {
@@ -244,6 +261,15 @@ export function useManageLibrary(mode) {
     setSortOrder(current => current === "asc" ? "desc" : "asc");
   }
 
+  function selectGroupSortField(field) {
+    setGroupSortField(field);
+    setGroupSortOrder(defaultSortOrders[field] || "asc");
+  }
+
+  function toggleGroupSortOrder() {
+    setGroupSortOrder(current => current === "asc" ? "desc" : "asc");
+  }
+
   function patchQuestionInCache(updated) {
     // Small cache patches avoid a full list reload after simple edits and map
     // zone saves.
@@ -288,6 +314,26 @@ export function useManageLibrary(mode) {
     ]
   );
 
+  const filteredGroups = useMemo(
+    () =>
+      filterAndSortGroups({
+        groups: allGroups,
+        groupSearch,
+        groupTypeFilter,
+        groupHasMediaOnly,
+        groupSortField,
+        groupSortOrder
+      }),
+    [
+      allGroups,
+      groupHasMediaOnly,
+      groupSearch,
+      groupSortField,
+      groupSortOrder,
+      groupTypeFilter
+    ]
+  );
+
   return {
     allGroups,
     allQuestions,
@@ -297,7 +343,13 @@ export function useManageLibrary(mode) {
     removeQuestionMedia,
     deleteQuestion,
     dueOnly,
+    filteredGroups,
     filteredQuestions,
+    groupHasMediaOnly,
+    groupSearch,
+    groupSortField,
+    groupSortOrder,
+    groupTypeFilter,
     tagFilter,
     handleSort,
     uploadQuestionMedia,
@@ -314,10 +366,14 @@ export function useManageLibrary(mode) {
     resetQuestionDraft,
     search,
     selectedItem,
+    selectGroupSortField,
     selectSortField,
     setAllGroups,
     setAllQuestions,
     setDueOnly,
+    setGroupHasMediaOnly,
+    setGroupSearch,
+    setGroupTypeFilter,
     setTagFilter,
     setIsCreatingQuestion,
     setIsCreatingGroup,
@@ -329,6 +385,7 @@ export function useManageLibrary(mode) {
     sortField,
     sortOrder,
     startCreateGroup,
+    toggleGroupSortOrder,
     toggleSortOrder,
     updateQuestion,
     patchQuestionInCache,

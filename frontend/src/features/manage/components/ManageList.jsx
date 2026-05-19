@@ -24,6 +24,7 @@ function centerListItem(list, item) {
 
 export default function ManageList({
   filteredQuestions,
+  filteredGroups,
   allGroups,
   selectedItem,
   setSelectedItem,
@@ -117,7 +118,7 @@ export default function ManageList({
   const items =
     viewMode === "questions"
       ? filteredQuestions
-      : allGroups;
+      : filteredGroups;
 
   const visibleRows =
     viewMode === "questions"
@@ -126,7 +127,7 @@ export default function ManageList({
   const visibleQuestionRowKey = visibleRows.map((row) => row.key).join("|");
   const visibleGroupRowKey =
     viewMode === "groups"
-      ? allGroups.map((group) => `group:${group.id}`).join("|")
+      ? filteredGroups.map((group) => `group:${group.id}`).join("|")
       : "";
   const renderedRowKey =
     viewMode === "questions"
@@ -209,7 +210,7 @@ export default function ManageList({
     }
 
     const selectedGroup = selectedItem?.type_group
-      ? allGroups.find((group) => selectedItem.id === group.id)
+      ? filteredGroups.find((group) => selectedItem.id === group.id)
       : null;
     const selectedId = selectedGroup?.id ?? null;
     const enteredGroups = previous.viewMode !== "groups";
@@ -235,7 +236,7 @@ export default function ManageList({
       viewMode: "groups",
       rowKey: `group:${selectedGroup.id}`
     };
-  }, [allGroups, selectedItem?.id, selectedItem?.type_group, viewMode]);
+  }, [filteredGroups, selectedItem?.id, selectedItem?.type_group, viewMode]);
 
   useLayoutEffect(() => {
     // Execute pending scrolls only after React has committed the matching rows
@@ -588,7 +589,7 @@ export default function ManageList({
             : renderQuestionCard(row)
         ))}
 
-        {viewMode === "groups" && allGroups.map((group) => (
+        {viewMode === "groups" && filteredGroups.map((group) => (
 
           <div
             key={group.id}
