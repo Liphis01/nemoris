@@ -1,6 +1,12 @@
 # TODO
 
 
+ui de merde dans manage preview
+ui de merde dans la review (impossible d'être précis + pb si trop de questions + pouvoir zoomer et déplacer la timeline)
+
+
+
+
 ## couleurs pour les types des cards
 background: "#145c46",
 color: "#6ff0c2",

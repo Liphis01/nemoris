@@ -4,7 +4,8 @@ from typing import Optional, List, Literal, Any, Dict
 
 QuestionType = Literal[
     "text",
-    "map"
+    "map",
+    "timeline"
 ]
 
 GroupType = Literal[
@@ -145,6 +146,29 @@ class AnswerRequest(BaseModel):
 
 class MapAnswerRequest(BaseModel):
     items: Dict[int, int]
+
+
+TimelinePrecision = Literal[
+    "year",
+    "month",
+    "day"
+]
+
+
+class TimelineDateValue(BaseModel):
+    year: int
+    month: Optional[int] = None
+    day: Optional[int] = None
+    precision: TimelinePrecision
+
+
+class TimelineAnswerItem(BaseModel):
+    start: TimelineDateValue
+    end: Optional[TimelineDateValue] = None
+
+
+class TimelineAnswerRequest(BaseModel):
+    items: Dict[int, TimelineAnswerItem]
 
 
 class MapZoneBulkItem(BaseModel):

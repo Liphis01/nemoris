@@ -21,6 +21,19 @@ export default function QuestionCard({
     : isHighlighted
       ? "1px solid rgba(134, 239, 172, 0.85)"
       : "1px solid #262626";
+  const typeStyles = {
+    text: {
+      label: "TEXT",
+      background: "#163b63",
+      color: "#5eb6ff"
+    },
+    timeline: {
+      label: "TIMELINE",
+      background: "#2b2047",
+      color: "#c4b5fd"
+    }
+  };
+  const typeStyle = typeStyles[q.type_q] || typeStyles.text;
 
   return (
     <div
@@ -126,12 +139,12 @@ export default function QuestionCard({
             fontWeight: "700",
             padding: "2px 6px",
             borderRadius: "999px",
-            background: "#163b63",
-            color: "#5eb6ff",
+            background: typeStyle.background,
+            color: typeStyle.color,
             flexShrink: 0
           }}
         >
-          TEXT
+          {typeStyle.label}
         </div>
 
         <div

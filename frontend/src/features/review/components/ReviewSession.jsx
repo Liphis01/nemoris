@@ -18,6 +18,7 @@ export default function ReviewSession({
   setShowAnswer,
   handleTextAnswer,
   handleMapComplete,
+  handleTimelineComplete,
   tagInput,
   setTagInput,
   limit,
@@ -329,6 +330,7 @@ export default function ReviewSession({
               setShowAnswer={setShowAnswer}
               handleTextAnswer={handleTextAnswer}
               handleMapComplete={handleMapComplete}
+              handleTimelineComplete={handleTimelineComplete}
             />
 
           </>

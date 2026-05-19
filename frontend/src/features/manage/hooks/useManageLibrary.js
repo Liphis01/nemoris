@@ -23,7 +23,8 @@ const initialQuestionDraft = {
   answer: "",
   tags: [],
   type_q: "text",
-  media: null
+  media: null,
+  data: {}
 };
 
 const initialGroupDraft = {

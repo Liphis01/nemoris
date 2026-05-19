@@ -9,6 +9,10 @@ from ..serializers import (
     serialize_map_review_zone,
     serialize_review_question_item
 )
+from .timeline import (
+    serialize_timeline_review_group,
+    serialize_timeline_review_item
+)
 
 
 def get_review_items(db, tags=None, limit=200, collection_id=None):
@@ -44,6 +48,7 @@ def get_review_items(db, tags=None, limit=200, collection_id=None):
 
     review_items = []
     grouped_items = {}
+    timeline_items = []
 
     for question in query.all():
         if tags and not set(tags).intersection(set(question.tags or [])):
@@ -60,8 +65,17 @@ def get_review_items(db, tags=None, limit=200, collection_id=None):
             grouped_items[group_id]["items"].append(serialize_map_review_zone(question))
             continue
 
+        if question.type_q == "timeline":
+            # Timeline questions stay atomic in storage/manage/calendar, but
+            # review presents every due item in one combined timeline screen.
+            timeline_items.append(serialize_timeline_review_item(question))
+            continue
+
         review_items.append(serialize_review_question_item(question))
 
     # Mixed sessions can contain normal questions and runtime map groups. The
-    # limit applies after grouping so a map consumes one review screen.
+    # limit applies after grouping so a map/timeline consumes one review screen.
+    if timeline_items:
+        review_items.append(serialize_timeline_review_group(timeline_items))
+
     return (review_items + list(grouped_items.values()))[:limit]

@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
+import {
+  createDefaultTimeline,
+  formatTimelineAnswer,
+  normalizeTimeline,
+  normalizeTimelineDate,
+  timelinePrecisions
+} from "../../timeline/timelineUtils";
 
 const panelStyle = {
   padding: "28px",
@@ -62,6 +69,208 @@ const tagStyle = {
   color: "#ccc",
   marginBottom: "8px"
 };
+
+function timelineDraftPatch(draft) {
+  const timeline = normalizeTimeline(draft?.data?.timeline || createDefaultTimeline());
+
+  return {
+    ...draft,
+    answer: formatTimelineAnswer(timeline),
+    data: {
+      ...(draft?.data || {}),
+      timeline
+    },
+    group_id: null
+  };
+}
+
+function TimelineDateFields({ label, value, onChange }) {
+  const date = normalizeTimelineDate(value, value?.precision || "year");
+  const compactInputStyle = {
+    ...inputStyle,
+    marginBottom: 0,
+    minWidth: 0
+  };
+
+  function updateField(field, nextValue) {
+    onChange(
+      normalizeTimelineDate({
+        ...date,
+        [field]: nextValue
+      }, field === "precision" ? nextValue : date.precision)
+    );
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid #2a2a2a",
+        borderRadius: "12px",
+        padding: "12px",
+        background: "#111",
+        marginBottom: "12px"
+      }}
+    >
+      <div
+        style={{
+          color: "#999",
+          fontSize: "12px",
+          fontWeight: "800",
+          marginBottom: "10px",
+          textTransform: "uppercase"
+        }}
+      >
+        {label}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "10px",
+          marginBottom: "10px"
+        }}
+      >
+        <select
+          style={compactInputStyle}
+          value={date.precision}
+          onChange={(event) => updateField("precision", event.target.value)}
+        >
+          {timelinePrecisions.map(precision => (
+            <option key={precision} value={precision}>
+              {precision}
+            </option>
+          ))}
+        </select>
+
+        <input
+          type="number"
+          style={compactInputStyle}
+          value={date.year}
+          onChange={(event) => updateField("year", event.target.value)}
+          placeholder="Year"
+        />
+      </div>
+
+      {date.precision !== "year" && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: date.precision === "day" ? "1fr 1fr" : "1fr",
+            gap: "10px"
+          }}
+        >
+          <input
+            type="number"
+            min="1"
+            max="12"
+            style={compactInputStyle}
+            value={date.month || 1}
+            onChange={(event) => updateField("month", event.target.value)}
+            placeholder="Month"
+          />
+
+          {date.precision === "day" && (
+            <input
+              type="number"
+              min="1"
+              max="31"
+              style={compactInputStyle}
+              value={date.day || 1}
+              onChange={(event) => updateField("day", event.target.value)}
+              placeholder="Day"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineDataEditor({ value, onChange }) {
+  const timeline = normalizeTimeline(value);
+
+  function commit(nextTimeline) {
+    const normalized = normalizeTimeline(nextTimeline);
+    onChange(normalized);
+  }
+
+  function updateKind(kind) {
+    commit({
+      ...timeline,
+      kind,
+      end: kind === "interval"
+        ? timeline.end || timeline.start
+        : undefined
+    });
+  }
+
+  function updateDate(part, date) {
+    commit({
+      ...timeline,
+      [part]: date
+    });
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid #2a2a2a",
+        borderRadius: "14px",
+        background: "#151515",
+        padding: "14px",
+        marginBottom: "18px"
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "10px",
+          marginBottom: "12px"
+        }}
+      >
+        <div style={{ color: "#bbb", fontSize: "14px", fontWeight: "800" }}>
+          Timeline
+        </div>
+
+        <select
+          style={{ ...inputStyle, width: "150px", marginBottom: 0 }}
+          value={timeline.kind}
+          onChange={(event) => updateKind(event.target.value)}
+        >
+          <option value="point">point</option>
+          <option value="interval">interval</option>
+        </select>
+      </div>
+
+      <TimelineDateFields
+        label={timeline.kind === "interval" ? "Start" : "Date"}
+        value={timeline.start}
+        onChange={(date) => updateDate("start", date)}
+      />
+
+      {timeline.kind === "interval" && (
+        <TimelineDateFields
+          label="End"
+          value={timeline.end || timeline.start}
+          onChange={(date) => updateDate("end", date)}
+        />
+      )}
+
+      <div
+        style={{
+          color: "#c4b5fd",
+          fontSize: "13px",
+          fontWeight: "800"
+        }}
+      >
+        {formatTimelineAnswer(timeline)}
+      </div>
+    </div>
+  );
+}
 
 function formatReviewDate(value) {
   // Dates arrive as YYYY-MM-DD from the backend. Build a local Date from parts
@@ -186,11 +395,64 @@ export default function ManageInspector({
       answer: selectedItem.answer || "",
       media: selectedItem.media || "",
       type_q: selectedItem.type_q || "text",
-      tags: selectedItem.tags || []
+      tags: selectedItem.tags || [],
+      data: selectedItem.data || {}
     });
     setTagInput("");
     setSaveStatus(null);
   }, [selectedItem]);
+
+  function updateQuestionDraftType(type_q) {
+    setQuestionDraft((prev) => {
+      const next = { ...prev, type_q };
+
+      if (type_q === "timeline") {
+        return timelineDraftPatch(next);
+      }
+
+      return {
+        ...next,
+        data: type_q === "text" ? {} : next.data
+      };
+    });
+  }
+
+  function updateQuestionDraftTimeline(timeline) {
+    setQuestionDraft((prev) => timelineDraftPatch({
+      ...prev,
+      type_q: "timeline",
+      data: {
+        ...(prev.data || {}),
+        timeline
+      }
+    }));
+  }
+
+  function updateDraftType(type_q) {
+    setDraft((prev) => {
+      const next = { ...prev, type_q };
+
+      if (type_q === "timeline") {
+        return timelineDraftPatch(next);
+      }
+
+      return {
+        ...next,
+        data: type_q === "text" ? {} : next.data
+      };
+    });
+  }
+
+  function updateDraftTimeline(timeline) {
+    setDraft((prev) => timelineDraftPatch({
+      ...prev,
+      type_q: "timeline",
+      data: {
+        ...(prev?.data || {}),
+        timeline
+      }
+    }));
+  }
 
   if (isCreatingGroup) {
     return (
@@ -268,11 +530,19 @@ export default function ManageInspector({
         <select
           style={inputStyle}
           value={questionDraft.type_q}
-          onChange={(e) => setQuestionDraft({ ...questionDraft, type_q: e.target.value })}
+          onChange={(e) => updateQuestionDraftType(e.target.value)}
         >
           <option value="text">text</option>
           <option value="map">map</option>
+          <option value="timeline">timeline</option>
         </select>
+
+        {questionDraft.type_q === "timeline" && (
+          <TimelineDataEditor
+            value={questionDraft.data?.timeline}
+            onChange={updateQuestionDraftTimeline}
+          />
+        )}
 
         <label style={labelStyle}>Media / URL</label>
         <input
@@ -337,7 +607,7 @@ export default function ManageInspector({
           <button type="button" onClick={async () => { await createQuestion(); setIsCreatingQuestion(false); }} style={buttonStyle}>
             Créer
           </button>
-          <button type="button" onClick={() => { setIsCreatingQuestion(false); setQuestionDraft({ question: "", answer: "", tags: [], type_q: "text", media: null }); }} style={{ ...buttonStyle, background: "#641c1c" }}>
+          <button type="button" onClick={() => { setIsCreatingQuestion(false); setQuestionDraft({ question: "", answer: "", tags: [], type_q: "text", media: null, data: {} }); }} style={{ ...buttonStyle, background: "#641c1c" }}>
             Annuler
           </button>
         </div>
@@ -487,6 +757,11 @@ export default function ManageInspector({
 
   
   function setField(field, value) {
+    if (field === "type_q") {
+      updateDraftType(value);
+      return;
+    }
+
     setDraft((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -511,7 +786,8 @@ export default function ManageInspector({
       answer: draft.answer,
       media: draft.media || null,
       type_q: draft.type_q,
-      tags: draft.tags
+      tags: draft.tags,
+      data: draft.type_q === "timeline" ? draft.data : {}
     };
 
     setSaveStatus("Enregistrement...");
@@ -583,7 +859,15 @@ export default function ManageInspector({
       >
         <option value="text">text</option>
         <option value="map">map</option>
+        <option value="timeline">timeline</option>
       </select>
+
+      {draft?.type_q === "timeline" && (
+        <TimelineDataEditor
+          value={draft.data?.timeline}
+          onChange={updateDraftTimeline}
+        />
+      )}
 
       <label style={labelStyle}>Media / URL</label>
       <input

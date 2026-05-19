@@ -1,5 +1,6 @@
 import TextReviewCard from "./TextReviewCard";
 import MapReview from "./MapReview";
+import TimelineReview from "./TimelineReview";
 
 export default function ReviewQuestionRenderer({
     q,
@@ -8,6 +9,7 @@ export default function ReviewQuestionRenderer({
     setShowAnswer,
     handleTextAnswer,
     handleMapComplete,
+    handleTimelineComplete,
 }) {
     if (!q) return null;
 
@@ -19,9 +21,21 @@ export default function ReviewQuestionRenderer({
     if (q.type_q === "map" && q.media) {
         return (
             <MapReview
+                key={currentIndex}
                 group={q}
                 reviewZones={q.items}
                 onComplete={handleMapComplete}
+            />
+        );
+    }
+
+    if (q.type_q === "timeline") {
+        return (
+            <TimelineReview
+                key={currentIndex}
+                group={q}
+                reviewItems={q.items || []}
+                onComplete={handleTimelineComplete}
             />
         );
     }

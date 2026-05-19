@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 from ..models import Collection, Progress, Question, QuestionGroup
 from ..serializers import serialize_manage_question
 from .progress import create_initial_progress
+from .timeline import validate_question_timeline
 
 
 GROUP_COMPATIBILITY = {
@@ -52,6 +53,7 @@ def get_collections_by_ids(db, collection_ids):
 def create_question(db, payload):
     # Every created question immediately gets its own Progress row. This keeps
     # grouped map zones independently reviewable.
+    validate_question_timeline(payload.type_q, payload.group_id, payload.data)
     validate_group_compatibility(db, payload.type_q, payload.group_id)
 
     question = Question(
@@ -132,6 +134,8 @@ def update_question(db, question_id: int, payload):
     # present in the payload.
     future_type = updates.get("type_q", question.type_q)
     future_group_id = updates.get("group_id", question.group_id)
+    future_data = updates.get("data", question.data or {})
+    validate_question_timeline(future_type, future_group_id, future_data)
     validate_group_compatibility(db, future_type, future_group_id)
 
     for field in ["type_q", "question", "answer", "media", "tags", "data", "group_id"]:

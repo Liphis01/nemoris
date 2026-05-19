@@ -24,6 +24,7 @@ const shortDateFormatter = new Intl.DateTimeFormat("fr-FR", {
 const typeColors = {
   text: ["#163b63", "#5eb6ff"],
   map: ["#3d2b14", "#ffcc7a"],
+  timeline: ["#2b2047", "#c4b5fd"],
   image: ["#163524", "#7ee2a8"],
   audio: ["#3a1d2d", "#ff9ccc"]
 };
@@ -71,6 +72,7 @@ function buildCalendarDays(monthDate) {
 function dueLabel(question) {
   if (question.group?.name) return question.group.name;
   if (question.type_q === "map") return "Map zone";
+  if (question.type_q === "timeline") return question.answer || "Timeline";
   return question.answer || "Question";
 }
 

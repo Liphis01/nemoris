@@ -39,3 +39,15 @@ export function sendMapAnswer(items) {
     body: JSON.stringify({ items })
   });
 }
+
+
+export function sendTimelineAnswer(items) {
+  // items is an object of question_id -> normalized timeline guesses.
+  return requestJson("/answer_timeline", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ items })
+  });
+}

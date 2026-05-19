@@ -67,6 +67,28 @@ export function useReviewSession(active) {
     setCurrentIndex(prev => prev + 1);
   }
 
+  function handleTimelineComplete(failedQuestionIds = []) {
+    // Timeline review also updates many atomic questions from one screen.
+    // Failed items are wrapped back into the runtime timeline shape.
+    if (current && failedQuestionIds.length > 0) {
+      const failedItems = (current.items || []).filter(item =>
+        failedQuestionIds.includes(item.question_id)
+      );
+
+      if (failedItems.length > 0) {
+        setQuestions(prev => [
+          ...prev,
+          {
+            ...current,
+            items: failedItems
+          }
+        ]);
+      }
+    }
+
+    setCurrentIndex(prev => prev + 1);
+  }
+
   useEffect(() => {
     if (!active) return;
 
@@ -97,6 +119,10 @@ export function useReviewSession(active) {
     if (!active) return;
 
     function handleKeyDown(event) {
+      if (current?.type_q === "map" || current?.type_q === "timeline") {
+        return;
+      }
+
       // Keyboard review flow: Enter reveals, then 1/2/3 grades the visible
       // answer. Map review handles its own input shortcuts.
       if (event.key === "Enter") {
@@ -118,12 +144,13 @@ export function useReviewSession(active) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [active, showAnswer, handleTextAnswer]);
+  }, [active, current?.type_q, showAnswer, handleTextAnswer]);
 
   return {
     collections,
     currentIndex,
     handleMapComplete,
+    handleTimelineComplete,
     handleTextAnswer,
     limit,
     questions,
