@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { sendMapAnswer } from "../api/api";
 import { fadeInStyle } from "../styles";
 import SvgMap from "./SvgMap";
@@ -63,11 +63,37 @@ const qualityButtonStyles = {
   }
 };
 
+const DESIRED_RETENTION = 0.9;
+
 function normalize(str = "") {
   return str
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
+}
+
+function pythonRoundPositive(value) {
+  const floorValue = Math.floor(value);
+  const fraction = value - floorValue;
+
+  if (fraction < 0.5) {
+    return floorValue;
+  }
+
+  if (fraction > 0.5) {
+    return floorValue + 1;
+  }
+
+  return floorValue % 2 === 0
+    ? floorValue
+    : floorValue + 1;
+}
+
+function nextInterval(stability) {
+  return Math.max(
+    1,
+    pythonRoundPositive(stability * Math.log(DESIRED_RETENTION) / Math.log(0.9))
+  );
 }
 
 export default function MapQuestion({ group, items, onComplete }) {
@@ -76,6 +102,7 @@ export default function MapQuestion({ group, items, onComplete }) {
   const [found, setFound] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
   const [itemQuality, setItemQuality] = useState({});
+  const [focusedCode, setFocusedCode] = useState(null);
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
 
@@ -186,6 +213,7 @@ export default function MapQuestion({ group, items, onComplete }) {
     setShowRecap(false);
     setFound([]);
     setItemQuality({});
+    setFocusedCode(null);
 
     onComplete(failedQuestionIds);
   }
@@ -227,6 +255,38 @@ export default function MapQuestion({ group, items, onComplete }) {
     };
   }
 
+  function getDifficultyScore(item, historyStats) {
+    const explicitDifficulty = Number(item.progress?.difficulty);
+
+    if (Number.isFinite(explicitDifficulty)) {
+      return explicitDifficulty;
+    }
+
+    if (historyStats.successRate !== null) {
+      return 10 - (historyStats.successRate / 10);
+    }
+
+    return 5;
+  }
+
+  function getProjectedInterval(item, quality) {
+    const progress = item.progress || {};
+    let stability = progress.stability || 1.0;
+    let difficulty = progress.difficulty || 5.0;
+
+    if (quality === 0) {
+      stability = Math.max(0.5, stability * 0.45);
+    } else if (quality === 1) {
+      difficulty = Math.min(10, difficulty + 0.1);
+      stability = stability * (1.2 + (10 - difficulty) * 0.03);
+    } else {
+      difficulty = Math.max(1, difficulty - 0.08);
+      stability = stability * (1.8 + (10 - difficulty) * 0.05);
+    }
+
+    return quality === 0 ? 0 : nextInterval(stability);
+  }
+
   const progressPercent = items.length
     ? (found.length / items.length) * 100
     : 0;
@@ -240,6 +300,34 @@ export default function MapQuestion({ group, items, onComplete }) {
   const recapSuccessRate = items.length
     ? Math.round((recapSuccessCount / items.length) * 100)
     : 0;
+  const recapRows = useMemo(() => {
+    return items
+      .map(item => {
+        const historyStats = getHistoryStats(item);
+        const isFound = foundSet.has(item.question_id);
+
+        return {
+          item,
+          historyStats,
+          isFound,
+          difficultyScore: getDifficultyScore(item, historyStats)
+        };
+      })
+      .sort((a, b) => {
+        if (a.isFound !== b.isFound) {
+          return a.isFound ? -1 : 1;
+        }
+
+        if (b.difficultyScore !== a.difficultyScore) {
+          return b.difficultyScore - a.difficultyScore;
+        }
+
+        return String(a.item.label || "").localeCompare(String(b.item.label || ""));
+      });
+  }, [items, foundSet]);
+  const hasCorrectRecapRows = recapRows.some(row => row.isFound);
+  const hasWrongRecapRows = recapRows.some(row => !row.isFound);
+  const showRecapSections = hasCorrectRecapRows && hasWrongRecapRows;
 
   return (
     <>
@@ -545,131 +633,138 @@ export default function MapQuestion({ group, items, onComplete }) {
               </div>
             </div>
 
-            <div
-              style={{
-                background: "#111",
-                borderRadius: "14px",
-                overflow: "hidden",
-                border: "1px solid #262626",
-                marginBottom: "24px"
-              }}
-            >
-              <SvgMap
-                svgPath={`/maps/${group.media}`}
-                found={foundCodes}
-                missed={missedCodes}
-                dueItems={[]}
-              />
-            </div>
+            <div className="map-recap-content">
+              <div style={recapMapPanelStyle}>
+                <SvgMap
+                  svgPath={`/maps/${group.media}`}
+                  found={foundCodes}
+                  missed={missedCodes}
+                  dueItems={[]}
+                  selected={focusedCode}
+                  focusCode={focusedCode}
+                />
+              </div>
 
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px"
-              }}
-            >
-              {items.map(item => {
-                const historyStats = getHistoryStats(item);
+              <div style={recapTableStyle}>
+                <div className="map-recap-table-header" style={recapTableHeaderStyle}>
+                  <div>Réponse</div>
+                  <div>Réussite</div>
+                  <div>Intervalle</div>
+                  <div>Qualité</div>
+                </div>
 
-                return (
-                  <div
-                    key={item.question_id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "16px",
-                      padding: "14px 16px",
-                      borderRadius: "12px",
-                      background: "#181818",
-                      border: "1px solid #262626"
-                    }}
-                  >
+                <div style={recapTableBodyStyle}>
+                  {recapRows.map((row, index) => {
+                    const { item, historyStats, isFound } = row;
+                    const showSection =
+                      showRecapSections &&
+                      (index === 0 || recapRows[index - 1].isFound !== isFound);
+                    const isFocused = focusedCode === item.code;
+                    const selectedQuality = itemQuality[item.question_id] ?? (isFound ? 2 : 0);
+                    const projectedInterval = getProjectedInterval(item, selectedQuality);
 
-                    <div>
-                      <div
-                        style={{
-                          fontWeight: "600",
-                          marginBottom: "4px"
-                        }}
-                      >
-                        {item.label}
-                      </div>
-                    </div>
+                    return (
+                      <Fragment key={item.question_id}>
+                        {showSection && (
+                          <div style={recapSectionStyle}>
+                            {isFound ? "Correct" : "Wrong"}
+                          </div>
+                        )}
 
-                    <div style={zoneHistoryStyle}>
-                      {historyStats.reviews > 0 ? (
-                        <>
-                          <span style={zoneHistoryRateStyle}>
-                            {historyStats.successRate}%
-                          </span>
-                          <span style={zoneHistoryMetaStyle}>
-                            {historyStats.reviews} revue{historyStats.reviews > 1 ? "s" : ""}
-                          </span>
-                        </>
-                      ) : (
-                        <span style={zoneHistoryMetaStyle}>Nouveau</span>
-                      )}
-                    </div>
+                        <button
+                          className="map-recap-row"
+                          type="button"
+                          onClick={() => setFocusedCode(item.code)}
+                          style={{
+                            ...recapRowStyle,
+                            ...(isFocused ? recapRowFocusedStyle : {}),
+                            borderLeft: isFound
+                              ? "3px solid rgba(126, 226, 168, 0.75)"
+                              : "3px solid rgba(255, 140, 148, 0.75)"
+                          }}
+                          title={item.code ? `Voir ${item.label} sur la carte` : item.label}
+                        >
+                          <div style={recapAnswerCellStyle}>
+                            {item.label}
+                          </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "8px"
-                      }}
-                    >
-                      {[0, 1, 2].map(qVal => {
+                          <div style={recapMetricCellStyle}>
+                            {historyStats.reviews > 0 ? (
+                              <>
+                                <span style={zoneHistoryRateStyle}>
+                                  {historyStats.successRate}%
+                                </span>
+                                <span style={zoneHistoryMetaStyle}>
+                                  {historyStats.reviews} revue{historyStats.reviews > 1 ? "s" : ""}
+                                </span>
+                              </>
+                            ) : (
+                              <span style={zoneHistoryMetaStyle}>Nouveau</span>
+                            )}
+                          </div>
 
-                        const selected =
-                          itemQuality[item.question_id] === qVal;
-                        const wasFound = foundSet.has(item.question_id);
-                        const disabled =
-                          (wasFound && qVal === 0) ||
-                          (!wasFound && qVal !== 0);
-                        const activeStyle = qualityButtonStyles[qVal];
+                          <div style={recapIntervalCellStyle}>
+                            {projectedInterval}
+                            <span style={recapIntervalUnitStyle}> j</span>
+                          </div>
 
-                        return (
-                          <button
-                            key={qVal}
-                            disabled={disabled}
-                            onClick={() => setQuality(item.question_id, qVal)}
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: "10px",
-                              cursor: disabled ? "not-allowed" : "pointer",
-                              fontWeight: "600",
-                              border: selected
-                                ? activeStyle.border
-                                : disabled
-                                  ? "1px solid #2a2a2a"
-                                  : "1px solid #333",
-                              background: selected
-                                ? activeStyle.background
-                                : disabled
-                                  ? "#181818"
-                                  : "#222",
-                              color: selected
-                                ? activeStyle.color
-                                : disabled
-                                  ? "#4a4a4a"
-                                  : "#999",
-                              opacity: disabled ? 0.55 : 1
-                            }}
-                          >
-                            {qVal === 0
-                              ? "❌"
-                              : qVal === 1
-                                ? "😐"
-                                : "✅"}
-                          </button>
-                        );
-                      })}
-                    </div>
+                          <div style={recapQualityCellStyle}>
+                            {[0, 1, 2].map(qVal => {
 
-                  </div>
-                );
-              })}
+                              const selected =
+                                itemQuality[item.question_id] === qVal;
+                              const wasFound = foundSet.has(item.question_id);
+                              const disabled =
+                                (wasFound && qVal === 0) ||
+                                (!wasFound && qVal !== 0);
+                              const activeStyle = qualityButtonStyles[qVal];
+
+                              return (
+                                <button
+                                  key={qVal}
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setQuality(item.question_id, qVal);
+                                  }}
+                                  style={{
+                                    ...recapQualityButtonStyle,
+                                    cursor: disabled ? "not-allowed" : "pointer",
+                                    border: selected
+                                      ? activeStyle.border
+                                      : disabled
+                                        ? "1px solid #2a2a2a"
+                                        : "1px solid #333",
+                                    background: selected
+                                      ? activeStyle.background
+                                      : disabled
+                                        ? "#181818"
+                                        : "#222",
+                                    color: selected
+                                      ? activeStyle.color
+                                      : disabled
+                                        ? "#4a4a4a"
+                                        : "#999",
+                                    opacity: disabled ? 0.55 : 1
+                                  }}
+                                  title={qVal === 0 ? "Raté" : qVal === 1 ? "Fragile" : "Réussi"}
+                                >
+                                  {qVal === 0
+                                    ? "❌"
+                                    : qVal === 1
+                                      ? "😐"
+                                      : "✅"}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </button>
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
           </div>
@@ -731,24 +826,135 @@ const recapStatLabelStyle = {
   marginTop: "3px"
 };
 
-const zoneHistoryStyle = {
+const recapMapPanelStyle = {
+  background: "#111",
+  borderRadius: "14px",
+  overflow: "hidden",
+  border: "1px solid #262626",
+  minHeight: "430px"
+};
+
+const recapTableStyle = {
+  minWidth: 0,
+  border: "1px solid #262626",
+  borderRadius: "14px",
+  overflow: "hidden",
+  background: "#111"
+};
+
+const recapTableHeaderStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(150px, 1.35fr) 94px 86px 124px",
+  gap: "10px",
+  alignItems: "center",
+  padding: "10px 14px",
+  background: "#151515",
+  borderBottom: "1px solid #262626",
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: "700",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  textAlign: "left"
+};
+
+const recapTableBodyStyle = {
   display: "flex",
   flexDirection: "column",
+  gap: "1px",
+  maxHeight: "430px",
+  overflow: "auto",
+  background: "#242424"
+};
+
+const recapSectionStyle = {
+  padding: "10px 14px 8px",
+  background: "#111",
+  color: "#8a8a8a",
+  fontSize: "11px",
+  fontWeight: "700",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  textAlign: "left"
+};
+
+const recapRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(150px, 1.35fr) 94px 86px 124px",
+  gap: "10px",
   alignItems: "center",
+  width: "100%",
+  minHeight: "58px",
+  padding: "10px 12px",
+  background: "#181818",
+  border: "0",
+  borderRadius: 0,
+  color: "#e5e5e5",
+  cursor: "pointer",
+  font: "inherit",
+  textAlign: "left",
+  boxSizing: "border-box",
+  transition: "background 0.14s ease, box-shadow 0.14s ease"
+};
+
+const recapRowFocusedStyle = {
+  background: "#202018",
+  boxShadow: "inset 0 0 0 1px rgba(243, 156, 18, 0.65)"
+};
+
+const recapAnswerCellStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontWeight: "650",
+  color: "#f3f3f3"
+};
+
+const recapMetricCellStyle = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
   justifyContent: "center",
-  flex: "0 0 96px",
-  minWidth: "96px",
-  textAlign: "center",
+  minWidth: 0,
   color: "#777",
   fontSize: "12px",
   lineHeight: "16px"
 };
 
-const zoneHistoryRateStyle = {
+const recapIntervalCellStyle = {
   color: "#e5e5e5",
   fontSize: "18px",
   fontWeight: "700",
-  lineHeight: "22px"
+  whiteSpace: "nowrap"
+};
+
+const recapIntervalUnitStyle = {
+  color: "#777",
+  fontSize: "12px",
+  fontWeight: "600"
+};
+
+const recapQualityCellStyle = {
+  display: "flex",
+  gap: "6px",
+  justifyContent: "flex-start"
+};
+
+const recapQualityButtonStyle = {
+  width: "34px",
+  height: "34px",
+  padding: 0,
+  borderRadius: "9px",
+  fontWeight: "600",
+  lineHeight: "34px"
+};
+
+const zoneHistoryRateStyle = {
+  color: "#e5e5e5",
+  fontSize: "17px",
+  fontWeight: "700",
+  lineHeight: "20px"
 };
 
 const zoneHistoryMetaStyle = {

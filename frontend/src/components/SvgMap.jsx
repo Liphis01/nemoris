@@ -10,6 +10,7 @@ export default function SvgMap({
     missed = [],
     dueItems = [],
     selected,
+    focusCode,
     onSelect,
     onCodesLoaded
 }) {
@@ -20,7 +21,12 @@ export default function SvgMap({
     const [isDragging, setIsDragging] = useState(false);
     const [start, setStart] = useState({ x: 0, y: 0 });
     const zoneElementsRef = useRef([]);
+    const transformRef = useRef({ scale: 1, offset: { x: 0, y: 0 } });
     const [svgVersion, setSvgVersion] = useState(0);
+
+    useEffect(() => {
+        transformRef.current = { scale, offset };
+    }, [scale, offset]);
 
     function handleMouseDown(e) {
         if (e.button !== 2) return; // clic droit uniquement
@@ -134,6 +140,41 @@ export default function SvgMap({
             cleanupFns.forEach(fn => fn());
         };
     }, [svgVersion, found, missed, selected, dueItems, onSelect]);
+
+    useEffect(() => {
+        if (!focusCode || !wrapperRef.current) return;
+
+        const target = zoneElementsRef.current.find(({ code }) => code === focusCode);
+        if (!target?.el) return;
+
+        const wrapperRect = wrapperRef.current.getBoundingClientRect();
+        if (!wrapperRect.width || !wrapperRect.height) return;
+
+        const renderedBox = target.el.getBoundingClientRect();
+        if (!renderedBox.width || !renderedBox.height) return;
+
+        const currentScale = transformRef.current.scale || 1;
+        const currentOffset = transformRef.current.offset || { x: 0, y: 0 };
+        const box = {
+            x: (renderedBox.left - wrapperRect.left - currentOffset.x) / currentScale,
+            y: (renderedBox.top - wrapperRect.top - currentOffset.y) / currentScale,
+            width: renderedBox.width / currentScale,
+            height: renderedBox.height / currentScale
+        };
+
+        const padding = 0.48;
+        const fitScale = Math.min(
+            wrapperRect.width / box.width,
+            wrapperRect.height / box.height
+        ) * padding;
+        const newScale = Math.min(Math.max(fitScale, 1), 8);
+
+        setScale(newScale);
+        setOffset({
+            x: (wrapperRect.width / 2) - (box.x + box.width / 2) * newScale,
+            y: (wrapperRect.height / 2) - (box.y + box.height / 2) * newScale
+        });
+    }, [focusCode, svgVersion]);
 
     useEffect(() => {
         const el = wrapperRef.current;

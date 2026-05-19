@@ -134,3 +134,40 @@ html, body {
   padding: 0;
   background-color: #121212;
 }
+
+.map-recap-content {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.9fr) minmax(430px, 1.1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.map-recap-row:hover {
+  background: #202020 !important;
+}
+
+@media (max-width: 920px) {
+  .map-recap-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-recap-table-header,
+  .map-recap-row {
+    grid-template-columns: minmax(130px, 1fr) 80px 70px 112px !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .map-recap-table-header {
+    display: none !important;
+  }
+
+  .map-recap-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .map-recap-row > :nth-child(2),
+  .map-recap-row > :nth-child(3) {
+    display: none !important;
+  }
+}
