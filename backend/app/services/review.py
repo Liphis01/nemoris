@@ -5,9 +5,9 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Collection, Progress, Question
 from ..serializers import (
-    serialize_grouped_map_review,
-    serialize_map_item,
-    serialize_review_question
+    serialize_map_review_group,
+    serialize_map_review_zone,
+    serialize_review_question_item
 )
 
 
@@ -49,11 +49,11 @@ def get_review_items(db, tags=None, limit=200, collection_id=None):
             group_id = question.group.id
 
             if group_id not in grouped_items:
-                grouped_items[group_id] = serialize_grouped_map_review(question.group)
+                grouped_items[group_id] = serialize_map_review_group(question.group)
 
-            grouped_items[group_id]["items"].append(serialize_map_item(question))
+            grouped_items[group_id]["items"].append(serialize_map_review_zone(question))
             continue
 
-        review_items.append(serialize_review_question(question))
+        review_items.append(serialize_review_question_item(question))
 
     return (review_items + list(grouped_items.values()))[:limit]

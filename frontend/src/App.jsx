@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Menu from "./features/menu/Menu";
-import Quiz from "./features/review/components/Quiz";
+import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
 import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
@@ -35,9 +35,9 @@ function App() {
   function openQuestionInManage(question) {
     manageLibrary.resetManageFilters();
     manageLibrary.setViewMode("questions");
-    manageLibrary.setIsCreating(false);
+    manageLibrary.setIsCreatingQuestion(false);
     manageLibrary.setIsCreatingGroup(false);
-    manageLibrary.setSelectedQuestion(question);
+    manageLibrary.setSelectedItem(question);
     setManageOpenQuestionId(question.id);
     setMode("manage");
   }
@@ -54,7 +54,7 @@ function App() {
       )}
 
       {mode === "quiz" && (
-        <Quiz
+        <ReviewSession
           setMode={setMode}
           {...reviewSession}
         />

@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import joinedload
 
 from ..models import Collection, Progress, Question, QuestionGroup
-from ..serializers import serialize_question_for_manage
+from ..serializers import serialize_manage_question
 from .progress import create_initial_progress
 
 
@@ -35,7 +35,7 @@ def validate_group_compatibility(db, type_q: str, group_id: int | None):
     return group
 
 
-def load_collections(db, collection_ids):
+def get_collections_by_ids(db, collection_ids):
     if not collection_ids:
         return []
 
@@ -46,7 +46,7 @@ def load_collections(db, collection_ids):
     )
 
 
-def create_question_record(db, payload):
+def create_question(db, payload):
     validate_group_compatibility(db, payload.type_q, payload.group_id)
 
     question = Question(
@@ -64,17 +64,17 @@ def create_question_record(db, payload):
     db.add(create_initial_progress(question.id))
 
     if payload.collection_ids:
-        question.collections = load_collections(db, payload.collection_ids)
+        question.collections = get_collections_by_ids(db, payload.collection_ids)
 
     return question
 
 
-def create_questions_bulk_records(db, questions):
+def create_questions_bulk(db, questions):
     created = []
 
     try:
         for payload in questions:
-            created.append(create_question_record(db, payload))
+            created.append(create_question(db, payload))
 
         db.commit()
     except Exception:
@@ -84,7 +84,7 @@ def create_questions_bulk_records(db, questions):
     return created
 
 
-def get_manage_questions(db):
+def list_questions_for_manage(db):
     questions = (
         db.query(Question)
         .options(
@@ -95,7 +95,7 @@ def get_manage_questions(db):
         .all()
     )
 
-    return [serialize_question_for_manage(question) for question in questions]
+    return [serialize_manage_question(question) for question in questions]
 
 
 def get_question_for_update(db, question_id: int):
@@ -115,7 +115,7 @@ def get_question_for_update(db, question_id: int):
     return question
 
 
-def update_question_record(db, question_id: int, payload):
+def update_question(db, question_id: int, payload):
     question = get_question_for_update(db, question_id)
     updates = payload.model_dump(exclude_unset=True)
 
@@ -128,7 +128,7 @@ def update_question_record(db, question_id: int, payload):
             setattr(question, field, updates[field])
 
     if "collection_ids" in updates:
-        question.collections = load_collections(db, updates["collection_ids"])
+        question.collections = get_collections_by_ids(db, updates["collection_ids"])
 
     db.commit()
     db.refresh(question)
@@ -146,11 +146,11 @@ def set_question_collections(db, question_id: int, collection_ids):
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    question.collections = load_collections(db, collection_ids)
+    question.collections = get_collections_by_ids(db, collection_ids)
     db.commit()
 
 
-def delete_question_record(db, question_id: int):
+def delete_question(db, question_id: int):
     question = (
         db.query(Question)
         .options(joinedload(Question.group))

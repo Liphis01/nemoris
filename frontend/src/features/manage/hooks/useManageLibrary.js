@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createQuestion as createQuestionRequest,
   deleteQuestion as deleteQuestionRequest,
-  deleteQuestionImage,
   listQuestions,
+  removeQuestionMedia as removeQuestionMediaRequest,
   updateQuestion as updateQuestionRequest,
   uploadMedia
 } from "../../../api/questions";
@@ -35,16 +35,16 @@ export function useManageLibrary(mode) {
   const [allQuestions, setAllQuestions] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
   const [search, setSearch] = useState("");
-  const [filterTheme, setFilterTheme] = useState("");
-  const [filterDue, setFilterDue] = useState(false);
+  const [tagFilter, setTagFilter] = useState("");
+  const [dueOnly, setDueOnly] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc");
-  const [selectedQuestion, setSelectedQuestion] = useState(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [viewMode, setViewMode] = useState("questions");
-  const [newRow, setNewRow] = useState(initialQuestionDraft);
-  const [newGroup, setNewGroup] = useState(initialGroupDraft);
+  const [questionDraft, setQuestionDraft] = useState(initialQuestionDraft);
+  const [groupDraft, setGroupDraft] = useState(initialGroupDraft);
   const questionInputRef = useRef(null);
 
   const loadAllQuestions = useCallback(async () => {
@@ -79,23 +79,23 @@ export function useManageLibrary(mode) {
   }, [loadAllGroups, loadAllQuestions, mode]);
 
   function resetQuestionDraft() {
-    setNewRow(initialQuestionDraft);
+    setQuestionDraft(initialQuestionDraft);
   }
 
   function resetGroupDraft() {
-    setNewGroup(initialGroupDraft);
+    setGroupDraft(initialGroupDraft);
   }
 
   function resetManageFilters() {
     setSearch("");
-    setFilterTheme("");
-    setFilterDue(false);
+    setTagFilter("");
+    setDueOnly(false);
   }
 
   async function updateQuestion(id, updatedFields) {
     await updateQuestionRequest(id, updatedFields);
 
-    updateQuestionInState({
+    patchQuestionInCache({
       id,
       ...updatedFields
     });
@@ -134,12 +134,12 @@ export function useManageLibrary(mode) {
   }
 
   async function createQuestion() {
-    if (!newRow.question) {
+    if (!questionDraft.question) {
       alert("Champs manquants");
       return;
     }
 
-    const created = await createQuestionRequest(newRow);
+    const created = await createQuestionRequest(questionDraft);
 
     setAllQuestions(prev => [...prev, created]);
     resetQuestionDraft();
@@ -153,21 +153,21 @@ export function useManageLibrary(mode) {
 
   function startCreateGroup() {
     setIsCreatingGroup(true);
-    setIsCreating(false);
-    setSelectedQuestion(null);
+    setIsCreatingQuestion(false);
+    setSelectedItem(null);
   }
 
   async function createGroup() {
-    if (!newGroup.name) {
+    if (!groupDraft.name) {
       alert("Le nom du groupe est requis.");
       return;
     }
 
     const createdGroup = await createGroupRequest({
-      type_group: newGroup.type_group,
-      name: newGroup.name,
-      media: newGroup.media || null,
-      data: newGroup.data
+      type_group: groupDraft.type_group,
+      name: groupDraft.name,
+      media: groupDraft.media || null,
+      data: groupDraft.data
     });
 
     setAllGroups(prev => [...prev, createdGroup]);
@@ -177,14 +177,14 @@ export function useManageLibrary(mode) {
     return createdGroup;
   }
 
-  async function handleUpload(event, question) {
+  async function uploadQuestionMedia(event, question) {
     const file = event.target.files[0];
     if (!file) return;
 
     const data = await uploadMedia(file);
 
     if (question.id === "new") {
-      setNewRow(prev => ({ ...prev, media: data.url }));
+      setQuestionDraft(prev => ({ ...prev, media: data.url }));
       return;
     }
 
@@ -197,7 +197,7 @@ export function useManageLibrary(mode) {
       media: data.url
     };
 
-    updateQuestionInState(updatedQuestion);
+    patchQuestionInCache(updatedQuestion);
     return updatedQuestion;
   }
 
@@ -210,7 +210,7 @@ export function useManageLibrary(mode) {
     }
   }
 
-  function updateQuestionInState(updated) {
+  function patchQuestionInCache(updated) {
     setAllQuestions(prev =>
       prev.map(question =>
         question.id === updated.id
@@ -220,8 +220,8 @@ export function useManageLibrary(mode) {
     );
   }
 
-  async function deleteImage(id) {
-    await deleteQuestionImage(id);
+  async function removeQuestionMedia(id) {
+    await removeQuestionMediaRequest(id);
 
     setAllQuestions(prev =>
       prev.map(question =>
@@ -237,15 +237,15 @@ export function useManageLibrary(mode) {
       filterAndSortQuestions({
         questions: allQuestions,
         search,
-        filterTheme,
-        filterDue,
+        tagFilter,
+        dueOnly,
         sortField,
         sortOrder
       }),
     [
       allQuestions,
-      filterDue,
-      filterTheme,
+      dueOnly,
+      tagFilter,
       search,
       sortField,
       sortOrder
@@ -258,42 +258,42 @@ export function useManageLibrary(mode) {
     createGroup,
     createQuestion,
     deleteGroup,
-    deleteImage,
+    removeQuestionMedia,
     deleteQuestion,
-    filterDue,
+    dueOnly,
     filteredQuestions,
-    filterTheme,
+    tagFilter,
     handleSort,
-    handleUpload,
-    isCreating,
+    uploadQuestionMedia,
+    isCreatingQuestion,
     isCreatingGroup,
     loadAllGroups,
     loadAllQuestions,
-    newGroup,
-    newRow,
+    groupDraft,
+    questionDraft,
     questionInputRef,
     reloadAllData,
     resetGroupDraft,
     resetManageFilters,
     resetQuestionDraft,
     search,
-    selectedQuestion,
+    selectedItem,
     setAllGroups,
     setAllQuestions,
-    setFilterDue,
-    setFilterTheme,
-    setIsCreating,
+    setDueOnly,
+    setTagFilter,
+    setIsCreatingQuestion,
     setIsCreatingGroup,
-    setNewGroup,
-    setNewRow,
+    setGroupDraft,
+    setQuestionDraft,
     setSearch,
-    setSelectedQuestion,
+    setSelectedItem,
     setViewMode,
     sortField,
     sortOrder,
     startCreateGroup,
     updateQuestion,
-    updateQuestionInState,
+    patchQuestionInCache,
     viewMode
   };
 }

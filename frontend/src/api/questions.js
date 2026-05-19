@@ -46,7 +46,7 @@ export function setQuestionCollections(id, collectionIds) {
 }
 
 
-export function deleteQuestionImage(id) {
+export function removeQuestionMedia(id) {
   return requestJson(`/questions/${id}/image`, {
     method: "DELETE"
   });

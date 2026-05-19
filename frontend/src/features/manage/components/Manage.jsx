@@ -1,17 +1,17 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
-import ManagePreview from "./ManagePreview";
+import ManageInspector from "./ManageInspector";
 import { useEffect, useState } from "react";
 
 export default function Manage(props) {
-  const [editing, setEditing] = useState(null);
+  const [editingZone, setEditingZone] = useState(null);
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
   const {
     allQuestions,
     clearOpenQuestionId,
     openQuestionId,
-    setSelectedQuestion,
+    setSelectedItem,
     setViewMode
   } = props;
 
@@ -38,19 +38,19 @@ export default function Manage(props) {
     if (!question) return;
 
     setViewMode?.("questions");
-    setSelectedQuestion?.(question);
-    setEditing(question.type_q === "map" ? question : null);
+    setSelectedItem?.(question);
+    setEditingZone(question.type_q === "map" ? question : null);
     setHighlightedQuestionIds([question.id]);
     clearOpenQuestionId?.();
-  }, [allQuestions, clearOpenQuestionId, openQuestionId, setSelectedQuestion, setViewMode]);
+  }, [allQuestions, clearOpenQuestionId, openQuestionId, setSelectedItem, setViewMode]);
 
   async function createQuestionWithHighlight() {
     const created = await props.createQuestion?.();
 
     if (created?.id) {
       props.setViewMode?.("questions");
-      props.setSelectedQuestion?.(created);
-      setEditing(created);
+      props.setSelectedItem?.(created);
+      setEditingZone(created.type_q === "map" ? created : null);
       setHighlightedQuestionIds([created.id]);
     }
 
@@ -62,8 +62,8 @@ export default function Manage(props) {
 
     if (created?.id) {
       props.setViewMode?.("groups");
-      props.setSelectedQuestion?.(created);
-      setEditing(null);
+      props.setSelectedItem?.(created);
+      setEditingZone(null);
       setHighlightedGroupIds([created.id]);
     }
 
@@ -85,16 +85,16 @@ export default function Manage(props) {
 
       <ManageList
         {...props}
-        editing={editing}
-        setEditing={setEditing}
+        editingZone={editingZone}
+        setEditingZone={setEditingZone}
         highlightedQuestionIds={highlightedQuestionIds}
         highlightedGroupIds={highlightedGroupIds}
       />
 
-      <ManagePreview
+      <ManageInspector
         {...props}
-        editing={editing}
-        setEditing={setEditing}
+        editingZone={editingZone}
+        setEditingZone={setEditingZone}
         createQuestion={createQuestionWithHighlight}
         createGroup={createGroupWithHighlight}
         setHighlightedQuestionIds={setHighlightedQuestionIds}

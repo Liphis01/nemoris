@@ -135,28 +135,28 @@ function ReviewCalendarAction({ compact = false, nextReview, onOpen }) {
   );
 }
 
-export default function ManagePreview({
+export default function ManageInspector({
   allGroups,
   setAllGroups,
   setAllQuestions,
-  selectedQuestion,
+  selectedItem,
   updateQuestion,
-  updateQuestionInState,
-  setSelectedQuestion,
-  setEditing,
+  patchQuestionInCache,
+  setSelectedItem,
+  setEditingZone,
   deleteQuestion,
-  handleUpload,
-  isCreating,
-  setIsCreating,
+  uploadQuestionMedia,
+  isCreatingQuestion,
+  setIsCreatingQuestion,
   isCreatingGroup,
   setIsCreatingGroup,
-  newRow,
-  setNewRow,
-  newGroup,
-  setNewGroup,
+  questionDraft,
+  setQuestionDraft,
+  groupDraft,
+  setGroupDraft,
   createQuestion,
   createGroup,
-  editing,
+  editingZone,
   setViewMode,
   setHighlightedQuestionIds,
   onOpenInCalendar
@@ -166,7 +166,7 @@ export default function ManagePreview({
   const [saveStatus, setSaveStatus] = useState(null);
 
   useEffect(() => {
-    if (!selectedQuestion) {
+    if (!selectedItem) {
       setDraft(null);
       setTagInput("");
       setSaveStatus(null);
@@ -174,15 +174,15 @@ export default function ManagePreview({
     }
     
     setDraft({
-      question: selectedQuestion.question || "",
-      answer: selectedQuestion.answer || "",
-      media: selectedQuestion.media || "",
-      type_q: selectedQuestion.type_q || "text",
-      tags: selectedQuestion.tags || []
+      question: selectedItem.question || "",
+      answer: selectedItem.answer || "",
+      media: selectedItem.media || "",
+      type_q: selectedItem.type_q || "text",
+      tags: selectedItem.tags || []
     });
     setTagInput("");
     setSaveStatus(null);
-  }, [selectedQuestion]);
+  }, [selectedItem]);
 
   if (isCreatingGroup) {
     return (
@@ -194,16 +194,16 @@ export default function ManagePreview({
         <label style={labelStyle}>Nom du groupe</label>
         <input
           style={inputStyle}
-          value={newGroup.name}
-          onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
+          value={groupDraft.name}
+          onChange={(e) => setGroupDraft({ ...groupDraft, name: e.target.value })}
           placeholder="Ex : Carte Europe"
         />
 
         <label style={labelStyle}>Type de groupe</label>
         <select
           style={inputStyle}
-          value={newGroup.type_group}
-          onChange={(e) => setNewGroup({ ...newGroup, type_group: e.target.value })}
+          value={groupDraft.type_group}
+          onChange={(e) => setGroupDraft({ ...groupDraft, type_group: e.target.value })}
         >
           <option value="map">map</option>
         </select>
@@ -211,8 +211,8 @@ export default function ManagePreview({
         <label style={labelStyle}>Media / URL (optionnel)</label>
         <input
           style={inputStyle}
-          value={newGroup.media}
-          onChange={(e) => setNewGroup({ ...newGroup, media: e.target.value })}
+          value={groupDraft.media}
+          onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
         />
 
         <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
@@ -223,7 +223,7 @@ export default function ManagePreview({
             type="button"
             onClick={() => {
               setIsCreatingGroup(false);
-              setNewGroup({ name: "", type_group: "map", media: "", data: {} });
+              setGroupDraft({ name: "", type_group: "map", media: "", data: {} });
             }}
             style={{ ...buttonStyle, background: "#641c1c" }}
           >
@@ -234,7 +234,7 @@ export default function ManagePreview({
     );
   }
 
-  if (isCreating) {
+  if (isCreatingQuestion) {
     return (
       <div style={panelStyle}>
         <div style={{ marginBottom: "22px", color: "#888" }}>
@@ -244,23 +244,23 @@ export default function ManagePreview({
         <label style={labelStyle}>Question</label>
         <input
           style={inputStyle}
-          value={newRow.question}
-          onChange={(e) => setNewRow({ ...newRow, question: e.target.value })}
+          value={questionDraft.question}
+          onChange={(e) => setQuestionDraft({ ...questionDraft, question: e.target.value })}
         />
 
         <label style={labelStyle}>Réponse</label>
         <textarea
           rows={5}
           style={{ ...inputStyle, resize: "vertical", minHeight: "140px" }}
-          value={newRow.answer}
-          onChange={(e) => setNewRow({ ...newRow, answer: e.target.value })}
+          value={questionDraft.answer}
+          onChange={(e) => setQuestionDraft({ ...questionDraft, answer: e.target.value })}
         />
 
         <label style={labelStyle}>Type de question</label>
         <select
           style={inputStyle}
-          value={newRow.type_q}
-          onChange={(e) => setNewRow({ ...newRow, type_q: e.target.value })}
+          value={questionDraft.type_q}
+          onChange={(e) => setQuestionDraft({ ...questionDraft, type_q: e.target.value })}
         >
           <option value="text">text</option>
           <option value="map">map</option>
@@ -269,24 +269,24 @@ export default function ManagePreview({
         <label style={labelStyle}>Media / URL</label>
         <input
           style={inputStyle}
-          value={newRow.media || ""}
+          value={questionDraft.media || ""}
           placeholder="http://..."
-          onChange={(e) => setNewRow({ ...newRow, media: e.target.value })}
+          onChange={(e) => setQuestionDraft({ ...questionDraft, media: e.target.value })}
         />
 
         <div style={{ marginBottom: "18px" }}>
           <label style={labelStyle}>Importer une image</label>
-          <input type="file" accept="image/*" onChange={(e) => handleUpload(e, { id: "new" })} style={{ color: "#eee" }} />
+          <input type="file" accept="image/*" onChange={(e) => uploadQuestionMedia(e, { id: "new" })} style={{ color: "#eee" }} />
         </div>
 
         <label style={labelStyle}>Tags</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-          {newRow.tags.map((tag) => (
+          {questionDraft.tags.map((tag) => (
             <div key={tag} style={tagStyle}>
               {tag}
               <button
                 type="button"
-                onClick={() => setNewRow({ ...newRow, tags: newRow.tags.filter((t) => t !== tag) })}
+                onClick={() => setQuestionDraft({ ...questionDraft, tags: questionDraft.tags.filter((t) => t !== tag) })}
                 style={{
                   border: "none",
                   background: "transparent",
@@ -305,20 +305,20 @@ export default function ManagePreview({
           <input
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), setNewRow({ ...newRow, tags: [...newRow.tags, tagInput.trim()] }), setTagInput(""))}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), setQuestionDraft({ ...questionDraft, tags: [...questionDraft.tags, tagInput.trim()] }), setTagInput(""))}
             placeholder="Ajouter un tag"
             style={inputStyle}
           />
-          <button type="button" onClick={() => { setNewRow({ ...newRow, tags: [...newRow.tags, tagInput.trim()] }); setTagInput(""); }} style={buttonStyle}>
+          <button type="button" onClick={() => { setQuestionDraft({ ...questionDraft, tags: [...questionDraft.tags, tagInput.trim()] }); setTagInput(""); }} style={buttonStyle}>
             Ajouter
           </button>
         </div>
 
-        {newRow.media && (
+        {questionDraft.media && (
           <div style={{ marginBottom: "24px" }}>
             <div style={{ marginBottom: "10px", color: "#bbb" }}>Aperçu media</div>
             <img
-              src={newRow.media}
+              src={questionDraft.media}
               alt="preview"
               style={{ width: "100%", borderRadius: "12px", border: "1px solid #222" }}
             />
@@ -326,10 +326,10 @@ export default function ManagePreview({
         )}
 
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
-          <button type="button" onClick={async () => { await createQuestion(); setIsCreating(false); }} style={buttonStyle}>
+          <button type="button" onClick={async () => { await createQuestion(); setIsCreatingQuestion(false); }} style={buttonStyle}>
             Créer
           </button>
-          <button type="button" onClick={() => { setIsCreating(false); setNewRow({ question: "", answer: "", tags: [], type_q: "text", media: null }); }} style={{ ...buttonStyle, background: "#641c1c" }}>
+          <button type="button" onClick={() => { setIsCreatingQuestion(false); setQuestionDraft({ question: "", answer: "", tags: [], type_q: "text", media: null }); }} style={{ ...buttonStyle, background: "#641c1c" }}>
             Annuler
           </button>
         </div>
@@ -337,7 +337,7 @@ export default function ManagePreview({
     );
   }
 
-  if (!selectedQuestion) {
+  if (!selectedItem) {
     return (
       <div
         style={{
@@ -353,19 +353,19 @@ export default function ManagePreview({
     );
   }
 
-  const isMapQuestion = selectedQuestion.type_q === "map";
-  const isMapGroup = selectedQuestion.type_group === "map";
-  const selectedNextReview = hasStartedProgress(selectedQuestion)
-    ? selectedQuestion.progress?.next_review || selectedQuestion.next_review
+  const selectedIsMapZone = selectedItem.type_q === "map";
+  const isMapGroup = selectedItem.type_group === "map";
+  const selectedNextReview = hasStartedProgress(selectedItem)
+    ? selectedItem.progress?.next_review || selectedItem.next_review
     : null;
 
   function openSelectedInCalendar() {
     if (!selectedNextReview) return;
-    onOpenInCalendar?.(selectedQuestion);
+    onOpenInCalendar?.(selectedItem);
   }
 
-  if (isMapQuestion || isMapGroup) {
-    const groupe = isMapQuestion ? selectedQuestion.group : selectedQuestion;
+  if (selectedIsMapZone || isMapGroup) {
+    const groupe = selectedIsMapZone ? selectedItem.group : selectedItem;
     const group = allGroups.find((g) => g.id === groupe.id);
 
     if (!group) {
@@ -450,15 +450,15 @@ export default function ManagePreview({
 
               if (savedZone) {
                 setViewMode?.("questions");
-                setSelectedQuestion(savedZone);
-                setEditing?.(savedZone);
+                setSelectedItem(savedZone);
+                setEditingZone?.(savedZone);
               }
             }
           }}
           onClose={() => { }}
-          selectedZone={editing}
+          selectedZone={editingZone}
           headerAction={
-            isMapQuestion ? (
+            selectedIsMapZone ? (
               <ReviewCalendarAction
                 compact
                 nextReview={selectedNextReview}
@@ -500,42 +500,42 @@ export default function ManagePreview({
 
     setSaveStatus("Enregistrement...");
 
-    await updateQuestion(selectedQuestion.id, payload);
+    await updateQuestion(selectedItem.id, payload);
 
     const updatedQuestion = {
-      ...selectedQuestion,
+      ...selectedItem,
       ...payload
     };
 
-    updateQuestionInState(updatedQuestion);
-    setSelectedQuestion(updatedQuestion);
+    patchQuestionInCache(updatedQuestion);
+    setSelectedItem(updatedQuestion);
     setSaveStatus("Enregistré ✔");
   }
 
   async function handleUploadFile(e) {
-    if (!handleUpload) return;
-    const updatedQuestion = await handleUpload(e, selectedQuestion);
+    if (!uploadQuestionMedia) return;
+    const updatedQuestion = await uploadQuestionMedia(e, selectedItem);
     if (updatedQuestion) {
-      setSelectedQuestion(updatedQuestion);
+      setSelectedItem(updatedQuestion);
       setDraft((prev) => ({ ...prev, media: updatedQuestion.media, type_q: updatedQuestion.type_q }));
     }
   }
 
   async function handleDelete() {
     if (!window.confirm("Supprimer cette question de la base ?")) return;
-    await deleteQuestion(selectedQuestion.id);
-    setSelectedQuestion(null);
+    await deleteQuestion(selectedItem.id);
+    setSelectedItem(null);
   }
 
   return (
     <div style={panelStyle}>
       <div style={{ marginBottom: "22px", color: "#888" }}>
-        Question #{selectedQuestion.id}
+        Question #{selectedItem.id}
       </div>
 
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", marginBottom: "18px" }}>
         <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-          {selectedQuestion.type_q || "text"}
+          {selectedItem.type_q || "text"}
         </div>
 
         <ReviewCalendarAction

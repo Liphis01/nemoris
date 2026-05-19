@@ -56,11 +56,11 @@ function getDifficultyScore(item, historyStats) {
 }
 
 
-export function useMapReview(items, onComplete) {
+export function useMapReview(reviewZones, onComplete) {
   const [input, setInput] = useState("");
-  const [found, setFound] = useState([]);
+  const [foundQuestionIds, setFoundQuestionIds] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
-  const [itemQuality, setItemQuality] = useState({});
+  const [qualityByQuestionId, setQualityByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
@@ -78,10 +78,10 @@ export function useMapReview(items, onComplete) {
     return () => window.clearTimeout(timeout);
   }, [incorrectFlashId, correctFlashId]);
 
-  const answerLookup = useMemo(() => {
+  const zoneByAnswer = useMemo(() => {
     const lookup = new Map();
 
-    items.forEach(item => {
+    reviewZones.forEach(item => {
       const aliases = item.aliases || item.data?.aliases || [];
       const values = [item.label, ...aliases];
 
@@ -95,58 +95,58 @@ export function useMapReview(items, onComplete) {
     });
 
     return lookup;
-  }, [items]);
+  }, [reviewZones]);
 
-  const itemByCode = useMemo(() => {
+  const zoneByCode = useMemo(() => {
     const lookup = new Map();
 
-    items.forEach(item => {
+    reviewZones.forEach(item => {
       if (item.code) {
         lookup.set(item.code, item);
       }
     });
 
     return lookup;
-  }, [items]);
+  }, [reviewZones]);
 
-  const foundSet = useMemo(
-    () => new Set(found),
-    [found]
+  const foundQuestionIdSet = useMemo(
+    () => new Set(foundQuestionIds),
+    [foundQuestionIds]
   );
 
   const foundCodes = useMemo(
     () =>
-      items
-        .filter(item => foundSet.has(item.question_id))
+      reviewZones
+        .filter(item => foundQuestionIdSet.has(item.question_id))
         .map(item => item.code),
-    [foundSet, items]
+    [foundQuestionIdSet, reviewZones]
   );
 
   const missedCodes = useMemo(
     () =>
-      items
-        .filter(item => !foundSet.has(item.question_id))
+      reviewZones
+        .filter(item => !foundQuestionIdSet.has(item.question_id))
         .map(item => item.code),
-    [foundSet, items]
+    [foundQuestionIdSet, reviewZones]
   );
 
   const dueCodes = useMemo(
-    () => items.map(item => item.code),
-    [items]
+    () => reviewZones.map(item => item.code),
+    [reviewZones]
   );
 
   function markFound(item) {
-    if (!item || foundSet.has(item.question_id)) return;
+    if (!item || foundQuestionIdSet.has(item.question_id)) return;
 
-    setFound(prev => [...prev, item.question_id]);
+    setFoundQuestionIds(prev => [...prev, item.question_id]);
     setCorrectFlashId(Date.now());
     setIncorrectFlashId(0);
   }
 
   function handleSubmit() {
-    const match = answerLookup.get(normalize(input));
+    const match = zoneByAnswer.get(normalize(input));
 
-    if (match && !foundSet.has(match.question_id)) {
+    if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match);
     } else if (input.trim()) {
       setIncorrectFlashId(Date.now());
@@ -157,60 +157,60 @@ export function useMapReview(items, onComplete) {
   }
 
   function handleZoneSelect(code) {
-    markFound(itemByCode.get(code));
+    markFound(zoneByCode.get(code));
   }
 
   function finishMap() {
     const initial = {};
 
-    items.forEach(item => {
-      initial[item.question_id] = foundSet.has(item.question_id) ? 2 : 0;
+    reviewZones.forEach(item => {
+      initial[item.question_id] = foundQuestionIdSet.has(item.question_id) ? 2 : 0;
     });
 
-    setItemQuality(initial);
+    setQualityByQuestionId(initial);
     setShowRecap(true);
   }
 
   async function sendResult() {
-    await sendMapAnswer(itemQuality);
+    await sendMapAnswer(qualityByQuestionId);
 
-    const failedQuestionIds = Object.entries(itemQuality)
+    const failedQuestionIds = Object.entries(qualityByQuestionId)
       .filter(([, quality]) => quality === 0)
       .map(([questionId]) => Number(questionId));
 
     setShowRecap(false);
-    setFound([]);
-    setItemQuality({});
+    setFoundQuestionIds([]);
+    setQualityByQuestionId({});
     setFocusedCode(null);
 
     onComplete(failedQuestionIds);
   }
 
   function setQuality(id, quality) {
-    setItemQuality(prev => ({
+    setQualityByQuestionId(prev => ({
       ...prev,
       [id]: quality
     }));
   }
 
-  const progressPercent = items.length
-    ? (found.length / items.length) * 100
+  const progressPercent = reviewZones.length
+    ? (foundQuestionIds.length / reviewZones.length) * 100
     : 0;
   const isIncorrectFlash = incorrectFlashId > 0;
   const isCorrectFlash = correctFlashId > 0;
   const feedbackTone = isIncorrectFlash ? "incorrect" : isCorrectFlash ? "correct" : null;
-  const recapSuccessCount = Object.values(itemQuality)
+  const recapSuccessCount = Object.values(qualityByQuestionId)
     .filter(quality => quality > 0)
     .length;
-  const recapMissCount = items.length - recapSuccessCount;
-  const recapSuccessRate = items.length
-    ? Math.round((recapSuccessCount / items.length) * 100)
+  const recapMissCount = reviewZones.length - recapSuccessCount;
+  const recapSuccessRate = reviewZones.length
+    ? Math.round((recapSuccessCount / reviewZones.length) * 100)
     : 0;
   const recapRows = useMemo(() => {
-    return items
+    return reviewZones
       .map(item => {
         const historyStats = getHistoryStats(item);
-        const isFound = foundSet.has(item.question_id);
+        const isFound = foundQuestionIdSet.has(item.question_id);
 
         return {
           item,
@@ -230,7 +230,7 @@ export function useMapReview(items, onComplete) {
 
         return String(a.item.label || "").localeCompare(String(b.item.label || ""));
       });
-  }, [items, foundSet]);
+  }, [reviewZones, foundQuestionIdSet]);
   const hasCorrectRecapRows = recapRows.some(row => row.isFound);
   const hasWrongRecapRows = recapRows.some(row => !row.isFound);
 
@@ -238,14 +238,14 @@ export function useMapReview(items, onComplete) {
     dueCodes,
     feedbackTone,
     focusedCode,
-    found,
+    foundQuestionIds,
     foundCodes,
-    foundSet,
+    foundQuestionIdSet,
     finishMap,
     handleSubmit,
     handleZoneSelect,
     input,
-    itemQuality,
+    qualityByQuestionId,
     missedCodes,
     progressPercent,
     recapMissCount,

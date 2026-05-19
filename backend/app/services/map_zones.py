@@ -2,11 +2,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import joinedload
 
 from ..models import Question, QuestionGroup
-from ..serializers import serialize_progress, serialize_question_for_manage
+from ..serializers import serialize_manage_question, serialize_progress
 from .progress import create_initial_progress
 
 
-def get_group(db, group_id: int):
+def get_map_group_or_404(db, group_id: int):
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)
@@ -22,7 +22,7 @@ def get_group(db, group_id: int):
     return group
 
 
-def serialize_zone(question):
+def serialize_map_zone_for_editor(question):
     return {
         "id": question.id,
         "type_q": question.type_q,
@@ -39,7 +39,7 @@ def serialize_zone(question):
     }
 
 
-def list_zones(db, group_id: int):
+def list_map_group_zones(db, group_id: int):
     group = (
         db.query(QuestionGroup)
         .options(joinedload(QuestionGroup.questions).joinedload(Question.progress))
@@ -51,14 +51,14 @@ def list_zones(db, group_id: int):
         raise HTTPException(404, "Group not found")
 
     return [
-        serialize_zone(question)
+        serialize_map_zone_for_editor(question)
         for question in group.questions
         if question.type_q == "map"
     ]
 
 
-def save_zones(db, group_id: int, payload):
-    group = get_group(db, group_id)
+def save_map_group_zones(db, group_id: int, payload):
+    group = get_map_group_or_404(db, group_id)
 
     if payload.group:
         group_updates = payload.group.model_dump(exclude_unset=True)
@@ -187,7 +187,7 @@ def save_zones(db, group_id: int, payload):
             "question_count": question_count
         },
         "zones": [
-            serialize_question_for_manage(zone)
+            serialize_manage_question(zone)
             for zone in saved_zones
         ],
         "createdQuestionIds": created_ids,

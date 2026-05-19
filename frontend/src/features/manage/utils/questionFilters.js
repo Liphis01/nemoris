@@ -13,10 +13,10 @@ function matchesSearch(question, search) {
 }
 
 
-function matchesTag(question, filterTheme) {
-  if (!filterTheme) return true;
+function matchesTag(question, tagFilter) {
+  if (!tagFilter) return true;
 
-  const normalizedFilter = filterTheme.toLowerCase();
+  const normalizedFilter = tagFilter.toLowerCase();
 
   return (question.tags || []).some(tag =>
     tag.toLowerCase().includes(normalizedFilter)
@@ -24,8 +24,8 @@ function matchesTag(question, filterTheme) {
 }
 
 
-function matchesDue(question, filterDue) {
-  if (!filterDue) return true;
+function matchesDue(question, dueOnly) {
+  if (!dueOnly) return true;
 
   const nextReview = getNextReview(question);
 
@@ -38,16 +38,16 @@ function matchesDue(question, filterDue) {
 export function filterAndSortQuestions({
   questions,
   search,
-  filterTheme,
-  filterDue,
+  tagFilter,
+  dueOnly,
   sortField,
   sortOrder
 }) {
   return questions
     .filter(question =>
       matchesSearch(question, search) &&
-      matchesTag(question, filterTheme) &&
-      matchesDue(question, filterDue)
+      matchesTag(question, tagFilter) &&
+      matchesDue(question, dueOnly)
     )
     .slice()
     .sort((a, b) => {

@@ -63,19 +63,19 @@ const qualityButtonStyles = {
   }
 };
 
-export default function MapQuestion({ group, items, onComplete }) {
+export default function MapReview({ group, reviewZones, onComplete }) {
   const {
     dueCodes,
     feedbackTone,
     focusedCode,
-    found,
+    foundQuestionIds,
     foundCodes,
-    foundSet,
+    foundQuestionIdSet,
     finishMap,
     handleSubmit,
     handleZoneSelect,
     input,
-    itemQuality,
+    qualityByQuestionId,
     missedCodes,
     progressPercent,
     recapMissCount,
@@ -88,7 +88,7 @@ export default function MapQuestion({ group, items, onComplete }) {
     setQuality,
     showRecap,
     showRecapSections
-  } = useMapReview(items, onComplete);
+  } = useMapReview(reviewZones, onComplete);
 
   return (
     <>
@@ -151,7 +151,7 @@ export default function MapQuestion({ group, items, onComplete }) {
                   color: "#fff"
                 }}
               >
-                {found.length}
+                {foundQuestionIds.length}
                 <span
                   style={{
                     color: "#666",
@@ -159,7 +159,7 @@ export default function MapQuestion({ group, items, onComplete }) {
                     marginLeft: "4px"
                   }}
                 >
-                  / {items.length}
+                  / {reviewZones.length}
                 </span>
               </div>
 
@@ -223,7 +223,7 @@ export default function MapQuestion({ group, items, onComplete }) {
                 color: "#777"
               }}
             >
-              <span>{items.length - found.length} restantes</span>
+              <span>{reviewZones.length - foundQuestionIds.length} restantes</span>
               <span>{Math.round(progressPercent)}%</span>
             </div>
           </div>
@@ -375,7 +375,7 @@ export default function MapQuestion({ group, items, onComplete }) {
               <div style={recapStatStyle}>
                 <div style={recapStatValueStyle}>
                   {recapSuccessCount}
-                  <span style={recapStatMutedStyle}> / {items.length}</span>
+                  <span style={recapStatMutedStyle}> / {reviewZones.length}</span>
                 </div>
                 <div style={recapStatLabelStyle}>trouvées</div>
               </div>
@@ -413,7 +413,7 @@ export default function MapQuestion({ group, items, onComplete }) {
                       showRecapSections &&
                       (index === 0 || recapRows[index - 1].isFound !== isFound);
                     const isFocused = focusedCode === item.code;
-                    const selectedQuality = itemQuality[item.question_id] ?? (isFound ? 2 : 0);
+                    const selectedQuality = qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
                     const projectedInterval =
                       item.projected_intervals?.[selectedQuality] ??
                       item.progress?.interval ??
@@ -479,8 +479,8 @@ export default function MapQuestion({ group, items, onComplete }) {
                             {[0, 1, 2].map(qVal => {
 
                               const selected =
-                                itemQuality[item.question_id] === qVal;
-                              const wasFound = foundSet.has(item.question_id);
+                                qualityByQuestionId[item.question_id] === qVal;
+                              const wasFound = foundQuestionIdSet.has(item.question_id);
                               const disabled =
                                 (wasFound && qVal === 0) ||
                                 (!wasFound && qVal !== 0);

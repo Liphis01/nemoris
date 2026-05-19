@@ -1,4 +1,4 @@
-import QuestionRenderer from "./QuestionRenderer";
+import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 
 const inputStyle = {
   background: "#151515",
@@ -10,7 +10,7 @@ const inputStyle = {
   outline: "none"
 };
 
-export default function Quiz({
+export default function ReviewSession({
   setMode,
   questions,
   currentIndex,
@@ -322,7 +322,7 @@ export default function Quiz({
 
             </div>
 
-            <QuestionRenderer
+            <ReviewQuestionRenderer
               q={currentQuestion}
               currentIndex={currentIndex}
               showAnswer={showAnswer}

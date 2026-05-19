@@ -11,7 +11,7 @@ const answerButtonStyle = {
     fontSize: "15px"
 };
 
-export default function TextQuestion({
+export default function TextReviewCard({
     q,
     currentIndex,
     showAnswer,

@@ -341,7 +341,7 @@ export default function ReviewCalendar({
     new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
-  const [selectedQuestionId, setSelectedQuestionId] = useState(null);
+  const [selectedCalendarQuestionId, setSelectedCalendarQuestionId] = useState(null);
   const [sortMode, setSortMode] = useState("type");
 
   const newQuestions = useMemo(
@@ -446,12 +446,12 @@ export default function ReviewCalendar({
 
     setVisibleMonth(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1));
     setSelectedDateKey(event.dateKey);
-    setSelectedQuestionId(event.question.id);
+    setSelectedCalendarQuestionId(event.question.id);
     clearOpenQuestionId?.();
   }, [clearOpenQuestionId, openQuestionId, scheduledEvents]);
 
   useLayoutEffect(() => {
-    if (!selectedQuestionId) return;
+    if (!selectedCalendarQuestionId) return;
 
     const detailList = detailListRef.current;
     const highlightedQuestion = highlightedQuestionRef.current;
@@ -470,7 +470,7 @@ export default function ReviewCalendar({
       top: Math.max(0, nextTop),
       behavior: "smooth"
     });
-  }, [selectedDateKey, selectedQuestionId]);
+  }, [selectedDateKey, selectedCalendarQuestionId]);
 
   function moveMonth(offset) {
     setVisibleMonth(
@@ -966,12 +966,12 @@ export default function ReviewCalendar({
                     <EventCard
                       key={event.id}
                       cardRef={
-                        selectedQuestionId === event.question.id
+                        selectedCalendarQuestionId === event.question.id
                           ? highlightedQuestionRef
                           : null
                       }
                       event={event}
-                      isSelected={selectedQuestionId === event.question.id}
+                      isSelected={selectedCalendarQuestionId === event.question.id}
                       onOpenQuestion={onOpenQuestion}
                       todayKey={todayKey}
                     />
@@ -986,12 +986,12 @@ export default function ReviewCalendar({
                     <EventCard
                       key={event.id}
                       cardRef={
-                        selectedQuestionId === event.question.id
+                        selectedCalendarQuestionId === event.question.id
                           ? highlightedQuestionRef
                           : null
                       }
                       event={event}
-                      isSelected={selectedQuestionId === event.question.id}
+                      isSelected={selectedCalendarQuestionId === event.question.id}
                       onOpenQuestion={onOpenQuestion}
                       todayKey={todayKey}
                     />

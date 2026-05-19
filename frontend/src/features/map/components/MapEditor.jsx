@@ -15,10 +15,10 @@ export default function MapEditor({
   headerAction
 }) {
 
-  const [editing, setEditing] = useState(null);
-  const [aliasesInput, setAliasesInput] = useState("");
+  const [editingZone, setEditingZone] = useState(null);
+  const [aliasInput, setAliasInput] = useState("");
   const labelInputRef = useRef(null);
-  const aliasesInputRef = useRef(null);
+  const aliasInputRef = useRef(null);
   const {
     clearDirty,
     dirtyZoneCodesRef,
@@ -37,7 +37,7 @@ export default function MapEditor({
   useEffect(() => {
     if (!selectedZone) return;
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
-    setEditing(normalizeZone(selectedZone, group));
+    setEditingZone(normalizeZone(selectedZone, group));
   }, [group, selectedZone, setZones]);
 
   const totalCodeCount = svgCodes.length;
@@ -49,10 +49,10 @@ export default function MapEditor({
   function handleSelect(code) {
     let nextZones = zones;
 
-    if (isBlankTemporaryZone(editing)) {
-      nextZones = zones.filter(z => z.id !== editing.id);
+    if (isBlankTemporaryZone(editingZone)) {
+      nextZones = zones.filter(z => z.id !== editingZone.id);
       setZones(nextZones);
-      clearDirty(getZoneCode(editing));
+      clearDirty(getZoneCode(editingZone));
     }
 
     let zone = nextZones.find(z => getZoneCode(z) === code);
@@ -69,17 +69,17 @@ export default function MapEditor({
       };
     }
 
-    setEditing(zone);
+    setEditingZone(zone);
   }
 
-  function updateLabel(value) {
-    const nextEditing = { ...editing, answer: value };
-    const code = getZoneCode(editing);
+  function updateZoneAnswer(value) {
+    const nextEditing = { ...editingZone, answer: value };
+    const code = getZoneCode(editingZone);
 
     setZones(prev => {
       if (isBlankTemporaryZone(nextEditing)) {
         clearDirty(code);
-        return prev.filter(z => z.id !== editing.id);
+        return prev.filter(z => z.id !== editingZone.id);
       }
 
       const zoneExists = prev.some(z => getZoneCode(z) === code);
@@ -94,16 +94,16 @@ export default function MapEditor({
         getZoneCode(z) === code ? { ...z, answer: value } : z
       );
     });
-    setEditing(nextEditing);
+    setEditingZone(nextEditing);
   }
 
   function addAlias(focusAfter = false) {
-    const value = aliasesInput.trim();
+    const value = aliasInput.trim();
     if (!value) return;
 
-    const currentAliases = editing.data?.aliases || [];
+    const currentAliases = editingZone.data?.aliases || [];
     const newAliases = [...currentAliases, value];
-    const code = getZoneCode(editing);
+    const code = getZoneCode(editingZone);
     markDirty(code);
 
     setZones(prev =>
@@ -117,22 +117,22 @@ export default function MapEditor({
       )
     );
 
-    setEditing(prev => ({
+    setEditingZone(prev => ({
       ...prev,
       data: { ...prev.data, aliases: newAliases }
     }));
 
-    setAliasesInput("");
+    setAliasInput("");
 
     if (focusAfter) {
-      aliasesInputRef.current?.focus();
+      aliasInputRef.current?.focus();
     }
   }
 
   function removeAlias(index) {
-    const currentAliases = editing.data?.aliases || [];
+    const currentAliases = editingZone.data?.aliases || [];
     const newAliases = currentAliases.filter((_, i) => i !== index);
-    const code = getZoneCode(editing);
+    const code = getZoneCode(editingZone);
     markDirty(code);
 
     setZones(prev =>
@@ -145,7 +145,7 @@ export default function MapEditor({
           : z
       )
     );
-    setEditing(prev => ({
+    setEditingZone(prev => ({
       ...prev,
       data: { ...prev.data, aliases: newAliases }
     }));
@@ -158,13 +158,13 @@ export default function MapEditor({
     }
   }
 
-  async function save() {
-    // Remove any currently editing zone that has an empty answer
-    const zonesToSave = editing && !editing.answer
-      ? zones.filter((z) => z.id !== editing.id)
+  async function saveMapEdits() {
+    // Remove the selected temporary zone when it still has no answer.
+    const zonesToSave = editingZone && !editingZone.answer
+      ? zones.filter((z) => z.id !== editingZone.id)
       : zones;
-    const savedEditingCode = editing && editing.answer
-      ? getZoneCode(editing)
+    const savedEditingCode = editingZone && editingZone.answer
+      ? getZoneCode(editingZone)
       : null;
     const dirtyCodes = dirtyZoneCodesRef.current;
     const changedZones = zonesToSave.filter(z => {
@@ -172,11 +172,11 @@ export default function MapEditor({
       return dirtyCodes.has(code) || String(z.id || "").startsWith("tmp-");
     });
 
-    if (editing && !editing.answer) {
-      clearDirty(getZoneCode(editing));
+    if (editingZone && !editingZone.answer) {
+      clearDirty(getZoneCode(editingZone));
       setZones(zonesToSave);
     }
-    setEditing(null);
+    setEditingZone(null);
 
     let saved;
 
@@ -208,13 +208,13 @@ export default function MapEditor({
   }
 
   useEffect(() => {
-    if (editing) {
-      if (document.activeElement === aliasesInputRef.current) {
+    if (editingZone) {
+      if (document.activeElement === aliasInputRef.current) {
         return;
       }
       labelInputRef.current?.focus();
     }
-  }, [editing]);
+  }, [editingZone]);
 
   return (
     <div
@@ -437,7 +437,7 @@ export default function MapEditor({
             <SvgMap
               svgPath={`/maps/${editableGroup.media}`}
               found={foundCodes}
-              selected={editing?.data?.code}
+              selected={editingZone?.data?.code}
               onSelect={handleSelect}
               onCodesLoaded={handleCodesLoaded}
             />
@@ -452,7 +452,7 @@ export default function MapEditor({
             background: "#181818"
           }}
         >
-          {editing ? (
+          {editingZone ? (
             <>
               <div
                 style={{
@@ -460,15 +460,15 @@ export default function MapEditor({
                   color: "#888"
                 }}
               >
-                Zone : {editing.data?.code}
+                Zone : {editingZone.data?.code}
               </div>
 
               <input
                 autoFocus
                 ref={labelInputRef}
-                value={editing.answer || ""}
+                value={editingZone.answer || ""}
                 onChange={(e) =>
-                  updateLabel(e.target.value)
+                  updateZoneAnswer(e.target.value)
                 }
                 placeholder="Nom"
                 style={{
@@ -492,7 +492,7 @@ export default function MapEditor({
                   marginBottom: "10px"
                 }}
               >
-                {(editing.data?.aliases || []).map((alias, index) => (
+                {(editingZone.data?.aliases || []).map((alias, index) => (
                   <div
                     key={index}
                     style={{
@@ -520,9 +520,9 @@ export default function MapEditor({
               </div>
 
               <input
-                ref={aliasesInputRef}
-                value={aliasesInput}
-                onChange={(e) => setAliasesInput(e.target.value)}
+                ref={aliasInputRef}
+                value={aliasInput}
+                onChange={(e) => setAliasInput(e.target.value)}
                 onKeyDown={handleAliasKeyDown}
                 onBlur={addAlias}
                 placeholder="Ajouter un alias"
@@ -544,7 +544,7 @@ export default function MapEditor({
           )}
           <div style={{ marginTop: "15px" }}>
             <button
-              onClick={save}
+              onClick={saveMapEdits}
               style={{
                 width: "100%",
                 padding: "12px",

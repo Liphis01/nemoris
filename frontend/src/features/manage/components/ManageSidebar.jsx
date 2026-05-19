@@ -2,12 +2,12 @@ export default function ManageSidebar({
   setMode,
   search,
   setSearch,
-  filterTheme,
-  setFilterTheme,
-  filterDue,
-  setFilterDue,
-  setIsCreating,
-  setSelectedQuestion,
+  tagFilter,
+  setTagFilter,
+  dueOnly,
+  setDueOnly,
+  setIsCreatingQuestion,
+  setSelectedItem,
   startCreateGroup,
   viewMode,
   setViewMode
@@ -153,8 +153,8 @@ export default function ManageSidebar({
         {viewMode === "questions" ? (
           <button
             onClick={() => {
-              setIsCreating(true);
-              setSelectedQuestion(null);
+              setIsCreatingQuestion(true);
+              setSelectedItem(null);
             }}
             style={{
               width: "100%",
@@ -225,8 +225,8 @@ export default function ManageSidebar({
 
             <input
               placeholder="Tags..."
-              value={filterTheme}
-              onChange={(e) => setFilterTheme(e.target.value)}
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
               style={inputStyle}
             />
 
@@ -244,8 +244,8 @@ export default function ManageSidebar({
 
               <input
                 type="checkbox"
-                checked={filterDue}
-                onChange={(e) => setFilterDue(e.target.checked)}
+                checked={dueOnly}
+                onChange={(e) => setDueOnly(e.target.checked)}
                 style={{
                   accentColor: "#b69cff"
                 }}

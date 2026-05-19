@@ -23,10 +23,10 @@ function centerListItem(list, item) {
 export default function ManageList({
   filteredQuestions,
   allGroups,
-  selectedQuestion,
-  setSelectedQuestion,
+  selectedItem,
+  setSelectedItem,
   viewMode,
-  setEditing,
+  setEditingZone,
   deleteQuestion,
   deleteGroup,
   highlightedQuestionIds = [],
@@ -70,9 +70,9 @@ export default function ManageList({
       try {
         await deleteGroup(id);
 
-        if (selectedQuestion?.id === id) {
-          setSelectedQuestion(null);
-          setEditing?.(null);
+        if (selectedItem?.id === id) {
+          setSelectedItem(null);
+          setEditingZone?.(null);
         }
       } finally {
         setRemovingId(null);
@@ -139,8 +139,8 @@ export default function ManageList({
       return;
     }
 
-    const selectedListQuestion = selectedQuestion?.type_q
-      ? filteredQuestions.find((question) => selectedQuestion.id === question.id)
+    const selectedListQuestion = selectedItem?.type_q
+      ? filteredQuestions.find((question) => selectedItem.id === question.id)
       : null;
     const highlightedQuestionSet = new Set(highlightedQuestionIds);
     const firstHighlightedQuestion = filteredQuestions.find((question) =>
@@ -185,7 +185,7 @@ export default function ManageList({
       next.add(groupId);
       return next;
     });
-  }, [filteredQuestions, highlightedQuestionIds, selectedQuestion?.id, selectedQuestion?.type_q, viewMode]);
+  }, [filteredQuestions, highlightedQuestionIds, selectedItem?.id, selectedItem?.type_q, viewMode]);
 
   useLayoutEffect(() => {
     const previous = lastGroupScrollSignalRef.current;
@@ -198,8 +198,8 @@ export default function ManageList({
       return;
     }
 
-    const selectedGroup = selectedQuestion?.type_group
-      ? allGroups.find((group) => selectedQuestion.id === group.id)
+    const selectedGroup = selectedItem?.type_group
+      ? allGroups.find((group) => selectedItem.id === group.id)
       : null;
     const selectedId = selectedGroup?.id ?? null;
     const enteredGroups = previous.viewMode !== "groups";
@@ -225,7 +225,7 @@ export default function ManageList({
       viewMode: "groups",
       rowKey: `group:${selectedGroup.id}`
     };
-  }, [allGroups, selectedQuestion?.id, selectedQuestion?.type_group, viewMode]);
+  }, [allGroups, selectedItem?.id, selectedItem?.type_group, viewMode]);
 
   useLayoutEffect(() => {
     const pendingScroll = pendingScrollRef.current;
@@ -237,7 +237,7 @@ export default function ManageList({
 
     centerListItem(list, row);
     pendingScrollRef.current = null;
-  }, [highlightedQuestionKey, renderedRowKey, selectedQuestion?.id, viewMode]);
+  }, [highlightedQuestionKey, renderedRowKey, selectedItem?.id, viewMode]);
 
   function setRowRef(rowKey) {
     return (element) => {
@@ -267,7 +267,7 @@ export default function ManageList({
   function renderQuestionCard(row) {
     const q = row.question;
     const sharedProps = {
-      selected: selectedQuestion?.id === q.id,
+      selected: selectedItem?.id === q.id,
       deleteOpen: openDeleteId === q.id,
       isRemoving: removingId === q.id,
       isHighlighted: highlightedQuestionIds.includes(q.id)
@@ -280,8 +280,8 @@ export default function ManageList({
           q={q}
           onClick={() => {
             setOpenDeleteId(null);
-            setSelectedQuestion(q);
-            setEditing(q);
+            setSelectedItem(q);
+            setEditingZone(q);
           }}
           onDeleteOpen={() => setOpenDeleteId(q.id)}
           closeDelete={() => setOpenDeleteId(null)}
@@ -296,7 +296,8 @@ export default function ManageList({
           q={q}
           onClick={() => {
             setOpenDeleteId(null);
-            setSelectedQuestion(q);
+            setSelectedItem(q);
+            setEditingZone(null);
           }}
           onDeleteOpen={() => setOpenDeleteId(q.id)}
           closeDelete={() => setOpenDeleteId(null)}
@@ -353,7 +354,7 @@ export default function ManageList({
     const { groupId, groupInfo } = row;
     const isOpen = expandedGroupIds.has(groupId);
     const selectedInside = groupInfo.questions.some(
-      (question) => selectedQuestion?.type_q && selectedQuestion.id === question.id
+      (question) => selectedItem?.type_q && selectedItem.id === question.id
     );
     const highlightedInside = groupInfo.questions.some(
       (question) => highlightedQuestionIds.includes(question.id)
@@ -593,14 +594,15 @@ export default function ManageList({
 
             <GroupCardItem
               group={group}
-              selected={selectedQuestion?.id === group.id}
+              selected={selectedItem?.id === group.id}
               deleteOpen={openDeleteId === group.id}
               isRemoving={removingId === group.id}
               isHighlighted={highlightedGroupIds.includes(group.id)}
 
               onClick={() => {
                 setOpenDeleteId(null);
-                setSelectedQuestion(group);
+                setSelectedItem(group);
+                setEditingZone?.(null);
               }}
 
               onDeleteOpen={() =>

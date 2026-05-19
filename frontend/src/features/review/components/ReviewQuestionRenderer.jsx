@@ -1,7 +1,7 @@
-import TextQuestion from "./TextQuestion";
-import MapQuestion from "./MapQuestion";
+import TextReviewCard from "./TextReviewCard";
+import MapReview from "./MapReview";
 
-export default function QuestionRenderer({
+export default function ReviewQuestionRenderer({
     q,
     currentIndex,
     showAnswer,
@@ -15,21 +15,20 @@ export default function QuestionRenderer({
         return <div>⚠️ Map vide</div>;
     }
 
-    // 🔥 MAP GROUP (nouveau système)
+    // Grouped map review built from atomic map questions.
     if (q.type_q === "map" && q.media) {
         return (
-            <MapQuestion
+            <MapReview
                 group={q}
-                items={q.items}
-                media={q.media}
+                reviewZones={q.items}
                 onComplete={handleMapComplete}
             />
         );
     }
 
-    // 🔹 QUESTION TEXTE
+    // Text review question.
     return (
-        <TextQuestion
+        <TextReviewCard
             q={q}
             currentIndex={currentIndex}
             showAnswer={showAnswer}

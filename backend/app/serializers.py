@@ -35,7 +35,7 @@ def serialize_progress(progress):
     }
 
 
-def serialize_question_for_manage(question):
+def serialize_manage_question(question):
     return {
         "id": question.id,
         "type_q": question.type_q,
@@ -64,7 +64,7 @@ def serialize_question_for_manage(question):
     }
 
 
-def serialize_review_question(question):
+def serialize_review_question_item(question):
 
     return {
         "type_q": question.type_q,
@@ -85,7 +85,7 @@ def serialize_review_question(question):
     }
 
 
-def serialize_grouped_map_review(group):
+def serialize_map_review_group(group):
 
     return {
         "group_id": group.id,
@@ -100,7 +100,7 @@ def serialize_grouped_map_review(group):
     }
 
 
-def serialize_map_item(question):
+def serialize_map_review_zone(question):
 
     return {
 
