@@ -65,7 +65,7 @@ def update_progress(progress, quality):
 
     reps += 1
 
-    interval = next_interval(stability)
+    interval = 0 if quality == 0 else next_interval(stability)
 
     next_review = today + timedelta(days=interval)
 

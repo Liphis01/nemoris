@@ -25,6 +25,7 @@ color: "#ff85c2",
 - quand on créé une question texte, il faudrait afficher la preview de la question après la création au lieu de rester sur la page de création (et quand on supprime la question il faut fermer la preview au lieu de revenir sur la création de question)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - quand j'ajoute des zones je veux les garder d'une couleur différente pour les différencier des zones déjà sauvegardées
+- dans la review, quand j'utilise le pad, je vois le chiffre dans l'input de la map après
 
 ## features
 - filtrer les groupes dans manage
