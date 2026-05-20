@@ -1,5 +1,11 @@
 export const timelinePrecisions = ["year", "month", "day"];
 
+const precisionRank = {
+  year: 0,
+  month: 1,
+  day: 2
+};
+
 export function isLeapYear(year) {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 }
@@ -255,6 +261,157 @@ export function normalizeTimeline(timeline) {
   }
 
   return result;
+}
+
+export function coerceTimelinePrecision(value, precision) {
+  return normalizeTimelineDate({
+    ...value,
+    precision
+  }, precision);
+}
+
+export function getFinestPrecision(...dates) {
+  return dates
+    .filter(Boolean)
+    .map(date => date.precision)
+    .filter(precision => precision in precisionRank)
+    .sort((a, b) => precisionRank[b] - precisionRank[a])[0] || "year";
+}
+
+function parseDateToken(value) {
+  const token = String(value || "").trim();
+  const toNumber = (raw) => Number.parseInt(raw, 10);
+  const validYear = (year) => Number.isInteger(year) && year >= 1 && year <= 9999;
+  const validMonth = (month) => Number.isInteger(month) && month >= 1 && month <= 12;
+  const validDay = (year, month, day) =>
+    Number.isInteger(day) &&
+    day >= 1 &&
+    day <= daysInMonth(year, month);
+  let match = token.match(/^(\d{1,4})$/);
+
+  if (match) {
+    const year = toNumber(match[1]);
+    if (!validYear(year)) return null;
+
+    return normalizeTimelineDate({
+      year,
+      precision: "year"
+    });
+  }
+
+  match = token.match(/^(\d{1,2})\/(\d{1,4})$/);
+
+  if (match) {
+    const month = toNumber(match[1]);
+    const year = toNumber(match[2]);
+    if (!validYear(year) || !validMonth(month)) return null;
+
+    return normalizeTimelineDate({
+      month,
+      year,
+      precision: "month"
+    });
+  }
+
+  match = token.match(/^(\d{1,2})\/(\d{1,2})\/(\d{1,4})$/);
+
+  if (match) {
+    const day = toNumber(match[1]);
+    const month = toNumber(match[2]);
+    const year = toNumber(match[3]);
+    if (!validYear(year) || !validMonth(month) || !validDay(year, month, day)) {
+      return null;
+    }
+
+    return normalizeTimelineDate({
+      day,
+      month,
+      year,
+      precision: "day"
+    });
+  }
+
+  match = token.match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
+
+  if (match) {
+    const year = toNumber(match[1]);
+    const month = toNumber(match[2]);
+    const day = toNumber(match[3]);
+    if (!validYear(year) || !validMonth(month) || !validDay(year, month, day)) {
+      return null;
+    }
+
+    return normalizeTimelineDate({
+      year,
+      month,
+      day,
+      precision: "day"
+    });
+  }
+
+  return null;
+}
+
+export function parseTimelineInput(value) {
+  const input = String(value || "").trim();
+
+  if (!input) {
+    return {
+      timeline: null,
+      error: ""
+    };
+  }
+
+  const intervalMatch = input.match(/^(.+?)\s*[-–]\s*(.+)$/);
+
+  if (intervalMatch && !input.match(/^\d{1,4}-\d{1,2}-\d{1,2}$/)) {
+    const parsedStart = parseDateToken(intervalMatch[1]);
+    const parsedEnd = parseDateToken(intervalMatch[2]);
+
+    if (!parsedStart || !parsedEnd) {
+      return {
+        timeline: null,
+        error: "Format de date invalide"
+      };
+    }
+
+    const precision = getFinestPrecision(parsedStart, parsedEnd);
+    const start = coerceTimelinePrecision(parsedStart, precision);
+    const end = coerceTimelinePrecision(parsedEnd, precision);
+
+    if (lowerOrdinal(end) < lowerOrdinal(start)) {
+      return {
+        timeline: null,
+        error: "La fin doit etre apres le debut"
+      };
+    }
+
+    return {
+      timeline: normalizeTimeline({
+        kind: "interval",
+        start,
+        end
+      }),
+      error: ""
+    };
+  }
+
+  const parsedDate = parseDateToken(input);
+
+  if (!parsedDate) {
+    return {
+      timeline: null,
+      error: "Format de date invalide"
+    };
+  }
+
+  return {
+    timeline: normalizeTimeline({
+      kind: "point",
+      start: parsedDate
+    }),
+    error: ""
+  };
 }
 
 export function buildRangeFromItems(items) {
