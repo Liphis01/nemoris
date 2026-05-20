@@ -81,7 +81,7 @@ export default function TimelineQuickDateInput({ onApply }) {
                 applyInput();
               }
             }}
-            placeholder="1914, 06/1944, 06/06/1944, 1914-1918"
+            placeholder="1914, 44 av. J.-C., 06/1944, 06/06/1944, 1914-1918"
             style={{
               ...inputStyle,
               border: error ? "1px solid #7f2d35" : inputStyle.border

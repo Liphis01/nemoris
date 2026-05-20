@@ -1,4 +1,6 @@
 export const timelinePrecisions = ["year", "month", "day"];
+export const minTimelineYear = -9999;
+export const maxTimelineYear = 9999;
 
 const precisionRank = {
   year: 0,
@@ -6,8 +8,28 @@ const precisionRank = {
   day: 2
 };
 
+export function yearToTimelineIndex(year) {
+  return year > 0 ? year : year + 1;
+}
+
+export function timelineIndexToYear(index) {
+  return index > 0 ? index : index - 1;
+}
+
+export function formatTimelineYear(year) {
+  const normalizedYear = Number(year) < 0 ? Number(year) : Math.max(1, Number(year) || 1);
+
+  if (normalizedYear < 0) {
+    return `${Math.abs(normalizedYear)} av. J.-C.`;
+  }
+
+  return String(normalizedYear);
+}
+
 export function isLeapYear(year) {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const timelineYear = yearToTimelineIndex(year);
+
+  return timelineYear % 4 === 0 && (timelineYear % 100 !== 0 || timelineYear % 400 === 0);
 }
 
 export function daysInMonth(year, month) {
@@ -27,8 +49,8 @@ export function daysInMonth(year, month) {
   ][Math.min(12, Math.max(1, month)) - 1];
 }
 
-function daysBeforeYear(year) {
-  const previousYear = year - 1;
+function daysBeforeTimelineIndex(timelineYear) {
+  const previousYear = timelineYear - 1;
 
   return (
     previousYear * 365 +
@@ -36,6 +58,10 @@ function daysBeforeYear(year) {
     Math.floor(previousYear / 100) +
     Math.floor(previousYear / 400)
   );
+}
+
+function daysBeforeYear(year) {
+  return daysBeforeTimelineIndex(yearToTimelineIndex(year));
 }
 
 function daysBeforeMonth(year, month) {
@@ -67,23 +93,26 @@ export function dateToOrdinal(year, month, day) {
   return daysBeforeYear(year) + daysBeforeMonth(year, month) + day;
 }
 
+export const minTimelineValue = dateToOrdinal(minTimelineYear, 1, 1);
+export const maxTimelineValue = dateToOrdinal(maxTimelineYear, 12, 31);
+
 export function ordinalToDate(value) {
-  const ordinal = Math.round(clampNumber(value, 1, dateToOrdinal(9999, 12, 31)));
-  let low = 1;
-  let high = 9999;
+  const ordinal = Math.round(clampNumber(value, minTimelineValue, maxTimelineValue));
+  let low = yearToTimelineIndex(minTimelineYear);
+  let high = yearToTimelineIndex(maxTimelineYear);
 
   while (low < high) {
     const mid = Math.floor((low + high + 1) / 2);
 
-    if (daysBeforeYear(mid) < ordinal) {
+    if (daysBeforeTimelineIndex(mid) < ordinal) {
       low = mid;
     } else {
       high = mid - 1;
     }
   }
 
-  const year = low;
-  let dayOfYear = ordinal - daysBeforeYear(year);
+  const year = timelineIndexToYear(low);
+  let dayOfYear = ordinal - daysBeforeTimelineIndex(low);
   let month = 1;
 
   while (dayOfYear > daysInMonth(year, month)) {
@@ -98,14 +127,26 @@ export function ordinalToDate(value) {
   };
 }
 
+function normalizeTimelineYear(value) {
+  const rawYear = Number(value);
+
+  if (!Number.isFinite(rawYear)) {
+    return new Date().getFullYear();
+  }
+
+  const rounded = Math.round(rawYear);
+  const nonZeroYear = rounded === 0 ? 1 : rounded;
+
+  return clampNumber(nonZeroYear, minTimelineYear, maxTimelineYear);
+}
+
 export function normalizeTimelineDate(value = {}, fallbackPrecision = "year") {
   const precision = timelinePrecisions.includes(value.precision)
     ? value.precision
-    : fallbackPrecision;
-  const rawYear = Number(value.year);
-  const year = Number.isFinite(rawYear)
-    ? clampNumber(Math.round(rawYear), 1, 9999)
-    : new Date().getFullYear();
+    : timelinePrecisions.includes(fallbackPrecision)
+      ? fallbackPrecision
+      : "year";
+  const year = normalizeTimelineYear(value.year);
   const rawMonth = Number(value.month);
   const month = precision === "year"
     ? null
@@ -188,19 +229,22 @@ export function ordinalToTimelineDate(value, precision) {
 
 export function dateToIsoInput(value) {
   const date = normalizeTimelineDate(value, value?.precision);
+  const yearPrefix = date.year < 0 ? "-" : "";
+  const year = `${yearPrefix}${String(Math.abs(date.year)).padStart(4, "0")}`;
   const month = String(date.month || 1).padStart(2, "0");
   const day = String(date.day || 1).padStart(2, "0");
 
-  return `${String(date.year).padStart(4, "0")}-${month}-${day}`;
+  return `${year}-${month}-${day}`;
 }
 
 export function dateFromIsoInput(value, precision) {
-  const [year, month, day] = String(value || "").split("-").map(Number);
+  const match = String(value || "").match(/^(-?\d{1,4})-(\d{1,2})-(\d{1,2})$/);
+  const [, year, month, day] = match || [];
 
   return normalizeTimelineDate({
-    year,
-    month,
-    day,
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
     precision
   }, precision);
 }
@@ -209,16 +253,17 @@ export function formatTimelineDate(value) {
   if (!value) return "";
 
   const date = normalizeTimelineDate(value, value.precision);
+  const formattedYear = formatTimelineYear(date.year);
 
   if (date.precision === "year") {
-    return String(date.year);
+    return formattedYear;
   }
 
   if (date.precision === "month") {
-    return `${String(date.month).padStart(2, "0")}/${date.year}`;
+    return `${String(date.month).padStart(2, "0")}/${formattedYear}`;
   }
 
-  return `${String(date.day).padStart(2, "0")}/${String(date.month).padStart(2, "0")}/${date.year}`;
+  return `${String(date.day).padStart(2, "0")}/${String(date.month).padStart(2, "0")}/${formattedYear}`;
 }
 
 export function formatTimelineAnswer(timeline) {
@@ -281,16 +326,24 @@ export function getFinestPrecision(...dates) {
 function parseDateToken(value) {
   const token = String(value || "").trim();
   const toNumber = (raw) => Number.parseInt(raw, 10);
-  const validYear = (year) => Number.isInteger(year) && year >= 1 && year <= 9999;
+  const validYear = (year) =>
+    Number.isInteger(year) &&
+    year !== 0 &&
+    year >= minTimelineYear &&
+    year <= maxTimelineYear;
   const validMonth = (month) => Number.isInteger(month) && month >= 1 && month <= 12;
   const validDay = (year, month, day) =>
     Number.isInteger(day) &&
     day >= 1 &&
     day <= daysInMonth(year, month);
-  let match = token.match(/^(\d{1,4})$/);
+  const extracted = extractEraToken(token);
+
+  if (!extracted) return null;
+
+  let match = extracted.token.match(/^(\d{1,4})$/);
 
   if (match) {
-    const year = toNumber(match[1]);
+    const year = applyEraToYear(toNumber(match[1]), extracted.era);
     if (!validYear(year)) return null;
 
     return normalizeTimelineDate({
@@ -299,11 +352,11 @@ function parseDateToken(value) {
     });
   }
 
-  match = token.match(/^(\d{1,2})\/(\d{1,4})$/);
+  match = extracted.token.match(/^(\d{1,2})\/(\d{1,4})$/);
 
   if (match) {
     const month = toNumber(match[1]);
-    const year = toNumber(match[2]);
+    const year = applyEraToYear(toNumber(match[2]), extracted.era);
     if (!validYear(year) || !validMonth(month)) return null;
 
     return normalizeTimelineDate({
@@ -313,12 +366,12 @@ function parseDateToken(value) {
     });
   }
 
-  match = token.match(/^(\d{1,2})\/(\d{1,2})\/(\d{1,4})$/);
+  match = extracted.token.match(/^(\d{1,2})\/(\d{1,2})\/(\d{1,4})$/);
 
   if (match) {
     const day = toNumber(match[1]);
     const month = toNumber(match[2]);
-    const year = toNumber(match[3]);
+    const year = applyEraToYear(toNumber(match[3]), extracted.era);
     if (!validYear(year) || !validMonth(month) || !validDay(year, month, day)) {
       return null;
     }
@@ -331,10 +384,10 @@ function parseDateToken(value) {
     });
   }
 
-  match = token.match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
+  match = extracted.token.match(/^(\d{1,4})-(\d{1,2})-(\d{1,2})$/);
 
   if (match) {
-    const year = toNumber(match[1]);
+    const year = applyEraToYear(toNumber(match[1]), extracted.era);
     const month = toNumber(match[2]);
     const day = toNumber(match[3]);
     if (!validYear(year) || !validMonth(month) || !validDay(year, month, day)) {
@@ -352,6 +405,70 @@ function parseDateToken(value) {
   return null;
 }
 
+function extractEraToken(value) {
+  const bcPattern = /(^|\s)(?:av\.?\s*(?:j\.?\s*-?\s*c\.?|jc)|bc|bce)\.?(?=$|\s|[.,;])/i;
+  const acPattern = /(^|\s)(?:apr\.?\s*(?:j\.?\s*-?\s*c\.?|jc)|ap\.?\s*(?:j\.?\s*-?\s*c\.?|jc)|ac|ad|ce)\.?(?=$|\s|[.,;])/i;
+  const bcReplacePattern = /(^|\s)(?:av\.?\s*(?:j\.?\s*-?\s*c\.?|jc)|bc|bce)\.?(?=$|\s|[.,;])/gi;
+  const acReplacePattern = /(^|\s)(?:apr\.?\s*(?:j\.?\s*-?\s*c\.?|jc)|ap\.?\s*(?:j\.?\s*-?\s*c\.?|jc)|ac|ad|ce)\.?(?=$|\s|[.,;])/gi;
+  let era = null;
+  let token = String(value || "").trim();
+  const hasBc = bcPattern.test(token);
+  const hasAc = acPattern.test(token);
+
+  if (hasBc && hasAc) return null;
+
+  if (hasBc) {
+    era = -1;
+    token = token.replace(bcReplacePattern, " ");
+  }
+
+  if (hasAc) {
+    era = 1;
+    token = token.replace(acReplacePattern, " ");
+  }
+
+  token = token.replace(/\s+/g, " ").trim();
+
+  if (token.startsWith("-")) {
+    era = -1;
+    token = token.slice(1).trim();
+  } else if (token.startsWith("+")) {
+    era = era || 1;
+    token = token.slice(1).trim();
+  }
+
+  return {
+    era,
+    token
+  };
+}
+
+function applyEraToYear(year, era) {
+  if (!Number.isInteger(year)) return year;
+  if (era === -1) return -Math.abs(year);
+
+  return Math.abs(year);
+}
+
+function findTimelineInterval(input) {
+  const candidates = [];
+  const normalizedInput = input.replace(/[–—]/g, "-");
+
+  for (let index = 0; index < normalizedInput.length; index += 1) {
+    if (normalizedInput[index] !== "-") continue;
+
+    const start = normalizedInput.slice(0, index).trim();
+    const end = normalizedInput.slice(index + 1).trim();
+
+    if (!start || !end) continue;
+    candidates.push([start, end]);
+  }
+
+  return candidates.find(([start, end]) =>
+    Boolean(parseDateToken(start)) && Boolean(parseDateToken(end))
+  ) || null;
+}
+
 export function parseTimelineInput(value) {
   const input = String(value || "").trim();
 
@@ -362,11 +479,23 @@ export function parseTimelineInput(value) {
     };
   }
 
-  const intervalMatch = input.match(/^(.+?)\s*[-–]\s*(.+)$/);
+  const parsedDate = parseDateToken(input);
 
-  if (intervalMatch && !input.match(/^\d{1,4}-\d{1,2}-\d{1,2}$/)) {
-    const parsedStart = parseDateToken(intervalMatch[1]);
-    const parsedEnd = parseDateToken(intervalMatch[2]);
+  if (parsedDate) {
+    return {
+      timeline: normalizeTimeline({
+        kind: "point",
+        start: parsedDate
+      }),
+      error: ""
+    };
+  }
+
+  const intervalMatch = findTimelineInterval(input);
+
+  if (intervalMatch) {
+    const parsedStart = parseDateToken(intervalMatch[0]);
+    const parsedEnd = parseDateToken(intervalMatch[1]);
 
     if (!parsedStart || !parsedEnd) {
       return {
@@ -396,21 +525,9 @@ export function parseTimelineInput(value) {
     };
   }
 
-  const parsedDate = parseDateToken(input);
-
-  if (!parsedDate) {
-    return {
-      timeline: null,
-      error: "Format de date invalide"
-    };
-  }
-
   return {
-    timeline: normalizeTimeline({
-      kind: "point",
-      start: parsedDate
-    }),
-    error: ""
+    timeline: null,
+    error: "Format de date invalide"
   };
 }
 
@@ -444,7 +561,7 @@ export function buildRangeFromItems(items) {
   end += Math.round(span * 0.25);
 
   return {
-    start_value: Math.max(1, start),
-    end_value: Math.min(dateToOrdinal(9999, 12, 31), end)
+    start_value: Math.max(minTimelineValue, start),
+    end_value: Math.min(maxTimelineValue, end)
   };
 }

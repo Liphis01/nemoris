@@ -1,19 +1,25 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sendTimelineAnswer } from "../../../api/review";
 import { fadeInStyle } from "../../../shared/styles";
 import {
   buildRangeFromItems,
   centerOrdinal,
   clampNumber,
+  dateToOrdinal,
+  formatTimelineYear,
   formatTimelineAnswer,
   formatTimelineDate,
   lowerOrdinal,
+  maxTimelineValue,
+  minTimelineValue,
   normalizeTimeline,
   ordinalToDate,
-  ordinalToTimelineDate
+  ordinalToTimelineDate,
+  timelineIndexToYear,
+  yearToTimelineIndex
 } from "../../timeline/timelineUtils";
 
-const colors = [
+const markerColors = [
   "#7dd3fc",
   "#c4b5fd",
   "#f9a8d4",
@@ -23,6 +29,23 @@ const colors = [
   "#93c5fd",
   "#d8b4fe"
 ];
+
+const monthNames = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+];
+
+const minViewportSpan = 14;
 
 const typeBadgeStyle = {
   display: "inline-flex",
@@ -66,254 +89,1718 @@ function qualityColor(quality) {
   return "#ff9aa5";
 }
 
-function buildTicks(range) {
-  const span = Math.max(1, range.end_value - range.start_value);
+function sortReviewItems(items) {
+  return [...items].sort((a, b) => {
+    const difficultyA = Number(a.progress?.difficulty ?? 5);
+    const difficultyB = Number(b.progress?.difficulty ?? 5);
 
-  return Array.from({ length: 7 }, (_, index) => {
-    const value = range.start_value + (span * index) / 6;
-    const date = ordinalToDate(value);
+    if (difficultyA !== difficultyB) return difficultyA - difficultyB;
 
-    return {
-      value,
-      label: String(date.year)
-    };
+    const repsA = Number(a.progress?.reps ?? 0);
+    const repsB = Number(b.progress?.reps ?? 0);
+
+    if (repsA !== repsB) return repsA - repsB;
+
+    return Number(a.question_id) - Number(b.question_id);
   });
 }
 
-function percentFromValue(value, range) {
-  const span = Math.max(1, range.end_value - range.start_value);
-  return clampNumber(((value - range.start_value) / span) * 100, 0, 100);
-}
-
-function buildInitialGuesses(items, range) {
-  const span = Math.max(1, range.end_value - range.start_value);
-  const guesses = {};
-
-  items.forEach((item, index) => {
-    const timeline = normalizeTimeline(item.timeline);
-    const slot = range.start_value + (span * (index + 1)) / (items.length + 1);
-    const start = ordinalToTimelineDate(slot, timeline.start.precision);
-
-    guesses[item.question_id] = {
-      start
-    };
-
-    if (timeline.kind === "interval") {
-      const endSlot = slot + span * 0.08;
-      guesses[item.question_id].end = ordinalToTimelineDate(
-        clampNumber(endSlot, range.start_value, range.end_value),
-        timeline.end.precision
-      );
-    }
-  });
-
-  return guesses;
-}
-
-function TimelineMarker({
-  item,
-  color,
-  guess,
-  index,
-  isFocused,
-  onFocus,
-  onPointerDown,
-  range
-}) {
-  const timeline = normalizeTimeline(item.timeline);
-  const startValue = centerOrdinal(guess.start);
-  const left = percentFromValue(startValue, range);
+function formatAnswer(answer, timeline) {
+  if (!answer) return "";
 
   if (timeline.kind === "interval") {
-    const endValue = centerOrdinal(guess.end);
-    const endLeft = percentFromValue(endValue, range);
-    const barLeft = Math.min(left, endLeft);
-    const barWidth = Math.max(1.8, Math.abs(endLeft - left));
+    return `${formatTimelineDate(answer.start)} - ${formatTimelineDate(answer.end)}`;
+  }
 
+  return formatTimelineDate(answer.start);
+}
+
+function getAnswerCenterValue(answer, timeline) {
+  if (timeline.kind === "interval") {
+    return Math.round((centerOrdinal(answer.start) + centerOrdinal(answer.end)) / 2);
+  }
+
+  return centerOrdinal(answer.start);
+}
+
+function percentFromValue(value, viewport) {
+  const span = Math.max(1, viewport.end_value - viewport.start_value);
+
+  return ((value - viewport.start_value) / span) * 100;
+}
+
+function buildTimelineBounds(range) {
+  const today = new Date();
+  const todayValue = dateToOrdinal(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    today.getDate()
+  );
+  const rightLimit = Math.max(todayValue, range.end_value);
+  const reviewSpan = Math.max(365, range.end_value - range.start_value);
+  const rightPadding = Math.min(120, Math.max(14, Math.round(reviewSpan * 0.015)));
+
+  return {
+    start_value: Math.max(minTimelineValue, Math.round(range.start_value - reviewSpan * 1.2)),
+    end_value: Math.min(maxTimelineValue, rightLimit + rightPadding)
+  };
+}
+
+function clampViewport(viewport, bounds) {
+  const boundsSpan = Math.max(1, bounds.end_value - bounds.start_value);
+  const span = Math.min(
+    Math.max(minViewportSpan, viewport.end_value - viewport.start_value),
+    boundsSpan
+  );
+  let start = viewport.start_value;
+  let end = start + span;
+
+  if (start < bounds.start_value) {
+    start = bounds.start_value;
+    end = start + span;
+  }
+
+  if (end > bounds.end_value) {
+    end = bounds.end_value;
+    start = end - span;
+  }
+
+  return {
+    start_value: start,
+    end_value: end
+  };
+}
+
+function zoomViewport(viewport, bounds, centerValue, zoomFactor) {
+  const center = clampNumber(centerValue, viewport.start_value, viewport.end_value);
+
+  return clampViewport({
+    start_value: center - (center - viewport.start_value) * zoomFactor,
+    end_value: center + (viewport.end_value - center) * zoomFactor
+  }, bounds);
+}
+
+function panViewport(viewport, bounds, deltaValue) {
+  return clampViewport({
+    start_value: viewport.start_value + deltaValue,
+    end_value: viewport.end_value + deltaValue
+  }, bounds);
+}
+
+function niceStep(rawStep) {
+  const target = Math.max(1, rawStep);
+  const magnitude = 10 ** Math.floor(Math.log10(target));
+  const normalized = target / magnitude;
+  const multiplier = normalized <= 1
+    ? 1
+    : normalized <= 2
+      ? 2
+      : normalized <= 5
+        ? 5
+        : 10;
+
+  return multiplier * magnitude;
+}
+
+function positiveModulo(value, divisor) {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function monthIndexFromDate(date) {
+  return yearToTimelineIndex(date.year) * 12 + date.month - 1;
+}
+
+function dateFromMonthIndex(monthIndex) {
+  const yearIndex = Math.floor(monthIndex / 12);
+
+  return {
+    year: timelineIndexToYear(yearIndex),
+    month: positiveModulo(monthIndex, 12) + 1
+  };
+}
+
+function niceMonthStep(rawStep) {
+  const steps = [1, 2, 3, 4, 6, 12, 24, 36, 60, 120];
+
+  return steps.find(step => step >= rawStep) || niceStep(rawStep / 12) * 12;
+}
+
+function buildGridTicks(rulers) {
+  const unitWeight = {
+    millennium: 4,
+    year: 3,
+    month: 2,
+    day: 1
+  };
+  const ticksByValue = new Map();
+
+  rulers.forEach(ruler => {
+    ruler.ticks.forEach(tick => {
+      const current = ticksByValue.get(tick.value);
+
+      if (!current || unitWeight[tick.unit] > unitWeight[current.unit]) {
+        ticksByValue.set(tick.value, tick);
+      }
+    });
+  });
+
+  return [...ticksByValue.values()].sort((a, b) => a.value - b.value);
+}
+
+function buildTimelineScale(viewport, width = 900) {
+  const span = Math.max(1, viewport.end_value - viewport.start_value);
+  const safeWidth = Math.max(320, width || 900);
+  const targetLabelCount = clampNumber(Math.floor(safeWidth / 92), 8, 14);
+  const startDate = ordinalToDate(viewport.start_value);
+  const endDate = ordinalToDate(viewport.end_value);
+  const yearTicks = [];
+  const monthTicks = [];
+  const dayTicks = [];
+  const bands = [];
+  const startYearIndex = yearToTimelineIndex(startDate.year);
+  const endYearIndex = yearToTimelineIndex(endDate.year);
+  const yearCount = Math.max(1, endYearIndex - startYearIndex + 1);
+  const yearStep = yearCount <= targetLabelCount
+    ? 1
+    : niceStep(yearCount / targetLabelCount);
+
+  for (
+    let yearIndex = Math.ceil(startYearIndex / yearStep) * yearStep;
+    yearIndex <= endYearIndex;
+    yearIndex += yearStep
+  ) {
+    const year = timelineIndexToYear(yearIndex);
+
+    yearTicks.push({
+      value: dateToOrdinal(year, 1, 1),
+      label: formatTimelineYear(year),
+      level: "major",
+      unit: "year"
+    });
+  }
+
+  const firstMillennium = Math.ceil(startDate.year / 1000) * 1000;
+
+  for (let year = firstMillennium; year <= endDate.year; year += 1000) {
+    if (year === 0) continue;
+
+    const value = dateToOrdinal(year, 1, 1);
+    const existingTick = yearTicks.find(tick => tick.value === value);
+
+    if (existingTick) {
+      existingTick.level = "millennium";
+      existingTick.unit = "millennium";
+      existingTick.label = formatTimelineYear(year);
+    } else {
+      yearTicks.push({
+        value,
+        label: formatTimelineYear(year),
+        level: "millennium",
+        unit: "millennium"
+      });
+    }
+  }
+
+  yearTicks.sort((a, b) => a.value - b.value);
+
+  if (!yearTicks.some(tick =>
+    tick.value >= viewport.start_value && tick.value <= viewport.end_value
+  )) {
+    yearTicks.push({
+      value: viewport.start_value,
+      label: formatTimelineYear(startDate.year),
+      level: "major",
+      unit: "year"
+    });
+  }
+
+  const bandStep = Math.max(yearStep, niceStep(yearCount / 5));
+  let bandIndex = 0;
+
+  for (
+    let yearIndex = Math.floor(startYearIndex / bandStep) * bandStep;
+    yearIndex <= endYearIndex + bandStep;
+    yearIndex += bandStep
+  ) {
+    const year = timelineIndexToYear(yearIndex);
+    const nextYearIndex = yearIndex + bandStep;
+    const nextYear = timelineIndexToYear(nextYearIndex);
+
+    bands.push({
+      start: clampNumber(dateToOrdinal(year, 1, 1), minTimelineValue, maxTimelineValue),
+      end: clampNumber(dateToOrdinal(nextYear, 1, 1), minTimelineValue, maxTimelineValue),
+      muted: bandIndex % 2 === 1
+    });
+    bandIndex += 1;
+  }
+
+  const startMonthIndex = monthIndexFromDate(startDate);
+  const endMonthIndex = monthIndexFromDate(endDate);
+  const monthCount = Math.max(1, endMonthIndex - startMonthIndex + 1);
+  const monthPixelWidth = safeWidth / monthCount;
+  const showMonths = monthPixelWidth >= 5 || span <= 365 * 15;
+  const monthGridStep = monthPixelWidth >= 5
+    ? 1
+    : monthPixelWidth >= 3
+      ? 2
+      : 3;
+  const monthLabelStep = niceMonthStep(Math.max(1, Math.ceil(monthCount / targetLabelCount)));
+
+  if (showMonths) {
+    for (
+      let monthIndex = Math.ceil(startMonthIndex / monthGridStep) * monthGridStep;
+      monthIndex <= endMonthIndex;
+      monthIndex += monthGridStep
+    ) {
+      const { year, month } = dateFromMonthIndex(monthIndex);
+      const labeled = positiveModulo(monthIndex, monthLabelStep) === 0;
+
+      monthTicks.push({
+        value: dateToOrdinal(year, month, 1),
+        label: labeled ? monthNames[month - 1] : "",
+        level: month === 1 ? "major" : "minor",
+        unit: "month"
+      });
+    }
+  }
+
+  if (showMonths && !monthTicks.some(tick =>
+    tick.value >= viewport.start_value && tick.value <= viewport.end_value
+  )) {
+    monthTicks.push({
+      value: viewport.start_value,
+      label: monthNames[startDate.month - 1],
+      level: "major",
+      unit: "month"
+    });
+  }
+
+  const dayPixelWidth = safeWidth / span;
+  const showDays = dayPixelWidth >= 5;
+  const showDayLabels = dayPixelWidth >= 22;
+
+  if (showDays) {
+    for (
+      let value = Math.ceil(viewport.start_value);
+      value <= viewport.end_value;
+      value += 1
+    ) {
+      const date = ordinalToDate(value);
+
+      dayTicks.push({
+        value,
+        label: showDayLabels ? String(date.day) : "",
+        level: date.day === 1 ? "major" : "minor",
+        unit: "day"
+      });
+    }
+  }
+
+  const rulers = [
+    { ticks: yearTicks },
+    ...(showMonths ? [{ ticks: monthTicks }] : []),
+    ...(showDays ? [{ ticks: dayTicks }] : [])
+  ];
+
+  return {
+    bands,
+    gridTicks: buildGridTicks(rulers),
+    rulers,
+    unit: showDays ? "day" : showMonths ? "month" : "year"
+  };
+}
+
+function percentWithinRange(value, range) {
+  const span = Math.max(1, range.end_value - range.start_value);
+
+  return ((value - range.start_value) / span) * 100;
+}
+
+function centerViewportOn(value, viewport, bounds) {
+  const span = viewport.end_value - viewport.start_value;
+
+  return clampViewport({
+    start_value: value - span / 2,
+    end_value: value + span / 2
+  }, bounds);
+}
+
+function formatViewportLabel(viewport) {
+  const span = Math.max(1, viewport.end_value - viewport.start_value);
+  const start = ordinalToDate(viewport.start_value);
+  const end = ordinalToDate(viewport.end_value);
+
+  if (span > 365 * 5) {
+    return `${formatTimelineYear(start.year)} - ${formatTimelineYear(end.year)}`;
+  }
+
+  if (span > 120) {
+    return `${monthNames[start.month - 1]} ${formatTimelineYear(start.year)} - ${monthNames[end.month - 1]} ${formatTimelineYear(end.year)}`;
+  }
+
+  return `${formatTimelineDate(snapValueToDate(viewport.start_value, "day"))} - ${formatTimelineDate(snapValueToDate(viewport.end_value, "day"))}`;
+}
+
+function snapValueToDate(value, precision) {
+  return ordinalToTimelineDate(
+    clampNumber(Math.round(value), minTimelineValue, maxTimelineValue),
+    precision
+  );
+}
+
+function normalizeIntervalAnswer(startValue, endValue, timeline, bounds) {
+  const boundedStart = clampNumber(startValue, bounds.start_value, bounds.end_value);
+  const boundedEnd = clampNumber(endValue, bounds.start_value, bounds.end_value);
+  const start = snapValueToDate(Math.min(boundedStart, boundedEnd), timeline.start.precision);
+  const end = snapValueToDate(Math.max(boundedStart, boundedEnd), timeline.end.precision);
+
+  return lowerOrdinal(end) < lowerOrdinal(start)
+    ? { start: end, end }
+    : { start, end };
+}
+
+function intervalDefaultSpan(timeline, viewport) {
+  const visibleSpan = viewport.end_value - viewport.start_value;
+
+  if (timeline.start.precision === "year" || timeline.end.precision === "year") {
+    return Math.max(365, visibleSpan * 0.12);
+  }
+
+  if (timeline.start.precision === "month" || timeline.end.precision === "month") {
+    return Math.max(30, visibleSpan * 0.12);
+  }
+
+  return Math.max(1, visibleSpan * 0.12);
+}
+
+function answerFromClick(value, timeline, viewport, bounds) {
+  if (timeline.kind !== "interval") {
+    return {
+      start: snapValueToDate(value, timeline.start.precision)
+    };
+  }
+
+  const halfSpan = intervalDefaultSpan(timeline, viewport) / 2;
+
+  return normalizeIntervalAnswer(value - halfSpan, value + halfSpan, timeline, bounds);
+}
+
+function answerToPayload(answer, timeline) {
+  const payload = {
+    start: answer.start
+  };
+
+  if (timeline.kind === "interval") {
+    payload.end = answer.end;
+  }
+
+  return payload;
+}
+
+function buildMarkers(items, answersByQuestionId, activeId, viewport, orderById) {
+  const rawMarkers = items
+    .map(item => {
+      if (item.question_id === activeId) return null;
+
+      const answer = answersByQuestionId[item.question_id];
+      if (!answer) return null;
+
+      const timeline = normalizeTimeline(item.timeline);
+      const centerValue = getAnswerCenterValue(answer, timeline);
+      const centerPercent = percentFromValue(centerValue, viewport);
+
+      if (centerPercent < -20 || centerPercent > 120) return null;
+
+      return {
+        answer,
+        centerPercent,
+        color: markerColors[(orderById.get(item.question_id) || 0) % markerColors.length],
+        item,
+        order: orderById.get(item.question_id) || 0,
+        stack: 0,
+        timeline
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.centerPercent - b.centerPercent);
+
+  const stackEndByLevel = [];
+
+  rawMarkers.forEach(marker => {
+    const level = stackEndByLevel.findIndex(lastPercent =>
+      marker.centerPercent - lastPercent > 13
+    );
+    const nextLevel = level === -1 ? stackEndByLevel.length : level;
+
+    marker.stack = nextLevel;
+    stackEndByLevel[nextLevel] = marker.centerPercent;
+  });
+
+  return rawMarkers;
+}
+
+function markerTop(stack) {
+  const lanes = [78, 88, 54, 44, 96, 34, 70, 60];
+
+  return lanes[stack % lanes.length];
+}
+
+function TimelineQueue({
+  activeId,
+  committedAnswers,
+  draftAnswers,
+  items,
+  onSelect,
+  skippedIds
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: "8px",
+        overflowX: "auto",
+        padding: "2px 0 8px"
+      }}
+    >
+      {items.map((item, index) => {
+        const active = activeId === item.question_id;
+        const answered = Boolean(committedAnswers[item.question_id]);
+        const draft = Boolean(draftAnswers[item.question_id]) && !answered;
+        const skipped = skippedIds.has(item.question_id) && !answered;
+        const color = markerColors[index % markerColors.length];
+
+        return (
+          <button
+            key={item.question_id}
+            type="button"
+            onClick={() => onSelect(item.question_id)}
+            title={item.question}
+            style={{
+              minWidth: "42px",
+              height: "36px",
+              borderRadius: "999px",
+              border: active
+                ? "2px solid #fff"
+                : answered
+                  ? `1px solid ${color}`
+                  : skipped
+                    ? "1px solid #6f6434"
+                    : draft
+                      ? "1px solid #3c5f7a"
+                      : "1px solid #333",
+              background: active
+                ? `${color}30`
+                : answered
+                  ? `${color}18`
+                  : skipped
+                    ? "#2d2917"
+                    : draft
+                      ? "#17242d"
+                      : "#171717",
+              color: answered ? color : skipped ? "#f3d36a" : draft ? "#7dd3fc" : "#777",
+              cursor: "pointer",
+              fontWeight: "900",
+              flexShrink: 0
+            }}
+          >
+            {index + 1}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TimelineTooltip({ tooltip }) {
+  if (!tooltip) return null;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${tooltip.x}%`,
+        top: `${tooltip.y}%`,
+        transform: "translate(-50%, -110%)",
+        maxWidth: "320px",
+        border: "1px solid #3a3a3a",
+        borderRadius: "10px",
+        background: "rgba(18,18,18,0.96)",
+        color: "#f4f4f4",
+        fontSize: "12px",
+        fontWeight: "750",
+        lineHeight: 1.35,
+        padding: "8px 10px",
+        pointerEvents: "none",
+        boxShadow: "0 12px 30px rgba(0,0,0,0.45)",
+        zIndex: 30
+      }}
+    >
+      {tooltip.text}
+    </div>
+  );
+}
+
+function TimelineCanvas({
+  activeAnswer,
+  activeId,
+  activeItem,
+  activeNumber,
+  bounds,
+  committedAnswers,
+  items,
+  onDraftChange,
+  onSelect,
+  orderById,
+  range
+}) {
+  const minimapRef = useRef(null);
+  const minimapDragRef = useRef(null);
+  const surfaceRef = useRef(null);
+  const dragRef = useRef(null);
+  const [viewport, setViewport] = useState(() => clampViewport(range, bounds));
+  const [dragMode, setDragMode] = useState("");
+  const [surfaceWidth, setSurfaceWidth] = useState(900);
+  const [tooltip, setTooltip] = useState(null);
+  const activeTimeline = normalizeTimeline(activeItem.timeline);
+  const activeColor = markerColors[(orderById.get(activeId) || 0) % markerColors.length];
+  const scale = useMemo(
+    () => buildTimelineScale(viewport, surfaceWidth),
+    [surfaceWidth, viewport]
+  );
+  const markers = useMemo(
+    () => buildMarkers(items, committedAnswers, activeId, viewport, orderById),
+    [activeId, committedAnswers, items, orderById, viewport]
+  );
+  const placedAnswers = useMemo(
+    () => items
+      .map(item => {
+        const answer = item.question_id === activeId
+          ? activeAnswer
+          : committedAnswers[item.question_id];
+
+        if (!answer) return null;
+
+        return {
+          answer,
+          color: markerColors[(orderById.get(item.question_id) || 0) % markerColors.length],
+          item,
+          timeline: normalizeTimeline(item.timeline)
+        };
+      })
+      .filter(Boolean),
+    [activeAnswer, activeId, committedAnswers, items, orderById]
+  );
+  const viewportLabel = formatViewportLabel(viewport);
+  const viewportStartPercent = percentWithinRange(viewport.start_value, bounds);
+  const viewportEndPercent = percentWithinRange(viewport.end_value, bounds);
+  const viewportWidthPercent = Math.max(2, viewportEndPercent - viewportStartPercent);
+
+  useEffect(() => {
+    setViewport(clampViewport(range, bounds));
+  }, [bounds, range]);
+
+  useEffect(() => {
+    const node = surfaceRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = () => {
+      setSurfaceWidth(node.getBoundingClientRect().width || 900);
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const nodes = [
+      surfaceRef.current,
+      minimapRef.current
+    ].filter(Boolean);
+
+    if (nodes.length === 0) return undefined;
+
+    function handleWheel(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      const zoomFactor = event.deltaY < 0 ? 0.78 : 1.28;
+
+      setViewport(current => {
+        const ratio = clampNumber((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+        const centerValue = current.start_value +
+          ratio * (current.end_value - current.start_value);
+
+        return zoomViewport(current, bounds, centerValue, zoomFactor);
+      });
+    }
+
+    nodes.forEach(node => node.addEventListener("wheel", handleWheel, { passive: false }));
+
+    return () => {
+      nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
+    };
+  }, [bounds]);
+
+  function valueFromClientX(clientX, targetViewport = viewport) {
+    const rect = surfaceRef.current?.getBoundingClientRect();
+    if (!rect) return targetViewport.start_value;
+
+    const ratio = clampNumber((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+
+    return targetViewport.start_value +
+      ratio * (targetViewport.end_value - targetViewport.start_value);
+  }
+
+  function valueFromMinimapClientX(clientX) {
+    const rect = minimapRef.current?.getBoundingClientRect();
+    if (!rect) return viewport.start_value;
+
+    const ratio = clampNumber((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+
+    return bounds.start_value + ratio * (bounds.end_value - bounds.start_value);
+  }
+
+  function placeDraft(value) {
+    onDraftChange(answerFromClick(value, activeTimeline, viewport, bounds));
+  }
+
+  function updateDraggedAnswer(mode, value, dragState) {
+    const initialAnswer = dragState.initialAnswer;
+    let nextAnswer;
+
+    if (activeTimeline.kind !== "interval" || mode === "point") {
+      nextAnswer = {
+        start: snapValueToDate(value, activeTimeline.start.precision)
+      };
+    } else if (mode === "start") {
+      const endValue = centerOrdinal(initialAnswer.end);
+      nextAnswer = normalizeIntervalAnswer(
+        Math.min(value, endValue),
+        endValue,
+        activeTimeline,
+        bounds
+      );
+    } else if (mode === "end") {
+      const startValue = centerOrdinal(initialAnswer.start);
+      nextAnswer = normalizeIntervalAnswer(
+        startValue,
+        Math.max(value, startValue),
+        activeTimeline,
+        bounds
+      );
+    } else {
+      const delta = value - dragState.startValue;
+      nextAnswer = normalizeIntervalAnswer(
+        centerOrdinal(initialAnswer.start) + delta,
+        centerOrdinal(initialAnswer.end) + delta,
+        activeTimeline,
+        bounds
+      );
+    }
+
+    onDraftChange(nextAnswer);
+  }
+
+  function capturePointer(event) {
+    try {
+      surfaceRef.current?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture may fail in some browser edge cases; dragging still works over the surface.
+    }
+  }
+
+  function releasePointer(event) {
+    try {
+      surfaceRef.current?.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Ignore release failures for pointers that were not captured.
+    }
+  }
+
+  function beginSurfaceDrag(event) {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    setTooltip(null);
+    capturePointer(event);
+
+    dragRef.current = {
+      initialViewport: viewport,
+      mode: "surface",
+      moved: false,
+      pointerId: event.pointerId,
+      startValue: valueFromClientX(event.clientX),
+      startX: event.clientX,
+      startY: event.clientY
+    };
+    setDragMode("surface");
+  }
+
+  function beginAnswerDrag(event, mode) {
+    if (event.button !== 0 || !activeAnswer) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    setTooltip(null);
+    capturePointer(event);
+
+    dragRef.current = {
+      initialAnswer: activeAnswer,
+      mode,
+      moved: false,
+      pointerId: event.pointerId,
+      startValue: valueFromClientX(event.clientX),
+      startX: event.clientX,
+      startY: event.clientY
+    };
+    setDragMode(mode);
+  }
+
+  function handlePointerMove(event) {
+    const dragState = dragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    const distance = Math.max(
+      Math.abs(event.clientX - dragState.startX),
+      Math.abs(event.clientY - dragState.startY)
+    );
+
+    if (distance > 3) {
+      dragState.moved = true;
+    }
+
+    if (dragState.mode === "surface") {
+      if (!dragState.moved) return;
+
+      const rect = surfaceRef.current?.getBoundingClientRect();
+      const span = dragState.initialViewport.end_value - dragState.initialViewport.start_value;
+      const deltaValue = -((event.clientX - dragState.startX) / Math.max(1, rect?.width || 1)) * span;
+
+      setViewport(panViewport(dragState.initialViewport, bounds, deltaValue));
+      return;
+    }
+
+    updateDraggedAnswer(dragState.mode, valueFromClientX(event.clientX), dragState);
+  }
+
+  function handlePointerUp(event) {
+    const dragState = dragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    if (dragState.mode === "surface" && !dragState.moved) {
+      placeDraft(valueFromClientX(event.clientX));
+    } else if (dragState.mode !== "surface" && !dragState.moved) {
+      updateDraggedAnswer(dragState.mode, valueFromClientX(event.clientX), dragState);
+    }
+
+    releasePointer(event);
+    dragRef.current = null;
+    setDragMode("");
+  }
+
+  function zoomFromButton(zoomFactor) {
+    const centerValue = activeAnswer
+      ? getAnswerCenterValue(activeAnswer, activeTimeline)
+      : (viewport.start_value + viewport.end_value) / 2;
+
+    setViewport(current => zoomViewport(current, bounds, centerValue, zoomFactor));
+  }
+
+  function resetViewport() {
+    setViewport(clampViewport(range, bounds));
+  }
+
+  function beginMinimapDrag(event) {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    setTooltip(null);
+
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture may fail if the pointer was already released.
+    }
+
+    minimapDragRef.current = {
+      pointerId: event.pointerId
+    };
+    setDragMode("minimap");
+    setViewport(current =>
+      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds)
+    );
+  }
+
+  function handleMinimapPointerMove(event) {
+    const dragState = minimapDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    setViewport(current =>
+      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds)
+    );
+  }
+
+  function handleMinimapPointerUp(event) {
+    const dragState = minimapDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    try {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Ignore release failures for uncaptured pointers.
+    }
+
+    minimapDragRef.current = null;
+    setDragMode("");
+  }
+
+  function showTooltip(text, x, y) {
+    setTooltip({
+      text,
+      x: clampNumber(x, 8, 92),
+      y: clampNumber(y, 14, 88)
+    });
+  }
+
+  function renderRulers() {
     return (
       <div
         style={{
           position: "absolute",
-          left: `${barLeft}%`,
-          top: `${index * 36 + 18}px`,
-          width: `${barWidth}%`,
-          height: "16px",
-          transform: "translateY(-50%)",
-          zIndex: isFocused ? 5 : 2
+          left: 0,
+          right: 0,
+          top: "14px",
+          borderTop: "1px solid rgba(244,240,223,0.08)",
+          borderBottom: "1px solid rgba(244,240,223,0.08)",
+          background: "rgba(18,18,18,0.58)",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+          overflow: "hidden",
+          zIndex: 2
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            inset: "5px 0",
-            borderRadius: "999px",
-            background: `${color}44`,
-            border: `1px solid ${color}99`
-          }}
-        />
-        {["start", "end"].map(handle => (
-          <button
-            key={handle}
-            type="button"
-            onPointerDown={(event) => onPointerDown(event, item, handle)}
-            onFocus={onFocus}
-            title={item.question}
+        {scale.rulers.map((ruler, rowIndex) => (
+          <div
+            key={`ruler-${rowIndex}`}
             style={{
-              position: "absolute",
-              left: handle === "start" ? 0 : "100%",
-              top: "50%",
-              width: "24px",
-              height: "24px",
-              borderRadius: "999px",
-              border: isFocused ? `2px solid #fff` : `2px solid ${color}`,
-              background: "#121212",
-              color,
-              transform: "translate(-50%, -50%)",
-              cursor: "ew-resize",
-              fontSize: "11px",
-              fontWeight: "900",
-              boxShadow: isFocused ? `0 0 0 5px ${color}22` : "none"
+              position: "relative",
+              height: "30px",
+              borderTop: rowIndex === 0 ? "none" : "1px solid rgba(244,240,223,0.08)"
             }}
           >
-            {handle === "start" ? "S" : "E"}
-          </button>
+            {ruler.ticks.map((tick, index) => {
+              const left = percentFromValue(tick.value, viewport);
+              const millennium = tick.level === "millennium";
+              const major = millennium || tick.level === "major";
+
+              if (left < -4 || left > 104) return null;
+
+              return (
+                <div
+                  key={`ruler-${rowIndex}-${tick.value}-${index}`}
+                  style={{
+                    position: "absolute",
+                    left: `${left}%`,
+                    top: 0,
+                    bottom: 0,
+                    borderLeft: millennium
+                      ? "2px solid rgba(244,212,140,0.72)"
+                      : major
+                        ? "1px solid rgba(244,240,223,0.38)"
+                        : "1px solid rgba(244,240,223,0.16)",
+                    color: millennium ? "#f4d48c" : major ? "#f1e8d4" : "#a99c88",
+                    fontSize: millennium ? "12px" : major ? "11px" : "10px",
+                    fontWeight: millennium ? "950" : major ? "900" : "750",
+                    pointerEvents: "none"
+                  }}
+                >
+                  {tick.label && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "6px",
+                        top: "7px",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {tick.label}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ))}
       </div>
     );
   }
 
+  function renderPassiveMarker(marker) {
+    const color = marker.color;
+    const top = markerTop(marker.stack);
+    const text = marker.item.question;
+    const answerText = formatAnswer(marker.answer, marker.timeline);
+
+    if (marker.timeline.kind === "interval") {
+      const start = percentFromValue(centerOrdinal(marker.answer.start), viewport);
+      const end = percentFromValue(centerOrdinal(marker.answer.end), viewport);
+      const left = Math.min(start, end);
+      const width = Math.max(8, Math.abs(end - start));
+
+      return (
+        <button
+          key={marker.item.question_id}
+          type="button"
+          onClick={() => onSelect(marker.item.question_id)}
+          onFocus={() => showTooltip(`${text}: ${answerText}`, left + width / 2, top)}
+          onMouseEnter={() => showTooltip(`${text}: ${answerText}`, left + width / 2, top)}
+          onMouseLeave={() => setTooltip(null)}
+          onPointerDown={(event) => event.stopPropagation()}
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${top}%`,
+            width: `${width}%`,
+            maxWidth: "260px",
+            minWidth: "92px",
+            height: "30px",
+            transform: "translateY(-50%)",
+            borderRadius: "999px",
+            border: `1px solid ${color}`,
+            background: `${color}26`,
+            color,
+            cursor: "pointer",
+            fontSize: "11px",
+            fontWeight: "900",
+            overflow: "hidden",
+            padding: "0 10px",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            zIndex: 5
+          }}
+        >
+          {marker.order + 1}. {text}
+        </button>
+      );
+    }
+
+    const left = percentFromValue(centerOrdinal(marker.answer.start), viewport);
+
+    return (
+      <button
+        key={marker.item.question_id}
+        type="button"
+        onClick={() => onSelect(marker.item.question_id)}
+        onFocus={() => showTooltip(`${text}: ${answerText}`, left, top)}
+        onMouseEnter={() => showTooltip(`${text}: ${answerText}`, left, top)}
+        onMouseLeave={() => setTooltip(null)}
+        onPointerDown={(event) => event.stopPropagation()}
+        style={{
+          position: "absolute",
+          left: `${left}%`,
+          top: `${top}%`,
+          display: "flex",
+          alignItems: "center",
+          gap: "7px",
+          maxWidth: "230px",
+          height: "32px",
+          transform: "translate(-50%, -50%)",
+          borderRadius: "999px",
+          border: `1px solid ${color}`,
+          background: "#151515",
+          color,
+          cursor: "pointer",
+          fontSize: "11px",
+          fontWeight: "900",
+          overflow: "hidden",
+          padding: "0 10px 0 5px",
+          zIndex: 5
+        }}
+      >
+        <span
+          style={{
+            alignItems: "center",
+            background: `${color}22`,
+            borderRadius: "999px",
+            display: "inline-flex",
+            flexShrink: 0,
+            height: "24px",
+            justifyContent: "center",
+            width: "24px"
+          }}
+        >
+          {marker.order + 1}
+        </span>
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {text}
+        </span>
+      </button>
+    );
+  }
+
+  function renderActiveAnswer() {
+    if (!activeAnswer) return null;
+
+    const text = activeItem.question;
+
+    if (activeTimeline.kind === "interval") {
+      const start = percentFromValue(centerOrdinal(activeAnswer.start), viewport);
+      const end = percentFromValue(centerOrdinal(activeAnswer.end), viewport);
+      const left = Math.min(start, end);
+      const width = Math.max(8, Math.abs(end - start));
+      const center = left + width / 2;
+
+      return (
+        <div
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: "64%",
+            width: `${width}%`,
+            minWidth: "112px",
+            height: "48px",
+            transform: "translateY(-50%)",
+            zIndex: 12
+          }}
+        >
+          <button
+            type="button"
+            onFocus={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50)}
+            onMouseEnter={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50)}
+            onMouseLeave={() => setTooltip(null)}
+            onPointerDown={(event) => beginAnswerDrag(event, "bar")}
+            style={{
+              position: "absolute",
+              inset: "9px 0",
+              borderRadius: "999px",
+              border: `2px solid ${activeColor}`,
+              background: `linear-gradient(90deg, ${activeColor}50, ${activeColor}24)`,
+              color: "#f7f7f7",
+              cursor: dragMode === "bar" ? "grabbing" : "grab",
+              fontSize: "12px",
+              fontWeight: "950",
+              overflow: "hidden",
+              padding: "0 32px",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`
+            }}
+          >
+            {activeNumber}. {text}
+          </button>
+
+          {["start", "end"].map(handle => (
+            <button
+              key={handle}
+              type="button"
+              aria-label={handle === "start" ? "Move period start" : "Move period end"}
+              onPointerDown={(event) => beginAnswerDrag(event, handle)}
+              style={{
+                position: "absolute",
+                left: handle === "start" ? 0 : "100%",
+                top: "50%",
+                width: "24px",
+                height: "44px",
+                transform: "translate(-50%, -50%)",
+                borderRadius: "999px",
+                border: "2px solid #fff",
+                background: activeColor,
+                cursor: "ew-resize",
+                boxShadow: "0 8px 20px rgba(0,0,0,0.42)",
+                zIndex: 2
+              }}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    const left = percentFromValue(centerOrdinal(activeAnswer.start), viewport);
+
+    return (
+      <button
+        type="button"
+        onFocus={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50)}
+        onMouseEnter={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50)}
+        onMouseLeave={() => setTooltip(null)}
+        onPointerDown={(event) => beginAnswerDrag(event, "point")}
+        style={{
+          position: "absolute",
+          left: `${left}%`,
+          top: "64%",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          maxWidth: "260px",
+          height: "42px",
+          transform: "translate(-50%, -50%)",
+          borderRadius: "999px",
+          border: "2px solid #fff",
+          background: activeColor,
+          color: "#101010",
+          cursor: dragMode === "point" ? "grabbing" : "grab",
+          fontSize: "12px",
+          fontWeight: "950",
+          overflow: "hidden",
+          padding: "0 14px 0 10px",
+          boxShadow: `0 0 0 10px ${activeColor}22, 0 14px 30px rgba(0,0,0,0.42)`,
+          zIndex: 12
+        }}
+      >
+        <span>{activeNumber}</span>
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {text}
+        </span>
+      </button>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onPointerDown={(event) => onPointerDown(event, item, "start")}
-      onFocus={onFocus}
-      title={item.question}
+    <div
       style={{
-        position: "absolute",
-        left: `${left}%`,
-        top: `${index * 36 + 18}px`,
-        width: "28px",
-        height: "28px",
-        borderRadius: "999px",
-        border: isFocused ? "2px solid #fff" : `2px solid ${color}`,
+        border: "1px solid #282828",
+        borderRadius: "18px",
         background: "#121212",
-        color,
-        transform: "translate(-50%, -50%)",
-        cursor: "ew-resize",
-        fontSize: "12px",
-        fontWeight: "900",
-        boxShadow: isFocused ? `0 0 0 5px ${color}22` : "none",
-        zIndex: isFocused ? 5 : 2
+        minHeight: "650px",
+        overflow: "hidden",
+        padding: "18px",
+        position: "relative"
       }}
     >
-      {index + 1}
-    </button>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "14px",
+          justifyContent: "space-between",
+          marginBottom: "14px",
+          position: "relative",
+          zIndex: 10
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              color: "#f4f0df",
+              fontSize: "23px",
+              fontWeight: "900",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {viewportLabel}
+          </div>
+          <div style={{ color: "#777", fontSize: "11px", marginTop: "3px" }}>
+            Wheel zooms, drag the ruler or minimap to move
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexShrink: 0, gap: "8px" }}>
+          <button
+            type="button"
+            onClick={() => zoomFromButton(0.72)}
+            style={{ ...buttonStyle, height: "36px", padding: 0, width: "40px" }}
+            title="Zoom in"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomFromButton(1.32)}
+            style={{ ...buttonStyle, height: "36px", padding: 0, width: "40px" }}
+            title="Zoom out"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            onClick={resetViewport}
+            style={{ ...buttonStyle, height: "36px", padding: "0 12px" }}
+            title="Reset view"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={minimapRef}
+        onPointerDown={beginMinimapDrag}
+        onPointerMove={handleMinimapPointerMove}
+        onPointerUp={handleMinimapPointerUp}
+        onPointerCancel={handleMinimapPointerUp}
+        style={{
+          position: "relative",
+          height: "76px",
+          border: "1px solid #2a2a2a",
+          borderRadius: "13px",
+          background: "linear-gradient(180deg, #161616, #101010)",
+          cursor: dragMode === "minimap" ? "grabbing" : "pointer",
+          marginBottom: "14px",
+          overflow: "hidden",
+          overscrollBehavior: "contain",
+          touchAction: "none"
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: "14px",
+            top: "10px",
+            color: "#777",
+            fontSize: "11px",
+            fontWeight: "800",
+            zIndex: 2
+          }}
+        >
+          {formatTimelineYear(ordinalToDate(bounds.start_value).year)}
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            right: "14px",
+            top: "10px",
+            color: "#777",
+            fontSize: "11px",
+            fontWeight: "800",
+            zIndex: 2
+          }}
+        >
+          {formatTimelineYear(ordinalToDate(bounds.end_value).year)}
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            left: "14px",
+            right: "14px",
+            top: "40px",
+            height: "4px",
+            borderRadius: "999px",
+            background: "#3c3326"
+          }}
+        />
+
+        {placedAnswers.map(entry => {
+          const isActive = entry.item.question_id === activeId;
+
+          if (entry.timeline.kind === "interval") {
+            const start = percentWithinRange(centerOrdinal(entry.answer.start), bounds);
+            const end = percentWithinRange(centerOrdinal(entry.answer.end), bounds);
+            const left = clampNumber(Math.min(start, end), 0, 100);
+            const width = Math.max(1, Math.abs(end - start));
+
+            return (
+              <div
+                key={`mini-${entry.item.question_id}`}
+                title={`${entry.item.question}: ${formatAnswer(entry.answer, entry.timeline)}`}
+                style={{
+                  position: "absolute",
+                  left: `${left}%`,
+                  top: isActive ? "34px" : "36px",
+                  width: `${width}%`,
+                  minWidth: isActive ? "12px" : "8px",
+                  height: isActive ? "12px" : "8px",
+                  borderRadius: "999px",
+                  background: entry.color,
+                  boxShadow: isActive ? `0 0 0 5px ${entry.color}22` : "none",
+                  transform: "translateY(-50%)",
+                  zIndex: isActive ? 5 : 3
+                }}
+              />
+            );
+          }
+
+          const left = percentWithinRange(centerOrdinal(entry.answer.start), bounds);
+
+          return (
+            <div
+              key={`mini-${entry.item.question_id}`}
+              title={`${entry.item.question}: ${formatAnswer(entry.answer, entry.timeline)}`}
+              style={{
+                position: "absolute",
+                left: `${left}%`,
+                top: isActive ? "40px" : "42px",
+                width: isActive ? "12px" : "8px",
+                height: isActive ? "12px" : "8px",
+                borderRadius: "999px",
+                background: entry.color,
+                border: isActive ? "2px solid #fff" : "none",
+                boxShadow: isActive ? `0 0 0 5px ${entry.color}22` : "none",
+                transform: "translate(-50%, -50%)",
+                zIndex: isActive ? 5 : 3
+              }}
+            />
+          );
+        })}
+
+        <div
+          style={{
+            position: "absolute",
+            left: `${viewportStartPercent}%`,
+            top: "8px",
+            width: `${viewportWidthPercent}%`,
+            minWidth: "28px",
+            bottom: "8px",
+            border: "2px solid #f4d48c",
+            borderRadius: "10px",
+            background: "rgba(244, 212, 140, 0.08)",
+            boxShadow: "0 0 0 1px rgba(0,0,0,0.35), 0 10px 22px rgba(0,0,0,0.25)",
+            pointerEvents: "none",
+            zIndex: 4
+          }}
+        />
+      </div>
+
+      <div
+        ref={surfaceRef}
+        onPointerDown={beginSurfaceDrag}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{
+          position: "relative",
+          height: "470px",
+          background: "linear-gradient(180deg, #181818 0%, #101010 100%)",
+          border: "1px solid #292929",
+          borderRadius: "14px",
+          cursor: dragMode === "surface" ? "grabbing" : "crosshair",
+          overflow: "hidden",
+          overscrollBehavior: "contain",
+          touchAction: "none"
+        }}
+      >
+        {scale.bands.map((band, index) => {
+          const left = clampNumber(percentFromValue(band.start, viewport), -20, 120);
+          const right = clampNumber(percentFromValue(band.end, viewport), -20, 120);
+          const width = Math.max(0, right - left);
+
+          return (
+            <div
+              key={`${band.start}-${index}`}
+              style={{
+                position: "absolute",
+                left: `${left}%`,
+                width: `${width}%`,
+                top: 0,
+                bottom: 0,
+                background: band.muted
+                  ? "rgba(255, 255, 255, 0.032)"
+                  : "rgba(255, 255, 255, 0.018)",
+                pointerEvents: "none"
+              }}
+            />
+          );
+        })}
+
+        {scale.gridTicks.map((tick, index) => {
+          const left = percentFromValue(tick.value, viewport);
+          const opacity = tick.unit === "millennium"
+            ? 0.5
+            : tick.unit === "year"
+            ? 0.28
+            : tick.unit === "month"
+              ? 0.14
+              : tick.level === "major"
+                ? 0.12
+                : 0.055;
+
+          if (left < -5 || left > 105) return null;
+
+          return (
+            <div
+              key={`grid-${tick.value}-${index}`}
+              style={{
+                position: "absolute",
+                left: `${left}%`,
+                top: 0,
+                bottom: 0,
+                borderLeft: tick.unit === "millennium"
+                  ? `2px solid rgba(244,212,140,${opacity})`
+                  : `1px solid rgba(244,240,223,${opacity})`,
+                pointerEvents: "none",
+                zIndex: 1
+              }}
+            />
+          );
+        })}
+
+        {renderRulers()}
+
+        <div
+          style={{
+            background: "linear-gradient(180deg, #8d6d3b 0%, #e4c178 48%, #806034 100%)",
+            border: "1px solid rgba(255,255,255,0.24)",
+            borderRadius: "999px",
+            boxShadow: "0 14px 34px rgba(0,0,0,0.42), inset 0 2px 0 rgba(255,255,255,0.22), inset 0 -12px 20px rgba(0,0,0,0.18)",
+            height: "34px",
+            left: "4%",
+            pointerEvents: "none",
+            position: "absolute",
+            right: "4%",
+            top: "64%",
+            transform: "translateY(-50%)",
+            zIndex: 2
+          }}
+        />
+
+        <div
+          style={{
+            background: "rgba(35, 24, 12, 0.82)",
+            borderRadius: "999px",
+            height: "3px",
+            left: "5%",
+            pointerEvents: "none",
+            position: "absolute",
+            right: "5%",
+            top: "64%",
+            transform: "translateY(-50%)",
+            zIndex: 3
+          }}
+        />
+
+        {markers.map(renderPassiveMarker)}
+        {renderActiveAnswer()}
+        <TimelineTooltip tooltip={tooltip} />
+
+        {!activeAnswer && (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "64%",
+              transform: "translate(-50%, 34px)",
+              color: "#9c927f",
+              fontSize: "13px",
+              fontWeight: "800",
+              pointerEvents: "none",
+              textAlign: "center",
+              whiteSpace: "nowrap",
+              zIndex: 4
+            }}
+          >
+            Click the ruler to place your answer
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
 export default function TimelineReview({ group, reviewItems, onComplete }) {
-  const axisRef = useRef(null);
-  const items = reviewItems || [];
-  const range = group.range || buildRangeFromItems(items);
-  const ticks = useMemo(() => buildTicks(range), [range]);
-  const [focusedId, setFocusedId] = useState(items[0]?.question_id || null);
-  const [guesses, setGuesses] = useState(() => buildInitialGuesses(items, range));
+  const sortedItems = useMemo(
+    () => sortReviewItems(reviewItems || []),
+    [reviewItems]
+  );
+  const [orderedIds, setOrderedIds] = useState(() =>
+    sortedItems.map(item => item.question_id)
+  );
+  const [activeId, setActiveId] = useState(sortedItems[0]?.question_id || null);
+  const [committedAnswers, setCommittedAnswers] = useState({});
+  const [draftAnswers, setDraftAnswers] = useState({});
+  const [skippedIds, setSkippedIds] = useState(() => new Set());
   const [recapResults, setRecapResults] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  function guessFromPointer(event, precision) {
-    const axis = axisRef.current;
-    if (!axis) return null;
+  const itemById = useMemo(
+    () => new Map(sortedItems.map(item => [item.question_id, item])),
+    [sortedItems]
+  );
+  const orderedItems = orderedIds
+    .map(id => itemById.get(id))
+    .filter(Boolean);
+  const orderById = useMemo(
+    () => new Map(orderedItems.map((item, index) => [item.question_id, index])),
+    [orderedItems]
+  );
+  const range = useMemo(
+    () => group.range || buildRangeFromItems(sortedItems),
+    [group.range, sortedItems]
+  );
+  const bounds = useMemo(() => buildTimelineBounds(range), [range]);
+  const activeItem = itemById.get(activeId) || sortedItems[0] || null;
+  const activeTimeline = activeItem ? normalizeTimeline(activeItem.timeline) : null;
+  const activeAnswer = activeItem
+    ? draftAnswers[activeItem.question_id] || committedAnswers[activeItem.question_id] || null
+    : null;
+  const activeCanBeCommitted = Boolean(activeItem && activeAnswer);
+  const placedCount = sortedItems.filter(item =>
+    Boolean(committedAnswers[item.question_id]) ||
+    (item.question_id === activeItem?.question_id && activeCanBeCommitted)
+  ).length;
+  const canSubmit = sortedItems.length > 0 && sortedItems.every(item =>
+    Boolean(committedAnswers[item.question_id]) ||
+    (item.question_id === activeItem?.question_id && activeCanBeCommitted)
+  );
 
-    const rect = axis.getBoundingClientRect();
-    const ratio = clampNumber((event.clientX - rect.left) / rect.width, 0, 1);
-    const value = range.start_value + (range.end_value - range.start_value) * ratio;
+  function setActiveDraft(answer) {
+    if (!activeItem) return;
 
-    return ordinalToTimelineDate(value, precision);
-  }
-
-  function updateGuess(item, handle, value) {
-    const timeline = normalizeTimeline(item.timeline);
-
-    setGuesses(prev => {
-      const current = prev[item.question_id] || {};
-      const next = {
-        ...current,
-        [handle]: value
-      };
-
-      if (timeline.kind === "interval") {
-        const start = next.start || current.start;
-        const end = next.end || current.end;
-
-        if (start && end && lowerOrdinal(end) < lowerOrdinal(start)) {
-          if (handle === "start") {
-            next.end = start;
-          } else {
-            next.start = end;
-          }
-        }
-      }
-
-      return {
-        ...prev,
-        [item.question_id]: next
-      };
+    setDraftAnswers(prev => ({
+      ...prev,
+      [activeItem.question_id]: answer
+    }));
+    setSkippedIds(prev => {
+      const next = new Set(prev);
+      next.delete(activeItem.question_id);
+      return next;
     });
+    setError("");
   }
 
-  function handlePointerDown(event, item, handle) {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setFocusedId(item.question_id);
+  function commitQuestion(questionId) {
+    const item = itemById.get(questionId);
+    const answer = draftAnswers[questionId] || committedAnswers[questionId];
 
-    const timeline = normalizeTimeline(item.timeline);
-    const precision = handle === "end"
-      ? timeline.end.precision
-      : timeline.start.precision;
+    if (!item || !answer) return null;
 
-    const firstGuess = guessFromPointer(event, precision);
-    if (firstGuess) updateGuess(item, handle, firstGuess);
+    setCommittedAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+    setSkippedIds(prev => {
+      const next = new Set(prev);
+      next.delete(questionId);
+      return next;
+    });
 
-    function handlePointerMove(moveEvent) {
-      const nextGuess = guessFromPointer(moveEvent, precision);
-      if (nextGuess) updateGuess(item, handle, nextGuess);
+    return answer;
+  }
+
+  function selectItem(questionId) {
+    if (activeItem && questionId !== activeItem.question_id) {
+      commitQuestion(activeItem.question_id);
     }
 
-    function handlePointerUp() {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
+    setActiveId(questionId);
+    setError("");
+  }
+
+  function findNextUncommitted(afterId, committedOverride = committedAnswers) {
+    const startIndex = Math.max(0, orderedIds.indexOf(afterId));
+    const rotatedIds = [
+      ...orderedIds.slice(startIndex + 1),
+      ...orderedIds.slice(0, startIndex + 1)
+    ];
+
+    return rotatedIds.find(id => !committedOverride[id]);
+  }
+
+  function goNext() {
+    if (!activeItem) return;
+
+    const answer = commitQuestion(activeItem.question_id);
+
+    if (!answer) {
+      setError("Place an answer on the timeline before moving on.");
+      return;
     }
 
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
+    const nextCommitted = {
+      ...committedAnswers,
+      [activeItem.question_id]: answer
+    };
+    const nextId = findNextUncommitted(activeItem.question_id, nextCommitted);
+
+    if (nextId) {
+      setActiveId(nextId);
+    }
+
+    setError("");
+  }
+
+  function skipActiveItem() {
+    if (!activeItem) return;
+
+    setSkippedIds(prev => {
+      const next = new Set(prev);
+      if (!committedAnswers[activeItem.question_id]) {
+        next.add(activeItem.question_id);
+      }
+      return next;
+    });
+    setOrderedIds(prev => [
+      ...prev.filter(id => id !== activeItem.question_id),
+      activeItem.question_id
+    ]);
+
+    const nextId = orderedIds.find(id =>
+      id !== activeItem.question_id &&
+      !committedAnswers[id]
+    ) || orderedIds.find(id => id !== activeItem.question_id) || activeItem.question_id;
+
+    setActiveId(nextId);
+    setError("");
   }
 
   async function submitTimeline() {
+    if (!activeItem) return;
+
+    const activeCommittedAnswer = draftAnswers[activeItem.question_id]
+      || committedAnswers[activeItem.question_id];
+    const answersForSubmit = {
+      ...committedAnswers,
+      ...(activeCommittedAnswer
+        ? { [activeItem.question_id]: activeCommittedAnswer }
+        : {})
+    };
+
+    if (!sortedItems.every(item => answersForSubmit[item.question_id])) {
+      setError("Answer every timeline question before validating.");
+      return;
+    }
+
     const payload = {};
 
-    items.forEach(item => {
+    orderedItems.forEach(item => {
       const timeline = normalizeTimeline(item.timeline);
-      const guess = guesses[item.question_id];
-
-      payload[item.question_id] = {
-        start: guess.start
-      };
-
-      if (timeline.kind === "interval") {
-        payload[item.question_id].end = guess.end;
-      }
+      payload[item.question_id] = answerToPayload(
+        answersForSubmit[item.question_id],
+        timeline
+      );
     });
 
+    setCommittedAnswers(answersForSubmit);
     setIsSubmitting(true);
     setError("");
 
     try {
       const response = await sendTimelineAnswer(payload);
-      setRecapResults(response.results || []);
-    } catch (submitError) {
-      setError(submitError.message || "Impossible de valider cette timeline.");
+      const resultOrder = new Map(orderedItems.map((item, index) => [
+        item.question_id,
+        index
+      ]));
+      const sortedResults = (response.results || []).slice().sort((a, b) =>
+        (resultOrder.get(a.question_id) || 0) - (resultOrder.get(b.question_id) || 0)
+      );
+
+      setRecapResults(sortedResults);
+    } catch (requestError) {
+      setError(requestError.message || "Impossible de valider cette timeline.");
     } finally {
       setIsSubmitting(false);
     }
@@ -326,6 +1813,10 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
 
     setRecapResults(null);
     onComplete(failedQuestionIds);
+  }
+
+  if (!activeItem || !activeTimeline) {
+    return null;
   }
 
   return (
@@ -342,7 +1833,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
       >
         <div
           style={{
-            padding: "22px 24px 18px",
+            padding: "16px 18px 14px",
             borderBottom: "1px solid #262626",
             background: "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
           }}
@@ -351,279 +1842,129 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
             style={{
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: "20px"
+              alignItems: "center",
+              gap: "20px",
+              marginBottom: "14px"
             }}
           >
-            <div>
-              <div style={typeBadgeStyle}>TIMELINE</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <div style={typeBadgeStyle}>TIMELINE</div>
+                <div
+                  style={{
+                    color: "#777",
+                    fontSize: "12px",
+                    fontWeight: "800"
+                  }}
+                >
+                  Question {(orderById.get(activeItem.question_id) || 0) + 1} / {sortedItems.length}
+                </div>
+              </div>
               <div
                 style={{
-                  marginTop: "14px",
                   color: "#f3f3f3",
-                  fontSize: "28px",
-                  fontWeight: "800"
+                  fontSize: "21px",
+                  fontWeight: "850",
+                  lineHeight: 1.22,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
                 }}
               >
-                Dates a placer
+                {activeItem.question}
+              </div>
+              <div
+                style={{
+                  color: "#777",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  marginTop: "7px"
+                }}
+              >
+                {activeTimeline.kind === "interval" ? "Period" : "Date"} · {" "}
+                {activeAnswer ? formatAnswer(activeAnswer, activeTimeline) : "not placed"}
               </div>
             </div>
 
-            <div style={{ color: "#888", textAlign: "right" }}>
-              <div style={{ color: "#fff", fontSize: "28px", fontWeight: "800" }}>
-                {items.length}
+            <div
+              style={{
+                alignItems: "flex-end",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                flexShrink: 0
+              }}
+            >
+              <div style={{ color: "#fff", fontSize: "24px", fontWeight: "850" }}>
+                {placedCount}
+                <span style={{ color: "#666", fontSize: "16px", marginLeft: "4px" }}>
+                  / {sortedItems.length}
+                </span>
               </div>
-              <div style={{ fontSize: "12px" }}>items</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <button type="button" onClick={skipActiveItem} style={{ ...buttonStyle, padding: "10px 12px" }}>
+                  Skip
+                </button>
+                <button type="button" onClick={goNext} style={{ ...successButtonStyle, padding: "10px 12px" }}>
+                  Next
+                </button>
+                <button
+                  type="button"
+                  onClick={submitTimeline}
+                  disabled={isSubmitting || !canSubmit}
+                  style={{
+                    ...successButtonStyle,
+                    cursor: isSubmitting || !canSubmit ? "not-allowed" : "pointer",
+                    opacity: isSubmitting || !canSubmit ? 0.55 : 1,
+                    padding: "10px 12px"
+                  }}
+                >
+                  {isSubmitting ? "Validation..." : "Validate"}
+                </button>
+              </div>
             </div>
           </div>
+
+          <TimelineQueue
+            activeId={activeItem.question_id}
+            committedAnswers={committedAnswers}
+            draftAnswers={draftAnswers}
+            items={orderedItems}
+            onSelect={selectItem}
+            skippedIds={skippedIds}
+          />
+        </div>
+
+        <div style={{ padding: "18px" }}>
+          <TimelineCanvas
+            activeAnswer={activeAnswer}
+            activeId={activeItem.question_id}
+            activeItem={activeItem}
+            activeNumber={(orderById.get(activeItem.question_id) || 0) + 1}
+            bounds={bounds}
+            committedAnswers={committedAnswers}
+            items={orderedItems}
+            onDraftChange={setActiveDraft}
+            onSelect={selectItem}
+            orderById={orderById}
+            range={range}
+          />
         </div>
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "320px minmax(0, 1fr)",
-            minHeight: "420px"
+            borderTop: "1px solid #262626",
+            padding: "12px 18px"
           }}
         >
           <div
             style={{
-              borderRight: "1px solid #262626",
-              padding: "16px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              maxHeight: "560px",
-              overflow: "auto"
+              color: error ? "#ff9aa5" : "#777",
+              fontSize: "13px",
+              fontWeight: error ? "700" : "500"
             }}
           >
-            {items.map((item, index) => {
-              const color = colors[index % colors.length];
-              const guess = guesses[item.question_id];
-              const timeline = normalizeTimeline(item.timeline);
-              const selected = focusedId === item.question_id;
-
-              return (
-                <button
-                  key={item.question_id}
-                  type="button"
-                  onClick={() => setFocusedId(item.question_id)}
-                  style={{
-                    border: selected ? `1px solid ${color}` : "1px solid #2a2a2a",
-                    borderRadius: "12px",
-                    background: selected ? `${color}18` : "#141414",
-                    color: "#eee",
-                    cursor: "pointer",
-                    padding: "12px",
-                    textAlign: "left"
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      marginBottom: "8px"
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: "22px",
-                        height: "22px",
-                        borderRadius: "999px",
-                        background: `${color}22`,
-                        border: `1px solid ${color}`,
-                        color,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "11px",
-                        fontWeight: "900",
-                        flexShrink: 0
-                      }}
-                    >
-                      {index + 1}
-                    </span>
-                    <span
-                      style={{
-                        color: "#f3f3f3",
-                        fontSize: "14px",
-                        fontWeight: "800",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      {item.question}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      color: "#999",
-                      fontSize: "12px",
-                      lineHeight: 1.45
-                    }}
-                  >
-                    {timeline.kind === "interval" ? "Intervalle" : "Date"} · {timeline.start.precision}
-                  </div>
-
-                  {guess && (
-                    <div
-                      style={{
-                        color,
-                        fontSize: "12px",
-                        fontWeight: "700",
-                        marginTop: "6px"
-                      }}
-                    >
-                      {formatTimelineDate(guess.start)}
-                      {timeline.kind === "interval" && guess.end
-                        ? ` - ${formatTimelineDate(guess.end)}`
-                        : ""}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div
-            style={{
-              padding: "24px",
-              minWidth: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "22px"
-            }}
-          >
-            <div
-              ref={axisRef}
-              style={{
-                position: "relative",
-                minHeight: `${Math.max(240, items.length * 36 + 64)}px`,
-                border: "1px solid #2a2a2a",
-                borderRadius: "14px",
-                background: "#101010",
-                overflow: "hidden",
-                padding: "34px 18px 40px",
-                boxSizing: "border-box"
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  left: "18px",
-                  right: "18px",
-                  top: "36px",
-                  bottom: "42px"
-                }}
-              >
-                {items.map((item, index) => (
-                  <div
-                    key={`lane-${item.question_id}`}
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      right: 0,
-                      top: `${index * 36 + 18}px`,
-                      height: "1px",
-                      background: "#242424"
-                    }}
-                  />
-                ))}
-
-                {ticks.map((tick, index) => {
-                  const left = percentFromValue(tick.value, range);
-
-                  return (
-                    <div
-                      key={`${tick.label}-${index}`}
-                      style={{
-                        position: "absolute",
-                        left: `${left}%`,
-                        top: "-14px",
-                        bottom: "-8px",
-                        borderLeft: "1px solid #242424",
-                        color: "#777",
-                        fontSize: "11px",
-                        pointerEvents: "none"
-                      }}
-                    >
-                      <div
-                        style={{
-                          transform: "translateX(-50%)",
-                          marginTop: "-18px",
-                          whiteSpace: "nowrap"
-                        }}
-                      >
-                        {tick.label}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {items.map((item, index) => {
-                  const color = colors[index % colors.length];
-                  const guess = guesses[item.question_id];
-
-                  if (!guess) return null;
-
-                  return (
-                    <TimelineMarker
-                      key={item.question_id}
-                      item={item}
-                      color={color}
-                      guess={guess}
-                      index={index}
-                      isFocused={focusedId === item.question_id}
-                      onFocus={() => setFocusedId(item.question_id)}
-                      onPointerDown={handlePointerDown}
-                      range={range}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            {error && (
-              <div
-                style={{
-                  border: "1px solid #6b2b31",
-                  borderRadius: "12px",
-                  background: "#3a1f24",
-                  color: "#ff9aa5",
-                  padding: "12px 14px",
-                  fontSize: "13px"
-                }}
-              >
-                {error}
-              </div>
-            )}
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "14px"
-              }}
-            >
-              <div style={{ color: "#777", fontSize: "13px" }}>
-                Glisse les marqueurs sur la frise, puis valide.
-              </div>
-
-              <button
-                type="button"
-                onClick={submitTimeline}
-                disabled={isSubmitting || items.length === 0}
-                style={{
-                  ...successButtonStyle,
-                  opacity: isSubmitting ? 0.7 : 1
-                }}
-              >
-                {isSubmitting ? "Validation..." : "Valider"}
-              </button>
-            </div>
+            {error || "Click the ruler to place an answer. Wheel zooms; the minimap shows where you are."}
           </div>
         </div>
       </div>
@@ -689,7 +2030,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
               }}
             >
               {recapResults.map(result => {
-                const item = items.find(entry => entry.question_id === result.question_id);
+                const item = itemById.get(result.question_id);
                 const timeline = normalizeTimeline(result.expected);
 
                 return (
@@ -720,7 +2061,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
                         {item?.question || `Question #${result.question_id}`}
                       </div>
                       <div style={{ color: "#777", fontSize: "12px", marginTop: "4px" }}>
-                        Erreur: {result.start.distance} {result.start.unit}
+                        Error: {result.start.distance} {result.start.unit}
                         {result.end
                           ? ` / ${result.end.distance} ${result.end.unit}`
                           : ""}
@@ -729,7 +2070,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
 
                     <div>
                       <div style={{ color: "#666", fontSize: "10px", fontWeight: "800", marginBottom: "4px" }}>
-                        REPONSE
+                        ANSWER
                       </div>
                       <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "700" }}>
                         {formatTimelineAnswer(timeline)}
@@ -738,7 +2079,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
 
                     <div>
                       <div style={{ color: "#666", fontSize: "10px", fontWeight: "800", marginBottom: "4px" }}>
-                        TA REPONSE
+                        YOUR ANSWER
                       </div>
                       <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "700" }}>
                         {formatTimelineDate(result.start.guess)}

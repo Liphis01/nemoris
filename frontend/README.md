@@ -35,14 +35,13 @@ color: "#ff85c2",
 ## features
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
-- questions type timeline (en groupe comme maps)
 - ajouter un timer pour les questions
 - mode entrainement
 - mode difficile (similaire à jetpunk : on ne voit pas les réponses possibles, pas le droit à l'erreur...)
 - étaler les questions sur plusieurs jours au maximum (éviter d'avoir un jour à 0 puis un jour à 10 questions)
 - dans manage, afficher toutes les stats d'une question
 - ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
-- mettre les différents modes de jetpunk pour les maps
+- mettre les différents modes de jetpunk pour les maps et alterner selon les jours
 - en review : les plus durs d'abord
 - dans le recap, afficher toutes les stats intéressantes des questions pour voir les progrès
 - dans le recap, cliquer sur une question fait un zoom sur la zone et inversement

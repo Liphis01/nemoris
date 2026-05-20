@@ -1,7 +1,10 @@
 import {
   centerOrdinal,
+  formatTimelineYear,
   formatTimelineAnswer,
   lowerOrdinal,
+  maxTimelineValue,
+  minTimelineValue,
   normalizeTimeline,
   ordinalToDate,
   upperOrdinal
@@ -39,8 +42,8 @@ function buildRange(timeline) {
   const span = Math.max(1, end - start);
 
   return {
-    start: Math.max(1, start - Math.round(span * 0.12)),
-    end: end + Math.round(span * 0.12)
+    start: Math.max(minTimelineValue, start - Math.round(span * 0.12)),
+    end: Math.min(maxTimelineValue, end + Math.round(span * 0.12))
   };
 }
 
@@ -171,8 +174,8 @@ export default function TimelineMiniPreview({ timeline }) {
             fontVariantNumeric: "tabular-nums"
           }}
         >
-          <span>{firstYear}</span>
-          <span>{lastYear}</span>
+          <span>{formatTimelineYear(firstYear)}</span>
+          <span>{formatTimelineYear(lastYear)}</span>
         </div>
       </div>
     </div>

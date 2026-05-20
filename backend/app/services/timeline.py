@@ -1,6 +1,4 @@
-import calendar
 import random
-from datetime import date
 
 from fastapi import HTTPException
 
@@ -10,7 +8,7 @@ from ..serializers import serialize_progress
 
 VALID_PRECISIONS = {"year", "month", "day"}
 VALID_KINDS = {"point", "interval"}
-MIN_YEAR = 1
+MIN_YEAR = -9999
 MAX_YEAR = 9999
 
 
@@ -20,6 +18,55 @@ def _timeline_error(message: str):
 
 def _date_error(message: str):
     raise ValueError(message)
+
+
+def timeline_year_to_index(year):
+    return year if year > 0 else year + 1
+
+
+def timeline_index_to_year(index):
+    return index if index > 0 else index - 1
+
+
+def is_leap_year(year):
+    timeline_year = timeline_year_to_index(year)
+    return (
+        timeline_year % 4 == 0 and
+        (timeline_year % 100 != 0 or timeline_year % 400 == 0)
+    )
+
+
+def days_in_month(year, month):
+    if month == 2:
+        return 29 if is_leap_year(year) else 28
+
+    return [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
+
+
+def days_before_timeline_index(timeline_year):
+    previous_year = timeline_year - 1
+    return (
+        previous_year * 365 +
+        previous_year // 4 -
+        previous_year // 100 +
+        previous_year // 400
+    )
+
+
+def days_before_year(year):
+    return days_before_timeline_index(timeline_year_to_index(year))
+
+
+def days_before_month(year, month):
+    return sum(days_in_month(year, current_month) for current_month in range(1, month))
+
+
+def date_to_ordinal(year, month, day):
+    return days_before_year(year) + days_before_month(year, month) + day
+
+
+MIN_TIMELINE_VALUE = date_to_ordinal(MIN_YEAR, 1, 1)
+MAX_TIMELINE_VALUE = date_to_ordinal(MAX_YEAR, 12, 31)
 
 
 def normalize_timeline_date(value):
@@ -35,8 +82,8 @@ def normalize_timeline_date(value):
     except (TypeError, ValueError):
         _date_error("Timeline year is required")
 
-    if year < MIN_YEAR or year > MAX_YEAR:
-        _date_error("Timeline year must be between 1 and 9999")
+    if year == 0 or year < MIN_YEAR or year > MAX_YEAR:
+        _date_error("Timeline year must be between -9999 and 9999, excluding 0")
 
     month = value.get("month")
     day = value.get("day")
@@ -58,7 +105,7 @@ def normalize_timeline_date(value):
         except (TypeError, ValueError):
             _date_error("Timeline day is required for day precision")
 
-        max_day = calendar.monthrange(year, month)[1]
+        max_day = days_in_month(year, month)
         if day < 1 or day > max_day:
             _date_error("Timeline day is invalid for this month")
     else:
@@ -124,22 +171,22 @@ def _date_for_value(value, boundary):
     if precision == "year":
         month = 1 if boundary == "lower" else 12
         day = 1 if boundary == "lower" else 31
-        return date(year, month, day)
+        return year, month, day
 
     if precision == "month":
         month = value["month"]
-        day = 1 if boundary == "lower" else calendar.monthrange(year, month)[1]
-        return date(year, month, day)
+        day = 1 if boundary == "lower" else days_in_month(year, month)
+        return year, month, day
 
-    return date(year, value["month"], value["day"])
+    return year, value["month"], value["day"]
 
 
 def date_lower_value(value):
-    return _date_for_value(value, "lower").toordinal()
+    return date_to_ordinal(*_date_for_value(value, "lower"))
 
 
 def date_upper_value(value):
-    return _date_for_value(value, "upper").toordinal()
+    return date_to_ordinal(*_date_for_value(value, "upper"))
 
 
 def date_center_value(value):
@@ -203,8 +250,8 @@ def build_timeline_range(items):
     right_padding = round(span * random.uniform(0.15, 0.35))
 
     return {
-        "start_value": max(1, start_value - left_padding),
-        "end_value": min(date(MAX_YEAR, 12, 31).toordinal(), end_value + right_padding)
+        "start_value": max(MIN_TIMELINE_VALUE, start_value - left_padding),
+        "end_value": min(MAX_TIMELINE_VALUE, end_value + right_padding)
     }
 
 
@@ -239,7 +286,7 @@ def serialize_timeline_review_group(items):
 
 
 def _month_index(value):
-    return value["year"] * 12 + (value["month"] - 1)
+    return timeline_year_to_index(value["year"]) * 12 + (value["month"] - 1)
 
 
 def _quality_from_distance(distance, precision):
@@ -273,7 +320,10 @@ def grade_timeline_date(expected, guessed):
         _timeline_error(str(error))
 
     if expected_precision == "year":
-        distance = abs(expected["year"] - guess["year"])
+        distance = abs(
+            timeline_year_to_index(expected["year"]) -
+            timeline_year_to_index(guess["year"])
+        )
         unit = "years"
     elif expected_precision == "month":
         distance = abs(_month_index(expected) - _month_index(guess))

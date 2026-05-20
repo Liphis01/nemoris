@@ -1,5 +1,6 @@
 import {
   daysInMonth,
+  maxTimelineYear,
   normalizeTimelineDate,
   timelinePrecisions
 } from "../timelineUtils";
@@ -31,6 +32,8 @@ export default function TimelineBoundaryInput({
   onChange
 }) {
   const date = normalizeTimelineDate(value, precision);
+  const era = date.year < 0 ? "bc" : "ac";
+  const displayYear = Math.abs(date.year);
 
   function update(nextFields) {
     onChange(
@@ -40,6 +43,23 @@ export default function TimelineBoundaryInput({
         precision
       }, precision)
     );
+  }
+
+  function updateYear(rawYear) {
+    const numericYear = Number(rawYear);
+    const positiveYear = Number.isFinite(numericYear)
+      ? Math.max(1, Math.round(Math.abs(numericYear)))
+      : 1;
+
+    update({
+      year: era === "bc" ? -positiveYear : positiveYear
+    });
+  }
+
+  function updateEra(nextEra) {
+    update({
+      year: nextEra === "bc" ? -displayYear : displayYear
+    });
   }
 
   return (
@@ -67,10 +87,10 @@ export default function TimelineBoundaryInput({
         style={{
           display: "grid",
           gridTemplateColumns: precision === "day"
-            ? "1fr 1fr 1fr"
+            ? "1fr 0.9fr 1fr 1fr"
             : precision === "month"
-              ? "1fr 1fr"
-              : "1fr",
+              ? "1fr 0.9fr 1fr"
+              : "1fr 0.9fr",
           gap: "8px"
         }}
       >
@@ -79,11 +99,23 @@ export default function TimelineBoundaryInput({
           <input
             type="number"
             min="1"
-            max="9999"
-            value={date.year}
-            onChange={(event) => update({ year: event.target.value })}
+            max={maxTimelineYear}
+            value={displayYear}
+            onChange={(event) => updateYear(event.target.value)}
             style={inputStyle}
           />
+        </label>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <span style={fieldLabelStyle}>Era</span>
+          <select
+            value={era}
+            onChange={(event) => updateEra(event.target.value)}
+            style={inputStyle}
+          >
+            <option value="ac">apr. J.-C.</option>
+            <option value="bc">av. J.-C.</option>
+          </select>
         </label>
 
         {timelinePrecisions.indexOf(precision) >= timelinePrecisions.indexOf("month") && (
