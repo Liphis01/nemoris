@@ -1,8 +1,11 @@
 # TODO
 
 
-ui de merde dans manage preview
-ui de merde dans la review (impossible d'être précis + pb si trop de questions + pouvoir zoomer et déplacer la timeline)
+enlever la barre au milieu de la timeline ? enlever les dates d'encadrement ?
+Remplacer par une flèche pour indiquer préciser la date de l'event
+text questions ont un "#" vide à corriger
+mettre de l'aléatoire dans les reviews
+gérer les retards de review pour pas avoir 1000 questions à revoir d'un coup (démotivant)
 
 
 
@@ -31,6 +34,7 @@ color: "#ff85c2",
 - le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
 - dans les réponses accepter " " pour "-"
 - hover un nom trop long doit l'afficher
+- passer automatiquement au recap de map quand on a tout trouvé
 
 ## features
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
@@ -60,6 +64,7 @@ color: "#ff85c2",
 - faire des propositions existantes pour le média et pous les tags
 - décaler la limite de questions par review en paramètre de target pour le scheduler
 - pouvoir revenir à la question précédente dans la review
+- faire un bouton toggle pour l'era dans la preview
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

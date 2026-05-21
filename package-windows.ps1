@@ -5,6 +5,8 @@ $FrontendDir = Join-Path $RootDir "frontend"
 $BackendDir = Join-Path $RootDir "backend"
 $AppName = "QuizApp"
 $OutputDir = Join-Path $BackendDir "dist\$AppName"
+$DatabaseFile = Join-Path $BackendDir "questions.db"
+$StaticDir = Join-Path $BackendDir "static"
 
 function Invoke-Checked {
   param(
@@ -19,6 +21,10 @@ function Invoke-Checked {
   if ($LASTEXITCODE -ne 0) {
     throw $Message
   }
+}
+
+if (-not (Test-Path $DatabaseFile)) {
+  throw "Missing backend\questions.db. Create or restore the local database before packaging, then rerun this script."
 }
 
 Write-Host "Building frontend..."
@@ -58,11 +64,15 @@ if (-not (Test-Path $OutputDir)) {
 
 Write-Host "Copying writable app data..."
 New-Item -ItemType Directory -Force $OutputDir | Out-Null
-Copy-Item "questions.db" (Join-Path $OutputDir "questions.db") -Force
+Copy-Item $DatabaseFile (Join-Path $OutputDir "questions.db") -Force
 New-Item -ItemType Directory -Force (Join-Path $OutputDir "static") | Out-Null
 
-if (Test-Path "static") {
-  Copy-Item "static\*" (Join-Path $OutputDir "static") -Recurse -Force
+if (Test-Path $StaticDir) {
+  $StaticItems = Get-ChildItem $StaticDir -Force
+
+  if ($StaticItems.Count -gt 0) {
+    Copy-Item $StaticItems.FullName (Join-Path $OutputDir "static") -Recurse -Force
+  }
 }
 
 Write-Host ""

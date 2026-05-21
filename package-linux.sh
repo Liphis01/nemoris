@@ -6,6 +6,14 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_DIR="$ROOT_DIR/backend"
 APP_NAME="QuizApp"
 OUTPUT_DIR="$BACKEND_DIR/dist/$APP_NAME"
+DATABASE_FILE="$BACKEND_DIR/questions.db"
+STATIC_DIR="$BACKEND_DIR/static"
+
+if [ ! -f "$DATABASE_FILE" ]; then
+  echo "Missing backend/questions.db."
+  echo "Create or restore the local database before packaging, then rerun this script."
+  exit 1
+fi
 
 echo "Building frontend..."
 cd "$FRONTEND_DIR"
@@ -36,9 +44,12 @@ pyinstaller \
   run_desktop.py
 
 echo "Copying writable app data..."
-cp questions.db "$OUTPUT_DIR/questions.db"
+cp "$DATABASE_FILE" "$OUTPUT_DIR/questions.db"
 mkdir -p "$OUTPUT_DIR/static"
-cp -R static/. "$OUTPUT_DIR/static/"
+
+if [ -d "$STATIC_DIR" ]; then
+  cp -R "$STATIC_DIR"/. "$OUTPUT_DIR/static/"
+fi
 
 echo
 echo "Done. Export this folder:"
