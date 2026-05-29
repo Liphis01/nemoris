@@ -68,7 +68,6 @@ def get_startup_notice(db: Session = Depends(get_db)):
 @router.get("/review")
 def get_review(
     tags: Optional[List[str]] = Query(default=None),
-    limit: int = 200,
     collection_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
@@ -77,7 +76,6 @@ def get_review(
     return get_review_items(
         db,
         tags=tags,
-        limit=limit,
         collection_id=collection_id
     )
 

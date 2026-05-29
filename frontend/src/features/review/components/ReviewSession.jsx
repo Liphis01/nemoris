@@ -21,8 +21,6 @@ export default function ReviewSession({
   handleTimelineComplete,
   tagInput,
   setTagInput,
-  limit,
-  setLimit,
   catchupTargetDraft,
   setCatchupTargetDraft,
   saveCatchupTarget,
@@ -224,33 +222,6 @@ export default function ReviewSession({
                   event.currentTarget.blur();
                 }
               }}
-              style={inputStyle}
-            />
-          </div>
-
-          {/* LIMIT */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              width: "110px"
-            }}
-          >
-            <div
-              style={{
-                color: "#777",
-                fontSize: "12px",
-                fontWeight: "600"
-              }}
-            >
-              LIMIT
-            </div>
-
-            <input
-              type="number"
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
               style={inputStyle}
             />
           </div>

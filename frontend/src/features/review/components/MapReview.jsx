@@ -68,6 +68,8 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     dueCodes,
     feedbackTone,
     focusedCode,
+    focusNextRemainingZone,
+    focusVersion,
     foundQuestionIds,
     foundCodes,
     foundQuestionIdSet,
@@ -82,6 +84,8 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     recapRows,
     recapSuccessCount,
     recapSuccessRate,
+    remainingFocusCode,
+    remainingZones,
     sendResult,
     setFocusedCode,
     setInput,
@@ -248,6 +252,8 @@ export default function MapReview({ group, reviewZones, onComplete }) {
               svgPath={`/maps/${group.media}`}
               found={foundCodes}
               dueItems={dueCodes}
+              focusCode={remainingFocusCode}
+              focusVersion={focusVersion}
               onSelect={handleZoneSelect}
             />
           </div>
@@ -289,7 +295,8 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                 justifyContent: "space-between",
                 alignItems: "center",
                 gap: "18px",
-                marginTop: "24px"
+                marginTop: "24px",
+                flexWrap: "wrap"
               }}
             >
               <div
@@ -310,12 +317,34 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                     : "Clique sur la carte ou tape les réponses."}
               </div>
 
-              <button
-                onClick={finishMap}
-                style={buttonStyle}
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                  marginLeft: "auto"
+                }}
               >
-                Terminer
-              </button>
+                <button
+                  onClick={focusNextRemainingZone}
+                  disabled={remainingZones.length === 0}
+                  style={{
+                    ...buttonStyle,
+                    cursor: remainingZones.length === 0 ? "not-allowed" : "pointer",
+                    opacity: remainingZones.length === 0 ? 0.55 : 1
+                  }}
+                >
+                  Zoom restante
+                </button>
+
+                <button
+                  onClick={finishMap}
+                  style={buttonStyle}
+                >
+                  Terminer
+                </button>
+              </div>
             </div>
           )}
         </div>

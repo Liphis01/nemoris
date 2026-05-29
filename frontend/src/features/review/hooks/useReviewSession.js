@@ -24,7 +24,6 @@ export function useReviewSession(active) {
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [limit, setLimit] = useState(200);
   const [catchupTarget, setCatchupTarget] = useState(50);
   const [catchupTargetDraft, setCatchupTargetDraft] = useState("50");
   const [catchupTargetSaving, setCatchupTargetSaving] = useState(false);
@@ -165,7 +164,6 @@ export function useReviewSession(active) {
     // due selection and runtime grouping.
     getReview(
       selectedTags,
-      limit,
       selectedCollection || null
     )
       .then((data) => {
@@ -182,7 +180,6 @@ export function useReviewSession(active) {
     active,
     selectedCollection,
     selectedTags,
-    limit,
     reviewReady,
     reviewRefreshKey
   ]);
@@ -259,14 +256,12 @@ export function useReviewSession(active) {
     handleTextAnswer,
     catchupTargetDraft,
     catchupTargetSaving,
-    limit,
     questions,
     reviewError,
     reviewLoading,
     saveCatchupTarget,
     selectedCollection,
     setCatchupTargetDraft,
-    setLimit,
     setSelectedCollection,
     setShowAnswer,
     setTagInput,

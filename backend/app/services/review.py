@@ -15,7 +15,7 @@ from .timeline import (
 )
 
 
-def get_review_items(db, tags=None, limit=200, collection_id=None):
+def get_review_items(db, tags=None, collection_id=None):
     today = date.today()
 
     # Start from due atomic questions. joinedload keeps Manage/review payloads
@@ -73,9 +73,8 @@ def get_review_items(db, tags=None, limit=200, collection_id=None):
 
         review_items.append(serialize_review_question_item(question))
 
-    # Mixed sessions can contain normal questions and runtime map groups. The
-    # limit applies after grouping so a map/timeline consumes one review screen.
+    # Mixed sessions can contain normal questions and runtime map groups.
     if timeline_items:
         review_items.append(serialize_timeline_review_group(timeline_items))
 
-    return (review_items + list(grouped_items.values()))[:limit]
+    return review_items + list(grouped_items.values())

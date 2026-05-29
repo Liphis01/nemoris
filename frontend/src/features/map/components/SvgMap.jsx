@@ -14,6 +14,7 @@ export default function SvgMap({
     unsaved = [],
     selected,
     focusCode,
+    focusVersion = 0,
     onSelect,
     onCodesLoaded
 }) {
@@ -189,7 +190,7 @@ export default function SvgMap({
             x: (wrapperRect.width / 2) - (box.x + box.width / 2) * newScale,
             y: (wrapperRect.height / 2) - (box.y + box.height / 2) * newScale
         });
-    }, [focusCode, svgVersion]);
+    }, [focusCode, focusVersion, svgVersion]);
 
     useEffect(() => {
         const el = wrapperRef.current;

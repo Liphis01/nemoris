@@ -71,6 +71,8 @@ export function useMapReview(reviewZones, onComplete) {
   const [showRecap, setShowRecap] = useState(false);
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
+  const [remainingFocusCode, setRemainingFocusCode] = useState(null);
+  const [focusVersion, setFocusVersion] = useState(0);
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
 
@@ -140,6 +142,12 @@ export function useMapReview(reviewZones, onComplete) {
     [foundQuestionIdSet, reviewZones]
   );
 
+  const remainingZones = useMemo(
+    () =>
+      reviewZones.filter(item => !foundQuestionIdSet.has(item.question_id)),
+    [foundQuestionIdSet, reviewZones]
+  );
+
   const dueCodes = useMemo(
     () => reviewZones.map(item => item.code),
     [reviewZones]
@@ -171,6 +179,23 @@ export function useMapReview(reviewZones, onComplete) {
     markFound(zoneByCode.get(code));
   }
 
+  function focusNextRemainingZone() {
+    if (remainingZones.length === 0) return;
+
+    const currentIndex = remainingZones.findIndex(
+      item => item.code === remainingFocusCode
+    );
+    const nextIndex = currentIndex >= 0
+      ? (currentIndex + 1) % remainingZones.length
+      : 0;
+    const nextCode = remainingZones[nextIndex]?.code;
+
+    if (!nextCode) return;
+
+    setRemainingFocusCode(nextCode);
+    setFocusVersion(version => version + 1);
+  }
+
   function finishMap() {
     // Initial recap grades are optimistic: found zones are easy, missed zones
     // are failed. The user can adjust before submitting.
@@ -197,6 +222,8 @@ export function useMapReview(reviewZones, onComplete) {
     setFoundQuestionIds([]);
     setQualityByQuestionId({});
     setFocusedCode(null);
+    setRemainingFocusCode(null);
+    setFocusVersion(0);
 
     onComplete(failedQuestionIds);
   }
@@ -255,6 +282,8 @@ export function useMapReview(reviewZones, onComplete) {
     dueCodes,
     feedbackTone,
     focusedCode,
+    focusNextRemainingZone,
+    focusVersion,
     foundQuestionIds,
     foundCodes,
     foundQuestionIdSet,
@@ -269,6 +298,8 @@ export function useMapReview(reviewZones, onComplete) {
     recapRows,
     recapSuccessCount,
     recapSuccessRate,
+    remainingFocusCode,
+    remainingZones,
     sendResult,
     setFocusedCode,
     setInput,

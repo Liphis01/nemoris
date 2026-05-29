@@ -541,7 +541,6 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         response = get_review(
             tags=None,
-            limit=200,
             collection_id=None,
             db=self.db
         )
@@ -551,6 +550,20 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             sorted(item["question_id"] for item in response),
             [1, 2]
         )
+
+    def test_review_route_returns_all_due_questions_without_cap(self):
+        for question_id in range(1, 206):
+            self.add_question(question_id)
+
+        self.db.commit()
+
+        response = get_review(
+            tags=None,
+            collection_id=None,
+            db=self.db
+        )
+
+        self.assertEqual(len(response), 205)
 
     def test_startup_rebalance_records_notice_when_items_move(self):
         today = date.today()
@@ -618,7 +631,6 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         response = get_review(
             tags=None,
-            limit=200,
             collection_id=None,
             db=self.db
         )
