@@ -66,7 +66,6 @@ color: "#ff85c2",
 - pouvoir revenir à la question précédente dans la review
 - faire un bouton toggle pour l'era dans la preview
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
-- zoom sur les zones dans la review qu'il reste à trouver
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

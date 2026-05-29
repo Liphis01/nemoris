@@ -6,6 +6,13 @@ function normalizeCode(code) {
     return code?.trim() || "";
 }
 
+const zoneStrokeStyle = {
+    color: "#111",
+    width: "0.35",
+    linecap: "round",
+    linejoin: "round"
+};
+
 export default function SvgMap({
     svgPath,
     found,
@@ -88,6 +95,10 @@ export default function SvgMap({
                     if (code) mapCodes.add(code);
 
                     el.style.cursor = "pointer";
+                    el.style.stroke = zoneStrokeStyle.color;
+                    el.style.strokeWidth = zoneStrokeStyle.width;
+                    el.style.strokeLinecap = zoneStrokeStyle.linecap;
+                    el.style.strokeLinejoin = zoneStrokeStyle.linejoin;
                     zoneElements.push({ el, code });
                 });
 
