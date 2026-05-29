@@ -1,13 +1,8 @@
 # TODO
 
 
-enlever la barre au milieu de la timeline ? enlever les dates d'encadrement ?
-Remplacer par une flèche pour indiquer préciser la date de l'event
-text questions ont un "#" vide à corriger
-mettre de l'aléatoire dans les reviews
-gérer les retards de review pour pas avoir 1000 questions à revoir d'un coup (démotivant)
 
-
+text questions ont un "#" vide à corrig
 
 
 ## couleurs pour les types des cards
@@ -35,6 +30,7 @@ color: "#ff85c2",
 - dans les réponses accepter " " pour "-"
 - hover un nom trop long doit l'afficher
 - passer automatiquement au recap de map quand on a tout trouvé
+- "#" vide pour les questions texte dans review
 
 ## features
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place

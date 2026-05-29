@@ -9,6 +9,7 @@ import {
   formatTimelineYear,
   formatTimelineAnswer,
   formatTimelineDate,
+  getFinestPrecision,
   lowerOrdinal,
   maxTimelineValue,
   minTimelineValue,
@@ -45,7 +46,19 @@ const monthNames = [
   "Dec"
 ];
 
-const minViewportSpan = 14;
+const answerAnchorTop = 64;
+const activeChipTop = 43;
+const rulerRowHeight = 24;
+const precisionRank = {
+  year: 0,
+  month: 1,
+  day: 2
+};
+const minViewportSpanByPrecision = {
+  year: 365,
+  month: 30,
+  day: 1
+};
 
 const typeBadgeStyle = {
   display: "inline-flex",
@@ -146,10 +159,29 @@ function buildTimelineBounds(range) {
   };
 }
 
-function clampViewport(viewport, bounds) {
+function minViewportSpanForPrecision(precision) {
+  return minViewportSpanByPrecision[precision] || minViewportSpanByPrecision.day;
+}
+
+function getTimelinePrecision(timeline) {
+  if (timeline.kind === "interval") {
+    return getFinestPrecision(timeline.start, timeline.end);
+  }
+
+  return timeline.start.precision;
+}
+
+function precisionAllows(activePrecision, precision) {
+  return precisionRank[activePrecision] >= precisionRank[precision];
+}
+
+function clampViewport(viewport, bounds, activePrecision = "day") {
   const boundsSpan = Math.max(1, bounds.end_value - bounds.start_value);
   const span = Math.min(
-    Math.max(minViewportSpan, viewport.end_value - viewport.start_value),
+    Math.max(
+      minViewportSpanForPrecision(activePrecision),
+      viewport.end_value - viewport.start_value
+    ),
     boundsSpan
   );
   let start = viewport.start_value;
@@ -171,20 +203,20 @@ function clampViewport(viewport, bounds) {
   };
 }
 
-function zoomViewport(viewport, bounds, centerValue, zoomFactor) {
+function zoomViewport(viewport, bounds, centerValue, zoomFactor, activePrecision = "day") {
   const center = clampNumber(centerValue, viewport.start_value, viewport.end_value);
 
   return clampViewport({
     start_value: center - (center - viewport.start_value) * zoomFactor,
     end_value: center + (viewport.end_value - center) * zoomFactor
-  }, bounds);
+  }, bounds, activePrecision);
 }
 
-function panViewport(viewport, bounds, deltaValue) {
+function panViewport(viewport, bounds, deltaValue, activePrecision = "day") {
   return clampViewport({
     start_value: viewport.start_value + deltaValue,
     end_value: viewport.end_value + deltaValue
-  }, bounds);
+  }, bounds, activePrecision);
 }
 
 function niceStep(rawStep) {
@@ -247,10 +279,14 @@ function buildGridTicks(rulers) {
   return [...ticksByValue.values()].sort((a, b) => a.value - b.value);
 }
 
-function buildTimelineScale(viewport, width = 900) {
+function buildTimelineScale(viewport, width = 900, activePrecision = "day") {
   const span = Math.max(1, viewport.end_value - viewport.start_value);
   const safeWidth = Math.max(320, width || 900);
-  const targetLabelCount = clampNumber(Math.floor(safeWidth / 92), 8, 14);
+  const yearLabelTarget = clampNumber(Math.floor(safeWidth / 52), 10, 32);
+  const monthLabelTarget = clampNumber(Math.floor(safeWidth / 42), 12, 34);
+  const dayLabelTarget = clampNumber(Math.floor(safeWidth / 30), 14, 42);
+  const allowMonths = precisionAllows(activePrecision, "month");
+  const allowDays = precisionAllows(activePrecision, "day");
   const startDate = ordinalToDate(viewport.start_value);
   const endDate = ordinalToDate(viewport.end_value);
   const yearTicks = [];
@@ -260,9 +296,9 @@ function buildTimelineScale(viewport, width = 900) {
   const startYearIndex = yearToTimelineIndex(startDate.year);
   const endYearIndex = yearToTimelineIndex(endDate.year);
   const yearCount = Math.max(1, endYearIndex - startYearIndex + 1);
-  const yearStep = yearCount <= targetLabelCount
+  const yearStep = yearCount <= yearLabelTarget
     ? 1
-    : niceStep(yearCount / targetLabelCount);
+    : niceStep(yearCount / yearLabelTarget);
 
   for (
     let yearIndex = Math.ceil(startYearIndex / yearStep) * yearStep;
@@ -338,13 +374,13 @@ function buildTimelineScale(viewport, width = 900) {
   const endMonthIndex = monthIndexFromDate(endDate);
   const monthCount = Math.max(1, endMonthIndex - startMonthIndex + 1);
   const monthPixelWidth = safeWidth / monthCount;
-  const showMonths = monthPixelWidth >= 5 || span <= 365 * 15;
-  const monthGridStep = monthPixelWidth >= 5
+  const showMonths = allowMonths && (monthPixelWidth >= 2.5 || span <= 365 * 30);
+  const monthGridStep = monthPixelWidth >= 4
     ? 1
-    : monthPixelWidth >= 3
+    : monthPixelWidth >= 2.5
       ? 2
       : 3;
-  const monthLabelStep = niceMonthStep(Math.max(1, Math.ceil(monthCount / targetLabelCount)));
+  const monthLabelStep = niceMonthStep(Math.max(1, Math.ceil(monthCount / monthLabelTarget)));
 
   if (showMonths) {
     for (
@@ -376,8 +412,9 @@ function buildTimelineScale(viewport, width = 900) {
   }
 
   const dayPixelWidth = safeWidth / span;
-  const showDays = dayPixelWidth >= 5;
-  const showDayLabels = dayPixelWidth >= 22;
+  const showDays = allowDays && (dayPixelWidth >= 1.8 || span <= 370);
+  const showAllDayLabels = dayPixelWidth >= 12;
+  const dayLabelStep = niceStep(Math.max(1, Math.ceil(span / dayLabelTarget)));
 
   if (showDays) {
     for (
@@ -389,7 +426,9 @@ function buildTimelineScale(viewport, width = 900) {
 
       dayTicks.push({
         value,
-        label: showDayLabels ? String(date.day) : "",
+        label: showAllDayLabels || positiveModulo(Math.round(value), dayLabelStep) === 0
+          ? String(date.day)
+          : "",
         level: date.day === 1 ? "major" : "minor",
         unit: "day"
       });
@@ -416,29 +455,17 @@ function percentWithinRange(value, range) {
   return ((value - range.start_value) / span) * 100;
 }
 
-function centerViewportOn(value, viewport, bounds) {
+function centerViewportOn(value, viewport, bounds, activePrecision = "day") {
   const span = viewport.end_value - viewport.start_value;
 
   return clampViewport({
     start_value: value - span / 2,
     end_value: value + span / 2
-  }, bounds);
+  }, bounds, activePrecision);
 }
 
-function formatViewportLabel(viewport) {
-  const span = Math.max(1, viewport.end_value - viewport.start_value);
-  const start = ordinalToDate(viewport.start_value);
-  const end = ordinalToDate(viewport.end_value);
-
-  if (span > 365 * 5) {
-    return `${formatTimelineYear(start.year)} - ${formatTimelineYear(end.year)}`;
-  }
-
-  if (span > 120) {
-    return `${monthNames[start.month - 1]} ${formatTimelineYear(start.year)} - ${monthNames[end.month - 1]} ${formatTimelineYear(end.year)}`;
-  }
-
-  return `${formatTimelineDate(snapValueToDate(viewport.start_value, "day"))} - ${formatTimelineDate(snapValueToDate(viewport.end_value, "day"))}`;
+function formatValueLabel(value, precision) {
+  return formatTimelineDate(snapValueToDate(value, precision));
 }
 
 function snapValueToDate(value, precision) {
@@ -653,20 +680,22 @@ function TimelineCanvas({
   orderById,
   range
 }) {
+  const activeTimeline = normalizeTimeline(activeItem.timeline);
+  const activePrecision = getTimelinePrecision(activeTimeline);
   const minimapRef = useRef(null);
   const minimapDragRef = useRef(null);
   const surfaceRef = useRef(null);
   const dragRef = useRef(null);
-  const [viewport, setViewport] = useState(() => clampViewport(range, bounds));
+  const [viewport, setViewport] = useState(() =>
+    clampViewport(range, bounds, activePrecision)
+  );
   const [dragMode, setDragMode] = useState("");
+  const [hoveredValue, setHoveredValue] = useState(null);
+  const [markerDateLabel, setMarkerDateLabel] = useState("");
   const [surfaceWidth, setSurfaceWidth] = useState(900);
   const [tooltip, setTooltip] = useState(null);
-  const activeTimeline = normalizeTimeline(activeItem.timeline);
   const activeColor = markerColors[(orderById.get(activeId) || 0) % markerColors.length];
-  const scale = useMemo(
-    () => buildTimelineScale(viewport, surfaceWidth),
-    [surfaceWidth, viewport]
-  );
+  const scale = buildTimelineScale(viewport, surfaceWidth, activePrecision);
   const markers = useMemo(
     () => buildMarkers(items, committedAnswers, activeId, viewport, orderById),
     [activeId, committedAnswers, items, orderById, viewport]
@@ -690,14 +719,27 @@ function TimelineCanvas({
       .filter(Boolean),
     [activeAnswer, activeId, committedAnswers, items, orderById]
   );
-  const viewportLabel = formatViewportLabel(viewport);
+  const canvasDateLabel = markerDateLabel || (hoveredValue === null
+    ? activeAnswer
+      ? formatAnswer(activeAnswer, activeTimeline)
+      : "Hover timeline to preview date"
+    : formatValueLabel(hoveredValue, activePrecision));
+  const canvasDateContext = markerDateLabel
+    ? "Marker date"
+    : hoveredValue === null
+    ? activeAnswer
+      ? "Placed answer"
+      : "Move pointer over the timeline"
+    : "Hovered date";
   const viewportStartPercent = percentWithinRange(viewport.start_value, bounds);
   const viewportEndPercent = percentWithinRange(viewport.end_value, bounds);
   const viewportWidthPercent = Math.max(2, viewportEndPercent - viewportStartPercent);
 
   useEffect(() => {
-    setViewport(clampViewport(range, bounds));
-  }, [bounds, range]);
+    setViewport(clampViewport(range, bounds, activePrecision));
+    setHoveredValue(null);
+    setMarkerDateLabel("");
+  }, [activePrecision, bounds, range]);
 
   useEffect(() => {
     const node = surfaceRef.current;
@@ -740,7 +782,7 @@ function TimelineCanvas({
         const centerValue = current.start_value +
           ratio * (current.end_value - current.start_value);
 
-        return zoomViewport(current, bounds, centerValue, zoomFactor);
+        return zoomViewport(current, bounds, centerValue, zoomFactor, activePrecision);
       });
     }
 
@@ -749,7 +791,7 @@ function TimelineCanvas({
     return () => {
       nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
     };
-  }, [bounds]);
+  }, [activePrecision, bounds]);
 
   function valueFromClientX(clientX, targetViewport = viewport) {
     const rect = surfaceRef.current?.getBoundingClientRect();
@@ -833,13 +875,15 @@ function TimelineCanvas({
     event.preventDefault();
     setTooltip(null);
     capturePointer(event);
+    const startValue = valueFromClientX(event.clientX);
+    setHoveredValue(startValue);
 
     dragRef.current = {
       initialViewport: viewport,
       mode: "surface",
       moved: false,
       pointerId: event.pointerId,
-      startValue: valueFromClientX(event.clientX),
+      startValue,
       startX: event.clientX,
       startY: event.clientY
     };
@@ -853,6 +897,7 @@ function TimelineCanvas({
     event.stopPropagation();
     setTooltip(null);
     capturePointer(event);
+    setHoveredValue(valueFromClientX(event.clientX));
 
     dragRef.current = {
       initialAnswer: activeAnswer,
@@ -886,11 +931,27 @@ function TimelineCanvas({
       const span = dragState.initialViewport.end_value - dragState.initialViewport.start_value;
       const deltaValue = -((event.clientX - dragState.startX) / Math.max(1, rect?.width || 1)) * span;
 
-      setViewport(panViewport(dragState.initialViewport, bounds, deltaValue));
+      setViewport(panViewport(
+        dragState.initialViewport,
+        bounds,
+        deltaValue,
+        activePrecision
+      ));
       return;
     }
 
     updateDraggedAnswer(dragState.mode, valueFromClientX(event.clientX), dragState);
+  }
+
+  function handleSurfacePointerMove(event) {
+    setHoveredValue(valueFromClientX(event.clientX));
+    handlePointerMove(event);
+  }
+
+  function handleSurfacePointerLeave() {
+    if (!dragRef.current) {
+      setHoveredValue(null);
+    }
   }
 
   function handlePointerUp(event) {
@@ -905,6 +966,7 @@ function TimelineCanvas({
 
     releasePointer(event);
     dragRef.current = null;
+    setHoveredValue(valueFromClientX(event.clientX));
     setDragMode("");
   }
 
@@ -913,11 +975,17 @@ function TimelineCanvas({
       ? getAnswerCenterValue(activeAnswer, activeTimeline)
       : (viewport.start_value + viewport.end_value) / 2;
 
-    setViewport(current => zoomViewport(current, bounds, centerValue, zoomFactor));
+    setViewport(current => zoomViewport(
+      current,
+      bounds,
+      centerValue,
+      zoomFactor,
+      activePrecision
+    ));
   }
 
   function resetViewport() {
-    setViewport(clampViewport(range, bounds));
+    setViewport(clampViewport(range, bounds, activePrecision));
   }
 
   function beginMinimapDrag(event) {
@@ -938,7 +1006,7 @@ function TimelineCanvas({
     };
     setDragMode("minimap");
     setViewport(current =>
-      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds)
+      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds, activePrecision)
     );
   }
 
@@ -947,7 +1015,7 @@ function TimelineCanvas({
     if (!dragState || dragState.pointerId !== event.pointerId) return;
 
     setViewport(current =>
-      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds)
+      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds, activePrecision)
     );
   }
 
@@ -973,19 +1041,27 @@ function TimelineCanvas({
     });
   }
 
+  function showMarkerDate(answer, timeline) {
+    setMarkerDateLabel(formatAnswer(answer, timeline));
+  }
+
+  function hideMarkerDate() {
+    setMarkerDateLabel("");
+  }
+
   function renderRulers() {
+    const rulerHeight = Math.max(rulerRowHeight, scale.rulers.length * rulerRowHeight);
+
     return (
       <div
         style={{
           position: "absolute",
           left: 0,
           right: 0,
-          top: "14px",
-          borderTop: "1px solid rgba(244,240,223,0.08)",
-          borderBottom: "1px solid rgba(244,240,223,0.08)",
-          background: "rgba(18,18,18,0.58)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+          top: "12px",
+          height: `${rulerHeight}px`,
           overflow: "hidden",
+          pointerEvents: "none",
           zIndex: 2
         }}
       >
@@ -994,8 +1070,7 @@ function TimelineCanvas({
             key={`ruler-${rowIndex}`}
             style={{
               position: "relative",
-              height: "30px",
-              borderTop: rowIndex === 0 ? "none" : "1px solid rgba(244,240,223,0.08)"
+              height: `${rulerRowHeight}px`
             }}
           >
             {ruler.ticks.map((tick, index) => {
@@ -1050,107 +1125,225 @@ function TimelineCanvas({
     const top = markerTop(marker.stack);
     const text = marker.item.question;
     const answerText = formatAnswer(marker.answer, marker.timeline);
+    const stemTop = Math.min(top, answerAnchorTop);
+    const stemHeight = Math.abs(answerAnchorTop - top);
 
     if (marker.timeline.kind === "interval") {
       const start = percentFromValue(centerOrdinal(marker.answer.start), viewport);
       const end = percentFromValue(centerOrdinal(marker.answer.end), viewport);
-      const left = Math.min(start, end);
+      const center = (start + end) / 2;
       const width = Math.max(8, Math.abs(end - start));
+      const left = center - width / 2;
 
       return (
-        <button
+        <div
           key={marker.item.question_id}
-          type="button"
-          onClick={() => onSelect(marker.item.question_id)}
-          onFocus={() => showTooltip(`${text}: ${answerText}`, left + width / 2, top)}
-          onMouseEnter={() => showTooltip(`${text}: ${answerText}`, left + width / 2, top)}
-          onMouseLeave={() => setTooltip(null)}
-          onPointerDown={(event) => event.stopPropagation()}
           style={{
             position: "absolute",
-            left: `${left}%`,
-            top: `${top}%`,
-            width: `${width}%`,
-            maxWidth: "260px",
-            minWidth: "92px",
-            height: "30px",
-            transform: "translateY(-50%)",
-            borderRadius: "999px",
-            border: `1px solid ${color}`,
-            background: `${color}26`,
-            color,
-            cursor: "pointer",
-            fontSize: "11px",
-            fontWeight: "900",
-            overflow: "hidden",
-            padding: "0 10px",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            inset: 0,
+            pointerEvents: "none",
             zIndex: 5
           }}
         >
-          {marker.order + 1}. {text}
-        </button>
+          <div
+            style={{
+              position: "absolute",
+              left: `${left}%`,
+              top: `${answerAnchorTop}%`,
+              width: `${width}%`,
+              height: "4px",
+              transform: "translateY(-50%)",
+              borderRadius: "999px",
+              background: `${color}55`,
+              boxShadow: `0 0 0 1px ${color}44`,
+              pointerEvents: "none"
+            }}
+          />
+          {[start, end].map((point, index) => (
+            <div
+              key={`${marker.item.question_id}-endpoint-${index}`}
+              style={{
+                position: "absolute",
+                left: `${point}%`,
+                top: `${answerAnchorTop}%`,
+                width: "9px",
+                height: "9px",
+                transform: "translate(-50%, -50%)",
+                borderRadius: "999px",
+                border: `1px solid ${color}`,
+                background: "#121212",
+                boxShadow: `0 0 0 3px ${color}18`,
+                pointerEvents: "none"
+              }}
+            />
+          ))}
+          <div
+            style={{
+              position: "absolute",
+              left: `${center}%`,
+              top: `${stemTop}%`,
+              height: `${stemHeight}%`,
+              borderLeft: `1px solid ${color}88`,
+              pointerEvents: "none"
+            }}
+          />
+            <button
+              type="button"
+              onClick={() => onSelect(marker.item.question_id)}
+              onBlur={hideMarkerDate}
+              onFocus={() => {
+                showTooltip(`${text}: ${answerText}`, center, top);
+                showMarkerDate(marker.answer, marker.timeline);
+              }}
+              onMouseEnter={() => {
+                showTooltip(`${text}: ${answerText}`, center, top);
+                showMarkerDate(marker.answer, marker.timeline);
+              }}
+              onMouseLeave={() => {
+                setTooltip(null);
+                hideMarkerDate();
+              }}
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{
+              position: "absolute",
+              left: `${center}%`,
+              top: `${top}%`,
+              display: "flex",
+              alignItems: "center",
+              gap: "7px",
+              maxWidth: "230px",
+              height: "30px",
+              transform: "translate(-50%, -50%)",
+              borderRadius: "999px",
+              border: `1px solid ${color}`,
+              background: "#151515",
+              color,
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: "900",
+              overflow: "hidden",
+              padding: "0 10px",
+              pointerEvents: "auto",
+              zIndex: 2
+            }}
+          >
+            <span>{marker.order + 1}</span>
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {text}
+            </span>
+          </button>
+        </div>
       );
     }
 
     const left = percentFromValue(centerOrdinal(marker.answer.start), viewport);
 
     return (
-      <button
+      <div
         key={marker.item.question_id}
-        type="button"
-        onClick={() => onSelect(marker.item.question_id)}
-        onFocus={() => showTooltip(`${text}: ${answerText}`, left, top)}
-        onMouseEnter={() => showTooltip(`${text}: ${answerText}`, left, top)}
-        onMouseLeave={() => setTooltip(null)}
-        onPointerDown={(event) => event.stopPropagation()}
         style={{
           position: "absolute",
-          left: `${left}%`,
-          top: `${top}%`,
-          display: "flex",
-          alignItems: "center",
-          gap: "7px",
-          maxWidth: "230px",
-          height: "32px",
-          transform: "translate(-50%, -50%)",
-          borderRadius: "999px",
-          border: `1px solid ${color}`,
-          background: "#151515",
-          color,
-          cursor: "pointer",
-          fontSize: "11px",
-          fontWeight: "900",
-          overflow: "hidden",
-          padding: "0 10px 0 5px",
+          inset: 0,
+          pointerEvents: "none",
           zIndex: 5
         }}
       >
-        <span
+        <div
           style={{
-            alignItems: "center",
-            background: `${color}22`,
+            position: "absolute",
+            left: `${left}%`,
+            top: `${stemTop}%`,
+            height: `${stemHeight}%`,
+            borderLeft: `1px solid ${color}88`,
+            pointerEvents: "none"
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${answerAnchorTop}%`,
+            width: "11px",
+            height: "11px",
+            transform: "translate(-50%, -50%)",
             borderRadius: "999px",
-            display: "inline-flex",
-            flexShrink: 0,
-            height: "24px",
-            justifyContent: "center",
-            width: "24px"
+            border: `2px solid ${color}`,
+            background: "#121212",
+            boxShadow: `0 0 0 4px ${color}18`,
+            pointerEvents: "none"
           }}
-        >
-          {marker.order + 1}
-        </span>
-        <span
+        />
+          <button
+            type="button"
+            onClick={() => onSelect(marker.item.question_id)}
+            onBlur={hideMarkerDate}
+            onFocus={() => {
+              showTooltip(`${text}: ${answerText}`, left, top);
+              showMarkerDate(marker.answer, marker.timeline);
+            }}
+            onMouseEnter={() => {
+              showTooltip(`${text}: ${answerText}`, left, top);
+              showMarkerDate(marker.answer, marker.timeline);
+            }}
+            onMouseLeave={() => {
+              setTooltip(null);
+              hideMarkerDate();
+            }}
+          onPointerDown={(event) => event.stopPropagation()}
           style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${top}%`,
+            display: "flex",
+            alignItems: "center",
+            gap: "7px",
+            maxWidth: "230px",
+            height: "30px",
+            transform: "translate(-50%, -50%)",
+            borderRadius: "999px",
+            border: `1px solid ${color}`,
+            background: "#151515",
+            color,
+            cursor: "pointer",
+            fontSize: "11px",
+            fontWeight: "900",
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
+            padding: "0 10px 0 5px",
+            pointerEvents: "auto",
+            zIndex: 2
           }}
         >
-          {text}
-        </span>
-      </button>
+          <span
+            style={{
+              alignItems: "center",
+              background: `${color}22`,
+              borderRadius: "999px",
+              display: "inline-flex",
+              flexShrink: 0,
+              height: "22px",
+              justifyContent: "center",
+              width: "22px"
+            }}
+          >
+            {marker.order + 1}
+          </span>
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {text}
+          </span>
+        </button>
+      </div>
     );
   }
 
@@ -1158,75 +1351,170 @@ function TimelineCanvas({
     if (!activeAnswer) return null;
 
     const text = activeItem.question;
+    const stemTop = Math.min(activeChipTop, answerAnchorTop);
+    const stemHeight = Math.abs(answerAnchorTop - activeChipTop);
 
     if (activeTimeline.kind === "interval") {
       const start = percentFromValue(centerOrdinal(activeAnswer.start), viewport);
       const end = percentFromValue(centerOrdinal(activeAnswer.end), viewport);
-      const left = Math.min(start, end);
-      const width = Math.max(8, Math.abs(end - start));
-      const center = left + width / 2;
+      const center = (start + end) / 2;
+      const width = Math.max(1, Math.abs(end - start));
+      const left = center - width / 2;
 
       return (
         <div
           style={{
             position: "absolute",
-            left: `${left}%`,
-            top: "64%",
-            width: `${width}%`,
-            minWidth: "112px",
-            height: "48px",
-            transform: "translateY(-50%)",
+            inset: 0,
+            pointerEvents: "none",
             zIndex: 12
           }}
         >
+          <div
+            style={{
+              position: "absolute",
+              left: `${left}%`,
+              top: `${answerAnchorTop}%`,
+              width: `${width}%`,
+              height: "5px",
+              transform: "translateY(-50%)",
+              borderRadius: "999px",
+              background: activeColor,
+              boxShadow: `0 0 0 5px ${activeColor}18, 0 8px 22px rgba(0,0,0,0.34)`,
+              pointerEvents: "none"
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              left: `${center}%`,
+              top: `${stemTop}%`,
+              height: `${stemHeight}%`,
+              borderLeft: `2px solid ${activeColor}`,
+              boxShadow: `0 0 16px ${activeColor}55`,
+              pointerEvents: "none"
+            }}
+          />
           <button
             type="button"
-            onFocus={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50)}
-            onMouseEnter={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50)}
-            onMouseLeave={() => setTooltip(null)}
+            onBlur={hideMarkerDate}
+            onFocus={() => {
+              showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50);
+              showMarkerDate(activeAnswer, activeTimeline);
+            }}
+            onMouseEnter={() => {
+              showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50);
+              showMarkerDate(activeAnswer, activeTimeline);
+            }}
+            onMouseLeave={() => {
+              setTooltip(null);
+              hideMarkerDate();
+            }}
             onPointerDown={(event) => beginAnswerDrag(event, "bar")}
             style={{
               position: "absolute",
-              inset: "9px 0",
+              left: `${center}%`,
+              top: `${activeChipTop}%`,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              maxWidth: "280px",
+              height: "38px",
+              transform: "translate(-50%, -50%)",
               borderRadius: "999px",
               border: `2px solid ${activeColor}`,
-              background: `linear-gradient(90deg, ${activeColor}50, ${activeColor}24)`,
+              background: "#151515",
               color: "#f7f7f7",
               cursor: dragMode === "bar" ? "grabbing" : "grab",
               fontSize: "12px",
               fontWeight: "950",
               overflow: "hidden",
-              padding: "0 32px",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              padding: "0 14px 0 10px",
+              pointerEvents: "auto",
               boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`
             }}
           >
-            {activeNumber}. {text}
+            <span
+              style={{
+                alignItems: "center",
+                background: activeColor,
+                borderRadius: "999px",
+                color: "#101010",
+                display: "inline-flex",
+                flexShrink: 0,
+                height: "24px",
+                justifyContent: "center",
+                width: "24px"
+              }}
+            >
+              {activeNumber}
+            </span>
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {text}
+            </span>
           </button>
 
-          {["start", "end"].map(handle => (
+          {[
+            ["start", start],
+            ["end", end]
+          ].map(([handle, point]) => (
             <button
               key={handle}
               type="button"
               aria-label={handle === "start" ? "Move period start" : "Move period end"}
+              onBlur={hideMarkerDate}
+              onFocus={() => showMarkerDate(activeAnswer, activeTimeline)}
+              onMouseEnter={() => showMarkerDate(activeAnswer, activeTimeline)}
+              onMouseLeave={hideMarkerDate}
               onPointerDown={(event) => beginAnswerDrag(event, handle)}
               style={{
                 position: "absolute",
-                left: handle === "start" ? 0 : "100%",
-                top: "50%",
-                width: "24px",
-                height: "44px",
+                left: `${point}%`,
+                top: `${answerAnchorTop}%`,
+                width: "20px",
+                height: "20px",
                 transform: "translate(-50%, -50%)",
                 borderRadius: "999px",
                 border: "2px solid #fff",
                 background: activeColor,
                 cursor: "ew-resize",
+                pointerEvents: "auto",
                 boxShadow: "0 8px 20px rgba(0,0,0,0.42)",
                 zIndex: 2
               }}
             />
           ))}
+          <button
+            type="button"
+            aria-label="Move period"
+            onBlur={hideMarkerDate}
+            onFocus={() => showMarkerDate(activeAnswer, activeTimeline)}
+            onMouseEnter={() => showMarkerDate(activeAnswer, activeTimeline)}
+            onMouseLeave={hideMarkerDate}
+            onPointerDown={(event) => beginAnswerDrag(event, "bar")}
+            style={{
+              position: "absolute",
+              left: `${center}%`,
+              top: `${answerAnchorTop}%`,
+              width: "13px",
+              height: "13px",
+              transform: "translate(-50%, -50%) rotate(45deg)",
+              border: "2px solid #fff",
+              borderRadius: "2px 50% 50% 50%",
+              background: activeColor,
+              boxShadow: `0 0 0 7px ${activeColor}18`,
+              cursor: dragMode === "bar" ? "grabbing" : "grab",
+              padding: 0,
+              pointerEvents: "auto",
+              zIndex: 3
+            }}
+          />
         </div>
       );
     }
@@ -1234,46 +1522,114 @@ function TimelineCanvas({
     const left = percentFromValue(centerOrdinal(activeAnswer.start), viewport);
 
     return (
-      <button
-        type="button"
-        onFocus={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50)}
-        onMouseEnter={() => showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50)}
-        onMouseLeave={() => setTooltip(null)}
-        onPointerDown={(event) => beginAnswerDrag(event, "point")}
+      <div
         style={{
           position: "absolute",
-          left: `${left}%`,
-          top: "64%",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          maxWidth: "260px",
-          height: "42px",
-          transform: "translate(-50%, -50%)",
-          borderRadius: "999px",
-          border: "2px solid #fff",
-          background: activeColor,
-          color: "#101010",
-          cursor: dragMode === "point" ? "grabbing" : "grab",
-          fontSize: "12px",
-          fontWeight: "950",
-          overflow: "hidden",
-          padding: "0 14px 0 10px",
-          boxShadow: `0 0 0 10px ${activeColor}22, 0 14px 30px rgba(0,0,0,0.42)`,
+          inset: 0,
+          pointerEvents: "none",
           zIndex: 12
         }}
       >
-        <span>{activeNumber}</span>
-        <span
+        <div
           style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${stemTop}%`,
+            height: `${stemHeight}%`,
+            borderLeft: `2px solid ${activeColor}`,
+            boxShadow: `0 0 16px ${activeColor}55`,
+            pointerEvents: "none"
+          }}
+        />
+        <button
+          type="button"
+          aria-label="Move date"
+          onBlur={hideMarkerDate}
+          onFocus={() => showMarkerDate(activeAnswer, activeTimeline)}
+          onMouseEnter={() => showMarkerDate(activeAnswer, activeTimeline)}
+          onMouseLeave={hideMarkerDate}
+          onPointerDown={(event) => beginAnswerDrag(event, "point")}
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${answerAnchorTop}%`,
+            width: "16px",
+            height: "16px",
+            transform: "translate(-50%, -50%) rotate(45deg)",
+            border: "2px solid #fff",
+            borderRadius: "2px 50% 50% 50%",
+            background: activeColor,
+            boxShadow: `0 0 0 8px ${activeColor}22, 0 10px 24px rgba(0,0,0,0.38)`,
+            cursor: dragMode === "point" ? "grabbing" : "grab",
+            padding: 0,
+            pointerEvents: "auto"
+          }}
+        />
+        <button
+          type="button"
+          onBlur={hideMarkerDate}
+          onFocus={() => {
+            showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50);
+            showMarkerDate(activeAnswer, activeTimeline);
+          }}
+          onMouseEnter={() => {
+            showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50);
+            showMarkerDate(activeAnswer, activeTimeline);
+          }}
+          onMouseLeave={() => {
+            setTooltip(null);
+            hideMarkerDate();
+          }}
+          onPointerDown={(event) => beginAnswerDrag(event, "point")}
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${activeChipTop}%`,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            maxWidth: "280px",
+            height: "38px",
+            transform: "translate(-50%, -50%)",
+            borderRadius: "999px",
+            border: `2px solid ${activeColor}`,
+            background: "#151515",
+            color: "#f7f7f7",
+            cursor: dragMode === "point" ? "grabbing" : "grab",
+            fontSize: "12px",
+            fontWeight: "950",
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
+            padding: "0 14px 0 10px",
+            pointerEvents: "auto",
+            boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`
           }}
         >
-          {text}
-        </span>
-      </button>
+          <span
+            style={{
+              alignItems: "center",
+              background: activeColor,
+              borderRadius: "999px",
+              color: "#101010",
+              display: "inline-flex",
+              flexShrink: 0,
+              height: "24px",
+              justifyContent: "center",
+              width: "24px"
+            }}
+          >
+            {activeNumber}
+          </span>
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {text}
+          </span>
+        </button>
+      </div>
     );
   }
 
@@ -1300,7 +1656,7 @@ function TimelineCanvas({
           zIndex: 10
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
           <div
             style={{
               color: "#f4f0df",
@@ -1311,10 +1667,10 @@ function TimelineCanvas({
               whiteSpace: "nowrap"
             }}
           >
-            {viewportLabel}
+            {canvasDateLabel}
           </div>
           <div style={{ color: "#777", fontSize: "11px", marginTop: "3px" }}>
-            Wheel zooms, drag the ruler or minimap to move
+            {canvasDateContext} · Wheel zooms, drag canvas or minimap to move
           </div>
         </div>
 
@@ -1478,9 +1834,10 @@ function TimelineCanvas({
       <div
         ref={surfaceRef}
         onPointerDown={beginSurfaceDrag}
-        onPointerMove={handlePointerMove}
+        onPointerMove={handleSurfacePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onPointerLeave={handleSurfacePointerLeave}
         style={{
           position: "relative",
           height: "470px",
@@ -1550,38 +1907,6 @@ function TimelineCanvas({
 
         {renderRulers()}
 
-        <div
-          style={{
-            background: "linear-gradient(180deg, #8d6d3b 0%, #e4c178 48%, #806034 100%)",
-            border: "1px solid rgba(255,255,255,0.24)",
-            borderRadius: "999px",
-            boxShadow: "0 14px 34px rgba(0,0,0,0.42), inset 0 2px 0 rgba(255,255,255,0.22), inset 0 -12px 20px rgba(0,0,0,0.18)",
-            height: "34px",
-            left: "4%",
-            pointerEvents: "none",
-            position: "absolute",
-            right: "4%",
-            top: "64%",
-            transform: "translateY(-50%)",
-            zIndex: 2
-          }}
-        />
-
-        <div
-          style={{
-            background: "rgba(35, 24, 12, 0.82)",
-            borderRadius: "999px",
-            height: "3px",
-            left: "5%",
-            pointerEvents: "none",
-            position: "absolute",
-            right: "5%",
-            top: "64%",
-            transform: "translateY(-50%)",
-            zIndex: 3
-          }}
-        />
-
         {markers.map(renderPassiveMarker)}
         {renderActiveAnswer()}
         <TimelineTooltip tooltip={tooltip} />
@@ -1591,7 +1916,7 @@ function TimelineCanvas({
             style={{
               position: "absolute",
               left: "50%",
-              top: "64%",
+              top: `${answerAnchorTop}%`,
               transform: "translate(-50%, 34px)",
               color: "#9c927f",
               fontSize: "13px",
@@ -1602,7 +1927,7 @@ function TimelineCanvas({
               zIndex: 4
             }}
           >
-            Click the ruler to place your answer
+            Click the timeline to place your answer
           </div>
         )}
       </div>
@@ -1847,7 +2172,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
               marginBottom: "14px"
             }}
           >
-            <div style={{ minWidth: 0 }}>
+            <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
                 <div style={typeBadgeStyle}>TIMELINE</div>
                 <div
@@ -1863,26 +2188,28 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
               <div
                 style={{
                   color: "#f3f3f3",
-                  fontSize: "21px",
-                  fontWeight: "850",
-                  lineHeight: 1.22,
+                  display: "-webkit-box",
+                  fontSize: "30px",
+                  fontWeight: "950",
+                  lineHeight: 1.1,
                   overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
+                  WebkitBoxOrient: "vertical",
+                  WebkitLineClamp: 2
                 }}
               >
                 {activeItem.question}
               </div>
               <div
                 style={{
-                  color: "#777",
-                  fontSize: "13px",
-                  fontWeight: "700",
-                  marginTop: "7px"
+                  color: "#858585",
+                  fontSize: "12px",
+                  fontWeight: "650",
+                  marginTop: "8px"
                 }}
               >
-                {activeTimeline.kind === "interval" ? "Period" : "Date"} · {" "}
-                {activeAnswer ? formatAnswer(activeAnswer, activeTimeline) : "not placed"}
+                {activeAnswer
+                  ? `Placed ${activeTimeline.kind === "interval" ? "period" : "date"}: ${formatAnswer(activeAnswer, activeTimeline)}`
+                  : "No answer placed"}
               </div>
             </div>
 
@@ -1964,7 +2291,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
               fontWeight: error ? "700" : "500"
             }}
           >
-            {error || "Click the ruler to place an answer. Wheel zooms; the minimap shows where you are."}
+            {error || "Click the timeline to place an answer. Wheel zooms; the minimap shows where you are."}
           </div>
         </div>
       </div>
