@@ -12,7 +12,6 @@ color: "#ff85c2",
 - bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
-- créer un groupe fait une alerte moche
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - vérifier que supprimer une question supprime aussi le progress associé
 - vérifier que supprimer un groupe supprime aussi les questions associées

@@ -14,34 +14,28 @@ const panelStyle = {
 };
 
 const labelStyle = {
-  color: "#8a8a8a",
-  fontSize: "10px",
-  fontWeight: "800",
-  letterSpacing: "0.06em",
-  textTransform: "uppercase"
+  color: "#bbb",
+  fontSize: "14px"
 };
 
 const inputStyle = {
   width: "100%",
-  background: "#101010",
+  background: "#121212",
   border: "1px solid #2a2a2a",
-  borderRadius: "8px",
+  borderRadius: "10px",
   color: "#eee",
-  fontSize: "14px",
   outline: "none",
-  padding: "11px 12px",
+  padding: "12px 14px",
   boxSizing: "border-box"
 };
 
 const buttonStyle = {
   background: "#2a2a2a",
-  border: "1px solid #333",
-  borderRadius: "8px",
+  border: "none",
+  borderRadius: "10px",
   color: "#eee",
   cursor: "pointer",
-  fontSize: "13px",
-  fontWeight: "800",
-  padding: "11px 14px"
+  padding: "12px 16px"
 };
 
 function buildTimelineDraft(draft, timeline) {
@@ -136,26 +130,17 @@ export default function TimelineQuestionEditor({
         <div style={{ minWidth: 0 }}>
           <div
             style={{
-              color: "#8a8a8a",
-              fontSize: "12px",
-              fontWeight: "800",
-              letterSpacing: "0.08em",
-              marginBottom: "8px",
-              textTransform: "uppercase"
-            }}
-          >
-            {meta || "Timeline question"}
-          </div>
-          <div
-            style={{
-              color: "#eee",
-              fontSize: "26px",
-              fontWeight: "900",
-              lineHeight: 1.1
+              color: "#888",
+              marginBottom: meta ? "8px" : 0
             }}
           >
             {heading}
           </div>
+          {meta && (
+            <div style={labelStyle}>
+              {meta}
+            </div>
+          )}
         </div>
 
         {headerAction}
@@ -179,9 +164,7 @@ export default function TimelineQuestionEditor({
               ...inputStyle,
               minHeight: "94px",
               resize: "vertical",
-              lineHeight: 1.45,
-              fontSize: "16px",
-              fontWeight: "700"
+              lineHeight: 1.45
             }}
           />
         </label>
@@ -195,8 +178,7 @@ export default function TimelineQuestionEditor({
             value={timelineDraft.answer || ""}
             style={{
               ...inputStyle,
-              color: "#c4b5fd",
-              fontWeight: "800"
+              color: "#c4b5fd"
             }}
           />
         </label>
@@ -218,7 +200,7 @@ export default function TimelineQuestionEditor({
               type="file"
               accept="image/*"
               onChange={onUploadFile}
-              style={{ color: "#ddd", fontSize: "13px" }}
+              style={{ color: "#ddd" }}
             />
           </label>
         )}
@@ -257,7 +239,6 @@ export default function TimelineQuestionEditor({
                     borderRadius: "999px",
                     color: "#ccc",
                     display: "inline-flex",
-                    fontSize: "12px",
                     gap: "8px",
                     padding: "6px 9px"
                   }}
