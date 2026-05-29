@@ -1,10 +1,5 @@
 # TODO
 
-
-
-text questions ont un "#" vide à corrig
-
-
 ## couleurs pour les types des cards
 background: "#145c46",
 color: "#6ff0c2",
