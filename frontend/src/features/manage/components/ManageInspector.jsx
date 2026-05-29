@@ -6,6 +6,7 @@ import {
   normalizeTimeline
 } from "../../timeline/timelineUtils";
 import TimelineQuestionEditor from "../../timeline/components/TimelineQuestionEditor";
+import TextQuestionEditor from "./TextQuestionEditor";
 
 const panelStyle = {
   padding: "28px",
@@ -56,17 +57,6 @@ const calendarButtonStyle = {
   fontWeight: "700",
   lineHeight: 1,
   whiteSpace: "nowrap"
-};
-
-const tagStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  padding: "6px 10px",
-  borderRadius: "999px",
-  background: "#212121",
-  color: "#ccc",
-  marginBottom: "8px"
 };
 
 function timelineDraftPatch(draft) {
@@ -143,7 +133,7 @@ function ReviewCalendarAction({ compact = false, nextReview, onOpen }) {
           textTransform: compact ? "uppercase" : undefined
         }}
       >
-        Review
+        Révision
       </span>
       <span
         style={{
@@ -188,7 +178,6 @@ export default function ManageInspector({
   // Inspector has three modes: create group, create question, or edit selected
   // item. Map groups/zones delegate their detailed editing to MapEditor.
   const [draft, setDraft] = useState(null);
-  const [tagInput, setTagInput] = useState("");
   const [saveStatus, setSaveStatus] = useState(null);
 
   useEffect(() => {
@@ -196,7 +185,6 @@ export default function ManageInspector({
     // until the user saves.
     if (!selectedItem) {
       setDraft(null);
-      setTagInput("");
       setSaveStatus(null);
       return;
     }
@@ -209,7 +197,6 @@ export default function ManageInspector({
       tags: selectedItem.tags || [],
       data: selectedItem.data || {}
     });
-    setTagInput("");
     setSaveStatus(null);
   }, [selectedItem]);
 
@@ -228,19 +215,21 @@ export default function ManageInspector({
     });
   }
 
-  function updateDraftType(type_q) {
-    setDraft((prev) => {
-      const next = { ...prev, type_q };
-
-      if (type_q === "timeline") {
-        return timelineDraftPatch(next);
-      }
-
-      return {
-        ...next,
-        data: type_q === "text" ? {} : next.data
-      };
+  function cancelCreateQuestion() {
+    setIsCreatingQuestion(false);
+    setQuestionDraft({
+      question: "",
+      answer: "",
+      tags: [],
+      type_q: "text",
+      media: null,
+      data: {}
     });
+  }
+
+  async function handleCreateQuestion() {
+    await createQuestion();
+    setIsCreatingQuestion(false);
   }
 
   if (isCreatingGroup) {
@@ -294,134 +283,27 @@ export default function ManageInspector({
   }
 
   if (isCreatingQuestion) {
+    const createEditorProps = {
+      draft: questionDraft,
+      heading: "Nouvelle question",
+      meta: questionDraft.type_q || "text",
+      onChange: setQuestionDraft,
+      onSubmit: handleCreateQuestion,
+      submitLabel: "Créer",
+      onCancel: cancelCreateQuestion,
+      onUploadFile: (event) => uploadQuestionMedia(event, { id: "new" }),
+      showTypeSelector: true,
+      onTypeChange: updateQuestionDraftType
+    };
+
     if (questionDraft.type_q === "timeline") {
       return (
-        <TimelineQuestionEditor
-          draft={questionDraft}
-          heading="Nouvelle timeline"
-          meta="Nouvelle question"
-          onChange={setQuestionDraft}
-          onSubmit={async () => {
-            await createQuestion();
-            setIsCreatingQuestion(false);
-          }}
-          submitLabel="Creer"
-          onCancel={() => {
-            setIsCreatingQuestion(false);
-            setQuestionDraft({
-              question: "",
-              answer: "",
-              tags: [],
-              type_q: "text",
-              media: null,
-              data: {}
-            });
-          }}
-          onUploadFile={(event) => uploadQuestionMedia(event, { id: "new" })}
-        />
+        <TimelineQuestionEditor {...createEditorProps} />
       );
     }
 
     return (
-      <div style={panelStyle}>
-        <div style={{ marginBottom: "22px", color: "#888" }}>
-          Nouvelle question
-        </div>
-
-        <label style={labelStyle}>Question</label>
-        <input
-          style={inputStyle}
-          value={questionDraft.question}
-          onChange={(e) => setQuestionDraft({ ...questionDraft, question: e.target.value })}
-        />
-
-        <label style={labelStyle}>Réponse</label>
-        <textarea
-          rows={5}
-          style={{ ...inputStyle, resize: "vertical", minHeight: "140px" }}
-          value={questionDraft.answer}
-          onChange={(e) => setQuestionDraft({ ...questionDraft, answer: e.target.value })}
-        />
-
-        <label style={labelStyle}>Type de question</label>
-        <select
-          style={inputStyle}
-          value={questionDraft.type_q}
-          onChange={(e) => updateQuestionDraftType(e.target.value)}
-        >
-          <option value="text">text</option>
-          <option value="map">map</option>
-          <option value="timeline">timeline</option>
-        </select>
-
-        <label style={labelStyle}>Media / URL</label>
-        <input
-          style={inputStyle}
-          value={questionDraft.media || ""}
-          placeholder="http://..."
-          onChange={(e) => setQuestionDraft({ ...questionDraft, media: e.target.value })}
-        />
-
-        <div style={{ marginBottom: "18px" }}>
-          <label style={labelStyle}>Importer une image</label>
-          <input type="file" accept="image/*" onChange={(e) => uploadQuestionMedia(e, { id: "new" })} style={{ color: "#eee" }} />
-        </div>
-
-        <label style={labelStyle}>Tags</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-          {questionDraft.tags.map((tag) => (
-            <div key={tag} style={tagStyle}>
-              {tag}
-              <button
-                type="button"
-                onClick={() => setQuestionDraft({ ...questionDraft, tags: questionDraft.tags.filter((t) => t !== tag) })}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: "#888",
-                  cursor: "pointer",
-                  padding: 0
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center" }}>
-          <input
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), setQuestionDraft({ ...questionDraft, tags: [...questionDraft.tags, tagInput.trim()] }), setTagInput(""))}
-            placeholder="Ajouter un tag"
-            style={inputStyle}
-          />
-          <button type="button" onClick={() => { setQuestionDraft({ ...questionDraft, tags: [...questionDraft.tags, tagInput.trim()] }); setTagInput(""); }} style={buttonStyle}>
-            Ajouter
-          </button>
-        </div>
-
-        {questionDraft.media && (
-          <div style={{ marginBottom: "24px" }}>
-            <div style={{ marginBottom: "10px", color: "#bbb" }}>Aperçu media</div>
-            <img
-              src={questionDraft.media}
-              alt="preview"
-              style={{ width: "100%", borderRadius: "12px", border: "1px solid #222" }}
-            />
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
-          <button type="button" onClick={async () => { await createQuestion(); setIsCreatingQuestion(false); }} style={buttonStyle}>
-            Créer
-          </button>
-          <button type="button" onClick={() => { setIsCreatingQuestion(false); setQuestionDraft({ question: "", answer: "", tags: [], type_q: "text", media: null, data: {} }); }} style={{ ...buttonStyle, background: "#641c1c" }}>
-            Annuler
-          </button>
-        </div>
-      </div>
+      <TextQuestionEditor {...createEditorProps} />
     );
   }
 
@@ -565,49 +447,6 @@ export default function ManageInspector({
     );
   }
 
-  if (draft?.type_q === "timeline") {
-    return (
-      <TimelineQuestionEditor
-        draft={draft}
-        heading={`Timeline #${selectedItem.id}`}
-        meta="Question"
-        onChange={setDraft}
-        onSubmit={handleSave}
-        submitLabel="Enregistrer"
-        onDelete={handleDelete}
-        onUploadFile={handleUploadFile}
-        saveStatus={saveStatus}
-        headerAction={(
-          <ReviewCalendarAction
-            nextReview={selectedNextReview}
-            onOpen={openSelectedInCalendar}
-          />
-        )}
-      />
-    );
-  }
-
-  
-  function setField(field, value) {
-    if (field === "type_q") {
-      updateDraftType(value);
-      return;
-    }
-
-    setDraft((prev) => ({ ...prev, [field]: value }));
-  }
-
-  function addTag() {
-    const value = tagInput.trim();
-    if (!value || draft.tags.includes(value)) return;
-    setDraft((prev) => ({ ...prev, tags: [...prev.tags, value] }));
-    setTagInput("");
-  }
-
-  function removeTag(tag) {
-    setDraft((prev) => ({ ...prev, tags: prev.tags.filter((t) => t !== tag) }));
-  }
-
   async function handleSave() {
     if (!draft) return;
 
@@ -651,119 +490,40 @@ export default function ManageInspector({
     setSelectedItem(null);
   }
 
+  const editorDraft = draft || {
+    question: selectedItem.question || "",
+    answer: selectedItem.answer || "",
+    media: selectedItem.media || "",
+    type_q: selectedItem.type_q || "text",
+    tags: selectedItem.tags || [],
+    data: selectedItem.data || {}
+  };
+  const editType = editorDraft.type_q || "text";
+  const editEditorProps = {
+    draft: editorDraft,
+    heading: `Question #${selectedItem.id}`,
+    meta: editType,
+    onChange: setDraft,
+    onSubmit: handleSave,
+    submitLabel: "Enregistrer",
+    onDelete: handleDelete,
+    onUploadFile: handleUploadFile,
+    saveStatus,
+    headerAction: (
+      <ReviewCalendarAction
+        nextReview={selectedNextReview}
+        onOpen={openSelectedInCalendar}
+      />
+    )
+  };
+
+  if (editType === "timeline") {
+    return (
+      <TimelineQuestionEditor {...editEditorProps} />
+    );
+  }
+
   return (
-    <div style={panelStyle}>
-      <div style={{ marginBottom: "22px", color: "#888" }}>
-        Question #{selectedItem.id}
-      </div>
-
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", marginBottom: "18px" }}>
-        <div style={{ padding: "8px 12px", borderRadius: "999px", background: "#222", color: "#ccc", fontSize: "13px" }}>
-          {selectedItem.type_q || "text"}
-        </div>
-
-        <ReviewCalendarAction
-          nextReview={selectedNextReview}
-          onOpen={openSelectedInCalendar}
-        />
-      </div>
-
-      <label style={labelStyle}>Question</label>
-      <input
-        style={inputStyle}
-        value={draft?.question || ""}
-        onChange={(e) => setField("question", e.target.value)}
-      />
-
-      <label style={labelStyle}>Réponse</label>
-      <textarea
-        rows={5}
-        style={{ ...inputStyle, resize: "vertical", minHeight: "140px" }}
-        value={draft?.answer || ""}
-        onChange={(e) => setField("answer", e.target.value)}
-      />
-
-      <label style={labelStyle}>Type de question</label>
-      <select
-        style={inputStyle}
-        value={draft?.type_q || "text"}
-        onChange={(e) => setField("type_q", e.target.value)}
-      >
-        <option value="text">text</option>
-        <option value="map">map</option>
-        <option value="timeline">timeline</option>
-      </select>
-
-      <label style={labelStyle}>Media / URL</label>
-      <input
-        style={inputStyle}
-        value={draft?.media || ""}
-        placeholder="http://..."
-        onChange={(e) => setField("media", e.target.value)}
-      />
-
-      <div style={{ marginBottom: "18px" }}>
-        <label style={labelStyle}>Importer une image</label>
-        <input type="file" accept="image/*" onChange={handleUploadFile} style={{ color: "#eee" }} />
-      </div>
-
-      <label style={labelStyle}>Tags</label>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-        {draft?.tags?.map((tag) => (
-          <div key={tag} style={tagStyle}>
-            {tag}
-            <button
-              type="button"
-              onClick={() => removeTag(tag)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#888",
-                cursor: "pointer",
-                padding: 0
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center" }}>
-        <input
-          value={tagInput}
-          onChange={(e) => setTagInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
-          placeholder="Ajouter un tag"
-          style={inputStyle}
-        />
-        <button type="button" onClick={addTag} style={buttonStyle}>
-          Ajouter
-        </button>
-      </div>
-
-      {draft?.media && (
-        <div style={{ marginBottom: "24px" }}>
-          <div style={{ marginBottom: "10px", color: "#bbb" }}>Aperçu media</div>
-          <img
-            src={draft.media}
-            alt="preview"
-            style={{ width: "100%", borderRadius: "12px", border: "1px solid #222" }}
-          />
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", paddingBottom: "30px" }}>
-        <button type="button" onClick={handleSave} style={buttonStyle}>
-          Enregistrer
-        </button>
-        <button type="button" onClick={handleDelete} style={{ ...buttonStyle, background: "#641c1c" }}>
-          Supprimer
-        </button>
-        {saveStatus && (
-          <span style={{ color: "#8f8", fontSize: "14px" }}>{saveStatus}</span>
-        )}
-      </div>
-    </div>
+    <TextQuestionEditor {...editEditorProps} />
   );
 }

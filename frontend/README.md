@@ -1,5 +1,11 @@
 # TODO
 
+
+
+remettre les chips dans les créations de questions
+
+
+
 ## couleurs pour les types des cards
 background: "#145c46",
 color: "#6ff0c2",
@@ -13,13 +19,11 @@ color: "#ff85c2",
 - recentrer les svg
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - le texte des cards est décalé vers la droite (à cause du MAP)
-- bouton "ajouter" des tags n'est pas aligné avec le champ de texte
 - on peut ajouter des tags vides ("")
 - quand on créé une question texte, il faudrait afficher la preview de la question après la création au lieu de rester sur la page de création (et quand on supprime la question il faut fermer la preview au lieu de revenir sur la création de question)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
-- dans la review, quand j'utilise le pad, je vois le chiffre dans l'input de la map après
+- dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après
 - le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
-- dans les réponses accepter " " pour "-"
 - hover un nom trop long doit l'afficher
 - passer automatiquement au recap de map quand on a tout trouvé
 - "#" vide pour les questions texte dans review
@@ -54,6 +58,7 @@ color: "#ff85c2",
 - pouvoir revenir à la question précédente dans la review
 - faire un bouton toggle pour l'era dans la preview
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
+- mettre un menu dans la preview quand je clique sur créer question pour demander quel type de question je veux créer
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

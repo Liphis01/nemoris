@@ -42,7 +42,7 @@ export default function TimelineQuickDateInput({ onApply }) {
         gap: "7px"
       }}
     >
-      <span style={labelStyle}>Quick date</span>
+      <span style={labelStyle}>Date rapide</span>
 
       <div
         style={{
@@ -83,7 +83,7 @@ export default function TimelineQuickDateInput({ onApply }) {
             padding: "0 16px"
           }}
         >
-          Apply
+          Appliquer
         </button>
       </div>
 
