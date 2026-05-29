@@ -144,6 +144,13 @@ class AnswerRequest(BaseModel):
     )
 
 
+class ReviewSettings(BaseModel):
+    catchup_daily_target: int = Field(
+        ge=1,
+        le=10000
+    )
+
+
 class MapAnswerRequest(BaseModel):
     items: Dict[int, int]
 

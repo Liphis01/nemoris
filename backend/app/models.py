@@ -136,6 +136,20 @@ class Progress(Base):
         back_populates="progress"
     )
 
+
+# =========================================================
+# APP SETTINGS
+# =========================================================
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+
+    # Small JSON blobs for local app preferences. Review settings currently
+    # store the catch-up target used by backlog rebalancing.
+    value = Column(JSON, nullable=False, default=dict)
+
 # =========================================================
 # COLLECTIONS
 # =========================================================

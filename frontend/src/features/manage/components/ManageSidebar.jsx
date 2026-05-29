@@ -69,6 +69,31 @@ export default function ManageSidebar({
     height: "40px"
   };
 
+  const clearableInputStyle = {
+    ...inputStyle,
+    paddingRight: "38px"
+  };
+
+  const clearInputButtonStyle = {
+    position: "absolute",
+    top: "50%",
+    right: "8px",
+    width: "24px",
+    height: "24px",
+    transform: "translateY(-50%)",
+    border: "none",
+    borderRadius: "50%",
+    background: "transparent",
+    color: "#777",
+    cursor: "pointer",
+    fontSize: "18px",
+    lineHeight: "24px",
+    padding: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center"
+  };
+
   const toggleButtonStyle = (active, color) => ({
     flex: 1,
     padding: "10px 12px",
@@ -87,6 +112,37 @@ export default function ManageSidebar({
     fontWeight: "600",
     fontSize: "13px"
   });
+
+  function renderClearableInput({
+    value,
+    onChange,
+    onClear,
+    placeholder,
+    ariaLabel
+  }) {
+    return (
+      <div style={{ position: "relative" }}>
+        <input
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={clearableInputStyle}
+        />
+
+        {value && (
+          <button
+            type="button"
+            onClick={onClear}
+            title={ariaLabel}
+            aria-label={ariaLabel}
+            style={clearInputButtonStyle}
+          >
+            ×
+          </button>
+        )}
+      </div>
+    );
+  }
 
   function renderSortControls({
     options,
@@ -335,19 +391,21 @@ export default function ManageSidebar({
         {viewMode === "questions" && (
           <>
 
-            <input
-              placeholder="Recherche..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={inputStyle}
-            />
+            {renderClearableInput({
+              value: search,
+              onChange: setSearch,
+              onClear: () => setSearch(""),
+              placeholder: "Recherche...",
+              ariaLabel: "Effacer la recherche"
+            })}
 
-            <input
-              placeholder="Tags..."
-              value={tagFilter}
-              onChange={(e) => setTagFilter(e.target.value)}
-              style={inputStyle}
-            />
+            {renderClearableInput({
+              value: tagFilter,
+              onChange: setTagFilter,
+              onClear: () => setTagFilter(""),
+              placeholder: "Tags...",
+              ariaLabel: "Effacer les tags"
+            })}
 
             <label
               style={{
@@ -388,19 +446,21 @@ export default function ManageSidebar({
         {viewMode === "groups" && (
           <>
 
-            <input
-              placeholder="Recherche..."
-              value={groupSearch}
-              onChange={(e) => setGroupSearch(e.target.value)}
-              style={inputStyle}
-            />
+            {renderClearableInput({
+              value: groupSearch,
+              onChange: setGroupSearch,
+              onClear: () => setGroupSearch(""),
+              placeholder: "Recherche...",
+              ariaLabel: "Effacer la recherche de groupes"
+            })}
 
-            <input
-              placeholder="Type..."
-              value={groupTypeFilter}
-              onChange={(e) => setGroupTypeFilter(e.target.value)}
-              style={inputStyle}
-            />
+            {renderClearableInput({
+              value: groupTypeFilter,
+              onChange: setGroupTypeFilter,
+              onClear: () => setGroupTypeFilter(""),
+              placeholder: "Type...",
+              ariaLabel: "Effacer le type"
+            })}
 
             <label
               style={{

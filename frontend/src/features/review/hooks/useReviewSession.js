@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listCollections } from "../../../api/collections";
-import { getReview, sendAnswer } from "../../../api/review";
+import {
+  getReview,
+  getReviewSettings,
+  rebalanceReviewCalendar,
+  sendAnswer,
+  updateReviewSettings
+} from "../../../api/review";
 
 
 function parseTags(tagInput) {
@@ -19,9 +25,16 @@ export function useReviewSession(active) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [limit, setLimit] = useState(200);
+  const [catchupTarget, setCatchupTarget] = useState(50);
+  const [catchupTargetDraft, setCatchupTargetDraft] = useState("50");
+  const [catchupTargetSaving, setCatchupTargetSaving] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState("");
+  const [reviewReady, setReviewReady] = useState(false);
+  const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState("");
 
   const current = questions[currentIndex];
 
@@ -98,7 +111,55 @@ export function useReviewSession(active) {
   }, [active]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      setReviewReady(false);
+      setReviewLoading(false);
+      setReviewError("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function prepareReview() {
+      setReviewReady(false);
+      setReviewLoading(true);
+      setReviewError("");
+      setQuestions([]);
+      setCurrentIndex(0);
+      setShowAnswer(false);
+
+      try {
+        const settings = await getReviewSettings();
+        const target = settings.catchup_daily_target || 50;
+
+        if (cancelled) return;
+
+        setCatchupTarget(target);
+        setCatchupTargetDraft(String(target));
+
+        if (!cancelled) {
+          setReviewReady(true);
+          setReviewLoading(false);
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (!cancelled) {
+          setReviewError(error.message || "Impossible de préparer la session.");
+          setReviewLoading(false);
+        }
+      }
+    }
+
+    prepareReview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
+
+  useEffect(() => {
+    if (!active || !reviewReady) return;
 
     // Re-fetch whenever filters change so the backend remains responsible for
     // due selection and runtime grouping.
@@ -111,9 +172,53 @@ export function useReviewSession(active) {
         setQuestions(data);
         setCurrentIndex(0);
         setShowAnswer(false);
+        setReviewError("");
       })
-      .catch(console.error);
-  }, [active, selectedCollection, selectedTags, limit]);
+      .catch((error) => {
+        console.error(error);
+        setReviewError(error.message || "Impossible de charger la session.");
+      });
+  }, [
+    active,
+    selectedCollection,
+    selectedTags,
+    limit,
+    reviewReady,
+    reviewRefreshKey
+  ]);
+
+  async function saveCatchupTarget() {
+    const parsed = Number(catchupTargetDraft);
+    const nextTarget = Number.isFinite(parsed)
+      ? Math.max(1, Math.floor(parsed))
+      : catchupTarget;
+
+    if (nextTarget === catchupTarget) {
+      setCatchupTargetDraft(String(catchupTarget));
+      return;
+    }
+
+    setCatchupTargetSaving(true);
+
+    try {
+      const settings = await updateReviewSettings({
+        catchup_daily_target: nextTarget
+      });
+      const savedTarget = settings.catchup_daily_target || nextTarget;
+
+      setCatchupTarget(savedTarget);
+      setCatchupTargetDraft(String(savedTarget));
+      await rebalanceReviewCalendar();
+      setReviewError("");
+      setReviewRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error(error);
+      setCatchupTargetDraft(String(catchupTarget));
+      setReviewError(error.message || "Impossible de préparer la session.");
+    } finally {
+      setCatchupTargetSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!active) return;
@@ -152,9 +257,15 @@ export function useReviewSession(active) {
     handleMapComplete,
     handleTimelineComplete,
     handleTextAnswer,
+    catchupTargetDraft,
+    catchupTargetSaving,
     limit,
     questions,
+    reviewError,
+    reviewLoading,
+    saveCatchupTarget,
     selectedCollection,
+    setCatchupTargetDraft,
     setLimit,
     setSelectedCollection,
     setShowAnswer,

@@ -19,7 +19,11 @@ const badgeStyle = {
     marginBottom: "14px"
 };
 
-export default function Menu({ setMode }) {
+export default function Menu({
+    setMode,
+    startupNotice,
+    onDismissStartupNotice
+}) {
 
     return (
         <div
@@ -71,6 +75,73 @@ export default function Menu({ setMode }) {
                         Nemoris
                     </h1>
                 </div>
+
+                {startupNotice && (
+                    <div
+                        style={{
+                            alignItems: "center",
+                            background: "linear-gradient(180deg, #17211b 0%, #141b16 100%)",
+                            border: "1px solid rgba(126, 226, 168, 0.24)",
+                            borderRadius: "14px",
+                            color: "#d8f6e2",
+                            display: "flex",
+                            gap: "14px",
+                            justifyContent: "space-between",
+                            marginBottom: "22px",
+                            padding: "14px 16px",
+                            boxShadow: "0 14px 34px rgba(0, 0, 0, 0.18)"
+                        }}
+                    >
+                        <div>
+                            <div
+                                style={{
+                                    color: "#7ee2a8",
+                                    fontSize: "11px",
+                                    fontWeight: "800",
+                                    letterSpacing: "0.06em",
+                                    marginBottom: "4px",
+                                    textTransform: "uppercase"
+                                }}
+                            >
+                                Calendrier rééquilibré
+                            </div>
+
+                            <div
+                                style={{
+                                    color: "#cfe9d8",
+                                    fontSize: "14px",
+                                    lineHeight: 1.45
+                                }}
+                            >
+                                {startupNotice.moved} question{startupNotice.moved > 1 ? "s" : ""} déplacée{startupNotice.moved > 1 ? "s" : ""} pour garder environ {startupNotice.daily_target}/jour.
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={onDismissStartupNotice}
+                            style={{
+                                alignItems: "center",
+                                background: "rgba(126, 226, 168, 0.08)",
+                                border: "1px solid rgba(126, 226, 168, 0.22)",
+                                borderRadius: "999px",
+                                color: "#a7e7bc",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                fontSize: "16px",
+                                height: "30px",
+                                justifyContent: "center",
+                                lineHeight: 1,
+                                padding: 0,
+                                width: "30px"
+                            }}
+                            aria-label="Masquer"
+                            title="Masquer"
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
 
                 {/* MAIN GRID */}
                 <div

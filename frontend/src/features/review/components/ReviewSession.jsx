@@ -23,6 +23,12 @@ export default function ReviewSession({
   setTagInput,
   limit,
   setLimit,
+  catchupTargetDraft,
+  setCatchupTargetDraft,
+  saveCatchupTarget,
+  catchupTargetSaving,
+  reviewLoading,
+  reviewError,
   collections,
   selectedCollection,
   setSelectedCollection
@@ -186,6 +192,42 @@ export default function ReviewSession({
             </select>
           </div>
 
+          {/* TARGET */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              width: "130px"
+            }}
+          >
+            <div
+              style={{
+                color: "#777",
+                fontSize: "12px",
+                fontWeight: "600"
+              }}
+            >
+              OBJECTIF/JOUR
+            </div>
+
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              value={catchupTargetDraft}
+              disabled={catchupTargetSaving}
+              onChange={(e) => setCatchupTargetDraft(e.target.value)}
+              onBlur={saveCatchupTarget}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              style={inputStyle}
+            />
+          </div>
+
           {/* LIMIT */}
           <div
             style={{
@@ -215,8 +257,40 @@ export default function ReviewSession({
 
         </div>
 
+        {/* LOADING */}
+        {reviewLoading && (
+          <div
+            style={{
+              background: "#181818",
+              border: "1px solid #262626",
+              borderRadius: "18px",
+              padding: "60px",
+              textAlign: "center",
+              color: "#777"
+            }}
+          >
+            Préparation de la session...
+          </div>
+        )}
+
+        {/* ERROR */}
+        {!reviewLoading && reviewError && (
+          <div
+            style={{
+              background: "#181818",
+              border: "1px solid #3a1d1d",
+              borderRadius: "18px",
+              padding: "60px",
+              textAlign: "center",
+              color: "#ff9c9c"
+            }}
+          >
+            {reviewError}
+          </div>
+        )}
+
         {/* EMPTY */}
-        {questions.length === 0 && (
+        {!reviewLoading && !reviewError && questions.length === 0 && (
           <div
             style={{
               background: "#181818",
@@ -232,7 +306,10 @@ export default function ReviewSession({
         )}
 
         {/* FINISHED */}
-        {currentIndex >= questions.length && questions.length > 0 && (
+        {!reviewLoading &&
+          !reviewError &&
+          currentIndex >= questions.length &&
+          questions.length > 0 && (
           <div
             style={{
               background: "#181818",
@@ -274,7 +351,10 @@ export default function ReviewSession({
         )}
 
         {/* QUESTION */}
-        {currentQuestion && currentIndex < questions.length && (
+        {!reviewLoading &&
+          !reviewError &&
+          currentQuestion &&
+          currentIndex < questions.length && (
           <>
 
             {/* TOP BAR */}

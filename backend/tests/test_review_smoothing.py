@@ -5,23 +5,35 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Progress, Question
-from app.routers.review import answer_map, answer_question, answer_timeline
+from app.models import AppSetting, Progress, Question
+from app.routers.review import (
+    answer_map,
+    answer_question,
+    answer_timeline,
+    get_review,
+    get_settings,
+    get_startup_notice,
+    rebalance_review,
+    update_settings
+)
+from app.services.startup import run_startup_rebalance
 from app.scheduler import (
     assign_smoothed_schedules,
     choose_smoothed_review_date,
+    rebalance_review_calendar,
     smoothing_radius_days
 )
 from app.schemas import (
     AnswerRequest,
     MapAnswerRequest,
+    ReviewSettings,
     TimelineAnswerItem,
     TimelineAnswerRequest,
     TimelineDateValue
 )
 
 
-def scheduling(today, interval):
+def scheduling(today, interval, type_q=None):
     return {
         "stability": 1.0,
         "difficulty": 5.0,
@@ -29,7 +41,25 @@ def scheduling(today, interval):
         "lapses": 0,
         "interval": interval,
         "next_review": today + timedelta(days=interval),
-        "last_review": today
+        "last_review": today,
+        "type_q": type_q
+    }
+
+
+def rebalance_entry(
+    question_id,
+    next_review,
+    difficulty=5.0,
+    last_review=None,
+    type_q=None
+):
+    return {
+        "question_id": question_id,
+        "next_review": next_review,
+        "last_review": last_review,
+        "interval": 0,
+        "difficulty": difficulty,
+        "type_q": type_q
     }
 
 
@@ -109,6 +139,130 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(assigned_high["next_review"], today + timedelta(days=3))
         self.assertEqual(assigned_low["next_review"], today + timedelta(days=2))
 
+    def test_regular_smoothing_prefers_type_mix_when_loads_are_equal(self):
+        today = date(2026, 1, 1)
+        ideal = today + timedelta(days=2)
+        mixed_day = today + timedelta(days=3)
+        daily_loads = {
+            today + timedelta(days=1): 1,
+            ideal: 1,
+            mixed_day: 1
+        }
+        daily_type_loads = {
+            today + timedelta(days=1): {"text": 1},
+            ideal: {"text": 1},
+            mixed_day: {"map": 1}
+        }
+
+        self.assertEqual(
+            choose_smoothed_review_date(
+                today,
+                ideal,
+                2,
+                daily_loads,
+                daily_type_loads=daily_type_loads,
+                type_q="text"
+            ),
+            mixed_day
+        )
+
+    def test_rebalance_spreads_overdue_backlog_by_target(self):
+        today = date(2026, 1, 10)
+        entries = [
+            rebalance_entry(index, today - timedelta(days=3))
+            for index in range(120)
+        ]
+
+        assigned = rebalance_review_calendar(entries, 50, today=today)
+        counts = {}
+
+        for scheduling_result in assigned:
+            day = scheduling_result["next_review"]
+            counts[day] = counts.get(day, 0) + 1
+
+        self.assertEqual(counts[today], 50)
+        self.assertEqual(counts[today + timedelta(days=1)], 50)
+        self.assertEqual(counts[today + timedelta(days=2)], 20)
+
+    def test_rebalance_pushes_overloaded_future_days(self):
+        today = date(2026, 1, 10)
+        future_day = today + timedelta(days=3)
+        entries = [
+            rebalance_entry(index, future_day)
+            for index in range(65)
+        ]
+
+        assigned = rebalance_review_calendar(entries, 50, today=today)
+        counts = {}
+
+        for scheduling_result in assigned:
+            day = scheduling_result["next_review"]
+            counts[day] = counts.get(day, 0) + 1
+
+        self.assertEqual(counts[future_day], 50)
+        self.assertEqual(counts[future_day + timedelta(days=1)], 15)
+
+    def test_rebalance_never_pulls_future_items_earlier(self):
+        today = date(2026, 1, 10)
+        future_day = today + timedelta(days=4)
+        entries = [
+            rebalance_entry(1, today - timedelta(days=1)),
+            rebalance_entry(2, future_day)
+        ]
+
+        assigned = rebalance_review_calendar(entries, 50, today=today)
+
+        self.assertEqual(assigned[1]["next_review"], future_day)
+
+    def test_rebalance_orders_overdue_by_age_difficulty_and_id(self):
+        today = date(2026, 1, 10)
+        entries = [
+            rebalance_entry(3, today - timedelta(days=1), difficulty=9.0),
+            rebalance_entry(1, today - timedelta(days=5), difficulty=1.0),
+            rebalance_entry(2, today - timedelta(days=1), difficulty=5.0),
+            rebalance_entry(4, today - timedelta(days=1), difficulty=9.0)
+        ]
+
+        assigned = rebalance_review_calendar(entries, 1, today=today)
+        assignment_by_id = {
+            item["question_id"]: item["next_review"]
+            for item in assigned
+        }
+
+        self.assertEqual(assignment_by_id[1], today)
+        self.assertEqual(assignment_by_id[3], today + timedelta(days=1))
+        self.assertEqual(assignment_by_id[4], today + timedelta(days=2))
+        self.assertEqual(assignment_by_id[2], today + timedelta(days=3))
+
+    def test_rebalance_interleaves_types_across_daily_buckets(self):
+        today = date(2026, 1, 10)
+        entries = [
+            rebalance_entry(index, today - timedelta(days=1), type_q="text")
+            for index in range(1, 7)
+        ] + [
+            rebalance_entry(index, today - timedelta(days=1), type_q="map")
+            for index in range(101, 107)
+        ]
+
+        assigned = rebalance_review_calendar(entries, 4, today=today)
+        counts = {}
+
+        for scheduling_result in assigned:
+            day = scheduling_result["next_review"]
+            type_q = scheduling_result["type_q"]
+            counts.setdefault(day, {})
+            counts[day][type_q] = counts[day].get(type_q, 0) + 1
+
+        self.assertEqual(counts[today], {"map": 2, "text": 2})
+        self.assertEqual(
+            counts[today + timedelta(days=1)],
+            {"map": 2, "text": 2}
+        )
+        self.assertEqual(
+            counts[today + timedelta(days=2)],
+            {"map": 2, "text": 2}
+        )
+
 
 class ReviewRouteSmoothingTests(unittest.TestCase):
     def setUp(self):
@@ -119,6 +273,18 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+    def add_question(self, question_id, type_q="text"):
+        question = Question(
+            id=question_id,
+            type_q=type_q,
+            question=f"Question {question_id}",
+            answer=f"Answer {question_id}",
+            tags=[],
+            data={}
+        )
+        self.db.add(question)
+        return question
 
     def add_progress(
         self,
@@ -232,6 +398,238 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             response["results"][0]["progress"]["next_review"],
             (today + timedelta(days=3)).isoformat()
         )
+
+    def test_text_answer_uses_type_mix_when_candidate_loads_match(self):
+        today = date.today()
+        question = self.add_question(1, type_q="text")
+        question.question = "Question"
+        question.answer = "Answer"
+        progress = self.add_progress(1, today)
+
+        for question_id, type_q, next_review in [
+            (101, "text", today + timedelta(days=1)),
+            (102, "text", today + timedelta(days=2)),
+            (103, "map", today + timedelta(days=3))
+        ]:
+            self.add_question(question_id, type_q=type_q)
+            self.add_progress(question_id, next_review, reps=1)
+
+        self.db.commit()
+
+        response = answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+
+        self.assertEqual(response["next_review"], today + timedelta(days=3))
+        self.assertEqual(progress.next_review, today + timedelta(days=3))
+
+    def test_default_review_settings_target_is_persisted(self):
+        settings = get_settings(db=self.db)
+        setting_row = (
+            self.db.query(AppSetting)
+            .filter(AppSetting.key == "review")
+            .first()
+        )
+
+        self.assertEqual(settings["catchup_daily_target"], 50)
+        self.assertEqual(
+            setting_row.value["catchup_daily_target"],
+            50
+        )
+
+    def test_review_settings_target_can_be_updated(self):
+        settings = update_settings(
+            ReviewSettings(catchup_daily_target=35),
+            db=self.db
+        )
+
+        self.assertEqual(settings["catchup_daily_target"], 35)
+        self.assertEqual(
+            get_settings(db=self.db)["catchup_daily_target"],
+            35
+        )
+
+    def test_rebalance_route_moves_progress_and_caps_daily_load(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 6):
+            self.add_question(question_id)
+            progress = self.add_progress(
+                question_id,
+                today - timedelta(days=3),
+                difficulty=5.0 + question_id
+            )
+
+            if question_id == 1:
+                progress.stability = 2.5
+                progress.reps = 4
+                progress.lapses = 1
+                progress.history = [{"reviewed_on": "2026-01-01"}]
+
+        self.db.commit()
+
+        response = rebalance_review(db=self.db)
+        counts = {}
+
+        for progress in self.db.query(Progress).all():
+            counts[progress.next_review] = counts.get(progress.next_review, 0) + 1
+
+        self.assertEqual(response["daily_target"], 2)
+        self.assertEqual(response["moved"], 5)
+        self.assertEqual(counts[today], 2)
+        self.assertEqual(counts[today + timedelta(days=1)], 2)
+        self.assertEqual(counts[today + timedelta(days=2)], 1)
+
+        unchanged = (
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+        self.assertEqual(unchanged.stability, 2.5)
+        self.assertEqual(unchanged.reps, 4)
+        self.assertEqual(unchanged.lapses, 1)
+        self.assertEqual(unchanged.history, [{"reviewed_on": "2026-01-01"}])
+
+    def test_rebalance_route_mixes_question_types_per_day(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
+
+        for question_id in range(1, 7):
+            self.add_question(question_id, type_q="text")
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        for question_id in range(101, 107):
+            self.add_question(question_id, type_q="map")
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        self.db.commit()
+
+        rebalance_review(db=self.db)
+        rows = (
+            self.db.query(Progress.next_review, Question.type_q, Progress.question_id)
+            .join(Question, Question.id == Progress.question_id)
+            .all()
+        )
+        counts = {}
+
+        for next_review, type_q, _ in rows:
+            counts.setdefault(next_review, {})
+            counts[next_review][type_q] = counts[next_review].get(type_q, 0) + 1
+
+        self.assertEqual(counts[today], {"map": 2, "text": 2})
+        self.assertEqual(
+            counts[today + timedelta(days=1)],
+            {"map": 2, "text": 2}
+        )
+        self.assertEqual(
+            counts[today + timedelta(days=2)],
+            {"map": 2, "text": 2}
+        )
+
+    def test_review_after_rebalance_returns_manageable_due_set(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 6):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        self.db.commit()
+        rebalance_review(db=self.db)
+
+        response = get_review(
+            tags=None,
+            limit=200,
+            collection_id=None,
+            db=self.db
+        )
+
+        self.assertEqual(len(response), 2)
+        self.assertEqual(
+            sorted(item["question_id"] for item in response),
+            [1, 2]
+        )
+
+    def test_startup_rebalance_records_notice_when_items_move(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 4):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        self.db.commit()
+
+        outcome = run_startup_rebalance(self.db)
+        notice = outcome["notice"]
+
+        self.assertIsNotNone(notice)
+        self.assertTrue(notice["id"])
+        self.assertTrue(notice["ran_at"])
+        self.assertEqual(notice["moved"], 3)
+        self.assertEqual(notice["daily_target"], 2)
+
+    def test_startup_rebalance_clears_old_notice_when_nothing_moves(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 4):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        self.db.commit()
+        first_outcome = run_startup_rebalance(self.db)
+
+        self.assertIsNotNone(first_outcome["notice"])
+
+        second_outcome = run_startup_rebalance(self.db)
+
+        self.assertEqual(second_outcome["rebalance"]["moved"], 0)
+        self.assertIsNone(second_outcome["notice"])
+        self.assertIsNone(get_startup_notice(db=self.db))
+
+    def test_startup_notice_endpoint_returns_persisted_notice(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 4):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        self.db.commit()
+        run_startup_rebalance(self.db)
+
+        response = get_startup_notice(db=self.db)
+
+        self.assertEqual(response["moved"], 3)
+        self.assertEqual(response["daily_target"], 2)
+
+    def test_review_route_does_not_rebalance_calendar(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 4):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1))
+
+        self.db.commit()
+
+        response = get_review(
+            tags=None,
+            limit=200,
+            collection_id=None,
+            db=self.db
+        )
+        overdue_count = (
+            self.db.query(Progress)
+            .filter(Progress.next_review == today - timedelta(days=1))
+            .count()
+        )
+
+        self.assertEqual(len(response), 3)
+        self.assertEqual(overdue_count, 3)
 
 
 if __name__ == "__main__":

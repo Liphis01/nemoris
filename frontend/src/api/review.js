@@ -1,6 +1,34 @@
 import { requestJson, requestOk } from "./http";
 
 
+export function getReviewSettings() {
+  return requestJson("/review/settings");
+}
+
+
+export function updateReviewSettings(payload) {
+  return requestJson("/review/settings", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+
+export function rebalanceReviewCalendar() {
+  return requestJson("/review/rebalance", {
+    method: "POST"
+  });
+}
+
+
+export function getStartupRebalanceNotice() {
+  return requestJson("/review/startup_notice");
+}
+
+
 export function getReview(selectedTags = [], limit = 200, collectionId = null) {
   // Keep review filtering server-side because the backend owns due selection
   // and runtime map grouping.

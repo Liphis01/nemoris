@@ -5,18 +5,64 @@ from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
 from ..models import Progress, Question
-from ..schemas import AnswerRequest, MapAnswerRequest, TimelineAnswerRequest
+from ..schemas import (
+    AnswerRequest,
+    MapAnswerRequest,
+    ReviewSettings,
+    TimelineAnswerRequest
+)
 from ..serializers import serialize_progress
 from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
-    create_initial_progress
+    create_initial_progress,
+    rebalance_progress_calendar
 )
 from ..services.review import get_review_items
+from ..services.settings import (
+    get_review_settings,
+    get_startup_rebalance_notice,
+    save_review_settings
+)
 from ..services.timeline import grade_timeline_answer, validate_timeline_data
 
 
 router = APIRouter()
+
+
+@router.get("/review/settings")
+def get_settings(db: Session = Depends(get_db)):
+    settings = get_review_settings(db)
+    db.commit()
+
+    return settings
+
+
+@router.put("/review/settings")
+def update_settings(
+    data: ReviewSettings,
+    db: Session = Depends(get_db)
+):
+    settings = save_review_settings(db, data.model_dump())
+    db.commit()
+
+    return settings
+
+
+@router.post("/review/rebalance")
+def rebalance_review(db: Session = Depends(get_db)):
+    result = rebalance_progress_calendar(db)
+    db.commit()
+
+    return {
+        "status": "ok",
+        **result
+    }
+
+
+@router.get("/review/startup_notice")
+def get_startup_notice(db: Session = Depends(get_db)):
+    return get_startup_rebalance_notice(db)
 
 
 @router.get("/review")

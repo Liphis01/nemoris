@@ -1,5 +1,8 @@
+import json
+
 from .database import engine
 from .models import Base
+from .scheduler import DEFAULT_CATCHUP_DAILY_TARGET
 
 
 def ensure_progress_schema():
@@ -48,9 +51,23 @@ def normalize_legacy_question_types():
         )
 
 
+def ensure_default_app_settings():
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+            (
+                "review",
+                json.dumps({
+                    "catchup_daily_target": DEFAULT_CATCHUP_DAILY_TARGET
+                })
+            )
+        )
+
+
 def init_database():
     # create_all is enough for this local app's initial tables. The helper
     # functions below handle the small legacy fixes that create_all cannot do.
     Base.metadata.create_all(bind=engine)
     ensure_progress_schema()
+    ensure_default_app_settings()
     normalize_legacy_question_types()

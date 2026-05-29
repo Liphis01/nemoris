@@ -3,8 +3,14 @@ import Menu from "./features/menu/Menu";
 import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
 import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
+import { getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
+
+
+function startupNoticeStorageKey(notice) {
+  return `startup-rebalance-notice:${notice.id}`;
+}
 
 
 function App() {
@@ -13,6 +19,7 @@ function App() {
   const [mode, setMode] = useState("menu");
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
+  const [startupNotice, setStartupNotice] = useState(null);
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
 
@@ -36,6 +43,36 @@ function App() {
       mode === "manage" ? "hidden" : "auto";
   }, [mode]);
 
+  useEffect(() => {
+    getStartupRebalanceNotice()
+      .then((notice) => {
+        if (!notice?.id || !notice.moved) return;
+
+        try {
+          if (localStorage.getItem(startupNoticeStorageKey(notice))) {
+            return;
+          }
+        } catch (error) {
+          console.error(error);
+        }
+
+        setStartupNotice(notice);
+      })
+      .catch(console.error);
+  }, []);
+
+  function dismissStartupNotice() {
+    if (startupNotice?.id) {
+      try {
+        localStorage.setItem(startupNoticeStorageKey(startupNotice), "dismissed");
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    setStartupNotice(null);
+  }
+
   function openQuestionInManage(question) {
     // Calendar -> Manage navigation should land on the exact question, without
     // whatever filters were previously active in Manage.
@@ -58,7 +95,11 @@ function App() {
   return (
     <div style={appStyle}>
       {mode === "menu" && (
-        <Menu setMode={setMode} />
+        <Menu
+          setMode={setMode}
+          startupNotice={startupNotice}
+          onDismissStartupNotice={dismissStartupNotice}
+        />
       )}
 
       {mode === "quiz" && (

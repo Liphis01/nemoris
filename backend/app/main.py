@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
 from .routers import collections, groups, maps, questions, review, uploads
+from .services.startup import run_startup_rebalance_with_session
 
 
 def create_app():
@@ -13,6 +14,7 @@ def create_app():
     # happens during app construction instead of through a separate migration
     # command.
     init_database()
+    run_startup_rebalance_with_session()
 
     app = FastAPI()
 

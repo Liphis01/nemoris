@@ -65,6 +65,8 @@ color: "#ff85c2",
 - décaler la limite de questions par review en paramètre de target pour le scheduler
 - pouvoir revenir à la question précédente dans la review
 - faire un bouton toggle pour l'era dans la preview
+- le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
+- zoom sur les zones dans la review qu'il reste à trouver
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
@@ -81,6 +83,7 @@ color: "#ff85c2",
 - faire un mode "berserk" où on peut choisir dans la review d'ajouter un chrono pour essayer de battre son record de temps
 - quand on vient d'ajouter une question, ajouter un indicateur et on doit passer la souris sur la card dans la liste pour enlever l'indicateur (à la LoL)
 - faire un menu settings
+- systeme de mmr
 
 # React + Vite
 
