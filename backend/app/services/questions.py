@@ -1,7 +1,13 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import joinedload
 
-from ..models import Collection, Progress, Question, QuestionGroup
+from ..models import (
+    Collection,
+    Progress,
+    Question,
+    QuestionGroup,
+    question_collection
+)
 from ..serializers import serialize_manage_question
 from .progress import create_initial_progress
 from .timeline import validate_question_timeline
@@ -165,6 +171,23 @@ def set_question_collections(db, question_id: int, collection_ids):
     db.commit()
 
 
+def delete_question_dependents(db, question_ids):
+    if not question_ids:
+        return
+
+    # Relationship cascades are intentionally not enabled in the models, so
+    # question-owned rows have to be removed explicitly before deleting rows
+    # from questions.
+    db.execute(
+        question_collection.delete().where(
+            question_collection.c.question_id.in_(question_ids)
+        )
+    )
+    db.query(Progress).filter(Progress.question_id.in_(question_ids)).delete(
+        synchronize_session=False
+    )
+
+
 def delete_question(db, question_id: int):
     question = (
         db.query(Question)
@@ -179,8 +202,7 @@ def delete_question(db, question_id: int):
     group = question.group
     # Clear many-to-many links and progress explicitly because cascades are not
     # enabled on these relationships.
-    question.collections = []
-    db.query(Progress).filter(Progress.question_id == question.id).delete()
+    delete_question_dependents(db, [question.id])
     db.delete(question)
     db.commit()
 

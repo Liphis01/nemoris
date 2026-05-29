@@ -47,6 +47,11 @@ const defaultSortOrders = {
 };
 
 
+function getItemGroupId(item) {
+  return item?.group_id ?? item?.group?.id ?? null;
+}
+
+
 export function useManageLibrary(mode) {
   // This hook is the Manage data store: it owns loaded questions/groups, local
   // filters, creation drafts, and cache patches after mutations.
@@ -167,6 +172,14 @@ export function useManageLibrary(mode) {
     try {
       await deleteGroupRequest(id);
       setAllGroups(prev => prev.filter(group => group.id !== id));
+      setAllQuestions(prev =>
+        prev.filter(question => getItemGroupId(question) !== id)
+      );
+      setSelectedItem(prev => {
+        if (!prev) return prev;
+        if (prev.type_group && prev.id === id) return null;
+        return getItemGroupId(prev) === id ? null : prev;
+      });
     } catch (error) {
       alert(error.message || "Impossible de supprimer le groupe.");
     }

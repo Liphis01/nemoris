@@ -13,8 +13,6 @@ color: "#ff85c2",
 - recentrer les svg
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - le texte des cards est décalé vers la droite (à cause du MAP)
-- vérifier que supprimer une question supprime aussi le progress associé
-- vérifier que supprimer un groupe supprime aussi les questions associées
 - bouton "ajouter" des tags n'est pas aligné avec le champ de texte
 - on peut ajouter des tags vides ("")
 - quand on créé une question texte, il faudrait afficher la preview de la question après la création au lieu de rester sur la page de création (et quand on supprime la question il faut fermer la preview au lieu de revenir sur la création de question)

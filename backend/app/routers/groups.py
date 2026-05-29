@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..dependencies import get_db
 from ..models import Question, QuestionGroup
 from ..schemas import GroupCreate, GroupOut, GroupUpdate
+from ..services.questions import delete_question_dependents
 
 
 router = APIRouter()
@@ -119,8 +120,6 @@ def update_group(
 
 @router.delete("/groups/{group_id}")
 def delete_group(group_id: int, db: Session = Depends(get_db)):
-    # Deleting non-empty groups would orphan visual relationships, so callers
-    # must delete or move questions first.
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)
@@ -130,10 +129,20 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    if group.questions:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete group with existing questions"
+    question_ids = [
+        question_id
+        for (question_id,) in (
+            db.query(Question.id)
+            .filter(Question.group_id == group.id)
+            .all()
+        )
+    ]
+
+    delete_question_dependents(db, question_ids)
+
+    if question_ids:
+        db.query(Question).filter(Question.id.in_(question_ids)).delete(
+            synchronize_session=False
         )
 
     db.delete(group)
