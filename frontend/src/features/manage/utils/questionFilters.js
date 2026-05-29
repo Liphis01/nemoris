@@ -10,6 +10,11 @@ function normalizeString(value) {
 }
 
 
+function normalizeSearchText(value) {
+  return normalizeString(value).replace(/[-\s]+/g, " ");
+}
+
+
 function getQuestionTitle(question) {
   if (question?.type_q === "map") {
     return normalizeString(question.answer || question.question);
@@ -98,11 +103,11 @@ function compareQuestions(a, b, sortField, sortOrder) {
 
 
 function matchesSearch(question, search) {
-  const normalizedSearch = search.toLowerCase();
+  const normalizedSearch = normalizeSearchText(search);
 
   return (
-    (question.question || "").toLowerCase().includes(normalizedSearch) ||
-    (question.answer || "").toLowerCase().includes(normalizedSearch)
+    normalizeSearchText(question.question).includes(normalizedSearch) ||
+    normalizeSearchText(question.answer).includes(normalizedSearch)
   );
 }
 

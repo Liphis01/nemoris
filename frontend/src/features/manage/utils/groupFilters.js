@@ -3,14 +3,19 @@ function normalizeString(value) {
 }
 
 
+function normalizeSearchText(value) {
+  return normalizeString(value).replace(/[-\s]+/g, " ");
+}
+
+
 function matchesSearch(group, search) {
   if (!search) return true;
 
-  const normalizedSearch = normalizeString(search);
+  const normalizedSearch = normalizeSearchText(search);
 
   return (
-    normalizeString(group.name).includes(normalizedSearch) ||
-    normalizeString(group.type_group).includes(normalizedSearch)
+    normalizeSearchText(group.name).includes(normalizedSearch) ||
+    normalizeSearchText(group.type_group).includes(normalizedSearch)
   );
 }
 

@@ -3,11 +3,13 @@ import { sendMapAnswer } from "../../../api/review";
 
 
 function normalize(str = "") {
-  // Match user input without case or accent sensitivity.
+  // Match user input without case, accent, or hyphen/space sensitivity.
   return str
     .toLowerCase()
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .replace(/[-\s]+/g, " ");
 }
 
 
