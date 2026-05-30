@@ -47,7 +47,8 @@ export default function TimelineQuestionEditor({
   onDelete,
   onUploadFile,
   saveStatus,
-  headerAction
+  headerAction,
+  availableTags = []
 }) {
   const [tagInput, setTagInput] = useState("");
   const timelineDraft = normalizeDraft(draft);
@@ -78,8 +79,8 @@ export default function TimelineQuestionEditor({
     });
   }
 
-  function addTag() {
-    const value = tagInput.trim();
+  function addTag(selectedTag) {
+    const value = String(selectedTag ?? tagInput).trim();
     if (!value || (timelineDraft.tags || []).includes(value)) return;
 
     commit({
@@ -154,6 +155,7 @@ export default function TimelineQuestionEditor({
       <TagEditor
         tags={timelineDraft.tags || []}
         tagInput={tagInput}
+        availableTags={availableTags}
         onTagInputChange={setPendingTagInput}
         onAddTag={addTag}
         onRemoveTag={removeTag}

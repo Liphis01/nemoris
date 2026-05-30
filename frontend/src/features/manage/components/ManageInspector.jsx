@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
+import MapFileInput from "../../map/components/MapFileInput";
 import {
   createDefaultTimeline,
   formatTimelineAnswer,
@@ -319,7 +320,8 @@ export default function ManageInspector({
   setHighlightedQuestionIds,
   onOpenInCalendar,
   registerPendingSaveHandler,
-  requestManageTransition
+  requestManageTransition,
+  availableTags = []
 }) {
   // Inspector has three modes: create group, create question, or edit selected
   // item. Map groups/zones delegate their detailed editing to MapEditor.
@@ -481,7 +483,7 @@ export default function ManageInspector({
         </select>
 
         <label style={labelStyle}>Media / URL (optionnel)</label>
-        <input
+        <MapFileInput
           style={inputStyle}
           value={groupDraft.media}
           onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
@@ -524,7 +526,8 @@ export default function ManageInspector({
       onSubmit: handleCreateQuestion,
       submitLabel: "Créer",
       onCancel: cancelCreateQuestion,
-      onUploadFile: (event) => uploadQuestionMedia(event, { id: "new" })
+      onUploadFile: (event) => uploadQuestionMedia(event, { id: "new" }),
+      availableTags
     };
 
     if (questionDraft.type_q === "timeline") {
@@ -734,6 +737,7 @@ export default function ManageInspector({
     onDelete: handleDelete,
     onUploadFile: handleUploadFile,
     saveStatus,
+    availableTags,
     headerAction: (
       <ReviewCalendarAction
         nextReview={selectedNextReview}

@@ -8,7 +8,6 @@
 - ajouter un timer pour les questions
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
 - mettre des tags sur les groupes les propage aux questions
-- barre de scroll moche dans manage
 - ajouter une recherche dans calender
 - montrer un équivalent de recap quand je regarde un groupe fait dans le passé dans le calendrier
 - faire un bouton toggle pour l'era dans la preview

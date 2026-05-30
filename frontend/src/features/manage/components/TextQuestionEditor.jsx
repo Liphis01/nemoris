@@ -32,7 +32,8 @@ export default function TextQuestionEditor({
   onDelete,
   onUploadFile,
   saveStatus,
-  headerAction
+  headerAction,
+  availableTags = []
 }) {
   const [tagInput, setTagInput] = useState("");
   const textDraft = normalizeDraft(draft);
@@ -52,8 +53,8 @@ export default function TextQuestionEditor({
     });
   }
 
-  function addTag() {
-    const value = tagInput.trim();
+  function addTag(selectedTag) {
+    const value = String(selectedTag ?? tagInput).trim();
     if (!value || (textDraft.tags || []).includes(value)) return;
 
     commit({
@@ -128,6 +129,7 @@ export default function TextQuestionEditor({
       <TagEditor
         tags={textDraft.tags || []}
         tagInput={tagInput}
+        availableTags={availableTags}
         onTagInputChange={setPendingTagInput}
         onAddTag={addTag}
         onRemoveTag={removeTag}

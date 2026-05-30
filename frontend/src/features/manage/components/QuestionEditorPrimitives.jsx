@@ -6,7 +6,12 @@ import {
   panelStyle,
   primaryButtonStyle
 } from "./QuestionEditorStyles";
+import AutocompleteInput from "../../../shared/AutocompleteInput";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+
+function tagKey(tag) {
+  return String(tag || "").trim().toLowerCase();
+}
 
 function QuestionTypeChip({ type }) {
   const typeStyle = getQuestionTypeChipStyle(type);
@@ -121,10 +126,16 @@ export function MediaPreview({ media }) {
 export function TagEditor({
   tags = [],
   tagInput,
+  availableTags = [],
   onTagInputChange,
   onAddTag,
   onRemoveTag
 }) {
+  const currentTagKeys = new Set(tags.map(tagKey));
+  const suggestedTags = availableTags.filter(tag =>
+    !currentTagKeys.has(tagKey(tag))
+  );
+
   return (
     <div>
       <div style={{ ...labelStyle, marginBottom: "8px" }}>
@@ -179,9 +190,10 @@ export function TagEditor({
           gap: "8px"
         }}
       >
-        <input
+        <AutocompleteInput
           value={tagInput}
           onChange={(event) => onTagInputChange?.(event.target.value)}
+          onSuggestionSelect={(tag) => onAddTag?.(tag)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -189,9 +201,10 @@ export function TagEditor({
             }
           }}
           placeholder="Ajouter un tag"
+          suggestions={suggestedTags}
           style={inputStyle}
         />
-        <button type="button" onClick={onAddTag} style={buttonStyle}>
+        <button type="button" onClick={() => onAddTag?.()} style={buttonStyle}>
           Ajouter
         </button>
       </div>

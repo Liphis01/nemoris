@@ -1,7 +1,26 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManageInspector from "./ManageInspector";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+function collectAvailableTags(questions = []) {
+  const tagsByKey = new Map();
+
+  questions.forEach((question) => {
+    (question.tags || []).forEach((tag) => {
+      const value = String(tag || "").trim();
+      const key = value.toLowerCase();
+
+      if (value && !tagsByKey.has(key)) {
+        tagsByKey.set(key, value);
+      }
+    });
+  });
+
+  return [...tagsByKey.values()].sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
 
 export default function Manage(props) {
   // Manage coordinates the three panels. The heavy data/state logic lives in
@@ -20,6 +39,10 @@ export default function Manage(props) {
     setSelectedItem,
     setViewMode
   } = props;
+  const availableTags = useMemo(
+    () => collectAvailableTags(allQuestions),
+    [allQuestions]
+  );
 
   const showAutosaveStatus = useCallback((status) => {
     if (autosaveTimeoutRef.current) {
@@ -207,6 +230,7 @@ export default function Manage(props) {
 
       <ManageSidebar
         {...props}
+        availableTags={availableTags}
         requestManageTransition={requestManageTransition}
       />
 
@@ -221,6 +245,7 @@ export default function Manage(props) {
 
       <ManageInspector
         {...props}
+        availableTags={availableTags}
         editingZone={editingZone}
         setEditingZone={setEditingZone}
         createQuestion={createQuestionWithHighlight}

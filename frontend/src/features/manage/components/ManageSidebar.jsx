@@ -1,3 +1,5 @@
+import AutocompleteInput from "../../../shared/AutocompleteInput";
+
 const sortOptions = [
   { value: "id", label: "Ajout" },
   { value: "title", label: "Titre" },
@@ -57,7 +59,8 @@ export default function ManageSidebar({
   startCreateGroup,
   viewMode,
   setViewMode,
-  requestManageTransition
+  requestManageTransition,
+  availableTags = []
 }) {
 
   const inputStyle = {
@@ -149,14 +152,25 @@ export default function ManageSidebar({
     onChange,
     onClear,
     placeholder,
-    ariaLabel
+    ariaLabel,
+    suggestions = [],
+    onSuggestionSelect
   }) {
     return (
       <div style={{ position: "relative" }}>
-        <input
+        <AutocompleteInput
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onSuggestionSelect={(suggestion) => {
+            if (onSuggestionSelect) {
+              onSuggestionSelect(suggestion);
+              return;
+            }
+
+            onChange(suggestion);
+          }}
+          suggestions={suggestions}
           style={clearableInputStyle}
         />
 
@@ -441,7 +455,9 @@ export default function ManageSidebar({
               onChange: setTagFilter,
               onClear: () => setTagFilter(""),
               placeholder: "Tags...",
-              ariaLabel: "Effacer les tags"
+              ariaLabel: "Effacer les tags",
+              suggestions: availableTags,
+              onSuggestionSelect: setTagFilter
             })}
 
             <select

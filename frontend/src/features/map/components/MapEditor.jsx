@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import MapFileInput from "./MapFileInput";
 import SvgMap from "./SvgMap";
 import {
   getZoneCode,
@@ -468,7 +469,7 @@ export default function MapEditor({
               Media
             </label>
 
-            <input
+            <MapFileInput
               value={editableGroup.media}
               onChange={(e) =>
                 updateGroupField("media", e.target.value)
