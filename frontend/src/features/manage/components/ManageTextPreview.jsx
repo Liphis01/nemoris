@@ -5,6 +5,7 @@ const LONG_TEXT_LENGTH = 48;
 const CLOSE_DELAY_MS = 140;
 const VIEWPORT_GUTTER = 12;
 const MIN_PREVIEW_HEIGHT = 160;
+const PREVIEW_GAP = 8;
 
 function normalizeItem(item) {
   const value = item?.value === null || item?.value === undefined
@@ -34,29 +35,21 @@ function getPreviewPosition(anchor) {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-  const availableWidth = viewportWidth - VIEWPORT_GUTTER * 2;
-  const width = Math.min(rect.width, availableWidth);
-  const left = clamp(rect.left, VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER);
-  const belowHeight = viewportHeight - rect.bottom - VIEWPORT_GUTTER - 6;
-  const aboveHeight = rect.top - VIEWPORT_GUTTER - 6;
-  const placeAbove = belowHeight < MIN_PREVIEW_HEIGHT && aboveHeight > belowHeight;
-  const availableHeight = Math.max(80, placeAbove ? aboveHeight : belowHeight);
-  const maxHeight = Math.min(420, availableHeight);
-  const top = placeAbove
-    ? null
-    : clamp(rect.bottom + 6, VIEWPORT_GUTTER, viewportHeight - maxHeight - VIEWPORT_GUTTER);
-  const bottom = placeAbove
-    ? clamp(
-      viewportHeight - rect.top + 6,
-      VIEWPORT_GUTTER,
-      viewportHeight - maxHeight - VIEWPORT_GUTTER
-    )
-    : null;
+  const rightRoom = viewportWidth - rect.right - PREVIEW_GAP - VIEWPORT_GUTTER;
+  const leftRoom = rect.left - PREVIEW_GAP - VIEWPORT_GUTTER;
+  const side = rightRoom >= 260 || rightRoom >= leftRoom ? "right" : "left";
+  const availableWidth = Math.max(220, side === "right" ? rightRoom : leftRoom);
+  const preferredWidth = Math.min(460, Math.max(320, rect.width));
+  const width = Math.min(preferredWidth, availableWidth);
+  const left = side === "right"
+    ? clamp(rect.right + PREVIEW_GAP, VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER)
+    : clamp(rect.left - width - PREVIEW_GAP, VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER);
+  const top = clamp(rect.top, VIEWPORT_GUTTER, viewportHeight - MIN_PREVIEW_HEIGHT - VIEWPORT_GUTTER);
+  const maxHeight = Math.min(420, Math.max(80, viewportHeight - top - VIEWPORT_GUTTER));
 
   return {
     left,
     top,
-    bottom,
     width,
     maxHeight
   };
@@ -197,8 +190,7 @@ export function useManageTextPreview(items) {
         style={{
           position: "fixed",
           left: `${position.left}px`,
-          top: position.top === null ? undefined : `${position.top}px`,
-          bottom: position.bottom === null ? undefined : `${position.bottom}px`,
+          top: `${position.top}px`,
           width: `${position.width}px`,
           maxHeight: `${position.maxHeight}px`,
           overflowY: "auto",
