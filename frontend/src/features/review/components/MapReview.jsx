@@ -1,6 +1,7 @@
-import { Fragment } from "react";
+import { Fragment, useCallback, useLayoutEffect, useRef } from "react";
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
+import { centerListItem } from "../../../shared/scroll";
 import { useMapReview } from "../hooks/useMapReview";
 
 const typeBadgeStyle = {
@@ -93,6 +94,42 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     showRecap,
     showRecapSections
   } = useMapReview(reviewZones, onComplete);
+  const recapTableBodyRef = useRef(null);
+  const recapRowRefs = useRef(new Map());
+  const recapRowKey = recapRows.map(row => row.item.code).join("|");
+
+  function setRecapRowRef(code) {
+    return (element) => {
+      if (!code) return;
+
+      if (element) {
+        recapRowRefs.current.set(code, element);
+      } else {
+        recapRowRefs.current.delete(code);
+      }
+    };
+  }
+
+  const scrollRecapRowIntoView = useCallback((code) => {
+    const list = recapTableBodyRef.current;
+    const row = recapRowRefs.current.get(code);
+    if (!list || !row) return;
+
+    centerListItem(list, row);
+  }, []);
+
+  const focusRecapCode = useCallback((code) => {
+    if (!code) return;
+
+    setFocusedCode(code);
+    window.requestAnimationFrame(() => scrollRecapRowIntoView(code));
+  }, [scrollRecapRowIntoView, setFocusedCode]);
+
+  useLayoutEffect(() => {
+    if (!showRecap || !focusedCode) return;
+
+    scrollRecapRowIntoView(focusedCode);
+  }, [focusedCode, recapRowKey, scrollRecapRowIntoView, showRecap]);
 
   return (
     <>
@@ -417,6 +454,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                   dueItems={[]}
                   selected={focusedCode}
                   focusCode={focusedCode}
+                  onSelect={focusRecapCode}
                 />
               </div>
 
@@ -428,7 +466,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                   <div>Qualité</div>
                 </div>
 
-                <div style={recapTableBodyStyle}>
+                <div ref={recapTableBodyRef} style={recapTableBodyStyle}>
                   {recapRows.map((row, index) => {
                     const { item, historyStats, isFound } = row;
                     const showSection =
@@ -451,9 +489,10 @@ export default function MapReview({ group, reviewZones, onComplete }) {
 
                         <div
                           className="map-recap-row"
+                          ref={setRecapRowRef(item.code)}
                           role="button"
                           tabIndex={0}
-                          onClick={() => setFocusedCode(item.code)}
+                          onClick={() => focusRecapCode(item.code)}
                           onKeyDown={(event) => {
                             if (event.target !== event.currentTarget) {
                               return;
@@ -461,7 +500,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
 
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              setFocusedCode(item.code);
+                              focusRecapCode(item.code);
                             }
                           }}
                           style={{

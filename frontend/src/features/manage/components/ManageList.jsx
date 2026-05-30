@@ -2,25 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import QuestionCard from "./QuestionCard";
 import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
+import { centerListItem } from "../../../shared/scroll";
 import { buildVisibleRows, getQuestionGroupId } from "../utils/manageRows";
-
-function centerListItem(list, item) {
-  // Keep cross-screen navigation visible by scrolling the selected/highlighted
-  // row toward the center of the list.
-  const listRect = list.getBoundingClientRect();
-  const itemRect = item.getBoundingClientRect();
-  const nextTop =
-    list.scrollTop +
-    itemRect.top -
-    listRect.top -
-    list.clientHeight / 2 +
-    item.offsetHeight / 2;
-
-  list.scrollTo({
-    top: Math.max(0, nextTop),
-    behavior: "smooth"
-  });
-}
 
 export default function ManageList({
   filteredQuestions,
