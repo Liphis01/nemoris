@@ -124,8 +124,9 @@ Important behavior:
   against existing daily loads.
 - Longer intervals get scheduling slots first.
 - Daily type loads are considered so review days mix question types.
-- `catchup_daily_target` controls calendar rebalancing when the backlog is too
-  dense.
+- `catchup_daily_target` is an approximate catch-up objective for calendar
+  rebalancing. The scheduler allows a 25% proportional tolerance before moving
+  overflow later.
 
 Settings and rebalancing endpoints:
 

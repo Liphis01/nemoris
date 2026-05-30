@@ -166,7 +166,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
             mixed_day
         )
 
-    def test_rebalance_spreads_overdue_backlog_by_target(self):
+    def test_rebalance_spreads_overdue_backlog_by_soft_target(self):
         today = date(2026, 1, 10)
         entries = [
             rebalance_entry(index, today - timedelta(days=3))
@@ -180,11 +180,25 @@ class SchedulerSmoothingTests(unittest.TestCase):
             day = scheduling_result["next_review"]
             counts[day] = counts.get(day, 0) + 1
 
-        self.assertEqual(counts[today], 50)
-        self.assertEqual(counts[today + timedelta(days=1)], 50)
-        self.assertEqual(counts[today + timedelta(days=2)], 20)
+        self.assertEqual(counts[today], 63)
+        self.assertEqual(counts[today + timedelta(days=1)], 57)
+        self.assertNotIn(today + timedelta(days=2), counts)
 
-    def test_rebalance_pushes_overloaded_future_days(self):
+    def test_rebalance_leaves_future_days_inside_soft_target(self):
+        today = date(2026, 1, 10)
+        future_day = today + timedelta(days=3)
+        entries = [
+            rebalance_entry(index, future_day)
+            for index in range(60)
+        ]
+
+        assigned = rebalance_review_calendar(entries, 50, today=today)
+
+        self.assertTrue(
+            all(item["next_review"] == future_day for item in assigned)
+        )
+
+    def test_rebalance_pushes_future_days_over_soft_target(self):
         today = date(2026, 1, 10)
         future_day = today + timedelta(days=3)
         entries = [
@@ -199,8 +213,8 @@ class SchedulerSmoothingTests(unittest.TestCase):
             day = scheduling_result["next_review"]
             counts[day] = counts.get(day, 0) + 1
 
-        self.assertEqual(counts[future_day], 50)
-        self.assertEqual(counts[future_day + timedelta(days=1)], 15)
+        self.assertEqual(counts[future_day], 63)
+        self.assertEqual(counts[future_day + timedelta(days=1)], 2)
 
     def test_rebalance_never_pulls_future_items_earlier(self):
         today = date(2026, 1, 10)
@@ -230,9 +244,9 @@ class SchedulerSmoothingTests(unittest.TestCase):
         }
 
         self.assertEqual(assignment_by_id[1], today)
-        self.assertEqual(assignment_by_id[3], today + timedelta(days=1))
-        self.assertEqual(assignment_by_id[4], today + timedelta(days=2))
-        self.assertEqual(assignment_by_id[2], today + timedelta(days=3))
+        self.assertEqual(assignment_by_id[3], today)
+        self.assertEqual(assignment_by_id[4], today + timedelta(days=1))
+        self.assertEqual(assignment_by_id[2], today + timedelta(days=1))
 
     def test_rebalance_interleaves_types_across_daily_buckets(self):
         today = date(2026, 1, 10)
@@ -253,14 +267,14 @@ class SchedulerSmoothingTests(unittest.TestCase):
             counts.setdefault(day, {})
             counts[day][type_q] = counts[day].get(type_q, 0) + 1
 
-        self.assertEqual(counts[today], {"map": 2, "text": 2})
+        self.assertEqual(counts[today], {"map": 3, "text": 2})
         self.assertEqual(
             counts[today + timedelta(days=1)],
-            {"map": 2, "text": 2}
+            {"map": 2, "text": 3}
         )
         self.assertEqual(
             counts[today + timedelta(days=2)],
-            {"map": 2, "text": 2}
+            {"map": 1, "text": 1}
         )
 
 
@@ -450,7 +464,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             35
         )
 
-    def test_rebalance_route_moves_progress_and_caps_daily_load(self):
+    def test_rebalance_route_moves_progress_and_soft_limits_daily_load(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
 
@@ -478,9 +492,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(response["daily_target"], 2)
         self.assertEqual(response["moved"], 5)
-        self.assertEqual(counts[today], 2)
+        self.assertEqual(counts[today], 3)
         self.assertEqual(counts[today + timedelta(days=1)], 2)
-        self.assertEqual(counts[today + timedelta(days=2)], 1)
+        self.assertNotIn(today + timedelta(days=2), counts)
 
         unchanged = (
             self.db.query(Progress)
@@ -518,14 +532,14 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             counts.setdefault(next_review, {})
             counts[next_review][type_q] = counts[next_review].get(type_q, 0) + 1
 
-        self.assertEqual(counts[today], {"map": 2, "text": 2})
+        self.assertEqual(counts[today], {"map": 3, "text": 2})
         self.assertEqual(
             counts[today + timedelta(days=1)],
-            {"map": 2, "text": 2}
+            {"map": 2, "text": 3}
         )
         self.assertEqual(
             counts[today + timedelta(days=2)],
-            {"map": 2, "text": 2}
+            {"map": 1, "text": 1}
         )
 
     def test_review_after_rebalance_returns_manageable_due_set(self):
@@ -541,10 +555,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         response = get_review(db=self.db)
 
-        self.assertEqual(len(response), 2)
+        self.assertEqual(len(response), 3)
         self.assertEqual(
             sorted(item["question_id"] for item in response),
-            [1, 2]
+            [1, 2, 3]
         )
 
     def test_review_route_returns_all_due_questions_without_cap(self):

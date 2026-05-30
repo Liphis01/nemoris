@@ -4,6 +4,7 @@ import math
 
 DESIRED_RETENTION = 0.9
 DEFAULT_CATCHUP_DAILY_TARGET = 50
+CATCHUP_REBALANCE_TOLERANCE = 1.25
 
 
 def next_interval(stability):
@@ -180,6 +181,12 @@ def normalize_daily_target(daily_target):
     return max(1, target)
 
 
+def soft_rebalance_daily_limit(daily_target):
+    return math.ceil(
+        normalize_daily_target(daily_target) * CATCHUP_REBALANCE_TOLERANCE
+    )
+
+
 def rebalance_review_calendar(entries, daily_target, today=None):
     """
     Spread existing scheduled review dates from today onward.
@@ -190,7 +197,7 @@ def rebalance_review_calendar(entries, daily_target, today=None):
     next_review/interval scheduling fields.
     """
     today = today or date.today()
-    daily_target = normalize_daily_target(daily_target)
+    daily_limit = soft_rebalance_daily_limit(daily_target)
     assigned_loads = {}
     assigned = [None] * len(entries)
 
@@ -257,7 +264,7 @@ def rebalance_review_calendar(entries, daily_target, today=None):
     for item in ordered:
         next_review = item["effective_due_date"]
 
-        while assigned_loads.get(next_review, 0) >= daily_target:
+        while assigned_loads.get(next_review, 0) >= daily_limit:
             next_review += timedelta(days=1)
 
         assigned_loads[next_review] = assigned_loads.get(next_review, 0) + 1
