@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
+import {
+  disabledSaveButtonStyle,
+  pendingSaveButtonStyle
+} from "../../manage/components/QuestionEditorStyles";
 import MapFileInput from "./MapFileInput";
 import SvgMap from "./SvgMap";
 import {
@@ -64,6 +68,7 @@ export default function MapEditor({
     ? Math.min(savedQuestionCount / totalCodeCount, 1)
     : 0;
   const assignmentDegrees = Math.round(assignmentRatio * 360);
+  const hasPendingMapChanges = hasDirtyChanges();
 
   function createTemporaryZone(code) {
     return {
@@ -877,16 +882,17 @@ export default function MapEditor({
           )}
           <div style={{ marginTop: "15px" }}>
             <button
+              type="button"
+              disabled={!hasPendingMapChanges}
               onClick={saveMapEdits}
-              title="Sauvegarder"
+              title={hasPendingMapChanges ? "Sauvegarder" : "Aucune modification à enregistrer"}
               style={{
+                ...(hasPendingMapChanges
+                  ? pendingSaveButtonStyle
+                  : disabledSaveButtonStyle),
                 width: "100%",
                 padding: "12px",
-                background: "#3a7afe",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer"
+                borderRadius: "8px"
               }}
             >
               Enregistrer

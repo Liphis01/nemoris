@@ -1,9 +1,11 @@
 import {
   buttonStyle,
   dangerButtonStyle,
+  disabledSaveButtonStyle,
   inputStyle,
   labelStyle,
   panelStyle,
+  pendingSaveButtonStyle,
   primaryButtonStyle
 } from "./QuestionEditorStyles";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
@@ -217,8 +219,16 @@ export function QuestionEditorActions({
   onSubmit,
   onCancel,
   onDelete,
-  saveStatus
+  saveStatus,
+  hasUnsavedChanges = false,
+  isSubmitDisabled = false
 }) {
+  const submitStyle = isSubmitDisabled
+    ? disabledSaveButtonStyle
+    : hasUnsavedChanges
+      ? pendingSaveButtonStyle
+      : primaryButtonStyle;
+
   return (
     <div
       style={{
@@ -229,7 +239,13 @@ export function QuestionEditorActions({
         paddingBottom: "20px"
       }}
     >
-      <button type="button" onClick={onSubmit} style={primaryButtonStyle}>
+      <button
+        type="button"
+        disabled={isSubmitDisabled}
+        onClick={onSubmit}
+        title={isSubmitDisabled ? "Aucune modification à enregistrer" : undefined}
+        style={submitStyle}
+      >
         {submitLabel}
       </button>
 

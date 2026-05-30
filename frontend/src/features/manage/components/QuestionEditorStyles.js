@@ -38,6 +38,27 @@ export const primaryButtonStyle = {
   color: "#d8ccff"
 };
 
+export const pendingSaveButtonStyle = {
+  ...primaryButtonStyle,
+  background: "linear-gradient(180deg, #5a3f12 0%, #362712 100%)",
+  border: "1px solid #facc15",
+  boxShadow: "0 0 0 3px rgba(250, 204, 21, 0.12), 0 10px 24px rgba(0, 0, 0, 0.28)",
+  color: "#fff3b8",
+  fontWeight: "700",
+  transition: "background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, opacity 0.16s ease"
+};
+
+export const disabledSaveButtonStyle = {
+  ...primaryButtonStyle,
+  background: "#202020",
+  border: "1px solid #333",
+  boxShadow: "none",
+  color: "#777",
+  cursor: "not-allowed",
+  opacity: 0.72,
+  transition: "background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, opacity 0.16s ease"
+};
+
 export const dangerButtonStyle = {
   ...buttonStyle,
   background: "#641c1c",

@@ -47,6 +47,8 @@ export default function TimelineQuestionEditor({
   onDelete,
   onUploadFile,
   saveStatus,
+  hasUnsavedChanges,
+  isSubmitDisabled,
   headerAction,
   availableTags = []
 }) {
@@ -167,6 +169,8 @@ export default function TimelineQuestionEditor({
         onCancel={onCancel}
         onDelete={onDelete}
         saveStatus={saveStatus}
+        hasUnsavedChanges={hasUnsavedChanges}
+        isSubmitDisabled={isSubmitDisabled}
       />
     </QuestionEditorShell>
   );

@@ -32,6 +32,8 @@ export default function TextQuestionEditor({
   onDelete,
   onUploadFile,
   saveStatus,
+  hasUnsavedChanges,
+  isSubmitDisabled,
   headerAction,
   availableTags = []
 }) {
@@ -141,6 +143,8 @@ export default function TextQuestionEditor({
         onCancel={onCancel}
         onDelete={onDelete}
         saveStatus={saveStatus}
+        hasUnsavedChanges={hasUnsavedChanges}
+        isSubmitDisabled={isSubmitDisabled}
       />
     </QuestionEditorShell>
   );

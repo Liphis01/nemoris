@@ -728,6 +728,10 @@ export default function ManageInspector({
     data: selectedItem.data || {}
   };
   const editType = editorDraft.type_q || "text";
+  const hasUnsavedChanges = !payloadsMatch(
+    buildQuestionSavePayload(editorDraft),
+    buildQuestionSavePayload(selectedItem)
+  );
   const editEditorProps = {
     draft: editorDraft,
     heading: `Question #${selectedItem.id}`,
@@ -738,6 +742,8 @@ export default function ManageInspector({
     onDelete: handleDelete,
     onUploadFile: handleUploadFile,
     saveStatus,
+    hasUnsavedChanges,
+    isSubmitDisabled: !hasUnsavedChanges,
     availableTags,
     headerAction: (
       <ReviewCalendarAction
