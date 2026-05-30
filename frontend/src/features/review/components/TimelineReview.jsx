@@ -507,9 +507,9 @@ function answerFromClick(value, timeline, viewport, bounds) {
     };
   }
 
-  const halfSpan = intervalDefaultSpan(timeline, viewport) / 2;
+  const span = intervalDefaultSpan(timeline, viewport);
 
-  return normalizeIntervalAnswer(value - halfSpan, value + halfSpan, timeline, bounds);
+  return normalizeIntervalAnswer(value, value + span, timeline, bounds);
 }
 
 function answerToPayload(answer, timeline) {
