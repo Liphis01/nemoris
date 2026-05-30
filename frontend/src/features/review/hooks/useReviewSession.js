@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getReview,
   getReviewSettings,
@@ -16,6 +16,9 @@ function isEditableTarget(target) {
   return Boolean(target.closest("input, textarea, select, [contenteditable]"));
 }
 
+const TEXT_ANSWER_FEEDBACK_MS = 240;
+
+
 export function useReviewSession(active) {
   // Owns one review run: fetching due items, moving through the queue, and
   // re-queueing failures for another pass.
@@ -29,23 +32,43 @@ export function useReviewSession(active) {
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [selectedTextQuality, setSelectedTextQuality] = useState(null);
+  const textAnswerTimeoutRef = useRef(null);
+  const textAnswerPendingRef = useRef(false);
 
   const current = questions[currentIndex];
 
+  const clearTextAnswerTimeout = useCallback(() => {
+    if (textAnswerTimeoutRef.current) {
+      clearTimeout(textAnswerTimeoutRef.current);
+      textAnswerTimeoutRef.current = null;
+    }
+
+    textAnswerPendingRef.current = false;
+  }, []);
+
   const handleTextAnswer = useCallback((quality) => {
-    if (!current) return;
+    if (!current || textAnswerPendingRef.current) return;
 
     // Fire-and-advance keeps review fast. Failures are appended to the end so
     // they appear again after the current queue.
+    clearTextAnswerTimeout();
+    textAnswerPendingRef.current = true;
+    setSelectedTextQuality(quality);
     sendAnswer(current.question_id, quality).catch(console.error);
 
-    if (quality === 0) {
-      setQuestions(prev => [...prev, current]);
-    }
+    textAnswerTimeoutRef.current = setTimeout(() => {
+      if (quality === 0) {
+        setQuestions(prev => [...prev, current]);
+      }
 
-    setShowAnswer(false);
-    setCurrentIndex(prev => prev + 1);
-  }, [current]);
+      setShowAnswer(false);
+      setCurrentIndex(prev => prev + 1);
+      setSelectedTextQuality(null);
+      textAnswerTimeoutRef.current = null;
+      textAnswerPendingRef.current = false;
+    }, TEXT_ANSWER_FEEDBACK_MS);
+  }, [clearTextAnswerTimeout, current]);
 
   function handleMapComplete(failedQuestionIds = []) {
     // A map screen can contain many atomic zone questions. Only failed zones are
@@ -93,6 +116,8 @@ export function useReviewSession(active) {
 
   useEffect(() => {
     if (!active) {
+      clearTextAnswerTimeout();
+      setSelectedTextQuality(null);
       setReviewReady(false);
       setReviewLoading(false);
       setReviewError("");
@@ -108,6 +133,7 @@ export function useReviewSession(active) {
       setQuestions([]);
       setCurrentIndex(0);
       setShowAnswer(false);
+      setSelectedTextQuality(null);
 
       try {
         const settings = await getReviewSettings();
@@ -137,7 +163,13 @@ export function useReviewSession(active) {
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, clearTextAnswerTimeout]);
+
+  useEffect(() => {
+    return () => {
+      clearTextAnswerTimeout();
+    };
+  }, [clearTextAnswerTimeout]);
 
   useEffect(() => {
     if (!active || !reviewReady) return;
@@ -148,6 +180,7 @@ export function useReviewSession(active) {
         setQuestions(data);
         setCurrentIndex(0);
         setShowAnswer(false);
+        setSelectedTextQuality(null);
         setReviewError("");
       })
       .catch((error) => {
@@ -205,7 +238,7 @@ export function useReviewSession(active) {
         return;
       }
 
-      // Keyboard review flow: Enter reveals, then 1/2/3/4 grades the visible
+      // Keyboard review flow: Enter reveals, then 0/1/2/3 grades the visible
       // answer. Map review handles its own input shortcuts.
       if (event.key === "Enter") {
         if (!showAnswer) {
@@ -216,19 +249,19 @@ export function useReviewSession(active) {
       }
 
       if (showAnswer) {
-        if (event.key === "1") {
+        if (event.key === "0") {
           event.preventDefault();
           handleTextAnswer(0);
         }
-        if (event.key === "2") {
+        if (event.key === "1") {
           event.preventDefault();
           handleTextAnswer(1);
         }
-        if (event.key === "3") {
+        if (event.key === "2") {
           event.preventDefault();
           handleTextAnswer(2);
         }
-        if (event.key === "4") {
+        if (event.key === "3") {
           event.preventDefault();
           handleTextAnswer(3);
         }
@@ -247,6 +280,7 @@ export function useReviewSession(active) {
     handleMapComplete,
     handleTimelineComplete,
     handleTextAnswer,
+    selectedTextQuality,
     catchupTargetDraft,
     catchupTargetSaving,
     questions,

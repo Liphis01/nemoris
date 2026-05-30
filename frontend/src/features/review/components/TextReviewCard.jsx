@@ -2,22 +2,82 @@ import { fadeInStyle } from "../../../shared/styles";
 
 const answerButtonStyle = {
     flex: 1,
-    border: "none",
+    border: "1px solid transparent",
     borderRadius: "12px",
     padding: "14px",
     fontWeight: "600",
     cursor: "pointer",
-    transition: "0.12s ease",
-    fontSize: "15px"
+    transition: "background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, color 0.14s ease, opacity 0.14s ease, transform 0.14s ease",
+    fontSize: "15px",
+    transform: "scale(1)"
 };
+
+const answerOptions = [
+    {
+        value: 0,
+        label: "0 · ❌ Faux",
+        background: "#3a1f24",
+        selectedBackground: "#6a2732",
+        color: "#ff9aa5",
+        selectedColor: "#ffe2e5"
+    },
+    {
+        value: 1,
+        label: "1 · 😐 Dur",
+        background: "#35311f",
+        selectedBackground: "#665224",
+        color: "#ffd36b",
+        selectedColor: "#fff1c7"
+    },
+    {
+        value: 2,
+        label: "2 · 🙂 Bon",
+        background: "#1f2f3a",
+        selectedBackground: "#25567d",
+        color: "#8fc7ff",
+        selectedColor: "#e1f0ff"
+    },
+    {
+        value: 3,
+        label: "3 · ✅ Facile",
+        background: "#1d3a2b",
+        selectedBackground: "#256844",
+        color: "#7ee2a8",
+        selectedColor: "#ddffeb"
+    }
+];
+
+function getAnswerButtonStyle(option, selectedQuality) {
+    const isAnswering = selectedQuality !== null;
+    const isSelected = selectedQuality === option.value;
+
+    return {
+        ...answerButtonStyle,
+        background: isSelected ? option.selectedBackground : option.background,
+        borderColor: isSelected ? option.color : "transparent",
+        boxShadow: isSelected
+            ? `0 0 0 3px ${option.color}22, 0 12px 28px ${option.color}20`
+            : "none",
+        color: isSelected ? option.selectedColor : option.color,
+        cursor: isAnswering ? "default" : "pointer",
+        opacity: isAnswering && !isSelected ? 0.42 : 1,
+        transform: isSelected
+            ? "translateY(-2px) scale(1.035)"
+            : isAnswering
+                ? "scale(0.985)"
+                : "scale(1)"
+    };
+}
 
 export default function TextReviewCard({
     q,
     currentIndex,
     showAnswer,
     setShowAnswer,
-    handleAnswer
+    handleAnswer,
+    selectedQuality
 }) {
+    const isAnswering = selectedQuality !== null;
 
     return (
         <div
@@ -178,49 +238,17 @@ export default function TextReviewCard({
                             }}
                         >
 
-                            <button
-                                onClick={() => handleAnswer(0)}
-                                style={{
-                                    ...answerButtonStyle,
-                                    background: "#3a1f24",
-                                    color: "#ff9aa5"
-                                }}
-                            >
-                                ❌ Faux
-                            </button>
-
-                            <button
-                                onClick={() => handleAnswer(1)}
-                                style={{
-                                    ...answerButtonStyle,
-                                    background: "#35311f",
-                                    color: "#ffd36b"
-                                }}
-                            >
-                                😐 Dur
-                            </button>
-
-                            <button
-                                onClick={() => handleAnswer(2)}
-                                style={{
-                                    ...answerButtonStyle,
-                                    background: "#1f2f3a",
-                                    color: "#8fc7ff"
-                                }}
-                            >
-                                🙂 Bon
-                            </button>
-
-                            <button
-                                onClick={() => handleAnswer(3)}
-                                style={{
-                                    ...answerButtonStyle,
-                                    background: "#1d3a2b",
-                                    color: "#7ee2a8"
-                                }}
-                            >
-                                ✅ Facile
-                            </button>
+                            {answerOptions.map(option => (
+                                <button
+                                    key={option.value}
+                                    aria-pressed={selectedQuality === option.value}
+                                    disabled={isAnswering}
+                                    onClick={() => handleAnswer(option.value)}
+                                    style={getAnswerButtonStyle(option, selectedQuality)}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
 
                         </div>
 

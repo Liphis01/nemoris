@@ -2,7 +2,6 @@
 
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
-- dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après
 
 ## quick fixes
 - proposer les fichiers .svg quand on commence à taper le nom d'une map dans la création de question map

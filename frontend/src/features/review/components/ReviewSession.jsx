@@ -17,6 +17,7 @@ export default function ReviewSession({
   showAnswer,
   setShowAnswer,
   handleTextAnswer,
+  selectedTextQuality,
   handleMapComplete,
   handleTimelineComplete,
   catchupTargetDraft,
@@ -313,6 +314,7 @@ export default function ReviewSession({
               showAnswer={showAnswer}
               setShowAnswer={setShowAnswer}
               handleTextAnswer={handleTextAnswer}
+              selectedTextQuality={selectedTextQuality}
               handleMapComplete={handleMapComplete}
               handleTimelineComplete={handleTimelineComplete}
             />
