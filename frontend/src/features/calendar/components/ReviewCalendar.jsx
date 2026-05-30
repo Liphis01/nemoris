@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import {
+  getQuestionTypeChipStyle,
+  questionTypeChipStyles
+} from "../../../shared/questionTypes";
 import CalendarGroupRecap from "./CalendarGroupRecap";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -22,6 +25,9 @@ const shortDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
   month: "short"
 });
+
+const calendarTypeOrder = ["text", "map", "timeline"];
+const maxCalendarCellTypeBars = 4;
 
 function toDateKey(date) {
   const year = date.getFullYear();
@@ -137,6 +143,65 @@ function historyColor(quality) {
   if (value === 2) return "#8fc7ff";
   if (value === 3) return "#7ee2a8";
   return "#8f9aa3";
+}
+
+function normalizeQuestionType(type) {
+  return type || "unknown";
+}
+
+function compareQuestionTypes(a, b) {
+  const aRank = calendarTypeOrder.indexOf(a);
+  const bRank = calendarTypeOrder.indexOf(b);
+
+  if (aRank !== -1 || bRank !== -1) {
+    if (aRank === -1) return 1;
+    if (bRank === -1) return -1;
+    return aRank - bRank;
+  }
+
+  return a.localeCompare(b);
+}
+
+function buildTypeSummaries(events) {
+  const total = events.length;
+  const counts = new Map();
+
+  for (const event of events) {
+    const type = normalizeQuestionType(event.question.type_q);
+    counts.set(type, (counts.get(type) || 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .sort(([a], [b]) => compareQuestionTypes(a, b))
+    .map(([type, count]) => ({
+      type,
+      count,
+      ratio: total > 0 ? count / total : 0
+    }));
+}
+
+function compareTypeSummariesBySize(a, b) {
+  if (b.count !== a.count) return b.count - a.count;
+  return compareQuestionTypes(a.type, b.type);
+}
+
+function calendarTypeLabel(type) {
+  return questionTypeChipStyles[type]?.label || type;
+}
+
+function calendarTypeHelperLabel(type, count) {
+  if (type === "map") return count > 1 ? "maps" : "map";
+  if (type === "text") return "text";
+  if (type === "timeline") return count > 1 ? "timelines" : "timeline";
+
+  const label = calendarTypeLabel(type).toLowerCase();
+  return count > 1 ? `${label}s` : label;
+}
+
+function barSummaryLabel(typeSummaries) {
+  return typeSummaries
+    .map(({ type, count }) => `${count} ${calendarTypeHelperLabel(type, count)}`)
+    .join("\n");
 }
 
 function addEvent(result, event) {
@@ -646,6 +711,19 @@ export default function ReviewCalendar({
   const nextScheduledEvent = scheduledEvents.find(
     (event) => event.dateKey >= todayKey
   );
+  const calendarLegendTypes = useMemo(() => {
+    const types = new Set(calendarTypeOrder);
+
+    for (const event of scheduledEvents) {
+      types.add(normalizeQuestionType(event.question.type_q));
+    }
+
+    for (const event of historyEvents) {
+      types.add(normalizeQuestionType(event.question.type_q));
+    }
+
+    return Array.from(types).sort(compareQuestionTypes);
+  }, [historyEvents, scheduledEvents]);
   const selectedPanelLabel = selectedDateKey < todayKey
     ? "Historique"
     : selectedDateKey === todayKey
@@ -1000,10 +1078,31 @@ export default function ReviewCalendar({
               {monthDays.map((date) => {
                 const dateKey = toDateKey(date);
                 const dayEvents = eventsByDate[dateKey] || [];
-                const historyCount = dayEvents.filter(
+                const historyEventsForDay = dayEvents.filter(
                   (event) => event.kind === "history"
-                ).length;
-                const scheduledCount = dayEvents.length - historyCount;
+                );
+                const scheduledEventsForDay = dayEvents.filter(
+                  (event) => event.kind === "scheduled"
+                );
+                const historyCount = historyEventsForDay.length;
+                const scheduledCount = scheduledEventsForDay.length;
+                const scheduledTypeSummaries = buildTypeSummaries(scheduledEventsForDay);
+                const historyTypeSummaries = buildTypeSummaries(historyEventsForDay);
+                const displayedTypeSummaries = scheduledCount > 0
+                  ? scheduledTypeSummaries
+                  : historyTypeSummaries;
+                const rankedTypeSummaries = [...displayedTypeSummaries]
+                  .sort(compareTypeSummariesBySize);
+                const showHistoryMarker = scheduledCount > 0 && historyCount > 0;
+                const maxVisibleTypeBars = showHistoryMarker
+                  ? maxCalendarCellTypeBars - 1
+                  : maxCalendarCellTypeBars;
+                const visibleTypeSummaries = rankedTypeSummaries
+                  .slice(0, maxVisibleTypeBars);
+                const hiddenTypeCount = rankedTypeSummaries
+                  .slice(maxVisibleTypeBars)
+                  .reduce((total, summary) => total + summary.count, 0);
+                const summaryLabel = barSummaryLabel(visibleTypeSummaries);
                 const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
                 const isToday = dateKey === todayKey;
                 const isSelected = dateKey === selectedDateKey;
@@ -1014,6 +1113,8 @@ export default function ReviewCalendar({
                   <button
                     key={dateKey}
                     onClick={() => selectDate(dateKey)}
+                    title={summaryLabel || undefined}
+                    aria-label={`${date.getDate()} ${monthFormatter.format(date)}${summaryLabel ? `. ${summaryLabel}` : ""}`}
                     style={{
                       minHeight: "96px",
                       padding: "10px",
@@ -1088,7 +1189,7 @@ export default function ReviewCalendar({
                             fontWeight: "800"
                           }}
                         >
-                          {dayEvents.length}
+                          {scheduledCount > 0 ? scheduledCount : historyCount}
                         </span>
                       )}
                     </div>
@@ -1100,35 +1201,139 @@ export default function ReviewCalendar({
                         gap: "5px"
                       }}
                     >
-                      {dayEvents.slice(0, 4).map((event) => (
-                        <div
-                          key={event.id}
-                          style={{
-                            height: event.kind === "history" ? "4px" : "6px",
-                            borderRadius: "999px",
-                            background: event.kind === "history"
-                              ? historyColor(event.history?.quality)
-                              : getQuestionTypeChipStyle(event.question.type_q).color,
-                            opacity: event.kind === "history"
-                              ? isCurrentMonth ? 0.38 : 0.2
-                              : isCurrentMonth ? 0.85 : 0.35
-                          }}
-                        />
-                      ))}
+                      {visibleTypeSummaries.map(({ type, count, ratio }) => {
+                        const typeStyle = getQuestionTypeChipStyle(type);
 
-                      {dayEvents.length > 4 && (
+                        return (
+                          <div
+                            key={type}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              opacity: isCurrentMonth ? 1 : 0.42
+                            }}
+                          >
+                            <span
+                              style={{
+                                flex: 1,
+                                height: "6px",
+                                borderRadius: "999px",
+                                background: "#242424",
+                                overflow: "hidden",
+                                position: "relative"
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "block",
+                                  width: `${Math.max(8, Math.round(ratio * 100))}%`,
+                                  height: "100%",
+                                  borderRadius: "999px",
+                                  background: typeStyle.color,
+                                  opacity: isCurrentMonth ? 0.86 : 0.55
+                                }}
+                              />
+                            </span>
+
+                            <span
+                              style={{
+                                color: typeStyle.color,
+                                fontSize: "10px",
+                                fontWeight: "800",
+                                lineHeight: 1,
+                                minWidth: "16px",
+                                textAlign: "right"
+                              }}
+                            >
+                              {count}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {hiddenTypeCount > 0 && (
                         <div
                           style={{
-                            color: "#666",
+                            color: isCurrentMonth ? "#666" : "#4f4f4f",
                             fontSize: "10px",
-                            fontWeight: "700"
+                            fontWeight: "700",
+                            lineHeight: 1
                           }}
                         >
-                          +{dayEvents.length - 4}
+                          +{hiddenTypeCount}
+                        </div>
+                      )}
+
+                      {showHistoryMarker && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            marginTop: scheduledCount > 0 ? "2px" : 0,
+                            color: isCurrentMonth ? "#737b83" : "#4f565c",
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            lineHeight: 1,
+                            opacity: scheduledCount > 0 ? 0.72 : 0.9
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: "18px",
+                              height: "4px",
+                              borderRadius: "999px",
+                              background: "#8f9aa3",
+                              opacity: isCurrentMonth ? 0.36 : 0.18
+                            }}
+                          />
+                          <span>
+                            {historyCount} revu{historyCount > 1 ? "s" : ""}
+                          </span>
                         </div>
                       )}
                     </div>
                   </button>
+                );
+              })}
+            </div>
+
+            <div
+              style={{
+                borderTop: "1px solid #262626",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "10px 14px",
+                padding: "10px 12px"
+              }}
+            >
+              {calendarLegendTypes.map((type) => {
+                const typeStyle = getQuestionTypeChipStyle(type);
+
+                return (
+                  <div
+                    key={type}
+                    style={{
+                      alignItems: "center",
+                      color: "#8f8f8f",
+                      display: "inline-flex",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      gap: "6px",
+                      lineHeight: 1
+                    }}
+                  >
+                    <span
+                      style={{
+                        background: typeStyle.color,
+                        borderRadius: "999px",
+                        height: "6px",
+                        width: "22px"
+                      }}
+                    />
+                    <span>{calendarTypeLabel(type)}</span>
+                  </div>
                 );
               })}
             </div>

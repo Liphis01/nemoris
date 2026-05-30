@@ -4,13 +4,13 @@
 - premier clique pour les intervalles timeline : date de début
 
 ## quick fixes
-- montrer un équivalent de recap quand je regarde un groupe fait dans le passé dans le calendrier
+- tab pour voir la zone suivante dans review 
+- enlever le type modifiable dans les questions maps
 - faire un bouton toggle pour l'era dans la preview
 - pouvoir trier les réponses dans le recap de map
 - ajouter une recherche dans calender
 - mettre des tags sur les groupes les propage aux questions
 - ajouter un timer pour les questions
-- enlever le type modifiable dans les questions maps
 
 ## bugs
 - bug des images + trouver comment afficher l'image dans les cards de manage
