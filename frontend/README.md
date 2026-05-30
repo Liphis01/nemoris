@@ -3,25 +3,14 @@
 
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
-
-
-
-## couleurs pour les types des cards
-background: "#145c46",
-color: "#6ff0c2",
-
-background: "#5a1d3d",
-color: "#ff85c2",
-
+- dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après
 
 ## bugs
 - bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - le texte des cards est décalé vers la droite (à cause du MAP)
-- quand on créé une question texte, il faudrait afficher la preview de la question après la création au lieu de rester sur la page de création (et quand on supprime la question il faut fermer la preview au lieu de revenir sur la création de question)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
-- dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après
 - le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
 - hover un nom trop long doit l'afficher
 
@@ -59,6 +48,7 @@ color: "#ff85c2",
 - pouvoir revenir en arrière dans la review
 - pouvoir trier les réponses dans le recap de map
 - tags sur les groupes
+- agrandir un peu le recap ?
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

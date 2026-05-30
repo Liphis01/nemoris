@@ -8,6 +8,14 @@ import {
 } from "../../../api/review";
 
 
+function isEditableTarget(target) {
+  if (!target || typeof target.closest !== "function") {
+    return false;
+  }
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
+
 export function useReviewSession(active) {
   // Owns one review run: fetching due items, moving through the queue, and
   // re-queueing failures for another pass.
@@ -193,19 +201,33 @@ export function useReviewSession(active) {
         return;
       }
 
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
       // Keyboard review flow: Enter reveals, then 1/2/3 grades the visible
       // answer. Map review handles its own input shortcuts.
       if (event.key === "Enter") {
         if (!showAnswer) {
+          event.preventDefault();
           setShowAnswer(true);
         }
         return;
       }
 
       if (showAnswer) {
-        if (event.key === "1") handleTextAnswer(0);
-        if (event.key === "2") handleTextAnswer(1);
-        if (event.key === "3") handleTextAnswer(2);
+        if (event.key === "1") {
+          event.preventDefault();
+          handleTextAnswer(0);
+        }
+        if (event.key === "2") {
+          event.preventDefault();
+          handleTextAnswer(1);
+        }
+        if (event.key === "3") {
+          event.preventDefault();
+          handleTextAnswer(2);
+        }
       }
     }
 
