@@ -64,6 +64,14 @@ body {
   background-clip: padding-box;
 }
 
+.map-editor-tag-strip {
+  -ms-overflow-style: none;
+}
+
+.map-editor-tag-strip::-webkit-scrollbar {
+  display: none;
+}
+
 #root {
   max-width: 100%;
   margin: 0 auto;

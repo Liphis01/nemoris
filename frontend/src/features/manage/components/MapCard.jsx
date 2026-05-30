@@ -207,56 +207,11 @@ export default function MapCard({
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             gap: "8px",
             minWidth: 0
           }}
         >
-
-          {/* TAGS */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              overflow: "hidden",
-              minWidth: 0
-            }}
-          >
-            {(q.tags || []).slice(0, 3).map(tag => (
-              <div
-                key={tag}
-                title={tag}
-                style={{
-                  maxWidth: "80px",
-                  padding: "1px 6px",
-                  borderRadius: "999px",
-                  background: "#2a2a2a",
-                  color: "#999",
-                  fontSize: "10px",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  flexShrink: 0
-                }}
-              >
-                #{tag}
-              </div>
-            ))}
-
-            {(q.tags?.length || 0) > 3 && (
-              <div
-                style={{
-                  color: "#666",
-                  fontSize: "10px",
-                  flexShrink: 0
-                }}
-              >
-                +{q.tags.length - 3}
-              </div>
-            )}
-          </div>
-
           {/* REVIEW */}
           <ReviewBadge progress={q.progress} />
 

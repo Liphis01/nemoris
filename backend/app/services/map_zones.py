@@ -6,6 +6,28 @@ from ..serializers import serialize_manage_question, serialize_progress
 from .progress import create_initial_progress
 
 
+def merge_tags(*tag_lists):
+    tags_by_key = {}
+
+    for tag_list in tag_lists:
+        for tag in tag_list or []:
+            value = str(tag or "").strip()
+            key = value.lower()
+
+            if value and key not in tags_by_key:
+                tags_by_key[key] = value
+
+    return list(tags_by_key.values())
+
+
+def derive_map_group_tags(questions):
+    return merge_tags(*[
+        question.tags or []
+        for question in questions or []
+        if question.type_q == "map"
+    ])
+
+
 def get_map_group_or_404(db, group_id: int):
     # Map-zone bulk editing is only valid for groups whose presentation type is
     # map. The individual rows inside are still normal Question rows.
@@ -65,6 +87,9 @@ def list_map_group_zones(db, group_id: int):
 
 def save_map_group_zones(db, group_id: int, payload):
     group = get_map_group_or_404(db, group_id)
+    group_updates = {}
+    shared_tags_provided = False
+    shared_tags = None
 
     if payload.group:
         # Group edits travel with zone saves so map title/media changes and zone
@@ -74,6 +99,10 @@ def save_map_group_zones(db, group_id: int, payload):
         for field in ["name", "media"]:
             if field in group_updates:
                 setattr(group, field, group_updates[field])
+
+        if "tags" in group_updates:
+            shared_tags_provided = True
+            shared_tags = group_updates.get("tags") or []
 
     existing_zones = (
         db.query(Question)
@@ -103,6 +132,11 @@ def save_map_group_zones(db, group_id: int, payload):
     updated_codes = []
 
     try:
+        if shared_tags_provided:
+            for zone in existing_zones:
+                zone.tags = shared_tags
+                touched_ids.append(zone.id)
+
         for zone_payload in payload.zones:
             code = zone_payload.code.strip()
 
@@ -134,7 +168,7 @@ def save_map_group_zones(db, group_id: int, payload):
                     question=f"{group.name} - {code}",
                     answer=zone_payload.answer or "",
                     media="",
-                    tags=[],
+                    tags=shared_tags if shared_tags_provided else [],
                     data={
                         "code": code,
                         "aliases": aliases
@@ -155,6 +189,8 @@ def save_map_group_zones(db, group_id: int, payload):
                 # progress history for that zone.
                 zone.answer = zone_payload.answer or ""
                 zone.question = f"{group.name} - {code}"
+                if shared_tags_provided:
+                    zone.tags = shared_tags
                 zone.data = {
                     "code": code,
                     "aliases": aliases
@@ -162,7 +198,8 @@ def save_map_group_zones(db, group_id: int, payload):
                 updated_ids.append(zone.id)
                 updated_codes.append(code)
 
-            touched_ids.append(zone.id)
+            if zone.id not in touched_ids:
+                touched_ids.append(zone.id)
 
         db.commit()
     except Exception:
@@ -193,6 +230,9 @@ def save_map_group_zones(db, group_id: int, payload):
         )
         .count()
     )
+    response_tags = shared_tags if shared_tags_provided else derive_map_group_tags(
+        existing_zones
+    )
 
     return {
         "group": {
@@ -200,6 +240,7 @@ def save_map_group_zones(db, group_id: int, payload):
             "type_group": group.type_group,
             "name": group.name,
             "media": group.media,
+            "tags": response_tags,
             "question_count": question_count
         },
         "zones": [

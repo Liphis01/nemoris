@@ -11,6 +11,7 @@ export default function GroupCardItem({
   closeDelete,
   deleteGroup
 }) {
+  const tags = group.tags || [];
   const cardBackground = selected
     ? "#222"
     : isHighlighted
@@ -30,6 +31,11 @@ export default function GroupCardItem({
       label: "Type",
       value: group.type_group,
       tone: "#8f8f8f"
+    },
+    {
+      label: "Tags",
+      value: tags.map(tag => `#${tag}`).join(" "),
+      tone: "#999"
     }
   ]);
 
@@ -140,6 +146,50 @@ export default function GroupCardItem({
         >
           {group.question_count || 0} questions
         </div>
+
+        {tags.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "4px",
+              marginTop: "8px",
+              overflow: "hidden"
+            }}
+          >
+            {tags.slice(0, 3).map(tag => (
+              <span
+                key={tag}
+                title={tag}
+                style={{
+                  background: "#242424",
+                  borderRadius: "999px",
+                  color: "#999",
+                  flexShrink: 0,
+                  fontSize: "10px",
+                  maxWidth: "78px",
+                  overflow: "hidden",
+                  padding: "2px 7px",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                #{tag}
+              </span>
+            ))}
+            {tags.length > 3 && (
+              <span
+                style={{
+                  color: "#666",
+                  flexShrink: 0,
+                  fontSize: "10px"
+                }}
+              >
+                +{tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       {preview}
     </>

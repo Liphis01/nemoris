@@ -24,11 +24,40 @@ function arraysMatch(left = [], right = []) {
 }
 
 
+function mergeTagsFromZones(zones = []) {
+  const tagsByKey = new Map();
+
+  zones.forEach((zone) => {
+    (zone.tags || []).forEach((tag) => {
+      const value = String(tag || "").trim();
+      const key = value.toLowerCase();
+
+      if (value && !tagsByKey.has(key)) {
+        tagsByKey.set(key, value);
+      }
+    });
+  });
+
+  return [...tagsByKey.values()];
+}
+
+
+function buildEditableGroup(group, zones = []) {
+  return {
+    name: group.name || "",
+    type_group: group.type_group || "map",
+    media: group.media || "",
+    tags: Array.isArray(group.tags) ? group.tags : mergeTagsFromZones(zones)
+  };
+}
+
+
 export function normalizeZone(zone, group) {
   // Keep map zones shaped like normal Manage questions while guaranteeing the
   // map-specific data.code/data.aliases fields exist.
   const code = getZoneCode(zone);
   const aliases = zone?.data?.aliases || zone?.aliases || [];
+  const zoneGroup = zone?.group || {};
 
   return {
     ...zone,
@@ -38,11 +67,12 @@ export function normalizeZone(zone, group) {
     media: zone?.media || "",
     tags: zone?.tags || [],
     group_id: zone?.group_id || group.id,
-    group: zone?.group || {
-      id: group.id,
-      type_group: group.type_group || "map",
-      name: group.name,
-      media: group.media
+    group: {
+      id: zoneGroup.id || group.id,
+      type_group: zoneGroup.type_group || group.type_group || "map",
+      name: zoneGroup.name || group.name,
+      media: zoneGroup.media || group.media,
+      tags: Array.isArray(zoneGroup.tags) ? zoneGroup.tags : group.tags || []
     },
     data: {
       ...(zone?.data || {}),
@@ -59,17 +89,11 @@ export function useMapZones(group) {
   const [zones, setZones] = useState([]);
   const [svgCodes, setSvgCodes] = useState([]);
   const [dirtyZoneCodes, setDirtyZoneCodes] = useState([]);
-  const [editableGroup, setEditableGroup] = useState({
-    name: group.name || "",
-    type_group: group.type_group || "map",
-    media: group.media || ""
-  });
+  const [editableGroup, setEditableGroup] = useState(() =>
+    buildEditableGroup(group)
+  );
   const initialZonesRef = useRef([]);
-  const initialGroupRef = useRef({
-    name: group.name || "",
-    type_group: group.type_group || "map",
-    media: group.media || ""
-  });
+  const initialGroupRef = useRef(buildEditableGroup(group));
   const dirtyZoneCodesRef = useRef(new Set());
   const zonesRef = useRef([]);
 
@@ -89,9 +113,12 @@ export function useMapZones(group) {
         // rows before comparing or saving.
         const data = await getMapZones(group.id);
         const mapZones = data.map(zone => normalizeZone(zone, group));
+        const nextGroup = buildEditableGroup(group, mapZones);
 
         setZones(mapZones);
         initialZonesRef.current = mapZones;
+        setEditableGroup(nextGroup);
+        initialGroupRef.current = nextGroup;
         clearAllDirty();
       } catch (error) {
         console.error("Error loading zones:", error);
@@ -99,15 +126,11 @@ export function useMapZones(group) {
     }
 
     if (group.id) {
-      const nextGroup = {
-        name: group.name || "",
-        type_group: group.type_group || "map",
-        media: group.media || ""
-      };
+      const nextGroup = buildEditableGroup(group);
 
-      loadZones();
       setEditableGroup(nextGroup);
       initialGroupRef.current = nextGroup;
+      loadZones();
     }
   }, [clearAllDirty, group]);
 
@@ -203,7 +226,8 @@ export function useMapZones(group) {
 
     return (
       (editableGroup.name || "") !== (initialGroup.name || "") ||
-      (editableGroup.media || "") !== (initialGroup.media || "")
+      (editableGroup.media || "") !== (initialGroup.media || "") ||
+      !arraysMatch(editableGroup.tags || [], initialGroup.tags || [])
     );
   }
 
@@ -217,7 +241,8 @@ export function useMapZones(group) {
     const saveResult = await patchMapZones(group.id, {
       group: {
         name: editableGroup.name,
-        media: editableGroup.media
+        media: editableGroup.media,
+        tags: editableGroup.tags || []
       },
       zones: changedZones.map(zone => ({
         id: String(zone.id || "").startsWith("tmp-") ? null : zone.id,
@@ -246,7 +271,8 @@ export function useMapZones(group) {
     const nextGroup = {
       name: saveResult.group?.name ?? editableGroup.name ?? "",
       type_group: saveResult.group?.type_group ?? editableGroup.type_group ?? "map",
-      media: saveResult.group?.media ?? editableGroup.media ?? ""
+      media: saveResult.group?.media ?? editableGroup.media ?? "",
+      tags: saveResult.group?.tags ?? editableGroup.tags ?? []
     };
 
     setEditableGroup(nextGroup);

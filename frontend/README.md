@@ -4,7 +4,6 @@
 - premier clique pour les intervalles timeline : date de début
 
 ## quick fixes
-- tab pour voir la zone suivante dans review 
 - enlever le type modifiable dans les questions maps
 - faire un bouton toggle pour l'era dans la preview
 - pouvoir trier les réponses dans le recap de map

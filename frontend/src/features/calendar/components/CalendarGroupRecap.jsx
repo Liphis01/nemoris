@@ -104,6 +104,23 @@ function getFocusedEvent(events, focusedQuestionId) {
   return events.find((event) => event.question.id === focusedQuestionId) || events[0];
 }
 
+function mergeTags(...tagLists) {
+  const tagsByKey = new Map();
+
+  tagLists.forEach((tagList) => {
+    (tagList || []).forEach((tag) => {
+      const value = String(tag || "").trim();
+      const key = value.toLowerCase();
+
+      if (value && !tagsByKey.has(key)) {
+        tagsByKey.set(key, value);
+      }
+    });
+  });
+
+  return [...tagsByKey.values()];
+}
+
 export default function CalendarGroupRecap({
   expanded = false,
   focusedQuestionId,
@@ -122,6 +139,13 @@ export default function CalendarGroupRecap({
   const group = row.group || {};
   const mapPath = groupMediaPath(group.media);
   const hasMapPreview = group.type_group === "map" && mapPath;
+  const groupTags = mergeTags(
+    row.tags,
+    group.tags,
+    group.type_group === "map"
+      ? row.events.map((event) => event.question.tags || []).flat()
+      : []
+  );
   const questionCount = row.events.length;
   const totalReviews = row.events.reduce(
     (sum, event) => sum + getHistoryStats(event.question).reviews,
@@ -199,6 +223,16 @@ export default function CalendarGroupRecap({
           <div style={{ minWidth: 0 }}>
             <div style={eyebrowStyle}>Récap groupe</div>
             <div style={recapTitleStyle}>{group.name || `Groupe #${row.groupId}`}</div>
+            {groupTags.length > 0 && (
+              <div style={chipRowStyle}>
+                {groupTags.slice(0, 3).map((tag) => (
+                  <span key={tag} title={tag} style={tagChipStyle}>#{tag}</span>
+                ))}
+                {groupTags.length > 3 && (
+                  <span style={infoChipStyle}>+{groupTags.length - 3}</span>
+                )}
+              </div>
+            )}
           </div>
 
           {onClose && (
@@ -255,6 +289,8 @@ export default function CalendarGroupRecap({
           const question = event.question;
           const historyStats = getHistoryStats(question);
           const isFocused = question.id === focusedEvent?.question.id;
+          const shouldShowQuestionTags =
+            group.type_group !== "map" && (question.tags || []).length > 0;
 
           return (
             <div
@@ -318,7 +354,7 @@ export default function CalendarGroupRecap({
                 </div>
               </div>
 
-              {(question.tags || []).length > 0 && (
+              {shouldShowQuestionTags && (
                 <div style={chipRowStyle}>
                   {(question.tags || []).slice(0, 3).map((tag) => (
                     <span key={tag} style={tagChipStyle}>#{tag}</span>

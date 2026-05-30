@@ -64,7 +64,12 @@ def serialize_manage_question(question):
                 "id": question.group.id,
                 "type_group": question.group.type_group,
                 "name": question.group.name,
-                "media": question.group.media
+                "media": question.group.media,
+                "tags": (
+                    question.tags or []
+                    if question.group.type_group == "map"
+                    else []
+                )
             }
             if question.group else None,
         "collections": [
@@ -99,7 +104,7 @@ def serialize_review_question_item(question):
     }
 
 
-def serialize_map_review_group(group):
+def serialize_map_review_group(group, tags=None):
     # Runtime aggregation object: this is intentionally not a database question
     # type. It groups due map-zone questions for a single review screen.
     return {
@@ -110,6 +115,8 @@ def serialize_map_review_group(group):
         "name": group.name,
 
         "media": group.media,
+
+        "tags": tags or [],
 
         "items": []
     }

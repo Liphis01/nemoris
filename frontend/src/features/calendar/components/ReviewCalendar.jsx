@@ -98,12 +98,30 @@ function getQuestionGroupId(question) {
   return String(groupId);
 }
 
+function mergeTags(...tagLists) {
+  const tagsByKey = new Map();
+
+  tagLists.forEach((tagList) => {
+    (tagList || []).forEach((tag) => {
+      const value = String(tag || "").trim();
+      const key = value.toLowerCase();
+
+      if (value && !tagsByKey.has(key)) {
+        tagsByKey.set(key, value);
+      }
+    });
+  });
+
+  return [...tagsByKey.values()];
+}
+
 function getEventGroup(event, groupId) {
   return event.question.group || {
     id: groupId,
     name: `Groupe #${groupId}`,
     type_group: event.question.type_q || "groupe",
-    media: null
+    media: null,
+    tags: event.question.type_q === "map" ? event.question.tags || [] : []
   };
 }
 
@@ -276,6 +294,7 @@ function buildDisplayRows(events) {
         kind: event.kind,
         groupId,
         group: getEventGroup(event, groupId),
+        tags: [],
         events: []
       };
       groupRows.set(key, row);
@@ -283,6 +302,11 @@ function buildDisplayRows(events) {
     }
 
     row.events.push(event);
+    row.tags = mergeTags(
+      row.tags,
+      row.group?.tags,
+      event.question.type_q === "map" ? event.question.tags : []
+    );
   }
 
   return rows;
@@ -507,6 +531,7 @@ function GroupEventCard({
 }) {
   const group = row.group || {};
   const groupType = group.type_group || row.events[0]?.question.type_q || "groupe";
+  const tags = row.tags || group.tags || [];
 
   return (
     <div
@@ -584,6 +609,49 @@ function GroupEventCard({
       >
         {group.name || `Groupe #${row.groupId}`}
       </div>
+
+      {tags.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "5px",
+            marginTop: "8px"
+          }}
+        >
+          {tags.slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              title={tag}
+              style={{
+                background: "#242424",
+                borderRadius: "999px",
+                color: "#999",
+                fontSize: "10px",
+                fontWeight: "700",
+                maxWidth: "82px",
+                overflow: "hidden",
+                padding: "2px 7px",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              #{tag}
+            </span>
+          ))}
+          {tags.length > 3 && (
+            <span
+              style={{
+                color: "#666",
+                fontSize: "10px",
+                fontWeight: "700"
+              }}
+            >
+              +{tags.length - 3}
+            </span>
+          )}
+        </div>
+      )}
 
       <div style={groupSummaryStyle}>
         {row.events.length} réponse{row.events.length > 1 ? "s" : ""} dans ce groupe
@@ -697,6 +765,7 @@ export default function ReviewCalendar({
   const selectedHistoryRows = buildDisplayRows(selectedHistoryEvents);
   const activeGroupRow = [...selectedScheduledRows, ...selectedHistoryRows]
     .find((row) => row.type === "group" && row.key === activeGroupKey);
+  const activeGroupTags = activeGroupRow?.tags || activeGroupRow?.group?.tags || [];
   const selectedHistoryCount = selectedHistoryEvents.length;
   const selectedScheduledCount = selectedScheduledEvents.length;
   const overdueCount = scheduledEvents.filter(
@@ -1397,6 +1466,49 @@ export default function ReviewCalendar({
                     >
                       {activeGroupRow.group?.name || `Groupe #${activeGroupRow.groupId}`}
                     </div>
+
+                    {activeGroupTags.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "5px",
+                          marginTop: "8px"
+                        }}
+                      >
+                        {activeGroupTags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            title={tag}
+                            style={{
+                              background: "#242424",
+                              borderRadius: "999px",
+                              color: "#999",
+                              fontSize: "10px",
+                              fontWeight: "700",
+                              maxWidth: "92px",
+                              overflow: "hidden",
+                              padding: "2px 7px",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                        {activeGroupTags.length > 3 && (
+                          <span
+                            style={{
+                              color: "#666",
+                              fontSize: "10px",
+                              fontWeight: "700"
+                            }}
+                          >
+                            +{activeGroupTags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     <div
                       style={{

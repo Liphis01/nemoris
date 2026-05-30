@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..dependencies import get_db
 from ..models import Question, QuestionGroup
 from ..schemas import GroupCreate, GroupOut, GroupUpdate
+from ..services.map_zones import merge_tags
 from ..services.questions import delete_question_dependents
 
 
@@ -42,6 +43,23 @@ def get_groups(db: Session = Depends(get_db)):
         .group_by(QuestionGroup.id)
         .all()
     )
+    group_ids = [group.id for group, _ in groups]
+    map_tag_rows = (
+        db.query(Question.group_id, Question.tags)
+        .filter(
+            Question.group_id.in_(group_ids),
+            Question.type_q == "map"
+        )
+        .all()
+        if group_ids else []
+    )
+    tags_by_group_id = {}
+
+    for group_id, tags in map_tag_rows:
+        tags_by_group_id[group_id] = merge_tags(
+            tags_by_group_id.get(group_id, []),
+            tags or []
+        )
 
     return [
         {
@@ -49,6 +67,7 @@ def get_groups(db: Session = Depends(get_db)):
             "type_group": group.type_group,
             "name": group.name,
             "media": group.media,
+            "tags": tags_by_group_id.get(group.id, []),
             "question_count": question_count
         }
         for group, question_count in groups
@@ -73,6 +92,11 @@ def get_group(group_id: int, db: Session = Depends(get_db)):
         "name": group.name,
         "type_group": group.type_group,
         "media": group.media,
+        "tags": merge_tags(*[
+            question.tags or []
+            for question in group.questions
+            if question.type_q == "map"
+        ]),
         "data": group.data or {},
         "questions": [
             {

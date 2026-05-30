@@ -12,6 +12,7 @@ export default function GroupHeaderCard({
   onToggle
 }) {
   const { groupInfo } = row;
+  const tags = groupInfo.tags || [];
   const mapTypeStyle = questionTypeChipStyles.map;
   const textTypeStyle = questionTypeChipStyles.text;
   const background = isOpen
@@ -38,6 +39,11 @@ export default function GroupHeaderCard({
       label: "Type",
       value: groupInfo.type,
       tone: "#8f8f8f"
+    },
+    {
+      label: "Tags",
+      value: tags.map(tag => `#${tag}`).join(" "),
+      tone: "#999"
     }
   ]);
   const setRefs = useCallback((element) => {
@@ -143,6 +149,39 @@ export default function GroupHeaderCard({
             minWidth: 0
           }}
         >
+          {tags.slice(0, 3).map(tag => (
+            <span
+              key={tag}
+              title={tag}
+              style={{
+                background: "#242424",
+                borderRadius: "999px",
+                color: "#999",
+                flexShrink: 1,
+                fontSize: "10px",
+                fontWeight: "700",
+                maxWidth: "70px",
+                minWidth: 0,
+                overflow: "hidden",
+                padding: "2px 6px",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              #{tag}
+            </span>
+          ))}
+          {tags.length > 3 && (
+            <span
+              style={{
+                color: "#666",
+                fontSize: "10px",
+                flexShrink: 0
+              }}
+            >
+              +{tags.length - 3}
+            </span>
+          )}
           {groupInfo.mapCount > 0 && (
             <span
               style={{

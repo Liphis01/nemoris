@@ -199,6 +199,8 @@ class MapZonesGroupUpdate(BaseModel):
 
     media: Optional[str] = None
 
+    tags: Optional[List[str]] = None
+
 
 class MapZonesBulkUpdate(BaseModel):
 

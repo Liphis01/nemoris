@@ -15,6 +15,24 @@ export function getQuestionGroupId(question) {
 }
 
 
+function mergeTags(...tagLists) {
+  const tagsByKey = new Map();
+
+  tagLists.forEach((tagList) => {
+    (tagList || []).forEach((tag) => {
+      const value = String(tag || "").trim();
+      const key = value.toLowerCase();
+
+      if (value && !tagsByKey.has(key)) {
+        tagsByKey.set(key, value);
+      }
+    });
+  });
+
+  return [...tagsByKey.values()];
+}
+
+
 function getGroupInfo(groupId, question, groupById) {
   const group = groupById.get(groupId) || question?.group || null;
 
@@ -23,6 +41,11 @@ function getGroupInfo(groupId, question, groupById) {
     group,
     name: group?.name || question?.group?.name || `Groupe #${groupId}`,
     type: group?.type_group || question?.group?.type_group || "groupe",
+    tags: mergeTags(
+      group?.tags,
+      question?.group?.tags,
+      question?.type_q === "map" ? question?.tags : []
+    ),
     questions: [],
     mapCount: 0,
     textCount: 0
@@ -91,6 +114,7 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortFie
 
     if (question.type_q === "map") {
       groupInfo.mapCount += 1;
+      groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
     } else {
       groupInfo.textCount += 1;
     }

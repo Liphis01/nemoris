@@ -613,6 +613,7 @@ export default function ManageInspector({
       >
         <MapEditor
           group={group}
+          availableTags={availableTags}
           onSave={async (delta, saveContext) => {
             // Map saves can change group metadata, create zones, and update
             // existing zone labels/aliases. Patch each affected local cache.

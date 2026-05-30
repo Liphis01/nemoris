@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import AutocompleteInput from "../../../shared/AutocompleteInput";
 import MapFileInput from "./MapFileInput";
 import SvgMap from "./SvgMap";
 import {
@@ -14,13 +15,15 @@ export default function MapEditor({
   onSave,
   selectedZone,
   headerAction,
-  registerPendingSaveHandler
+  registerPendingSaveHandler,
+  availableTags = []
 }) {
   // MapEditor turns SVG zones into atomic map questions. The group is visual
   // context; each saved zone remains its own reviewable question.
   const [editingZone, setEditingZone] = useState(null);
   const [mapFocusCode, setMapFocusCode] = useState(null);
   const [aliasInput, setAliasInput] = useState("");
+  const [groupTagInput, setGroupTagInput] = useState("");
   const labelInputRef = useRef(null);
   const aliasInputRef = useRef(null);
   const focusLabelAfterZoneChangeRef = useRef(false);
@@ -68,10 +71,53 @@ export default function MapEditor({
       type_q: "map",
       question: "",
       answer: "",
-      tags: [],
+      tags: editableGroup.tags || [],
       group_id: group.id,
       data: { code, aliases: [] }
     };
+  }
+
+  function addGroupTag(selectedTag) {
+    const value = String(selectedTag ?? groupTagInput).trim();
+    const currentTags = editableGroup.tags || [];
+
+    if (!value || currentTags.includes(value)) {
+      setGroupTagInput("");
+      return;
+    }
+
+    updateGroupField("tags", [...currentTags, value]);
+    setGroupTagInput("");
+  }
+
+  function removeGroupTag(tag) {
+    updateGroupField(
+      "tags",
+      (editableGroup.tags || []).filter(item => item !== tag)
+    );
+  }
+
+  function handleGroupTagWheel(event) {
+    const strip = event.currentTarget;
+    const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
+
+    if (maxScrollLeft <= 0) {
+      return;
+    }
+
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.deltaY;
+
+    if (!delta) {
+      return;
+    }
+
+    event.preventDefault();
+    strip.scrollLeft = Math.max(
+      0,
+      Math.min(maxScrollLeft, strip.scrollLeft + delta)
+    );
   }
 
   function discardBlankEditingZone(sourceZones) {
@@ -397,7 +443,7 @@ export default function MapEditor({
                 marginBottom: "4px"
               }}
             >
-              Nom du groupe
+              Nom
             </label>
 
             <input
@@ -415,7 +461,7 @@ export default function MapEditor({
             />
           </div>
 
-          {/* TYPE */}
+            {/* TYPE */}
           <div
             style={{
               display: "flex",
@@ -450,7 +496,7 @@ export default function MapEditor({
             </select>
           </div>
 
-          {/* MEDIA */}
+            {/* MEDIA */}
           <div
             style={{
               display: "flex",
@@ -483,7 +529,161 @@ export default function MapEditor({
                 borderRadius: "8px"
               }}
             />
-          </div>
+            </div>
+
+            {/* TAGS */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                minWidth: "180px",
+                flex: "1 1 220px"
+              }}
+            >
+              <label
+                style={{
+                  fontSize: "12px",
+                  color: "#777",
+                  marginBottom: "4px"
+                }}
+              >
+                Tags
+              </label>
+
+              {(editableGroup.tags || []).length > 0 && (
+                <div
+                  style={{
+                    marginBottom: "6px",
+                    minWidth: 0,
+                    position: "relative"
+                  }}
+                >
+                  <div
+                    className="map-editor-tag-strip"
+                    onWheel={handleGroupTagWheel}
+                    style={{
+                      display: "flex",
+                      flexWrap: "nowrap",
+                      gap: "5px",
+                      minWidth: 0,
+                      overscrollBehavior: "contain",
+                      overflowX: "auto",
+                      overflowY: "hidden",
+                      paddingRight: "24px",
+                      scrollbarWidth: "none"
+                    }}
+                  >
+                    {(editableGroup.tags || []).map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          alignItems: "center",
+                          background: "#242424",
+                          borderRadius: "999px",
+                          color: "#b8b8b8",
+                          display: "inline-flex",
+                          flex: "0 0 auto",
+                          fontSize: "11px",
+                          gap: "6px",
+                          lineHeight: 1,
+                          maxWidth: "110px",
+                          padding: "5px 7px"
+                        }}
+                      >
+                        <span
+                          title={tag}
+                          style={{
+                            minWidth: 0,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          #{tag}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Retirer le tag ${tag}`}
+                          onClick={() => removeGroupTag(tag)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#888",
+                            cursor: "pointer",
+                            flexShrink: 0,
+                            lineHeight: 1,
+                            padding: 0
+                          }}
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      background: "linear-gradient(90deg, rgba(24, 24, 24, 0), #181818 82%)",
+                      bottom: 0,
+                      pointerEvents: "none",
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                      width: "28px"
+                    }}
+                  />
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "6px",
+                  gridTemplateColumns: "minmax(0, 1fr) 32px"
+                }}
+              >
+                <AutocompleteInput
+                  value={groupTagInput}
+                  onChange={(event) => setGroupTagInput(event.target.value)}
+                  onSuggestionSelect={addGroupTag}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addGroupTag();
+                    }
+                  }}
+                  placeholder="Tag"
+                  suggestions={availableTags.filter(tag =>
+                    !(editableGroup.tags || []).includes(tag)
+                  )}
+                  style={{
+                    padding: "8px 9px",
+                    background: "#111",
+                    color: "#eee",
+                    border: "1px solid #333",
+                    borderRadius: "8px",
+                    fontSize: "13px"
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => addGroupTag()}
+                  title="Ajouter le tag"
+                  style={{
+                    background: "#242424",
+                    border: "1px solid #333",
+                    borderRadius: "8px",
+                    color: "#ddd",
+                    cursor: "pointer",
+                    fontSize: "18px",
+                    lineHeight: 1,
+                    padding: 0
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
 
           <div
             style={{
@@ -658,7 +858,7 @@ export default function MapEditor({
                 onChange={(e) => setAliasInput(e.target.value)}
                 onKeyDown={handleAliasKeyDown}
                 onBlur={addAlias}
-                placeholder="Ajouter un alias"
+                placeholder="Alias"
                 style={{
                   width: "100%",
                   padding: "10px",
@@ -678,6 +878,7 @@ export default function MapEditor({
           <div style={{ marginTop: "15px" }}>
             <button
               onClick={saveMapEdits}
+              title="Sauvegarder"
               style={{
                 width: "100%",
                 padding: "12px",
@@ -688,7 +889,7 @@ export default function MapEditor({
                 cursor: "pointer"
               }}
             >
-              Sauvegarder
+              Enregistrer
             </button>
           </div>
         </div>

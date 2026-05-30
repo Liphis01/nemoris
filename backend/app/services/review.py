@@ -47,7 +47,10 @@ def get_review_items(db):
             group_id = question.group.id
 
             if group_id not in grouped_items:
-                grouped_items[group_id] = serialize_map_review_group(question.group)
+                grouped_items[group_id] = serialize_map_review_group(
+                    question.group,
+                    question.tags or []
+                )
 
             grouped_items[group_id]["items"].append(serialize_map_review_zone(question))
             continue
