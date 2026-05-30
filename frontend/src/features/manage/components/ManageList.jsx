@@ -19,6 +19,9 @@ export default function ManageList({
   deleteGroup,
   highlightedQuestionIds = [],
   highlightedGroupIds = [],
+  isCreatingQuestion,
+  resetQuestionDraft,
+  setIsCreatingQuestion,
   requestManageTransition
 }) {
   // This list renders either flat groups or grouped question rows, while also
@@ -279,6 +282,20 @@ export default function ManageList({
     });
   }
 
+  function closeQuestionCreation() {
+    if (!isCreatingQuestion) return;
+
+    setIsCreatingQuestion?.(false);
+    resetQuestionDraft?.();
+  }
+
+  function selectQuestion(q) {
+    closeQuestionCreation();
+    setOpenDeleteId(null);
+    setSelectedItem(q);
+    setEditingZone(q.type_q === "map" ? q : null);
+  }
+
   function renderQuestionCard(row) {
     const q = row.question;
     const sharedProps = {
@@ -294,11 +311,7 @@ export default function ManageList({
           {...sharedProps}
           q={q}
           onClick={() => {
-            runManageTransition(() => {
-              setOpenDeleteId(null);
-              setSelectedItem(q);
-              setEditingZone(q);
-            });
+            runManageTransition(() => selectQuestion(q));
           }}
           onDeleteOpen={() => setOpenDeleteId(q.id)}
           closeDelete={() => setOpenDeleteId(null)}
@@ -312,11 +325,7 @@ export default function ManageList({
           {...sharedProps}
           q={q}
           onClick={() => {
-            runManageTransition(() => {
-              setOpenDeleteId(null);
-              setSelectedItem(q);
-              setEditingZone(null);
-            });
+            runManageTransition(() => selectQuestion(q));
           }}
           onDeleteOpen={() => setOpenDeleteId(q.id)}
           closeDelete={() => setOpenDeleteId(null)}

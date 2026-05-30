@@ -4,7 +4,6 @@
 - premier clique pour les intervalles timeline : date de début
 
 ## quick fixes
-- quand on créé une question et qu'on clique sur une autre question on est bloqués sur la création
 - montrer un équivalent de recap quand je regarde un groupe fait dans le passé dans le calendrier
 - faire un bouton toggle pour l'era dans la preview
 - pouvoir trier les réponses dans le recap de map
