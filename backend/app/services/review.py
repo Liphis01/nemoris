@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
-from ..models import Collection, Progress, Question
+from ..models import Progress, Question
 from ..serializers import (
     serialize_map_review_group,
     serialize_map_review_zone,
@@ -15,18 +15,17 @@ from .timeline import (
 )
 
 
-def get_review_items(db, tags=None, collection_id=None):
+def get_review_items(db):
     today = date.today()
 
     # Start from due atomic questions. joinedload keeps Manage/review payloads
-    # from triggering per-question lazy queries for progress/group/collections.
+    # from triggering per-question lazy queries for progress/group.
     query = (
         db.query(Question)
         .outerjoin(Progress)
         .options(
             joinedload(Question.progress),
-            joinedload(Question.group),
-            joinedload(Question.collections)
+            joinedload(Question.group)
         )
         .filter(
             or_(
@@ -37,23 +36,11 @@ def get_review_items(db, tags=None, collection_id=None):
         )
     )
 
-    if collection_id:
-        # Collection filtering stays on Question rows. Grouped reviews are
-        # formed later from the matching atomic questions only.
-        query = (
-            query
-            .join(Question.collections)
-            .filter(Collection.id == collection_id)
-        )
-
     review_items = []
     grouped_items = {}
     timeline_items = []
 
     for question in query.all():
-        if tags and not set(tags).intersection(set(question.tags or [])):
-            continue
-
         if question.group and question.group.type_group == "map":
             # Maps are grouped only at runtime: each zone keeps independent
             # progress, but the UI receives one map review object per group.

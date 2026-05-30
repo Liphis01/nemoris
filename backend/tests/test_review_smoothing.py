@@ -539,11 +539,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.db.commit()
         rebalance_review(db=self.db)
 
-        response = get_review(
-            tags=None,
-            collection_id=None,
-            db=self.db
-        )
+        response = get_review(db=self.db)
 
         self.assertEqual(len(response), 2)
         self.assertEqual(
@@ -557,11 +553,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.db.commit()
 
-        response = get_review(
-            tags=None,
-            collection_id=None,
-            db=self.db
-        )
+        response = get_review(db=self.db)
 
         self.assertEqual(len(response), 205)
 
@@ -629,11 +621,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.db.commit()
 
-        response = get_review(
-            tags=None,
-            collection_id=None,
-            db=self.db
-        )
+        response = get_review(db=self.db)
         overdue_count = (
             self.db.query(Progress)
             .filter(Progress.next_review == today - timedelta(days=1))

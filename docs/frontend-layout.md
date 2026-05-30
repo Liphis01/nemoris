@@ -85,7 +85,7 @@ Examples:
 - collections
 - tags
 - search
-- review filters
+- question filters
 
 ## Center
 

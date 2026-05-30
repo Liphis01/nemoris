@@ -54,19 +54,7 @@ This ensures:
 - due questions are reviewed
 - forgotten questions resurface
 
-## Step 2 — Apply Filters
-
-Filters are applied BEFORE grouping.
-
-Examples:
-
-- tags
-- collections
-- future difficulty filters
-
-Filtering always applies to atomic questions.
-
-## Step 3 — Group Runtime Objects
+## Step 2 — Group Runtime Objects
 
 Grouped question types are aggregated dynamically.
 
@@ -88,7 +76,7 @@ Example runtime object:
 
 This object is NOT stored in database.
 
-## Step 4 — Return Frontend Review Items
+## Step 3 — Return Frontend Review Items
 
 The frontend receives a mixed review queue:
 

@@ -2,7 +2,7 @@ import { requestJson } from "./http";
 
 
 export function listCollections() {
-  // Collections are loaded for review filtering and question organization.
+  // Collections are loaded for question organization.
   return requestJson("/collections");
 }
 

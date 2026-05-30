@@ -19,17 +19,12 @@ export default function ReviewSession({
   handleTextAnswer,
   handleMapComplete,
   handleTimelineComplete,
-  tagInput,
-  setTagInput,
   catchupTargetDraft,
   setCatchupTargetDraft,
   saveCatchupTarget,
   catchupTargetSaving,
   reviewLoading,
-  reviewError,
-  collections,
-  selectedCollection,
-  setSelectedCollection
+  reviewError
 }) {
   const currentQuestion = questions[currentIndex];
 
@@ -113,7 +108,7 @@ export default function ReviewSession({
 
         </div>
 
-        {/* FILTER BAR */}
+        {/* SESSION SETTINGS */}
         <div
           style={{
             background: "#181818",
@@ -127,68 +122,6 @@ export default function ReviewSession({
             alignItems: "flex-end"
           }}
         >
-
-          {/* TAGS */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              minWidth: "240px",
-              flex: 1
-            }}
-          >
-            <div
-              style={{
-                color: "#777",
-                fontSize: "12px",
-                fontWeight: "600"
-              }}
-            >
-              TAGS
-            </div>
-
-            <input
-              placeholder="geo, asie..."
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-
-          {/* COLLECTION */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              minWidth: "200px"
-            }}
-          >
-            <div
-              style={{
-                color: "#777",
-                fontSize: "12px",
-                fontWeight: "600"
-              }}
-            >
-              COLLECTION
-            </div>
-
-            <select
-              value={selectedCollection}
-              onChange={(e) => setSelectedCollection(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Toutes</option>
-
-              {collections.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
 
           {/* TARGET */}
           <div

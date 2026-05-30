@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { listCollections } from "../../../api/collections";
+import { useCallback, useEffect, useState } from "react";
 import {
   getReview,
   getReviewSettings,
@@ -7,15 +6,6 @@ import {
   sendAnswer,
   updateReviewSettings
 } from "../../../api/review";
-
-
-function parseTags(tagInput) {
-  // Tags are entered as a comma-separated filter in the review toolbar.
-  return tagInput
-    .split(",")
-    .map(tag => tag.trim())
-    .filter(Boolean);
-}
 
 
 export function useReviewSession(active) {
@@ -27,20 +17,12 @@ export function useReviewSession(active) {
   const [catchupTarget, setCatchupTarget] = useState(50);
   const [catchupTargetDraft, setCatchupTargetDraft] = useState("50");
   const [catchupTargetSaving, setCatchupTargetSaving] = useState(false);
-  const [tagInput, setTagInput] = useState("");
-  const [collections, setCollections] = useState([]);
-  const [selectedCollection, setSelectedCollection] = useState("");
   const [reviewReady, setReviewReady] = useState(false);
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
 
   const current = questions[currentIndex];
-
-  const selectedTags = useMemo(
-    () => parseTags(tagInput),
-    [tagInput]
-  );
 
   const handleTextAnswer = useCallback((quality) => {
     if (!current) return;
@@ -102,14 +84,6 @@ export function useReviewSession(active) {
   }
 
   useEffect(() => {
-    if (!active) return;
-
-    listCollections()
-      .then(setCollections)
-      .catch(console.error);
-  }, [active]);
-
-  useEffect(() => {
     if (!active) {
       setReviewReady(false);
       setReviewLoading(false);
@@ -160,12 +134,8 @@ export function useReviewSession(active) {
   useEffect(() => {
     if (!active || !reviewReady) return;
 
-    // Re-fetch whenever filters change so the backend remains responsible for
-    // due selection and runtime grouping.
-    getReview(
-      selectedTags,
-      selectedCollection || null
-    )
+    // The backend owns due selection and runtime grouping.
+    getReview()
       .then((data) => {
         setQuestions(data);
         setCurrentIndex(0);
@@ -178,8 +148,6 @@ export function useReviewSession(active) {
       });
   }, [
     active,
-    selectedCollection,
-    selectedTags,
     reviewReady,
     reviewRefreshKey
   ]);
@@ -249,7 +217,6 @@ export function useReviewSession(active) {
   }, [active, current?.type_q, showAnswer, handleTextAnswer]);
 
   return {
-    collections,
     currentIndex,
     handleMapComplete,
     handleTimelineComplete,
@@ -260,12 +227,8 @@ export function useReviewSession(active) {
     reviewError,
     reviewLoading,
     saveCatchupTarget,
-    selectedCollection,
     setCatchupTargetDraft,
-    setSelectedCollection,
     setShowAnswer,
-    setTagInput,
-    showAnswer,
-    tagInput
+    showAnswer
   };
 }

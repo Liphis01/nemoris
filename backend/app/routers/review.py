@@ -1,6 +1,4 @@
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
@@ -67,17 +65,10 @@ def get_startup_notice(db: Session = Depends(get_db)):
 
 @router.get("/review")
 def get_review(
-    tags: Optional[List[str]] = Query(default=None),
-    collection_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    # The service handles due filtering and runtime map grouping; the route only
-    # translates query parameters into that call.
-    return get_review_items(
-        db,
-        tags=tags,
-        collection_id=collection_id
-    )
+    # The service handles due filtering and runtime map grouping.
+    return get_review_items(db)
 
 
 @router.post("/answer")

@@ -29,17 +29,8 @@ export function getStartupRebalanceNotice() {
 }
 
 
-export function getReview(selectedTags = [], collectionId = null) {
-  // Keep review filtering server-side because the backend owns due selection
-  // and runtime map grouping.
-  const params = new URLSearchParams();
-
-  selectedTags.forEach(tag => params.append("tags", tag));
-
-  if (collectionId) params.append("collection_id", collectionId);
-
-  const query = params.toString();
-  return requestJson(query ? `/review?${query}` : "/review");
+export function getReview() {
+  return requestJson("/review");
 }
 
 
