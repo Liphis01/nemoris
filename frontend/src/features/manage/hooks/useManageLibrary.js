@@ -16,16 +16,18 @@ import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
 
-const initialQuestionDraft = {
+function createInitialQuestionDraft(type_q = "text") {
   // Default new questions are text items. Map zones are normally created from
   // the map editor because they need a data.code value from the SVG.
-  question: "",
-  answer: "",
-  tags: [],
-  type_q: "text",
-  media: null,
-  data: {}
-};
+  return {
+    question: "",
+    answer: "",
+    tags: [],
+    type_q,
+    media: null,
+    data: {}
+  };
+}
 
 function draftTagsWithPendingTag(draft) {
   const tags = Array.isArray(draft?.tags) ? draft.tags : [];
@@ -92,7 +94,7 @@ export function useManageLibrary(mode) {
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [viewMode, setViewMode] = useState("questions");
-  const [questionDraft, setQuestionDraft] = useState(initialQuestionDraft);
+  const [questionDraft, setQuestionDraft] = useState(() => createInitialQuestionDraft());
   const [groupDraft, setGroupDraft] = useState(initialGroupDraft);
   const questionInputRef = useRef(null);
 
@@ -132,7 +134,7 @@ export function useManageLibrary(mode) {
   }, [loadAllGroups, loadAllQuestions, mode]);
 
   function resetQuestionDraft() {
-    setQuestionDraft(initialQuestionDraft);
+    setQuestionDraft(createInitialQuestionDraft());
   }
 
   function resetGroupDraft() {
@@ -225,6 +227,13 @@ export function useManageLibrary(mode) {
     }, 0);
 
     return created;
+  }
+
+  function startCreateQuestion() {
+    setQuestionDraft(createInitialQuestionDraft(""));
+    setIsCreatingQuestion(true);
+    setIsCreatingGroup(false);
+    setSelectedItem(null);
   }
 
   function startCreateGroup() {
@@ -426,6 +435,7 @@ export function useManageLibrary(mode) {
     setViewMode,
     sortField,
     sortOrder,
+    startCreateQuestion,
     startCreateGroup,
     toggleGroupSortOrder,
     toggleSortOrder,

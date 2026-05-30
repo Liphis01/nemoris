@@ -1,5 +1,6 @@
 import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
+import { questionTypeChipStyles } from "../../../shared/questionTypes";
 
 export default function MapCard({
   q,
@@ -12,6 +13,7 @@ export default function MapCard({
   closeDelete,
   deleteQuestion
 }) {
+  const mapTypeStyle = questionTypeChipStyles.map;
   const cardBackground = selected
     ? "#252525"
     : isHighlighted
@@ -30,7 +32,7 @@ export default function MapCard({
     {
       label: "Zone",
       value: q.answer || "Unnamed zone",
-      tone: "#ffc76b"
+      tone: mapTypeStyle.color
     },
     {
       label: "Group",
@@ -146,8 +148,8 @@ export default function MapCard({
               fontWeight: "700",
               padding: "2px 6px",
               borderRadius: "999px",
-              background: "#5a3b12",
-              color: "#ffc76b",
+              background: mapTypeStyle.background,
+              color: mapTypeStyle.color,
               flexShrink: 0
             }}
           >

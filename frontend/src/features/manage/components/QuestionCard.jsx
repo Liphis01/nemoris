@@ -1,5 +1,6 @@
 import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 export default function QuestionCard({
   q,
@@ -22,19 +23,7 @@ export default function QuestionCard({
     : isHighlighted
       ? "1px solid rgba(134, 239, 172, 0.85)"
       : "1px solid #262626";
-  const typeStyles = {
-    text: {
-      label: "TEXT",
-      background: "#163b63",
-      color: "#5eb6ff"
-    },
-    timeline: {
-      label: "TIMELINE",
-      background: "#2b2047",
-      color: "#c4b5fd"
-    }
-  };
-  const typeStyle = typeStyles[q.type_q] || typeStyles.text;
+  const typeStyle = getQuestionTypeChipStyle(q.type_q);
   const {
     setAnchorElement,
     triggerProps,

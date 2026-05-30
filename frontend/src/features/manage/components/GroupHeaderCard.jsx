@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useManageTextPreview } from "./ManageTextPreview";
+import { questionTypeChipStyles } from "../../../shared/questionTypes";
 
 export default function GroupHeaderCard({
   row,
@@ -11,6 +12,8 @@ export default function GroupHeaderCard({
   onToggle
 }) {
   const { groupInfo } = row;
+  const mapTypeStyle = questionTypeChipStyles.map;
+  const textTypeStyle = questionTypeChipStyles.text;
   const background = isOpen
     ? "#1a1a1a"
     : selectedInside
@@ -147,8 +150,8 @@ export default function GroupHeaderCard({
                 fontWeight: "700",
                 padding: "2px 6px",
                 borderRadius: "999px",
-                background: "#5a3b12",
-                color: "#ffc76b",
+                background: mapTypeStyle.background,
+                color: mapTypeStyle.color,
                 whiteSpace: "nowrap"
               }}
             >
@@ -162,8 +165,8 @@ export default function GroupHeaderCard({
                 fontWeight: "700",
                 padding: "2px 6px",
                 borderRadius: "999px",
-                background: "#163b63",
-                color: "#5eb6ff",
+                background: textTypeStyle.background,
+                color: textTypeStyle.color,
                 whiteSpace: "nowrap"
               }}
             >

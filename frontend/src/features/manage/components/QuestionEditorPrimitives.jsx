@@ -6,27 +6,10 @@ import {
   panelStyle,
   primaryButtonStyle
 } from "./QuestionEditorStyles";
-
-const typeChipStyles = {
-  text: {
-    label: "TEXT",
-    background: "#163b63",
-    color: "#5eb6ff"
-  },
-  timeline: {
-    label: "TIMELINE",
-    background: "#2b2047",
-    color: "#c4b5fd"
-  },
-  map: {
-    label: "MAP",
-    background: "#1f3d2a",
-    color: "#75d991"
-  }
-};
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 function QuestionTypeChip({ type }) {
-  const typeStyle = typeChipStyles[type] || typeChipStyles.text;
+  const typeStyle = getQuestionTypeChipStyle(type);
 
   return (
     <div
@@ -99,22 +82,6 @@ export function QuestionEditorField({ label, children }) {
       <span style={labelStyle}>{label}</span>
       {children}
     </label>
-  );
-}
-
-export function TypeQuestionSelect({ value, onChange }) {
-  return (
-    <QuestionEditorField label="Type de question">
-      <select
-        style={inputStyle}
-        value={value || "text"}
-        onChange={(event) => onChange?.(event.target.value)}
-      >
-        <option value="text">text</option>
-        <option value="map">map</option>
-        <option value="timeline">timeline</option>
-      </select>
-    </QuestionEditorField>
   );
 }
 

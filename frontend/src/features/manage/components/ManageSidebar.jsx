@@ -52,8 +52,8 @@ export default function ManageSidebar({
   groupSortOrder,
   selectGroupSortField,
   toggleGroupSortOrder,
-  setIsCreatingQuestion,
   setSelectedItem,
+  startCreateQuestion,
   startCreateGroup,
   viewMode,
   setViewMode,
@@ -372,12 +372,7 @@ export default function ManageSidebar({
         {/* CREATE BUTTON */}
         {viewMode === "questions" ? (
           <button
-            onClick={() => {
-              runManageTransition(() => {
-                setIsCreatingQuestion(true);
-                setSelectedItem(null);
-              });
-            }}
+            onClick={() => runManageTransition(() => startCreateQuestion?.())}
             style={{
               width: "100%",
               padding: "12px",

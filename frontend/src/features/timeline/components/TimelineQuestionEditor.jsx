@@ -5,8 +5,7 @@ import {
   QuestionEditorActions,
   QuestionEditorField,
   QuestionEditorShell,
-  TagEditor,
-  TypeQuestionSelect
+  TagEditor
 } from "../../manage/components/QuestionEditorPrimitives";
 import { inputStyle } from "../../manage/components/QuestionEditorStyles";
 import {
@@ -48,9 +47,7 @@ export default function TimelineQuestionEditor({
   onDelete,
   onUploadFile,
   saveStatus,
-  headerAction,
-  showTypeSelector = false,
-  onTypeChange
+  headerAction
 }) {
   const [tagInput, setTagInput] = useState("");
   const timelineDraft = normalizeDraft(draft);
@@ -65,12 +62,6 @@ export default function TimelineQuestionEditor({
 
   function commitTimeline(nextTimeline) {
     commit(buildTimelineDraft(timelineDraft, nextTimeline));
-  }
-
-  function setType(type_q) {
-    if (onTypeChange) {
-      onTypeChange(type_q);
-    }
   }
 
   function setQuestion(question) {
@@ -120,10 +111,6 @@ export default function TimelineQuestionEditor({
 
   return (
     <QuestionEditorShell heading={heading} meta={meta} headerAction={headerAction}>
-      {showTypeSelector && (
-        <TypeQuestionSelect value={timelineDraft.type_q} onChange={setType} />
-      )}
-
       <QuestionEditorField label="Question">
         <textarea
           rows={3}

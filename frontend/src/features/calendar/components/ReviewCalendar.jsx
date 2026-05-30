@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
@@ -20,14 +21,6 @@ const shortDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
   month: "short"
 });
-
-const typeColors = {
-  text: ["#163b63", "#5eb6ff"],
-  map: ["#3d2b14", "#ffcc7a"],
-  timeline: ["#2b2047", "#c4b5fd"],
-  image: ["#163524", "#7ee2a8"],
-  audio: ["#3a1d2d", "#ff9ccc"]
-};
 
 function toDateKey(date) {
   const year = date.getFullYear();
@@ -85,11 +78,11 @@ function dueTitle(question) {
 }
 
 function typeBadgeStyle(type) {
-  const [background, color] = typeColors[type] || ["#2a2a2a", "#aaa"];
+  const typeStyle = getQuestionTypeChipStyle(type);
 
   return {
-    background,
-    color,
+    background: typeStyle.background,
+    color: typeStyle.color,
     borderRadius: "999px",
     padding: "3px 8px",
     fontSize: "10px",
@@ -809,7 +802,7 @@ export default function ReviewCalendar({
                             borderRadius: "999px",
                             background: event.kind === "history"
                               ? historyColor(event.history?.quality)
-                              : typeColors[event.question.type_q]?.[1] || "#777",
+                              : getQuestionTypeChipStyle(event.question.type_q).color,
                             opacity: event.kind === "history"
                               ? isCurrentMonth ? 0.38 : 0.2
                               : isCurrentMonth ? 0.85 : 0.35

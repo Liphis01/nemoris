@@ -5,8 +5,7 @@ import {
   QuestionEditorActions,
   QuestionEditorField,
   QuestionEditorShell,
-  TagEditor,
-  TypeQuestionSelect
+  TagEditor
 } from "./QuestionEditorPrimitives";
 import { inputStyle } from "./QuestionEditorStyles";
 
@@ -33,9 +32,7 @@ export default function TextQuestionEditor({
   onDelete,
   onUploadFile,
   saveStatus,
-  headerAction,
-  showTypeSelector = false,
-  onTypeChange
+  headerAction
 }) {
   const [tagInput, setTagInput] = useState("");
   const textDraft = normalizeDraft(draft);
@@ -53,15 +50,6 @@ export default function TextQuestionEditor({
       ...textDraft,
       [field]: value
     });
-  }
-
-  function setType(type_q) {
-    if (onTypeChange) {
-      onTypeChange(type_q);
-      return;
-    }
-
-    setField("type_q", type_q);
   }
 
   function addTag() {
@@ -97,10 +85,6 @@ export default function TextQuestionEditor({
 
   return (
     <QuestionEditorShell heading={heading} meta={meta} headerAction={headerAction}>
-      {showTypeSelector && (
-        <TypeQuestionSelect value={textDraft.type_q} onChange={setType} />
-      )}
-
       <QuestionEditorField label="Question">
         <textarea
           rows={3}
