@@ -65,6 +65,11 @@ export function useMapZones(group) {
     media: group.media || ""
   });
   const initialZonesRef = useRef([]);
+  const initialGroupRef = useRef({
+    name: group.name || "",
+    type_group: group.type_group || "map",
+    media: group.media || ""
+  });
   const dirtyZoneCodesRef = useRef(new Set());
   const zonesRef = useRef([]);
 
@@ -94,12 +99,15 @@ export function useMapZones(group) {
     }
 
     if (group.id) {
-      loadZones();
-      setEditableGroup({
+      const nextGroup = {
         name: group.name || "",
         type_group: group.type_group || "map",
         media: group.media || ""
-      });
+      };
+
+      loadZones();
+      setEditableGroup(nextGroup);
+      initialGroupRef.current = nextGroup;
     }
   }, [clearAllDirty, group]);
 
@@ -190,6 +198,19 @@ export function useMapZones(group) {
     }));
   }
 
+  function groupDiffersFromSaved() {
+    const initialGroup = initialGroupRef.current || {};
+
+    return (
+      (editableGroup.name || "") !== (initialGroup.name || "") ||
+      (editableGroup.media || "") !== (initialGroup.media || "")
+    );
+  }
+
+  function hasDirtyChanges() {
+    return dirtyZoneCodesRef.current.size > 0 || groupDiffersFromSaved();
+  }
+
   async function saveMapZones({ zonesToSave, changedZones }) {
     // Send only changed zones, but rebuild local state from the server response
     // so newly created rows get their real database ids/progress.
@@ -222,6 +243,15 @@ export function useMapZones(group) {
     clearAllDirty();
     initialZonesRef.current = nextZones;
 
+    const nextGroup = {
+      name: saveResult.group?.name ?? editableGroup.name ?? "",
+      type_group: saveResult.group?.type_group ?? editableGroup.type_group ?? "map",
+      media: saveResult.group?.media ?? editableGroup.media ?? ""
+    };
+
+    setEditableGroup(nextGroup);
+    initialGroupRef.current = nextGroup;
+
     return {
       delta: newCount - initialCount,
       nextZones,
@@ -237,6 +267,7 @@ export function useMapZones(group) {
     editableGroup,
     foundCodes,
     handleCodesLoaded,
+    hasDirtyChanges,
     markDirty,
     savedQuestionCount,
     saveMapZones,

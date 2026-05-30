@@ -4,7 +4,6 @@
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
 - cliquer sur une zone de la map dans le recap scroll à la zone correspondante
-quand on clique sur une autre question ça enregistre automatiquement les modifications de la question précédente
 
 
 
@@ -83,6 +82,7 @@ color: "#ff85c2",
 - quand on vient d'ajouter une question, ajouter un indicateur et on doit passer la souris sur la card dans la liste pour enlever l'indicateur (à la LoL)
 - faire un menu settings
 - systeme de mmr
+- différentes langues disponibles
 
 # React + Vite
 

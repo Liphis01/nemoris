@@ -27,6 +27,26 @@ const initialQuestionDraft = {
   data: {}
 };
 
+function draftTagsWithPendingTag(draft) {
+  const tags = Array.isArray(draft?.tags) ? draft.tags : [];
+  const pendingTag = (draft?._pendingTagInput || "").trim();
+
+  if (!pendingTag || tags.includes(pendingTag)) {
+    return tags;
+  }
+
+  return [...tags, pendingTag];
+}
+
+function questionMutationPayload(draft) {
+  const { _pendingTagInput, ...payload } = draft || {};
+
+  return {
+    ...payload,
+    tags: draftTagsWithPendingTag(draft)
+  };
+}
+
 const initialGroupDraft = {
   name: "",
   type_group: "map",
@@ -187,13 +207,15 @@ export function useManageLibrary(mode) {
     }
   }
 
-  async function createQuestion() {
-    if (!questionDraft.question) {
+  async function createQuestion(draftOverride) {
+    const payload = questionMutationPayload(draftOverride || questionDraft);
+
+    if (!payload.question) {
       alert("Champs manquants");
       return;
     }
 
-    const created = await createQuestionRequest(questionDraft);
+    const created = await createQuestionRequest(payload);
 
     setAllQuestions(prev => [...prev, created]);
     resetQuestionDraft();

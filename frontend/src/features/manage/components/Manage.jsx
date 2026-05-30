@@ -1,7 +1,7 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManageInspector from "./ManageInspector";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function Manage(props) {
   // Manage coordinates the three panels. The heavy data/state logic lives in
@@ -9,6 +9,10 @@ export default function Manage(props) {
   const [editingZone, setEditingZone] = useState(null);
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
+  const [autosaveStatus, setAutosaveStatus] = useState(null);
+  const pendingSaveHandlerRef = useRef(null);
+  const transitionInProgressRef = useRef(false);
+  const autosaveTimeoutRef = useRef(null);
   const {
     allQuestions,
     clearOpenQuestionId,
@@ -16,6 +20,75 @@ export default function Manage(props) {
     setSelectedItem,
     setViewMode
   } = props;
+
+  const showAutosaveStatus = useCallback((status) => {
+    if (autosaveTimeoutRef.current) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
+
+    setAutosaveStatus(status);
+
+    if (status?.type === "success") {
+      autosaveTimeoutRef.current = window.setTimeout(() => {
+        setAutosaveStatus(null);
+        autosaveTimeoutRef.current = null;
+      }, 2500);
+    }
+  }, []);
+
+  const registerPendingSaveHandler = useCallback((handler) => {
+    pendingSaveHandlerRef.current = typeof handler === "function"
+      ? handler
+      : null;
+
+    return () => {
+      if (pendingSaveHandlerRef.current === handler) {
+        pendingSaveHandlerRef.current = null;
+      }
+    };
+  }, []);
+
+  const requestManageTransition = useCallback(async (action) => {
+    if (transitionInProgressRef.current) {
+      return;
+    }
+
+    transitionInProgressRef.current = true;
+    showAutosaveStatus(null);
+
+    try {
+      const saveHandler = pendingSaveHandlerRef.current;
+      const saveResult = saveHandler
+        ? await saveHandler()
+        : { saved: false };
+
+      await action?.();
+
+      if (saveResult?.saved) {
+        showAutosaveStatus({
+          type: "success",
+          message: "Enregistré"
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      showAutosaveStatus({
+        type: "error",
+        message: "Enregistrement impossible"
+      });
+    } finally {
+      transitionInProgressRef.current = false;
+    }
+  }, [showAutosaveStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // Highlights are transient breadcrumbs after create/save/navigation actions.
@@ -49,10 +122,10 @@ export default function Manage(props) {
     clearOpenQuestionId?.();
   }, [allQuestions, clearOpenQuestionId, openQuestionId, setSelectedItem, setViewMode]);
 
-  async function createQuestionWithHighlight() {
+  async function createQuestionWithHighlight(draftOverride) {
     // Wrap the shared create action with UI selection/highlight behavior for
     // this workspace.
-    const created = await props.createQuestion?.();
+    const created = await props.createQuestion?.(draftOverride);
 
     if (created?.id) {
       props.setViewMode?.("questions");
@@ -85,10 +158,57 @@ export default function Manage(props) {
         height: "100%",
         background: "#121212",
         color: "#eee",
-        overflow: "hidden"
+        overflow: "hidden",
+        position: "relative"
       }}
     >
-      <ManageSidebar {...props} />
+      {autosaveStatus && (
+        <div
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            left: "50%",
+            bottom: "18px",
+            transform: "translateX(-50%)",
+            zIndex: 20,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 12px",
+            borderRadius: "8px",
+            border: "1px solid #303030",
+            borderLeft: autosaveStatus.type === "error"
+              ? "3px solid #f87171"
+              : "3px solid #86efac",
+            background: autosaveStatus.type === "error"
+              ? "rgba(33, 23, 23, 0.96)"
+              : "rgba(24, 30, 26, 0.96)",
+            color: autosaveStatus.type === "error" ? "#f2b8b8" : "#cce8d3",
+            boxShadow: "0 10px 24px rgba(0, 0, 0, 0.32)",
+            fontSize: "13px",
+            fontWeight: "600",
+            lineHeight: 1.2,
+            pointerEvents: "none"
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: autosaveStatus.type === "error" ? "#f87171" : "#86efac",
+              flexShrink: 0
+            }}
+          />
+          {autosaveStatus.message}
+        </div>
+      )}
+
+      <ManageSidebar
+        {...props}
+        requestManageTransition={requestManageTransition}
+      />
 
       <ManageList
         {...props}
@@ -96,6 +216,7 @@ export default function Manage(props) {
         setEditingZone={setEditingZone}
         highlightedQuestionIds={highlightedQuestionIds}
         highlightedGroupIds={highlightedGroupIds}
+        requestManageTransition={requestManageTransition}
       />
 
       <ManageInspector
@@ -105,6 +226,8 @@ export default function Manage(props) {
         createQuestion={createQuestionWithHighlight}
         createGroup={createGroupWithHighlight}
         setHighlightedQuestionIds={setHighlightedQuestionIds}
+        registerPendingSaveHandler={registerPendingSaveHandler}
+        requestManageTransition={requestManageTransition}
       />
     </div>
   );

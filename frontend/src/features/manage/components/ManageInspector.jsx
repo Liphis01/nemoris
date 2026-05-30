@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
 import {
   createDefaultTimeline,
@@ -104,6 +104,42 @@ function hasStartedProgress(question) {
   return (question?.progress?.reps || 0) > 0 || history.length > 0;
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${stableStringify(value[key])}`
+    ).join(",")}}`;
+  }
+
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? "undefined" : serialized;
+}
+
+function buildQuestionSavePayload(source) {
+  const type_q = source?.type_q || "text";
+  const tags = Array.isArray(source?.tags) ? source.tags : [];
+  const pendingTag = (source?._pendingTagInput || "").trim();
+
+  return {
+    question: source?.question || "",
+    answer: source?.answer || "",
+    media: source?.media || null,
+    type_q,
+    tags: pendingTag && !tags.includes(pendingTag)
+      ? [...tags, pendingTag]
+      : tags,
+    data: type_q === "timeline" ? source?.data || {} : {}
+  };
+}
+
+function payloadsMatch(left, right) {
+  return stableStringify(left) === stableStringify(right);
+}
+
 function ReviewCalendarAction({ compact = false, nextReview, onOpen }) {
   if (!nextReview) return null;
 
@@ -173,7 +209,9 @@ export default function ManageInspector({
   editingZone,
   setViewMode,
   setHighlightedQuestionIds,
-  onOpenInCalendar
+  onOpenInCalendar,
+  registerPendingSaveHandler,
+  requestManageTransition
 }) {
   // Inspector has three modes: create group, create question, or edit selected
   // item. Map groups/zones delegate their detailed editing to MapEditor.
@@ -215,6 +253,70 @@ export default function ManageInspector({
     });
   }
 
+  const saveQuestionDraft = useCallback(async ({ force = false, silent = false } = {}) => {
+    if (!draft || !selectedItem?.id || !selectedItem.type_q || selectedItem.type_q === "map") {
+      return { saved: false };
+    }
+
+    const payload = buildQuestionSavePayload(draft);
+    const currentPayload = buildQuestionSavePayload(selectedItem);
+
+    if (!force && payloadsMatch(payload, currentPayload)) {
+      return { saved: false };
+    }
+
+    if (!silent) {
+      setSaveStatus("Enregistrement...");
+    }
+
+    await updateQuestion(selectedItem.id, payload);
+
+    const updatedQuestion = {
+      ...selectedItem,
+      ...payload
+    };
+
+    patchQuestionInCache(updatedQuestion);
+    setSelectedItem(updatedQuestion);
+
+    if (!silent) {
+      setSaveStatus("Enregistré ✔");
+    }
+
+    return {
+      saved: true,
+      question: updatedQuestion
+    };
+  }, [draft, patchQuestionInCache, selectedItem, setSelectedItem, updateQuestion]);
+
+  const saveSelectedQuestionIfDirty = useCallback(() => (
+    saveQuestionDraft({ silent: true })
+  ), [saveQuestionDraft]);
+
+  useEffect(() => {
+    if (!registerPendingSaveHandler) {
+      return undefined;
+    }
+
+    if (
+      isCreatingQuestion ||
+      isCreatingGroup ||
+      !selectedItem?.id ||
+      !selectedItem.type_q ||
+      selectedItem.type_q === "map"
+    ) {
+      return undefined;
+    }
+
+    return registerPendingSaveHandler(saveSelectedQuestionIfDirty);
+  }, [
+    isCreatingGroup,
+    isCreatingQuestion,
+    registerPendingSaveHandler,
+    saveSelectedQuestionIfDirty,
+    selectedItem
+  ]);
+
   function cancelCreateQuestion() {
     setIsCreatingQuestion(false);
     setQuestionDraft({
@@ -227,8 +329,8 @@ export default function ManageInspector({
     });
   }
 
-  async function handleCreateQuestion() {
-    await createQuestion();
+  async function handleCreateQuestion(submittedDraft) {
+    await createQuestion(submittedDraft || questionDraft);
     setIsCreatingQuestion(false);
   }
 
@@ -331,6 +433,12 @@ export default function ManageInspector({
 
   function openSelectedInCalendar() {
     if (!selectedNextReview) return;
+
+    if (requestManageTransition) {
+      requestManageTransition(() => onOpenInCalendar?.(selectedItem));
+      return;
+    }
+
     onOpenInCalendar?.(selectedItem);
   }
 
@@ -432,6 +540,7 @@ export default function ManageInspector({
             }
           }}
           onClose={() => { }}
+          registerPendingSaveHandler={registerPendingSaveHandler}
           selectedZone={editingZone}
           headerAction={
             selectedIsMapZone ? (
@@ -448,31 +557,12 @@ export default function ManageInspector({
   }
 
   async function handleSave() {
-    if (!draft) return;
-
-    // Only editable scalar fields are sent here. Map-specific fields are saved
-    // through MapEditor so data.code stays tied to the SVG zone.
-    const payload = {
-      question: draft.question,
-      answer: draft.answer,
-      media: draft.media || null,
-      type_q: draft.type_q,
-      tags: draft.tags,
-      data: draft.type_q === "timeline" ? draft.data : {}
-    };
-
-    setSaveStatus("Enregistrement...");
-
-    await updateQuestion(selectedItem.id, payload);
-
-    const updatedQuestion = {
-      ...selectedItem,
-      ...payload
-    };
-
-    patchQuestionInCache(updatedQuestion);
-    setSelectedItem(updatedQuestion);
-    setSaveStatus("Enregistré ✔");
+    try {
+      await saveQuestionDraft({ force: true });
+    } catch (error) {
+      console.error(error);
+      setSaveStatus("Enregistrement impossible");
+    }
   }
 
   async function handleUploadFile(e) {

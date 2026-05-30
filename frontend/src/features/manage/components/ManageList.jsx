@@ -17,7 +17,8 @@ export default function ManageList({
   deleteQuestion,
   deleteGroup,
   highlightedQuestionIds = [],
-  highlightedGroupIds = []
+  highlightedGroupIds = [],
+  requestManageTransition
 }) {
   // This list renders either flat groups or grouped question rows, while also
   // owning local UI state for delete popovers, expansion, and scroll targets.
@@ -245,6 +246,15 @@ export default function ManageList({
     };
   }
 
+  function runManageTransition(action) {
+    if (requestManageTransition) {
+      requestManageTransition(action);
+      return;
+    }
+
+    action?.();
+  }
+
   function toggleGroup(groupId) {
     setOpenDeleteId(null);
 
@@ -283,9 +293,11 @@ export default function ManageList({
           {...sharedProps}
           q={q}
           onClick={() => {
-            setOpenDeleteId(null);
-            setSelectedItem(q);
-            setEditingZone(q);
+            runManageTransition(() => {
+              setOpenDeleteId(null);
+              setSelectedItem(q);
+              setEditingZone(q);
+            });
           }}
           onDeleteOpen={() => setOpenDeleteId(q.id)}
           closeDelete={() => setOpenDeleteId(null)}
@@ -299,9 +311,11 @@ export default function ManageList({
           {...sharedProps}
           q={q}
           onClick={() => {
-            setOpenDeleteId(null);
-            setSelectedItem(q);
-            setEditingZone(null);
+            runManageTransition(() => {
+              setOpenDeleteId(null);
+              setSelectedItem(q);
+              setEditingZone(null);
+            });
           }}
           onDeleteOpen={() => setOpenDeleteId(q.id)}
           closeDelete={() => setOpenDeleteId(null)}
@@ -656,9 +670,11 @@ export default function ManageList({
               isHighlighted={highlightedGroupIds.includes(group.id)}
 
               onClick={() => {
-                setOpenDeleteId(null);
-                setSelectedItem(group);
-                setEditingZone?.(null);
+                runManageTransition(() => {
+                  setOpenDeleteId(null);
+                  setSelectedItem(group);
+                  setEditingZone?.(null);
+                });
               }}
 
               onDeleteOpen={() =>

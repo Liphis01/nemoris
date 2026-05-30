@@ -51,7 +51,8 @@ export default function ManageSidebar({
   setSelectedItem,
   startCreateGroup,
   viewMode,
-  setViewMode
+  setViewMode,
+  requestManageTransition
 }) {
 
   const inputStyle = {
@@ -128,6 +129,15 @@ export default function ManageSidebar({
     fontWeight: "600",
     fontSize: "13px"
   });
+
+  function runManageTransition(action) {
+    if (requestManageTransition) {
+      requestManageTransition(action);
+      return;
+    }
+
+    action?.();
+  }
 
   function renderClearableInput({
     value,
@@ -299,7 +309,7 @@ export default function ManageSidebar({
           </div>
 
           <button
-            onClick={() => setMode("menu")}
+            onClick={() => runManageTransition(() => setMode("menu"))}
             style={{
               padding: "8px 10px",
               background: "#1d1d1d",
@@ -324,7 +334,10 @@ export default function ManageSidebar({
         >
 
           <button
-            onClick={() => setViewMode("questions")}
+            onClick={() => {
+              if (viewMode === "questions") return;
+              runManageTransition(() => setViewMode("questions"));
+            }}
             style={toggleButtonStyle(
               viewMode === "questions",
               "#b69cff"
@@ -334,7 +347,10 @@ export default function ManageSidebar({
           </button>
 
           <button
-            onClick={() => setViewMode("groups")}
+            onClick={() => {
+              if (viewMode === "groups") return;
+              runManageTransition(() => setViewMode("groups"));
+            }}
             style={toggleButtonStyle(
               viewMode === "groups",
               "#ffcc7a"
@@ -349,8 +365,10 @@ export default function ManageSidebar({
         {viewMode === "questions" ? (
           <button
             onClick={() => {
-              setIsCreatingQuestion(true);
-              setSelectedItem(null);
+              runManageTransition(() => {
+                setIsCreatingQuestion(true);
+                setSelectedItem(null);
+              });
             }}
             style={{
               width: "100%",
@@ -368,7 +386,7 @@ export default function ManageSidebar({
           </button>
         ) : (
           <button
-            onClick={() => startCreateGroup?.()}
+            onClick={() => runManageTransition(() => startCreateGroup?.())}
             style={{
               width: "100%",
               padding: "12px",

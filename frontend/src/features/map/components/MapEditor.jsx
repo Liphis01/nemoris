@@ -12,7 +12,8 @@ export default function MapEditor({
   onClose,
   onSave,
   selectedZone,
-  headerAction
+  headerAction,
+  registerPendingSaveHandler
 }) {
   // MapEditor turns SVG zones into atomic map questions. The group is visual
   // context; each saved zone remains its own reviewable question.
@@ -22,6 +23,7 @@ export default function MapEditor({
   const labelInputRef = useRef(null);
   const aliasInputRef = useRef(null);
   const focusLabelAfterZoneChangeRef = useRef(false);
+  const saveMapEditsRef = useRef(null);
   const {
     clearDirty,
     dirtyZoneCodes,
@@ -29,6 +31,7 @@ export default function MapEditor({
     editableGroup,
     foundCodes,
     handleCodesLoaded,
+    hasDirtyChanges,
     savedQuestionCount,
     saveMapZones,
     setZones,
@@ -246,12 +249,13 @@ export default function MapEditor({
     handleZoneTab(e);
   }
 
-  async function saveMapEdits() {
+  async function saveMapEdits({ autosave = false } = {}) {
+    const shouldDiscardBlankTemporaryZone = isBlankTemporaryZone(editingZone);
     // Remove the selected temporary zone when it still has no answer.
-    const zonesToSave = editingZone && !editingZone.answer
+    const zonesToSave = shouldDiscardBlankTemporaryZone
       ? zones.filter((z) => z.id !== editingZone.id)
       : zones;
-    const savedEditingCode = editingZone && editingZone.answer
+    const savedEditingCode = editingZone && !shouldDiscardBlankTemporaryZone
       ? getZoneCode(editingZone)
       : null;
     const dirtyCodes = dirtyZoneCodesRef.current;
@@ -260,23 +264,35 @@ export default function MapEditor({
       const code = getZoneCode(z);
       return dirtyCodes.has(code) || String(z.id || "").startsWith("tmp-");
     });
+    const shouldSave = changedZones.length > 0 || hasDirtyChanges();
 
-    if (editingZone && !editingZone.answer) {
+    if (shouldDiscardBlankTemporaryZone) {
       clearDirty(getZoneCode(editingZone));
       setZones(zonesToSave);
     }
-    setEditingZone(null);
+
+    if (!shouldSave) {
+      if (!autosave) {
+        setEditingZone(null);
+      }
+
+      return { saved: false };
+    }
 
     let saved;
 
     try {
       saved = await saveMapZones({ zonesToSave, changedZones });
     } catch (error) {
-      alert(error.message || "Impossible de sauvegarder la carte.");
-      return;
+      if (!autosave) {
+        alert(error.message || "Impossible de sauvegarder la carte.");
+      }
+
+      throw error;
     }
 
     const { delta, savedZones, saveResult } = saved;
+    setEditingZone(null);
 
     if (onSave) {
       // Bubble enough detail to ManageInspector to patch local lists and
@@ -296,7 +312,25 @@ export default function MapEditor({
     if (onClose) {
       onClose();
     }
+
+    return { saved: true };
   }
+
+  useEffect(() => {
+    saveMapEditsRef.current = saveMapEdits;
+  });
+
+  useEffect(() => {
+    if (!registerPendingSaveHandler) {
+      return undefined;
+    }
+
+    const saveIfDirty = () => saveMapEditsRef.current?.({ autosave: true }) || {
+      saved: false
+    };
+
+    return registerPendingSaveHandler(saveIfDirty);
+  }, [registerPendingSaveHandler]);
 
   useEffect(() => {
     if (editingZone) {

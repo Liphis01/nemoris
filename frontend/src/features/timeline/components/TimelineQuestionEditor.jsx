@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ImageImportField,
   MediaPreview,
@@ -55,6 +55,10 @@ export default function TimelineQuestionEditor({
   const [tagInput, setTagInput] = useState("");
   const timelineDraft = normalizeDraft(draft);
 
+  useEffect(() => {
+    setTagInput(timelineDraft._pendingTagInput || "");
+  }, [timelineDraft._pendingTagInput]);
+
   function commit(nextDraft) {
     onChange?.(normalizeDraft(nextDraft));
   }
@@ -89,7 +93,8 @@ export default function TimelineQuestionEditor({
 
     commit({
       ...timelineDraft,
-      tags: [...(timelineDraft.tags || []), value]
+      tags: [...(timelineDraft.tags || []), value],
+      _pendingTagInput: ""
     });
     setTagInput("");
   }
@@ -99,6 +104,18 @@ export default function TimelineQuestionEditor({
       ...timelineDraft,
       tags: (timelineDraft.tags || []).filter(item => item !== tag)
     });
+  }
+
+  function setPendingTagInput(value) {
+    setTagInput(value);
+    commit({
+      ...timelineDraft,
+      _pendingTagInput: value
+    });
+  }
+
+  function submitWithPendingTag() {
+    onSubmit?.(timelineDraft);
   }
 
   return (
@@ -150,14 +167,14 @@ export default function TimelineQuestionEditor({
       <TagEditor
         tags={timelineDraft.tags || []}
         tagInput={tagInput}
-        onTagInputChange={setTagInput}
+        onTagInputChange={setPendingTagInput}
         onAddTag={addTag}
         onRemoveTag={removeTag}
       />
 
       <QuestionEditorActions
         submitLabel={submitLabel}
-        onSubmit={onSubmit}
+        onSubmit={submitWithPendingTag}
         onCancel={onCancel}
         onDelete={onDelete}
         saveStatus={saveStatus}

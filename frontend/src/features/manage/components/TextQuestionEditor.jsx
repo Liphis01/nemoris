@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ImageImportField,
   MediaPreview,
@@ -40,6 +40,10 @@ export default function TextQuestionEditor({
   const [tagInput, setTagInput] = useState("");
   const textDraft = normalizeDraft(draft);
 
+  useEffect(() => {
+    setTagInput(textDraft._pendingTagInput || "");
+  }, [textDraft._pendingTagInput]);
+
   function commit(nextDraft) {
     onChange?.(normalizeDraft(nextDraft));
   }
@@ -66,7 +70,8 @@ export default function TextQuestionEditor({
 
     commit({
       ...textDraft,
-      tags: [...(textDraft.tags || []), value]
+      tags: [...(textDraft.tags || []), value],
+      _pendingTagInput: ""
     });
     setTagInput("");
   }
@@ -76,6 +81,18 @@ export default function TextQuestionEditor({
       ...textDraft,
       tags: (textDraft.tags || []).filter(item => item !== tag)
     });
+  }
+
+  function setPendingTagInput(value) {
+    setTagInput(value);
+    commit({
+      ...textDraft,
+      _pendingTagInput: value
+    });
+  }
+
+  function submitWithPendingTag() {
+    onSubmit?.(textDraft);
   }
 
   return (
@@ -127,14 +144,14 @@ export default function TextQuestionEditor({
       <TagEditor
         tags={textDraft.tags || []}
         tagInput={tagInput}
-        onTagInputChange={setTagInput}
+        onTagInputChange={setPendingTagInput}
         onAddTag={addTag}
         onRemoveTag={removeTag}
       />
 
       <QuestionEditorActions
         submitLabel={submitLabel}
-        onSubmit={onSubmit}
+        onSubmit={submitWithPendingTag}
         onCancel={onCancel}
         onDelete={onDelete}
         saveStatus={saveStatus}
