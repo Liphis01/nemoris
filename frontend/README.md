@@ -2,8 +2,6 @@
 
 
 
-revoir la timeline pour les intervalles
-garder la même taille de fenetre pour les maps dans la review
 cliquer sur une zone de la map dans le recap scroll à la zone correspondante
 quand on clique sur une autre question ça enregistre automatiquement les modifications de la question précédente
 

@@ -240,14 +240,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
             borderBottom: "1px solid #262626"
           }}
         >
-          <div
-            style={{
-              background: "#111",
-              borderRadius: "14px",
-              overflow: "hidden",
-              border: "1px solid #262626"
-            }}
-          >
+          <div style={activeMapPanelStyle}>
             <SvgMap
               svgPath={`/maps/${group.media}`}
               found={foundCodes}
@@ -570,6 +563,14 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     </>
   );
 }
+
+const activeMapPanelStyle = {
+  background: "#111",
+  borderRadius: "14px",
+  overflow: "hidden",
+  border: "1px solid #262626",
+  height: "clamp(300px, 55vh, 480px)"
+};
 
 const overlayStyle = {
   position: "fixed",
