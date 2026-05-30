@@ -94,6 +94,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     showRecap,
     showRecapSections
   } = useMapReview(reviewZones, onComplete);
+  const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
@@ -124,6 +125,11 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     setFocusedCode(code);
     window.requestAnimationFrame(() => scrollRecapRowIntoView(code));
   }, [scrollRecapRowIntoView, setFocusedCode]);
+
+  function handleZoomRemaining() {
+    focusNextRemainingZone();
+    inputRef.current?.focus({ preventScroll: true });
+  }
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
@@ -297,6 +303,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
         >
           <input
             autoFocus
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
@@ -357,7 +364,8 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                 }}
               >
                 <button
-                  onClick={focusNextRemainingZone}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleZoomRemaining}
                   disabled={remainingZones.length === 0}
                   style={{
                     ...buttonStyle,
