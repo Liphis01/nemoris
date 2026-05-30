@@ -8,6 +8,7 @@ export default function ReviewQuestionRenderer({
     showAnswer,
     setShowAnswer,
     handleTextAnswer,
+    currentTextQuality,
     selectedTextQuality,
     handleMapComplete,
     handleTimelineComplete,
@@ -49,6 +50,7 @@ export default function ReviewQuestionRenderer({
             showAnswer={showAnswer}
             setShowAnswer={setShowAnswer}
             handleAnswer={handleTextAnswer}
+            currentQuality={currentTextQuality}
             selectedQuality={selectedTextQuality}
         />
     );

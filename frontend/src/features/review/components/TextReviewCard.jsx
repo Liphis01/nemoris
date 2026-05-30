@@ -47,9 +47,8 @@ const answerOptions = [
     }
 ];
 
-function getAnswerButtonStyle(option, selectedQuality) {
-    const isAnswering = selectedQuality !== null;
-    const isSelected = selectedQuality === option.value;
+function getAnswerButtonStyle(option, displayQuality, isAnswering) {
+    const isSelected = displayQuality === option.value;
 
     return {
         ...answerButtonStyle,
@@ -75,9 +74,11 @@ export default function TextReviewCard({
     showAnswer,
     setShowAnswer,
     handleAnswer,
+    currentQuality,
     selectedQuality
 }) {
     const isAnswering = selectedQuality !== null;
+    const displayQuality = selectedQuality ?? currentQuality;
 
     return (
         <div
@@ -241,10 +242,14 @@ export default function TextReviewCard({
                             {answerOptions.map(option => (
                                 <button
                                     key={option.value}
-                                    aria-pressed={selectedQuality === option.value}
+                                    aria-pressed={displayQuality === option.value}
                                     disabled={isAnswering}
                                     onClick={() => handleAnswer(option.value)}
-                                    style={getAnswerButtonStyle(option, selectedQuality)}
+                                    style={getAnswerButtonStyle(
+                                        option,
+                                        displayQuality,
+                                        isAnswering
+                                    )}
                                 >
                                     {option.label}
                                 </button>

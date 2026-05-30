@@ -48,6 +48,20 @@ export function sendAnswer(questionId, quality) {
 }
 
 
+export function reviseAnswer(questionId, quality) {
+  return requestOk("/answer/revise", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      question_id: questionId,
+      quality
+    })
+  });
+}
+
+
 export function sendMapAnswer(items) {
   // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestOk("/answer_map", {

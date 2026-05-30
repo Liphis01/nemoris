@@ -4,17 +4,13 @@
 - premier clique pour les intervalles timeline : date de début
 
 ## quick fixes
-- proposer les fichiers .svg quand on commence à taper le nom d'une map dans la création de question map
-- ajouter un timer pour les questions
-- quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
-- mettre des tags sur les groupes les propage aux questions
-- ajouter une recherche dans calender
+- quand on créé une question et qu'on clique sur une autre question on est bloqués sur la création
 - montrer un équivalent de recap quand je regarde un groupe fait dans le passé dans le calendrier
 - faire un bouton toggle pour l'era dans la preview
-- pouvoir revenir en arrière dans la review
 - pouvoir trier les réponses dans le recap de map
-- pouvoir revenir à la question précédente dans la review
-- mettre un menu dans la preview quand je clique sur créer question pour demander quel type de question je veux créer
+- ajouter une recherche dans calender
+- mettre des tags sur les groupes les propage aux questions
+- ajouter un timer pour les questions
 
 ## bugs
 - bug des images + trouver comment afficher l'image dans les cards de manage

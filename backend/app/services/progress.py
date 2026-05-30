@@ -8,6 +8,7 @@ from ..scheduler import (
     assign_smoothed_schedules,
     candidate_review_dates,
     new_fsrs_card_data,
+    parse_history_date,
     rebalance_review_calendar,
     update_progress
 )
@@ -75,6 +76,68 @@ def write_scheduling(progress: Progress, quality: int, scheduling: dict):
     record_answer_history(progress, quality, scheduling)
 
     return scheduling
+
+
+def _number_from_history(entry, field, default, caster=float):
+    try:
+        return caster(entry.get(field))
+    except (TypeError, ValueError):
+        return default
+
+
+def restore_progress_from_history(progress: Progress, history):
+    history = list(history or [])
+    progress.history = history
+
+    if not history:
+        progress.stability = 1.0
+        progress.difficulty = 5.0
+        progress.reps = 0
+        progress.lapses = 0
+        progress.interval = 0
+        progress.last_review = None
+        progress.next_review = date.today()
+        progress.fsrs_card = new_fsrs_card_data(progress.question_id)
+        progress.fsrs_version = FSRS_VERSION
+        return
+
+    latest = history[-1]
+    last_review = parse_history_date(latest.get("reviewed_on"))
+    next_review = parse_history_date(latest.get("next_review"))
+
+    progress.stability = _number_from_history(latest, "stability", 1.0)
+    progress.difficulty = _number_from_history(latest, "difficulty", 5.0)
+    progress.reps = _number_from_history(
+        latest,
+        "reps",
+        len(history),
+        caster=int
+    )
+    progress.lapses = _number_from_history(
+        latest,
+        "lapses",
+        sum(1 for entry in history if entry.get("quality") == 0),
+        caster=int
+    )
+    progress.interval = _number_from_history(latest, "interval", 0, caster=int)
+    progress.last_review = last_review
+    progress.next_review = next_review or date.today()
+    progress.fsrs_card = None
+    progress.fsrs_version = FSRS_VERSION
+
+
+def replace_latest_scheduling(db, progress: Progress, quality: int):
+    # Reopening the last review screen should correct the previous grade, not
+    # count as another repetition. Roll progress back to the state represented
+    # by the penultimate history item, then schedule once with the new quality.
+    history = list(progress.history or [])
+
+    if not history:
+        return apply_scheduling(db, progress, quality)
+
+    restore_progress_from_history(progress, history[:-1])
+
+    return apply_scheduling(db, progress, quality)
 
 
 def load_daily_review_counts(db, dates, exclude_question_ids=None):

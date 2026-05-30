@@ -16,6 +16,7 @@ from app.routers.review import (
     get_settings,
     get_startup_notice,
     rebalance_review,
+    revise_answer_question,
     update_settings
 )
 from app.services.startup import run_startup_rebalance
@@ -405,6 +406,52 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.history[-1]["quality"], 3)
         self.assertEqual(progress.history[-1]["fsrs_rating"], 4)
         self.assertEqual(progress.history[-1]["fsrs_state"], 2)
+
+    def test_revise_answer_replaces_latest_history_entry(self):
+        today = date.today()
+        self.add_question(1, type_q="text")
+        progress = self.add_progress(1, today)
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+        response = revise_answer_question(
+            AnswerRequest(question_id=1, quality=3),
+            db=self.db
+        )
+
+        self.assertEqual(len(response["history"]), 1)
+        self.assertEqual(progress.history[-1]["quality"], 3)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.lapses, 0)
+
+    def test_revise_answer_preserves_earlier_history(self):
+        today = date.today()
+        self.add_question(1, type_q="text")
+        progress = self.add_progress(1, today)
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+        first_history_entry = progress.history[0]
+        answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+
+        response = revise_answer_question(
+            AnswerRequest(question_id=1, quality=3),
+            db=self.db
+        )
+
+        self.assertEqual(len(response["history"]), 2)
+        self.assertEqual(progress.history[0], first_history_entry)
+        self.assertEqual(progress.history[-1]["quality"], 3)
+        self.assertEqual(progress.reps, 2)
 
     def test_answer_quality_validation_accepts_four_ratings(self):
         self.assertEqual(

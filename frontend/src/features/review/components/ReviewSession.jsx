@@ -17,9 +17,12 @@ export default function ReviewSession({
   showAnswer,
   setShowAnswer,
   handleTextAnswer,
+  currentTextQuality,
   selectedTextQuality,
   handleMapComplete,
   handleTimelineComplete,
+  canReturnToLastQuestion,
+  returnToLastQuestion,
   catchupTargetDraft,
   setCatchupTargetDraft,
   saveCatchupTarget,
@@ -252,6 +255,26 @@ export default function ReviewSession({
               Toutes les questions ont été révisées.
             </div>
 
+            {canReturnToLastQuestion && (
+              <button
+                type="button"
+                onClick={returnToLastQuestion}
+                style={{
+                  background: "#232323",
+                  border: "1px solid #333",
+                  color: "#eee",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  cursor: "pointer",
+                  fontWeight: "650",
+                  fontSize: "14px",
+                  marginTop: "24px"
+                }}
+              >
+                Modifier la dernière réponse
+              </button>
+            )}
+
           </div>
         )}
 
@@ -274,11 +297,39 @@ export default function ReviewSession({
 
               <div
                 style={{
-                  color: "#888",
-                  fontSize: "14px"
+                  alignItems: "center",
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap"
                 }}
               >
-                Question {currentIndex + 1} / {questions.length}
+                <div
+                  style={{
+                    color: "#888",
+                    fontSize: "14px"
+                  }}
+                >
+                  Question {currentIndex + 1} / {questions.length}
+                </div>
+
+                {canReturnToLastQuestion && (
+                  <button
+                    type="button"
+                    onClick={returnToLastQuestion}
+                    style={{
+                      background: "#1f1f1f",
+                      border: "1px solid #333",
+                      color: "#ccc",
+                      padding: "7px 10px",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "650"
+                    }}
+                  >
+                    ← Réponse précédente
+                  </button>
+                )}
               </div>
 
               <div
@@ -314,6 +365,7 @@ export default function ReviewSession({
               showAnswer={showAnswer}
               setShowAnswer={setShowAnswer}
               handleTextAnswer={handleTextAnswer}
+              currentTextQuality={currentTextQuality}
               selectedTextQuality={selectedTextQuality}
               handleMapComplete={handleMapComplete}
               handleTimelineComplete={handleTimelineComplete}

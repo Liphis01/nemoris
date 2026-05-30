@@ -3,6 +3,7 @@ import {
   getReview,
   getReviewSettings,
   rebalanceReviewCalendar,
+  reviseAnswer,
   sendAnswer,
   updateReviewSettings
 } from "../../../api/review";
@@ -33,10 +34,24 @@ export function useReviewSession(active) {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [selectedTextQuality, setSelectedTextQuality] = useState(null);
+  const [answeredTextByIndex, setAnsweredTextByIndex] = useState({});
+  const [returnToLastQuestionArmed, setReturnToLastQuestionArmed] = useState(false);
   const textAnswerTimeoutRef = useRef(null);
   const textAnswerPendingRef = useRef(false);
+  const textAnswerRequestsRef = useRef({});
 
   const current = questions[currentIndex];
+  const lastQuestionIndex = currentIndex - 1;
+  const lastQuestion = questions[lastQuestionIndex];
+  const currentTextAnswer = current?.type_q === "text"
+    ? answeredTextByIndex[currentIndex]
+    : null;
+  const canReturnToLastQuestion = Boolean(
+    returnToLastQuestionArmed &&
+    lastQuestion?.type_q === "text" &&
+    answeredTextByIndex[lastQuestionIndex] &&
+    selectedTextQuality === null
+  );
 
   const clearTextAnswerTimeout = useCallback(() => {
     if (textAnswerTimeoutRef.current) {
@@ -47,32 +62,88 @@ export function useReviewSession(active) {
     textAnswerPendingRef.current = false;
   }, []);
 
+  const returnToLastQuestion = useCallback(() => {
+    if (!canReturnToLastQuestion) return;
+
+    clearTextAnswerTimeout();
+    setSelectedTextQuality(null);
+    setShowAnswer(true);
+    setReturnToLastQuestionArmed(false);
+    setCurrentIndex(prev => Math.max(0, prev - 1));
+  }, [canReturnToLastQuestion, clearTextAnswerTimeout]);
+
   const handleTextAnswer = useCallback((quality) => {
     if (!current || textAnswerPendingRef.current) return;
 
     // Fire-and-advance keeps review fast. Failures are appended to the end so
     // they appear again after the current queue.
+    const answerIndex = currentIndex;
+    const existingAnswer = answeredTextByIndex[answerIndex]?.questionId === current.question_id
+      ? answeredTextByIndex[answerIndex]
+      : null;
+    const previousQuality = existingAnswer?.quality;
+    const previousRequest = textAnswerRequestsRef.current[answerIndex] || Promise.resolve();
+    const request = existingAnswer
+      ? previousRequest
+        .catch(() => null)
+        .then(() => reviseAnswer(current.question_id, quality))
+      : sendAnswer(current.question_id, quality);
+
+    textAnswerRequestsRef.current[answerIndex] = request;
+    request.catch(console.error);
+    setAnsweredTextByIndex(prev => ({
+      ...prev,
+      [answerIndex]: {
+        questionId: current.question_id,
+        quality
+      }
+    }));
+
     clearTextAnswerTimeout();
     textAnswerPendingRef.current = true;
     setSelectedTextQuality(quality);
-    sendAnswer(current.question_id, quality).catch(console.error);
 
     textAnswerTimeoutRef.current = setTimeout(() => {
-      if (quality === 0) {
-        setQuestions(prev => [...prev, current]);
-      }
+      setQuestions(prev => {
+        const nextQuestions = previousQuality === 0 && quality !== 0
+          ? prev.filter(item => item._reviewRetryOfIndex !== answerIndex)
+          : prev;
+        const hasRetry = nextQuestions.some(
+          item => item._reviewRetryOfIndex === answerIndex
+        );
+
+        if (quality === 0 && !hasRetry) {
+          return [
+            ...nextQuestions,
+            {
+              ...current,
+              _reviewRetryOfIndex: answerIndex
+            }
+          ];
+        }
+
+        return nextQuestions;
+      });
 
       setShowAnswer(false);
       setCurrentIndex(prev => prev + 1);
+      setReturnToLastQuestionArmed(true);
       setSelectedTextQuality(null);
       textAnswerTimeoutRef.current = null;
       textAnswerPendingRef.current = false;
     }, TEXT_ANSWER_FEEDBACK_MS);
-  }, [clearTextAnswerTimeout, current]);
+  }, [
+    answeredTextByIndex,
+    clearTextAnswerTimeout,
+    current,
+    currentIndex
+  ]);
 
   function handleMapComplete(failedQuestionIds = []) {
     // A map screen can contain many atomic zone questions. Only failed zones are
     // re-queued, wrapped back into the same runtime map group shape.
+    const answerIndex = currentIndex;
+
     if (current && failedQuestionIds.length > 0) {
       const failedItems = (current.items || []).filter(item =>
         failedQuestionIds.includes(item.question_id)
@@ -83,18 +154,22 @@ export function useReviewSession(active) {
           ...prev,
           {
             ...current,
-            items: failedItems
+            items: failedItems,
+            _reviewRetryOfIndex: answerIndex
           }
         ]);
       }
     }
 
     setCurrentIndex(prev => prev + 1);
+    setReturnToLastQuestionArmed(true);
   }
 
   function handleTimelineComplete(failedQuestionIds = []) {
     // Timeline review also updates many atomic questions from one screen.
     // Failed items are wrapped back into the runtime timeline shape.
+    const answerIndex = currentIndex;
+
     if (current && failedQuestionIds.length > 0) {
       const failedItems = (current.items || []).filter(item =>
         failedQuestionIds.includes(item.question_id)
@@ -105,13 +180,15 @@ export function useReviewSession(active) {
           ...prev,
           {
             ...current,
-            items: failedItems
+            items: failedItems,
+            _reviewRetryOfIndex: answerIndex
           }
         ]);
       }
     }
 
     setCurrentIndex(prev => prev + 1);
+    setReturnToLastQuestionArmed(true);
   }
 
   useEffect(() => {
@@ -121,6 +198,9 @@ export function useReviewSession(active) {
       setReviewReady(false);
       setReviewLoading(false);
       setReviewError("");
+      setAnsweredTextByIndex({});
+      setReturnToLastQuestionArmed(false);
+      textAnswerRequestsRef.current = {};
       return;
     }
 
@@ -134,6 +214,9 @@ export function useReviewSession(active) {
       setCurrentIndex(0);
       setShowAnswer(false);
       setSelectedTextQuality(null);
+      setAnsweredTextByIndex({});
+      setReturnToLastQuestionArmed(false);
+      textAnswerRequestsRef.current = {};
 
       try {
         const settings = await getReviewSettings();
@@ -181,6 +264,9 @@ export function useReviewSession(active) {
         setCurrentIndex(0);
         setShowAnswer(false);
         setSelectedTextQuality(null);
+        setAnsweredTextByIndex({});
+        setReturnToLastQuestionArmed(false);
+        textAnswerRequestsRef.current = {};
         setReviewError("");
       })
       .catch((error) => {
@@ -280,6 +366,9 @@ export function useReviewSession(active) {
     handleMapComplete,
     handleTimelineComplete,
     handleTextAnswer,
+    canReturnToLastQuestion,
+    currentTextQuality: currentTextAnswer?.quality ?? null,
+    returnToLastQuestion,
     selectedTextQuality,
     catchupTargetDraft,
     catchupTargetSaving,

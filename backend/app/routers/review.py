@@ -14,7 +14,8 @@ from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
     create_initial_progress,
-    rebalance_progress_calendar
+    rebalance_progress_calendar,
+    replace_latest_scheduling
 )
 from ..services.review import get_review_items
 from ..services.settings import (
@@ -86,6 +87,33 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         db.add(progress)
 
     apply_scheduling(db, progress, data.quality)
+    db.commit()
+
+    return {
+        "stability": progress.stability,
+        "difficulty": progress.difficulty,
+        "interval": progress.interval,
+        "last_review": progress.last_review,
+        "next_review": progress.next_review,
+        "reps": progress.reps,
+        "lapses": progress.lapses,
+        "history": progress.history or []
+    }
+
+
+@router.post("/answer/revise")
+def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
+    progress = (
+        db.query(Progress)
+        .filter(Progress.question_id == data.question_id)
+        .first()
+    )
+
+    if not progress:
+        progress = create_initial_progress(data.question_id)
+        db.add(progress)
+
+    replace_latest_scheduling(db, progress, data.quality)
     db.commit()
 
     return {
