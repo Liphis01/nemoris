@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import CalendarGroupRecap from "./CalendarGroupRecap";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
@@ -81,6 +82,29 @@ function dueTitle(question) {
   return question.question || "Question sans titre";
 }
 
+function getQuestionGroupId(question) {
+  const groupId = question?.group_id ?? question?.group?.id;
+
+  if (groupId === null || groupId === undefined || groupId === "") {
+    return null;
+  }
+
+  return String(groupId);
+}
+
+function getEventGroup(event, groupId) {
+  return event.question.group || {
+    id: groupId,
+    name: `Groupe #${groupId}`,
+    type_group: event.question.type_q || "groupe",
+    media: null
+  };
+}
+
+function groupRowKey(kind, groupId) {
+  return `${kind}:group:${groupId}`;
+}
+
 function typeBadgeStyle(type) {
   const typeStyle = getQuestionTypeChipStyle(type);
 
@@ -153,6 +177,45 @@ function eventSortValue(event, sortMode) {
 
 function compareEvents(a, b, sortMode) {
   return eventSortValue(a, sortMode).localeCompare(eventSortValue(b, sortMode));
+}
+
+function buildDisplayRows(events) {
+  const rows = [];
+  const groupRows = new Map();
+
+  for (const event of events) {
+    const groupId = getQuestionGroupId(event.question);
+
+    if (!groupId) {
+      rows.push({
+        type: "question",
+        key: event.id,
+        event
+      });
+      continue;
+    }
+
+    const key = groupRowKey(event.kind, groupId);
+    let row = groupRows.get(key);
+
+    if (!row) {
+      row = {
+        type: "group",
+        key,
+        id: key,
+        kind: event.kind,
+        groupId,
+        group: getEventGroup(event, groupId),
+        events: []
+      };
+      groupRows.set(key, row);
+      rows.push(row);
+    }
+
+    row.events.push(event);
+  }
+
+  return rows;
 }
 
 function SectionHeader({ count, label }) {
@@ -325,6 +388,151 @@ function EventCard({
   );
 }
 
+function groupStatusLabel(row, todayKey) {
+  if (row.kind === "history") {
+    const labels = new Set(
+      row.events.map((event) => historyLabel(event.history?.quality))
+    );
+
+    if (labels.size === 1) {
+      return [...labels][0];
+    }
+
+    return "Historique";
+  }
+
+  return row.events[0]?.dateKey < todayKey ? "Due" : "À revoir";
+}
+
+function groupStatusColor(row, todayKey) {
+  if (row.kind === "history") {
+    const qualities = new Set(
+      row.events.map((event) => event.history?.quality)
+    );
+
+    if (qualities.size === 1) {
+      return historyColor([...qualities][0]);
+    }
+
+    return "#8f9aa3";
+  }
+
+  return row.events[0]?.dateKey < todayKey ? "#ff9c9c" : "#b69cff";
+}
+
+function GroupEventCard({
+  cardRef,
+  isSelected,
+  onOpenGroup,
+  row,
+  todayKey
+}) {
+  const group = row.group || {};
+  const groupType = group.type_group || row.events[0]?.question.type_q || "groupe";
+  const sampleAnswers = row.events
+    .slice(0, 3)
+    .map((event) => dueTitle(event.question));
+
+  return (
+    <button
+      type="button"
+      ref={cardRef}
+      onClick={() => onOpenGroup?.(row)}
+      style={{
+        width: "100%",
+        padding: "11px 12px",
+        borderRadius: "12px",
+        border: isSelected
+          ? "1px solid rgba(126, 226, 168, 0.85)"
+          : "1px solid #262626",
+        background: isSelected ? "rgba(22, 53, 36, 0.72)" : "#151515",
+        color: "inherit",
+        boxShadow: isSelected
+          ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
+          : "none",
+        marginBottom: "8px",
+        textAlign: "left",
+        cursor: "pointer",
+        font: "inherit",
+        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+      }}
+      title="Voir le récap du groupe"
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto minmax(0, 1fr) auto",
+          gap: "8px",
+          alignItems: "center",
+          marginBottom: "7px"
+        }}
+      >
+        <span style={typeBadgeStyle(groupType)}>
+          {groupType}
+        </span>
+
+        <span
+          style={{
+            color: "#777",
+            fontSize: "12px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {row.events.length} réponse{row.events.length > 1 ? "s" : ""}
+        </span>
+
+        <span
+          style={{
+            background: "#222",
+            color: groupStatusColor(row, todayKey),
+            borderRadius: "999px",
+            padding: "3px 8px",
+            fontSize: "10px",
+            fontWeight: "800",
+            letterSpacing: "0.04em",
+            textTransform: "uppercase"
+          }}
+        >
+          {groupStatusLabel(row, todayKey)}
+        </span>
+      </div>
+
+      <div
+        style={{
+          color: "#eee",
+          fontSize: "14px",
+          fontWeight: "800",
+          lineHeight: 1.35,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }}
+      >
+        {group.name || `Groupe #${row.groupId}`}
+      </div>
+
+      {sampleAnswers.length > 0 && (
+        <div
+          style={{
+            color: "#888",
+            fontSize: "12px",
+            lineHeight: 1.35,
+            marginTop: "6px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {sampleAnswers.join(" · ")}
+          {row.events.length > sampleAnswers.length && ` · +${row.events.length - sampleAnswers.length}`}
+        </div>
+      )}
+    </button>
+  );
+}
+
 export default function ReviewCalendar({
   setMode,
   questions,
@@ -342,6 +550,7 @@ export default function ReviewCalendar({
   );
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
   const [selectedCalendarQuestionId, setSelectedCalendarQuestionId] = useState(null);
+  const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [sortMode, setSortMode] = useState("type");
   const [calendarCardHeight, setCalendarCardHeight] = useState(null);
 
@@ -414,6 +623,10 @@ export default function ReviewCalendar({
   const selectedHistoryEvents = selectedEvents
     .filter((event) => event.kind === "history")
     .sort((a, b) => compareEvents(a, b, sortMode));
+  const selectedScheduledRows = buildDisplayRows(selectedScheduledEvents);
+  const selectedHistoryRows = buildDisplayRows(selectedHistoryEvents);
+  const activeGroupRow = [...selectedScheduledRows, ...selectedHistoryRows]
+    .find((row) => row.type === "group" && row.key === activeGroupKey);
   const selectedHistoryCount = selectedHistoryEvents.length;
   const selectedScheduledCount = selectedScheduledEvents.length;
   const overdueCount = scheduledEvents.filter(
@@ -472,11 +685,20 @@ export default function ReviewCalendar({
     setVisibleMonth(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1));
     setSelectedDateKey(event.dateKey);
     setSelectedCalendarQuestionId(event.question.id);
+    const groupId = getQuestionGroupId(event.question);
+    setActiveGroupKey(groupId ? groupRowKey(event.kind, groupId) : null);
     clearOpenQuestionId?.();
   }, [clearOpenQuestionId, openQuestionId, scheduledEvents]);
 
+  useEffect(() => {
+    if (!activeGroupKey || activeGroupRow) return;
+
+    setActiveGroupKey(null);
+    setSelectedCalendarQuestionId(null);
+  }, [activeGroupKey, activeGroupRow]);
+
   useLayoutEffect(() => {
-    if (!selectedCalendarQuestionId) return;
+    if (!selectedCalendarQuestionId || activeGroupKey) return;
 
     const detailList = detailListRef.current;
     const highlightedQuestion = highlightedQuestionRef.current;
@@ -495,7 +717,7 @@ export default function ReviewCalendar({
       top: Math.max(0, nextTop),
       behavior: "smooth"
     });
-  }, [selectedDateKey, selectedCalendarQuestionId]);
+  }, [activeGroupKey, selectedDateKey, selectedCalendarQuestionId]);
 
   function moveMonth(offset) {
     setVisibleMonth(
@@ -505,7 +727,53 @@ export default function ReviewCalendar({
 
   function selectToday() {
     setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDateKey(todayKey);
+    selectDate(todayKey);
+  }
+
+  function selectDate(dateKey) {
+    setSelectedDateKey(dateKey);
+    setSelectedCalendarQuestionId(null);
+    setActiveGroupKey(null);
+  }
+
+  function openGroupRow(row) {
+    setActiveGroupKey(row.key);
+    setSelectedCalendarQuestionId(row.events[0]?.question.id ?? null);
+  }
+
+  function renderDisplayRow(row) {
+    if (row.type === "question") {
+      return (
+        <EventCard
+          key={row.key}
+          cardRef={
+            selectedCalendarQuestionId === row.event.question.id
+              ? highlightedQuestionRef
+              : null
+          }
+          event={row.event}
+          isSelected={selectedCalendarQuestionId === row.event.question.id}
+          onOpenQuestion={onOpenQuestion}
+          todayKey={todayKey}
+        />
+      );
+    }
+
+    const selectedInside = row.events.some(
+      (event) => selectedCalendarQuestionId === event.question.id
+    );
+    const isSelected = activeGroupKey === row.key || selectedInside;
+
+    return (
+      <GroupEventCard
+        key={row.key}
+        cardRef={isSelected ? highlightedQuestionRef : null}
+        isSelected={isSelected}
+        onOpenGroup={openGroupRow}
+        row={row}
+        todayKey={todayKey}
+      />
+    );
   }
 
   return (
@@ -520,7 +788,7 @@ export default function ReviewCalendar({
     >
       <div
         style={{
-          maxWidth: "1180px",
+          maxWidth: activeGroupRow ? "1480px" : "1180px",
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
@@ -630,7 +898,9 @@ export default function ReviewCalendar({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 360px",
+            gridTemplateColumns: activeGroupRow
+              ? "minmax(0, 1fr) minmax(520px, 0.72fr)"
+              : "minmax(0, 1fr) 360px",
             gap: "18px",
             alignItems: "start"
           }}
@@ -738,7 +1008,7 @@ export default function ReviewCalendar({
                 return (
                   <button
                     key={dateKey}
-                    onClick={() => setSelectedDateKey(dateKey)}
+                    onClick={() => selectDate(dateKey)}
                     style={{
                       minHeight: "96px",
                       padding: "10px",
@@ -882,158 +1152,213 @@ export default function ReviewCalendar({
                 textAlign: "left"
               }}
             >
-              <div
-                style={{
-                  color: selectedDateKey < todayKey ? "#8f9aa3" : "#777",
-                  fontSize: "11px",
-                  fontWeight: "800",
-                  letterSpacing: "0.06em",
-                  marginBottom: "8px",
-                  textTransform: "uppercase"
-                }}
-              >
-                {selectedPanelLabel}
-              </div>
-
-              <div
-                style={{
-                  fontSize: "22px",
-                  fontWeight: "800",
-                  lineHeight: 1.15,
-                  textTransform: "capitalize"
-                }}
-              >
-                {detailDateFormatter.format(selectedDate)}
-              </div>
-
-              <div
-                style={{
-                  color: "#777",
-                  fontSize: "13px",
-                  marginTop: "8px"
-                }}
-              >
-                {selectedHistoryCount > 0 && (
-                  <>{selectedHistoryCount} revue{selectedHistoryCount > 1 ? "s" : ""}</>
-                )}
-                {selectedHistoryCount > 0 && selectedScheduledCount > 0 && " · "}
-                {selectedScheduledCount > 0 && (
-                  <>{selectedScheduledCount} échéance{selectedScheduledCount > 1 ? "s" : ""}</>
-                )}
-                {selectedEvents.length === 0 && "Aucune activité"}
-              </div>
-
-              {selectedEvents.length > 1 && (
+              {activeGroupRow ? (
                 <div
                   style={{
                     display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    marginTop: "12px"
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: "14px"
                   }}
                 >
-                  <span
-                    style={{
-                      color: "#666",
-                      fontSize: "11px",
-                      fontWeight: "800",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase"
-                    }}
-                  >
-                    Trier
-                  </span>
-                  <select
-                    value={sortMode}
-                    onChange={(event) => setSortMode(event.target.value)}
-                    style={{
-                      flex: 1,
-                      background: "#111",
-                      border: "1px solid #2f2f2f",
-                      borderRadius: "10px",
-                      color: "#ccc",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      outline: "none",
-                      padding: "8px 10px"
-                    }}
-                  >
-                    <option value="type">Type / groupe</option>
-                    <option value="title">Titre</option>
-                    <option value="quality">Résultat</option>
-                    <option value="id">ID</option>
-                  </select>
-                </div>
-              )}
-            </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        color: "#7ee2a8",
+                        fontSize: "11px",
+                        fontWeight: "800",
+                        letterSpacing: "0.06em",
+                        marginBottom: "8px",
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      Récap groupe
+                    </div>
 
-            <div
-              className="app-scrollbar"
-              ref={detailListRef}
-              style={{
-                flex: 1,
-                minHeight: 0,
-                overflow: "auto",
-                scrollbarGutter: "stable",
-                padding: "10px"
-              }}
-            >
-              {selectedEvents.length === 0 ? (
-                <div
-                  style={{
-                    padding: "40px 18px",
-                    color: "#777",
-                    textAlign: "center",
-                    fontSize: "14px",
-                    lineHeight: 1.5
-                  }}
-                >
-                  Rien dans l'historique ou les échéances pour cette journée.
+                    <div
+                      style={{
+                        fontSize: "22px",
+                        fontWeight: "800",
+                        lineHeight: 1.15,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {activeGroupRow.group?.name || `Groupe #${activeGroupRow.groupId}`}
+                    </div>
+
+                    <div
+                      style={{
+                        color: "#777",
+                        fontSize: "13px",
+                        marginTop: "8px"
+                      }}
+                    >
+                      {detailDateFormatter.format(selectedDate)} · {activeGroupRow.events.length} réponse{activeGroupRow.events.length > 1 ? "s" : ""}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveGroupKey(null);
+                    }}
+                    style={backButtonStyle}
+                  >
+                    Retour à la liste
+                  </button>
                 </div>
               ) : (
                 <>
-                  <SectionHeader
-                    count={selectedScheduledEvents.length}
-                    label="À revoir"
-                  />
+                  <div
+                    style={{
+                      color: selectedDateKey < todayKey ? "#8f9aa3" : "#777",
+                      fontSize: "11px",
+                      fontWeight: "800",
+                      letterSpacing: "0.06em",
+                      marginBottom: "8px",
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    {selectedPanelLabel}
+                  </div>
 
-                  {selectedScheduledEvents.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      cardRef={
-                        selectedCalendarQuestionId === event.question.id
-                          ? highlightedQuestionRef
-                          : null
-                      }
-                      event={event}
-                      isSelected={selectedCalendarQuestionId === event.question.id}
-                      onOpenQuestion={onOpenQuestion}
-                      todayKey={todayKey}
-                    />
-                  ))}
+                  <div
+                    style={{
+                      fontSize: "22px",
+                      fontWeight: "800",
+                      lineHeight: 1.15,
+                      textTransform: "capitalize"
+                    }}
+                  >
+                    {detailDateFormatter.format(selectedDate)}
+                  </div>
 
-                  <SectionHeader
-                    count={selectedHistoryEvents.length}
-                    label="Historique"
-                  />
+                  <div
+                    style={{
+                      color: "#777",
+                      fontSize: "13px",
+                      marginTop: "8px"
+                    }}
+                  >
+                    {selectedHistoryCount > 0 && (
+                      <>{selectedHistoryCount} revue{selectedHistoryCount > 1 ? "s" : ""}</>
+                    )}
+                    {selectedHistoryCount > 0 && selectedScheduledCount > 0 && " · "}
+                    {selectedScheduledCount > 0 && (
+                      <>{selectedScheduledCount} échéance{selectedScheduledCount > 1 ? "s" : ""}</>
+                    )}
+                    {selectedEvents.length === 0 && "Aucune activité"}
+                  </div>
 
-                  {selectedHistoryEvents.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      cardRef={
-                        selectedCalendarQuestionId === event.question.id
-                          ? highlightedQuestionRef
-                          : null
-                      }
-                      event={event}
-                      isSelected={selectedCalendarQuestionId === event.question.id}
-                      onOpenQuestion={onOpenQuestion}
-                      todayKey={todayKey}
-                    />
-                  ))}
+                  {selectedEvents.length > 1 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginTop: "12px"
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "#666",
+                          fontSize: "11px",
+                          fontWeight: "800",
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase"
+                        }}
+                      >
+                        Trier
+                      </span>
+                      <select
+                        value={sortMode}
+                        onChange={(event) => setSortMode(event.target.value)}
+                        style={{
+                          flex: 1,
+                          background: "#111",
+                          border: "1px solid #2f2f2f",
+                          borderRadius: "10px",
+                          color: "#ccc",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          outline: "none",
+                          padding: "8px 10px"
+                        }}
+                      >
+                        <option value="type">Type / groupe</option>
+                        <option value="title">Titre</option>
+                        <option value="quality">Résultat</option>
+                        <option value="id">ID</option>
+                      </select>
+                    </div>
+                  )}
                 </>
               )}
             </div>
+
+            {activeGroupRow ? (
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: "hidden"
+                }}
+              >
+                <CalendarGroupRecap
+                  expanded
+                  focusedQuestionId={selectedCalendarQuestionId}
+                  onFocusQuestion={setSelectedCalendarQuestionId}
+                  onOpenQuestion={onOpenQuestion}
+                  row={activeGroupRow}
+                  showHeader={false}
+                  todayKey={todayKey}
+                />
+              </div>
+            ) : (
+              <div
+                className="app-scrollbar"
+                ref={detailListRef}
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: "auto",
+                  scrollbarGutter: "stable",
+                  padding: "10px"
+                }}
+              >
+                {selectedEvents.length === 0 ? (
+                  <div
+                    style={{
+                      padding: "40px 18px",
+                      color: "#777",
+                      textAlign: "center",
+                      fontSize: "14px",
+                      lineHeight: 1.5
+                    }}
+                  >
+                    Rien dans l'historique ou les échéances pour cette journée.
+                  </div>
+                ) : (
+                  <>
+                    <SectionHeader
+                      count={selectedScheduledEvents.length}
+                      label="À revoir"
+                    />
+
+                    {selectedScheduledRows.map(renderDisplayRow)}
+
+                    <SectionHeader
+                      count={selectedHistoryEvents.length}
+                      label="Historique"
+                    />
+
+                    {selectedHistoryRows.map(renderDisplayRow)}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1074,4 +1399,16 @@ const smallButtonStyle = {
   cursor: "pointer",
   fontSize: "13px",
   padding: "0 12px"
+};
+
+const backButtonStyle = {
+  background: "#202020",
+  border: "1px solid #363636",
+  borderRadius: "10px",
+  color: "#ddd",
+  cursor: "pointer",
+  flexShrink: 0,
+  fontSize: "13px",
+  fontWeight: "700",
+  padding: "9px 12px"
 };

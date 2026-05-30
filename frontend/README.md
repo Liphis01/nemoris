@@ -21,6 +21,7 @@
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 
 ## features
+- mettre un truc addictif de day streaks
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
 - mode entrainement
 - mode difficile (similaire à jetpunk : on ne voit pas les réponses possibles, pas le droit à l'erreur...)
@@ -29,7 +30,6 @@
 - mettre les différents modes de jetpunk pour les maps et alterner selon les jours
 - dans le recap, afficher toutes les stats intéressantes des questions pour voir les progrès
 - mettre en évidence les zones trop petites (c.f. jetpunk)
-- mettre un truc addictif de day streaks
 - scraper le site de émilien
 - faire des propositions existantes pour le média et pous les tags
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
