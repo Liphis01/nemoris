@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
@@ -151,10 +151,38 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     window.requestAnimationFrame(() => scrollRecapRowIntoView(code));
   }, [scrollRecapRowIntoView, setFocusedCode]);
 
-  function handleZoomRemaining() {
+  const handleZoomRemaining = useCallback(() => {
     focusNextRemainingZone();
     inputRef.current?.focus({ preventScroll: true });
-  }
+  }, [focusNextRemainingZone]);
+
+  useEffect(() => {
+    if (showRecap || remainingZones.length === 0) {
+      return undefined;
+    }
+
+    function handleMapKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.key !== "Tab" ||
+        event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      handleZoomRemaining();
+    }
+
+    window.addEventListener("keydown", handleMapKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleMapKeyDown);
+    };
+  }, [handleZoomRemaining, remainingZones.length, showRecap]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
@@ -399,7 +427,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                     opacity: remainingZones.length === 0 ? 0.55 : 1
                   }}
                 >
-                  Zoom restante
+                  Zone suivante
                 </button>
 
                 <button
