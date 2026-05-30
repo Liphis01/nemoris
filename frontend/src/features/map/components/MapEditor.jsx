@@ -540,8 +540,11 @@ export default function MapEditor({
             {/* TAGS */}
             <div
               style={{
+                borderLeft: "1px solid #303030",
+                boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
+                paddingLeft: "14px",
                 minWidth: "180px",
                 flex: "1 1 220px"
               }}
