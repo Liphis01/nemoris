@@ -314,7 +314,10 @@ export default function ManageSidebar({
           </div>
 
           <button
-            onClick={() => runManageTransition(() => setMode("menu"))}
+            onClick={() => runManageTransition(() => {
+              setSelectedItem(null);
+              setMode("menu");
+            })}
             style={{
               padding: "8px 10px",
               background: "#1d1d1d",

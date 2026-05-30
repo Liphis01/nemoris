@@ -435,11 +435,17 @@ export default function ManageInspector({
     if (!selectedNextReview) return;
 
     if (requestManageTransition) {
-      requestManageTransition(() => onOpenInCalendar?.(selectedItem));
+      requestManageTransition(() => {
+        onOpenInCalendar?.(selectedItem);
+        setSelectedItem(null);
+        setEditingZone?.(null);
+      });
       return;
     }
 
     onOpenInCalendar?.(selectedItem);
+    setSelectedItem(null);
+    setEditingZone?.(null);
   }
 
   if (selectedIsMapZone || isMapGroup) {
