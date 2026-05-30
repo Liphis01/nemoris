@@ -7,6 +7,45 @@ import {
   primaryButtonStyle
 } from "./QuestionEditorStyles";
 
+const typeChipStyles = {
+  text: {
+    label: "TEXT",
+    background: "#163b63",
+    color: "#5eb6ff"
+  },
+  timeline: {
+    label: "TIMELINE",
+    background: "#2b2047",
+    color: "#c4b5fd"
+  },
+  map: {
+    label: "MAP",
+    background: "#1f3d2a",
+    color: "#75d991"
+  }
+};
+
+function QuestionTypeChip({ type }) {
+  const typeStyle = typeChipStyles[type] || typeChipStyles.text;
+
+  return (
+    <div
+      style={{
+        alignSelf: "flex-start",
+        background: typeStyle.background,
+        borderRadius: "999px",
+        color: typeStyle.color,
+        fontSize: "10px",
+        fontWeight: "700",
+        lineHeight: 1,
+        padding: "4px 7px"
+      }}
+    >
+      {typeStyle.label}
+    </div>
+  );
+}
+
 export function QuestionEditorShell({
   heading,
   meta,
@@ -34,9 +73,7 @@ export function QuestionEditorShell({
             {heading}
           </div>
           {meta && (
-            <div style={labelStyle}>
-              {meta}
-            </div>
+            <QuestionTypeChip type={meta} />
           )}
         </div>
 

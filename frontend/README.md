@@ -2,7 +2,11 @@
 
 
 
-remettre les chips dans les créations de questions
+enlever le zoom quand je clique sur une zone dans manage
+filtrer en fonction du type de questions dans manage
+revoir la timeline pour les intervalles
+garder la même taille de fenetre pour les maps dans la review
+cliquer sur une zone de la map dans le recap scroll à la zone correspondante
 
 
 
@@ -27,6 +31,8 @@ color: "#ff85c2",
 - hover un nom trop long doit l'afficher
 - passer automatiquement au recap de map quand on a tout trouvé
 - "#" vide pour les questions texte dans review
+- réaligner les titres des colonnes dans le recap
+- cliquer sur "zoom restante" devrait garder le focus sur la zone d'input
 
 ## features
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place
@@ -59,6 +65,8 @@ color: "#ff85c2",
 - faire un bouton toggle pour l'era dans la preview
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - mettre un menu dans la preview quand je clique sur créer question pour demander quel type de question je veux créer
+- pouvoir revenir en arrière dans la review
+- pouvoir trier les réponses dans le recap de map
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
