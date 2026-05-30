@@ -20,7 +20,6 @@ color: "#ff85c2",
 - recentrer les svg
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - le texte des cards est décalé vers la droite (à cause du MAP)
-- on peut ajouter des tags vides ("")
 - quand on créé une question texte, il faudrait afficher la preview de la question après la création au lieu de rester sur la page de création (et quand on supprime la question il faut fermer la preview au lieu de revenir sur la création de question)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après

@@ -63,6 +63,17 @@ function getDifficultyScore(item, historyStats) {
 }
 
 
+function buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet) {
+  const initial = {};
+
+  reviewZones.forEach(item => {
+    initial[item.question_id] = foundQuestionIdSet.has(item.question_id) ? 2 : 0;
+  });
+
+  return initial;
+}
+
+
 export function useMapReview(reviewZones, onComplete) {
   // This hook turns a runtime map group into an interactive recall session:
   // matching typed answers, tracking found zones, then sending per-zone grades.
@@ -153,11 +164,29 @@ export function useMapReview(reviewZones, onComplete) {
     [reviewZones]
   );
 
+  useEffect(() => {
+    if (showRecap || reviewZones.length === 0) return;
+
+    const nextFoundQuestionIdSet = new Set(foundQuestionIds);
+    const allZonesFound = reviewZones.every(item =>
+      nextFoundQuestionIdSet.has(item.question_id)
+    );
+
+    if (!allZonesFound) return;
+
+    setQualityByQuestionId(
+      buildInitialQualityByQuestionId(reviewZones, nextFoundQuestionIdSet)
+    );
+    setShowRecap(true);
+  }, [foundQuestionIds, reviewZones, showRecap]);
+
   function markFound(item) {
     // Do not count a zone twice if the user types an alias after clicking it.
     if (!item || foundQuestionIdSet.has(item.question_id)) return;
 
-    setFoundQuestionIds(prev => [...prev, item.question_id]);
+    setFoundQuestionIds(prev =>
+      prev.includes(item.question_id) ? prev : [...prev, item.question_id]
+    );
     setCorrectFlashId(Date.now());
     setIncorrectFlashId(0);
   }
@@ -199,13 +228,9 @@ export function useMapReview(reviewZones, onComplete) {
   function finishMap() {
     // Initial recap grades are optimistic: found zones are easy, missed zones
     // are failed. The user can adjust before submitting.
-    const initial = {};
-
-    reviewZones.forEach(item => {
-      initial[item.question_id] = foundQuestionIdSet.has(item.question_id) ? 2 : 0;
-    });
-
-    setQualityByQuestionId(initial);
+    setQualityByQuestionId(
+      buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet)
+    );
     setShowRecap(true);
   }
 
