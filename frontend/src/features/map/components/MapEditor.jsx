@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
 import {
   disabledSaveButtonStyle,
+  pendingSaveDotStyle,
   pendingSaveButtonStyle
 } from "../../manage/components/QuestionEditorStyles";
 import MapFileInput from "./MapFileInput";
@@ -895,6 +896,9 @@ export default function MapEditor({
                 borderRadius: "8px"
               }}
             >
+              {hasPendingMapChanges && (
+                <span aria-hidden="true" style={pendingSaveDotStyle} />
+              )}
               Enregistrer
             </button>
           </div>

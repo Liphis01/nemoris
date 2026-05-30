@@ -5,6 +5,7 @@ import {
   inputStyle,
   labelStyle,
   panelStyle,
+  pendingSaveDotStyle,
   pendingSaveButtonStyle,
   primaryButtonStyle
 } from "./QuestionEditorStyles";
@@ -228,6 +229,7 @@ export function QuestionEditorActions({
     : hasUnsavedChanges
       ? pendingSaveButtonStyle
       : primaryButtonStyle;
+  const showPendingDot = hasUnsavedChanges && !isSubmitDisabled;
 
   return (
     <div
@@ -246,6 +248,9 @@ export function QuestionEditorActions({
         title={isSubmitDisabled ? "Aucune modification à enregistrer" : undefined}
         style={submitStyle}
       >
+        {showPendingDot && (
+          <span aria-hidden="true" style={pendingSaveDotStyle} />
+        )}
         {submitLabel}
       </button>
 

@@ -40,12 +40,25 @@ export const primaryButtonStyle = {
 
 export const pendingSaveButtonStyle = {
   ...primaryButtonStyle,
-  background: "linear-gradient(180deg, #5a3f12 0%, #362712 100%)",
-  border: "1px solid #facc15",
-  boxShadow: "0 0 0 3px rgba(250, 204, 21, 0.12), 0 10px 24px rgba(0, 0, 0, 0.28)",
-  color: "#fff3b8",
+  alignItems: "center",
+  background: "linear-gradient(180deg, #1f1d17 0%, #171615 100%)",
+  border: "1px solid #d6a91c",
+  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 3px rgba(250, 204, 21, 0.08)",
+  color: "#ffe58a",
+  display: "inline-flex",
+  gap: "8px",
   fontWeight: "700",
+  justifyContent: "center",
   transition: "background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, opacity 0.16s ease"
+};
+
+export const pendingSaveDotStyle = {
+  background: "#facc15",
+  borderRadius: "999px",
+  boxShadow: "0 0 10px rgba(250, 204, 21, 0.58)",
+  flex: "0 0 auto",
+  height: "7px",
+  width: "7px"
 };
 
 export const disabledSaveButtonStyle = {
