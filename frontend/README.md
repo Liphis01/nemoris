@@ -25,9 +25,6 @@ color: "#ff85c2",
 - dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après
 - le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
 - hover un nom trop long doit l'afficher
-- passer automatiquement au recap de map quand on a tout trouvé
-- réaligner les titres des colonnes dans le recap
-- cliquer sur "zoom restante" devrait garder le focus sur la zone d'input
 
 ## features
 - quand on essaye de créer une question map, ça met sur la création de groupe de map à la place

@@ -686,14 +686,21 @@ const recapTableStyle = {
   background: "#111"
 };
 
+const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 124px";
+const recapTableGap = "10px";
+const recapTablePadding = "10px 14px";
+const recapStatusStripeBorder = "3px solid transparent";
+
 const recapTableHeaderStyle = {
   display: "grid",
-  gridTemplateColumns: "minmax(150px, 1.35fr) 94px 86px 124px",
-  gap: "10px",
+  gridTemplateColumns: recapTableGridColumns,
+  gap: recapTableGap,
   alignItems: "center",
-  padding: "10px 14px",
+  padding: recapTablePadding,
   background: "#151515",
   borderBottom: "1px solid #262626",
+  borderLeft: recapStatusStripeBorder,
+  boxSizing: "border-box",
   color: "#777",
   fontSize: "11px",
   fontWeight: "700",
@@ -724,14 +731,15 @@ const recapSectionStyle = {
 
 const recapRowStyle = {
   display: "grid",
-  gridTemplateColumns: "minmax(150px, 1.35fr) 94px 86px 124px",
-  gap: "10px",
+  gridTemplateColumns: recapTableGridColumns,
+  gap: recapTableGap,
   alignItems: "center",
   width: "100%",
   minHeight: "58px",
-  padding: "10px 12px",
+  padding: recapTablePadding,
   background: "#181818",
   border: "0",
+  borderLeft: recapStatusStripeBorder,
   borderRadius: 0,
   color: "#e5e5e5",
   cursor: "pointer",
