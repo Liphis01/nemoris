@@ -10,6 +10,7 @@
 - ajouter une recherche dans calender
 - mettre des tags sur les groupes les propage aux questions
 - ajouter un timer pour les questions
+- enlever le type modifiable dans les questions maps
 
 ## bugs
 - bug des images + trouver comment afficher l'image dans les cards de manage

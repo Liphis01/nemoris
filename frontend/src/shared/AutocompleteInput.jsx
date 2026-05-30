@@ -17,6 +17,7 @@ function splitLayoutStyle(style = {}) {
 
   return {
     inputStyle: {
+      boxSizing: "border-box",
       ...inputStyle,
       width: "100%"
     },
