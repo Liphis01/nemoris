@@ -17,16 +17,21 @@ function answerLabel(question) {
 }
 
 function historyLabel(quality) {
-  if (quality === 0) return "Raté";
-  if (quality === 1) return "Fragile";
-  if (quality === 2) return "Réussi";
+  const value = Number(quality);
+  if (value === 0) return "Faux";
+  if (value === 1) return "Dur";
+  if (value === 2) return "Bon";
+  if (value === 3) return "Facile";
   return "Revu";
 }
 
 function historyColor(quality) {
-  if (quality === 0) return "#ff9c9c";
-  if (quality === 1) return "#ffcc7a";
-  return "#7ee2a8";
+  const value = Number(quality);
+  if (value === 0) return "#ff9c9c";
+  if (value === 1) return "#ffcc7a";
+  if (value === 2) return "#8fc7ff";
+  if (value === 3) return "#7ee2a8";
+  return "#8f9aa3";
 }
 
 function parseDateKey(value) {
@@ -331,7 +336,7 @@ export default function CalendarGroupRecap({
                   }}
                   style={manageButtonStyle}
                 >
-                  Gérer
+                  Gérer dans Manage ↗
                 </button>
               </div>
             </div>

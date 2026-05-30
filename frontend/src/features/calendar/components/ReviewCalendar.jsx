@@ -122,16 +122,21 @@ function typeBadgeStyle(type) {
 }
 
 function historyLabel(quality) {
-  if (quality === 0) return "Raté";
-  if (quality === 1) return "Fragile";
-  if (quality === 2) return "Réussi";
+  const value = Number(quality);
+  if (value === 0) return "Faux";
+  if (value === 1) return "Dur";
+  if (value === 2) return "Bon";
+  if (value === 3) return "Facile";
   return "Revu";
 }
 
 function historyColor(quality) {
-  if (quality === 0) return "#ff9c9c";
-  if (quality === 1) return "#ffcc7a";
-  return "#7ee2a8";
+  const value = Number(quality);
+  if (value === 0) return "#ff9c9c";
+  if (value === 1) return "#ffcc7a";
+  if (value === 2) return "#8fc7ff";
+  if (value === 3) return "#7ee2a8";
+  return "#8f9aa3";
 }
 
 function addEvent(result, event) {
@@ -267,12 +272,11 @@ function EventCard({
   const isHistory = event.kind === "history";
 
   return (
-    <button
-      type="button"
+    <div
       ref={cardRef}
-      onClick={() => onOpenQuestion?.(question)}
       style={{
         width: "100%",
+        boxSizing: "border-box",
         padding: "11px 12px",
         borderRadius: "12px",
         border: isSelected
@@ -291,11 +295,9 @@ function EventCard({
           : "none",
         marginBottom: "8px",
         textAlign: "left",
-        cursor: "pointer",
         font: "inherit",
         transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
       }}
-      title="Ouvrir dans Manage"
     >
       <div
         style={{
@@ -384,7 +386,18 @@ function EventCard({
           ))}
         </div>
       )}
-    </button>
+
+      <div style={cardFooterStyle}>
+        <span style={cardHintStyle}>Question #{question.id}</span>
+        <button
+          type="button"
+          onClick={() => onOpenQuestion?.(question)}
+          style={cardActionButtonStyle}
+        >
+          Gérer dans Manage ↗
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -429,17 +442,13 @@ function GroupEventCard({
 }) {
   const group = row.group || {};
   const groupType = group.type_group || row.events[0]?.question.type_q || "groupe";
-  const sampleAnswers = row.events
-    .slice(0, 3)
-    .map((event) => dueTitle(event.question));
 
   return (
-    <button
-      type="button"
+    <div
       ref={cardRef}
-      onClick={() => onOpenGroup?.(row)}
       style={{
         width: "100%",
+        boxSizing: "border-box",
         padding: "11px 12px",
         borderRadius: "12px",
         border: isSelected
@@ -452,11 +461,9 @@ function GroupEventCard({
           : "none",
         marginBottom: "8px",
         textAlign: "left",
-        cursor: "pointer",
         font: "inherit",
         transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
       }}
-      title="Voir le récap du groupe"
     >
       <div
         style={{
@@ -513,23 +520,21 @@ function GroupEventCard({
         {group.name || `Groupe #${row.groupId}`}
       </div>
 
-      {sampleAnswers.length > 0 && (
-        <div
-          style={{
-            color: "#888",
-            fontSize: "12px",
-            lineHeight: 1.35,
-            marginTop: "6px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
-          }}
+      <div style={groupSummaryStyle}>
+        {row.events.length} réponse{row.events.length > 1 ? "s" : ""} dans ce groupe
+      </div>
+
+      <div style={cardFooterStyle}>
+        <span style={cardHintStyle}>Groupe #{row.groupId}</span>
+        <button
+          type="button"
+          onClick={() => onOpenGroup?.(row)}
+          style={cardActionButtonStyle}
         >
-          {sampleAnswers.join(" · ")}
-          {row.events.length > sampleAnswers.length && ` · +${row.events.length - sampleAnswers.length}`}
-        </div>
-      )}
-    </button>
+          Récap
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -788,7 +793,7 @@ export default function ReviewCalendar({
     >
       <div
         style={{
-          maxWidth: activeGroupRow ? "1480px" : "1180px",
+          maxWidth: activeGroupRow ? "1480px" : "1240px",
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
@@ -900,7 +905,7 @@ export default function ReviewCalendar({
             display: "grid",
             gridTemplateColumns: activeGroupRow
               ? "minmax(0, 1fr) minmax(520px, 0.72fr)"
-              : "minmax(0, 1fr) 360px",
+              : "minmax(0, 1fr) 420px",
             gap: "18px",
             alignItems: "start"
           }}
@@ -1399,6 +1404,40 @@ const smallButtonStyle = {
   cursor: "pointer",
   fontSize: "13px",
   padding: "0 12px"
+};
+
+const cardFooterStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "8px",
+  justifyContent: "space-between",
+  marginTop: "10px"
+};
+
+const cardHintStyle = {
+  color: "#666",
+  fontSize: "11px"
+};
+
+const cardActionButtonStyle = {
+  background: "#202020",
+  border: "1px solid #363636",
+  borderRadius: "8px",
+  color: "#ddd",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: "800",
+  padding: "6px 10px"
+};
+
+const groupSummaryStyle = {
+  color: "#888",
+  fontSize: "12px",
+  lineHeight: 1.35,
+  marginTop: "6px",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
 };
 
 const backButtonStyle = {
