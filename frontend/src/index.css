@@ -64,11 +64,11 @@ body {
   background-clip: padding-box;
 }
 
-.map-editor-tag-strip {
+.map-editor-chip-strip {
   -ms-overflow-style: none;
 }
 
-.map-editor-tag-strip::-webkit-scrollbar {
+.map-editor-chip-strip::-webkit-scrollbar {
   display: none;
 }
 

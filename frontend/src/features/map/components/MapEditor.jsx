@@ -103,7 +103,7 @@ export default function MapEditor({
     );
   }
 
-  function handleGroupTagWheel(event) {
+  function handleHorizontalChipWheel(event) {
     const strip = event.currentTarget;
     const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
 
@@ -565,8 +565,8 @@ export default function MapEditor({
                   }}
                 >
                   <div
-                    className="map-editor-tag-strip"
-                    onWheel={handleGroupTagWheel}
+                    className="map-editor-chip-strip"
+                    onWheel={handleHorizontalChipWheel}
                     style={{
                       display: "flex",
                       flexWrap: "nowrap",
@@ -822,40 +822,89 @@ export default function MapEditor({
                 }}
               />
 
-              {/* TAGS */}
+              {/* ALIASES */}
               <div
                 style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                  marginBottom: "10px"
+                  marginBottom: "10px",
+                  minWidth: 0,
+                  position: "relative"
                 }}
               >
-                {(editingZone.data?.aliases || []).map((alias, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      background: "#333",
-                      padding: "5px 8px",
-                      borderRadius: "6px",
-                      display: "flex",
-                      gap: "6px",
-                      alignItems: "center"
-                    }}
-                  >
-                    <span>{alias}</span>
-
-                    <span
-                      onClick={() => removeAlias(index)}
+                <div
+                  className="map-editor-chip-strip"
+                  onWheel={handleHorizontalChipWheel}
+                  style={{
+                    display: "flex",
+                    flexWrap: "nowrap",
+                    gap: "6px",
+                    minHeight: "27px",
+                    minWidth: 0,
+                    overscrollBehavior: "contain",
+                    overflowX: "auto",
+                    overflowY: "hidden",
+                    paddingRight: "24px",
+                    scrollbarWidth: "none"
+                  }}
+                >
+                  {(editingZone.data?.aliases || []).map((alias, index) => (
+                    <div
+                      key={index}
                       style={{
-                        cursor: "pointer",
-                        color: "#999"
+                        alignItems: "center",
+                        background: "#333",
+                        borderRadius: "6px",
+                        display: "inline-flex",
+                        flex: "0 0 auto",
+                        gap: "6px",
+                        maxWidth: "150px",
+                        padding: "5px 8px"
                       }}
                     >
-                      ✕
-                    </span>
-                  </div>
-                ))}
+                      <span
+                        title={alias}
+                        style={{
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {alias}
+                      </span>
+
+                      <button
+                        type="button"
+                        aria-label={`Retirer l'alias ${alias}`}
+                        onClick={() => removeAlias(index)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "#999",
+                          cursor: "pointer",
+                          flexShrink: 0,
+                          lineHeight: 1,
+                          padding: 0
+                        }}
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {(editingZone.data?.aliases || []).length > 0 && (
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      background: "linear-gradient(90deg, rgba(24, 24, 24, 0), #181818 82%)",
+                      bottom: 0,
+                      pointerEvents: "none",
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                      width: "28px"
+                    }}
+                  />
+                )}
               </div>
 
               <input
