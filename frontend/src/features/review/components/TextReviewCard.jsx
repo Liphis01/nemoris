@@ -70,7 +70,7 @@ export default function TextReviewCard({
                             fontSize: "13px"
                         }}
                     >
-                        Question #{q.id}
+                        Question #{q.question_id ?? q.id}
                     </div>
 
                 </div>

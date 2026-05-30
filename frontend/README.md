@@ -27,7 +27,6 @@ color: "#ff85c2",
 - le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
 - hover un nom trop long doit l'afficher
 - passer automatiquement au recap de map quand on a tout trouvé
-- "#" vide pour les questions texte dans review
 - réaligner les titres des colonnes dans le recap
 - cliquer sur "zoom restante" devrait garder le focus sur la zone d'input
 
