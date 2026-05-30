@@ -1,9 +1,5 @@
 # TODO
 
-
-changer l'alignement du hover dans manage en horizontal (cf codex: show full hover text)
-
-
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
 - dans la review, quand j'utilise le pavé numérique, je vois le chiffre dans l'input de la map après

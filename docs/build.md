@@ -1,45 +1,23 @@
-# Build Guide
+# Build And Run
 
-This project can be run as a production web app or exported as a portable
-desktop folder.
+The app runs as a Vite/FastAPI dev pair, a production web app, or a portable
+PyInstaller folder.
 
-The frontend is built with Vite. In production, API calls are relative, so the
-FastAPI backend serves both the API and the generated `frontend/dist` files.
+## Development
 
-## Ubuntu Portable Build
-
-Use the Linux packaging script from the project root:
+From the project root:
 
 ```bash
-./package-linux.sh
+./start.sh
 ```
 
-The script:
-
-1. builds the Vite frontend in `frontend/dist`
-2. prepares `backend/venv`
-3. installs backend requirements and PyInstaller
-4. bundles `backend/run_desktop.py`
-5. copies writable app data into the output folder
-
-The output folder is:
-
-```bash
-backend/dist/QuizApp/
-```
-
-Run the packaged app with:
-
-```bash
-backend/dist/QuizApp/QuizApp
-```
-
-When exporting the app, copy the whole `backend/dist/QuizApp` folder. The
-`_internal` folder, `questions.db`, and `static` folder are part of the app.
+The script stops old processes on ports `8000` and `5173`, starts the backend
+with `uvicorn app.main:app --reload`, starts Vite, and opens
+`http://localhost:5173`. It expects `backend/venv` to exist.
 
 ## Production Web Run
 
-Use this when you want the built app locally without a PyInstaller package:
+Use this when you want FastAPI to serve the built frontend locally:
 
 ```bash
 cd frontend
@@ -55,22 +33,41 @@ cd ..
 ./start-prod.sh
 ```
 
-Then open:
-
-```text
-http://localhost:8000
-```
-
-Set a different port with:
+Open `http://localhost:8000`. To change the port:
 
 ```bash
 QUIZ_APP_PORT=8765 ./start-prod.sh
 ```
 
+In production, frontend API calls are relative and FastAPI serves
+`frontend/dist`.
+
+## Linux Portable Build
+
+From the project root:
+
+```bash
+./package-linux.sh
+```
+
+The script builds Vite, prepares `backend/venv`, installs PyInstaller, bundles
+`backend/run_desktop.py`, and copies writable app data.
+
+Output:
+
+```bash
+backend/dist/QuizApp/
+```
+
+Run:
+
+```bash
+backend/dist/QuizApp/QuizApp
+```
+
 ## Windows Portable Build
 
-Build the Windows executable on Windows. PyInstaller output is OS-specific, so
-an Ubuntu or WSL build does not create a Windows `.exe`.
+Build on Windows because PyInstaller output is OS-specific.
 
 Prerequisites:
 
@@ -90,29 +87,23 @@ If PowerShell blocks the script:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-The output folder is:
+Output:
 
 ```text
 backend\dist\QuizApp\
 ```
 
-Run the packaged app with:
+Run:
 
 ```powershell
 backend\dist\QuizApp\QuizApp.exe
 ```
 
-Export the whole `QuizApp` folder, not only the `.exe`.
+## App Data And Tests
 
-## Gotchas
-
-- `backend/questions.db` is local app data and is ignored by git. The portable
-  packaging scripts require it so the exported app has a database to use.
-- `backend/static/` contains uploaded media and is ignored by git. If it exists,
-  packaging copies it into the exported app.
-- Build Linux packages on the oldest Ubuntu version you want to support when
-  compatibility matters.
-- In WSL or headless Linux, the automatic browser open can fail while the app
-  server still starts normally.
-- Backend tests require `pytest`, but `pytest` is not currently part of
-  `backend/requirements.txt`.
+- `backend/questions.db` is local data and is ignored by git. Portable builds
+  require it.
+- `backend/static/` contains uploaded media and is copied into portable builds
+  when present.
+- Export the whole `QuizApp` output folder, not only the executable.
+- Backend tests live in `backend/tests`. Install `pytest` separately if needed.

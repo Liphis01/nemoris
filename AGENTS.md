@@ -1,293 +1,79 @@
-# Quiz App Architecture
+# Quiz App Agent Notes
 
-## Project Goal
+## Purpose
 
-This project is a personal knowledge/review application inspired by:
-- spaced repetition systems
-- spreadsheet-based knowledge management
-- Obsidian-like exploration
+Personal knowledge/review app combining spaced repetition, spreadsheet-like
+editing, and visual exploration. Prioritize fast review, fast browsing, embedded
+editors, and quick grouped-content inspection.
 
-The app must support:
-- fast reviewing
-- fast editing
-- visual exploration of knowledge
-- grouped learning (maps, timelines, etc.)
+## Current Shape
 
-The user must be able to:
-- review efficiently
-- browse knowledge quickly
-- visually inspect grouped content
+- Frontend: React + Vite in `frontend/src/features/{manage,map,review,timeline,calendar,menu}` plus `shared`.
+- Backend: FastAPI + SQLAlchemy in `backend/app/{routers,services}`; keep `main.py` thin.
+- Run dev with `./start.sh`. Packaging notes live in `docs/build.md`.
+- Backend tests are in `backend/tests`; `pytest` may need to be installed separately.
 
-The Manage UI is intended to progressively evolve toward:
-- Obsidian/Figma-like knowledge management
-- embedded editors
-- fast navigation
-- spreadsheet-level editing speed
+## Core Data Rules
 
----
+- `Question` is always one atomic review item with independent `Progress`.
+- Core question fields: `question`, `answer`, `type_q`, `media`, `tags`, `group_id`, `data`.
+- Collections are many-to-many; do not duplicate them in `data`.
+- Use `media`, `group_id`, and `data`; never reintroduce old `fichier` naming.
+- `QuestionGroup` stores presentation metadata only: `type_group`, `name`, `media`, `data`.
+- No group-level progress. Do not create database question types like `map_group` or `timeline_group`.
+- Prefer `Question.data` or `QuestionGroup.data` for type-specific metadata before adding SQL columns.
 
-# Tech Stack
+## Question Types
 
-Frontend:
-- React
-- Vite
+- `text`: normal prompt/answer review.
+- `map`: one SVG zone per `Question`; map group metadata is `QuestionGroup(type_group="map")`. Zone `code` and `aliases` live in `question.data`.
+- `timeline`: one date item per `Question`; it must not belong to a group. `data.timeline` has `kind` (`point` or `interval`), `start`, optional `end`, and precision `year`/`month`/`day`. Year 0 is invalid; BC years are negative.
 
-Backend:
-- FastAPI
-- SQLAlchemy
+Runtime grouped objects may exist for review UI payloads, but they are never
+persisted as questions.
 
----
+## Review And Scheduling
 
-# Core Principles
+- `/review` selects due/new atomic questions and builds frontend-ready runtime groups. Review filtering is no longer a main `/review` concern.
+- Backend owns grouping and serializers; frontend should render returned shapes instead of rebuilding grouping rules.
+- Text failures, failed map zones, and failed timeline items are requeued within the frontend session.
+- Scheduling lives in `scheduler.py` and `services/progress.py`: keep FSRS-inspired intervals, history, load smoothing, type mixing, and `catchup_daily_target` rebalancing behavior intact.
 
-## Questions are ALWAYS atomic
+## Manage UX
 
-A Question represents ONE reviewable item.
+- Manage is a spreadsheet plus knowledge browser, not an admin CRUD screen.
+- Keep the left filters/sort sidebar, center list/cards, and right `ManageInspector` embedded editor direction.
+- Preserve inline/embedded edits, keyboard-friendly navigation, and autosave of pending existing-item edits before selection or mode changes.
+- Keep question/group filtering and sorting in dedicated utils; avoid duplicating that logic in components.
+- Deleting a group deletes its questions too; keep frontend caches consistent after mutations.
 
-Examples:
-- one country
-- one capital
-- one map zone
-- one timeline event
+## Map And Timeline UX
 
----
+- Map answer matching ignores case, accents, and hyphen/space differences.
+- Map review sends one quality per zone; recap appears after all zones are found and keeps per-zone progress independent.
+- Keep map input focus stable around buttons, and prevent global review shortcuts from leaking into map/timeline/input fields.
+- Timeline date math must stay consistent between `backend/app/services/timeline.py` and `frontend/src/features/timeline/timelineUtils.js`.
 
-# Database Model
+## Code Style
 
-Every Question has:
+- Make minimal, explicit, behavior-preserving changes.
+- Prefer existing feature folders, hooks, serializers, and services over new abstractions.
+- Avoid giant components, deep prop chains, N+1 queries, hidden review logic, and unrelated refactors.
+- Use `joinedload`/bulk queries for backend payloads.
+- Preserve existing French UI copy unless asked otherwise.
+- Comments should explain non-obvious behavior only.
 
-- question
-- answer
-- type_q
-- media
-- tags
-- group_id
-- data
+## Before Refactoring
 
-Optional fields MAY exist if useful.
+1. Explain the plan first.
+2. Keep behavior stable and changes scoped.
+3. Avoid introducing new concepts unless requested.
 
----
+## Recent Context Since Last AGENTS.md Update
 
-# Question Types
+Last AGENTS.md commit: `c3884af` on 2026-05-19.
 
-## text
-
-Standard question/answer review.
-
-Examples:
-- capital cities
-- vocabulary
-- history facts
-
-## map
-
-A single map zone.
-
-A map review session groups multiple map questions sharing the same group_id.
-
-There is NEVER a "map_group" database question type.
-
-"map_group" may only exist as a temporary frontend runtime aggregation object if absolutely necessary.
-
----
-
-# Group System
-
-Questions sharing a group_id belong to the same visual/grouped review.
-
-Examples:
-- countries on same SVG map
-- timeline events
-- anatomy diagrams
-
-Groups are runtime organizational structures.
-
-Questions remain independent review items.
-
-Each question has independent progress.
-
----
-
-# Progress Rules
-
-Progress is ALWAYS attached to individual questions.
-
-Map zones must have independent spaced repetition progress.
-
-Grouped reviews are only UI/runtime aggregation.
-
----
-
-# Media Rules
-
-media replaces old "fichier" field.
-
-media may contain:
-- image path
-- svg filename
-- audio file
-- video file
-
-Do NOT reintroduce "fichier".
-
----
-
-# Map Rules
-
-Map-specific data belongs in:
-- Question.data
-
-Examples:
-- SVG code (unique identifier for map zones)
-- aliases
-- extra metadata
-
-Avoid multiplying dedicated SQL columns unless necessary.
-
-Preferred structure:
-
-```json
-data = {
-  "code": "dep_75",
-  "aliases": ["paris", "paris city"]
-}
-```
----
-
-# Frontend Architecture
-
-Keep components focused and small.
-
-Avoid giant files.
-
-Preferred structure:
-
-components/
-  manage/
-  quiz/
-
----
-
-# Manage UI Philosophy
-
-Manage is BOTH:
-- a spreadsheet
-- a knowledge browser
-
-The user must be able to:
-- inspect information instantly
-- edit quickly
-- navigate visually
-
-The UI should progressively evolve toward:
-- split panels
-- embedded editors
-- keyboard-friendly workflows
-- graph-like exploration
-
----
-
-# Important Constraints
-
-## Do NOT invent new question models
-
-Do NOT create:
-- duplicate structures
-- parallel APIs
-- temporary database models
-
----
-
-# Refactor Rules
-
-Prefer:
-- minimal changes
-- preserving behavior
-- incremental refactors
-
-Avoid:
-- massive rewrites
-- unrelated changes
-- hidden feature additions
-
----
-
-# Backend Rules
-
-Prefer:
-- joinedload
-- minimizing SQL queries
-- serializers
-- explicit runtime aggregation
-
-Avoid:
-- N+1 queries
-- duplicated review logic
-
----
-
-# Frontend Rules
-
-Prefer:
-- reusable components
-- local state clarity
-- embedded panels
-- inline editing
-
-Avoid:
-- deeply nested props
-- giant stateful components
-- duplicated rendering logic
-
----
-
-# Review Endpoint Rules
-
-/review is responsible for:
-- filtering
-- due question selection
-- runtime grouping
-
-The database stores atomic questions only.
-
----
-
-# Naming Conventions
-
-Use:
-- media
-- group_id
-- data
-
-Avoid old names:
-- fichier
-- map_group database type
-
----
-
-# Expected Coding Style
-
-- explicit
-- readable
-- minimal magic
-- low abstraction unless justified
-
-Favor maintainability over cleverness.
-
----
-
-# Running the app
-
-To run the app you can use the provided .sh file:
-
-```bash
-./start.sh
-```
-
-# Before Refactoring
-
-Always:
-1. explain the plan first
-2. preserve behavior
-3. minimize changes
-4. avoid introducing new concepts unless requested
+Since then: timeline review/editing was added; scheduling smoothing and catch-up
+rebalancing were added; Manage gained sorting/type filters/autosave/richer hover
+previews; map review gained recap/focus/hover polish; packaging docs/scripts
+were added.

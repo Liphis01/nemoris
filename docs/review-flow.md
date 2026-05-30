@@ -1,246 +1,142 @@
 # Review Flow
 
-## Purpose
+## Responsibilities
 
-The review system is responsible for:
-- selecting due questions
-- grouping related questions dynamically
-- returning frontend-ready review objects
-- preserving independent spaced repetition progress
+The review backend selects due/new atomic questions, builds frontend-ready
+runtime review objects, and updates independent progress for every answered
+question. Review filtering is not a main `/review` responsibility anymore.
 
-The review system must remain:
-- predictable
-- scalable
-- database-efficient
+## Loading A Session
 
----
+`GET /review` loads questions that have no progress, no `next_review`, or
+`next_review <= today`. It uses joined progress/group data, then returns a mixed
+queue:
 
-# Core Principle
+- `text`: one question item.
+- `map`: one runtime group per due map group, with only due zone questions in
+  `items`.
+- `timeline`: one runtime timeline screen containing due timeline items.
 
-The database stores ONLY atomic questions.
+Runtime grouped objects are response shapes only. They are never stored as
+questions and never own progress.
 
-The `/review` endpoint dynamically aggregates grouped review sessions.
+## Runtime Shapes
 
-Examples:
-- map reviews
-- future timeline reviews
-- future diagram reviews
+Text items use `question_id`, prompt, answer, media, tags, and progress.
 
-Grouping exists ONLY at runtime.
-
----
-
-# Review Lifecycle
-
-## Step 1 — Load Due Questions
-
-The backend selects:
-- questions with due progress
-- OR questions with no progress yet
-
-Example logic:
-
-```python
-or_(
-    Progress.id == None,
-    Progress.next_review == None,
-    Progress.next_review <= today
-)
-```
-
-This ensures:
-
-- new questions appear immediately
-- due questions are reviewed
-- forgotten questions resurface
-
-## Step 2 — Group Runtime Objects
-
-Grouped question types are aggregated dynamically.
-
-Example:
-
-- all map zones sharing the same group_id
-- grouped into one runtime review item
-
-Example runtime object:
-
-```json
-{
-  "type_q": "map",
-  "group_id": 12,
-  "media": "europe.svg",
-  "items": [...]
-}
-```
-
-This object is NOT stored in database.
-
-## Step 3 — Return Frontend Review Items
-
-The frontend receives a mixed review queue:
-
-```json
-[
-  { "type_q": "text" },
-  { "type_q": "text" },
-  { "type_q": "map" }
-]
-```
-
-Each item is frontend-renderable.
-
-# Review Object Types
-
-Text Question
-
-```json
-{
-  "id": 42,
-  "question": "Capital of Japan",
-  "answer": "Tokyo",
-  "type_q": "text"
-}
-```
-
-# Map Group Runtime Object
+Map groups use:
 
 ```json
 {
   "type_q": "map",
   "group_id": 5,
+  "name": "Europe",
   "media": "europe.svg",
   "items": [
     {
-      "id": 1,
-      "question": "France",
-      "data": {
-        "code": "fr"
-      }
+      "question_id": 12,
+      "code": "fr",
+      "label": "France",
+      "aliases": ["republique francaise"],
+      "progress": {}
     }
   ]
 }
 ```
 
-# Important Distinction
-
-## Database Question
-
-Persistent atomic object.
-
-Contains:
-
-- one progress
-- one memory item
-- one reviewable unit
-
-## Runtime Group Object
-
-Temporary UI/review structure.
-
-Contains:
-
-- multiple atomic questions
-- frontend rendering info
-
-Never persisted.
-
-# Progress System
-
-Progress is ALWAYS attached to atomic questions.
-
-Example:
-
-Question	Progress
-France	due
-Germany	mature
-Italy	learning
-
-Even when reviewed together.
-
-# Sending Answers
-
-## Text Questions
-
-Frontend sends:
+Timeline groups use:
 
 ```json
 {
-  "question_id": 42,
-  "quality": 2
+  "type_q": "timeline",
+  "name": "Timeline",
+  "items": [
+    {
+      "question_id": 40,
+      "timeline": {
+        "kind": "point",
+        "start": { "year": 1789, "precision": "year" }
+      },
+      "start_value": 652933,
+      "progress": {}
+    }
+  ],
+  "range": {}
 }
 ```
 
-## Map Reviews
+## Answer Endpoints
 
-Frontend sends per-item results:
+Text review posts one grade:
 
 ```json
+POST /answer
+{ "question_id": 42, "quality": 2 }
+```
+
+Map review posts one grade per atomic zone:
+
+```json
+POST /answer_map
+{ "items": { "12": 2, "13": 0 } }
+```
+
+Timeline review posts one guess per atomic timeline question:
+
+```json
+POST /answer_timeline
 {
   "items": {
-    "12": 2,
-    "13": 1,
-    "14": 0
+    "40": {
+      "start": { "year": 1789, "precision": "year" }
+    }
   }
 }
 ```
 
-Each item updates its own progress independently.
+Qualities are `0 = failed`, `1 = hard`, and `2 = easy`. Missing progress rows
+are created lazily before scheduling is applied.
 
-# Runtime Aggregation Rules
+## Frontend Session Behavior
 
-Aggregation should:
+The frontend renders the returned queue and sends answer payloads. It should not
+rebuild backend grouping rules.
 
-- happen in backend
-- remain explicit
-- avoid frontend reconstruction complexity
+Failures are requeued inside the current session:
 
-Avoid:
+- failed text cards are appended as the same item,
+- failed map zones are wrapped back into the same map runtime shape,
+- failed timeline items are wrapped back into the same timeline runtime shape.
 
-- hidden grouping logic
-- duplicated grouping logic in frontend
+Global review shortcuts must not leak into map, timeline, input, textarea,
+select, or contenteditable targets.
 
-# SQL Efficiency Rules
+## Scheduling
 
-Prefer:
+Scheduling is centralized in `backend/app/scheduler.py` and
+`backend/app/services/progress.py`.
 
-- joinedload
-- outerjoin
-- bulk loading
+Important behavior:
 
-Avoid:
+- New progress starts due today with default stability and difficulty.
+- Every answer appends a history snapshot.
+- `apply_scheduling_batch` computes raw intervals, then smooths the batch
+  against existing daily loads.
+- Longer intervals get scheduling slots first.
+- Daily type loads are considered so review days mix question types.
+- `catchup_daily_target` controls calendar rebalancing when the backlog is too
+  dense.
 
-- N+1 queries
-- per-question fetches
-- repeated group lookups
+Settings and rebalancing endpoints:
 
-# Frontend Responsibilities
+- `GET /review/settings`
+- `PUT /review/settings`
+- `POST /review/rebalance`
+- `GET /review/startup_notice`
 
-Frontend should:
+## Backend Rules
 
-- render review objects
-- manage session state
-- send answer quality
-
-Frontend should NOT:
-
-- rebuild grouped structures
-- infer backend grouping rules
-
-# Future Compatibility
-
-The review flow is designed to support:
-
-- timelines
-- image hotspot quizzes
-- anatomy diagrams
-- audio recognition
-- grouped media reviews
-
-All future grouped systems should follow the SAME runtime aggregation pattern.
-
-# Golden Rule
-
-Review grouping is a VIEW concern.
-
-Progress remains atomic forever.
+- Keep runtime grouping explicit in backend services/serializers.
+- Use joined or bulk queries to avoid N+1 work.
+- Keep progress atomic even when multiple items are answered from one screen.
+- Keep timeline grading and date normalization on the backend authoritative.
