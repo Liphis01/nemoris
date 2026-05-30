@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useLayoutEffect, useRef } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
@@ -98,6 +98,19 @@ export default function MapReview({ group, reviewZones, onComplete }) {
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
+  const foundZoneLabels = useMemo(() => {
+    const labels = {};
+
+    reviewZones.forEach(item => {
+      if (!item.code || !item.label || !foundQuestionIdSet.has(item.question_id)) {
+        return;
+      }
+
+      labels[item.code] = item.label;
+    });
+
+    return labels;
+  }, [foundQuestionIdSet, reviewZones]);
 
   function setRecapRowRef(code) {
     return (element) => {
@@ -290,6 +303,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
               dueItems={dueCodes}
               focusCode={remainingFocusCode}
               focusVersion={focusVersion}
+              zoneLabels={foundZoneLabels}
               onSelect={handleZoneSelect}
             />
           </div>

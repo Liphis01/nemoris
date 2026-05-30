@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const emptyZoneLabels = {};
 
 function normalizeCode(code) {
     // SVG data-code attributes are the stable link between drawn zones and
@@ -22,6 +24,7 @@ export default function SvgMap({
     selected,
     focusCode,
     focusVersion = 0,
+    zoneLabels = emptyZoneLabels,
     onSelect,
     onCodesLoaded
 }) {
@@ -36,6 +39,7 @@ export default function SvgMap({
     const zoneElementsRef = useRef([]);
     const transformRef = useRef({ scale: 1, offset: { x: 0, y: 0 } });
     const [svgVersion, setSvgVersion] = useState(0);
+    const [tooltip, setTooltip] = useState(null);
 
     useEffect(() => {
         // Keep the latest transform available to effects/event handlers that
@@ -67,6 +71,30 @@ export default function SvgMap({
     function handleMouseUp() {
         setIsDragging(false);
     }
+
+    const hideTooltip = useCallback(() => {
+        setTooltip(null);
+    }, []);
+
+    const showTooltip = useCallback((event, label) => {
+        if (!label || !wrapperRef.current) {
+            hideTooltip();
+            return;
+        }
+
+        const rect = wrapperRef.current.getBoundingClientRect();
+        const rawX = event.clientX - rect.left;
+        const rawY = event.clientY - rect.top;
+        const x = Math.min(Math.max(rawX, 28), Math.max(rect.width - 28, 28));
+        const showBelow = rawY < 54;
+
+        setTooltip({
+            label,
+            x,
+            y: showBelow ? rawY + 14 : rawY - 14,
+            placement: showBelow ? "below" : "above"
+        });
+    }, [hideTooltip]);
 
     useEffect(() => {
         let cancelled = false;
@@ -135,28 +163,42 @@ export default function SvgMap({
 
         const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
             el.style.fill = getColor(code);
+            const tooltipLabel = String(zoneLabels[code] || "");
 
             const handleClick = () => {
                 if (code && onSelect) onSelect(code);
             };
 
-            const handleEnter = () => {
+            const handleEnter = (event) => {
                 if (!foundSet.has(code) && !unsavedSet.has(code) && selected !== code) {
                     el.style.fill = "#888";
+                }
+
+                if (tooltipLabel) {
+                    showTooltip(event, tooltipLabel);
+                }
+            };
+
+            const handleMove = (event) => {
+                if (tooltipLabel) {
+                    showTooltip(event, tooltipLabel);
                 }
             };
 
             const handleLeave = () => {
                 el.style.fill = getColor(code);
+                hideTooltip();
             };
 
             el.addEventListener("click", handleClick);
             el.addEventListener("mouseenter", handleEnter);
+            el.addEventListener("mousemove", handleMove);
             el.addEventListener("mouseleave", handleLeave);
 
             return () => {
                 el.removeEventListener("click", handleClick);
                 el.removeEventListener("mouseenter", handleEnter);
+                el.removeEventListener("mousemove", handleMove);
                 el.removeEventListener("mouseleave", handleLeave);
             };
         });
@@ -164,7 +206,18 @@ export default function SvgMap({
         return () => {
             cleanupFns.forEach(fn => fn());
         };
-    }, [svgVersion, found, missed, selected, dueItems, unsaved, onSelect]);
+    }, [
+        svgVersion,
+        found,
+        missed,
+        selected,
+        dueItems,
+        unsaved,
+        zoneLabels,
+        onSelect,
+        showTooltip,
+        hideTooltip
+    ]);
 
     useEffect(() => {
         if (!focusCode || !wrapperRef.current) return;
@@ -255,7 +308,10 @@ export default function SvgMap({
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onMouseLeave={() => {
+                handleMouseUp();
+                hideTooltip();
+            }}
             onContextMenu={(e) => e.preventDefault()}
         >
             <div
@@ -269,6 +325,39 @@ export default function SvgMap({
                     transition: isDragging ? "none" : "transform 0.15s ease-out"
                 }}
             />
+            {tooltip && (
+                <div
+                    style={{
+                        ...mapTooltipStyle,
+                        left: `${tooltip.x}px`,
+                        top: `${tooltip.y}px`,
+                        transform: tooltip.placement === "below"
+                            ? "translate(-50%, 0)"
+                            : "translate(-50%, -100%)"
+                    }}
+                >
+                    {tooltip.label}
+                </div>
+            )}
         </div>
     );
 }
+
+const mapTooltipStyle = {
+    position: "absolute",
+    zIndex: 5,
+    maxWidth: "220px",
+    padding: "7px 10px",
+    borderRadius: "999px",
+    border: "1px solid rgba(126, 226, 168, 0.4)",
+    background: "rgba(14, 18, 16, 0.92)",
+    boxShadow: "0 10px 28px rgba(0, 0, 0, 0.36)",
+    color: "#ecfdf5",
+    fontSize: "12px",
+    fontWeight: "700",
+    lineHeight: "16px",
+    overflow: "hidden",
+    pointerEvents: "none",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap"
+};

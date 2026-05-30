@@ -3,7 +3,6 @@
 
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
-- cliquer sur une zone de la map dans le recap scroll à la zone correspondante
 
 
 
