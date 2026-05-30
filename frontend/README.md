@@ -17,7 +17,6 @@
 - les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
-- le calendrier affiche toutes les erreurs donc on atteint 1000 ultra vite dans les jours
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 
 ## features
@@ -34,6 +33,7 @@
 - faire des propositions existantes pour le média et pous les tags
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - agrandir un peu le recap ?
+- aller voir l'historique d'une seule question
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

@@ -48,6 +48,10 @@ function isNewQuestion(question) {
   return (question.progress?.reps || 0) === 0 && history.length === 0;
 }
 
+function isSuccessfulHistoryEntry(entry) {
+  return Number(entry?.quality) > 0;
+}
+
 function buildCalendarDays(monthDate) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
@@ -330,6 +334,7 @@ export default function ReviewCalendar({
 }) {
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
+  const calendarCardRef = useRef(null);
   const detailListRef = useRef(null);
   const highlightedQuestionRef = useRef(null);
   const [visibleMonth, setVisibleMonth] = useState(
@@ -338,6 +343,7 @@ export default function ReviewCalendar({
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
   const [selectedCalendarQuestionId, setSelectedCalendarQuestionId] = useState(null);
   const [sortMode, setSortMode] = useState("type");
+  const [calendarCardHeight, setCalendarCardHeight] = useState(null);
 
   const newQuestions = useMemo(
     () => questions.filter(isNewQuestion),
@@ -362,6 +368,7 @@ export default function ReviewCalendar({
     () => questions.flatMap((question) =>
       (question.progress?.history || [])
         .filter((entry) => entry.reviewed_on)
+        .filter(isSuccessfulHistoryEntry)
         .map((entry, index) => ({
           id: `history-${question.id}-${entry.reviewed_on}-${index}`,
           dateKey: entry.reviewed_on,
@@ -426,6 +433,29 @@ export default function ReviewCalendar({
     : selectedDateKey === todayKey
       ? "Aujourd'hui"
       : "À venir";
+
+  useLayoutEffect(() => {
+    const calendarCard = calendarCardRef.current;
+    if (!calendarCard) return undefined;
+
+    function updateCalendarCardHeight() {
+      const nextHeight = Math.ceil(calendarCard.getBoundingClientRect().height);
+      setCalendarCardHeight((currentHeight) =>
+        currentHeight === nextHeight ? currentHeight : nextHeight
+      );
+    }
+
+    updateCalendarCardHeight();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(updateCalendarCardHeight);
+      observer.observe(calendarCard);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateCalendarCardHeight);
+    return () => window.removeEventListener("resize", updateCalendarCardHeight);
+  }, []);
 
   useEffect(() => {
     if (!openQuestionId) return;
@@ -606,6 +636,7 @@ export default function ReviewCalendar({
           }}
         >
           <div
+            ref={calendarCardRef}
             style={{
               background: "#181818",
               border: "1px solid #262626",
@@ -833,6 +864,12 @@ export default function ReviewCalendar({
               background: "#181818",
               border: "1px solid #262626",
               borderRadius: "16px",
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              height: calendarCardHeight ? `${calendarCardHeight}px` : undefined,
+              maxHeight: calendarCardHeight ? `${calendarCardHeight}px` : undefined,
+              minHeight: 0,
               overflow: "hidden",
               position: "sticky",
               top: "24px"
@@ -934,7 +971,8 @@ export default function ReviewCalendar({
               className="app-scrollbar"
               ref={detailListRef}
               style={{
-                maxHeight: "620px",
+                flex: 1,
+                minHeight: 0,
                 overflow: "auto",
                 scrollbarGutter: "stable",
                 padding: "10px"
