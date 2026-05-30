@@ -94,8 +94,9 @@ POST /answer_timeline
 }
 ```
 
-Qualities are `0 = failed`, `1 = hard`, and `2 = easy`. Missing progress rows
-are created lazily before scheduling is applied.
+Qualities are `0 = Again/Faux`, `1 = Hard/Dur`, `2 = Good/Bon`, and
+`3 = Easy/Facile`. Missing progress rows are created lazily before scheduling
+is applied.
 
 ## Frontend Session Behavior
 
@@ -118,15 +119,19 @@ Scheduling is centralized in `backend/app/scheduler.py` and
 
 Important behavior:
 
+- Scheduling uses FSRS v6 through `py-fsrs` 6.3.1, with date-level due dates in
+  the app database.
 - New progress starts due today with default stability and difficulty.
 - Every answer appends a history snapshot.
-- `apply_scheduling_batch` computes raw intervals, then smooths the batch
-  against existing daily loads.
+- `apply_scheduling_batch` computes raw FSRS intervals with fuzzing enabled,
+  then smooths the batch against existing daily loads.
 - Longer intervals get scheduling slots first.
 - Daily type loads are considered so review days mix question types.
 - `catchup_daily_target` is an approximate catch-up objective for calendar
   rebalancing. The scheduler allows a 25% proportional tolerance before moving
   overflow later.
+- Startup runs a one-time FSRS v6 migration. Existing history is replayed when
+  possible; otherwise the current scalar progress and due date are preserved.
 
 Settings and rebalancing endpoints:
 

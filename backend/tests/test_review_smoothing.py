@@ -1,6 +1,8 @@
 import unittest
 from datetime import date, timedelta
 
+from fsrs import Rating
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,9 +19,13 @@ from app.routers.review import (
     update_settings
 )
 from app.services.startup import run_startup_rebalance
+from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
 from app.scheduler import (
+    FSRS_VERSION,
+    app_quality_to_fsrs_rating,
     assign_smoothed_schedules,
     choose_smoothed_review_date,
+    legacy_quality_to_fsrs_rating,
     rebalance_review_calendar,
     smoothing_radius_days
 )
@@ -64,6 +70,18 @@ def rebalance_entry(
 
 
 class SchedulerSmoothingTests(unittest.TestCase):
+    def test_app_quality_maps_to_fsrs_ratings(self):
+        self.assertEqual(app_quality_to_fsrs_rating(0), Rating.Again)
+        self.assertEqual(app_quality_to_fsrs_rating(1), Rating.Hard)
+        self.assertEqual(app_quality_to_fsrs_rating(2), Rating.Good)
+        self.assertEqual(app_quality_to_fsrs_rating(3), Rating.Easy)
+
+    def test_legacy_success_mapping_is_type_aware(self):
+        self.assertEqual(legacy_quality_to_fsrs_rating(2, "text"), Rating.Easy)
+        self.assertEqual(legacy_quality_to_fsrs_rating(2, "map"), Rating.Good)
+        self.assertEqual(legacy_quality_to_fsrs_rating(2, "timeline"), Rating.Good)
+        self.assertEqual(legacy_quality_to_fsrs_rating(2, None), Rating.Good)
+
     def test_smoothing_radius_depends_on_interval(self):
         self.assertEqual(smoothing_radius_days(0), 0)
         self.assertEqual(smoothing_radius_days(1), 0)
@@ -353,7 +371,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             (today + timedelta(days=2)).isoformat()
         )
 
-    def test_map_answer_smooths_batch_by_highest_interval_first(self):
+    def test_map_answer_smooths_batch_against_existing_load(self):
         today = date.today()
         low = self.add_progress(1, today, stability=1.5)
         high = self.add_progress(2, today, stability=2.0)
@@ -369,6 +387,40 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(high.next_review, today + timedelta(days=3))
         self.assertEqual(low.next_review, today + timedelta(days=2))
+
+    def test_text_answer_accepts_easy_quality_and_records_fsrs_metadata(self):
+        today = date.today()
+        self.add_question(1, type_q="text")
+        progress = self.add_progress(1, today)
+        self.db.commit()
+
+        response = answer_question(
+            AnswerRequest(question_id=1, quality=3),
+            db=self.db
+        )
+
+        self.assertGreater(response["interval"], 2)
+        self.assertEqual(progress.fsrs_version, FSRS_VERSION)
+        self.assertEqual(progress.fsrs_card["state"], 2)
+        self.assertEqual(progress.history[-1]["quality"], 3)
+        self.assertEqual(progress.history[-1]["fsrs_rating"], 4)
+        self.assertEqual(progress.history[-1]["fsrs_state"], 2)
+
+    def test_answer_quality_validation_accepts_four_ratings(self):
+        self.assertEqual(
+            AnswerRequest(question_id=1, quality=3).quality,
+            3
+        )
+        self.assertEqual(
+            MapAnswerRequest(items={1: 3}).items[1],
+            3
+        )
+
+        with self.assertRaises(ValidationError):
+            AnswerRequest(question_id=1, quality=4)
+
+        with self.assertRaises(ValidationError):
+            MapAnswerRequest(items={1: 4})
 
     def test_timeline_answer_uses_smoothed_date(self):
         today = date.today()
@@ -624,6 +676,55 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(response["moved"], 3)
         self.assertEqual(response["daily_target"], 2)
+
+    def test_fsrs_migration_replays_history_with_type_aware_success(self):
+        today = date(2026, 1, 10)
+        text = self.add_question(1, type_q="text")
+        map_question = self.add_question(2, type_q="map")
+        text_progress = self.add_progress(text.id, today)
+        map_progress = self.add_progress(map_question.id, today)
+        text_progress.history = [
+            {"reviewed_on": "2026-01-01", "quality": 2}
+        ]
+        map_progress.history = [
+            {"reviewed_on": "2026-01-01", "quality": 2}
+        ]
+        self.db.commit()
+
+        result = migrate_progress_to_fsrs_v6(self.db)
+
+        self.assertEqual(result["migrated"], 2)
+        self.assertEqual(result["from_history"], 2)
+        self.assertEqual(text_progress.fsrs_version, FSRS_VERSION)
+        self.assertEqual(map_progress.fsrs_version, FSRS_VERSION)
+        self.assertGreater(text_progress.stability, map_progress.stability)
+        self.assertEqual(text_progress.fsrs_card["state"], 2)
+        self.assertEqual(map_progress.fsrs_card["state"], 2)
+
+    def test_fsrs_migration_backfills_scalar_rows_without_history(self):
+        today = date(2026, 1, 10)
+        due = today + timedelta(days=12)
+        self.add_question(1, type_q="text")
+        progress = self.add_progress(
+            1,
+            due,
+            stability=2.5,
+            difficulty=6.0,
+            reps=3
+        )
+        progress.last_review = today
+        progress.interval = 12
+        self.db.commit()
+
+        result = migrate_progress_to_fsrs_v6(self.db)
+
+        self.assertEqual(result["migrated"], 1)
+        self.assertEqual(result["from_scalars"], 1)
+        self.assertEqual(progress.fsrs_version, FSRS_VERSION)
+        self.assertEqual(progress.fsrs_card["stability"], 2.5)
+        self.assertEqual(progress.fsrs_card["difficulty"], 6.0)
+        self.assertTrue(progress.fsrs_card["due"].startswith(due.isoformat()))
+        self.assertEqual(progress.next_review, due)
 
     def test_review_route_does_not_rebalance_calendar(self):
         today = date.today()

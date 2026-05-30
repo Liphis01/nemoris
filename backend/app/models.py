@@ -127,6 +127,8 @@ class Progress(Base):
     interval = Column(Integer, default=0)
     last_review = Column(Date, nullable=True)
     next_review = Column(Date)
+    fsrs_card = Column(JSON, nullable=True)
+    fsrs_version = Column(String, nullable=True)
     # Append-only review snapshots used by the UI for history/stats. The active
     # scheduling state is stored in the scalar columns above.
     history = Column(JSON, default=list)
@@ -146,8 +148,7 @@ class AppSetting(Base):
 
     key = Column(String, primary_key=True)
 
-    # Small JSON blobs for local app preferences. Review settings currently
-    # store the catch-up target used by backlog rebalancing.
+    # Small JSON blobs for local app preferences and startup migration markers.
     value = Column(JSON, nullable=False, default=dict)
 
 # =========================================================

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal, Any, Dict
+from typing import Annotated, Optional, List, Literal, Any, Dict
 
 
 QuestionType = Literal[
@@ -134,14 +134,14 @@ class SetCollections(BaseModel):
     collection_ids: List[int]
 
 
+AnswerQuality = Annotated[int, Field(ge=0, le=3)]
+
+
 class AnswerRequest(BaseModel):
     question_id: int
 
-    # int between 0 and 2 (0 = wrong, 1 = hard, 2 = easy)
-    quality: int = Field(
-        ge=0,
-        le=2
-    )
+    # 0 = Again/Faux, 1 = Hard/Dur, 2 = Good/Bon, 3 = Easy/Facile
+    quality: AnswerQuality
 
 
 class ReviewSettings(BaseModel):
@@ -152,7 +152,7 @@ class ReviewSettings(BaseModel):
 
 
 class MapAnswerRequest(BaseModel):
-    items: Dict[int, int]
+    items: Dict[int, AnswerQuality]
 
 
 TimelinePrecision = Literal[

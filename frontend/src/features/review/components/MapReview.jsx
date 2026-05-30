@@ -58,11 +58,23 @@ const qualityButtonStyles = {
     color: "#f3d36a"
   },
   2: {
+    background: "#20303a",
+    border: "1px solid #345b7a",
+    color: "#8fc7ff"
+  },
+  3: {
     background: "#3a3420",
     border: "1px solid #2c5c3e",
     color: "#7ee2a8"
   }
 };
+
+const qualityOptions = [
+  { value: 0, icon: "❌", title: "Faux" },
+  { value: 1, icon: "😐", title: "Dur" },
+  { value: 2, icon: "🙂", title: "Bon" },
+  { value: 3, icon: "✅", title: "Facile" }
+];
 
 export default function MapReview({ group, reviewZones, onComplete }) {
   const {
@@ -559,52 +571,36 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                           </div>
 
                           <div style={recapQualityCellStyle}>
-                            {[0, 1, 2].map(qVal => {
+                            {qualityOptions.map(({ value: qVal, icon, title }) => {
 
                               const selected =
                                 qualityByQuestionId[item.question_id] === qVal;
-                              const wasFound = foundQuestionIdSet.has(item.question_id);
-                              const disabled =
-                                (wasFound && qVal === 0) ||
-                                (!wasFound && qVal !== 0);
                               const activeStyle = qualityButtonStyles[qVal];
 
                               return (
                                 <button
                                   key={qVal}
                                   type="button"
-                                  disabled={disabled}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setQuality(item.question_id, qVal);
                                   }}
                                   style={{
                                     ...recapQualityButtonStyle,
-                                    cursor: disabled ? "not-allowed" : "pointer",
+                                    cursor: "pointer",
                                     border: selected
                                       ? activeStyle.border
-                                      : disabled
-                                        ? "1px solid #2a2a2a"
-                                        : "1px solid #333",
+                                      : "1px solid #333",
                                     background: selected
                                       ? activeStyle.background
-                                      : disabled
-                                        ? "#181818"
-                                        : "#222",
+                                      : "#222",
                                     color: selected
                                       ? activeStyle.color
-                                      : disabled
-                                        ? "#4a4a4a"
-                                        : "#999",
-                                    opacity: disabled ? 0.55 : 1
+                                      : "#999"
                                   }}
-                                  title={qVal === 0 ? "Raté" : qVal === 1 ? "Fragile" : "Réussi"}
+                                  title={title}
                                 >
-                                  {qVal === 0
-                                    ? "❌"
-                                    : qVal === 1
-                                      ? "😐"
-                                      : "✅"}
+                                  {icon}
                                 </button>
                               );
                             })}
@@ -700,7 +696,7 @@ const recapTableStyle = {
   background: "#111"
 };
 
-const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 124px";
+const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 158px";
 const recapTableGap = "10px";
 const recapTablePadding = "10px 14px";
 const recapStatusStripeBorder = "3px solid transparent";
@@ -808,7 +804,7 @@ const recapQualityCellStyle = {
 };
 
 const recapQualityButtonStyle = {
-  width: "34px",
+  width: "32px",
   height: "34px",
   padding: 0,
   borderRadius: "9px",

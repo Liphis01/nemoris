@@ -24,6 +24,8 @@ def ensure_progress_schema():
             "reps": "INTEGER",
             "lapses": "INTEGER",
             "last_review": "DATE",
+            "fsrs_card": "JSON",
+            "fsrs_version": "VARCHAR",
             "history": "JSON"
         }
 

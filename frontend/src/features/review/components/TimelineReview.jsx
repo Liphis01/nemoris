@@ -91,13 +91,15 @@ const successButtonStyle = {
 };
 
 function qualityLabel(quality) {
-  if (quality === 2) return "Facile";
+  if (quality === 3) return "Facile";
+  if (quality === 2) return "Bon";
   if (quality === 1) return "Dur";
   return "Faux";
 }
 
 function qualityColor(quality) {
-  if (quality === 2) return "#7ee2a8";
+  if (quality === 3) return "#7ee2a8";
+  if (quality === 2) return "#8fc7ff";
   if (quality === 1) return "#ffd36b";
   return "#ff9aa5";
 }

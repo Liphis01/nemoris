@@ -67,6 +67,7 @@ function buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet) {
   const initial = {};
 
   reviewZones.forEach(item => {
+    // Found zones default to FSRS Good. Missed zones default to Again.
     initial[item.question_id] = foundQuestionIdSet.has(item.question_id) ? 2 : 0;
   });
 
@@ -226,8 +227,8 @@ export function useMapReview(reviewZones, onComplete) {
   }
 
   function finishMap() {
-    // Initial recap grades are optimistic: found zones are easy, missed zones
-    // are failed. The user can adjust before submitting.
+    // Initial recap grades are optimistic but not maximal: found zones are Good,
+    // missed zones are Again. The user can adjust before submitting.
     setQualityByQuestionId(
       buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet)
     );

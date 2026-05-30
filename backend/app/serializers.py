@@ -13,8 +13,16 @@ def serialize_progress(progress):
             "lapses": 0,
             "last_review": None,
             "next_review": None,
+            "fsrs_state": None,
+            "fsrs_version": None,
             "history": []
         }
+
+    fsrs_state = (
+        progress.fsrs_card.get("state")
+        if isinstance(progress.fsrs_card, dict)
+        else None
+    )
 
     return {
         "interval": progress.interval,
@@ -32,6 +40,8 @@ def serialize_progress(progress):
             if progress.next_review
             else None
         ),
+        "fsrs_state": fsrs_state,
+        "fsrs_version": progress.fsrs_version,
         "history": progress.history or []
     }
 

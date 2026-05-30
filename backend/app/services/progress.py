@@ -4,8 +4,10 @@ from sqlalchemy import func
 
 from ..models import Progress, Question
 from ..scheduler import (
+    FSRS_VERSION,
     assign_smoothed_schedules,
     candidate_review_dates,
+    new_fsrs_card_data,
     rebalance_review_calendar,
     update_progress
 )
@@ -23,6 +25,8 @@ def create_initial_progress(question_id: int):
         lapses=0,
         interval=0,
         next_review=date.today(),
+        fsrs_card=new_fsrs_card_data(question_id),
+        fsrs_version=FSRS_VERSION,
         history=[]
     )
 
@@ -47,6 +51,11 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
         entry["ideal_interval"] = scheduling["ideal_interval"]
         entry["ideal_next_review"] = scheduling["ideal_next_review"].isoformat()
 
+    if "fsrs_rating" in scheduling:
+        entry["fsrs_rating"] = scheduling["fsrs_rating"]
+        entry["fsrs_state"] = scheduling["fsrs_state"]
+        entry["fsrs_version"] = scheduling["fsrs_version"]
+
     history.append(entry)
 
     progress.history = history
@@ -60,6 +69,8 @@ def write_scheduling(progress: Progress, quality: int, scheduling: dict):
     progress.interval = scheduling["interval"]
     progress.last_review = scheduling["last_review"]
     progress.next_review = scheduling["next_review"]
+    progress.fsrs_card = scheduling.get("fsrs_card")
+    progress.fsrs_version = scheduling.get("fsrs_version", FSRS_VERSION)
 
     record_answer_history(progress, quality, scheduling)
 
@@ -206,7 +217,8 @@ def rebalance_progress_calendar(db, today=None):
             "last_review": progress.last_review,
             "interval": progress.interval or 0,
             "difficulty": progress.difficulty,
-            "type_q": type_q
+            "type_q": type_q,
+            "fsrs_card": progress.fsrs_card
         }
         for progress, type_q in progress_rows
     ]
@@ -229,6 +241,9 @@ def rebalance_progress_calendar(db, today=None):
             updated_count += 1
             progress.next_review = scheduling["next_review"]
             progress.interval = scheduling["interval"]
+            if scheduling.get("fsrs_card"):
+                progress.fsrs_card = scheduling["fsrs_card"]
+                progress.fsrs_version = FSRS_VERSION
 
     return {
         "daily_target": daily_target,

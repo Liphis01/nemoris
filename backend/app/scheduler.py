@@ -1,20 +1,176 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import math
+
+from fsrs import Card, Rating, Scheduler, State
 
 
 DESIRED_RETENTION = 0.9
 DEFAULT_CATCHUP_DAILY_TARGET = 50
 CATCHUP_REBALANCE_TOLERANCE = 1.25
+FSRS_VERSION = "6.3.1"
+FSRS_MAXIMUM_INTERVAL = 36500
+APP_QUALITY_AGAIN = 0
+APP_QUALITY_HARD = 1
+APP_QUALITY_GOOD = 2
+APP_QUALITY_EASY = 3
 
 
-def next_interval(stability):
-    """
-    Convert stability to interval using FSRS forgetting curve
-    """
-    return max(
-        1,
-        round(stability * math.log(DESIRED_RETENTION) / math.log(0.9))
+def review_datetime_for_date(day):
+    day = day or date.today()
+    return datetime(
+        day.year,
+        day.month,
+        day.day,
+        12,
+        0,
+        0,
+        tzinfo=timezone.utc
     )
+
+
+def date_from_review_datetime(value):
+    if not value:
+        return None
+
+    return value.astimezone(timezone.utc).date()
+
+
+def parse_history_date(value):
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+
+
+def create_fsrs_scheduler(enable_fuzzing=True):
+    return Scheduler(
+        desired_retention=DESIRED_RETENTION,
+        learning_steps=(),
+        relearning_steps=(),
+        maximum_interval=FSRS_MAXIMUM_INTERVAL,
+        enable_fuzzing=enable_fuzzing
+    )
+
+
+def app_quality_to_fsrs_rating(quality):
+    try:
+        quality = int(quality)
+    except (TypeError, ValueError):
+        raise ValueError("Review quality must be between 0 and 3")
+
+    if quality not in {
+        APP_QUALITY_AGAIN,
+        APP_QUALITY_HARD,
+        APP_QUALITY_GOOD,
+        APP_QUALITY_EASY
+    }:
+        raise ValueError("Review quality must be between 0 and 3")
+
+    return Rating(quality + 1)
+
+
+def legacy_quality_to_fsrs_rating(quality, type_q=None):
+    try:
+        quality = int(quality)
+    except (TypeError, ValueError):
+        return None
+
+    if quality == APP_QUALITY_AGAIN:
+        return Rating.Again
+    if quality == APP_QUALITY_HARD:
+        return Rating.Hard
+    if quality == APP_QUALITY_GOOD:
+        return Rating.Easy if type_q == "text" else Rating.Good
+    if quality == APP_QUALITY_EASY:
+        return Rating.Easy
+
+    return None
+
+
+def fsrs_card_to_dict(card):
+    return card.to_dict()
+
+
+def new_fsrs_card_data(question_id, due=None):
+    return fsrs_card_to_dict(
+        Card(
+            card_id=question_id or 0,
+            due=review_datetime_for_date(due or date.today())
+        )
+    )
+
+
+def fsrs_card_from_data(data):
+    if not data:
+        return None
+
+    if isinstance(data, str):
+        return Card.from_json(data)
+
+    return Card.from_dict(data)
+
+
+def set_fsrs_card_due_date(card_data, next_review):
+    if not card_data or not next_review:
+        return card_data
+
+    try:
+        card = fsrs_card_from_data(card_data)
+    except (TypeError, ValueError, KeyError):
+        return card_data
+
+    card.due = review_datetime_for_date(next_review)
+
+    return fsrs_card_to_dict(card)
+
+
+def _scalar_review_card(progress, today=None):
+    due_date = getattr(progress, "next_review", None) or today or date.today()
+    last_review = getattr(progress, "last_review", None)
+    interval = getattr(progress, "interval", None) or 0
+    reps = getattr(progress, "reps", None) or 0
+    stability = progress_value(progress, "stability", None)
+    difficulty = progress_value(progress, "difficulty", None)
+
+    if not last_review and reps > 0 and interval > 0:
+        last_review = due_date - timedelta(days=interval)
+
+    if (
+        reps > 0 and
+        last_review and
+        stability is not None and
+        difficulty is not None
+    ):
+        return Card(
+            card_id=getattr(progress, "question_id", None) or 0,
+            state=State.Review,
+            step=None,
+            stability=float(stability),
+            difficulty=float(difficulty),
+            due=review_datetime_for_date(due_date),
+            last_review=review_datetime_for_date(last_review)
+        )
+
+    return Card(
+        card_id=getattr(progress, "question_id", None) or 0,
+        due=review_datetime_for_date(due_date)
+    )
+
+
+def fsrs_card_for_progress(progress, today=None):
+    if progress and getattr(progress, "fsrs_card", None):
+        try:
+            return fsrs_card_from_data(progress.fsrs_card)
+        except (TypeError, ValueError, KeyError):
+            pass
+
+    return _scalar_review_card(progress, today=today)
 
 
 def progress_value(progress, field, default):
@@ -135,13 +291,21 @@ def smooth_scheduling(scheduling, daily_loads, daily_type_loads=None):
     if next_review == ideal_next_review:
         return scheduling
 
-    return {
+    smoothed = {
         **scheduling,
         "ideal_interval": ideal_interval,
         "ideal_next_review": ideal_next_review,
         "interval": max(0, (next_review - today).days),
         "next_review": next_review
     }
+
+    if smoothed.get("fsrs_card"):
+        smoothed["fsrs_card"] = set_fsrs_card_due_date(
+            smoothed["fsrs_card"],
+            next_review
+        )
+
+    return smoothed
 
 
 def assign_smoothed_schedules(schedulings, daily_loads, daily_type_loads=None):
@@ -282,7 +446,11 @@ def rebalance_review_calendar(entries, daily_target, today=None):
             "original_next_review": item["original_next_review"],
             "effective_due_date": item["effective_due_date"],
             "interval": interval,
-            "next_review": next_review
+            "next_review": next_review,
+            "fsrs_card": set_fsrs_card_due_date(
+                entry.get("fsrs_card"),
+                next_review
+            )
         }
 
     return assigned
@@ -290,80 +458,69 @@ def rebalance_review_calendar(entries, daily_target, today=None):
 
 def update_progress(progress, quality, today=None):
     """
-    Apply a compact FSRS-inspired scheduling step.
+    Apply an FSRS v6 scheduling step.
 
-    quality: 0 = fail, 1 = hard, 2 = easy. The returned dict is written back to
-    Progress by services/progress.py so scheduling stays isolated from database
-    mutation.
+    quality: 0 = Again, 1 = Hard, 2 = Good, 3 = Easy. The returned dict is
+    written back to Progress by services/progress.py so scheduling stays
+    isolated from database mutation.
     """
-
     today = today or date.today()
-
-    stability = progress_value(progress, "stability", 1.0)
-    difficulty = progress_value(progress, "difficulty", 5.0)
-    reps = progress_value(progress, "reps", 0)
+    rating = app_quality_to_fsrs_rating(quality)
+    scheduler = create_fsrs_scheduler(enable_fuzzing=True)
+    review_datetime = review_datetime_for_date(today)
+    card = fsrs_card_for_progress(progress, today=today)
+    reviewed_card, review_log = scheduler.review_card(
+        card,
+        rating,
+        review_datetime=review_datetime
+    )
+    next_review = date_from_review_datetime(reviewed_card.due)
+    last_review = date_from_review_datetime(reviewed_card.last_review) or today
+    reps = progress_value(progress, "reps", 0) + 1
     lapses = progress_value(progress, "lapses", 0)
 
-    # ============================================
-    # FAIL
-    # ============================================
-
-    if quality == 0:
-
-        difficulty = min(10, difficulty + 0.4)
-
-        stability = max(
-            0.5,
-            stability * 0.45
-        )
-
+    if rating == Rating.Again:
         lapses += 1
 
-    # ============================================
-    # HARD
-    # ============================================
-
-    elif quality == 1:
-
-        difficulty = min(10, difficulty + 0.1)
-
-        stability = stability * (
-            1.2 + (10 - difficulty) * 0.03
-        )
-
-    # ============================================
-    # EASY
-    # ============================================
-
-    else:
-
-        difficulty = max(1, difficulty - 0.08)
-
-        stability = stability * (
-            1.8 + (10 - difficulty) * 0.05
-        )
-
-    reps += 1
-
-    interval = 0 if quality == 0 else next_interval(stability)
-
-    next_review = today + timedelta(days=interval)
-
     return {
-        "stability": stability,
-        "difficulty": difficulty,
+        "stability": reviewed_card.stability,
+        "difficulty": reviewed_card.difficulty,
         "reps": reps,
         "lapses": lapses,
-        "interval": interval,
+        "interval": max(0, (next_review - last_review).days),
         "next_review": next_review,
-        "last_review": today
+        "last_review": last_review,
+        "fsrs_card": fsrs_card_to_dict(reviewed_card),
+        "fsrs_version": FSRS_VERSION,
+        "fsrs_rating": int(rating),
+        "fsrs_state": int(reviewed_card.state),
+        "fsrs_review_log": review_log.to_dict()
     }
 
 
 def preview_intervals(progress):
     # The map recap can show what each button would schedule before the user
     # commits a quality choice.
-    return {
-        quality: update_progress(progress, quality)["interval"]
-        for quality in (0, 1, 2)
-    }
+    today = date.today()
+    scheduler = create_fsrs_scheduler(enable_fuzzing=False)
+    card = fsrs_card_for_progress(progress, today=today)
+    review_datetime = review_datetime_for_date(today)
+    intervals = {}
+
+    for quality in (
+        APP_QUALITY_AGAIN,
+        APP_QUALITY_HARD,
+        APP_QUALITY_GOOD,
+        APP_QUALITY_EASY
+    ):
+        rating = app_quality_to_fsrs_rating(quality)
+        reviewed_card, _ = scheduler.review_card(
+            card,
+            rating,
+            review_datetime=review_datetime
+        )
+        next_review = date_from_review_datetime(reviewed_card.due)
+        last_review = date_from_review_datetime(reviewed_card.last_review)
+        intervals[quality] = max(0, (next_review - last_review).days)
+
+    return intervals

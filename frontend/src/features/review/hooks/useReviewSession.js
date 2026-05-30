@@ -205,7 +205,7 @@ export function useReviewSession(active) {
         return;
       }
 
-      // Keyboard review flow: Enter reveals, then 1/2/3 grades the visible
+      // Keyboard review flow: Enter reveals, then 1/2/3/4 grades the visible
       // answer. Map review handles its own input shortcuts.
       if (event.key === "Enter") {
         if (!showAnswer) {
@@ -227,6 +227,10 @@ export function useReviewSession(active) {
         if (event.key === "3") {
           event.preventDefault();
           handleTextAnswer(2);
+        }
+        if (event.key === "4") {
+          event.preventDefault();
+          handleTextAnswer(3);
         }
       }
     }

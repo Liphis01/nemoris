@@ -173,7 +173,8 @@ export default function TextReviewCard({
                         <div
                             style={{
                                 display: "flex",
-                                gap: "14px"
+                                gap: "14px",
+                                flexWrap: "wrap"
                             }}
                         >
 
@@ -201,6 +202,17 @@ export default function TextReviewCard({
 
                             <button
                                 onClick={() => handleAnswer(2)}
+                                style={{
+                                    ...answerButtonStyle,
+                                    background: "#1f2f3a",
+                                    color: "#8fc7ff"
+                                }}
+                            >
+                                🙂 Bon
+                            </button>
+
+                            <button
+                                onClick={() => handleAnswer(3)}
                                 style={{
                                     ...answerButtonStyle,
                                     background: "#1d3a2b",
