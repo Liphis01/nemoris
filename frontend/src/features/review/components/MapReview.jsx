@@ -5,9 +5,10 @@ import { centerListItem } from "../../../shared/scroll";
 import { useMapReview } from "../hooks/useMapReview";
 
 const typeBadgeStyle = {
-  display: "inline-flex",
+  display: "flex",
   alignItems: "center",
   gap: "6px",
+  width: "fit-content",
   padding: "5px 10px",
   borderRadius: "999px",
   fontSize: "12px",
