@@ -496,6 +496,7 @@ export default function ManageList({
 
       {/* LIST */}
       <div
+        className="app-scrollbar"
         ref={listRef}
         style={{
           flex: 1,
@@ -504,6 +505,7 @@ export default function ManageList({
           display: "flex",
           flexDirection: "column",
           gap: "8px",
+          scrollbarGutter: "stable",
           minHeight: 0
         }}
       >

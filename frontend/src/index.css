@@ -38,6 +38,32 @@ body {
   background: var(--bg);
 }
 
+.app-scrollbar {
+  scrollbar-color: #454545 transparent;
+  scrollbar-width: thin;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555;
+  background-clip: padding-box;
+}
+
 #root {
   max-width: 100%;
   margin: 0 auto;

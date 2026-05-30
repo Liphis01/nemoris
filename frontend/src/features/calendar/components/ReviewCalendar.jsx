@@ -931,10 +931,12 @@ export default function ReviewCalendar({
             </div>
 
             <div
+              className="app-scrollbar"
               ref={detailListRef}
               style={{
                 maxHeight: "620px",
                 overflow: "auto",
+                scrollbarGutter: "stable",
                 padding: "10px"
               }}
             >
