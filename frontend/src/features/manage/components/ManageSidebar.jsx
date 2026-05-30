@@ -14,6 +14,11 @@ const questionTypeOptions = [
   { value: "timeline", label: "Timeline" }
 ];
 
+const groupTypeOptions = [
+  { value: "", label: "Tous les types" },
+  { value: "map", label: "Map" }
+];
+
 const groupSortOptions = [
   { value: "id", label: "Ajout" },
   { value: "name", label: "Nom" },
@@ -501,13 +506,18 @@ export default function ManageSidebar({
               ariaLabel: "Effacer la recherche de groupes"
             })}
 
-            {renderClearableInput({
-              value: groupTypeFilter,
-              onChange: setGroupTypeFilter,
-              onClear: () => setGroupTypeFilter(""),
-              placeholder: "Type de groupe...",
-              ariaLabel: "Effacer le type de groupe"
-            })}
+            <select
+              value={groupTypeFilter}
+              onChange={(event) => setGroupTypeFilter(event.target.value)}
+              style={filterSelectStyle}
+              aria-label="Filtrer les groupes par type"
+            >
+              {groupTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
             <label
               style={{

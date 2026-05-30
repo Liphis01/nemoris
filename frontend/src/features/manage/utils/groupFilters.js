@@ -23,9 +23,7 @@ function matchesSearch(group, search) {
 function matchesType(group, typeFilter) {
   if (!typeFilter) return true;
 
-  return normalizeString(group.type_group).includes(
-    normalizeString(typeFilter)
-  );
+  return normalizeString(group.type_group) === normalizeString(typeFilter);
 }
 
 
