@@ -17,6 +17,7 @@ export default function MapEditor({
   // MapEditor turns SVG zones into atomic map questions. The group is visual
   // context; each saved zone remains its own reviewable question.
   const [editingZone, setEditingZone] = useState(null);
+  const [mapFocusCode, setMapFocusCode] = useState(null);
   const [aliasInput, setAliasInput] = useState("");
   const labelInputRef = useRef(null);
   const aliasInputRef = useRef(null);
@@ -38,11 +39,17 @@ export default function MapEditor({
   } = useMapZones(group);
 
   useEffect(() => {
-    if (!selectedZone) return;
+    if (!selectedZone) {
+      setMapFocusCode(null);
+      return;
+    }
+
+    const selectedCode = getZoneCode(selectedZone);
     // When opened from an existing map question, focus that zone and discard any
     // unsaved blank temporary row from a previous click.
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
     setEditingZone(normalizeZone(selectedZone, group));
+    setMapFocusCode(selectedCode);
   }, [group, selectedZone, setZones]);
 
   const totalCodeCount = svgCodes.length;
@@ -126,6 +133,7 @@ export default function MapEditor({
 
     if (nextCode) {
       focusLabelAfterZoneChangeRef.current = true;
+      setMapFocusCode(nextCode);
       selectZoneCode(nextCode, nextZones);
     }
   }
@@ -526,7 +534,7 @@ export default function MapEditor({
               found={foundCodes}
               unsaved={dirtyZoneCodes}
               selected={getZoneCode(editingZone)}
-              focusCode={getZoneCode(editingZone)}
+              focusCode={mapFocusCode}
               onSelect={handleSelect}
               onCodesLoaded={handleCodesLoaded}
             />

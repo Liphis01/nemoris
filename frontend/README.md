@@ -2,11 +2,10 @@
 
 
 
-enlever le zoom quand je clique sur une zone dans manage
-filtrer en fonction du type de questions dans manage
 revoir la timeline pour les intervalles
 garder la même taille de fenetre pour les maps dans la review
 cliquer sur une zone de la map dans le recap scroll à la zone correspondante
+quand on clique sur une autre question ça enregistre automatiquement les modifications de la question précédente
 
 
 
@@ -67,6 +66,7 @@ color: "#ff85c2",
 - mettre un menu dans la preview quand je clique sur créer question pour demander quel type de question je veux créer
 - pouvoir revenir en arrière dans la review
 - pouvoir trier les réponses dans le recap de map
+- tags sur les groupes
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

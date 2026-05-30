@@ -92,7 +92,7 @@ export default function Menu({
                             boxShadow: "0 14px 34px rgba(0, 0, 0, 0.18)"
                         }}
                     >
-                        <div>
+                        <div style={{ textAlign: "left" }}>
                             <div
                                 style={{
                                     color: "#7ee2a8",

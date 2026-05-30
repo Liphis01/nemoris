@@ -59,6 +59,7 @@ export function useManageLibrary(mode) {
   const [allGroups, setAllGroups] = useState([]);
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [questionTypeFilter, setQuestionTypeFilter] = useState("");
   const [dueOnly, setDueOnly] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc");
@@ -121,6 +122,7 @@ export function useManageLibrary(mode) {
   function resetManageFilters() {
     setSearch("");
     setTagFilter("");
+    setQuestionTypeFilter("");
     setDueOnly(false);
     setSortField("id");
     setSortOrder("asc");
@@ -314,6 +316,7 @@ export function useManageLibrary(mode) {
         questions: allQuestions,
         search,
         tagFilter,
+        questionTypeFilter,
         dueOnly,
         sortField,
         sortOrder
@@ -321,6 +324,7 @@ export function useManageLibrary(mode) {
     [
       allQuestions,
       dueOnly,
+      questionTypeFilter,
       tagFilter,
       search,
       sortField,
@@ -374,6 +378,7 @@ export function useManageLibrary(mode) {
     groupDraft,
     questionDraft,
     questionInputRef,
+    questionTypeFilter,
     reloadAllData,
     resetGroupDraft,
     resetManageFilters,
@@ -393,6 +398,7 @@ export function useManageLibrary(mode) {
     setIsCreatingGroup,
     setGroupDraft,
     setQuestionDraft,
+    setQuestionTypeFilter,
     setSearch,
     setSelectedItem,
     setViewMode,

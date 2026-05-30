@@ -1,9 +1,17 @@
 const sortOptions = [
   { value: "id", label: "Ajout" },
   { value: "title", label: "Titre" },
+  { value: "type", label: "Type" },
   { value: "group", label: "Groupe" },
   { value: "next_review", label: "Prochaine review" },
   { value: "reps", label: "Moins revues" }
+];
+
+const questionTypeOptions = [
+  { value: "", label: "Tous les types" },
+  { value: "text", label: "Text" },
+  { value: "map", label: "Map" },
+  { value: "timeline", label: "Timeline" }
 ];
 
 const groupSortOptions = [
@@ -21,6 +29,8 @@ export default function ManageSidebar({
   setSearch,
   tagFilter,
   setTagFilter,
+  questionTypeFilter,
+  setQuestionTypeFilter,
   dueOnly,
   setDueOnly,
   sortField,
@@ -67,6 +77,12 @@ export default function ManageSidebar({
     ...inputStyle,
     cursor: "pointer",
     height: "40px"
+  };
+
+  const filterSelectStyle = {
+    ...inputStyle,
+    cursor: "pointer",
+    height: "42px"
   };
 
   const clearableInputStyle = {
@@ -407,6 +423,19 @@ export default function ManageSidebar({
               ariaLabel: "Effacer les tags"
             })}
 
+            <select
+              value={questionTypeFilter}
+              onChange={(event) => setQuestionTypeFilter(event.target.value)}
+              style={filterSelectStyle}
+              aria-label="Filtrer les questions par type"
+            >
+              {questionTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
             <label
               style={{
                 display: "flex",
@@ -458,8 +487,8 @@ export default function ManageSidebar({
               value: groupTypeFilter,
               onChange: setGroupTypeFilter,
               onClear: () => setGroupTypeFilter(""),
-              placeholder: "Type...",
-              ariaLabel: "Effacer le type"
+              placeholder: "Type de groupe...",
+              ariaLabel: "Effacer le type de groupe"
             })}
 
             <label

@@ -49,10 +49,13 @@ function getReviewReps(question) {
 function getSortValues(question, sortField) {
   const id = Number(question?.id || 0);
   const title = getQuestionTitle(question);
+  const type = normalizeString(question?.type_q);
 
   switch (sortField) {
     case "title":
       return [title, id];
+    case "type":
+      return [type, title, id];
     case "group":
       return [
         question?.group?.name ? 0 : 1,
@@ -102,6 +105,13 @@ function compareQuestions(a, b, sortField, sortOrder) {
 }
 
 
+function matchesType(question, questionTypeFilter) {
+  if (!questionTypeFilter) return true;
+
+  return normalizeString(question?.type_q) === normalizeString(questionTypeFilter);
+}
+
+
 function matchesSearch(question, search) {
   const normalizedSearch = normalizeSearchText(search);
 
@@ -140,6 +150,7 @@ export function filterAndSortQuestions({
   questions,
   search,
   tagFilter,
+  questionTypeFilter,
   dueOnly,
   sortField,
   sortOrder
@@ -150,6 +161,7 @@ export function filterAndSortQuestions({
     .filter(question =>
       matchesSearch(question, search) &&
       matchesTag(question, tagFilter) &&
+      matchesType(question, questionTypeFilter) &&
       matchesDue(question, dueOnly)
     )
     .slice()
