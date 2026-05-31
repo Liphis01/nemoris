@@ -261,6 +261,19 @@ export function useMapReview(reviewZones, onComplete) {
     }));
   }
 
+  function setFoundZoneQualities(quality) {
+    setQualityByQuestionId(prev => {
+      if (foundQuestionIdSet.size === 0) return prev;
+
+      const next = { ...prev };
+      foundQuestionIdSet.forEach(id => {
+        next[id] = quality;
+      });
+
+      return next;
+    });
+  }
+
   const progressPercent = reviewZones.length
     ? (foundQuestionIds.length / reviewZones.length) * 100
     : 0;
@@ -328,6 +341,7 @@ export function useMapReview(reviewZones, onComplete) {
     remainingZones,
     sendResult,
     setFocusedCode,
+    setFoundZoneQualities,
     setInput,
     setQuality,
     showRecap,

@@ -102,6 +102,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     remainingZones,
     sendResult,
     setFocusedCode,
+    setFoundZoneQualities,
     setInput,
     setQuality,
     showRecap,
@@ -111,6 +112,17 @@ export default function MapReview({ group, reviewZones, onComplete }) {
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
+  const foundBulkQuality = useMemo(() => {
+    if (foundQuestionIds.length === 0) return null;
+
+    const firstQuality = qualityByQuestionId[foundQuestionIds[0]] ?? 2;
+
+    return foundQuestionIds.every(
+      questionId => (qualityByQuestionId[questionId] ?? 2) === firstQuality
+    )
+      ? firstQuality
+      : null;
+  }, [foundQuestionIds, qualityByQuestionId]);
   const foundZoneLabels = useMemo(() => {
     const labels = {};
 
@@ -534,6 +546,50 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                   className="app-scrollbar"
                   style={recapTableBodyStyle}
                 >
+                  {foundQuestionIds.length > 0 && (
+                    <div style={recapBulkQualityStyle}>
+                      <div style={recapBulkQualityTextStyle}>
+                        <div style={recapBulkQualityTitleStyle}>
+                          Zones trouvées
+                        </div>
+                        <div style={recapBulkQualityMetaStyle}>
+                          {foundQuestionIds.length} qualité{foundQuestionIds.length > 1 ? "s" : ""}
+                        </div>
+                      </div>
+
+                      <div style={recapBulkQualityControlsStyle}>
+                        {qualityOptions.map(({ value: qVal, icon, title }) => {
+                          const selected = foundBulkQuality === qVal;
+                          const activeStyle = qualityButtonStyles[qVal];
+
+                          return (
+                            <button
+                              key={qVal}
+                              type="button"
+                              onClick={() => setFoundZoneQualities(qVal)}
+                              style={{
+                                ...recapQualityButtonStyle,
+                                cursor: "pointer",
+                                border: selected
+                                  ? activeStyle.border
+                                  : "1px solid #333",
+                                background: selected
+                                  ? activeStyle.background
+                                  : "#222",
+                                color: selected
+                                  ? activeStyle.color
+                                  : "#999"
+                              }}
+                              title={`Appliquer aux zones trouvées : ${title}`}
+                            >
+                              {icon}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {recapRows.map((row, index) => {
                     const { item, historyStats, isFound } = row;
                     const showSection =
@@ -772,6 +828,46 @@ const recapSectionStyle = {
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   textAlign: "left"
+};
+
+const recapBulkQualityStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  padding: "10px 14px",
+  background: "#111",
+  borderLeft: recapStatusStripeBorder,
+  boxSizing: "border-box",
+  flexWrap: "wrap"
+};
+
+const recapBulkQualityTextStyle = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  justifyContent: "center",
+  minWidth: 0
+};
+
+const recapBulkQualityTitleStyle = {
+  color: "#e5e5e5",
+  fontSize: "12px",
+  fontWeight: "700",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const recapBulkQualityMetaStyle = {
+  color: "#777",
+  fontSize: "11px",
+  lineHeight: "15px"
+};
+
+const recapBulkQualityControlsStyle = {
+  display: "flex",
+  gap: "6px",
+  flex: "0 0 auto"
 };
 
 const recapRowStyle = {
