@@ -2,9 +2,6 @@
 
 ## Highest value upgrades
 
-Frontend complexity control
-ManageInspector.jsx is already large, and Manage is a central workflow. I would start extracting by behavior, not by arbitrary component splitting: autosave state, editor mode state, preview state, and type-specific editor adapters.
-
 Contract stability between backend and frontend
 AGENTS strongly says backend owns review grouping and frontend renders returned shapes. That contract should be protected with tests or schemas.
 Add explicit response-shape tests for /review, /answer_map, /answer_timeline, and serializers so future UI work does not accidentally rebuild grouping logic client-side.
