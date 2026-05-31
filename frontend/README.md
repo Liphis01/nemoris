@@ -11,11 +11,11 @@
 - mettre des tags sur les groupes les propage aux questions
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
+- mettre une ligne verticale sous ma souris dans la timeline qui stick à la graduation de derrière
 
 ## bugs
 - bug des images + trouver comment afficher l'image dans les cards de manage
 - recentrer les svg
-- les ids des questions ne se recalculent pas après une suppression (attention à l'id de progress)
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom

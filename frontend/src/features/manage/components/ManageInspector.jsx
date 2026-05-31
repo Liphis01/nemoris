@@ -138,6 +138,17 @@ function buildQuestionSavePayload(source) {
   };
 }
 
+function buildQuestionDraft(source) {
+  return {
+    question: source?.question || "",
+    answer: source?.answer || "",
+    media: source?.media || "",
+    type_q: source?.type_q || "text",
+    tags: source?.tags || [],
+    data: source?.data || {}
+  };
+}
+
 function payloadsMatch(left, right) {
   return stableStringify(left) === stableStringify(right);
 }
@@ -302,7 +313,6 @@ export default function ManageInspector({
   patchQuestionInCache,
   setSelectedItem,
   setEditingZone,
-  deleteQuestion,
   uploadQuestionMedia,
   isCreatingQuestion,
   setIsCreatingQuestion,
@@ -337,14 +347,7 @@ export default function ManageInspector({
       return;
     }
     
-    setDraft({
-      question: selectedItem.question || "",
-      answer: selectedItem.answer || "",
-      media: selectedItem.media || "",
-      type_q: selectedItem.type_q || "text",
-      tags: selectedItem.tags || [],
-      data: selectedItem.data || {}
-    });
+    setDraft(buildQuestionDraft(selectedItem));
     setSaveStatus(null);
   }, [selectedItem]);
 
@@ -704,6 +707,11 @@ export default function ManageInspector({
     }
   }
 
+  function handleCancelEdit() {
+    setDraft(buildQuestionDraft(selectedItem));
+    setSaveStatus(null);
+  }
+
   async function handleUploadFile(e) {
     if (!uploadQuestionMedia) return;
     const updatedQuestion = await uploadQuestionMedia(e, selectedItem);
@@ -713,20 +721,7 @@ export default function ManageInspector({
     }
   }
 
-  async function handleDelete() {
-    if (!window.confirm("Supprimer cette question de la base ?")) return;
-    await deleteQuestion(selectedItem.id);
-    setSelectedItem(null);
-  }
-
-  const editorDraft = draft || {
-    question: selectedItem.question || "",
-    answer: selectedItem.answer || "",
-    media: selectedItem.media || "",
-    type_q: selectedItem.type_q || "text",
-    tags: selectedItem.tags || [],
-    data: selectedItem.data || {}
-  };
+  const editorDraft = draft || buildQuestionDraft(selectedItem);
   const editType = editorDraft.type_q || "text";
   const hasUnsavedChanges = !payloadsMatch(
     buildQuestionSavePayload(editorDraft),
@@ -739,7 +734,7 @@ export default function ManageInspector({
     onChange: setDraft,
     onSubmit: handleSave,
     submitLabel: "Enregistrer",
-    onDelete: handleDelete,
+    onCancel: handleCancelEdit,
     onUploadFile: handleUploadFile,
     saveStatus,
     hasUnsavedChanges,
