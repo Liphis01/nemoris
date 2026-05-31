@@ -1,0 +1,155 @@
+import { act, renderHook } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { useMapReview } from "./useMapReview";
+
+vi.mock("../../../api/review", () => ({
+  sendMapAnswer: vi.fn()
+}));
+
+function labels(rows) {
+  return rows.map(row => row.item.label);
+}
+
+function zone({
+  questionId,
+  code,
+  label,
+  difficulty = 5,
+  interval = 0,
+  projectedIntervals = {}
+}) {
+  return {
+    question_id: questionId,
+    code,
+    label,
+    progress: {
+      difficulty,
+      interval
+    },
+    projected_intervals: projectedIntervals
+  };
+}
+
+describe("useMapReview recap sorting", () => {
+  it("toggles answer sorting inside found and missed sections", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "b", label: "Beta", difficulty: 9 }),
+      zone({ questionId: 2, code: "a", label: "Alpha", difficulty: 3 }),
+      zone({ questionId: 3, code: "g", label: "Gamma", difficulty: 8 }),
+      zone({ questionId: 4, code: "d", label: "Delta", difficulty: 2 })
+    ];
+    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+
+    act(() => {
+      result.current.handleZoneSelect("b");
+    });
+    act(() => {
+      result.current.handleZoneSelect("a");
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Beta",
+      "Alpha",
+      "Gamma",
+      "Delta"
+    ]);
+
+    act(() => {
+      result.current.toggleRecapSort("answer");
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Alpha",
+      "Beta",
+      "Delta",
+      "Gamma"
+    ]);
+    expect(result.current.recapRows.map(row => row.isFound)).toEqual([
+      true,
+      true,
+      false,
+      false
+    ]);
+
+    act(() => {
+      result.current.toggleRecapSort("answer");
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Beta",
+      "Alpha",
+      "Gamma",
+      "Delta"
+    ]);
+  });
+
+  it("uses current row quality for quality and interval sorting", () => {
+    const reviewZones = [
+      zone({
+        questionId: 1,
+        code: "a",
+        label: "Alpha",
+        difficulty: 8,
+        projectedIntervals: { 1: 5, 2: 20, 3: 80 }
+      }),
+      zone({
+        questionId: 2,
+        code: "b",
+        label: "Beta",
+        difficulty: 6,
+        projectedIntervals: { 1: 10, 2: 40, 3: 60 }
+      }),
+      zone({ questionId: 3, code: "g", label: "Gamma", difficulty: 4 })
+    ];
+    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+
+    act(() => {
+      result.current.handleZoneSelect("a");
+    });
+    act(() => {
+      result.current.handleZoneSelect("b");
+    });
+    act(() => {
+      result.current.finishMap();
+    });
+    act(() => {
+      result.current.toggleRecapSort("interval");
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Alpha",
+      "Beta",
+      "Gamma"
+    ]);
+
+    act(() => {
+      result.current.setQuality(1, 3);
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Beta",
+      "Alpha",
+      "Gamma"
+    ]);
+
+    act(() => {
+      result.current.toggleRecapSort("quality");
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Beta",
+      "Alpha",
+      "Gamma"
+    ]);
+
+    act(() => {
+      result.current.setQuality(1, 1);
+    });
+
+    expect(labels(result.current.recapRows)).toEqual([
+      "Alpha",
+      "Beta",
+      "Gamma"
+    ]);
+  });
+});

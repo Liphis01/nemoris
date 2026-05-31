@@ -77,6 +77,13 @@ const qualityOptions = [
   { value: 3, icon: "✅", title: "Facile" }
 ];
 
+const recapHeaderColumns = [
+  { key: "answer", label: "Réponse" },
+  { key: "success", label: "Réussite" },
+  { key: "interval", label: "Intervalle" },
+  { key: "quality", label: "Qualité" }
+];
+
 export default function MapReview({ group, reviewZones, onComplete }) {
   const {
     dueCodes,
@@ -96,6 +103,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     progressPercent,
     recapMissCount,
     recapRows,
+    recapSort,
     recapSuccessCount,
     recapSuccessRate,
     remainingFocusCode,
@@ -106,7 +114,8 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     setInput,
     setQuality,
     showRecap,
-    showRecapSections
+    showRecapSections,
+    toggleRecapSort
   } = useMapReview(reviewZones, onComplete);
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
@@ -535,10 +544,42 @@ export default function MapReview({ group, reviewZones, onComplete }) {
 
               <div style={recapTableStyle}>
                 <div className="map-recap-table-header" style={recapTableHeaderStyle}>
-                  <div>Réponse</div>
-                  <div>Réussite</div>
-                  <div>Intervalle</div>
-                  <div>Qualité</div>
+                  {recapHeaderColumns.map(({ key, label }) => {
+                    const isActive = recapSort.key === key;
+                    const nextDirection = isActive && recapSort.direction === "asc"
+                      ? "desc"
+                      : "asc";
+
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-label={`${label} : trier ${
+                          nextDirection === "asc" ? "croissant" : "décroissant"
+                        }`}
+                        aria-pressed={isActive}
+                        onClick={() => toggleRecapSort(key)}
+                        style={{
+                          ...recapHeaderButtonStyle,
+                          ...(isActive ? recapHeaderButtonActiveStyle : {})
+                        }}
+                        title={`${label} : trier ${
+                          nextDirection === "asc" ? "croissant" : "décroissant"
+                        }`}
+                      >
+                        <span style={recapHeaderLabelStyle}>{label}</span>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            ...recapHeaderSortIndicatorStyle,
+                            opacity: isActive ? 1 : 0
+                          }}
+                        >
+                          {recapSort.direction === "asc" ? "↑" : "↓"}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div
@@ -818,6 +859,46 @@ const recapTableHeaderStyle = {
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   textAlign: "left"
+};
+
+const recapHeaderButtonStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: "5px",
+  minWidth: 0,
+  width: "100%",
+  padding: 0,
+  background: "transparent",
+  border: 0,
+  color: "inherit",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: "inherit",
+  letterSpacing: "inherit",
+  lineHeight: "16px",
+  textAlign: "left",
+  textTransform: "inherit"
+};
+
+const recapHeaderButtonActiveStyle = {
+  color: "#e5e5e5"
+};
+
+const recapHeaderLabelStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const recapHeaderSortIndicatorStyle = {
+  flex: "0 0 10px",
+  width: "10px",
+  color: "#e5e5e5",
+  fontSize: "12px",
+  lineHeight: "12px",
+  textAlign: "center"
 };
 
 const recapTableBodyStyle = {

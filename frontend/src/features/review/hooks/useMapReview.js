@@ -75,6 +75,74 @@ function buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet) {
 }
 
 
+const initialRecapSort = {
+  key: null,
+  direction: "asc"
+};
+
+
+function getSelectedQuality(item, isFound, qualityByQuestionId) {
+  return qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
+}
+
+
+function getProjectedInterval(item, selectedQuality) {
+  const value =
+    item.projected_intervals?.[selectedQuality] ??
+    item.progress?.interval ??
+    0;
+  const interval = Number(value);
+
+  return Number.isFinite(interval) ? interval : 0;
+}
+
+
+function compareDefaultRecapRows(a, b) {
+  if (b.difficultyScore !== a.difficultyScore) {
+    return b.difficultyScore - a.difficultyScore;
+  }
+
+  return String(a.item.label || "").localeCompare(String(b.item.label || ""));
+}
+
+
+function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
+  if (recapSort.key === "answer") {
+    return String(a.item.label || "").localeCompare(String(b.item.label || ""));
+  }
+
+  if (recapSort.key === "success") {
+    const aRate = a.historyStats.successRate === null
+      ? -1
+      : a.historyStats.successRate;
+    const bRate = b.historyStats.successRate === null
+      ? -1
+      : b.historyStats.successRate;
+
+    return aRate - bRate;
+  }
+
+  if (recapSort.key === "interval") {
+    const aQuality = getSelectedQuality(a.item, a.isFound, qualityByQuestionId);
+    const bQuality = getSelectedQuality(b.item, b.isFound, qualityByQuestionId);
+
+    return (
+      getProjectedInterval(a.item, aQuality) -
+      getProjectedInterval(b.item, bQuality)
+    );
+  }
+
+  if (recapSort.key === "quality") {
+    return (
+      getSelectedQuality(a.item, a.isFound, qualityByQuestionId) -
+      getSelectedQuality(b.item, b.isFound, qualityByQuestionId)
+    );
+  }
+
+  return 0;
+}
+
+
 export function useMapReview(reviewZones, onComplete) {
   // This hook turns a runtime map group into an interactive recall session:
   // matching typed answers, tracking found zones, then sending per-zone grades.
@@ -87,6 +155,7 @@ export function useMapReview(reviewZones, onComplete) {
   const [focusVersion, setFocusVersion] = useState(0);
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
+  const [recapSort, setRecapSort] = useState(initialRecapSort);
 
   useEffect(() => {
     if (!incorrectFlashId && !correctFlashId) {
@@ -274,6 +343,13 @@ export function useMapReview(reviewZones, onComplete) {
     });
   }
 
+  function toggleRecapSort(key) {
+    setRecapSort(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
+    }));
+  }
+
   const progressPercent = reviewZones.length
     ? (foundQuestionIds.length / reviewZones.length) * 100
     : 0;
@@ -288,8 +364,8 @@ export function useMapReview(reviewZones, onComplete) {
     ? Math.round((recapSuccessCount / reviewZones.length) * 100)
     : 0;
   const recapRows = useMemo(() => {
-    // Recap prioritizes found zones first, then harder zones, then alphabetical
-    // labels to make the review summary scannable.
+    // Recap always keeps found zones above missed zones. Header sorting only
+    // changes the order inside each section.
     return reviewZones
       .map(item => {
         const historyStats = getHistoryStats(item);
@@ -307,13 +383,24 @@ export function useMapReview(reviewZones, onComplete) {
           return a.isFound ? -1 : 1;
         }
 
-        if (b.difficultyScore !== a.difficultyScore) {
-          return b.difficultyScore - a.difficultyScore;
+        if (!recapSort.key) {
+          return compareDefaultRecapRows(a, b);
         }
 
-        return String(a.item.label || "").localeCompare(String(b.item.label || ""));
+        const sortResult = compareActiveRecapSort(
+          a,
+          b,
+          recapSort,
+          qualityByQuestionId
+        );
+
+        if (sortResult !== 0) {
+          return recapSort.direction === "asc" ? sortResult : -sortResult;
+        }
+
+        return compareDefaultRecapRows(a, b);
       });
-  }, [reviewZones, foundQuestionIdSet]);
+  }, [reviewZones, foundQuestionIdSet, qualityByQuestionId, recapSort]);
   const hasCorrectRecapRows = recapRows.some(row => row.isFound);
   const hasWrongRecapRows = recapRows.some(row => !row.isFound);
 
@@ -335,6 +422,7 @@ export function useMapReview(reviewZones, onComplete) {
     progressPercent,
     recapMissCount,
     recapRows,
+    recapSort,
     recapSuccessCount,
     recapSuccessRate,
     remainingFocusCode,
@@ -345,6 +433,7 @@ export function useMapReview(reviewZones, onComplete) {
     setInput,
     setQuality,
     showRecap,
-    showRecapSections: hasCorrectRecapRows && hasWrongRecapRows
+    showRecapSections: hasCorrectRecapRows && hasWrongRecapRows,
+    toggleRecapSort
   };
 }
