@@ -2,7 +2,10 @@
 
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
-- l'ajout/la modification d'une image n'est pas pris en considération dans l'état du bouton sauvegarde
+- cliquer sur une question dans calender met plus de détails et augmente la taille de l'image preview
+- cliquer sur une question dans calendar met en surbrillance toutes les dates qui ont cette question
+- do you think it's a good idea to allow url for images ?
+- add a “Copy locally” or “Importer depuis l’URL” button.
 
 ## quick fixes
 - mettre un bouton dans recap pour changer la qualité de toutes les zones trouvées
@@ -35,7 +38,6 @@
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
-- cliquer sur une question dans calendar met en surbrillance toutes les dates qui ont cette question
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

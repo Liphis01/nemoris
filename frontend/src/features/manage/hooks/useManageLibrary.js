@@ -265,26 +265,15 @@ export function useManageLibrary(mode) {
   async function uploadQuestionMedia(file, question) {
     if (!file) return;
 
-    // New-question uploads update the draft. Existing-question uploads persist
-    // immediately and then patch the local cache.
+    // Uploads only create the static asset. The question.media value is saved
+    // through the normal editor save flow so dirty-state/autosave stays intact.
     const data = await uploadMedia(file);
 
-    if (question.id === "new") {
+    if (question?.id === "new") {
       setQuestionDraft(prev => ({ ...prev, media: data.url }));
-      return data;
     }
 
-    await updateQuestion(question.id, {
-      media: data.url
-    });
-
-    const updatedQuestion = {
-      ...question,
-      media: data.url
-    };
-
-    patchQuestionInCache(updatedQuestion);
-    return updatedQuestion;
+    return data;
   }
 
   function handleSort(field) {

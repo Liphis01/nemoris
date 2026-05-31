@@ -314,7 +314,6 @@ export default function ManageInspector({
   setSelectedItem,
   setEditingZone,
   uploadQuestionMedia,
-  removeQuestionMedia,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -716,33 +715,11 @@ export default function ManageInspector({
 
   async function handleUploadFile(file) {
     if (!uploadQuestionMedia) return;
-    const updatedQuestion = await uploadQuestionMedia(file, selectedItem);
-    if (updatedQuestion) {
-      setSelectedItem(updatedQuestion);
-      setDraft((prev) => ({
-        ...prev,
-        media: updatedQuestion.media,
-        type_q: updatedQuestion.type_q
-      }));
-    }
 
-    return updatedQuestion;
+    return uploadQuestionMedia(file, selectedItem);
   }
 
-  async function handleRemoveMedia() {
-    if (!removeQuestionMedia) {
-      setDraft((prev) => ({ ...prev, media: "" }));
-      return;
-    }
-
-    const updatedQuestion = await removeQuestionMedia(selectedItem.id);
-    const nextSelectedItem = {
-      ...selectedItem,
-      ...(updatedQuestion || {}),
-      media: null
-    };
-
-    setSelectedItem(nextSelectedItem);
+  function handleRemoveMedia() {
     setDraft((prev) => ({ ...prev, media: "" }));
   }
 
