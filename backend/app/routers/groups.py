@@ -6,6 +6,7 @@ from ..dependencies import get_db
 from ..models import Question, QuestionGroup
 from ..schemas import GroupCreate, GroupOut, GroupUpdate
 from ..services.map_zones import merge_tags
+from ..services.media import delete_unreferenced_media_file, media_points_to_same_static_file
 from ..services.questions import delete_question_dependents
 
 
@@ -131,6 +132,7 @@ def update_group(
         raise HTTPException(status_code=404, detail="Group not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    old_media = group.media
 
     for field in ["name", "media", "data"]:
         if field in updates:
@@ -138,6 +140,12 @@ def update_group(
 
     db.commit()
     db.refresh(group)
+
+    if (
+        "media" in updates and
+        not media_points_to_same_static_file(old_media, group.media)
+    ):
+        delete_unreferenced_media_file(db, old_media)
 
     return group
 
@@ -161,6 +169,15 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
             .all()
         )
     ]
+    media_values = [
+        media
+        for (media,) in (
+            db.query(Question.media)
+            .filter(Question.group_id == group.id)
+            .all()
+        )
+    ]
+    media_values.append(group.media)
 
     delete_question_dependents(db, question_ids)
 
@@ -171,5 +188,8 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
 
     db.delete(group)
     db.commit()
+
+    for media in media_values:
+        delete_unreferenced_media_file(db, media)
 
     return {"status": "deleted"}

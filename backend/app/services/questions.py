@@ -9,6 +9,7 @@ from ..models import (
     question_collection
 )
 from ..serializers import serialize_manage_question
+from .media import delete_unreferenced_media_file, media_points_to_same_static_file
 from .progress import create_initial_progress
 from .timeline import validate_question_timeline
 
@@ -135,6 +136,7 @@ def get_question_for_update(db, question_id: int):
 def update_question(db, question_id: int, payload):
     question = get_question_for_update(db, question_id)
     updates = payload.model_dump(exclude_unset=True)
+    old_media = question.media
 
     # Validate the final type/group combination, not only fields explicitly
     # present in the payload.
@@ -153,6 +155,12 @@ def update_question(db, question_id: int, payload):
 
     db.commit()
     db.refresh(question)
+
+    if (
+        "media" in updates and
+        not media_points_to_same_static_file(old_media, question.media)
+    ):
+        delete_unreferenced_media_file(db, old_media)
 
     return question
 
@@ -200,11 +208,14 @@ def delete_question(db, question_id: int):
         raise HTTPException(status_code=404, detail="Question not found")
 
     group = question.group
+    question_media = question.media
+    group_media = group.media if group else None
     # Clear many-to-many links and progress explicitly because cascades are not
     # enabled on these relationships.
     delete_question_dependents(db, [question.id])
     db.delete(question)
     db.commit()
+    delete_unreferenced_media_file(db, question_media)
 
     if group:
         # Empty groups are removed automatically after their last question is
@@ -218,3 +229,4 @@ def delete_question(db, question_id: int):
         if remaining == 0:
             db.delete(group)
             db.commit()
+            delete_unreferenced_media_file(db, group_media)

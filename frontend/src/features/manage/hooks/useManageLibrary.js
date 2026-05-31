@@ -262,8 +262,7 @@ export function useManageLibrary(mode) {
     return createdGroup;
   }
 
-  async function uploadQuestionMedia(event, question) {
-    const file = event.target.files[0];
+  async function uploadQuestionMedia(file, question) {
     if (!file) return;
 
     // New-question uploads update the draft. Existing-question uploads persist
@@ -272,7 +271,7 @@ export function useManageLibrary(mode) {
 
     if (question.id === "new") {
       setQuestionDraft(prev => ({ ...prev, media: data.url }));
-      return;
+      return data;
     }
 
     await updateQuestion(question.id, {
@@ -331,14 +330,20 @@ export function useManageLibrary(mode) {
 
   async function removeQuestionMedia(id) {
     await removeQuestionMediaRequest(id);
+    const currentQuestion = allQuestions.find(question => question.id === id);
+    const updatedQuestion = currentQuestion
+      ? { ...currentQuestion, media: null }
+      : null;
 
     setAllQuestions(prev =>
       prev.map(question =>
         question.id === id
-          ? { ...question, media: null, type_q: "text" }
+          ? { ...question, media: null }
           : question
       )
     );
+
+    return updatedQuestion;
   }
 
   const filteredQuestions = useMemo(

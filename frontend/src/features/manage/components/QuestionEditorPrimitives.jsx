@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import {
   buttonStyle,
   dangerButtonStyle,
@@ -10,6 +11,7 @@ import {
   primaryButtonStyle
 } from "./QuestionEditorStyles";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
+import { resolveMediaUrl } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 function tagKey(tag) {
@@ -101,7 +103,7 @@ export function ImageImportField({ onUploadFile }) {
       <input
         type="file"
         accept="image/*"
-        onChange={onUploadFile}
+        onChange={(event) => onUploadFile(event.target.files?.[0])}
         style={{ color: "#ddd" }}
       />
     </QuestionEditorField>
@@ -109,7 +111,7 @@ export function ImageImportField({ onUploadFile }) {
 }
 
 export function MediaPreview({ media }) {
-  const src = (media || "").trim();
+  const src = resolveMediaUrl(media);
 
   if (!src) return null;
 
@@ -123,6 +125,209 @@ export function MediaPreview({ media }) {
         border: "1px solid #282828"
       }}
     />
+  );
+}
+
+export function ImageMediaField({
+  media,
+  onMediaChange,
+  onUploadFile,
+  onRemoveMedia
+}) {
+  const fileInputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
+  const mediaValue = media || "";
+  const hasMedia = Boolean(String(mediaValue).trim());
+
+  async function uploadFile(file) {
+    if (!file || !onUploadFile) return;
+
+    if (file.type && !file.type.startsWith("image/")) {
+      setError("Seules les images sont acceptées.");
+      return;
+    }
+
+    setError("");
+    setIsUploading(true);
+
+    try {
+      const result = await onUploadFile(file);
+      const nextMedia = result?.media || result?.url;
+
+      if (nextMedia) {
+        onMediaChange?.(nextMedia);
+      }
+    } catch (uploadError) {
+      setError(uploadError.message || "Import impossible.");
+    } finally {
+      setIsUploading(false);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
+  function firstImageFile(fileList) {
+    return Array.from(fileList || []).find((file) =>
+      !file.type || file.type.startsWith("image/")
+    );
+  }
+
+  function handleFileInputChange(event) {
+    uploadFile(firstImageFile(event.target.files));
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    setIsDragging(false);
+    uploadFile(firstImageFile(event.dataTransfer?.files));
+  }
+
+  function handlePaste(event) {
+    const pastedImage = firstImageFile(event.clipboardData?.files);
+
+    if (pastedImage) {
+      event.preventDefault();
+      uploadFile(pastedImage);
+      return;
+    }
+
+    const pastedText = event.clipboardData?.getData("text/plain")?.trim();
+
+    if (
+      pastedText &&
+      (
+        /^(https?:)?\/\//.test(pastedText) ||
+        pastedText.startsWith("/static/") ||
+        pastedText.startsWith("data:image/")
+      )
+    ) {
+      onMediaChange?.(pastedText);
+    }
+  }
+
+  async function removeMedia() {
+    setError("");
+
+    try {
+      if (onRemoveMedia && hasMedia) {
+        await onRemoveMedia();
+      } else {
+        onMediaChange?.("");
+      }
+    } catch (removeError) {
+      setError(removeError.message || "Suppression impossible.");
+    }
+  }
+
+  return (
+    <div
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsDragging(false);
+        }
+      }}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+      style={{
+        border: isDragging
+          ? "1px solid rgba(126, 226, 168, 0.75)"
+          : "1px solid #2a2a2a",
+        borderRadius: "12px",
+        background: isDragging ? "#17231b" : "#121212",
+        padding: "12px",
+        transition: "background 0.14s ease, border 0.14s ease"
+      }}
+    >
+      <QuestionEditorField label="Image / URL">
+        <input
+          value={mediaValue}
+          onChange={(event) => onMediaChange?.(event.target.value)}
+          placeholder="https://... ou /static/image.jpg"
+          style={{
+            ...inputStyle,
+            marginBottom: 0
+          }}
+        />
+      </QuestionEditorField>
+
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          marginTop: "10px"
+        }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileInputChange}
+          style={{ display: "none" }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!onUploadFile || isUploading}
+          style={{
+            ...buttonStyle,
+            opacity: !onUploadFile || isUploading ? 0.6 : 1
+          }}
+        >
+          {hasMedia ? "Remplacer" : "Choisir"}
+        </button>
+        {hasMedia && (
+          <button
+            type="button"
+            onClick={removeMedia}
+            style={dangerButtonStyle}
+          >
+            Retirer
+          </button>
+        )}
+        <span
+          style={{
+            color: isDragging ? "#7ee2a8" : "#777",
+            fontSize: "12px"
+          }}
+        >
+          {isUploading
+            ? "Import en cours..."
+            : isDragging
+              ? "Déposer l'image"
+              : "Glisser-déposer ou coller"}
+        </span>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            color: "#ff9c9c",
+            fontSize: "12px",
+            marginTop: "9px"
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div style={{ marginTop: hasMedia ? "12px" : 0 }}>
+        <MediaPreview media={mediaValue} />
+      </div>
+    </div>
   );
 }
 

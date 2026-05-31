@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { resolveMediaUrl } from "../../../shared/media";
 
 const LONG_TEXT_LENGTH = 48;
 const CLOSE_DELAY_MS = 140;
@@ -68,7 +69,7 @@ function anchorHasPreviewOverflow(anchor) {
   return Array.from(targets).some(elementHasOverflow);
 }
 
-export function useManageTextPreview(items) {
+export function useManageTextPreview(items, options = {}) {
   const closeTimerRef = useRef(null);
   const previewId = useId();
   const [anchorElement, setAnchorElement] = useState(null);
@@ -76,11 +77,13 @@ export function useManageTextPreview(items) {
   const [position, setPosition] = useState(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const previewItems = (items || []).map(normalizeItem).filter(Boolean);
+  const mediaSrc = resolveMediaUrl(options.media);
   const contentKey = previewItems
     .map((item) => `${item.label}:${item.value}`)
+    .concat(mediaSrc ? [`media:${mediaSrc}`] : [])
     .join("\u0000");
   const hasLongValue = previewItems.some((item) => hasLongText(item.value));
-  const enabled = hasLongValue || hasOverflow;
+  const enabled = Boolean(mediaSrc) || hasLongValue || hasOverflow;
 
   function clearCloseTimer() {
     if (closeTimerRef.current) {
@@ -214,6 +217,20 @@ export function useManageTextPreview(items) {
             gap: "10px"
           }}
         >
+          {mediaSrc && (
+            <img
+              src={mediaSrc}
+              alt=""
+              style={{
+                width: "100%",
+                maxHeight: "190px",
+                objectFit: "contain",
+                borderRadius: "8px",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                background: "#0f0f0f"
+              }}
+            />
+          )}
           {previewItems.map((item, index) => (
             <div
               key={`${item.label || "text"}-${index}`}

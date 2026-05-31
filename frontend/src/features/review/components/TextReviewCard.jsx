@@ -1,4 +1,5 @@
 import { fadeInStyle } from "../../../shared/styles";
+import { resolveMediaUrl } from "../../../shared/media";
 
 const answerButtonStyle = {
     flex: 1,
@@ -79,6 +80,7 @@ export default function TextReviewCard({
 }) {
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
+    const mediaSrc = resolveMediaUrl(q.media);
 
     return (
         <div
@@ -152,16 +154,16 @@ export default function TextReviewCard({
                         lineHeight: 1.35,
                         fontWeight: "700",
                         color: "#f3f3f3",
-                        marginBottom: q.media ? "24px" : "0"
+                        marginBottom: mediaSrc ? "24px" : "0"
                     }}
                 >
                     {q.question}
                 </div>
 
                 {/* IMAGE */}
-                {q.media && (
+                {mediaSrc && (
                     <img
-                        src={q.media}
+                        src={mediaSrc}
                         alt="question"
                         style={{
                             width: "100%",

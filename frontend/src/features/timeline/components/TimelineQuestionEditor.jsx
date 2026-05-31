@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  ImageImportField,
-  MediaPreview,
+  ImageMediaField,
   QuestionEditorActions,
   QuestionEditorField,
   QuestionEditorShell,
@@ -46,6 +45,7 @@ export default function TimelineQuestionEditor({
   onCancel,
   onDelete,
   onUploadFile,
+  onRemoveMedia,
   saveStatus,
   hasUnsavedChanges,
   isSubmitDisabled,
@@ -142,17 +142,12 @@ export default function TimelineQuestionEditor({
         />
       </QuestionEditorField>
 
-      <QuestionEditorField label="Media / URL">
-        <input
-          value={timelineDraft.media || ""}
-          onChange={(event) => setMedia(event.target.value)}
-          placeholder="http://..."
-          style={inputStyle}
-        />
-      </QuestionEditorField>
-
-      <ImageImportField onUploadFile={onUploadFile} />
-      <MediaPreview media={timelineDraft.media} />
+      <ImageMediaField
+        media={timelineDraft.media}
+        onMediaChange={setMedia}
+        onUploadFile={onUploadFile}
+        onRemoveMedia={onRemoveMedia}
+      />
 
       <TagEditor
         tags={timelineDraft.tags || []}

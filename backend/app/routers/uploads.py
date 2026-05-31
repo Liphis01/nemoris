@@ -1,12 +1,9 @@
-import os
-import shutil
-
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
-from ..config import STATIC_DIR
 from ..dependencies import get_db
 from ..models import Question
+from ..services.media import delete_unreferenced_media_file, store_uploaded_image
 
 
 router = APIRouter()
@@ -23,39 +20,18 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
     if not question:
         return {"error": "Question not found"}
 
-    if not question.media:
+    old_media = question.media
+
+    if not old_media:
         return {"error": "No image"}
 
-    is_local_static = (
-        question.media.startswith("/static/") or
-        question.media.startswith("http://127.0.0.1:8000/static/")
-    )
-
-    # Only delete files that this app owns. External URLs may be referenced by
-    # media but should never be removed from disk.
-    if not is_local_static:
-        return {"error": "External image"}
-
-    file_path = STATIC_DIR / os.path.basename(question.media)
-
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
     question.media = None
-    question.type_q = "text"
-
     db.commit()
+    delete_unreferenced_media_file(db, old_media)
 
     return {"status": "image deleted"}
 
 
 @router.post("/upload")
 def upload_image(file: UploadFile = File(...)):
-    # Keep the stored URL relative so it works from both dev and packaged builds.
-    filename = os.path.basename(file.filename)
-    file_path = STATIC_DIR / filename
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {"url": f"/static/{filename}"}
+    return store_uploaded_image(file)

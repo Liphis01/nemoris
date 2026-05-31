@@ -3,6 +3,7 @@ import {
   getQuestionTypeChipStyle,
   questionTypeChipStyles
 } from "../../../shared/questionTypes";
+import { resolveMediaUrl } from "../../../shared/media";
 import CalendarGroupRecap from "./CalendarGroupRecap";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -359,6 +360,7 @@ function EventCard({
 }) {
   const question = event.question;
   const isHistory = event.kind === "history";
+  const mediaSrc = resolveMediaUrl(question.media);
 
   return (
     <div
@@ -437,17 +439,57 @@ function EventCard({
 
       <div
         style={{
-          color: "#eee",
-          fontSize: "14px",
-          fontWeight: "700",
-          lineHeight: 1.35,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap"
+          display: mediaSrc ? "grid" : "block",
+          gridTemplateColumns: mediaSrc ? "minmax(0, 1fr) 48px" : undefined,
+          gap: mediaSrc ? "10px" : undefined,
+          alignItems: "center"
         }}
       >
-        {dueTitle(question)}
+        <div
+          style={{
+            color: "#eee",
+            fontSize: "14px",
+            fontWeight: "700",
+            lineHeight: 1.35,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {dueTitle(question)}
+        </div>
+
+        {mediaSrc && (
+          <img
+            src={mediaSrc}
+            alt=""
+            style={{
+              width: "48px",
+              height: "38px",
+              borderRadius: "7px",
+              border: "1px solid #2d2d2d",
+              objectFit: "cover",
+              background: "#101010"
+            }}
+          />
+        )}
       </div>
+
+      {mediaSrc && isSelected && (
+        <img
+          src={mediaSrc}
+          alt=""
+          style={{
+            width: "100%",
+            maxHeight: "180px",
+            objectFit: "contain",
+            borderRadius: "10px",
+            border: "1px solid #2d2d2d",
+            background: "#101010",
+            marginTop: "10px"
+          }}
+        />
+      )}
 
       {(question.tags || []).length > 0 && (
         <div
@@ -1172,6 +1214,15 @@ export default function ReviewCalendar({
                   .slice(maxVisibleTypeBars)
                   .reduce((total, summary) => total + summary.count, 0);
                 const summaryLabel = barSummaryLabel(visibleTypeSummaries);
+                const mediaCount = dayEvents.filter((event) =>
+                  Boolean(resolveMediaUrl(event.question.media))
+                ).length;
+                const fullSummaryLabel = [
+                  summaryLabel,
+                  mediaCount > 0
+                    ? `${mediaCount} image${mediaCount > 1 ? "s" : ""}`
+                    : ""
+                ].filter(Boolean).join("\n");
                 const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
                 const isToday = dateKey === todayKey;
                 const isSelected = dateKey === selectedDateKey;
@@ -1182,8 +1233,8 @@ export default function ReviewCalendar({
                   <button
                     key={dateKey}
                     onClick={() => selectDate(dateKey)}
-                    title={summaryLabel || undefined}
-                    aria-label={`${date.getDate()} ${monthFormatter.format(date)}${summaryLabel ? `. ${summaryLabel}` : ""}`}
+                    title={fullSummaryLabel || undefined}
+                    aria-label={`${date.getDate()} ${monthFormatter.format(date)}${fullSummaryLabel ? `. ${fullSummaryLabel}` : ""}`}
                     style={{
                       minHeight: "96px",
                       padding: "10px",

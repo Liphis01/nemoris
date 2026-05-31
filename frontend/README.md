@@ -2,19 +2,21 @@
 
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
+- l'ajout/la modification d'une image n'est pas pris en considération dans l'état du bouton sauvegarde
 
 ## quick fixes
-- enlever le type modifiable dans les questions maps
+- mettre un bouton dans recap pour changer la qualité de toutes les zones trouvées
+- enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
+- scroll bar moche dans recap
 - faire un bouton toggle pour l'era dans la preview
 - pouvoir trier les réponses dans le recap de map
 - ajouter une recherche dans calender
-- mettre des tags sur les groupes les propage aux questions
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
 - mettre une ligne verticale sous ma souris dans la timeline qui stick à la graduation de derrière
 
 ## bugs
-- bug des images + trouver comment afficher l'image dans les cards de manage
+- la taille des images doit être limitée
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
@@ -28,13 +30,12 @@
 - dans manage, afficher toutes les stats d'une question
 - ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
 - mettre les différents modes de jetpunk pour les maps et alterner selon les jours
-- dans le recap, afficher toutes les stats intéressantes des questions pour voir les progrès
 - mettre en évidence les zones trop petites (c.f. jetpunk)
 - scraper le site de émilien
-- faire des propositions existantes pour le média et pous les tags
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
+- cliquer sur une question dans calendar met en surbrillance toutes les dates qui ont cette question
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

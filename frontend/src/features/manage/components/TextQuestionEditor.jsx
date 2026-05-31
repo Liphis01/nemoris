@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  ImageImportField,
-  MediaPreview,
+  ImageMediaField,
   QuestionEditorActions,
   QuestionEditorField,
   QuestionEditorShell,
@@ -31,6 +30,7 @@ export default function TextQuestionEditor({
   onCancel,
   onDelete,
   onUploadFile,
+  onRemoveMedia,
   saveStatus,
   hasUnsavedChanges,
   isSubmitDisabled,
@@ -116,17 +116,12 @@ export default function TextQuestionEditor({
         />
       </QuestionEditorField>
 
-      <QuestionEditorField label="Media / URL">
-        <input
-          value={textDraft.media || ""}
-          onChange={(event) => setField("media", event.target.value)}
-          placeholder="http://..."
-          style={inputStyle}
-        />
-      </QuestionEditorField>
-
-      <ImageImportField onUploadFile={onUploadFile} />
-      <MediaPreview media={textDraft.media} />
+      <ImageMediaField
+        media={textDraft.media}
+        onMediaChange={(media) => setField("media", media)}
+        onUploadFile={onUploadFile}
+        onRemoveMedia={onRemoveMedia}
+      />
 
       <TagEditor
         tags={textDraft.tags || []}

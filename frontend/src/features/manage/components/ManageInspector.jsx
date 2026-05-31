@@ -314,6 +314,7 @@ export default function ManageInspector({
   setSelectedItem,
   setEditingZone,
   uploadQuestionMedia,
+  removeQuestionMedia,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -529,7 +530,8 @@ export default function ManageInspector({
       onSubmit: handleCreateQuestion,
       submitLabel: "Créer",
       onCancel: cancelCreateQuestion,
-      onUploadFile: (event) => uploadQuestionMedia(event, { id: "new" }),
+      onUploadFile: (file) => uploadQuestionMedia(file, { id: "new" }),
+      onRemoveMedia: () => setQuestionDraft(prev => ({ ...prev, media: "" })),
       availableTags
     };
 
@@ -712,13 +714,36 @@ export default function ManageInspector({
     setSaveStatus(null);
   }
 
-  async function handleUploadFile(e) {
+  async function handleUploadFile(file) {
     if (!uploadQuestionMedia) return;
-    const updatedQuestion = await uploadQuestionMedia(e, selectedItem);
+    const updatedQuestion = await uploadQuestionMedia(file, selectedItem);
     if (updatedQuestion) {
       setSelectedItem(updatedQuestion);
-      setDraft((prev) => ({ ...prev, media: updatedQuestion.media, type_q: updatedQuestion.type_q }));
+      setDraft((prev) => ({
+        ...prev,
+        media: updatedQuestion.media,
+        type_q: updatedQuestion.type_q
+      }));
     }
+
+    return updatedQuestion;
+  }
+
+  async function handleRemoveMedia() {
+    if (!removeQuestionMedia) {
+      setDraft((prev) => ({ ...prev, media: "" }));
+      return;
+    }
+
+    const updatedQuestion = await removeQuestionMedia(selectedItem.id);
+    const nextSelectedItem = {
+      ...selectedItem,
+      ...(updatedQuestion || {}),
+      media: null
+    };
+
+    setSelectedItem(nextSelectedItem);
+    setDraft((prev) => ({ ...prev, media: "" }));
   }
 
   const editorDraft = draft || buildQuestionDraft(selectedItem);
@@ -736,6 +761,7 @@ export default function ManageInspector({
     submitLabel: "Enregistrer",
     onCancel: handleCancelEdit,
     onUploadFile: handleUploadFile,
+    onRemoveMedia: handleRemoveMedia,
     saveStatus,
     hasUnsavedChanges,
     isSubmitDisabled: !hasUnsavedChanges,

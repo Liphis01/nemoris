@@ -39,7 +39,7 @@ export default function QuestionCard({
       value: q.answer || "—",
       tone: "#8f8f8f"
     }
-  ]);
+  ], { media: q.media });
 
   return (
     <>
@@ -171,6 +171,24 @@ export default function QuestionCard({
           >
             {q.question}
           </div>
+
+          {q.media && (
+            <div
+              title="Image"
+              style={{
+                border: "1px solid rgba(126, 226, 168, 0.35)",
+                borderRadius: "999px",
+                color: "#7ee2a8",
+                flexShrink: 0,
+                fontSize: "9px",
+                fontWeight: "800",
+                lineHeight: 1,
+                padding: "3px 5px"
+              }}
+            >
+              IMG
+            </div>
+          )}
 
           <div
             style={{
