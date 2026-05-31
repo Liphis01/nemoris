@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+import { filterAndSortQuestions } from "./questionFilters";
+
+describe("questionFilters", () => {
+  const questions = [
+    {
+      id: 1,
+      type_q: "text",
+      question: "Capital of France",
+      answer: "Paris",
+      tags: ["Geo"],
+      progress: { next_review: "2099-01-01", reps: 4 }
+    },
+    {
+      id: 2,
+      type_q: "timeline",
+      question: "D-Day",
+      answer: "06/06/1944",
+      tags: ["history"],
+      progress: { next_review: "2000-01-01", reps: 1 }
+    },
+    {
+      id: 3,
+      type_q: "map",
+      question: "ile de france",
+      answer: "Ile-de-France",
+      tags: ["geo", "map"],
+      progress: null
+    }
+  ];
+
+  it("filters by search, tag, type, and due status", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "d day",
+      tagFilter: "hist",
+      questionTypeFilter: "timeline",
+      dueOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([2]);
+  });
+
+  it("treats missing progress as due and normalizes hyphenated text", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "ile de france",
+      tagFilter: "",
+      questionTypeFilter: "map",
+      dueOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([3]);
+  });
+
+  it("sorts by review count and next review for review-focused browsing", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "",
+      tagFilter: "",
+      questionTypeFilter: "",
+      dueOnly: false,
+      sortField: "reps",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([3, 2, 1]);
+  });
+});

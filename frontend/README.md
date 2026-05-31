@@ -34,6 +34,9 @@ npm run dev      # Vite dev server on port 5173
 npm run build    # Production frontend build in dist/
 npm run lint     # ESLint
 npm run preview  # Preview a production build
+npm run test     # Vitest watch mode for src/**/*.test.*
+npm run test:run # Vitest single run
+npm run test:e2e # Playwright critical browser flows
 ```
 
 ## Source Layout
