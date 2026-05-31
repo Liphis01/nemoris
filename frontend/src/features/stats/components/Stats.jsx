@@ -31,7 +31,10 @@ const panelStyle = {
   background: "#171717",
   border: "1px solid #292929",
   borderRadius: "14px",
-  padding: "18px"
+  boxSizing: "border-box",
+  minWidth: 0,
+  padding: "18px",
+  width: "100%"
 };
 
 const statCardStyle = {
@@ -196,7 +199,9 @@ function SummaryCards({ counts }) {
       style={{
         display: "grid",
         gap: "12px",
-        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))"
+        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+        minWidth: 0,
+        width: "100%"
       }}
     >
       {cards.map(([label, value, color, background]) => (
@@ -362,6 +367,7 @@ function RetentionTable({ retentionByType = {} }) {
                 background: "#131313",
                 border: "1px solid #292929",
                 borderRadius: "12px",
+                boxSizing: "border-box",
                 display: "grid",
                 gap: "12px",
                 gridTemplateColumns: "92px minmax(0, 1fr) repeat(3, 68px)",
@@ -490,6 +496,7 @@ function QuestionRow({
         background: "#131313",
         border: "1px solid #292929",
         borderRadius: "12px",
+        boxSizing: "border-box",
         color: "inherit",
         cursor: "pointer",
         display: "grid",
@@ -497,6 +504,7 @@ function QuestionRow({
         gridTemplateColumns: "minmax(0, 1fr) 84px 74px 92px 34px",
         padding: "12px",
         textAlign: "left",
+        minWidth: 0,
         width: "100%"
       }}
     >
@@ -620,7 +628,8 @@ function QuestionList({
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: "8px"
+            gap: "8px",
+            minWidth: 0
           }}
         >
           {questions.map((question) => (
