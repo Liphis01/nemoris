@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendTimelineAnswer } from "../../../api/review";
 import { fadeInStyle } from "../../../shared/styles";
 import {
@@ -692,6 +692,7 @@ function TimelineCanvas({
   const [viewport, setViewport] = useState(() =>
     clampViewport(range, bounds, activePrecision)
   );
+  const viewportRef = useRef(viewport);
   const [dragMode, setDragMode] = useState("");
   const [hoveredValue, setHoveredValue] = useState(null);
   const [markerDateLabel, setMarkerDateLabel] = useState("");
@@ -738,11 +739,16 @@ function TimelineCanvas({
   const viewportEndPercent = percentWithinRange(viewport.end_value, bounds);
   const viewportWidthPercent = Math.max(2, viewportEndPercent - viewportStartPercent);
 
+  const updateViewport = useCallback((nextViewport) => {
+    viewportRef.current = nextViewport;
+    setViewport(nextViewport);
+  }, []);
+
   useEffect(() => {
-    setViewport(clampViewport(range, bounds, activePrecision));
+    updateViewport(clampViewport(range, bounds, activePrecision));
     setHoveredValue(null);
     setMarkerDateLabel("");
-  }, [activePrecision, bounds, range]);
+  }, [activePrecision, bounds, range, updateViewport]);
 
   useEffect(() => {
     const node = surfaceRef.current;
@@ -779,14 +785,13 @@ function TimelineCanvas({
 
       const rect = event.currentTarget.getBoundingClientRect();
       const zoomFactor = event.deltaY < 0 ? 0.78 : 1.28;
+      const current = viewportRef.current;
+      const ratio = clampNumber((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+      const centerValue = current.start_value +
+        ratio * (current.end_value - current.start_value);
 
-      setViewport(current => {
-        const ratio = clampNumber((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
-        const centerValue = current.start_value +
-          ratio * (current.end_value - current.start_value);
-
-        return zoomViewport(current, bounds, centerValue, zoomFactor, activePrecision);
-      });
+      setHoveredValue(centerValue);
+      updateViewport(zoomViewport(current, bounds, centerValue, zoomFactor, activePrecision));
     }
 
     nodes.forEach(node => node.addEventListener("wheel", handleWheel, { passive: false }));
@@ -794,7 +799,7 @@ function TimelineCanvas({
     return () => {
       nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
     };
-  }, [activePrecision, bounds]);
+  }, [activePrecision, bounds, updateViewport]);
 
   function valueFromClientX(clientX, targetViewport = viewport) {
     const rect = surfaceRef.current?.getBoundingClientRect();
@@ -933,13 +938,15 @@ function TimelineCanvas({
       const rect = surfaceRef.current?.getBoundingClientRect();
       const span = dragState.initialViewport.end_value - dragState.initialViewport.start_value;
       const deltaValue = -((event.clientX - dragState.startX) / Math.max(1, rect?.width || 1)) * span;
-
-      setViewport(panViewport(
+      const nextViewport = panViewport(
         dragState.initialViewport,
         bounds,
         deltaValue,
         activePrecision
-      ));
+      );
+
+      setHoveredValue(valueFromClientX(event.clientX, nextViewport));
+      updateViewport(nextViewport);
       return;
     }
 
@@ -947,6 +954,12 @@ function TimelineCanvas({
   }
 
   function handleSurfacePointerMove(event) {
+    const dragState = dragRef.current;
+    if (dragState?.mode === "surface" && dragState.pointerId === event.pointerId) {
+      handlePointerMove(event);
+      return;
+    }
+
     setHoveredValue(valueFromClientX(event.clientX));
     handlePointerMove(event);
   }
@@ -978,8 +991,8 @@ function TimelineCanvas({
       ? getAnswerCenterValue(activeAnswer, activeTimeline)
       : (viewport.start_value + viewport.end_value) / 2;
 
-    setViewport(current => zoomViewport(
-      current,
+    updateViewport(zoomViewport(
+      viewportRef.current,
       bounds,
       centerValue,
       zoomFactor,
@@ -988,7 +1001,7 @@ function TimelineCanvas({
   }
 
   function resetViewport() {
-    setViewport(clampViewport(range, bounds, activePrecision));
+    updateViewport(clampViewport(range, bounds, activePrecision));
   }
 
   function beginMinimapDrag(event) {
@@ -1008,18 +1021,24 @@ function TimelineCanvas({
       pointerId: event.pointerId
     };
     setDragMode("minimap");
-    setViewport(current =>
-      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds, activePrecision)
-    );
+    updateViewport(centerViewportOn(
+      valueFromMinimapClientX(event.clientX),
+      viewportRef.current,
+      bounds,
+      activePrecision
+    ));
   }
 
   function handleMinimapPointerMove(event) {
     const dragState = minimapDragRef.current;
     if (!dragState || dragState.pointerId !== event.pointerId) return;
 
-    setViewport(current =>
-      centerViewportOn(valueFromMinimapClientX(event.clientX), current, bounds, activePrecision)
-    );
+    updateViewport(centerViewportOn(
+      valueFromMinimapClientX(event.clientX),
+      viewportRef.current,
+      bounds,
+      activePrecision
+    ));
   }
 
   function handleMinimapPointerUp(event) {
@@ -1119,6 +1138,88 @@ function TimelineCanvas({
             })}
           </div>
         ))}
+      </div>
+    );
+  }
+
+  function renderHoverGuide() {
+    if (hoveredValue === null) return null;
+
+    const left = percentFromValue(hoveredValue, viewport);
+    if (left < -2 || left > 102) return null;
+
+    const labelLeft = clampNumber(left, 9, 91);
+    const rulerHeight = Math.max(rulerRowHeight, scale.rulers.length * rulerRowHeight);
+
+    return (
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 3
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: 0,
+            bottom: 0,
+            width: "46px",
+            transform: "translateX(-50%)",
+            background: "linear-gradient(90deg, rgba(244,212,140,0), rgba(244,212,140,0.1), rgba(244,212,140,0))"
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: 0,
+            bottom: 0,
+            width: "2px",
+            transform: "translateX(-50%)",
+            borderRadius: "999px",
+            background: "linear-gradient(180deg, rgba(244,212,140,0.1), rgba(244,212,140,0.95) 18%, rgba(244,212,140,0.68) 72%, rgba(244,212,140,0.08))",
+            boxShadow: "0 0 18px rgba(244,212,140,0.34)"
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${answerAnchorTop}%`,
+            width: "9px",
+            height: "9px",
+            transform: "translate(-50%, -50%)",
+            border: "2px solid rgba(255,255,255,0.78)",
+            borderRadius: "999px",
+            background: "#f4d48c",
+            boxShadow: "0 0 0 7px rgba(244,212,140,0.15), 0 8px 20px rgba(0,0,0,0.35)"
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: `${labelLeft}%`,
+            top: `${rulerHeight + 22}px`,
+            transform: "translateX(-50%)",
+            border: "1px solid rgba(244,212,140,0.52)",
+            borderRadius: "999px",
+            background: "rgba(19, 18, 15, 0.92)",
+            color: "#f4f0df",
+            fontSize: "11px",
+            fontWeight: "900",
+            letterSpacing: 0,
+            lineHeight: 1,
+            padding: "7px 10px",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.38), 0 0 0 1px rgba(0,0,0,0.32)",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {formatValueLabel(hoveredValue, activePrecision)}
+        </div>
       </div>
     );
   }
@@ -1909,6 +2010,7 @@ function TimelineCanvas({
         })}
 
         {renderRulers()}
+        {renderHoverGuide()}
 
         {markers.map(renderPassiveMarker)}
         {renderActiveAnswer()}

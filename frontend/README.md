@@ -1,8 +1,9 @@
 # TODO
 
+Read AGENTS.md. At that point, what do you think lacks or needs upgrading in the project ? Give me suggestions and also possible longterm improvements.
+
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
-- do you think it's a good idea to allow url for images ?
 - add a “Copy locally” or “Importer depuis l’URL” button.
 
 ## quick fixes
@@ -14,7 +15,6 @@
 - ajouter une recherche dans calender
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
-- mettre une ligne verticale sous ma souris dans la timeline qui stick à la graduation de derrière
 
 ## bugs
 - la taille des images doit être limitée
