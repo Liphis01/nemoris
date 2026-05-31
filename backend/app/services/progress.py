@@ -6,6 +6,7 @@ from ..models import Progress, Question
 from ..scheduler import (
     FSRS_VERSION,
     assign_smoothed_schedules,
+    apply_favorite_review_frequency,
     candidate_review_dates,
     new_fsrs_card_data,
     parse_history_date,
@@ -51,6 +52,13 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
     if "ideal_interval" in scheduling:
         entry["ideal_interval"] = scheduling["ideal_interval"]
         entry["ideal_next_review"] = scheduling["ideal_next_review"].isoformat()
+
+    if scheduling.get("favorite_boost"):
+        entry["favorite_boost"] = True
+        entry["favorite_base_interval"] = scheduling["favorite_base_interval"]
+        entry["favorite_base_next_review"] = (
+            scheduling["favorite_base_next_review"].isoformat()
+        )
 
     if "fsrs_rating" in scheduling:
         entry["fsrs_rating"] = scheduling["fsrs_rating"]
@@ -187,16 +195,19 @@ def load_daily_review_type_counts(db, dates, exclude_question_ids=None):
     return result
 
 
-def load_question_types(db, question_ids):
+def load_question_review_metadata(db, question_ids):
     question_ids = set(question_ids)
 
     if not question_ids:
         return {}
 
     return {
-        question_id: type_q
-        for question_id, type_q in (
-            db.query(Question.id, Question.type_q)
+        question_id: {
+            "type_q": type_q,
+            "favorite": bool((data or {}).get("favorite"))
+        }
+        for question_id, type_q, data in (
+            db.query(Question.id, Question.type_q, Question.data)
             .filter(Question.id.in_(question_ids))
             .all()
         )
@@ -215,11 +226,16 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
         for progress, _ in progress_quality_pairs
         if progress.question_id is not None
     }
-    question_types = load_question_types(db, question_ids)
+    question_metadata = load_question_review_metadata(db, question_ids)
 
     for progress, quality in progress_quality_pairs:
+        metadata = question_metadata.get(progress.question_id, {})
         scheduling = update_progress(progress, quality, today=today)
-        scheduling["type_q"] = question_types.get(progress.question_id)
+        scheduling["type_q"] = metadata.get("type_q")
+        scheduling = apply_favorite_review_frequency(
+            scheduling,
+            favorite=metadata.get("favorite", False)
+        )
         items.append((progress, quality, scheduling))
 
         if progress.question_id is not None:

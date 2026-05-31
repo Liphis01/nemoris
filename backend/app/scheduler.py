@@ -13,6 +13,7 @@ APP_QUALITY_AGAIN = 0
 APP_QUALITY_HARD = 1
 APP_QUALITY_GOOD = 2
 APP_QUALITY_EASY = 3
+FAVORITE_INTERVAL_MULTIPLIER = 0.7
 
 
 def review_datetime_for_date(day):
@@ -208,6 +209,41 @@ def candidate_review_dates(today, ideal_next_review, interval):
         first_date + timedelta(days=offset)
         for offset in range(days + 1)
     ]
+
+
+def favorite_interval(interval):
+    if interval <= 1:
+        return interval
+
+    boosted = max(1, math.floor(interval * FAVORITE_INTERVAL_MULTIPLIER))
+    return min(interval - 1, boosted)
+
+
+def apply_favorite_review_frequency(scheduling, favorite=False):
+    if not favorite:
+        return scheduling
+
+    interval = scheduling["interval"]
+    boosted_interval = favorite_interval(interval)
+
+    if boosted_interval == interval:
+        return scheduling
+
+    last_review = scheduling["last_review"]
+    next_review = last_review + timedelta(days=boosted_interval)
+
+    return {
+        **scheduling,
+        "favorite_boost": True,
+        "favorite_base_interval": interval,
+        "favorite_base_next_review": scheduling["next_review"],
+        "interval": boosted_interval,
+        "next_review": next_review,
+        "fsrs_card": set_fsrs_card_due_date(
+            scheduling.get("fsrs_card"),
+            next_review
+        )
+    }
 
 
 def type_key(type_q):
@@ -498,7 +534,7 @@ def update_progress(progress, quality, today=None):
     }
 
 
-def preview_intervals(progress):
+def preview_intervals(progress, favorite=False):
     # The map recap can show what each button would schedule before the user
     # commits a quality choice.
     today = date.today()
@@ -521,6 +557,7 @@ def preview_intervals(progress):
         )
         next_review = date_from_review_datetime(reviewed_card.due)
         last_review = date_from_review_datetime(reviewed_card.last_review)
-        intervals[quality] = max(0, (next_review - last_review).days)
+        interval = max(0, (next_review - last_review).days)
+        intervals[quality] = favorite_interval(interval) if favorite else interval
 
     return intervals

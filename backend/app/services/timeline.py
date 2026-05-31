@@ -265,7 +265,10 @@ def serialize_timeline_review_item(question):
         "tags": question.tags or [],
         "timeline": timeline,
         "progress": serialize_progress(question.progress),
-        "projected_intervals": preview_intervals(question.progress)
+        "projected_intervals": preview_intervals(
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite"))
+        )
     }
 
     item["start_value"] = date_center_value(timeline["start"])

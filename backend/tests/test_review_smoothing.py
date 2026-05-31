@@ -26,6 +26,7 @@ from app.scheduler import (
     app_quality_to_fsrs_rating,
     assign_smoothed_schedules,
     choose_smoothed_review_date,
+    favorite_interval,
     legacy_quality_to_fsrs_rating,
     rebalance_review_calendar,
     smoothing_radius_days
@@ -91,6 +92,13 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(smoothing_radius_days(4), 2)
         self.assertEqual(smoothing_radius_days(13), 2)
         self.assertEqual(smoothing_radius_days(14), 3)
+
+    def test_favorite_interval_shortens_review_intervals(self):
+        self.assertEqual(favorite_interval(0), 0)
+        self.assertEqual(favorite_interval(1), 1)
+        self.assertEqual(favorite_interval(2), 1)
+        self.assertEqual(favorite_interval(3), 2)
+        self.assertEqual(favorite_interval(10), 7)
 
     def test_interval_zero_and_one_do_not_move(self):
         today = date(2026, 1, 1)
@@ -370,6 +378,30 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(
             progress.history[-1]["ideal_next_review"],
             (today + timedelta(days=2)).isoformat()
+        )
+
+    def test_favorite_answer_schedules_earlier_than_fsrs_interval(self):
+        today = date.today()
+        question = self.add_question(1, type_q="text")
+        question.data = {"favorite": True}
+        progress = self.add_progress(1, today)
+        self.db.commit()
+
+        response = answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+        history = progress.history[-1]
+
+        self.assertTrue(history["favorite_boost"])
+        self.assertGreater(history["favorite_base_interval"], response["interval"])
+        self.assertEqual(
+            history["favorite_base_next_review"],
+            (today + timedelta(days=history["favorite_base_interval"])).isoformat()
+        )
+        self.assertEqual(
+            response["next_review"],
+            today + timedelta(days=response["interval"])
         )
 
     def test_map_answer_smooths_batch_against_existing_load(self):

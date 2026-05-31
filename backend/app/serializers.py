@@ -140,6 +140,7 @@ def serialize_map_review_zone(question):
         ),
 
         "projected_intervals": preview_intervals(
-            question.progress
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite"))
         )
     }
