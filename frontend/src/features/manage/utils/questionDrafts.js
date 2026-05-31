@@ -26,7 +26,7 @@ export function buildQuestionSavePayload(source) {
     tags: pendingTag && !tags.includes(pendingTag)
       ? [...tags, pendingTag]
       : tags,
-    data: type_q === "timeline" ? source?.data || {} : {}
+    data: source?.data || {}
   };
 }
 

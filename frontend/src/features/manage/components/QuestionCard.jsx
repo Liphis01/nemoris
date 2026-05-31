@@ -1,6 +1,7 @@
 import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import FavoriteToggleButton from "./FavoriteToggleButton";
 
 export default function QuestionCard({
   q,
@@ -11,7 +12,8 @@ export default function QuestionCard({
   isHighlighted,
   onDeleteOpen,
   closeDelete,
-  deleteQuestion
+  deleteQuestion,
+  onToggleFavorite
 }) {
   const cardBackground = selected
     ? "#252525"
@@ -189,6 +191,11 @@ export default function QuestionCard({
               IMG
             </div>
           )}
+
+          <FavoriteToggleButton
+            favorite={Boolean(q.data?.favorite)}
+            onToggle={onToggleFavorite}
+          />
 
           <div
             style={{

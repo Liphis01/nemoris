@@ -370,6 +370,65 @@ export default function Menu({
 
                         </div>
 
+                        {/* STATS */}
+                        <div
+                            onClick={() => setMode("stats")}
+                            style={{
+                                ...cardStyle,
+                                flex: 1,
+                                background:
+                                    "linear-gradient(180deg, #171a20 0%, #14161a 100%)"
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform =
+                                    "translateY(-2px)";
+                                e.currentTarget.style.border =
+                                    "1px solid #3a3a3a";
+                                e.currentTarget.style.background =
+                                    "linear-gradient(180deg, #1c2230 0%, #171a20 100%)";
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform =
+                                    "translateY(0px)";
+                                e.currentTarget.style.border =
+                                    "1px solid #2a2a2a";
+                                e.currentTarget.style.background =
+                                    "linear-gradient(180deg, #171a20 0%, #14161a 100%)";
+                            }}
+                        >
+
+                            <div
+                                style={{
+                                    ...badgeStyle,
+                                    background: "#14283d",
+                                    color: "#8fc7ff"
+                                }}
+                            >
+                                STATS
+                            </div>
+
+                            <div
+                                style={{
+                                    fontSize: "22px",
+                                    fontWeight: "700",
+                                    marginBottom: "10px"
+                                }}
+                            >
+                                Statistiques
+                            </div>
+
+                            <div
+                                style={{
+                                    color: "#888",
+                                    fontSize: "14px",
+                                    lineHeight: 1.5
+                                }}
+                            >
+                                Suivre la charge, la rétention, les favoris et les points faibles.
+                            </div>
+
+                        </div>
+
                         {/* FUTURE BLOCK */}
                         <div
                             style={{

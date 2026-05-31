@@ -51,6 +51,92 @@ function defaultTimelineResults(payload) {
   }));
 }
 
+function toDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function questionStatsSummary(question) {
+  const history = question.progress?.history || [];
+  const reviews = history.length || question.progress?.reps || 0;
+  const failed = history.length > 0
+    ? history.filter(entry => Number(entry.quality) === 0).length
+    : question.progress?.lapses || 0;
+  const hard = history.filter(entry => Number(entry.quality) === 1).length;
+  const success = history.length > 0
+    ? history.filter(entry => Number(entry.quality) > 0).length
+    : Math.max(0, reviews - failed);
+
+  return {
+    ...clone(question),
+    favorite: Boolean(question.data?.favorite),
+    reviews,
+    success_count: success,
+    failed_count: failed,
+    hard_count: hard,
+    retention: reviews > 0 ? Math.round((success / reviews) * 100) : null,
+    difficulty: question.progress?.difficulty || 5,
+    lapses: question.progress?.lapses || failed,
+    reps: question.progress?.reps || reviews,
+    last_review: question.progress?.last_review || null,
+    next_review: question.progress?.next_review || toDateKey(new Date())
+  };
+}
+
+function defaultStats(questions) {
+  const today = toDateKey(new Date());
+  const loadByType = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+    return {
+      date: toDateKey(date),
+      total: 0,
+      types: {
+        text: 0,
+        map: 0,
+        timeline: 0
+      }
+    };
+  });
+  const summaries = questions.map(questionStatsSummary);
+
+  return {
+    generated_on: today,
+    windows: {
+      load_days: 30,
+      retention_days: 90,
+      retention_start: today
+    },
+    counts: {
+      total: questions.length,
+      due_total: 0,
+      overdue: 0,
+      due_today: 0,
+      new: questions.filter(question => !question.progress?.reps).length,
+      by_type: {
+        text: { total: 0, due: 0, overdue: 0, due_today: 0, new: 0 },
+        map: { total: 0, due: 0, overdue: 0, due_today: 0, new: 0 },
+        timeline: { total: 0, due: 0, overdue: 0, due_today: 0, new: 0 }
+      }
+    },
+    load_by_type: loadByType,
+    retention_by_type: {
+      text: { reviews: 0, success: 0, failed: 0, hard: 0, retention: null },
+      map: { reviews: 0, success: 0, failed: 0, hard: 0, retention: null },
+      timeline: { reviews: 0, success: 0, failed: 0, hard: 0, retention: null }
+    },
+    hard_questions: summaries.filter(question => question.reviews > 0),
+    favorite_questions: summaries.filter(question => question.favorite),
+    weak_spots: {
+      map: summaries.filter(question => question.type_q === "map" && question.reviews > 0),
+      timeline: summaries.filter(question => question.type_q === "timeline" && question.reviews > 0)
+    }
+  };
+}
+
 export async function mockApi(page, options = {}) {
   const state = {
     answerRequests: [],
@@ -59,6 +145,7 @@ export async function mockApi(page, options = {}) {
     mapAnswerRequests: [],
     questionUpdates: [],
     review: clone(options.review || []),
+    stats: clone(options.stats || defaultStats(options.questions || [])),
     reviewSettings: {
       catchup_daily_target: 50,
       ...(options.reviewSettings || {})
@@ -110,6 +197,11 @@ export async function mockApi(page, options = {}) {
 
     if (method === "GET" && path === "/review") {
       await fulfillJson(route, state.review);
+      return;
+    }
+
+    if (method === "GET" && path === "/stats") {
+      await fulfillJson(route, state.stats);
       return;
     }
 

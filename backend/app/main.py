@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
-from .routers import collections, groups, maps, questions, review, uploads
+from .routers import collections, groups, maps, questions, review, stats, uploads
 from .services.startup import run_startup_rebalance_with_session
 
 
@@ -36,6 +36,7 @@ def create_app():
     app.include_router(groups.router)
     app.include_router(collections.router)
     app.include_router(review.router)
+    app.include_router(stats.router)
     app.include_router(maps.router)
     app.include_router(uploads.router)
 

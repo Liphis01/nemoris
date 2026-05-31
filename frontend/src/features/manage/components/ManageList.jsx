@@ -22,7 +22,8 @@ export default function ManageList({
   isCreatingQuestion,
   resetQuestionDraft,
   setIsCreatingQuestion,
-  requestManageTransition
+  requestManageTransition,
+  updateQuestion
 }) {
   // This list renders either flat groups or grouped question rows, while also
   // owning local UI state for delete popovers, expansion, and scroll targets.
@@ -259,6 +260,26 @@ export default function ManageList({
     action?.();
   }
 
+  async function toggleFavorite(q, savedQuestion) {
+    const sourceQuestion = savedQuestion?.id === q.id ? savedQuestion : q;
+    const nextData = { ...(sourceQuestion.data || {}) };
+
+    if (nextData.favorite) {
+      delete nextData.favorite;
+    } else {
+      nextData.favorite = true;
+    }
+
+    await updateQuestion?.(q.id, { data: nextData });
+
+    if (selectedItem?.id === q.id) {
+      setSelectedItem({
+        ...sourceQuestion,
+        data: nextData
+      });
+    }
+  }
+
   function toggleGroup(groupId) {
     setOpenDeleteId(null);
 
@@ -318,6 +339,11 @@ export default function ManageList({
           deleteQuestion={() =>
             handleDeleteQuestion(q.id)
           }
+          onToggleFavorite={() =>
+            runManageTransition((saveResult) =>
+              toggleFavorite(q, saveResult?.question)
+            )
+          }
         />
       )
       : (
@@ -331,6 +357,11 @@ export default function ManageList({
           closeDelete={() => setOpenDeleteId(null)}
           deleteQuestion={() =>
             handleDeleteQuestion(q.id)
+          }
+          onToggleFavorite={() =>
+            runManageTransition((saveResult) =>
+              toggleFavorite(q, saveResult?.question)
+            )
           }
         />
       );

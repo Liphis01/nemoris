@@ -3,6 +3,7 @@ import Menu from "./features/menu/Menu";
 import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
 import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
+import Stats from "./features/stats/components/Stats";
 import { getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
@@ -76,12 +77,18 @@ function App() {
   function openQuestionInManage(question) {
     // Calendar -> Manage navigation should land on the exact question, without
     // whatever filters were previously active in Manage.
+    openQuestionIdInManage(question.id);
+  }
+
+  function openQuestionIdInManage(questionId) {
+    // Cross-feature navigation can happen before Manage has loaded questions.
+    // Store the id and let Manage resolve it after its normal data load.
     manageLibrary.resetManageFilters();
     manageLibrary.setViewMode("questions");
     manageLibrary.setIsCreatingQuestion(false);
     manageLibrary.setIsCreatingGroup(false);
-    manageLibrary.setSelectedItem(question);
-    setManageOpenQuestionId(question.id);
+    manageLibrary.setSelectedItem(null);
+    setManageOpenQuestionId(questionId);
     setMode("manage");
   }
 
@@ -126,6 +133,13 @@ function App() {
           onOpenQuestion={openQuestionInManage}
           openQuestionId={calendarOpenQuestionId}
           clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
+        />
+      )}
+
+      {mode === "stats" && (
+        <Stats
+          setMode={setMode}
+          onOpenQuestion={openQuestionIdInManage}
         />
       )}
     </div>

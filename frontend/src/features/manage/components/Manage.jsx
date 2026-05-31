@@ -86,7 +86,7 @@ export default function Manage(props) {
         ? await saveHandler()
         : { saved: false };
 
-      await action?.();
+      await action?.(saveResult);
 
       if (saveResult?.saved) {
         showAutosaveStatus({

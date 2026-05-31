@@ -1,14 +1,5 @@
 # TODO
 
-## Highest value upgrades
-
-Contract stability between backend and frontend
-AGENTS strongly says backend owns review grouping and frontend renders returned shapes. That contract should be protected with tests or schemas.
-Add explicit response-shape tests for /review, /answer_map, /answer_timeline, and serializers so future UI work does not accidentally rebuild grouping logic client-side.
-
-README / roadmap cleanup
-frontend/README.md is still mostly TODO plus Vite template text. Move product TODOs into docs/roadmap.md, keep README focused on setup, architecture links, commands, and testing.
-
 
 ## Product Suggestions
 Add a real Stats area: due counts, new count, review load by type, retention by type, hard/favorite questions, timeline/map weak spots.
@@ -59,6 +50,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
+- heatmap des questions les plus durs pour les maps
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

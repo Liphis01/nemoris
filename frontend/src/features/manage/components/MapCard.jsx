@@ -1,6 +1,7 @@
 import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
+import FavoriteToggleButton from "./FavoriteToggleButton";
 
 export default function MapCard({
   q,
@@ -11,7 +12,8 @@ export default function MapCard({
   isHighlighted,
   onDeleteOpen,
   closeDelete,
-  deleteQuestion
+  deleteQuestion,
+  onToggleFavorite
 }) {
   const mapTypeStyle = questionTypeChipStyles.map;
   const cardBackground = selected
@@ -172,6 +174,11 @@ export default function MapCard({
           >
             {q.answer || "Unnamed zone"}
           </div>
+
+          <FavoriteToggleButton
+            favorite={Boolean(q.data?.favorite)}
+            onToggle={onToggleFavorite}
+          />
 
           <div
             style={{

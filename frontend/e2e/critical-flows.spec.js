@@ -163,6 +163,139 @@ test("Manage autosaves dirty question edits before selection changes", async ({ 
   await expect(page.getByRole("textbox", { name: "Question", exact: true })).toHaveValue("Second prompt");
 });
 
+test("stats screen shows metrics, toggles favorites, and opens Manage", async ({ page }) => {
+  const loadByType = Array.from({ length: 30 }, (_, index) => ({
+    date: `2026-01-${String(index + 1).padStart(2, "0")}`,
+    total: index === 0 ? 3 : 0,
+    types: {
+      text: index === 0 ? 2 : 0,
+      map: index === 0 ? 1 : 0,
+      timeline: 0
+    }
+  }));
+  const hardQuestion = {
+    id: 1,
+    type_q: "text",
+    question: "Hard prompt",
+    answer: "Hard answer",
+    tags: [],
+    media: null,
+    data: { source: "stats" },
+    group_id: null,
+    group: null,
+    favorite: false,
+    reviews: 3,
+    success_count: 1,
+    failed_count: 2,
+    hard_count: 0,
+    retention: 33,
+    difficulty: 8,
+    lapses: 2,
+    reps: 3,
+    last_review: "2026-01-01",
+    next_review: "2026-01-01"
+  };
+  const mapQuestion = {
+    id: 2,
+    type_q: "map",
+    question: "Europe - FR",
+    answer: "France",
+    tags: [],
+    media: null,
+    data: { code: "FR", aliases: ["France"] },
+    group_id: 7,
+    group: {
+      id: 7,
+      name: "Europe",
+      type_group: "map"
+    },
+    favorite: false,
+    reviews: 2,
+    success_count: 1,
+    failed_count: 1,
+    hard_count: 0,
+    retention: 50,
+    difficulty: 6,
+    lapses: 1,
+    reps: 2,
+    last_review: "2026-01-01",
+    next_review: "2026-01-03"
+  };
+  const state = await mockApi(page, {
+    questions: [
+      {
+        id: 1,
+        type_q: "text",
+        question: "Hard prompt",
+        answer: "Hard answer",
+        tags: [],
+        media: null,
+        data: { source: "stats" },
+        progress: {
+          next_review: "2026-01-01",
+          reps: 3,
+          lapses: 2,
+          history: []
+        }
+      }
+    ],
+    stats: {
+      generated_on: "2026-01-01",
+      windows: {
+        load_days: 30,
+        retention_days: 90,
+        retention_start: "2025-10-04"
+      },
+      counts: {
+        total: 2,
+        due_total: 3,
+        overdue: 1,
+        due_today: 2,
+        new: 1,
+        by_type: {
+          text: { total: 1, due: 2, overdue: 1, due_today: 1, new: 0 },
+          map: { total: 1, due: 1, overdue: 0, due_today: 1, new: 1 },
+          timeline: { total: 0, due: 0, overdue: 0, due_today: 0, new: 0 }
+        }
+      },
+      load_by_type: loadByType,
+      retention_by_type: {
+        text: { reviews: 3, success: 1, failed: 2, hard: 0, retention: 33 },
+        map: { reviews: 2, success: 1, failed: 1, hard: 0, retention: 50 },
+        timeline: { reviews: 0, success: 0, failed: 0, hard: 0, retention: null }
+      },
+      hard_questions: [hardQuestion],
+      favorite_questions: [],
+      weak_spots: {
+        map: [mapQuestion],
+        timeline: []
+      }
+    }
+  });
+
+  await page.goto("/");
+  await page.getByText("Statistiques").click();
+
+  await expect(page.getByRole("heading", { name: "Statistiques" })).toBeVisible();
+  await expect(page.getByText("Questions difficiles")).toBeVisible();
+  await expect(page.getByText("Hard prompt")).toBeVisible();
+
+  await page.getByRole("button", { name: "Ajouter aux favoris" }).first().click();
+  await expect.poll(() => state.questionUpdates.length).toBe(1);
+  expect(state.questionUpdates[0]).toMatchObject({
+    id: 1,
+    payload: {
+      data: {
+        source: "stats",
+        favorite: true
+      }
+    }
+  });
+
+  await page.getByText("Hard prompt").click();
+  await expect(page.getByRole("textbox", { name: "Question", exact: true })).toHaveValue("Hard prompt");
+});
+
 test("group deletion removes grouped questions from the Manage cache", async ({ page }) => {
   const state = await mockApi(page, {
     groups: [
