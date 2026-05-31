@@ -10,9 +10,8 @@ from .services.startup import run_startup_rebalance_with_session
 
 
 def create_app():
-    # The desktop/dev app starts directly from FastAPI, so database setup
-    # happens during app construction instead of through a separate migration
-    # command.
+    # The desktop/dev app starts directly from FastAPI, so pending migrations
+    # run during app construction while still remaining explicit.
     init_database()
     run_startup_rebalance_with_session()
 

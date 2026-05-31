@@ -11,6 +11,9 @@ dist/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
+backend/backups/
 backend/static/
 
 # Env

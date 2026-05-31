@@ -42,6 +42,35 @@ QUIZ_APP_PORT=8765 ./start-prod.sh
 In production, frontend API calls are relative and FastAPI serves
 `frontend/dist`.
 
+## Data Migrations And Backups
+
+The backend runs explicit internal migrations at startup and records them in
+`schema_migrations`. Pending migrations that alter existing schema/data create a
+zip backup first.
+
+Create an exportable backup manually from the project root:
+
+```bash
+./backup-data.sh
+```
+
+On Windows:
+
+```powershell
+.\backup-data.ps1
+```
+
+Backups are written to `backend/backups/` and contain `questions.db`, uploaded
+media from `static/`, and `backup-manifest.json`.
+
+To run migrations without starting the app:
+
+```bash
+cd backend
+source venv/bin/activate
+python manage_data.py migrate
+```
+
 ## Linux Portable Build
 
 From the project root:
@@ -51,7 +80,7 @@ From the project root:
 ```
 
 The script builds Vite, prepares `backend/venv`, installs PyInstaller, bundles
-`backend/run_desktop.py`, and copies writable app data.
+`backend/run_desktop.py`, creates a data backup, and copies writable app data.
 
 Output:
 
@@ -105,5 +134,6 @@ backend\dist\QuizApp\QuizApp.exe
   require it.
 - `backend/static/` contains uploaded media and is copied into portable builds
   when present.
+- `backend/backups/` contains exportable backup zips and is ignored by git.
 - Export the whole `QuizApp` output folder, not only the executable.
 - Backend tests live in `backend/tests`. Install `pytest` separately if needed.

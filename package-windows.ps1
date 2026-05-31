@@ -27,6 +27,16 @@ if (-not (Test-Path $DatabaseFile)) {
   throw "Missing backend\questions.db. Create or restore the local database before packaging, then rerun this script."
 }
 
+Write-Host "Creating data backup before packaging..."
+$VenvPython = Join-Path $BackendDir "venv\Scripts\python.exe"
+$ManageData = Join-Path $BackendDir "manage_data.py"
+
+if (Test-Path $VenvPython) {
+  Invoke-Checked { & $VenvPython $ManageData backup --reason packaging --label before-package } "Backup failed. Packaging stopped."
+} else {
+  Invoke-Checked { py -3.12 $ManageData backup --reason packaging --label before-package } "Backup failed. Packaging stopped."
+}
+
 Write-Host "Building frontend..."
 Set-Location $FrontendDir
 

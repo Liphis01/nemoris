@@ -15,6 +15,9 @@ if [ ! -f "$DATABASE_FILE" ]; then
   exit 1
 fi
 
+echo "Creating data backup before packaging..."
+"$ROOT_DIR/backup-data.sh" --reason packaging --label before-package
+
 echo "Building frontend..."
 cd "$FRONTEND_DIR"
 

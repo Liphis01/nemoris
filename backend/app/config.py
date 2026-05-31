@@ -10,5 +10,7 @@ APP_DATA_DIR = (
     if getattr(sys, "frozen", False)
     else BACKEND_DIR
 )
+DATABASE_FILE = APP_DATA_DIR / "questions.db"
 STATIC_DIR = APP_DATA_DIR / "static"
+BACKUP_DIR = APP_DATA_DIR / "backups"
 FRONTEND_DIST_DIR = BUNDLED_DIR / "frontend" / "dist"

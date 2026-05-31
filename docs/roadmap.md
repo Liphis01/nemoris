@@ -1,5 +1,34 @@
 # TODO
 
+## Highest value upgrades
+
+Frontend complexity control
+ManageInspector.jsx is already large, and Manage is a central workflow. I would start extracting by behavior, not by arbitrary component splitting: autosave state, editor mode state, preview state, and type-specific editor adapters.
+
+Contract stability between backend and frontend
+AGENTS strongly says backend owns review grouping and frontend renders returned shapes. That contract should be protected with tests or schemas.
+Add explicit response-shape tests for /review, /answer_map, /answer_timeline, and serializers so future UI work does not accidentally rebuild grouping logic client-side.
+
+README / roadmap cleanup
+frontend/README.md is still mostly TODO plus Vite template text. Move product TODOs into docs/roadmap.md, keep README focused on setup, architecture links, commands, and testing.
+
+
+## Product Suggestions
+Add a real Stats area: due counts, new count, review load by type, retention by type, hard/favorite questions, timeline/map weak spots.
+Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.
+Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
+Add settings UI for scheduler targets, per-type daily weights, theme/display preferences, backup location, import behavior.
+Improve content ingestion: CSV import/export UI, “import from URL”, local media copy, duplicate detection, and batch tag/collection editing.
+Add map review mode variants: visible answer list, hidden answer list, strict JetPunk-style mode, small-zone emphasis.
+
+## Long term improvements
+Knowledge graph / tag hierarchy: tags like USA belonging to Amérique and Monde, with inherited filtering and stats.
+Per-type scheduling policy: maps are fast, timelines are slower; daily load should account for estimated effort, not just item count.
+Desktop hardening: automatic backups, restore flow, portable data location chooser, startup health checks.
+AI-assisted authoring: generate draft questions, aliases, distractors, timeline entries, or map labels from selected text/URLs, but keep review data user-verifiable.
+Challenge modes: timed runs, streaks, personal records, “hard mode”, but keep them separate from normal FSRS progress so they do not distort memory scheduling.
+Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
+
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
 - add a “Copy locally” or “Importer depuis l’URL” button.
