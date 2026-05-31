@@ -447,7 +447,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
       {showRecap && (
         <div style={overlayStyle}>
 
-          <div style={recapCardStyle}>
+          <div className="app-scrollbar" style={recapCardStyle}>
 
             <div
               style={{
@@ -529,7 +529,11 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                   <div>Qualité</div>
                 </div>
 
-                <div ref={recapTableBodyRef} style={recapTableBodyStyle}>
+                <div
+                  ref={recapTableBodyRef}
+                  className="app-scrollbar"
+                  style={recapTableBodyStyle}
+                >
                   {recapRows.map((row, index) => {
                     const { item, historyStats, isFound } = row;
                     const showSection =
@@ -675,6 +679,7 @@ const recapCardStyle = {
   maxWidth: "1100px",
   maxHeight: "100%",
   overflow: "auto",
+  scrollbarGutter: "stable",
   background: "#1a1a1a",
   border: "1px solid #2a2a2a",
   borderRadius: "18px",
@@ -754,6 +759,7 @@ const recapTableBodyStyle = {
   gap: "1px",
   maxHeight: "430px",
   overflow: "auto",
+  scrollbarGutter: "stable",
   background: "#242424"
 };
 
