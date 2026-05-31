@@ -547,7 +547,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                   style={recapTableBodyStyle}
                 >
                   {foundQuestionIds.length > 0 && (
-                    <div style={recapBulkQualityStyle}>
+                    <div className="map-recap-bulk-row" style={recapBulkQualityStyle}>
                       <div style={recapBulkQualityTextStyle}>
                         <div style={recapBulkQualityTitleStyle}>
                           Zones trouvées
@@ -559,28 +559,39 @@ export default function MapReview({ group, reviewZones, onComplete }) {
 
                       <div style={recapBulkQualityControlsStyle}>
                         {qualityOptions.map(({ value: qVal, icon, title }) => {
-                          const selected = foundBulkQuality === qVal;
+                          const disabled = qVal === 0;
+                          const selected = !disabled && foundBulkQuality === qVal;
                           const activeStyle = qualityButtonStyles[qVal];
 
                           return (
                             <button
                               key={qVal}
                               type="button"
+                              disabled={disabled}
                               onClick={() => setFoundZoneQualities(qVal)}
                               style={{
                                 ...recapQualityButtonStyle,
-                                cursor: "pointer",
+                                cursor: disabled ? "not-allowed" : "pointer",
                                 border: selected
                                   ? activeStyle.border
-                                  : "1px solid #333",
+                                  : disabled
+                                    ? "1px solid #2d2d2d"
+                                    : "1px solid #333",
                                 background: selected
                                   ? activeStyle.background
-                                  : "#222",
+                                  : disabled
+                                    ? "#181818"
+                                    : "#222",
                                 color: selected
                                   ? activeStyle.color
-                                  : "#999"
+                                  : disabled
+                                    ? "#555"
+                                    : "#999",
+                                opacity: disabled ? 0.65 : 1
                               }}
-                              title={`Appliquer aux zones trouvées : ${title}`}
+                              title={disabled
+                                ? "Faux indisponible pour les zones trouvées"
+                                : `Appliquer aux zones trouvées : ${title}`}
                             >
                               {icon}
                             </button>
@@ -831,15 +842,14 @@ const recapSectionStyle = {
 };
 
 const recapBulkQualityStyle = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: recapTableGridColumns,
   alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
-  padding: "10px 14px",
+  gap: recapTableGap,
+  padding: recapTablePadding,
   background: "#111",
   borderLeft: recapStatusStripeBorder,
-  boxSizing: "border-box",
-  flexWrap: "wrap"
+  boxSizing: "border-box"
 };
 
 const recapBulkQualityTextStyle = {
@@ -847,6 +857,7 @@ const recapBulkQualityTextStyle = {
   flexDirection: "column",
   alignItems: "flex-start",
   justifyContent: "center",
+  gridColumn: "1 / -2",
   minWidth: 0
 };
 
