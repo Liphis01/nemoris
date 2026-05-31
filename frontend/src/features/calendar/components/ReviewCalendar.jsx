@@ -27,6 +27,12 @@ const shortDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "short"
 });
 
+const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric"
+});
+
 const calendarTypeOrder = ["text", "map", "timeline"];
 const maxCalendarCellTypeBars = 4;
 
@@ -45,6 +51,11 @@ function parseDateKey(value) {
   if (!year || !month || !day) return null;
 
   return new Date(year, month - 1, day);
+}
+
+function formatDateKey(value) {
+  const date = parseDateKey(value);
+  return date ? compactDateFormatter.format(date) : "Non planifié";
 }
 
 function getNextReview(question) {
@@ -164,6 +175,36 @@ function historyColor(quality) {
   return "#8f9aa3";
 }
 
+function getQuestionReviewStats(question) {
+  const history = question.progress?.history || [];
+
+  if (history.length > 0) {
+    const successes = history.filter((entry) => Number(entry?.quality) > 0).length;
+
+    return {
+      reviews: history.length,
+      successRate: Math.round((successes / history.length) * 100)
+    };
+  }
+
+  const reps = question.progress?.reps || 0;
+  const lapses = question.progress?.lapses || 0;
+
+  if (reps > 0) {
+    const successes = Math.max(0, reps - lapses);
+
+    return {
+      reviews: reps,
+      successRate: Math.round((successes / reps) * 100)
+    };
+  }
+
+  return {
+    reviews: 0,
+    successRate: null
+  };
+}
+
 function normalizeQuestionType(type) {
   return type || "unknown";
 }
@@ -268,6 +309,11 @@ function compareEvents(a, b, sortMode) {
   return eventSortValue(a, sortMode).localeCompare(eventSortValue(b, sortMode));
 }
 
+function findQuestionEvent(events, questionId) {
+  if (!questionId) return null;
+  return events.find((event) => event.question.id === questionId) || null;
+}
+
 function buildDisplayRows(events) {
   const rows = [];
   const groupRows = new Map();
@@ -356,19 +402,41 @@ function EventCard({
   event,
   isSelected,
   onOpenQuestion,
+  onSelectQuestion,
   todayKey
 }) {
   const question = event.question;
   const isHistory = event.kind === "history";
   const mediaSrc = resolveMediaUrl(question.media);
+  const tags = question.tags || [];
+  const visibleTags = isSelected ? tags : tags.slice(0, 3);
+  const reviewStats = getQuestionReviewStats(question);
+  const reviewLabel = reviewStats.reviews > 0
+    ? `${reviewStats.successRate}% (${reviewStats.reviews})`
+    : "Nouveau";
+
+  function selectQuestion() {
+    onSelectQuestion?.(question.id);
+  }
 
   return (
     <div
       ref={cardRef}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
+      onClick={selectQuestion}
+      onKeyDown={(keyboardEvent) => {
+        if (keyboardEvent.target !== keyboardEvent.currentTarget) return;
+        if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") return;
+
+        keyboardEvent.preventDefault();
+        selectQuestion();
+      }}
       style={{
         width: "100%",
         boxSizing: "border-box",
-        padding: "11px 12px",
+        padding: isSelected ? "13px 14px" : "11px 12px",
         borderRadius: "12px",
         border: isSelected
           ? "1px solid rgba(126, 226, 168, 0.85)"
@@ -384,10 +452,11 @@ function EventCard({
         boxShadow: isSelected
           ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
           : "none",
+        cursor: "pointer",
         marginBottom: "8px",
         textAlign: "left",
         font: "inherit",
-        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, padding 0.16s ease"
       }}
     >
       <div
@@ -407,9 +476,10 @@ function EventCard({
           style={{
             color: "#777",
             fontSize: "12px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
+            lineHeight: 1.3,
+            overflow: isSelected ? "visible" : "hidden",
+            textOverflow: isSelected ? "clip" : "ellipsis",
+            whiteSpace: isSelected ? "normal" : "nowrap"
           }}
         >
           {dueLabel(question)}
@@ -440,9 +510,13 @@ function EventCard({
       <div
         style={{
           display: mediaSrc ? "grid" : "block",
-          gridTemplateColumns: mediaSrc ? "minmax(0, 1fr) 48px" : undefined,
+          gridTemplateColumns: mediaSrc
+            ? isSelected
+              ? "minmax(0, 1fr) 58px"
+              : "minmax(0, 1fr) 48px"
+            : undefined,
           gap: mediaSrc ? "10px" : undefined,
-          alignItems: "center"
+          alignItems: isSelected ? "start" : "center"
         }}
       >
         <div
@@ -451,9 +525,9 @@ function EventCard({
             fontSize: "14px",
             fontWeight: "700",
             lineHeight: 1.35,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
+            overflow: isSelected ? "visible" : "hidden",
+            textOverflow: isSelected ? "clip" : "ellipsis",
+            whiteSpace: isSelected ? "normal" : "nowrap"
           }}
         >
           {dueTitle(question)}
@@ -464,8 +538,8 @@ function EventCard({
             src={mediaSrc}
             alt=""
             style={{
-              width: "48px",
-              height: "38px",
+              width: isSelected ? "58px" : "48px",
+              height: isSelected ? "46px" : "38px",
               borderRadius: "7px",
               border: "1px solid #2d2d2d",
               objectFit: "cover",
@@ -481,7 +555,7 @@ function EventCard({
           alt=""
           style={{
             width: "100%",
-            maxHeight: "180px",
+            maxHeight: "260px",
             objectFit: "contain",
             borderRadius: "10px",
             border: "1px solid #2d2d2d",
@@ -491,7 +565,35 @@ function EventCard({
         />
       )}
 
-      {(question.tags || []).length > 0 && (
+      {isSelected && (
+        <div style={cardMetaGridStyle}>
+          <div style={cardMetaBlockStyle}>
+            <span style={cardMetaLabelStyle}>Réussite</span>
+            <span style={cardMetaValueStyle}>{reviewLabel}</span>
+          </div>
+
+          <div style={cardMetaBlockStyle}>
+            <span style={cardMetaLabelStyle}>Intervalle</span>
+            <span style={cardMetaValueStyle}>{question.progress?.interval ?? 0} j</span>
+          </div>
+
+          <div style={cardMetaBlockStyle}>
+            <span style={cardMetaLabelStyle}>Dernière</span>
+            <span style={cardMetaValueStyle}>
+              {formatDateKey(question.progress?.last_review)}
+            </span>
+          </div>
+
+          <div style={cardMetaBlockStyle}>
+            <span style={cardMetaLabelStyle}>Prochaine</span>
+            <span style={cardMetaValueStyle}>
+              {formatDateKey(question.progress?.next_review)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {tags.length > 0 && (
         <div
           style={{
             display: "flex",
@@ -500,7 +602,7 @@ function EventCard({
             marginTop: "8px"
           }}
         >
-          {(question.tags || []).slice(0, 3).map((tag) => (
+          {visibleTags.map((tag) => (
             <span
               key={tag}
               style={{
@@ -515,6 +617,9 @@ function EventCard({
               #{tag}
             </span>
           ))}
+          {!isSelected && tags.length > visibleTags.length && (
+            <span style={tagOverflowStyle}>+{tags.length - visibleTags.length}</span>
+          )}
         </div>
       )}
 
@@ -522,7 +627,10 @@ function EventCard({
         <span style={cardHintStyle}>Question #{question.id}</span>
         <button
           type="button"
-          onClick={() => onOpenQuestion?.(question)}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+            onOpenQuestion?.(question);
+          }}
           style={cardActionButtonStyle}
         >
           Gérer dans Manage ↗
@@ -925,8 +1033,27 @@ export default function ReviewCalendar({
   }
 
   function selectDate(dateKey) {
+    const matchingEvent = findQuestionEvent(
+      eventsByDate[dateKey] || [],
+      selectedCalendarQuestionId
+    );
+
     setSelectedDateKey(dateKey);
+
+    if (matchingEvent) {
+      const groupId = getQuestionGroupId(matchingEvent.question);
+      setActiveGroupKey(groupId ? groupRowKey(matchingEvent.kind, groupId) : null);
+      return;
+    }
+
     setSelectedCalendarQuestionId(null);
+    setActiveGroupKey(null);
+  }
+
+  function selectQuestionCard(questionId) {
+    setSelectedCalendarQuestionId((currentQuestionId) =>
+      currentQuestionId === questionId ? null : questionId
+    );
     setActiveGroupKey(null);
   }
 
@@ -948,6 +1075,7 @@ export default function ReviewCalendar({
           event={row.event}
           isSelected={selectedCalendarQuestionId === row.event.question.id}
           onOpenQuestion={onOpenQuestion}
+          onSelectQuestion={selectQuestionCard}
           todayKey={todayKey}
         />
       );
@@ -1228,28 +1356,59 @@ export default function ReviewCalendar({
                 const isSelected = dateKey === selectedDateKey;
                 const isPast = dateKey < todayKey;
                 const hasEvents = dayEvents.length > 0;
+                const containsSelectedQuestion = Boolean(
+                  findQuestionEvent(dayEvents, selectedCalendarQuestionId)
+                );
+                const selectedQuestionHint = containsSelectedQuestion
+                  ? "Contient la question sélectionnée"
+                  : "";
+                const cellBackground = isToday
+                  ? isSelected
+                    ? "#332512"
+                    : "#241d12"
+                  : isSelected
+                    ? "#252525"
+                    : isPast
+                      ? "#151515"
+                      : "#181818";
+                const highlightedCellBackground = containsSelectedQuestion
+                  ? `linear-gradient(rgba(126, 226, 168, 0.12), rgba(126, 226, 168, 0.12)), ${cellBackground}`
+                  : cellBackground;
+                const cellBoxShadow = isToday
+                  ? isSelected
+                    ? "inset 0 0 0 2px #ffcc7a, 0 0 0 1px rgba(255, 204, 122, 0.24)"
+                    : "inset 0 0 0 1px rgba(255, 204, 122, 0.72), 0 0 18px rgba(255, 204, 122, 0.08)"
+                  : isSelected
+                    ? "inset 0 0 0 1px #3a3a3a"
+                    : "none";
+                const highlightedCellBoxShadow = [
+                  containsSelectedQuestion
+                    ? "inset 0 0 0 3px rgba(126, 226, 168, 0.9), 0 0 0 1px rgba(126, 226, 168, 0.16)"
+                    : "",
+                  cellBoxShadow === "none" ? "" : cellBoxShadow
+                ].filter(Boolean).join(", ") || "none";
+                const cellTitle = [
+                  selectedQuestionHint,
+                  fullSummaryLabel
+                ].filter(Boolean).join("\n");
+                const cellAriaDetails = [
+                  fullSummaryLabel,
+                  selectedQuestionHint
+                ].filter(Boolean).join(". ");
 
                 return (
                   <button
                     key={dateKey}
                     onClick={() => selectDate(dateKey)}
-                    title={fullSummaryLabel || undefined}
-                    aria-label={`${date.getDate()} ${monthFormatter.format(date)}${fullSummaryLabel ? `. ${fullSummaryLabel}` : ""}`}
+                    title={cellTitle || undefined}
+                    aria-label={`${date.getDate()} ${monthFormatter.format(date)}${cellAriaDetails ? `. ${cellAriaDetails}` : ""}`}
                     style={{
                       minHeight: "96px",
                       padding: "10px",
                       border: "none",
                       borderRight: "1px solid #242424",
                       borderBottom: "1px solid #242424",
-                      background: isToday
-                        ? isSelected
-                          ? "#332512"
-                          : "#241d12"
-                        : isSelected
-                          ? "#252525"
-                          : isPast
-                            ? "#151515"
-                            : "#181818",
+                      background: highlightedCellBackground,
                       color: isCurrentMonth
                         ? isPast
                           ? "#aaa"
@@ -1257,13 +1416,7 @@ export default function ReviewCalendar({
                         : "#555",
                       cursor: "pointer",
                       textAlign: "left",
-                      boxShadow: isToday
-                        ? isSelected
-                          ? "inset 0 0 0 2px #ffcc7a, 0 0 0 1px rgba(255, 204, 122, 0.24)"
-                          : "inset 0 0 0 1px rgba(255, 204, 122, 0.72), 0 0 18px rgba(255, 204, 122, 0.08)"
-                        : isSelected
-                          ? "inset 0 0 0 1px #3a3a3a"
-                          : "none",
+                      boxShadow: highlightedCellBoxShadow,
                       transition: "background 0.12s ease, box-shadow 0.12s ease"
                     }}
                   >
@@ -1787,6 +1940,42 @@ const cardHintStyle = {
   fontSize: "11px"
 };
 
+const cardMetaGridStyle = {
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  marginTop: "10px"
+};
+
+const cardMetaBlockStyle = {
+  background: "#171717",
+  border: "1px solid #2b2b2b",
+  borderRadius: "8px",
+  minWidth: 0,
+  padding: "7px 8px"
+};
+
+const cardMetaLabelStyle = {
+  color: "#777",
+  display: "block",
+  fontSize: "10px",
+  fontWeight: "800",
+  letterSpacing: "0.05em",
+  marginBottom: "3px",
+  textTransform: "uppercase"
+};
+
+const cardMetaValueStyle = {
+  color: "#ddd",
+  display: "block",
+  fontSize: "12px",
+  fontWeight: "700",
+  lineHeight: 1.25,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
 const cardActionButtonStyle = {
   background: "#202020",
   border: "1px solid #363636",
@@ -1796,6 +1985,13 @@ const cardActionButtonStyle = {
   fontSize: "12px",
   fontWeight: "800",
   padding: "6px 10px"
+};
+
+const tagOverflowStyle = {
+  color: "#666",
+  fontSize: "10px",
+  fontWeight: "700",
+  padding: "2px 0"
 };
 
 const groupSummaryStyle = {

@@ -2,8 +2,6 @@
 
 ## vérifier
 - premier clique pour les intervalles timeline : date de début
-- cliquer sur une question dans calender met plus de détails et augmente la taille de l'image preview
-- cliquer sur une question dans calendar met en surbrillance toutes les dates qui ont cette question
 - do you think it's a good idea to allow url for images ?
 - add a “Copy locally” or “Importer depuis l’URL” button.
 
