@@ -489,30 +489,10 @@ function normalizeIntervalAnswer(startValue, endValue, timeline, bounds) {
     : { start, end };
 }
 
-function intervalDefaultSpan(timeline, viewport) {
-  const visibleSpan = viewport.end_value - viewport.start_value;
-
-  if (timeline.start.precision === "year" || timeline.end.precision === "year") {
-    return Math.max(365, visibleSpan * 0.12);
-  }
-
-  if (timeline.start.precision === "month" || timeline.end.precision === "month") {
-    return Math.max(30, visibleSpan * 0.12);
-  }
-
-  return Math.max(1, visibleSpan * 0.12);
-}
-
-function answerFromClick(value, timeline, viewport, bounds) {
-  if (timeline.kind !== "interval") {
-    return {
-      start: snapValueToDate(value, timeline.start.precision)
-    };
-  }
-
-  const span = intervalDefaultSpan(timeline, viewport);
-
-  return normalizeIntervalAnswer(value, value + span, timeline, bounds);
+function answerFromClick(value, timeline) {
+  return {
+    start: snapValueToDate(value, timeline.start.precision)
+  };
 }
 
 function answerToPayload(answer, timeline) {
@@ -681,7 +661,8 @@ function TimelineCanvas({
   onDraftChange,
   onSelect,
   orderById,
-  range
+  range,
+  resetSignal
 }) {
   const activeTimeline = normalizeTimeline(activeItem.timeline);
   const activePrecision = getTimelinePrecision(activeTimeline);
@@ -696,6 +677,7 @@ function TimelineCanvas({
   const [dragMode, setDragMode] = useState("");
   const [hoveredValue, setHoveredValue] = useState(null);
   const [markerDateLabel, setMarkerDateLabel] = useState("");
+  const [pendingInterval, setPendingInterval] = useState(null);
   const [surfaceWidth, setSurfaceWidth] = useState(900);
   const [tooltip, setTooltip] = useState(null);
   const activeColor = markerColors[(orderById.get(activeId) || 0) % markerColors.length];
@@ -723,13 +705,26 @@ function TimelineCanvas({
       .filter(Boolean),
     [activeAnswer, activeId, committedAnswers, items, orderById]
   );
-  const canvasDateLabel = markerDateLabel || (hoveredValue === null
+  const pendingIntervalAnswer =
+    pendingInterval && activeTimeline.kind === "interval" && !activeAnswer
+      ? normalizeIntervalAnswer(
+        pendingInterval.anchorValue,
+        pendingInterval.floatingValue,
+        activeTimeline,
+        bounds
+      )
+      : null;
+  const canvasDateLabel = markerDateLabel || (pendingIntervalAnswer
+    ? formatAnswer(pendingIntervalAnswer, activeTimeline)
+    : hoveredValue === null
     ? activeAnswer
       ? formatAnswer(activeAnswer, activeTimeline)
       : "Hover timeline to preview date"
     : formatValueLabel(hoveredValue, activePrecision));
   const canvasDateContext = markerDateLabel
     ? "Marker date"
+    : pendingIntervalAnswer
+    ? "Click again to place the other border"
     : hoveredValue === null
     ? activeAnswer
       ? "Placed answer"
@@ -748,7 +743,20 @@ function TimelineCanvas({
     updateViewport(clampViewport(range, bounds, activePrecision));
     setHoveredValue(null);
     setMarkerDateLabel("");
+    setPendingInterval(null);
   }, [activePrecision, bounds, range, updateViewport]);
+
+  useEffect(() => {
+    setHoveredValue(null);
+    setMarkerDateLabel("");
+    setPendingInterval(null);
+  }, [activeId, resetSignal]);
+
+  useEffect(() => {
+    if (activeAnswer) {
+      setPendingInterval(null);
+    }
+  }, [activeAnswer]);
 
   useEffect(() => {
     const node = surfaceRef.current;
@@ -791,6 +799,11 @@ function TimelineCanvas({
         ratio * (current.end_value - current.start_value);
 
       setHoveredValue(centerValue);
+      setPendingInterval(prev => (
+        prev && activeTimeline.kind === "interval" && !activeAnswer
+          ? { ...prev, floatingValue: centerValue }
+          : prev
+      ));
       updateViewport(zoomViewport(current, bounds, centerValue, zoomFactor, activePrecision));
     }
 
@@ -799,7 +812,7 @@ function TimelineCanvas({
     return () => {
       nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
     };
-  }, [activePrecision, bounds, updateViewport]);
+  }, [activeAnswer, activePrecision, activeTimeline.kind, bounds, updateViewport]);
 
   function valueFromClientX(clientX, targetViewport = viewport) {
     const rect = surfaceRef.current?.getBoundingClientRect();
@@ -821,7 +834,30 @@ function TimelineCanvas({
   }
 
   function placeDraft(value) {
-    onDraftChange(answerFromClick(value, activeTimeline, viewport, bounds));
+    if (activeTimeline.kind !== "interval") {
+      onDraftChange(answerFromClick(value, activeTimeline));
+      return;
+    }
+
+    if (activeAnswer) {
+      return;
+    }
+
+    if (!pendingInterval) {
+      setPendingInterval({
+        anchorValue: value,
+        floatingValue: value
+      });
+      return;
+    }
+
+    onDraftChange(normalizeIntervalAnswer(
+      pendingInterval.anchorValue,
+      value,
+      activeTimeline,
+      bounds
+    ));
+    setPendingInterval(null);
   }
 
   function updateDraggedAnswer(mode, value, dragState) {
@@ -944,8 +980,14 @@ function TimelineCanvas({
         deltaValue,
         activePrecision
       );
+      const nextValue = valueFromClientX(event.clientX, nextViewport);
 
-      setHoveredValue(valueFromClientX(event.clientX, nextViewport));
+      setHoveredValue(nextValue);
+      setPendingInterval(prev => (
+        prev && activeTimeline.kind === "interval" && !activeAnswer
+          ? { ...prev, floatingValue: nextValue }
+          : prev
+      ));
       updateViewport(nextViewport);
       return;
     }
@@ -960,12 +1002,19 @@ function TimelineCanvas({
       return;
     }
 
-    setHoveredValue(valueFromClientX(event.clientX));
+    const value = valueFromClientX(event.clientX);
+
+    setHoveredValue(value);
+    setPendingInterval(prev => (
+      prev && activeTimeline.kind === "interval" && !activeAnswer
+        ? { ...prev, floatingValue: value }
+        : prev
+    ));
     handlePointerMove(event);
   }
 
   function handleSurfacePointerLeave() {
-    if (!dragRef.current) {
+    if (!dragRef.current && !pendingInterval) {
       setHoveredValue(null);
     }
   }
@@ -1447,6 +1496,151 @@ function TimelineCanvas({
             {text}
           </span>
         </button>
+      </div>
+    );
+  }
+
+  function renderPendingInterval() {
+    if (!pendingIntervalAnswer || !pendingInterval) return null;
+
+    const text = activeItem.question;
+    const stemTop = Math.min(activeChipTop, answerAnchorTop);
+    const stemHeight = Math.abs(answerAnchorTop - activeChipTop);
+    const anchor = percentFromValue(
+      clampNumber(pendingInterval.anchorValue, bounds.start_value, bounds.end_value),
+      viewport
+    );
+    const floating = percentFromValue(
+      clampNumber(pendingInterval.floatingValue, bounds.start_value, bounds.end_value),
+      viewport
+    );
+    const center = (anchor + floating) / 2;
+    const width = Math.max(1, Math.abs(floating - anchor));
+    const left = center - width / 2;
+
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 11
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: `${left}%`,
+            top: `${answerAnchorTop}%`,
+            width: `${width}%`,
+            height: "5px",
+            transform: "translateY(-50%)",
+            borderRadius: "999px",
+            background: activeColor,
+            boxShadow: `0 0 0 5px ${activeColor}18, 0 8px 22px rgba(0,0,0,0.34)`,
+            opacity: 0.88
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: `${center}%`,
+            top: `${stemTop}%`,
+            height: `${stemHeight}%`,
+            borderLeft: `2px solid ${activeColor}`,
+            boxShadow: `0 0 16px ${activeColor}55`,
+            opacity: 0.88
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: `${center}%`,
+            top: `${activeChipTop}%`,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            maxWidth: "280px",
+            height: "38px",
+            transform: "translate(-50%, -50%)",
+            borderRadius: "999px",
+            border: `2px solid ${activeColor}`,
+            background: "#151515",
+            color: "#f7f7f7",
+            fontSize: "12px",
+            fontWeight: "950",
+            overflow: "hidden",
+            padding: "0 14px 0 10px",
+            boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`,
+            opacity: 0.9
+          }}
+          title={formatAnswer(pendingIntervalAnswer, activeTimeline)}
+        >
+          <span
+            style={{
+              alignItems: "center",
+              background: activeColor,
+              borderRadius: "999px",
+              color: "#101010",
+              display: "inline-flex",
+              flexShrink: 0,
+              height: "24px",
+              justifyContent: "center",
+              width: "24px"
+            }}
+          >
+            {activeNumber}
+          </span>
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {text}
+          </span>
+        </div>
+
+        {[
+          ["anchor", anchor],
+          ["floating", floating]
+        ].map(([handle, point]) => (
+          <div
+            key={handle}
+            style={{
+              position: "absolute",
+              left: `${point}%`,
+              top: `${answerAnchorTop}%`,
+              width: "20px",
+              height: "20px",
+              transform: "translate(-50%, -50%)",
+              borderRadius: "999px",
+              border: "2px solid #fff",
+              background: activeColor,
+              boxShadow: handle === "anchor"
+                ? `0 0 0 6px ${activeColor}22, 0 8px 20px rgba(0,0,0,0.42)`
+                : "0 8px 20px rgba(0,0,0,0.42)",
+              zIndex: 2
+            }}
+          />
+        ))}
+        <div
+          style={{
+            position: "absolute",
+            left: `${center}%`,
+            top: `${answerAnchorTop}%`,
+            width: "13px",
+            height: "13px",
+            transform: "translate(-50%, -50%) rotate(45deg)",
+            border: "2px solid #fff",
+            borderRadius: "2px 50% 50% 50%",
+            background: activeColor,
+            boxShadow: `0 0 0 7px ${activeColor}18`,
+            padding: 0,
+            zIndex: 3
+          }}
+        />
       </div>
     );
   }
@@ -1948,7 +2142,11 @@ function TimelineCanvas({
           background: "linear-gradient(180deg, #181818 0%, #101010 100%)",
           border: "1px solid #292929",
           borderRadius: "14px",
-          cursor: dragMode === "surface" ? "grabbing" : "crosshair",
+          cursor: dragMode === "surface"
+            ? "grabbing"
+            : activeTimeline.kind === "interval" && activeAnswer
+              ? "grab"
+              : "crosshair",
           overflow: "hidden",
           overscrollBehavior: "contain",
           touchAction: "none"
@@ -2013,6 +2211,7 @@ function TimelineCanvas({
         {renderHoverGuide()}
 
         {markers.map(renderPassiveMarker)}
+        {renderPendingInterval()}
         {renderActiveAnswer()}
         <TimelineTooltip tooltip={tooltip} />
 
@@ -2032,7 +2231,9 @@ function TimelineCanvas({
               zIndex: 4
             }}
           >
-            Click the timeline to place your answer
+            {pendingIntervalAnswer
+              ? "Click again to place the other border"
+              : "Click the timeline to place your answer"}
           </div>
         )}
       </div>
@@ -2055,6 +2256,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
   const [recapResults, setRecapResults] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [canvasResetSignal, setCanvasResetSignal] = useState(0);
 
   const itemById = useMemo(
     () => new Map(sortedItems.map(item => [item.question_id, item])),
@@ -2184,6 +2386,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
     ) || orderedIds.find(id => id !== activeItem.question_id) || activeItem.question_id;
 
     setActiveId(nextId);
+    setCanvasResetSignal(prev => prev + 1);
     setError("");
   }
 
@@ -2380,6 +2583,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
             onSelect={selectItem}
             orderById={orderById}
             range={range}
+            resetSignal={canvasResetSignal}
           />
         </div>
 

@@ -2,7 +2,6 @@
 
 
 ## Product Suggestions
-Add a real Stats area: due counts, new count, review load by type, retention by type, hard/favorite questions, timeline/map weak spots.
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
 Add settings UI for scheduler targets, per-type daily weights, theme/display preferences, backup location, import behavior.
@@ -18,7 +17,6 @@ Challenge modes: timed runs, streaks, personal records, “hard mode”, but kee
 Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
 
 ## vérifier
-- premier clique pour les intervalles timeline : date de début
 - add a “Copy locally” or “Importer depuis l’URL” button.
 
 ## quick fixes
