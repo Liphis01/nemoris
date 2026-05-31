@@ -1,308 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
-import MapFileInput from "../../map/components/MapFileInput";
-import {
-  createDefaultTimeline,
-  formatTimelineAnswer,
-  normalizeTimeline
-} from "../../timeline/timelineUtils";
-import TimelineQuestionEditor from "../../timeline/components/TimelineQuestionEditor";
-import TextQuestionEditor from "./TextQuestionEditor";
-import { questionTypeChipStyles } from "../../../shared/questionTypes";
-
-const panelStyle = {
-  padding: "28px",
-  overflow: "overlay",
-  background: "#141414",
-  height: "100%"
-};
-
-const labelStyle = {
-  display: "block",
-  marginBottom: "8px",
-  color: "#bbb",
-  fontSize: "14px"
-};
-
-const inputStyle = {
-  width: "100%",
-  marginBottom: "18px",
-  padding: "12px 14px",
-  borderRadius: "10px",
-  border: "1px solid #2a2a2a",
-  background: "#121212",
-  color: "#eee",
-  boxSizing: "border-box"
-};
-
-const buttonStyle = {
-  padding: "12px 16px",
-  borderRadius: "10px",
-  border: "none",
-  cursor: "pointer",
-  background: "#2a2a2a",
-  color: "#eee",
-  marginRight: "12px"
-};
-
-const calendarButtonStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  padding: "8px 12px",
-  borderRadius: "999px",
-  border: "1px solid #24583a",
-  background: "#151c18",
-  color: "#7ee2a8",
-  cursor: "pointer",
-  fontSize: "13px",
-  fontWeight: "700",
-  lineHeight: 1,
-  whiteSpace: "nowrap"
-};
-
-function timelineDraftPatch(draft) {
-  const timeline = normalizeTimeline(draft?.data?.timeline || createDefaultTimeline());
-
-  return {
-    ...draft,
-    answer: formatTimelineAnswer(timeline),
-    data: {
-      ...(draft?.data || {}),
-      timeline
-    },
-    group_id: null
-  };
-}
-
-function formatReviewDate(value) {
-  // Dates arrive as YYYY-MM-DD from the backend. Build a local Date from parts
-  // to avoid timezone shifts around midnight.
-  if (!value) return "";
-
-  const [year, month, day] = value.split("-");
-  if (!year || !month || !day) return value;
-
-  const reviewDate = new Date(Number(year), Number(month) - 1, Number(day));
-  const today = new Date();
-  const todayKey = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
-  );
-  const tomorrowKey = new Date(todayKey);
-  tomorrowKey.setDate(todayKey.getDate() + 1);
-
-  if (reviewDate.getTime() === todayKey.getTime()) return "Aujourd'hui";
-  if (reviewDate.getTime() === tomorrowKey.getTime()) return "Demain";
-
-  return `${day}-${month}-${year}`;
-}
-
-function hasStartedProgress(question) {
-  // New questions are due immediately, but showing a calendar jump before the
-  // first review is noisy. Only expose it after progress has started.
-  const history = question?.progress?.history || [];
-  return (question?.progress?.reps || 0) > 0 || history.length > 0;
-}
-
-function stableStringify(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) =>
-      `${JSON.stringify(key)}:${stableStringify(value[key])}`
-    ).join(",")}}`;
-  }
-
-  const serialized = JSON.stringify(value);
-  return serialized === undefined ? "undefined" : serialized;
-}
-
-function buildQuestionSavePayload(source) {
-  const type_q = source?.type_q || "text";
-  const tags = Array.isArray(source?.tags) ? source.tags : [];
-  const pendingTag = (source?._pendingTagInput || "").trim();
-
-  return {
-    question: source?.question || "",
-    answer: source?.answer || "",
-    media: source?.media || null,
-    type_q,
-    tags: pendingTag && !tags.includes(pendingTag)
-      ? [...tags, pendingTag]
-      : tags,
-    data: type_q === "timeline" ? source?.data || {} : {}
-  };
-}
-
-function buildQuestionDraft(source) {
-  return {
-    question: source?.question || "",
-    answer: source?.answer || "",
-    media: source?.media || "",
-    type_q: source?.type_q || "text",
-    tags: source?.tags || [],
-    data: source?.data || {}
-  };
-}
-
-function payloadsMatch(left, right) {
-  return stableStringify(left) === stableStringify(right);
-}
-
-function ReviewCalendarAction({ compact = false, nextReview, onOpen }) {
-  if (!nextReview) return null;
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      style={{
-        ...calendarButtonStyle,
-        ...(compact
-          ? {
-            alignItems: "flex-start",
-            flexDirection: "column",
-            gap: "3px",
-            padding: "7px 10px",
-            borderRadius: "10px"
-          }
-          : {})
-      }}
-      title="Voir cette question dans le calendrier"
-    >
-      <span
-        style={{
-          color: "#8a8a8a",
-          fontSize: compact ? "10px" : undefined,
-          letterSpacing: compact ? "0.04em" : undefined,
-          textTransform: compact ? "uppercase" : undefined
-        }}
-      >
-        Révision
-      </span>
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "6px"
-        }}
-      >
-        {formatReviewDate(nextReview)}
-        <span aria-hidden="true">→</span>
-      </span>
-    </button>
-  );
-}
-
-const questionCreationTypes = [
-  {
-    value: "text",
-    label: "Question texte",
-    detail: "Question et réponse libre"
-  },
-  {
-    value: "timeline",
-    label: "Événement timeline",
-    detail: "Date ponctuelle ou intervalle"
-  },
-  {
-    value: "map",
-    label: "Carte",
-    detail: "Créer un groupe map et ses zones"
-  }
-];
-
-function QuestionCreationTypeChooser({ onSelect, onCancel }) {
-  return (
-    <div style={panelStyle}>
-      <div style={{ marginBottom: "22px", color: "#888" }}>
-        Nouvelle question
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-          marginBottom: "22px"
-        }}
-      >
-        {questionCreationTypes.map((type) => {
-          const typeStyle = questionTypeChipStyles[type.value];
-
-          return (
-            <button
-              key={type.value}
-              type="button"
-              onClick={() => onSelect?.(type.value)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "18px",
-                width: "100%",
-                padding: "16px",
-                borderRadius: "8px",
-                border: `1px solid ${typeStyle.color}`,
-                background: typeStyle.background,
-                color: typeStyle.color,
-                cursor: "pointer",
-                textAlign: "left"
-              }}
-            >
-              <span style={{ minWidth: 0 }}>
-                <span
-                  style={{
-                    display: "block",
-                    color: typeStyle.color,
-                    fontSize: "16px",
-                    fontWeight: "800",
-                    marginBottom: "5px"
-                  }}
-                >
-                  {type.label}
-                </span>
-                <span
-                  style={{
-                    display: "block",
-                    color: typeStyle.color,
-                    fontSize: "13px",
-                    lineHeight: 1.35
-                  }}
-                >
-                  {type.detail}
-                </span>
-              </span>
-              <span
-                aria-hidden="true"
-                style={{
-                  color: typeStyle.color,
-                  fontSize: "22px",
-                  lineHeight: 1,
-                  flexShrink: 0
-                }}
-              >
-                →
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <button
-        type="button"
-        onClick={onCancel}
-        style={{ ...buttonStyle, background: "#641c1c" }}
-      >
-        Annuler
-      </button>
-    </div>
-  );
-}
+import CreateMapGroupEditor from "./CreateMapGroupEditor";
+import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
+import ReviewCalendarAction from "./ReviewCalendarAction";
+import { getQuestionEditorAdapter } from "./questionEditorAdapters";
+import useInspectorAutosave from "../hooks/useInspectorAutosave";
+import useInspectorEditorMode from "../hooks/useInspectorEditorMode";
+import useInspectorPreviewState from "../hooks/useInspectorPreviewState";
 
 export default function ManageInspector({
   allGroups,
@@ -333,186 +36,70 @@ export default function ManageInspector({
   requestManageTransition,
   availableTags = []
 }) {
-  // Inspector has three modes: create group, create question, or edit selected
-  // item. Map groups/zones delegate their detailed editing to MapEditor.
-  const [draft, setDraft] = useState(null);
-  const [saveStatus, setSaveStatus] = useState(null);
-
-  useEffect(() => {
-    // Copy selected item into a local draft so typing does not mutate list cache
-    // until the user saves.
-    if (!selectedItem) {
-      setDraft(null);
-      setSaveStatus(null);
-      return;
-    }
-    
-    setDraft(buildQuestionDraft(selectedItem));
-    setSaveStatus(null);
-  }, [selectedItem]);
-
-  function selectQuestionCreationType(type_q) {
-    if (type_q === "map") {
-      setViewMode?.("groups");
-
-      if (startCreateGroup) {
-        startCreateGroup();
-        return;
-      }
-
-      setIsCreatingQuestion(false);
-      setIsCreatingGroup(true);
-      setSelectedItem(null);
-      return;
-    }
-
-    setQuestionDraft((prev) => {
-      const next = { ...prev, type_q };
-
-      if (type_q === "timeline") {
-        return timelineDraftPatch(next);
-      }
-
-      return {
-        ...next,
-        data: type_q === "text" ? {} : next.data
-      };
-    });
-  }
-
-  const saveQuestionDraft = useCallback(async ({ force = false, silent = false } = {}) => {
-    if (!draft || !selectedItem?.id || !selectedItem.type_q || selectedItem.type_q === "map") {
-      return { saved: false };
-    }
-
-    const payload = buildQuestionSavePayload(draft);
-    const currentPayload = buildQuestionSavePayload(selectedItem);
-
-    if (!force && payloadsMatch(payload, currentPayload)) {
-      return { saved: false };
-    }
-
-    if (!silent) {
-      setSaveStatus("Enregistrement...");
-    }
-
-    await updateQuestion(selectedItem.id, payload);
-
-    const updatedQuestion = {
-      ...selectedItem,
-      ...payload
-    };
-
-    patchQuestionInCache(updatedQuestion);
-    setSelectedItem(updatedQuestion);
-
-    if (!silent) {
-      setSaveStatus("Enregistré ✔");
-    }
-
-    return {
-      saved: true,
-      question: updatedQuestion
-    };
-  }, [draft, patchQuestionInCache, selectedItem, setSelectedItem, updateQuestion]);
-
-  const saveSelectedQuestionIfDirty = useCallback(() => (
-    saveQuestionDraft({ silent: true })
-  ), [saveQuestionDraft]);
-
-  useEffect(() => {
-    if (!registerPendingSaveHandler) {
-      return undefined;
-    }
-
-    if (
-      isCreatingQuestion ||
-      isCreatingGroup ||
-      !selectedItem?.id ||
-      !selectedItem.type_q ||
-      selectedItem.type_q === "map"
-    ) {
-      return undefined;
-    }
-
-    return registerPendingSaveHandler(saveSelectedQuestionIfDirty);
-  }, [
+  const {
+    canRenderQuestionEditor,
+    cancelCreateGroup,
+    cancelCreateQuestion,
+    createCurrentQuestion,
+    mode,
+    selectQuestionCreationType
+  } = useInspectorEditorMode({
+    createQuestion,
     isCreatingGroup,
     isCreatingQuestion,
+    questionDraft,
+    selectedItem,
+    setGroupDraft,
+    setIsCreatingGroup,
+    setIsCreatingQuestion,
+    setQuestionDraft,
+    setSelectedItem,
+    setViewMode,
+    startCreateGroup
+  });
+
+  const {
+    draft,
+    hasUnsavedChanges,
+    removeMedia,
+    resetDraft,
+    saveDraft,
+    saveStatus,
+    setDraft
+  } = useInspectorAutosave({
+    isCreatingGroup,
+    isCreatingQuestion,
+    patchQuestionInCache,
     registerPendingSaveHandler,
-    saveSelectedQuestionIfDirty,
-    selectedItem
-  ]);
+    selectedItem,
+    setSelectedItem,
+    updateQuestion
+  });
 
-  function cancelCreateQuestion() {
-    setIsCreatingQuestion(false);
-    setQuestionDraft({
-      question: "",
-      answer: "",
-      tags: [],
-      type_q: "text",
-      media: null,
-      data: {}
-    });
-  }
+  const {
+    openSelectedInCalendar,
+    selectedNextReview
+  } = useInspectorPreviewState({
+    onOpenInCalendar,
+    requestManageTransition,
+    selectedItem,
+    setEditingZone,
+    setSelectedItem
+  });
 
-  async function handleCreateQuestion(submittedDraft) {
-    await createQuestion(submittedDraft || questionDraft);
-    setIsCreatingQuestion(false);
-  }
-
-  if (isCreatingGroup) {
+  if (mode === "createGroup") {
     return (
-      <div style={panelStyle}>
-        <div style={{ marginBottom: "22px", color: "#888" }}>
-          Nouveau groupe
-        </div>
-
-        <label style={labelStyle}>Nom du groupe</label>
-        <input
-          style={inputStyle}
-          value={groupDraft.name}
-          onChange={(e) => setGroupDraft({ ...groupDraft, name: e.target.value })}
-          placeholder="Ex : Carte Europe"
-        />
-
-        <label style={labelStyle}>Type de groupe</label>
-        <select
-          style={inputStyle}
-          value={groupDraft.type_group}
-          onChange={(e) => setGroupDraft({ ...groupDraft, type_group: e.target.value })}
-        >
-          <option value="map">map</option>
-        </select>
-
-        <label style={labelStyle}>Media / URL (optionnel)</label>
-        <MapFileInput
-          style={inputStyle}
-          value={groupDraft.media}
-          onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
-        />
-
-        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-          <button type="button" onClick={createGroup} style={buttonStyle}>
-            Créer le groupe
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsCreatingGroup(false);
-              setGroupDraft({ name: "", type_group: "map", media: "", data: {} });
-            }}
-            style={{ ...buttonStyle, background: "#641c1c" }}
-          >
-            Annuler
-          </button>
-        </div>
-      </div>
+      <CreateMapGroupEditor
+        groupDraft={groupDraft}
+        onCancel={cancelCreateGroup}
+        onCreate={createGroup}
+        setGroupDraft={setGroupDraft}
+      />
     );
   }
 
-  if (isCreatingQuestion) {
-    if (!["text", "timeline"].includes(questionDraft.type_q)) {
+  if (mode === "createQuestion") {
+    if (!canRenderQuestionEditor) {
       return (
         <QuestionCreationTypeChooser
           onSelect={selectQuestionCreationType}
@@ -521,12 +108,15 @@ export default function ManageInspector({
       );
     }
 
+    const { Editor: CreateQuestionEditor } = getQuestionEditorAdapter(
+      questionDraft.type_q
+    );
     const createEditorProps = {
       draft: questionDraft,
       heading: "Nouvelle question",
       meta: questionDraft.type_q,
       onChange: setQuestionDraft,
-      onSubmit: handleCreateQuestion,
+      onSubmit: createCurrentQuestion,
       submitLabel: "Créer",
       onCancel: cancelCreateQuestion,
       onUploadFile: (file) => uploadQuestionMedia(file, { id: "new" }),
@@ -534,18 +124,12 @@ export default function ManageInspector({
       availableTags
     };
 
-    if (questionDraft.type_q === "timeline") {
-      return (
-        <TimelineQuestionEditor {...createEditorProps} />
-      );
-    }
-
     return (
-      <TextQuestionEditor {...createEditorProps} />
+      <CreateQuestionEditor {...createEditorProps} />
     );
   }
 
-  if (!selectedItem) {
+  if (mode === "empty") {
     return (
       <div
         style={{
@@ -563,26 +147,6 @@ export default function ManageInspector({
 
   const selectedIsMapZone = selectedItem.type_q === "map";
   const isMapGroup = selectedItem.type_group === "map";
-  const selectedNextReview = hasStartedProgress(selectedItem)
-    ? selectedItem.progress?.next_review || selectedItem.next_review
-    : null;
-
-  function openSelectedInCalendar() {
-    if (!selectedNextReview) return;
-
-    if (requestManageTransition) {
-      requestManageTransition(() => {
-        onOpenInCalendar?.(selectedItem);
-        setSelectedItem(null);
-        setEditingZone?.(null);
-      });
-      return;
-    }
-
-    onOpenInCalendar?.(selectedItem);
-    setSelectedItem(null);
-    setEditingZone?.(null);
-  }
 
   if (selectedIsMapZone || isMapGroup) {
     // Selecting either a map group or one of its zones opens the full map editor
@@ -699,46 +263,25 @@ export default function ManageInspector({
     );
   }
 
-  async function handleSave() {
-    try {
-      await saveQuestionDraft({ force: true });
-    } catch (error) {
-      console.error(error);
-      setSaveStatus("Enregistrement impossible");
-    }
-  }
-
-  function handleCancelEdit() {
-    setDraft(buildQuestionDraft(selectedItem));
-    setSaveStatus(null);
-  }
-
   async function handleUploadFile(file) {
     if (!uploadQuestionMedia) return;
 
     return uploadQuestionMedia(file, selectedItem);
   }
 
-  function handleRemoveMedia() {
-    setDraft((prev) => ({ ...prev, media: "" }));
-  }
-
-  const editorDraft = draft || buildQuestionDraft(selectedItem);
+  const editorDraft = draft;
   const editType = editorDraft.type_q || "text";
-  const hasUnsavedChanges = !payloadsMatch(
-    buildQuestionSavePayload(editorDraft),
-    buildQuestionSavePayload(selectedItem)
-  );
+  const { Editor: EditQuestionEditor } = getQuestionEditorAdapter(editType);
   const editEditorProps = {
     draft: editorDraft,
     heading: `Question #${selectedItem.id}`,
     meta: editType,
     onChange: setDraft,
-    onSubmit: handleSave,
+    onSubmit: saveDraft,
     submitLabel: "Enregistrer",
-    onCancel: handleCancelEdit,
+    onCancel: resetDraft,
     onUploadFile: handleUploadFile,
-    onRemoveMedia: handleRemoveMedia,
+    onRemoveMedia: removeMedia,
     saveStatus,
     hasUnsavedChanges,
     isSubmitDisabled: !hasUnsavedChanges,
@@ -751,13 +294,7 @@ export default function ManageInspector({
     )
   };
 
-  if (editType === "timeline") {
-    return (
-      <TimelineQuestionEditor {...editEditorProps} />
-    );
-  }
-
   return (
-    <TextQuestionEditor {...editEditorProps} />
+    <EditQuestionEditor {...editEditorProps} />
   );
 }
