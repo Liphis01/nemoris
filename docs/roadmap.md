@@ -16,7 +16,7 @@ Challenge modes: timed runs, streaks, personal records, “hard mode”, but kee
 Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
 
 ## vérifier
-- add a “Copy locally” or “Importer depuis l’URL” button.
+- j'ai fait un groupe d'images avec quelques erreurs. à la fin de la review j'ai été requestionné sur les images ratées. je ne les ai pas faites et je suis retourné au menu princ. en revenant, plus de questions.
 
 ## quick fixes
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe
@@ -32,7 +32,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - trouver un meilleur agencement pour les aliases dans map preview
 
 ## bugs
-- j'ai fait un groupe d'images avec quelques erreurs. à la fin de la review j'ai été requestionné sur les images ratées. je ne les ai pas faites et je suis retourné au menu princ. en revenant, plus de questions.
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas

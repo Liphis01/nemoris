@@ -20,6 +20,10 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\npng-data"
 JPEG_BYTES = b"\xff\xd8\xff\xe0jpeg-data"
 GIF_BYTES = b"GIF89agif-data"
 WEBP_BYTES = b"RIFF\x10\x00\x00\x00WEBPwebp-data"
+SVG_BYTES = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">'
+    b'<rect width="1" height="1" fill="#fff"/></svg>'
+)
 
 
 def upload(filename, content_type, data):
@@ -51,7 +55,8 @@ class MediaTests(unittest.TestCase):
             ("photo.jpg", "image/jpeg", JPEG_BYTES, ".jpg"),
             ("photo.png", "image/png", PNG_BYTES, ".png"),
             ("photo.gif", "image/gif", GIF_BYTES, ".gif"),
-            ("photo.webp", "image/webp", WEBP_BYTES, ".webp")
+            ("photo.webp", "image/webp", WEBP_BYTES, ".webp"),
+            ("photo.svg", "image/svg+xml", SVG_BYTES, ".svg")
         ]
 
         urls = []
@@ -129,6 +134,22 @@ class MediaTests(unittest.TestCase):
             )
 
         self.assertEqual(oversized_error.exception.status_code, 413)
+
+    def test_upload_rejects_unsafe_svg_images(self):
+        unsafe_payloads = [
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>',
+            b'<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg"></svg>'
+        ]
+
+        for payload in unsafe_payloads:
+            with self.subTest(payload=payload):
+                with self.assertRaises(HTTPException) as svg_error:
+                    media_service.store_uploaded_image(
+                        upload("bad.svg", "image/svg+xml", payload)
+                    )
+
+                self.assertEqual(svg_error.exception.status_code, 400)
 
     def test_replacing_question_media_deletes_unreferenced_local_file(self):
         old_file = self.static_dir / "old.png"

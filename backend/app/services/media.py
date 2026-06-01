@@ -1,6 +1,7 @@
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
+from xml.etree import ElementTree
 
 from fastapi import HTTPException
 
@@ -16,12 +17,14 @@ SAFE_IMAGE_EXTENSIONS = {
     ".jpg": "jpeg",
     ".jpeg": "jpeg",
     ".png": "png",
+    ".svg": "svg",
     ".webp": "webp"
 }
 DEFAULT_EXTENSION_BY_KIND = {
     "gif": ".gif",
     "jpeg": ".jpg",
     "png": ".png",
+    "svg": ".svg",
     "webp": ".webp"
 }
 LOCAL_STATIC_HOSTS = {
@@ -29,6 +32,13 @@ LOCAL_STATIC_HOSTS = {
     "localhost:8000"
 }
 STATIC_URL_PREFIX = "/static/"
+FORBIDDEN_SVG_ELEMENTS = {
+    "embed",
+    "foreignobject",
+    "iframe",
+    "object",
+    "script"
+}
 
 
 def detect_raster_image_kind(data: bytes):
@@ -45,6 +55,64 @@ def detect_raster_image_kind(data: bytes):
         return "webp"
 
     return None
+
+
+def xml_local_name(name):
+    return str(name or "").rsplit("}", 1)[-1].lower()
+
+
+def is_safe_svg(data: bytes):
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return False
+
+    lowered = text.lower()
+
+    if (
+        "<!doctype" in lowered or
+        "<!entity" in lowered or
+        "javascript:" in lowered
+    ):
+        return False
+
+    try:
+        root = ElementTree.fromstring(data)
+    except (ElementTree.ParseError, ValueError):
+        return False
+
+    if xml_local_name(root.tag) != "svg":
+        return False
+
+    for element in root.iter():
+        if xml_local_name(element.tag) in FORBIDDEN_SVG_ELEMENTS:
+            return False
+
+        for attribute, value in element.attrib.items():
+            attribute_name = xml_local_name(attribute)
+            attribute_value = str(value or "").strip().lower()
+
+            if attribute_name.startswith("on"):
+                return False
+
+            if (
+                attribute_name in {"href", "src"} and
+                attribute_value.startswith(("javascript:", "data:text/html"))
+            ):
+                return False
+
+    return True
+
+
+def detect_svg_image_kind(data: bytes):
+    if is_safe_svg(data):
+        return "svg"
+
+    return None
+
+
+def detect_image_kind(data: bytes):
+    return detect_raster_image_kind(data) or detect_svg_image_kind(data)
 
 
 def safe_image_extension(filename: str, image_kind: str):
@@ -105,12 +173,12 @@ def store_uploaded_image(
         raise HTTPException(status_code=400, detail="Only image uploads are supported")
 
     data = read_upload_bytes(upload_file, max_bytes=max_bytes)
-    image_kind = detect_raster_image_kind(data)
+    image_kind = detect_image_kind(data)
 
     if not image_kind:
         raise HTTPException(
             status_code=400,
-            detail="Only JPEG, PNG, GIF, and WebP images are supported"
+            detail="Only JPEG, PNG, GIF, WebP, and SVG images are supported"
         )
 
     root_dir = static_dir or STATIC_DIR
