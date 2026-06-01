@@ -33,13 +33,6 @@ function answerFromFilename(filename) {
   return basename || "Image";
 }
 
-function splitAliases(value) {
-  return String(value || "")
-    .split(/[,;\n]/)
-    .map(alias => alias.trim())
-    .filter(Boolean);
-}
-
 function normalizeItem(item) {
   const data = item?.data || {};
 
@@ -134,7 +127,9 @@ export default function ImageGroupEditor({
   const [uploading, setUploading] = useState(false);
   const [initialSignature, setInitialSignature] = useState("");
   const [previewItem, setPreviewItem] = useState(null);
+  const [aliasInputByTempId, setAliasInputByTempId] = useState({});
   const fileInputRef = useRef(null);
+  const aliasInputRefs = useRef({});
   const saveImageItemsRef = useRef(null);
 
   const currentSignature = useMemo(() => (
@@ -155,6 +150,8 @@ export default function ImageGroupEditor({
     setSharedTags(group.tags || []);
     setTagInput("");
     setDeletedItemIds([]);
+    setAliasInputByTempId({});
+    aliasInputRefs.current = {};
     setLoading(true);
     setSaveStatus("");
 
@@ -209,6 +206,63 @@ export default function ImageGroupEditor({
     );
   }, []);
 
+  const updateAliasInput = useCallback((tempId, value) => {
+    setAliasInputByTempId(prev => ({
+      ...prev,
+      [tempId]: value
+    }));
+  }, []);
+
+  const addAlias = useCallback((item, focusAfter = false) => {
+    const value = String(aliasInputByTempId[item.tempId] || "").trim();
+
+    if (!value) return;
+
+    const currentAliases = item.aliases || [];
+
+    if (!currentAliases.includes(value)) {
+      updateItem(item.tempId, {
+        aliases: [...currentAliases, value]
+      });
+    }
+
+    setAliasInputByTempId(prev => ({
+      ...prev,
+      [item.tempId]: ""
+    }));
+
+    if (focusAfter) {
+      window.requestAnimationFrame(() => {
+        aliasInputRefs.current[item.tempId]?.focus();
+      });
+    }
+  }, [aliasInputByTempId, updateItem]);
+
+  const removeAlias = useCallback((item, index) => {
+    updateItem(item.tempId, {
+      aliases: (item.aliases || []).filter((_, aliasIndex) => aliasIndex !== index)
+    });
+  }, [updateItem]);
+
+  function handleHorizontalChipWheel(event) {
+    const strip = event.currentTarget;
+    const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
+
+    if (maxScrollLeft <= 0) return;
+
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.deltaY;
+
+    if (!delta) return;
+
+    event.preventDefault();
+    strip.scrollLeft = Math.max(
+      0,
+      Math.min(maxScrollLeft, strip.scrollLeft + delta)
+    );
+  }
+
   const addEmptyItem = useCallback(() => {
     setItems(prev => [
       ...prev,
@@ -232,6 +286,12 @@ export default function ImageGroupEditor({
     }
 
     setItems(prev => prev.filter(candidate => candidate.tempId !== item.tempId));
+    setAliasInputByTempId(prev => {
+      const next = { ...prev };
+      delete next[item.tempId];
+      return next;
+    });
+    delete aliasInputRefs.current[item.tempId];
   }, []);
 
   const toggleFavorite = useCallback((item) => {
@@ -625,16 +685,114 @@ export default function ImageGroupEditor({
                   />
                 </label>
 
-                <label style={{ display: "grid", gap: "6px" }}>
-                  <span style={labelStyle}>Alias</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ ...labelStyle, marginBottom: "6px" }}>
+                    Alias
+                  </div>
+                  <div
+                    style={{
+                      marginBottom: "8px",
+                      minWidth: 0,
+                      position: "relative"
+                    }}
+                  >
+                    <div
+                      className="map-editor-chip-strip"
+                      onWheel={handleHorizontalChipWheel}
+                      style={{
+                        display: "flex",
+                        flexWrap: "nowrap",
+                        gap: "6px",
+                        minHeight: "27px",
+                        minWidth: 0,
+                        overscrollBehavior: "contain",
+                        overflowX: "auto",
+                        overflowY: "hidden",
+                        paddingRight: "24px",
+                        scrollbarWidth: "none"
+                      }}
+                    >
+                      {(item.aliases || []).map((alias, index) => (
+                        <div
+                          key={`${alias}-${index}`}
+                          style={{
+                            alignItems: "center",
+                            background: "#333",
+                            borderRadius: "6px",
+                            display: "inline-flex",
+                            flex: "0 0 auto",
+                            gap: "6px",
+                            maxWidth: "150px",
+                            padding: "5px 8px"
+                          }}
+                        >
+                          <span
+                            title={alias}
+                            style={{
+                              minWidth: 0,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {alias}
+                          </span>
+
+                          <button
+                            type="button"
+                            aria-label={`Retirer l'alias ${alias}`}
+                            onClick={() => removeAlias(item, index)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "#999",
+                              cursor: "pointer",
+                              flexShrink: 0,
+                              lineHeight: 1,
+                              padding: 0
+                            }}
+                          >
+                            x
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {(item.aliases || []).length > 0 && (
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          background: "linear-gradient(90deg, rgba(23, 23, 23, 0), #171717 82%)",
+                          bottom: 0,
+                          pointerEvents: "none",
+                          position: "absolute",
+                          right: 0,
+                          top: 0,
+                          width: "28px"
+                        }}
+                      />
+                    )}
+                  </div>
                   <input
-                    value={(item.aliases || []).join(", ")}
-                    onChange={(event) => updateItem(item.tempId, {
-                      aliases: splitAliases(event.target.value)
-                    })}
+                    ref={(element) => {
+                      if (element) {
+                        aliasInputRefs.current[item.tempId] = element;
+                      } else {
+                        delete aliasInputRefs.current[item.tempId];
+                      }
+                    }}
+                    value={aliasInputByTempId[item.tempId] || ""}
+                    onChange={(event) => updateAliasInput(item.tempId, event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addAlias(item, true);
+                      }
+                    }}
+                    onBlur={() => addAlias(item)}
+                    placeholder="Alias"
                     style={inputStyle}
                   />
-                </label>
+                </div>
               </div>
 
               <div
