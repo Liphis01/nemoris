@@ -161,17 +161,17 @@ class StatsServiceTests(unittest.TestCase):
 
         self.assertEqual(stats["counts"]["total"], 6)
         self.assertEqual(stats["counts"]["new"], 1)
-        self.assertEqual(stats["counts"]["due_total"], 3)
+        self.assertEqual(stats["counts"]["due_total"], 2)
         self.assertEqual(stats["counts"]["overdue"], 1)
-        self.assertEqual(stats["counts"]["due_today"], 2)
+        self.assertEqual(stats["counts"]["due_today"], 1)
         self.assertEqual(stats["counts"]["by_type"]["text"]["total"], 3)
         self.assertEqual(stats["counts"]["by_type"]["timeline"]["due"], 1)
         self.assertEqual(stats["counts"]["by_type"]["image"]["total"], 0)
 
         today_load = stats["load_by_type"][0]
         self.assertEqual(today_load["date"], today.isoformat())
-        self.assertEqual(today_load["total"], 3)
-        self.assertEqual(today_load["types"]["text"], 2)
+        self.assertEqual(today_load["total"], 2)
+        self.assertEqual(today_load["types"]["text"], 1)
         self.assertEqual(today_load["types"]["timeline"], 1)
         self.assertEqual(stats["load_by_type"][2]["types"]["map"], 1)
         self.assertEqual(stats["load_by_type"][5]["types"]["timeline"], 1)
@@ -218,6 +218,24 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["hard_questions"][0]["reviews"], 5)
         self.assertEqual(stats["hard_questions"][0]["failed_count"], 3)
         self.assertEqual(stats["hard_questions"][0]["retention"], 40)
+
+    def test_unstarted_progress_counts_as_new_not_due_load(self):
+        today = date(2026, 1, 15)
+        self.add_question(
+            1,
+            type_q="text",
+            next_review=today,
+            history=[],
+            reps=0
+        )
+        self.db.commit()
+
+        stats = build_stats(self.db, today=today)
+
+        self.assertEqual(stats["counts"]["new"], 1)
+        self.assertEqual(stats["counts"]["due_total"], 0)
+        self.assertEqual(stats["counts"]["due_today"], 0)
+        self.assertEqual(stats["load_by_type"][0]["total"], 0)
 
 
 if __name__ == "__main__":

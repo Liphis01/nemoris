@@ -181,7 +181,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         progress = Progress(
             stability=1.0,
             difficulty=5.0,
-            reps=0,
+            reps=1,
             lapses=0,
             interval=0,
             next_review=next_review if next_review else date.today(),

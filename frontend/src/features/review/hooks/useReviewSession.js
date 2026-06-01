@@ -20,6 +20,22 @@ function isEditableTarget(target) {
 const TEXT_ANSWER_FEEDBACK_MS = 240;
 
 
+function progressIsNew(progress) {
+  const history = progress?.history || [];
+
+  return !progress || ((progress.reps || 0) === 0 && history.length === 0);
+}
+
+
+function reviewItemIsNew(item) {
+  if (Array.isArray(item?.items)) {
+    return item.items.every(child => progressIsNew(child.progress));
+  }
+
+  return progressIsNew(item?.progress);
+}
+
+
 export function useReviewSession(active) {
   // Owns one review run: fetching due items, moving through the queue, and
   // re-queueing failures for another pass.
@@ -33,6 +49,8 @@ export function useReviewSession(active) {
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [bonusReviewLoading, setBonusReviewLoading] = useState(false);
+  const [bonusReviewStarted, setBonusReviewStarted] = useState(false);
   const [selectedTextQuality, setSelectedTextQuality] = useState(null);
   const [answeredTextByIndex, setAnsweredTextByIndex] = useState({});
   const [returnToLastQuestionArmed, setReturnToLastQuestionArmed] = useState(false);
@@ -60,6 +78,10 @@ export function useReviewSession(active) {
     answeredTextByIndex[lastQuestionIndex] &&
     selectedTextQuality === null
   );
+  const canStartBonusReview = Boolean(
+    !bonusReviewStarted &&
+    currentIndex >= questions.length
+  );
 
   const clearTextAnswerTimeout = useCallback(() => {
     if (textAnswerTimeoutRef.current) {
@@ -79,6 +101,16 @@ export function useReviewSession(active) {
     setReturnToLastQuestionArmed(false);
     setCurrentIndex(prev => Math.max(0, prev - 1));
   }, [canReturnToLastQuestion, clearTextAnswerTimeout]);
+
+  const waitForTextAnswerRequests = useCallback(() => {
+    const requests = Object.values(textAnswerRequestsRef.current);
+
+    if (requests.length === 0) {
+      return Promise.resolve();
+    }
+
+    return Promise.allSettled(requests);
+  }, []);
 
   const handleTextAnswer = useCallback((quality) => {
     if (!current || textAnswerPendingRef.current) return;
@@ -232,6 +264,8 @@ export function useReviewSession(active) {
       setReviewReady(false);
       setReviewLoading(false);
       setReviewError("");
+      setBonusReviewLoading(false);
+      setBonusReviewStarted(false);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
       textAnswerRequestsRef.current = {};
@@ -244,6 +278,8 @@ export function useReviewSession(active) {
       setReviewReady(false);
       setReviewLoading(true);
       setReviewError("");
+      setBonusReviewLoading(false);
+      setBonusReviewStarted(false);
       setQuestions([]);
       setCurrentIndex(0);
       setShowAnswer(false);
@@ -263,7 +299,6 @@ export function useReviewSession(active) {
 
         if (!cancelled) {
           setReviewReady(true);
-          setReviewLoading(false);
         }
       } catch (error) {
         console.error(error);
@@ -292,6 +327,7 @@ export function useReviewSession(active) {
     if (!active || !reviewReady) return;
 
     // The backend owns due selection and runtime grouping.
+    setReviewLoading(true);
     getReview()
       .then((data) => {
         setQuestions(data);
@@ -300,12 +336,15 @@ export function useReviewSession(active) {
         setSelectedTextQuality(null);
         setAnsweredTextByIndex({});
         setReturnToLastQuestionArmed(false);
+        setBonusReviewStarted(false);
         textAnswerRequestsRef.current = {};
         setReviewError("");
+        setReviewLoading(false);
       })
       .catch((error) => {
         console.error(error);
         setReviewError(error.message || "Impossible de charger la session.");
+        setReviewLoading(false);
       });
   }, [
     active,
@@ -336,6 +375,7 @@ export function useReviewSession(active) {
       setCatchupTargetDraft(String(savedTarget));
       await rebalanceReviewCalendar();
       setReviewError("");
+      setBonusReviewStarted(false);
       setReviewRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error(error);
@@ -345,6 +385,36 @@ export function useReviewSession(active) {
       setCatchupTargetSaving(false);
     }
   }
+
+  const startBonusReview = useCallback(async () => {
+    if (bonusReviewLoading || !canStartBonusReview) return;
+
+    setBonusReviewLoading(true);
+    setReviewError("");
+
+    try {
+      await waitForTextAnswerRequests();
+      const data = await getReview({ includeNew: true });
+
+      setQuestions(data);
+      setCurrentIndex(0);
+      setShowAnswer(false);
+      setSelectedTextQuality(null);
+      setAnsweredTextByIndex({});
+      setReturnToLastQuestionArmed(false);
+      setBonusReviewStarted(data.length === 0 || data.every(reviewItemIsNew));
+      textAnswerRequestsRef.current = {};
+    } catch (error) {
+      console.error(error);
+      setReviewError(error.message || "Impossible de charger les questions bonus.");
+    } finally {
+      setBonusReviewLoading(false);
+    }
+  }, [
+    bonusReviewLoading,
+    canStartBonusReview,
+    waitForTextAnswerRequests
+  ]);
 
   useEffect(() => {
     if (!active) return;
@@ -400,6 +470,8 @@ export function useReviewSession(active) {
   }, [active, current?.items, current?.type_q, showAnswer, handleTextAnswer]);
 
   return {
+    bonusReviewLoading,
+    canStartBonusReview,
     currentIndex,
     handleImageComplete,
     handleMapComplete,
@@ -408,6 +480,7 @@ export function useReviewSession(active) {
     canReturnToLastQuestion,
     currentTextQuality: currentTextAnswer?.quality ?? null,
     returnToLastQuestion,
+    startBonusReview,
     selectedTextQuality,
     catchupTargetDraft,
     catchupTargetSaving,

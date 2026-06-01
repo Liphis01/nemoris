@@ -3,7 +3,6 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
-from .progress import create_initial_progress
 
 
 def merge_tags(*tag_lists):
@@ -161,8 +160,8 @@ def save_map_group_zones(db, group_id: int, payload):
                 zone = existing_by_code.get(code)
 
             if not zone:
-                # A new SVG code becomes a new atomic map question with its own
-                # progress row.
+                # A new SVG code becomes a new atomic map question. Progress is
+                # created lazily when that zone is first answered.
                 zone = Question(
                     type_q="map",
                     question=f"{group.name} - {code}",
@@ -178,7 +177,6 @@ def save_map_group_zones(db, group_id: int, payload):
 
                 db.add(zone)
                 db.flush()
-                db.add(create_initial_progress(zone.id))
 
                 existing_by_id[zone.id] = zone
                 existing_by_code[code] = zone

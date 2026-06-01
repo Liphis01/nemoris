@@ -65,7 +65,7 @@ class ImageGroupTests(unittest.TestCase):
 
         self.assertEqual(image.type_q, "image")
         self.assertEqual(image.group_id, group.id)
-        self.assertIsNotNone(
+        self.assertIsNone(
             self.db.query(Progress)
             .filter(Progress.question_id == image.id)
             .first()
@@ -163,7 +163,7 @@ class ImageGroupTests(unittest.TestCase):
         self.assertEqual(questions[0].question, "European flags - France")
         self.assertEqual(questions[0].data["aliases"], ["French Republic"])
         self.assertTrue(questions[0].data["favorite"])
-        self.assertEqual(self.db.query(Progress).count(), 2)
+        self.assertEqual(self.db.query(Progress).count(), 1)
         self.assertIsNone(self.db.get(Question, deleted.id))
 
     def test_bulk_save_reports_only_changed_existing_items_as_updated(self):

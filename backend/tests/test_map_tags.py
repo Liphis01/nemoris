@@ -119,7 +119,11 @@ class MapTagTests(unittest.TestCase):
         self.db.add_all([group, *questions])
         self.db.flush()
         self.db.add_all([
-            Progress(question_id=question.id, next_review=date.today())
+            Progress(
+                question_id=question.id,
+                next_review=date.today(),
+                reps=1
+            )
             for question in questions
         ])
         self.db.commit()

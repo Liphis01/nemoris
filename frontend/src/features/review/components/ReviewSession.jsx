@@ -24,6 +24,9 @@ export default function ReviewSession({
   handleTimelineComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
+  canStartBonusReview,
+  startBonusReview,
+  bonusReviewLoading,
   catchupTargetDraft,
   setCatchupTargetDraft,
   saveCatchupTarget,
@@ -210,7 +213,31 @@ export default function ReviewSession({
               color: "#777"
             }}
           >
-            🎉 Aucune question pour aujourd’hui
+            <div>🎉 Aucune question pour aujourd’hui</div>
+
+            {canStartBonusReview && (
+              <button
+                type="button"
+                onClick={startBonusReview}
+                disabled={bonusReviewLoading}
+                style={{
+                  background: bonusReviewLoading ? "#202020" : "#233228",
+                  border: "1px solid #385544",
+                  color: bonusReviewLoading ? "#888" : "#d7f5df",
+                  display: "inline-flex",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  cursor: bonusReviewLoading ? "default" : "pointer",
+                  fontWeight: "650",
+                  fontSize: "14px",
+                  marginTop: "22px"
+                }}
+              >
+                {bonusReviewLoading
+                  ? "Chargement des bonus..."
+                  : "Faire des questions bonus"}
+              </button>
+            )}
           </div>
         )}
 
@@ -273,6 +300,30 @@ export default function ReviewSession({
                 }}
               >
                 Modifier la dernière réponse
+              </button>
+            )}
+
+            {canStartBonusReview && (
+              <button
+                type="button"
+                onClick={startBonusReview}
+                disabled={bonusReviewLoading}
+                style={{
+                  background: bonusReviewLoading ? "#202020" : "#233228",
+                  border: "1px solid #385544",
+                  color: bonusReviewLoading ? "#888" : "#d7f5df",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  cursor: bonusReviewLoading ? "default" : "pointer",
+                  fontWeight: "650",
+                  fontSize: "14px",
+                  marginTop: "14px",
+                  marginLeft: canReturnToLastQuestion ? "10px" : 0
+                }}
+              >
+                {bonusReviewLoading
+                  ? "Chargement des bonus..."
+                  : "Faire des questions bonus"}
               </button>
             )}
 

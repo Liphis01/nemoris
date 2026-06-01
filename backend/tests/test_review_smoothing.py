@@ -628,6 +628,88 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             35
         )
 
+    def test_review_defaults_to_started_due_and_blocks_new_until_clear(self):
+        today = date.today()
+        self.add_question(1)
+        self.add_progress(1, today, reps=1)
+        self.add_question(2)
+        self.add_question(3)
+        self.add_progress(3, today, reps=0)
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        bonus_response = get_review(include_new=True, db=self.db)
+
+        self.assertEqual(
+            [item["question_id"] for item in response],
+            [1]
+        )
+        self.assertEqual(
+            [item["question_id"] for item in bonus_response],
+            [1]
+        )
+
+    def test_bonus_review_returns_new_questions_when_due_work_is_clear(self):
+        today = date.today()
+        self.add_question(1)
+        self.add_question(2)
+        self.add_progress(2, today, reps=0)
+        self.add_question(3)
+        self.add_progress(3, today + timedelta(days=3), reps=1)
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        bonus_response = get_review(include_new=True, db=self.db)
+
+        self.assertEqual(response, [])
+        self.assertEqual(
+            [item["question_id"] for item in bonus_response],
+            [1, 2]
+        )
+
+    def test_failed_first_answer_becomes_scheduled_before_more_bonus(self):
+        today = date.today()
+        self.add_question(1)
+        self.add_question(2)
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+
+        response = get_review(include_new=True, db=self.db)
+
+        self.assertEqual(
+            [item["question_id"] for item in response],
+            [1]
+        )
+        progress = (
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+        self.assertEqual(progress.next_review, today)
+        self.assertEqual(progress.reps, 1)
+
+    def test_rebalance_route_ignores_unstarted_progress_rows(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+
+        for question_id in range(1, 3):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=2), reps=1)
+
+        self.add_question(3)
+        new_progress = self.add_progress(3, today - timedelta(days=2), reps=0)
+        self.db.commit()
+
+        response = rebalance_review(db=self.db)
+
+        self.assertEqual(response["total"], 2)
+        self.assertEqual(response["moved"], 2)
+        self.assertEqual(new_progress.next_review, today - timedelta(days=2))
+
     def test_rebalance_route_moves_progress_and_soft_limits_daily_load(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
@@ -637,7 +719,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             progress = self.add_progress(
                 question_id,
                 today - timedelta(days=3),
-                difficulty=5.0 + question_id
+                difficulty=5.0 + question_id,
+                reps=1
             )
 
             if question_id == 1:
@@ -676,11 +759,11 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         for question_id in range(1, 7):
             self.add_question(question_id, type_q="text")
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         for question_id in range(101, 107):
             self.add_question(question_id, type_q="map")
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         self.db.commit()
 
@@ -712,7 +795,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         for question_id in range(1, 6):
             self.add_question(question_id)
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         self.db.commit()
         rebalance_review(db=self.db)
@@ -728,6 +811,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
     def test_review_route_returns_all_due_questions_without_cap(self):
         for question_id in range(1, 206):
             self.add_question(question_id)
+            self.add_progress(question_id, date.today(), reps=1)
 
         self.db.commit()
 
@@ -741,7 +825,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         for question_id in range(1, 4):
             self.add_question(question_id)
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         self.db.commit()
 
@@ -760,7 +844,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         for question_id in range(1, 4):
             self.add_question(question_id)
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         self.db.commit()
         first_outcome = run_startup_rebalance(self.db)
@@ -779,7 +863,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         for question_id in range(1, 4):
             self.add_question(question_id)
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         self.db.commit()
         run_startup_rebalance(self.db)
@@ -844,7 +928,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         for question_id in range(1, 4):
             self.add_question(question_id)
-            self.add_progress(question_id, today - timedelta(days=1))
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
 
         self.db.commit()
 

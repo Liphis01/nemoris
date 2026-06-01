@@ -67,10 +67,11 @@ def get_startup_notice(db: Session = Depends(get_db)):
 
 @router.get("/review")
 def get_review(
+    include_new: bool = False,
     db: Session = Depends(get_db)
 ):
     # The service handles due filtering and runtime map grouping.
-    return get_review_items(db)
+    return get_review_items(db, include_new=include_new)
 
 
 @router.post("/answer")

@@ -79,6 +79,65 @@ describe("useReviewSession", () => {
       question_id: 10,
       _reviewRetryOfIndex: 0
     });
+    expect(result.current.canStartBonusReview).toBe(false);
+  });
+
+  it("offers bonus review after scheduled text questions are correct", async () => {
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    vi.useFakeTimers();
+
+    act(() => {
+      result.current.handleTextAnswer(2);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(240);
+    });
+
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.canStartBonusReview).toBe(true);
+  });
+
+  it("offers bonus review when scheduled review is empty", async () => {
+    getReview
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          question_id: 11,
+          type_q: "text",
+          question: "Bonus",
+          answer: "Answer"
+        }
+      ]);
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.reviewLoading).toBe(false);
+    });
+
+    expect(result.current.questions).toEqual([]);
+    expect(result.current.canStartBonusReview).toBe(true);
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
+    expect(result.current.questions).toEqual([
+      {
+        question_id: 11,
+        type_q: "text",
+        question: "Bonus",
+        answer: "Answer"
+      }
+    ]);
+    expect(result.current.canStartBonusReview).toBe(false);
   });
 
   it("requeues only failed image group items", async () => {
@@ -137,5 +196,73 @@ describe("useReviewSession", () => {
     await waitFor(() => {
       expect(getReview).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("waits for pending text answers before loading bonus questions", async () => {
+    let resolveAnswer;
+    const answerPromise = new Promise(resolve => {
+      resolveAnswer = resolve;
+    });
+    getReview
+      .mockResolvedValueOnce([
+        {
+          question_id: 10,
+          type_q: "text",
+          question: "Question",
+          answer: "Answer"
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          question_id: 11,
+          type_q: "text",
+          question: "Bonus",
+          answer: "Answer"
+        }
+      ]);
+    sendAnswer.mockReturnValue(answerPromise);
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    vi.useFakeTimers();
+
+    act(() => {
+      result.current.handleTextAnswer(2);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(240);
+    });
+
+    expect(result.current.canStartBonusReview).toBe(true);
+
+    let bonusPromise;
+
+    act(() => {
+      bonusPromise = result.current.startBonusReview();
+    });
+
+    expect(getReview).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveAnswer({});
+      await bonusPromise;
+    });
+
+    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
+    expect(result.current.questions).toEqual([
+      {
+        question_id: 11,
+        type_q: "text",
+        question: "Bonus",
+        answer: "Answer"
+      }
+    ]);
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.canStartBonusReview).toBe(false);
   });
 });

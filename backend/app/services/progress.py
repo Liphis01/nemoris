@@ -1,7 +1,5 @@
 from datetime import date
 
-from sqlalchemy import func
-
 from ..models import Progress, Question
 from ..scheduler import (
     FSRS_VERSION,
@@ -17,8 +15,8 @@ from .settings import get_review_settings
 
 
 def create_initial_progress(question_id: int):
-    # New questions are due immediately so they appear in review without a
-    # separate scheduling initialization step.
+    # Progress is created lazily on the first answer. At that point the card
+    # should schedule from today just like a first FSRS review.
     return Progress(
         question_id=question_id,
         stability=1.0,
@@ -31,6 +29,21 @@ def create_initial_progress(question_id: int):
         fsrs_version=FSRS_VERSION,
         history=[]
     )
+
+
+def progress_has_started(progress: Progress | None):
+    if not progress:
+        return False
+
+    return (
+        (progress.reps or 0) > 0 or
+        bool(progress.last_review) or
+        len(progress.history or []) > 0
+    )
+
+
+def progress_is_new(progress: Progress | None):
+    return not progress_has_started(progress)
 
 
 def record_answer_history(progress: Progress, quality: int, scheduling: dict):
@@ -155,17 +168,22 @@ def load_daily_review_counts(db, dates, exclude_question_ids=None):
         return {}
 
     query = (
-        db.query(Progress.next_review, func.count(Progress.id))
+        db.query(Progress)
         .filter(Progress.next_review.in_(dates))
     )
 
     if exclude_question_ids:
         query = query.filter(~Progress.question_id.in_(exclude_question_ids))
 
-    return {
-        next_review: count
-        for next_review, count in query.group_by(Progress.next_review).all()
-    }
+    counts = {}
+
+    for progress in query.all():
+        if progress_is_new(progress):
+            continue
+
+        counts[progress.next_review] = counts.get(progress.next_review, 0) + 1
+
+    return counts
 
 
 def load_daily_review_type_counts(db, dates, exclude_question_ids=None):
@@ -175,7 +193,7 @@ def load_daily_review_type_counts(db, dates, exclude_question_ids=None):
         return {}
 
     query = (
-        db.query(Progress.next_review, Question.type_q, func.count(Progress.id))
+        db.query(Progress, Question.type_q)
         .join(Question, Question.id == Progress.question_id)
         .filter(Progress.next_review.in_(dates))
     )
@@ -185,12 +203,13 @@ def load_daily_review_type_counts(db, dates, exclude_question_ids=None):
 
     result = {}
 
-    for next_review, type_q, count in (
-        query
-        .group_by(Progress.next_review, Question.type_q)
-        .all()
-    ):
-        result.setdefault(next_review, {})[type_q or "unknown"] = count
+    for progress, type_q in query.all():
+        if progress_is_new(progress):
+            continue
+
+        type_counts = result.setdefault(progress.next_review, {})
+        current_type = type_q or "unknown"
+        type_counts[current_type] = type_counts.get(current_type, 0) + 1
 
     return result
 
@@ -282,11 +301,15 @@ def apply_scheduling(db, progress: Progress, quality: int, today=None):
 def rebalance_progress_calendar(db, today=None):
     settings = get_review_settings(db)
     daily_target = settings["catchup_daily_target"]
-    progress_rows = (
-        db.query(Progress, Question.type_q)
-        .join(Question, Question.id == Progress.question_id)
-        .all()
-    )
+    progress_rows = [
+        (progress, type_q)
+        for progress, type_q in (
+            db.query(Progress, Question.type_q)
+            .join(Question, Question.id == Progress.question_id)
+            .all()
+        )
+        if progress_has_started(progress)
+    ]
     progresses = [progress for progress, _ in progress_rows]
     entries = [
         {

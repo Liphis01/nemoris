@@ -9,7 +9,6 @@ from .media import (
     media_points_to_same_static_file,
     store_uploaded_image
 )
-from .progress import create_initial_progress
 from .questions import delete_question_dependents
 
 
@@ -224,7 +223,6 @@ def save_image_group_items(db, group_id: int, payload):
 
                 db.add(item)
                 db.flush()
-                db.add(create_initial_progress(item.id))
                 existing_by_id[item.id] = item
                 created_ids.append(item.id)
             else:

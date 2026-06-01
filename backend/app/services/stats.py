@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Question
 from ..scheduler import parse_history_date
+from .progress import progress_is_new
 
 
 KNOWN_TYPES = ("text", "map", "timeline", "image")
@@ -62,10 +63,7 @@ def _history_date(entry):
 
 
 def _is_new(progress):
-    if not progress:
-        return True
-
-    return (progress.reps or 0) == 0 and len(progress.history or []) == 0
+    return progress_is_new(progress)
 
 
 def _next_review(progress, today):
@@ -246,6 +244,7 @@ def build_stats(db, today=None):
         if is_new:
             counts["new"] += 1
             type_counts["new"] += 1
+            continue
 
         if next_review <= today:
             counts["due_total"] += 1

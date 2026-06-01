@@ -10,7 +10,6 @@ from ..models import (
 )
 from ..serializers import serialize_manage_question
 from .media import delete_unreferenced_media_file, media_points_to_same_static_file
-from .progress import create_initial_progress
 from .timeline import validate_question_timeline
 
 
@@ -59,8 +58,8 @@ def get_collections_by_ids(db, collection_ids):
 
 
 def create_question(db, payload):
-    # Every created question immediately gets its own Progress row. This keeps
-    # grouped map zones independently reviewable.
+    # Progress is created lazily on first answer so new cards stay outside the
+    # scheduled review workload until the user chooses bonus questions.
     validate_question_timeline(payload.type_q, payload.group_id, payload.data)
     validate_group_compatibility(db, payload.type_q, payload.group_id)
 
@@ -76,7 +75,6 @@ def create_question(db, payload):
 
     db.add(question)
     db.flush()
-    db.add(create_initial_progress(question.id))
 
     if payload.collection_ids:
         question.collections = get_collections_by_ids(db, payload.collection_ids)

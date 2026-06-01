@@ -29,8 +29,16 @@ export function getStartupRebalanceNotice() {
 }
 
 
-export function getReview() {
-  return requestJson("/review");
+export function getReview(options = {}) {
+  const params = new URLSearchParams();
+
+  if (options.includeNew) {
+    params.set("include_new", "true");
+  }
+
+  const query = params.toString();
+
+  return requestJson(`/review${query ? `?${query}` : ""}`);
 }
 
 
