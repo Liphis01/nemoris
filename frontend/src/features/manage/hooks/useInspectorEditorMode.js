@@ -15,7 +15,7 @@ function emptyQuestionDraft() {
   };
 }
 
-function emptyGroupDraft(type_group = "map") {
+function emptyGroupDraft(type_group = "") {
   return {
     name: "",
     type_group,
@@ -80,6 +80,10 @@ export default function useInspectorEditorMode({
     setQuestionDraft(emptyQuestionDraft());
   }, [setIsCreatingQuestion, setQuestionDraft]);
 
+  const selectGroupCreationType = useCallback((type_group) => {
+    setGroupDraft(emptyGroupDraft(type_group));
+  }, [setGroupDraft]);
+
   const createCurrentQuestion = useCallback(async (submittedDraft) => {
     await createQuestion(submittedDraft || questionDraft);
     setIsCreatingQuestion(false);
@@ -96,6 +100,7 @@ export default function useInspectorEditorMode({
     cancelCreateQuestion,
     createCurrentQuestion,
     mode,
+    selectGroupCreationType,
     selectQuestionCreationType
   };
 }

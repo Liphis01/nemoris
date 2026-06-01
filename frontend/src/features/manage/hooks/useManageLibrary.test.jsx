@@ -14,6 +14,9 @@ import {
   deleteGroup,
   listGroups
 } from "../../../api/groups";
+import {
+  uploadImageGroupMedia
+} from "../../../api/imageGroups";
 
 vi.mock("../../../api/questions", () => ({
   createQuestion: vi.fn(),
@@ -28,6 +31,10 @@ vi.mock("../../../api/groups", () => ({
   createGroup: vi.fn(),
   deleteGroup: vi.fn(),
   listGroups: vi.fn()
+}));
+
+vi.mock("../../../api/imageGroups", () => ({
+  uploadImageGroupMedia: vi.fn()
 }));
 
 describe("useManageLibrary", () => {
@@ -80,6 +87,7 @@ describe("useManageLibrary", () => {
     createGroup.mockResolvedValue({});
     removeQuestionMedia.mockResolvedValue({});
     uploadMedia.mockResolvedValue({});
+    uploadImageGroupMedia.mockResolvedValue({});
     vi.spyOn(window, "alert").mockImplementation(() => {});
   });
 
@@ -119,5 +127,70 @@ describe("useManageLibrary", () => {
     expect(result.current.allGroups.map(item => item.id)).toEqual([8]);
     expect(result.current.allQuestions.map(item => item.id)).toEqual([22]);
     expect(result.current.selectedItem).toBeNull();
+  });
+
+  it("opens group creation without preselecting a type", () => {
+    const { result } = renderHook(() => useManageLibrary("manage"));
+
+    act(() => {
+      result.current.startCreateGroup();
+    });
+
+    expect(result.current.isCreatingGroup).toBe(true);
+    expect(result.current.groupDraft.type_group).toBe("");
+  });
+
+  it("requires a svg media before creating a map group", async () => {
+    const { result } = renderHook(() => useManageLibrary("manage"));
+
+    act(() => {
+      result.current.startCreateGroup("map");
+      result.current.setGroupDraft({
+        name: "Europe",
+        type_group: "map",
+        media: "",
+        data: {}
+      });
+    });
+
+    await act(async () => {
+      await result.current.createGroup();
+    });
+
+    expect(createGroup).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith("Le fichier SVG de la carte est requis.");
+  });
+
+  it("creates image groups without cover media", async () => {
+    const createdGroup = {
+      id: 9,
+      name: "Drapeaux",
+      type_group: "image",
+      media: null
+    };
+    createGroup.mockResolvedValue(createdGroup);
+    const { result } = renderHook(() => useManageLibrary("manage"));
+
+    act(() => {
+      result.current.startCreateGroup("image");
+      result.current.setGroupDraft({
+        name: "Drapeaux",
+        type_group: "image",
+        media: "",
+        data: {}
+      });
+    });
+
+    await act(async () => {
+      await result.current.createGroup();
+    });
+
+    expect(createGroup).toHaveBeenCalledWith({
+      type_group: "image",
+      name: "Drapeaux",
+      media: null,
+      data: {}
+    });
+    expect(result.current.allGroups).toContain(createdGroup);
   });
 });

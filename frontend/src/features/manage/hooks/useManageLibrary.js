@@ -52,7 +52,7 @@ function questionMutationPayload(draft) {
   };
 }
 
-function createInitialGroupDraft(type_group = "map") {
+function createInitialGroupDraft(type_group = "") {
   return {
     name: "",
     type_group,
@@ -243,7 +243,7 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
-  function startCreateGroup(type_group = "map") {
+  function startCreateGroup(type_group = "") {
     setGroupDraft(createInitialGroupDraft(type_group));
     setIsCreatingGroup(true);
     setIsCreatingQuestion(false);
@@ -251,8 +251,18 @@ export function useManageLibrary(mode) {
   }
 
   async function createGroup() {
+    if (!groupDraft.type_group) {
+      alert("Le type de groupe est requis.");
+      return;
+    }
+
     if (!groupDraft.name) {
       alert("Le nom du groupe est requis.");
+      return;
+    }
+
+    if (groupDraft.type_group === "map" && !groupDraft.media) {
+      alert("Le fichier SVG de la carte est requis.");
       return;
     }
 

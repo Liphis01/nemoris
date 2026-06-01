@@ -1,5 +1,6 @@
 import MapEditor from "../../map/components/MapEditor";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
+import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
 import ImageGroupEditor from "./ImageGroupEditor";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
@@ -44,6 +45,7 @@ export default function ManageInspector({
     cancelCreateQuestion,
     createCurrentQuestion,
     mode,
+    selectGroupCreationType,
     selectQuestionCreationType
   } = useInspectorEditorMode({
     createQuestion,
@@ -90,6 +92,15 @@ export default function ManageInspector({
   });
 
   if (mode === "createGroup") {
+    if (!groupDraft.type_group) {
+      return (
+        <GroupCreationTypeChooser
+          onSelect={selectGroupCreationType}
+          onCancel={cancelCreateGroup}
+        />
+      );
+    }
+
     return (
       <CreateMapGroupEditor
         groupDraft={groupDraft}
