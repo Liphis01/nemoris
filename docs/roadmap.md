@@ -51,6 +51,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
 - heatmap des questions les plus durs pour les maps
+- bloquer les questions nouvelles tant qu'on décide pas de les mettre dans la review (genre brouillon)
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

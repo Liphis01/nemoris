@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getImageGroupItems, patchImageGroupItems } from "../../../api/imageGroups";
 import { resolveMediaUrl } from "../../../shared/media";
 import FavoriteToggleButton from "./FavoriteToggleButton";
@@ -18,6 +18,11 @@ import {
 } from "./QuestionEditorPrimitives";
 
 let tempItemCounter = 0;
+const IMAGE_GROUP_ROW_HEIGHT = 292;
+const IMAGE_GROUP_ROW_GAP = 10;
+const IMAGE_GROUP_ROW_SLOT_HEIGHT = IMAGE_GROUP_ROW_HEIGHT + IMAGE_GROUP_ROW_GAP;
+const IMAGE_GROUP_OVERSCAN_ROWS = 8;
+const IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT = 720;
 
 function nextTempId() {
   tempItemCounter += 1;
@@ -108,6 +113,259 @@ function imagePreviewButtonStyle(hasImage) {
   };
 }
 
+const ImageGroupItemRow = memo(function ImageGroupItemRow({
+  aliasInputValue,
+  item,
+  onAddAlias,
+  onHorizontalChipWheel,
+  onPreviewItem,
+  onRegisterAliasInput,
+  onRemoveAlias,
+  onRemoveItem,
+  onToggleFavorite,
+  onUpdateAliasInput,
+  onUpdateItem,
+  selected
+}) {
+  const mediaSrc = useMemo(() => resolveMediaUrl(item.media), [item.media]);
+
+  const handleAnswerChange = useCallback((event) => {
+    onUpdateItem(item.tempId, {
+      answer: event.target.value
+    });
+  }, [item.tempId, onUpdateItem]);
+
+  const handleMediaChange = useCallback((event) => {
+    onUpdateItem(item.tempId, {
+      media: event.target.value
+    });
+  }, [item.tempId, onUpdateItem]);
+
+  const handleAliasInputChange = useCallback((event) => {
+    onUpdateAliasInput(item.tempId, event.target.value);
+  }, [item.tempId, onUpdateAliasInput]);
+
+  const handleAliasKeyDown = useCallback((event) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    onAddAlias(item, true);
+  }, [item, onAddAlias]);
+
+  const handleAliasBlur = useCallback(() => {
+    onAddAlias(item);
+  }, [item, onAddAlias]);
+
+  const handleAliasRef = useCallback((element) => {
+    onRegisterAliasInput(item.tempId, element);
+  }, [item.tempId, onRegisterAliasInput]);
+
+  return (
+    <div
+      data-image-group-item-row
+      data-image-group-item-id={item.id || item.tempId}
+      style={{
+        border: selected
+          ? "1px solid #f0c36a"
+          : "1px solid #2a2a2a",
+        borderRadius: "10px",
+        background: selected ? "#241f15" : "#171717",
+        boxSizing: "border-box",
+        height: `${IMAGE_GROUP_ROW_HEIGHT}px`,
+        padding: "12px",
+        display: "grid",
+        gridTemplateColumns: "96px minmax(0, 1fr) auto",
+        gap: "12px",
+        alignItems: "start"
+      }}
+    >
+      {mediaSrc ? (
+        <button
+          type="button"
+          onClick={() => onPreviewItem(item)}
+          aria-label={`Agrandir ${item.answer || "l'image"}`}
+          title="Agrandir l'image"
+          style={imagePreviewButtonStyle(true)}
+        >
+          <img
+            src={mediaSrc}
+            alt={item.answer || "image"}
+            loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            style={{
+              maxHeight: "100%",
+              maxWidth: "100%",
+              objectFit: "contain"
+            }}
+          />
+        </button>
+      ) : (
+        <div
+          style={{
+            ...imagePreviewStyle(false),
+            alignItems: "center",
+            color: "#666",
+            display: "flex",
+            fontSize: "11px",
+            justifyContent: "center"
+          }}
+        >
+          image
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "grid",
+          gap: "10px",
+          minWidth: 0
+        }}
+      >
+        <label style={{ display: "grid", gap: "6px" }}>
+          <span style={labelStyle}>Réponse</span>
+          <input
+            value={item.answer || ""}
+            onChange={handleAnswerChange}
+            style={inputStyle}
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: "6px" }}>
+          <span style={labelStyle}>Image / URL</span>
+          <input
+            value={item.media || ""}
+            onChange={handleMediaChange}
+            style={inputStyle}
+          />
+        </label>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...labelStyle, marginBottom: "6px" }}>
+            Alias
+          </div>
+          <div
+            style={{
+              marginBottom: "8px",
+              minWidth: 0,
+              position: "relative"
+            }}
+          >
+            <div
+              className="map-editor-chip-strip"
+              onWheel={onHorizontalChipWheel}
+              style={{
+                display: "flex",
+                flexWrap: "nowrap",
+                gap: "6px",
+                minHeight: "27px",
+                minWidth: 0,
+                overscrollBehavior: "contain",
+                overflowX: "auto",
+                overflowY: "hidden",
+                paddingRight: "24px",
+                scrollbarWidth: "none"
+              }}
+            >
+              {(item.aliases || []).map((alias, index) => (
+                <div
+                  key={`${alias}-${index}`}
+                  style={{
+                    alignItems: "center",
+                    background: "#333",
+                    borderRadius: "6px",
+                    display: "inline-flex",
+                    flex: "0 0 auto",
+                    gap: "6px",
+                    maxWidth: "150px",
+                    padding: "5px 8px"
+                  }}
+                >
+                  <span
+                    title={alias}
+                    style={{
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {alias}
+                  </span>
+
+                  <button
+                    type="button"
+                    aria-label={`Retirer l'alias ${alias}`}
+                    onClick={() => onRemoveAlias(item, index)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#999",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      lineHeight: 1,
+                      padding: 0
+                    }}
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+            {(item.aliases || []).length > 0 && (
+              <div
+                aria-hidden="true"
+                style={{
+                  background: "linear-gradient(90deg, rgba(23, 23, 23, 0), #171717 82%)",
+                  bottom: 0,
+                  pointerEvents: "none",
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  width: "28px"
+                }}
+              />
+            )}
+          </div>
+          <input
+            ref={handleAliasRef}
+            value={aliasInputValue || ""}
+            onChange={handleAliasInputChange}
+            onKeyDown={handleAliasKeyDown}
+            onBlur={handleAliasBlur}
+            placeholder="Alias"
+            style={inputStyle}
+          />
+        </div>
+      </div>
+
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px"
+        }}
+      >
+        <FavoriteToggleButton
+          favorite={Boolean(item.data?.favorite)}
+          onToggle={() => onToggleFavorite(item)}
+        />
+        <button
+          type="button"
+          onClick={() => onRemoveItem(item)}
+          style={{
+            ...dangerButtonStyle,
+            padding: "8px 10px"
+          }}
+        >
+          Supprimer
+        </button>
+      </div>
+    </div>
+  );
+});
+
 export default function ImageGroupEditor({
   group,
   availableTags = [],
@@ -128,34 +386,89 @@ export default function ImageGroupEditor({
   const [initialSignature, setInitialSignature] = useState("");
   const [previewItem, setPreviewItem] = useState(null);
   const [aliasInputByTempId, setAliasInputByTempId] = useState({});
+  const [itemsScrollTop, setItemsScrollTop] = useState(0);
+  const [itemsViewportHeight, setItemsViewportHeight] = useState(
+    IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT
+  );
   const fileInputRef = useRef(null);
   const aliasInputRefs = useRef({});
+  const itemsScrollRef = useRef(null);
+  const currentGroupRef = useRef(group);
   const saveImageItemsRef = useRef(null);
+  const groupId = group?.id;
+  const selectedItemId = selectedItem?.id ?? null;
 
   const currentSignature = useMemo(() => (
     buildSignature(editableGroup, sharedTags, items, deletedItemIds)
   ), [deletedItemIds, editableGroup, items, sharedTags]);
   const hasUnsavedChanges = currentSignature !== initialSignature;
+  const selectedItemIndex = useMemo(() => {
+    if (!selectedItemId) return -1;
+
+    return items.findIndex((item) => item.id === selectedItemId);
+  }, [items, selectedItemId]);
+  const visibleItemWindow = useMemo(() => {
+    if (items.length === 0) {
+      return {
+        startIndex: 0,
+        endIndex: 0,
+        items: [],
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0
+      };
+    }
+
+    const viewportHeight = Math.max(
+      itemsViewportHeight || 0,
+      IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT
+    );
+    const startIndex = Math.max(
+      0,
+      Math.floor(itemsScrollTop / IMAGE_GROUP_ROW_SLOT_HEIGHT) -
+        IMAGE_GROUP_OVERSCAN_ROWS
+    );
+    const visibleCount = Math.ceil(viewportHeight / IMAGE_GROUP_ROW_SLOT_HEIGHT) +
+      (IMAGE_GROUP_OVERSCAN_ROWS * 2) +
+      1;
+    const endIndex = Math.min(items.length, startIndex + visibleCount);
+
+    return {
+      startIndex,
+      endIndex,
+      items: items.slice(startIndex, endIndex),
+      topSpacerHeight: startIndex * IMAGE_GROUP_ROW_SLOT_HEIGHT,
+      bottomSpacerHeight: Math.max(0, (items.length - endIndex) * IMAGE_GROUP_ROW_SLOT_HEIGHT)
+    };
+  }, [items, itemsScrollTop, itemsViewportHeight]);
 
   useEffect(() => {
-    if (!group?.id) return undefined;
+    currentGroupRef.current = group;
+  });
+
+  useEffect(() => {
+    if (!groupId) return undefined;
 
     let cancelled = false;
+    const selectedGroup = currentGroupRef.current;
     const nextGroup = {
-      ...group,
-      media: group.media || ""
+      ...selectedGroup,
+      media: selectedGroup.media || ""
     };
 
     setEditableGroup(nextGroup);
-    setSharedTags(group.tags || []);
+    setSharedTags(selectedGroup.tags || []);
     setTagInput("");
     setDeletedItemIds([]);
     setAliasInputByTempId({});
     aliasInputRefs.current = {};
+    setItemsScrollTop(0);
+    if (itemsScrollRef.current) {
+      itemsScrollRef.current.scrollTop = 0;
+    }
     setLoading(true);
     setSaveStatus("");
 
-    getImageGroupItems(group.id)
+    getImageGroupItems(groupId)
       .then((data) => {
         if (cancelled) return;
 
@@ -167,7 +480,7 @@ export default function ImageGroupEditor({
         setItems(normalizedItems);
         setInitialSignature(buildSignature(
           nextGroup,
-          group.tags || [],
+          selectedGroup.tags || [],
           normalizedItems,
           []
         ));
@@ -187,13 +500,59 @@ export default function ImageGroupEditor({
     return () => {
       cancelled = true;
     };
-  }, [group]);
+  }, [groupId]);
+
+  useEffect(() => {
+    const scrollElement = itemsScrollRef.current;
+    if (!scrollElement) return undefined;
+
+    const updateViewportHeight = () => {
+      setItemsViewportHeight(
+        scrollElement.clientHeight || IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT
+      );
+    };
+
+    updateViewportHeight();
+
+    if (!window.ResizeObserver) {
+      window.addEventListener("resize", updateViewportHeight);
+      return () => {
+        window.removeEventListener("resize", updateViewportHeight);
+      };
+    }
+
+    const observer = new window.ResizeObserver(updateViewportHeight);
+    observer.observe(scrollElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading || selectedItemIndex < 0) return;
+
+    const nextScrollTop = Math.max(
+      0,
+      selectedItemIndex * IMAGE_GROUP_ROW_SLOT_HEIGHT
+    );
+
+    if (itemsScrollRef.current) {
+      itemsScrollRef.current.scrollTop = nextScrollTop;
+    }
+
+    setItemsScrollTop(nextScrollTop);
+  }, [loading, selectedItemId, selectedItemIndex]);
 
   const updateGroupField = useCallback((field, value) => {
     setEditableGroup(prev => ({
       ...(prev || {}),
       [field]: value
     }));
+  }, []);
+
+  const handleItemsScroll = useCallback((event) => {
+    setItemsScrollTop(event.currentTarget.scrollTop);
   }, []);
 
   const updateItem = useCallback((tempId, patch) => {
@@ -211,6 +570,14 @@ export default function ImageGroupEditor({
       ...prev,
       [tempId]: value
     }));
+  }, []);
+
+  const registerAliasInput = useCallback((tempId, element) => {
+    if (element) {
+      aliasInputRefs.current[tempId] = element;
+    } else {
+      delete aliasInputRefs.current[tempId];
+    }
   }, []);
 
   const addAlias = useCallback((item, focusAfter = false) => {
@@ -244,7 +611,7 @@ export default function ImageGroupEditor({
     });
   }, [updateItem]);
 
-  function handleHorizontalChipWheel(event) {
+  const handleHorizontalChipWheel = useCallback((event) => {
     const strip = event.currentTarget;
     const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
 
@@ -261,7 +628,7 @@ export default function ImageGroupEditor({
       0,
       Math.min(maxScrollLeft, strip.scrollLeft + delta)
     );
-  }
+  }, []);
 
   const addEmptyItem = useCallback(() => {
     setItems(prev => [
@@ -365,6 +732,8 @@ export default function ImageGroupEditor({
       return { saved: false };
     }
 
+    const scrollTopBeforeSave = itemsScrollRef.current?.scrollTop ?? 0;
+
     setSaveStatus("Enregistrement...");
 
     try {
@@ -396,6 +765,13 @@ export default function ImageGroupEditor({
       setSaveStatus("Enregistré");
 
       await onSave?.(saveResult);
+
+      window.requestAnimationFrame(() => {
+        if (itemsScrollRef.current) {
+          itemsScrollRef.current.scrollTop = scrollTopBeforeSave;
+        }
+        setItemsScrollTop(scrollTopBeforeSave);
+      });
 
       return {
         saved: true,
@@ -571,14 +947,16 @@ export default function ImageGroupEditor({
       </div>
 
       <div
+        ref={itemsScrollRef}
+        data-testid="image-group-items-scroll"
         className="app-scrollbar"
+        onScroll={handleItemsScroll}
         style={{
           flex: 1,
           overflow: "auto",
           padding: "14px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px"
+          display: "block",
+          scrollbarGutter: "stable"
         }}
       >
         {loading && (
@@ -603,224 +981,55 @@ export default function ImageGroupEditor({
           </div>
         )}
 
-        {!loading && items.map((item) => {
-          const mediaSrc = resolveMediaUrl(item.media);
-          const selected = selectedItem?.id && selectedItem.id === item.id;
+        {!loading && items.length > 0 && (
+          <div>
+            {visibleItemWindow.topSpacerHeight > 0 && (
+              <div
+                aria-hidden="true"
+                style={{ height: `${visibleItemWindow.topSpacerHeight}px` }}
+              />
+            )}
 
-          return (
-            <div
-              key={item.tempId}
-              style={{
-                border: selected
-                  ? "1px solid #f0c36a"
-                  : "1px solid #2a2a2a",
-                borderRadius: "10px",
-                background: selected ? "#241f15" : "#171717",
-                padding: "12px",
-                display: "grid",
-                gridTemplateColumns: "96px minmax(0, 1fr) auto",
-                gap: "12px",
-                alignItems: "start"
-              }}
-            >
-              {mediaSrc ? (
-                <button
-                  type="button"
-                  onClick={() => setPreviewItem(item)}
-                  aria-label={`Agrandir ${item.answer || "l'image"}`}
-                  title="Agrandir l'image"
-                  style={imagePreviewButtonStyle(true)}
-                >
-                  <img
-                    src={mediaSrc}
-                    alt={item.answer || "image"}
-                    style={{
-                      maxHeight: "100%",
-                      maxWidth: "100%",
-                      objectFit: "contain"
-                    }}
-                  />
-                </button>
-              ) : (
+            {visibleItemWindow.items.map((item, index) => {
+              const itemIndex = visibleItemWindow.startIndex + index;
+              const hasFollowingRows = itemIndex < items.length - 1;
+
+              return (
                 <div
+                  key={item.tempId}
                   style={{
-                    ...imagePreviewStyle(false),
-                    alignItems: "center",
-                    color: "#666",
-                    display: "flex",
-                    fontSize: "11px",
-                    justifyContent: "center"
+                    height: `${IMAGE_GROUP_ROW_HEIGHT}px`,
+                    marginBottom: hasFollowingRows
+                      ? `${IMAGE_GROUP_ROW_GAP}px`
+                      : 0
                   }}
                 >
-                  image
-                </div>
-              )}
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: "10px",
-                  minWidth: 0
-                }}
-              >
-                <label style={{ display: "grid", gap: "6px" }}>
-                  <span style={labelStyle}>Réponse</span>
-                  <input
-                    value={item.answer || ""}
-                    onChange={(event) => updateItem(item.tempId, {
-                      answer: event.target.value
-                    })}
-                    style={inputStyle}
-                  />
-                </label>
-
-                <label style={{ display: "grid", gap: "6px" }}>
-                  <span style={labelStyle}>Image / URL</span>
-                  <input
-                    value={item.media || ""}
-                    onChange={(event) => updateItem(item.tempId, {
-                      media: event.target.value
-                    })}
-                    style={inputStyle}
-                  />
-                </label>
-
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ ...labelStyle, marginBottom: "6px" }}>
-                    Alias
-                  </div>
-                  <div
-                    style={{
-                      marginBottom: "8px",
-                      minWidth: 0,
-                      position: "relative"
-                    }}
-                  >
-                    <div
-                      className="map-editor-chip-strip"
-                      onWheel={handleHorizontalChipWheel}
-                      style={{
-                        display: "flex",
-                        flexWrap: "nowrap",
-                        gap: "6px",
-                        minHeight: "27px",
-                        minWidth: 0,
-                        overscrollBehavior: "contain",
-                        overflowX: "auto",
-                        overflowY: "hidden",
-                        paddingRight: "24px",
-                        scrollbarWidth: "none"
-                      }}
-                    >
-                      {(item.aliases || []).map((alias, index) => (
-                        <div
-                          key={`${alias}-${index}`}
-                          style={{
-                            alignItems: "center",
-                            background: "#333",
-                            borderRadius: "6px",
-                            display: "inline-flex",
-                            flex: "0 0 auto",
-                            gap: "6px",
-                            maxWidth: "150px",
-                            padding: "5px 8px"
-                          }}
-                        >
-                          <span
-                            title={alias}
-                            style={{
-                              minWidth: 0,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap"
-                            }}
-                          >
-                            {alias}
-                          </span>
-
-                          <button
-                            type="button"
-                            aria-label={`Retirer l'alias ${alias}`}
-                            onClick={() => removeAlias(item, index)}
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              color: "#999",
-                              cursor: "pointer",
-                              flexShrink: 0,
-                              lineHeight: 1,
-                              padding: 0
-                            }}
-                          >
-                            x
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {(item.aliases || []).length > 0 && (
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          background: "linear-gradient(90deg, rgba(23, 23, 23, 0), #171717 82%)",
-                          bottom: 0,
-                          pointerEvents: "none",
-                          position: "absolute",
-                          right: 0,
-                          top: 0,
-                          width: "28px"
-                        }}
-                      />
-                    )}
-                  </div>
-                  <input
-                    ref={(element) => {
-                      if (element) {
-                        aliasInputRefs.current[item.tempId] = element;
-                      } else {
-                        delete aliasInputRefs.current[item.tempId];
-                      }
-                    }}
-                    value={aliasInputByTempId[item.tempId] || ""}
-                    onChange={(event) => updateAliasInput(item.tempId, event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addAlias(item, true);
-                      }
-                    }}
-                    onBlur={() => addAlias(item)}
-                    placeholder="Alias"
-                    style={inputStyle}
+                  <ImageGroupItemRow
+                    aliasInputValue={aliasInputByTempId[item.tempId] || ""}
+                    item={item}
+                    onAddAlias={addAlias}
+                    onHorizontalChipWheel={handleHorizontalChipWheel}
+                    onPreviewItem={setPreviewItem}
+                    onRegisterAliasInput={registerAliasInput}
+                    onRemoveAlias={removeAlias}
+                    onRemoveItem={removeItem}
+                    onToggleFavorite={toggleFavorite}
+                    onUpdateAliasInput={updateAliasInput}
+                    onUpdateItem={updateItem}
+                    selected={Boolean(selectedItemId && selectedItemId === item.id)}
                   />
                 </div>
-              </div>
+              );
+            })}
 
+            {visibleItemWindow.bottomSpacerHeight > 0 && (
               <div
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px"
-                }}
-              >
-                <FavoriteToggleButton
-                  favorite={Boolean(item.data?.favorite)}
-                  onToggle={() => toggleFavorite(item)}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeItem(item)}
-                  style={{
-                    ...dangerButtonStyle,
-                    padding: "8px 10px"
-                  }}
-                >
-                  Supprimer
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                aria-hidden="true"
+                style={{ height: `${visibleItemWindow.bottomSpacerHeight}px` }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {previewItem && (
