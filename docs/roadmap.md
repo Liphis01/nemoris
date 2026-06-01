@@ -1,7 +1,5 @@
 # TODO
 
-How do you suggest I create conveniently the group for flags ? Should I download all flags and import them one by one into the group ?
-
 ## Product Suggestions
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
@@ -35,7 +33,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 
 ## bugs
 - j'ai fait un groupe d'images avec quelques erreurs. à la fin de la review j'ai été requestionné sur les images ratées. je ne les ai pas faites et je suis retourné au menu princ. en revenant, plus de questions.
-- la taille des images doit être limitée
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas

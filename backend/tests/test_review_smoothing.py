@@ -28,6 +28,7 @@ from app.scheduler import (
     choose_smoothed_review_date,
     favorite_interval,
     legacy_quality_to_fsrs_rating,
+    preview_intervals,
     rebalance_review_calendar,
     smoothing_radius_days
 )
@@ -99,6 +100,20 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(favorite_interval(2), 1)
         self.assertEqual(favorite_interval(3), 2)
         self.assertEqual(favorite_interval(10), 7)
+
+    def test_again_projected_interval_is_immediate_retry(self):
+        progress = Progress(
+            question_id=1,
+            stability=1.0,
+            difficulty=5.0,
+            reps=0,
+            lapses=0,
+            interval=0,
+            next_review=date.today(),
+            history=[]
+        )
+
+        self.assertEqual(preview_intervals(progress)[0], 0)
 
     def test_interval_zero_and_one_do_not_move(self):
         today = date(2026, 1, 1)
@@ -438,6 +453,24 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.history[-1]["quality"], 3)
         self.assertEqual(progress.history[-1]["fsrs_rating"], 4)
         self.assertEqual(progress.history[-1]["fsrs_state"], 2)
+
+    def test_again_answer_stays_due_today_for_retry(self):
+        today = date.today()
+        self.add_question(1, type_q="text")
+        progress = self.add_progress(1, today)
+        self.db.commit()
+
+        response = answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+
+        self.assertEqual(response["next_review"], today)
+        self.assertEqual(response["interval"], 0)
+        self.assertEqual(progress.next_review, today)
+        self.assertEqual(progress.interval, 0)
+        self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
+        self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
 
     def test_revise_answer_replaces_latest_history_entry(self):
         today = date.today()

@@ -487,6 +487,32 @@ class ReviewResponseShapeTests(unittest.TestCase):
             zone_b.id: 0
         })
 
+    def test_review_endpoint_returns_missed_map_items_after_group_submit(self):
+        fixture = self.seed_review_contract_fixture()
+        zone_a, zone_b = fixture["map_zones"]
+
+        answer_map(
+            MapAnswerRequest(items={
+                zone_a.id: 2,
+                zone_b.id: 0
+            }),
+            db=self.db
+        )
+
+        response = get_review(db=self.db)
+        map_groups = [
+            item
+            for item in response
+            if item["type_q"] == "map"
+        ]
+
+        self.assertEqual(len(map_groups), 1)
+        self.assertEqual(
+            [item["question_id"] for item in map_groups[0]["items"]],
+            [zone_b.id]
+        )
+        self.assertEqual(zone_b.progress.next_review, date.today())
+
     def test_answer_image_endpoint_returns_ack_shape_for_item_grades(self):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]

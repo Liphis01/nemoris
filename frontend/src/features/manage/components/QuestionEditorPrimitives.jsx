@@ -116,15 +116,29 @@ export function MediaPreview({ media }) {
   if (!src) return null;
 
   return (
-    <img
-      src={src}
-      alt="preview"
+    <div
       style={{
-        width: "100%",
+        alignItems: "center",
+        background: "#101010",
+        border: "1px solid #2f2f2f",
         borderRadius: "8px",
-        border: "1px solid #282828"
+        display: "flex",
+        height: "78px",
+        justifyContent: "center",
+        overflow: "hidden",
+        width: "108px"
       }}
-    />
+    >
+      <img
+        src={src}
+        alt="preview"
+        style={{
+          maxHeight: "100%",
+          maxWidth: "100%",
+          objectFit: "contain"
+        }}
+      />
+    </div>
   );
 }
 
@@ -244,72 +258,93 @@ export function ImageMediaField({
         border: isDragging
           ? "1px solid rgba(126, 226, 168, 0.75)"
           : "1px solid #2a2a2a",
-        borderRadius: "12px",
+        borderRadius: "10px",
         background: isDragging ? "#17231b" : "#121212",
         padding: "12px",
         transition: "background 0.14s ease, border 0.14s ease"
       }}
     >
-      <QuestionEditorField label="Image / URL">
-        <input
-          value={mediaValue}
-          onChange={(event) => onMediaChange?.(event.target.value)}
-          placeholder="https://... ou /static/image.jpg"
-          style={{
-            ...inputStyle,
-            marginBottom: 0
-          }}
-        />
-      </QuestionEditorField>
-
       <div
         style={{
-          alignItems: "center",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px",
-          marginTop: "10px"
+          alignItems: "start",
+          display: "grid",
+          gap: "12px",
+          gridTemplateColumns: hasMedia
+            ? "108px minmax(0, 1fr)"
+            : "minmax(0, 1fr)"
         }}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileInputChange}
-          style={{ display: "none" }}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={!onUploadFile || isUploading}
-          style={{
-            ...buttonStyle,
-            opacity: !onUploadFile || isUploading ? 0.6 : 1
-          }}
-        >
-          {hasMedia ? "Remplacer" : "Choisir"}
-        </button>
-        {hasMedia && (
-          <button
-            type="button"
-            onClick={removeMedia}
-            style={dangerButtonStyle}
+        {hasMedia && <MediaPreview media={mediaValue} />}
+
+        <div style={{ minWidth: 0 }}>
+          <QuestionEditorField label="Image / URL">
+            <input
+              value={mediaValue}
+              onChange={(event) => onMediaChange?.(event.target.value)}
+              placeholder="https://... ou /static/image.jpg"
+              style={{
+                ...inputStyle,
+                marginBottom: 0
+              }}
+            />
+          </QuestionEditorField>
+
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              marginTop: "10px"
+            }}
           >
-            Retirer
-          </button>
-        )}
-        <span
-          style={{
-            color: isDragging ? "#7ee2a8" : "#777",
-            fontSize: "12px"
-          }}
-        >
-          {isUploading
-            ? "Import en cours..."
-            : isDragging
-              ? "Déposer l'image"
-              : "Glisser-déposer ou coller"}
-        </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileInputChange}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!onUploadFile || isUploading}
+              style={{
+                ...primaryButtonStyle,
+                opacity: !onUploadFile || isUploading ? 0.6 : 1,
+                padding: "10px 14px",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {isUploading
+                ? "Import..."
+                : hasMedia
+                  ? "Remplacer l'image"
+                  : "Importer une image"}
+            </button>
+            {hasMedia && (
+              <button
+                type="button"
+                onClick={removeMedia}
+                style={{
+                  ...dangerButtonStyle,
+                  padding: "10px 14px",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                Retirer
+              </button>
+            )}
+            <span
+              style={{
+                color: isDragging ? "#7ee2a8" : "#777",
+                fontSize: "12px"
+              }}
+            >
+              {isDragging ? "Déposer l'image" : "Glisser-déposer ou coller"}
+            </span>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -323,10 +358,6 @@ export function ImageMediaField({
           {error}
         </div>
       )}
-
-      <div style={{ marginTop: hasMedia ? "12px" : 0 }}>
-        <MediaPreview media={mediaValue} />
-      </div>
     </div>
   );
 }

@@ -517,6 +517,10 @@ def update_progress(progress, quality, today=None):
 
     if rating == Rating.Again:
         lapses += 1
+        # A failed card stays due immediately so leaving and reopening review
+        # does not drop the retry that the frontend would have queued in memory.
+        reviewed_card.due = review_datetime
+        next_review = today
 
     return {
         "stability": reviewed_card.stability,
@@ -558,6 +562,8 @@ def preview_intervals(progress, favorite=False):
         next_review = date_from_review_datetime(reviewed_card.due)
         last_review = date_from_review_datetime(reviewed_card.last_review)
         interval = max(0, (next_review - last_review).days)
+        if rating == Rating.Again:
+            interval = 0
         intervals[quality] = favorite_interval(interval) if favorite else interval
 
     return intervals
