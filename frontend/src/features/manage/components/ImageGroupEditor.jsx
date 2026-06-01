@@ -732,8 +732,6 @@ export default function ImageGroupEditor({
       return { saved: false };
     }
 
-    const scrollTopBeforeSave = itemsScrollRef.current?.scrollTop ?? 0;
-
     setSaveStatus("Enregistrement...");
 
     try {
@@ -765,13 +763,6 @@ export default function ImageGroupEditor({
       setSaveStatus("Enregistré");
 
       await onSave?.(saveResult);
-
-      window.requestAnimationFrame(() => {
-        if (itemsScrollRef.current) {
-          itemsScrollRef.current.scrollTop = scrollTopBeforeSave;
-        }
-        setItemsScrollTop(scrollTopBeforeSave);
-      });
 
       return {
         saved: true,
