@@ -101,6 +101,18 @@ def build_image_item_data(existing_data, payload_data, aliases):
     return data
 
 
+def media_values_equal(left, right):
+    return (left or "") == (right or "") or media_points_to_same_static_file(left, right)
+
+
+def image_item_payload_changed(item, desired_answer, desired_media, desired_data):
+    return (
+        (item.answer or "") != desired_answer or
+        not media_values_equal(item.media, desired_media) or
+        (item.data or {}) != desired_data
+    )
+
+
 def save_image_group_items(db, group_id: int, payload):
     group = get_image_group_or_404(db, group_id)
     group_updates = {}
@@ -216,15 +228,24 @@ def save_image_group_items(db, group_id: int, payload):
                 existing_by_id[item.id] = item
                 created_ids.append(item.id)
             else:
-                old_media = item.media
-                item.answer = item_payload.answer or ""
-                item.question = build_image_question_text(group, item.answer)
-                item.media = item_payload.media or ""
-                item.data = build_image_item_data(
+                desired_answer = item_payload.answer or ""
+                desired_media = item_payload.media or ""
+                desired_data = build_image_item_data(
                     item.data or {},
                     item_payload.data or {},
                     aliases
                 )
+                payload_changed = image_item_payload_changed(
+                    item,
+                    desired_answer,
+                    desired_media,
+                    desired_data
+                )
+                old_media = item.media
+                item.answer = desired_answer
+                item.question = build_image_question_text(group, item.answer)
+                item.media = desired_media
+                item.data = desired_data
 
                 if shared_tags_provided:
                     item.tags = shared_tags
@@ -232,7 +253,8 @@ def save_image_group_items(db, group_id: int, payload):
                 if not media_points_to_same_static_file(old_media, item.media):
                     media_to_delete.append(old_media)
 
-                updated_ids.append(item.id)
+                if payload_changed:
+                    updated_ids.append(item.id)
 
         db.commit()
     except Exception:

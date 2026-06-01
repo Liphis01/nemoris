@@ -166,6 +166,71 @@ class ImageGroupTests(unittest.TestCase):
         self.assertEqual(self.db.query(Progress).count(), 2)
         self.assertIsNone(self.db.get(Question, deleted.id))
 
+    def test_bulk_save_reports_only_changed_existing_items_as_updated(self):
+        group = QuestionGroup(
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={}
+        )
+        unchanged = Question(
+            type_q="image",
+            question="Flags - France",
+            answer="France",
+            media="/static/france.png",
+            tags=["flags"],
+            data={"aliases": ["FR"], "favorite": True},
+            group=group
+        )
+        changed = Question(
+            type_q="image",
+            question="Flags - Germany",
+            answer="Germany",
+            media="/static/germany.png",
+            tags=["flags"],
+            data={"aliases": ["DE"]},
+            group=group
+        )
+
+        self.db.add_all([group, unchanged, changed])
+        self.db.flush()
+        self.db.add_all([
+            Progress(question_id=unchanged.id, next_review=date.today()),
+            Progress(question_id=changed.id, next_review=date.today())
+        ])
+        self.db.commit()
+
+        response = save_image_group_items(
+            self.db,
+            group.id,
+            ImageGroupItemsBulkUpdate(
+                group={
+                    "name": "Flags",
+                    "media": None,
+                    "tags": ["flags"]
+                },
+                items=[
+                    {
+                        "id": unchanged.id,
+                        "answer": "France",
+                        "media": "/static/france.png",
+                        "aliases": ["FR"],
+                        "data": {"favorite": True}
+                    },
+                    {
+                        "id": changed.id,
+                        "answer": "Germany",
+                        "media": "/static/germany.png",
+                        "aliases": ["Germany flag"]
+                    }
+                ],
+                deleted_item_ids=[]
+            )
+        )
+
+        self.assertEqual(response["createdQuestionIds"], [])
+        self.assertEqual(response["updatedQuestionIds"], [changed.id])
+
     def test_list_image_group_items_returns_editor_shape(self):
         group = QuestionGroup(
             type_group="image",
