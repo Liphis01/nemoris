@@ -134,6 +134,20 @@ export function useImageReview(reviewItems, onComplete) {
     setFeedbackTone(null);
   }
 
+  function selectNextItem() {
+    if (resultMode || !activeItem) return;
+
+    const nextQuestionId = firstUnfoundFrom(
+      shuffledItems,
+      foundQuestionIdSet,
+      activeItem.question_id
+    );
+
+    if (!nextQuestionId || nextQuestionId === activeItem.question_id) return;
+
+    selectItem(nextQuestionId);
+  }
+
   function enterResultMode(nextFoundIds, nextQualities) {
     const foundSet = questionIdSet(nextFoundIds);
     const missedIds = shuffledItems
@@ -274,6 +288,7 @@ export function useImageReview(reviewItems, onComplete) {
     remainingCount: Math.max(0, shuffledItems.length - answeredCount),
     resultMode,
     selectItem,
+    selectNextItem,
     sendResult,
     setInput,
     setQuality

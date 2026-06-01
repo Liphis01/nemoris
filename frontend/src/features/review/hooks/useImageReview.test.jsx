@@ -119,6 +119,29 @@ describe("useImageReview", () => {
     expect(result.current.input).toBe("");
   });
 
+  it("selects the next unfinished image in shuffled order", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain")
+    ];
+    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const currentIndex = result.current.gridItems.findIndex(row => row.isActive);
+    const expectedNext = result.current.gridItems[
+      (currentIndex + 1) % result.current.gridItems.length
+    ];
+
+    act(() => {
+      result.current.setInput("draft");
+    });
+    act(() => {
+      result.current.selectNextItem();
+    });
+
+    expect(result.current.activeQuestionId).toBe(expectedNext.item.question_id);
+    expect(result.current.input).toBe("");
+  });
+
   it("finishes on the same grid with found qualities editable and misses locked", async () => {
     sendImageAnswer.mockResolvedValue({});
     const onComplete = vi.fn();

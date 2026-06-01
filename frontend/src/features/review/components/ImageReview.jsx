@@ -74,6 +74,7 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
   const inputRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const {
+    activeQuestionId,
     answeredCount,
     feedbackTone,
     finishReview,
@@ -84,16 +85,26 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
     remainingCount,
     resultMode,
     selectItem,
+    selectNextItem,
     sendResult,
     setInput,
     setQuality
   } = useImageReview(reviewItems, onComplete);
 
-  function selectTile(questionId) {
-    selectItem(questionId);
+  function focusAnswerInput() {
     window.requestAnimationFrame(() => {
       inputRef.current?.focus({ preventScroll: true });
     });
+  }
+
+  function selectTile(questionId) {
+    selectItem(questionId);
+    focusAnswerInput();
+  }
+
+  function selectNextTile() {
+    selectNextItem();
+    focusAnswerInput();
   }
 
   function openPreview(row) {
@@ -102,6 +113,7 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
 
   function closePreview() {
     setPreviewRow(null);
+    focusAnswerInput();
   }
 
   useEffect(() => {
@@ -110,6 +122,9 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         setPreviewRow(null);
+        window.requestAnimationFrame(() => {
+          inputRef.current?.focus({ preventScroll: true });
+        });
       }
     }
 
@@ -120,6 +135,14 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
     };
   }, [previewRow]);
 
+  useEffect(() => {
+    if (resultMode || previewRow) return;
+
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+  }, [activeQuestionId, previewRow, resultMode]);
+
   if (gridItems.length === 0) {
     return null;
   }
@@ -127,6 +150,14 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
   return (
     <>
       <div
+        onKeyDownCapture={(event) => {
+          if (resultMode || previewRow || event.key !== "Tab") {
+            return;
+          }
+
+          event.preventDefault();
+          selectNextTile();
+        }}
         style={{
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
@@ -355,7 +386,9 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
+                  event.preventDefault();
                   handleSubmit();
+                  focusAnswerInput();
                 }
               }}
               placeholder="Tape la réponse..."
