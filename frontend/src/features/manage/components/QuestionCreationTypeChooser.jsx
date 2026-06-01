@@ -16,6 +16,11 @@ const questionCreationTypes = [
     value: "map",
     label: "Carte",
     detail: "Créer un groupe map et ses zones"
+  },
+  {
+    value: "image",
+    label: "Groupe d'images",
+    detail: "Créer un groupe d'images à réviser"
   }
 ];
 

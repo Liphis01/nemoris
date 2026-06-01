@@ -6,14 +6,17 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Progress, Question, QuestionGroup
-from app.routers.review import answer_map, answer_timeline, get_review
+from app.routers.review import answer_image, answer_map, answer_timeline, get_review
 from app.schemas import (
+    ImageAnswerRequest,
     MapAnswerRequest,
     TimelineAnswerItem,
     TimelineAnswerRequest,
     TimelineDateValue
 )
 from app.serializers import (
+    serialize_image_review_group,
+    serialize_image_review_item,
     serialize_map_review_group,
     serialize_map_review_zone,
     serialize_progress,
@@ -58,6 +61,25 @@ MAP_ZONE_KEYS = {
     "question_id",
     "code",
     "label",
+    "aliases",
+    "progress",
+    "projected_intervals"
+}
+IMAGE_GROUP_KEYS = {
+    "group_id",
+    "type_q",
+    "name",
+    "media",
+    "tags",
+    "items"
+}
+IMAGE_ITEM_KEYS = {
+    "question_id",
+    "question",
+    "answer",
+    "label",
+    "media",
+    "tags",
     "aliases",
     "progress",
     "projected_intervals"
@@ -233,6 +255,36 @@ class ReviewResponseShapeTests(unittest.TestCase):
             data=interval_timeline(1914, 1918),
             next_review=today
         )
+        image_group = QuestionGroup(
+            id=20,
+            type_group="image",
+            name="Flags",
+            media="/static/flags.png",
+            data={}
+        )
+        self.db.add(image_group)
+        image_item_a = self.add_question(
+            7,
+            type_q="image",
+            question="Flags - France",
+            answer="France",
+            media="/static/france.png",
+            tags=["flags"],
+            data={"aliases": ["French flag"]},
+            group=image_group,
+            next_review=today
+        )
+        image_item_b = self.add_question(
+            8,
+            type_q="image",
+            question="Flags - Germany",
+            answer="Germany",
+            media="/static/germany.png",
+            tags=["flags"],
+            data={"aliases": ["Deutschland"]},
+            group=image_group,
+            next_review=today
+        )
         future = self.add_question(
             6,
             type_q="text",
@@ -246,6 +298,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
             "text": text,
             "map_group": map_group,
             "map_zones": [map_zone_a, map_zone_b],
+            "image_group": image_group,
+            "image_items": [image_item_a, image_item_b],
             "timeline_items": [timeline_point, timeline_interval],
             "future": future
         }
@@ -315,7 +369,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             if "question_id" in item
         }
 
-        self.assertEqual(len(response), 3)
+        self.assertEqual(len(response), 4)
         text_items = [
             item
             for item in response
@@ -331,10 +385,16 @@ class ReviewResponseShapeTests(unittest.TestCase):
             for item in response
             if item["type_q"] == "timeline"
         ]
+        image_groups = [
+            item
+            for item in response
+            if item["type_q"] == "image"
+        ]
 
         self.assertEqual(len(text_items), 1)
         self.assertEqual(len(map_groups), 1)
         self.assertEqual(len(timeline_groups), 1)
+        self.assertEqual(len(image_groups), 1)
 
         text_item = text_items[0]
         self.assertEqual(set(text_item), TEXT_REVIEW_KEYS)
@@ -383,6 +443,23 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id for item in fixture["timeline_items"]}
         )
 
+        image_group = image_groups[0]
+        self.assertEqual(set(image_group), IMAGE_GROUP_KEYS)
+        self.assertEqual(image_group["group_id"], fixture["image_group"].id)
+        self.assertEqual(image_group["name"], "Flags")
+        self.assertEqual(image_group["tags"], ["flags"])
+        self.assertEqual(len(image_group["items"]), 2)
+
+        for item in image_group["items"]:
+            self.assertEqual(set(item), IMAGE_ITEM_KEYS)
+            self.assert_progress_shape(item["progress"])
+            self.assert_projected_intervals_shape(item["projected_intervals"])
+
+        self.assertEqual(
+            {item["question_id"] for item in image_group["items"]},
+            {item.id for item in fixture["image_items"]}
+        )
+
     def test_answer_map_endpoint_returns_ack_shape_for_zone_grades(self):
         fixture = self.seed_review_contract_fixture()
         zone_a, zone_b = fixture["map_zones"]
@@ -408,6 +485,33 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(qualities_by_question_id, {
             zone_a.id: 2,
             zone_b.id: 0
+        })
+
+    def test_answer_image_endpoint_returns_ack_shape_for_item_grades(self):
+        fixture = self.seed_review_contract_fixture()
+        item_a, item_b = fixture["image_items"]
+
+        response = answer_image(
+            ImageAnswerRequest(items={
+                item_a.id: 2,
+                item_b.id: 0
+            }),
+            db=self.db
+        )
+
+        self.assertEqual(response, {"status": "ok"})
+
+        qualities_by_question_id = {
+            progress.question_id: progress.history[-1]["quality"]
+            for progress in (
+                self.db.query(Progress)
+                .filter(Progress.question_id.in_([item_a.id, item_b.id]))
+                .all()
+            )
+        }
+        self.assertEqual(qualities_by_question_id, {
+            item_a.id: 2,
+            item_b.id: 0
         })
 
     def test_answer_timeline_endpoint_returns_per_item_result_shapes(self):
@@ -466,6 +570,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         text = fixture["text"]
         map_group = fixture["map_group"]
         map_zone = fixture["map_zones"][0]
+        image_group = fixture["image_group"]
+        image_item = fixture["image_items"][0]
         timeline_point, timeline_interval = fixture["timeline_items"]
 
         self.assertEqual(set(serialize_progress(text.progress)), PROGRESS_KEYS)
@@ -490,6 +596,25 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assert_progress_shape(map_zone_payload["progress"])
         self.assert_projected_intervals_shape(
             map_zone_payload["projected_intervals"]
+        )
+
+        image_group_payload = serialize_image_review_group(
+            image_group,
+            tags=["flags"]
+        )
+        self.assertEqual(set(image_group_payload), IMAGE_GROUP_KEYS)
+        self.assertEqual(image_group_payload["type_q"], "image")
+        self.assertEqual(image_group_payload["items"], [])
+        self.assertNotIn("progress", image_group_payload)
+
+        image_item_payload = serialize_image_review_item(image_item)
+        self.assertEqual(set(image_item_payload), IMAGE_ITEM_KEYS)
+        self.assertEqual(image_item_payload["question_id"], image_item.id)
+        self.assertEqual(image_item_payload["label"], "France")
+        self.assertEqual(image_item_payload["media"], "/static/france.png")
+        self.assert_progress_shape(image_item_payload["progress"])
+        self.assert_projected_intervals_shape(
+            image_item_payload["projected_intervals"]
         )
 
         timeline_point_payload = serialize_timeline_review_item(timeline_point)

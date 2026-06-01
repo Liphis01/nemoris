@@ -6,10 +6,16 @@ import {
 } from "../utils/questionDrafts";
 
 function canAutosaveSelectedQuestion(selectedItem) {
+  const groupedImage = selectedItem?.type_q === "image" && (
+    selectedItem.group_id ||
+    selectedItem.group?.id
+  );
+
   return Boolean(
     selectedItem?.id &&
     selectedItem.type_q &&
-    selectedItem.type_q !== "map"
+    selectedItem.type_q !== "map" &&
+    !groupedImage
   );
 }
 

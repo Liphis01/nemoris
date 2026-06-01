@@ -142,7 +142,7 @@ export default function CalendarGroupRecap({
   const groupTags = mergeTags(
     row.tags,
     group.tags,
-    group.type_group === "map"
+    ["map", "image"].includes(group.type_group)
       ? row.events.map((event) => event.question.tags || []).flat()
       : []
   );
@@ -290,7 +290,8 @@ export default function CalendarGroupRecap({
           const historyStats = getHistoryStats(question);
           const isFocused = question.id === focusedEvent?.question.id;
           const shouldShowQuestionTags =
-            group.type_group !== "map" && (question.tags || []).length > 0;
+            !["map", "image"].includes(group.type_group) &&
+            (question.tags || []).length > 0;
 
           return (
             <div

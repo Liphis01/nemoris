@@ -14,6 +14,7 @@ export default function GroupHeaderCard({
   const { groupInfo } = row;
   const tags = groupInfo.tags || [];
   const mapTypeStyle = questionTypeChipStyles.map;
+  const imageTypeStyle = questionTypeChipStyles.image;
   const textTypeStyle = questionTypeChipStyles.text;
   const background = isOpen
     ? "#1a1a1a"
@@ -195,6 +196,21 @@ export default function GroupHeaderCard({
               }}
             >
               {groupInfo.mapCount} MAP
+            </span>
+          )}
+          {groupInfo.imageCount > 0 && (
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                padding: "2px 6px",
+                borderRadius: "999px",
+                background: imageTypeStyle.background,
+                color: imageTypeStyle.color,
+                whiteSpace: "nowrap"
+              }}
+            >
+              {groupInfo.imageCount} IMAGE
             </span>
           )}
           {groupInfo.textCount > 0 && (

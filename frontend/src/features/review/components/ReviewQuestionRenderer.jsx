@@ -1,4 +1,5 @@
 import TextReviewCard from "./TextReviewCard";
+import ImageReview from "./ImageReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
 
@@ -11,6 +12,7 @@ export default function ReviewQuestionRenderer({
     currentTextQuality,
     selectedTextQuality,
     handleMapComplete,
+    handleImageComplete,
     handleTimelineComplete,
 }) {
     if (!q) return null;
@@ -27,6 +29,17 @@ export default function ReviewQuestionRenderer({
                 group={q}
                 reviewZones={q.items}
                 onComplete={handleMapComplete}
+            />
+        );
+    }
+
+    if (q.type_q === "image" && q.items) {
+        return (
+            <ImageReview
+                key={currentIndex}
+                group={q}
+                reviewItems={q.items || []}
+                onComplete={handleImageComplete}
             />
         );
     }

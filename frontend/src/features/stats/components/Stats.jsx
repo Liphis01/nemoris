@@ -6,7 +6,7 @@ import {
   questionTypeChipStyles
 } from "../../../shared/questionTypes";
 
-const typeOrder = ["text", "map", "timeline"];
+const typeOrder = ["text", "map", "timeline", "image"];
 
 const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -98,12 +98,16 @@ function questionTitle(question) {
     return question.answer || question.question || "Zone sans titre";
   }
 
+  if (question.type_q === "image") {
+    return question.answer || question.question || "Image sans titre";
+  }
+
   return question.question || "Question sans titre";
 }
 
 function questionSubtitle(question) {
   if (question.group?.name) {
-    return question.type_q === "map"
+    return question.type_q === "map" || question.type_q === "image"
       ? question.group.name
       : `${question.group.name} · ${question.answer || "Réponse vide"}`;
   }
@@ -863,6 +867,15 @@ export default function Stats({
                 label="Timeline"
                 title="Points faibles timeline"
                 questions={stats.weak_spots?.timeline || []}
+                savingFavoriteIds={savingFavoriteIds}
+                onOpenQuestion={onOpenQuestion}
+                onToggleFavorite={toggleFavorite}
+              />
+              <QuestionList
+                emptyLabel="Pas encore de faiblesse image"
+                label="Images"
+                title="Points faibles images"
+                questions={stats.weak_spots?.image || []}
                 savingFavoriteIds={savingFavoriteIds}
                 onOpenQuestion={onOpenQuestion}
                 onToggleFavorite={toggleFavorite}

@@ -5,6 +5,7 @@ from ..dependencies import get_db
 from ..models import Progress, Question
 from ..schemas import (
     AnswerRequest,
+    ImageAnswerRequest,
     MapAnswerRequest,
     ReviewSettings,
     TimelineAnswerRequest
@@ -130,9 +131,20 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
 
 @router.post("/answer_map")
 def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
-    question_ids = list(data.items.keys())
+    apply_answer_batch(db, data.items)
+    return {"status": "ok"}
 
-    # One map submit can grade many independent zone questions. Fetch existing
+
+@router.post("/answer_image")
+def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
+    apply_answer_batch(db, data.items)
+    return {"status": "ok"}
+
+
+def apply_answer_batch(db, items):
+    question_ids = list(items.keys())
+
+    # One grouped submit can grade many independent questions. Fetch existing
     # progress rows in one query, then create any missing rows while iterating.
     existing_progresses = (
         db.query(Progress)
@@ -147,7 +159,7 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
 
     progress_quality_pairs = []
 
-    for question_id, quality in data.items.items():
+    for question_id, quality in items.items():
         progress = progress_map.get(question_id)
 
         if not progress:
@@ -160,8 +172,6 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
     apply_scheduling_batch(db, progress_quality_pairs)
 
     db.commit()
-
-    return {"status": "ok"}
 
 
 @router.post("/answer_timeline")

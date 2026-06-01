@@ -81,6 +81,39 @@ describe("useReviewSession", () => {
     });
   });
 
+  it("requeues only failed image group items", async () => {
+    getReview.mockResolvedValue([
+      {
+        group_id: 5,
+        type_q: "image",
+        name: "Flags",
+        items: [
+          { question_id: 10, answer: "France" },
+          { question_id: 11, answer: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([11]);
+    });
+
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.questions).toHaveLength(2);
+    expect(result.current.questions[1]).toMatchObject({
+      type_q: "image",
+      _reviewRetryOfIndex: 0,
+      items: [
+        { question_id: 11, answer: "Germany" }
+      ]
+    });
+  });
+
   it("saves catchup target and refreshes the review queue", async () => {
     const { result } = renderHook(() => useReviewSession(true));
 

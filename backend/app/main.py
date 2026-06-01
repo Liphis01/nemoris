@@ -5,7 +5,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
-from .routers import collections, groups, maps, questions, review, stats, uploads
+from .routers import (
+    collections,
+    groups,
+    image_groups,
+    maps,
+    questions,
+    review,
+    stats,
+    uploads
+)
 from .services.startup import run_startup_rebalance_with_session
 
 
@@ -38,6 +47,7 @@ def create_app():
     app.include_router(review.router)
     app.include_router(stats.router)
     app.include_router(maps.router)
+    app.include_router(image_groups.router)
     app.include_router(uploads.router)
 
     if FRONTEND_DIST_DIR.exists():

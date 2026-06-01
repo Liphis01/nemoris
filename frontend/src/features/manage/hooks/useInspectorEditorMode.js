@@ -15,10 +15,10 @@ function emptyQuestionDraft() {
   };
 }
 
-function emptyGroupDraft() {
+function emptyGroupDraft(type_group = "map") {
   return {
     name: "",
-    type_group: "map",
+    type_group,
     media: "",
     data: {}
   };
@@ -47,16 +47,17 @@ export default function useInspectorEditorMode({
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
   const selectQuestionCreationType = useCallback((type_q) => {
-    if (type_q === "map") {
+    if (type_q === "map" || type_q === "image") {
       setViewMode?.("groups");
 
       if (startCreateGroup) {
-        startCreateGroup();
+        startCreateGroup(type_q);
         return;
       }
 
       setIsCreatingQuestion(false);
       setIsCreatingGroup(true);
+      setGroupDraft(emptyGroupDraft(type_q));
       setSelectedItem(null);
       return;
     }
@@ -67,6 +68,7 @@ export default function useInspectorEditorMode({
   }, [
     setIsCreatingGroup,
     setIsCreatingQuestion,
+    setGroupDraft,
     setQuestionDraft,
     setSelectedItem,
     setViewMode,

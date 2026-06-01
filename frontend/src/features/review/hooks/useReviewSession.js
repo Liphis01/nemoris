@@ -43,12 +43,20 @@ export function useReviewSession(active) {
   const current = questions[currentIndex];
   const lastQuestionIndex = currentIndex - 1;
   const lastQuestion = questions[lastQuestionIndex];
-  const currentTextAnswer = current?.type_q === "text"
+  const currentIsTextLike = current?.type_q === "text" || (
+    current?.type_q === "image" &&
+    !current?.items
+  );
+  const lastQuestionIsTextLike = lastQuestion?.type_q === "text" || (
+    lastQuestion?.type_q === "image" &&
+    !lastQuestion?.items
+  );
+  const currentTextAnswer = currentIsTextLike
     ? answeredTextByIndex[currentIndex]
     : null;
   const canReturnToLastQuestion = Boolean(
     returnToLastQuestionArmed &&
-    lastQuestion?.type_q === "text" &&
+    lastQuestionIsTextLike &&
     answeredTextByIndex[lastQuestionIndex] &&
     selectedTextQuality === null
   );
@@ -142,6 +150,32 @@ export function useReviewSession(active) {
   function handleMapComplete(failedQuestionIds = []) {
     // A map screen can contain many atomic zone questions. Only failed zones are
     // re-queued, wrapped back into the same runtime map group shape.
+    const answerIndex = currentIndex;
+
+    if (current && failedQuestionIds.length > 0) {
+      const failedItems = (current.items || []).filter(item =>
+        failedQuestionIds.includes(item.question_id)
+      );
+
+      if (failedItems.length > 0) {
+        setQuestions(prev => [
+          ...prev,
+          {
+            ...current,
+            items: failedItems,
+            _reviewRetryOfIndex: answerIndex
+          }
+        ]);
+      }
+    }
+
+    setCurrentIndex(prev => prev + 1);
+    setReturnToLastQuestionArmed(true);
+  }
+
+  function handleImageComplete(failedQuestionIds = []) {
+    // Image groups mirror map runtime groups: only failed atomic images are
+    // appended for another pass in the same review session.
     const answerIndex = currentIndex;
 
     if (current && failedQuestionIds.length > 0) {
@@ -316,7 +350,11 @@ export function useReviewSession(active) {
     if (!active) return;
 
     function handleKeyDown(event) {
-      if (current?.type_q === "map" || current?.type_q === "timeline") {
+      if (
+        current?.type_q === "map" ||
+        current?.type_q === "timeline" ||
+        (current?.type_q === "image" && current?.items)
+      ) {
         return;
       }
 
@@ -359,10 +397,11 @@ export function useReviewSession(active) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [active, current?.type_q, showAnswer, handleTextAnswer]);
+  }, [active, current?.items, current?.type_q, showAnswer, handleTextAnswer]);
 
   return {
     currentIndex,
+    handleImageComplete,
     handleMapComplete,
     handleTimelineComplete,
     handleTextAnswer,

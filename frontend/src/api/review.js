@@ -74,6 +74,18 @@ export function sendMapAnswer(items) {
 }
 
 
+export function sendImageAnswer(items) {
+  // items is an object of question_id -> quality, one entry per atomic image.
+  return requestOk("/answer_image", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ items })
+  });
+}
+
+
 export function sendTimelineAnswer(items) {
   // items is an object of question_id -> normalized timeline guesses.
   return requestJson("/answer_timeline", {

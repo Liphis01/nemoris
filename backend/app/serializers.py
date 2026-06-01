@@ -67,7 +67,7 @@ def serialize_manage_question(question):
                 "media": question.group.media,
                 "tags": (
                     question.tags or []
-                    if question.group.type_group == "map"
+                    if question.group.type_group in {"map", "image"}
                     else []
                 )
             }
@@ -132,6 +132,51 @@ def serialize_map_review_zone(question):
         "code": question.data.get("code") if question.data else None,
 
         "label": question.answer,
+
+        "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "progress": serialize_progress(
+            question.progress
+        ),
+
+        "projected_intervals": preview_intervals(
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite"))
+        )
+    }
+
+
+def serialize_image_review_group(group, tags=None):
+    # Runtime aggregation object: image rows stay independently scheduled, but
+    # review can keep related due images in one focused screen.
+    return {
+        "group_id": group.id,
+
+        "type_q": "image",
+
+        "name": group.name,
+
+        "media": group.media,
+
+        "tags": tags or [],
+
+        "items": []
+    }
+
+
+def serialize_image_review_item(question):
+    return {
+        "question_id": question.id,
+
+        "question": question.question,
+
+        "answer": question.answer,
+
+        "label": question.answer,
+
+        "media": question.media,
+
+        "tags": question.tags or [],
 
         "aliases": question.data.get("aliases", []) if question.data else [],
 

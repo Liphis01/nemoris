@@ -1,5 +1,6 @@
 import MapEditor from "../../map/components/MapEditor";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
+import ImageGroupEditor from "./ImageGroupEditor";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
 import { getQuestionEditorAdapter } from "./questionEditorAdapters";
@@ -147,6 +148,11 @@ export default function ManageInspector({
 
   const selectedIsMapZone = selectedItem.type_q === "map";
   const isMapGroup = selectedItem.type_group === "map";
+  const selectedIsImageItem = selectedItem.type_q === "image" && (
+    selectedItem.group_id ||
+    selectedItem.group?.id
+  );
+  const isImageGroup = selectedItem.type_group === "image";
 
   if (selectedIsMapZone || isMapGroup) {
     // Selecting either a map group or one of its zones opens the full map editor
@@ -251,6 +257,104 @@ export default function ManageInspector({
           selectedZone={editingZone}
           headerAction={
             selectedIsMapZone ? (
+              <ReviewCalendarAction
+                compact
+                nextReview={selectedNextReview}
+                onOpen={openSelectedInCalendar}
+              />
+            ) : null
+          }
+        />
+      </div>
+    );
+  }
+
+  if (selectedIsImageItem || isImageGroup) {
+    const groupId = selectedIsImageItem
+      ? selectedItem.group?.id ?? selectedItem.group_id
+      : selectedItem.id;
+    const group = allGroups.find((g) => g.id === groupId);
+
+    if (!group) {
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#777",
+            fontSize: "18px"
+          }}
+        >
+          Sélectionner une question ou un groupe
+        </div>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          height: "100%",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column"
+        }}
+      >
+        <ImageGroupEditor
+          group={group}
+          selectedItem={selectedIsImageItem ? selectedItem : null}
+          availableTags={availableTags}
+          onUploadFile={(file) => uploadQuestionMedia(file, selectedItem)}
+          onSave={async (saveResult) => {
+            const savedGroup = saveResult?.group;
+            const savedItems = saveResult?.items || [];
+            const deletedIds = saveResult?.deletedQuestionIds || [];
+
+            if (savedGroup) {
+              setAllGroups(prev =>
+                prev.map(g =>
+                  g.id === savedGroup.id
+                    ? { ...g, ...savedGroup }
+                    : g
+                )
+              );
+            }
+
+            setAllQuestions?.(prev => {
+              const deletedIdSet = new Set(deletedIds);
+              const existingIds = new Set(prev.map(question => question.id));
+              const patched = prev
+                .filter(question => !deletedIdSet.has(question.id))
+                .map(question => {
+                  const savedItem = savedItems.find(item => item.id === question.id);
+                  return savedItem || question;
+                });
+              const created = savedItems.filter(item => !existingIds.has(item.id));
+
+              return [...patched, ...created];
+            });
+
+            const highlightedIds = (saveResult?.createdQuestionIds || []).length > 0
+              ? saveResult.createdQuestionIds
+              : saveResult?.updatedQuestionIds || [];
+
+            if (highlightedIds.length > 0) {
+              setHighlightedQuestionIds?.(highlightedIds);
+            }
+
+            if (selectedIsImageItem) {
+              const savedSelectedItem = savedItems.find(item => item.id === selectedItem.id);
+
+              if (savedSelectedItem) {
+                setSelectedItem(savedSelectedItem);
+              }
+            } else if (savedGroup) {
+              setSelectedItem(savedGroup);
+            }
+          }}
+          registerPendingSaveHandler={registerPendingSaveHandler}
+          headerAction={
+            selectedIsImageItem ? (
               <ReviewCalendarAction
                 compact
                 nextReview={selectedNextReview}

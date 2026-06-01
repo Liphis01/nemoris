@@ -23,6 +23,14 @@ describe("manageRows", () => {
     answer: "Paris",
     group_id: 7
   };
+  const imageQuestion = {
+    id: 23,
+    type_q: "image",
+    question: "Flags - France",
+    answer: "France",
+    tags: ["flag"],
+    group_id: 7
+  };
   const ungroupedQuestion = {
     id: 22,
     type_q: "text",
@@ -38,7 +46,7 @@ describe("manageRows", () => {
 
   it("renders collapsed groups as headers and expanded groups with atomic questions", () => {
     const collapsedRows = buildVisibleRows(
-      [mapQuestion, textQuestion, ungroupedQuestion],
+      [mapQuestion, textQuestion, imageQuestion, ungroupedQuestion],
       [group],
       new Set(),
       "id"
@@ -50,7 +58,7 @@ describe("manageRows", () => {
     ]);
 
     const expandedRows = buildVisibleRows(
-      [mapQuestion, textQuestion, ungroupedQuestion],
+      [mapQuestion, textQuestion, imageQuestion, ungroupedQuestion],
       [group],
       new Set(["7"]),
       "id"
@@ -59,9 +67,16 @@ describe("manageRows", () => {
     expect(expandedRows.map(row => row.key)).toEqual([
       "group:7",
       "question:20",
+      "question:23",
       "question:21",
       "question:22"
     ]);
+    expect(expandedRows[0].groupInfo).toMatchObject({
+      imageCount: 1,
+      mapCount: 1,
+      textCount: 1
+    });
+    expect(expandedRows[0].groupInfo.tags).toEqual(["geo", "fr", "flag"]);
     expect(expandedRows[1]).toMatchObject({
       nested: true,
       groupId: "7"

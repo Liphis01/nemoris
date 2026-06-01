@@ -4,6 +4,7 @@ import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
 import GroupHeaderCard from "./GroupHeaderCard";
 import { centerListItem } from "../../../shared/scroll";
+import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import { buildVisibleRows, getQuestionGroupId } from "../utils/manageRows";
 
 export default function ManageList({
@@ -394,7 +395,11 @@ export default function ManageList({
             style={{
               width: "3px",
               borderRadius: "999px",
-              background: q.type_q === "map" ? "#5a3b12" : "#163b63",
+              background: q.type_q === "map"
+                ? questionTypeChipStyles.map.background
+                : q.type_q === "image"
+                  ? questionTypeChipStyles.image.background
+                  : questionTypeChipStyles.text.background,
               opacity: sharedProps.selected || sharedProps.isHighlighted ? 1 : 0.55,
               margin: "6px 0",
               justifySelf: "center"

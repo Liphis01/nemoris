@@ -45,18 +45,18 @@ def get_groups(db: Session = Depends(get_db)):
         .all()
     )
     group_ids = [group.id for group, _ in groups]
-    map_tag_rows = (
+    grouped_tag_rows = (
         db.query(Question.group_id, Question.tags)
         .filter(
             Question.group_id.in_(group_ids),
-            Question.type_q == "map"
+            Question.type_q.in_(["map", "image"])
         )
         .all()
         if group_ids else []
     )
     tags_by_group_id = {}
 
-    for group_id, tags in map_tag_rows:
+    for group_id, tags in grouped_tag_rows:
         tags_by_group_id[group_id] = merge_tags(
             tags_by_group_id.get(group_id, []),
             tags or []
@@ -96,7 +96,7 @@ def get_group(group_id: int, db: Session = Depends(get_db)):
         "tags": merge_tags(*[
             question.tags or []
             for question in group.questions
-            if question.type_q == "map"
+            if question.type_q in {"map", "image"}
         ]),
         "data": group.data or {},
         "questions": [

@@ -17,7 +17,8 @@ from .timeline import validate_question_timeline
 GROUP_COMPATIBILITY = {
     # Group type -> allowed Question.type_q values. Add here before allowing a
     # new grouped review type through create/update.
-    "map": ["map"]
+    "map": ["map"],
+    "image": ["image"]
 }
 
 

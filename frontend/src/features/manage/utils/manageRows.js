@@ -44,10 +44,11 @@ function getGroupInfo(groupId, question, groupById) {
     tags: mergeTags(
       group?.tags,
       question?.group?.tags,
-      question?.type_q === "map" ? question?.tags : []
+      ["map", "image"].includes(question?.type_q) ? question?.tags : []
     ),
     questions: [],
     mapCount: 0,
+    imageCount: 0,
     textCount: 0
   };
 }
@@ -58,20 +59,23 @@ function orderGroupQuestionsForDisplay(questions, sortField) {
     return questions;
   }
 
-  // Map zones are kept first inside a group because they are usually edited as
-  // a visual set; other question types still remain visible below them.
+  // Visual grouped items are kept first because they are usually edited as a
+  // set; other question types still remain visible below them.
   const mapQuestions = [];
+  const imageQuestions = [];
   const otherQuestions = [];
 
   questions.forEach((question) => {
     if (question.type_q === "map") {
       mapQuestions.push(question);
+    } else if (question.type_q === "image") {
+      imageQuestions.push(question);
     } else {
       otherQuestions.push(question);
     }
   });
 
-  return [...mapQuestions, ...otherQuestions];
+  return [...mapQuestions, ...imageQuestions, ...otherQuestions];
 }
 
 
@@ -114,6 +118,9 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortFie
 
     if (question.type_q === "map") {
       groupInfo.mapCount += 1;
+      groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
+    } else if (question.type_q === "image") {
+      groupInfo.imageCount += 1;
       groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
     } else {
       groupInfo.textCount += 1;

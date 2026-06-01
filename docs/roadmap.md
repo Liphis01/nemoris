@@ -1,5 +1,9 @@
 # TODO
 
+How do you suggest I create conveniently the group for flags ? Should I download all flags and import them one by one into the group ?
+
+Have a look at how when I create a new question I'm asked which type I want to create. I want the same UI for the currently available types upon creating groups. Be careful, group maps require a svg to display something on the preview so you'll have to handle the link between the map choice and the preview.
+
 
 ## Product Suggestions
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.

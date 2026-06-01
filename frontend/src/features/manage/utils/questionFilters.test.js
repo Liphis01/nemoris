@@ -26,6 +26,14 @@ describe("questionFilters", () => {
       answer: "Ile-de-France",
       tags: ["geo", "map"],
       progress: null
+    },
+    {
+      id: 4,
+      type_q: "image",
+      question: "Flags - Cote d Ivoire",
+      answer: "Cote-d Ivoire",
+      tags: ["flags"],
+      progress: { next_review: "2000-01-01", reps: 2 }
     }
   ];
 
@@ -62,6 +70,18 @@ describe("questionFilters", () => {
       dueOnly: false,
       sortField: "reps",
       sortOrder: "asc"
-    }).map(question => question.id)).toEqual([3, 2, 1]);
+    }).map(question => question.id)).toEqual([3, 2, 4, 1]);
+  });
+
+  it("filters image questions by type and normalized answer", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "cote d ivoire",
+      tagFilter: "",
+      questionTypeFilter: "image",
+      dueOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([4]);
   });
 });

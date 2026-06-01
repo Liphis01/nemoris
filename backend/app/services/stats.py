@@ -6,7 +6,7 @@ from ..models import Question
 from ..scheduler import parse_history_date
 
 
-KNOWN_TYPES = ("text", "map", "timeline")
+KNOWN_TYPES = ("text", "map", "timeline", "image")
 LOAD_WINDOW_DAYS = 30
 RETENTION_WINDOW_DAYS = 90
 HARD_QUESTION_LIMIT = 12
@@ -335,6 +335,11 @@ def build_stats(db, today=None):
                 summary
                 for summary in ranked_reviewed
                 if summary["type_q"] == "timeline"
+            ][:WEAK_SPOT_LIMIT],
+            "image": [
+                summary
+                for summary in ranked_reviewed
+                if summary["type_q"] == "image"
             ][:WEAK_SPOT_LIMIT]
         }
     }

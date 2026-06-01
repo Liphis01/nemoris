@@ -23,6 +23,8 @@ export default function CreateMapGroupEditor({
   onCreate,
   setGroupDraft
 }) {
+  const isMapGroup = groupDraft.type_group === "map";
+
   return (
     <div style={panelStyle}>
       <div style={{ marginBottom: "22px", color: "#888" }}>
@@ -44,14 +46,26 @@ export default function CreateMapGroupEditor({
         onChange={(e) => setGroupDraft({ ...groupDraft, type_group: e.target.value })}
       >
         <option value="map">map</option>
+        <option value="image">image</option>
       </select>
 
-      <label style={stackedLabelStyle}>Media / URL (optionnel)</label>
-      <MapFileInput
-        style={stackedInputStyle}
-        value={groupDraft.media}
-        onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
-      />
+      <label style={stackedLabelStyle}>
+        {isMapGroup ? "Media / URL (optionnel)" : "Image de couverture / URL (optionnel)"}
+      </label>
+      {isMapGroup ? (
+        <MapFileInput
+          style={stackedInputStyle}
+          value={groupDraft.media}
+          onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
+        />
+      ) : (
+        <input
+          style={stackedInputStyle}
+          value={groupDraft.media || ""}
+          onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
+          placeholder="https://... ou /static/image.jpg"
+        />
+      )}
 
       <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
         <button

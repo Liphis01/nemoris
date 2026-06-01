@@ -5,6 +5,8 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Progress, Question
 from ..serializers import (
+    serialize_image_review_group,
+    serialize_image_review_item,
     serialize_map_review_group,
     serialize_map_review_zone,
     serialize_review_question_item
@@ -37,7 +39,8 @@ def get_review_items(db):
     )
 
     review_items = []
-    grouped_items = {}
+    map_grouped_items = {}
+    image_grouped_items = {}
     timeline_items = []
 
     for question in query.all():
@@ -46,13 +49,29 @@ def get_review_items(db):
             # progress, but the UI receives one map review object per group.
             group_id = question.group.id
 
-            if group_id not in grouped_items:
-                grouped_items[group_id] = serialize_map_review_group(
+            if group_id not in map_grouped_items:
+                map_grouped_items[group_id] = serialize_map_review_group(
                     question.group,
                     question.tags or []
                 )
 
-            grouped_items[group_id]["items"].append(serialize_map_review_zone(question))
+            map_grouped_items[group_id]["items"].append(
+                serialize_map_review_zone(question)
+            )
+            continue
+
+        if question.group and question.group.type_group == "image":
+            group_id = question.group.id
+
+            if group_id not in image_grouped_items:
+                image_grouped_items[group_id] = serialize_image_review_group(
+                    question.group,
+                    question.tags or []
+                )
+
+            image_grouped_items[group_id]["items"].append(
+                serialize_image_review_item(question)
+            )
             continue
 
         if question.type_q == "timeline":
@@ -67,4 +86,8 @@ def get_review_items(db):
     if timeline_items:
         review_items.append(serialize_timeline_review_group(timeline_items))
 
-    return review_items + list(grouped_items.values())
+    return (
+        review_items +
+        list(map_grouped_items.values()) +
+        list(image_grouped_items.values())
+    )

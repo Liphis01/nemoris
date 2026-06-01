@@ -1,5 +1,6 @@
 import { fadeInStyle } from "../../../shared/styles";
 import { resolveMediaUrl } from "../../../shared/media";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 const answerButtonStyle = {
     flex: 1,
@@ -81,6 +82,7 @@ export default function TextReviewCard({
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
     const mediaSrc = resolveMediaUrl(q.media);
+    const typeStyle = getQuestionTypeChipStyle(q.type_q);
 
     return (
         <div
@@ -116,15 +118,15 @@ export default function TextReviewCard({
 
                     <div
                         style={{
-                            background: "#2b2047",
-                            color: "#b69cff",
+                            background: typeStyle.background,
+                            color: typeStyle.color,
                             padding: "4px 10px",
                             borderRadius: "999px",
                             fontSize: "11px",
                             fontWeight: "700"
                         }}
                     >
-                        TEXT
+                        {typeStyle.label}
                     </div>
 
                     <div

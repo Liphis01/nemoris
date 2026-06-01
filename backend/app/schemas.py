@@ -5,11 +5,13 @@ from typing import Annotated, Optional, List, Literal, Any, Dict
 QuestionType = Literal[
     "text",
     "map",
-    "timeline"
+    "timeline",
+    "image"
 ]
 
 GroupType = Literal[
-    "map"
+    "map",
+    "image"
 ]
 
 
@@ -155,6 +157,10 @@ class MapAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
 
 
+class ImageAnswerRequest(BaseModel):
+    items: Dict[int, AnswerQuality]
+
+
 TimelinePrecision = Literal[
     "year",
     "month",
@@ -207,6 +213,45 @@ class MapZonesBulkUpdate(BaseModel):
     group: Optional[MapZonesGroupUpdate] = None
 
     zones: List[MapZoneBulkItem] = Field(
+        default_factory=list
+    )
+
+
+class ImageGroupItemBulkItem(BaseModel):
+
+    id: Optional[int] = None
+
+    answer: Optional[str] = ""
+
+    media: Optional[str] = ""
+
+    aliases: List[str] = Field(
+        default_factory=list
+    )
+
+    data: dict[str, Any] = Field(
+        default_factory=dict
+    )
+
+
+class ImageGroupItemsGroupUpdate(BaseModel):
+
+    name: Optional[str] = None
+
+    media: Optional[str] = None
+
+    tags: Optional[List[str]] = None
+
+
+class ImageGroupItemsBulkUpdate(BaseModel):
+
+    group: Optional[ImageGroupItemsGroupUpdate] = None
+
+    items: List[ImageGroupItemBulkItem] = Field(
+        default_factory=list
+    )
+
+    deleted_item_ids: List[int] = Field(
         default_factory=list
     )
 

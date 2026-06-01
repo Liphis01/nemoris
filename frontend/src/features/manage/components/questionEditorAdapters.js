@@ -14,6 +14,15 @@ function prepareTextDraft(draft) {
   };
 }
 
+function prepareImageDraft(draft) {
+  return {
+    ...draft,
+    type_q: "image",
+    media: draft?.media || "",
+    data: draft?.data || {}
+  };
+}
+
 export function prepareTimelineDraft(draft) {
   const timeline = normalizeTimeline(draft?.data?.timeline || createDefaultTimeline());
 
@@ -37,6 +46,10 @@ const questionEditorAdapters = {
   timeline: {
     Editor: TimelineQuestionEditor,
     prepareDraft: prepareTimelineDraft
+  },
+  image: {
+    Editor: TextQuestionEditor,
+    prepareDraft: prepareImageDraft
   }
 };
 

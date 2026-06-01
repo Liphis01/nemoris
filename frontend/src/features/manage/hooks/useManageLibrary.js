@@ -49,12 +49,16 @@ function questionMutationPayload(draft) {
   };
 }
 
-const initialGroupDraft = {
-  name: "",
-  type_group: "map",
-  media: "",
-  data: {}
-};
+function createInitialGroupDraft(type_group = "map") {
+  return {
+    name: "",
+    type_group,
+    media: "",
+    data: {}
+  };
+}
+
+const initialGroupDraft = createInitialGroupDraft();
 
 const defaultSortOrders = {
   id: "asc",
@@ -138,7 +142,7 @@ export function useManageLibrary(mode) {
   }
 
   function resetGroupDraft() {
-    setGroupDraft(initialGroupDraft);
+    setGroupDraft(createInitialGroupDraft());
   }
 
   function resetManageFilters() {
@@ -236,7 +240,8 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
-  function startCreateGroup() {
+  function startCreateGroup(type_group = "map") {
+    setGroupDraft(createInitialGroupDraft(type_group));
     setIsCreatingGroup(true);
     setIsCreatingQuestion(false);
     setSelectedItem(null);

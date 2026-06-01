@@ -20,6 +20,7 @@ export default function ReviewSession({
   currentTextQuality,
   selectedTextQuality,
   handleMapComplete,
+  handleImageComplete,
   handleTimelineComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
@@ -368,6 +369,7 @@ export default function ReviewSession({
               currentTextQuality={currentTextQuality}
               selectedTextQuality={selectedTextQuality}
               handleMapComplete={handleMapComplete}
+              handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
             />
 
