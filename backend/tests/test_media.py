@@ -78,6 +78,42 @@ class MediaTests(unittest.TestCase):
         self.assertEqual(len(urls), len(set(urls)))
         self.assertNotEqual(duplicate_a, duplicate_b)
 
+    def test_upload_can_store_and_delete_static_subdirectory_files(self):
+        result = media_service.store_uploaded_image(
+            upload("flag.png", "image/png", PNG_BYTES),
+            storage_subdir="image-groups/7"
+        )
+        url = result["url"]
+        file_path = self.static_dir / "image-groups" / "7" / Path(url).name
+
+        self.assertTrue(url.startswith("/static/image-groups/7/"))
+        self.assertTrue(file_path.exists())
+        self.assertEqual(
+            media_service.static_filename_from_media(url),
+            f"image-groups/7/{Path(url).name}"
+        )
+
+        question = Question(
+            type_q="image",
+            question="Flags - France",
+            answer="France",
+            media=url,
+            tags=[],
+            data={}
+        )
+        self.db.add(question)
+        self.db.commit()
+
+        self.assertFalse(media_service.delete_unreferenced_media_file(self.db, url))
+        self.assertTrue(file_path.exists())
+
+        question.media = None
+        self.db.commit()
+
+        self.assertTrue(media_service.delete_unreferenced_media_file(self.db, url))
+        self.assertFalse(file_path.exists())
+        self.assertFalse((self.static_dir / "image-groups" / "7").exists())
+
     def test_upload_rejects_non_images_and_oversized_images(self):
         with self.assertRaises(HTTPException) as non_image_error:
             media_service.store_uploaded_image(

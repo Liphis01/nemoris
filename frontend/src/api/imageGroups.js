@@ -15,3 +15,14 @@ export function patchImageGroupItems(groupId, payload) {
     body: JSON.stringify(payload)
   });
 }
+
+
+export function uploadImageGroupMedia(groupId, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return requestJson(`/image-groups/${groupId}/upload`, {
+    method: "POST",
+    body: formData
+  });
+}

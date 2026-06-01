@@ -4,8 +4,6 @@ How do you suggest I create conveniently the group for flags ? Should I download
 
 Have a look at how when I create a new question I'm asked which type I want to create. I want the same UI for the currently available types upon creating groups. Be careful, group maps require a svg to display something on the preview so you'll have to handle the link between the map choice and the preview.
 
-garder les images de meme groupe dans un dossier commun ?
-
 ## Product Suggestions
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.

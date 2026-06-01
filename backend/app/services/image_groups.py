@@ -4,7 +4,11 @@ from sqlalchemy.orm import joinedload
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
 from .map_zones import merge_tags
-from .media import delete_unreferenced_media_files, media_points_to_same_static_file
+from .media import (
+    delete_unreferenced_media_files,
+    media_points_to_same_static_file,
+    store_uploaded_image
+)
 from .progress import create_initial_progress
 from .questions import delete_question_dependents
 
@@ -68,6 +72,15 @@ def list_image_group_items(db, group_id: int):
         for question in group.questions
         if question.type_q == "image"
     ]
+
+
+def upload_image_group_media(db, group_id: int, upload_file):
+    group = get_image_group_or_404(db, group_id)
+
+    return store_uploaded_image(
+        upload_file,
+        storage_subdir=f"image-groups/{group.id}"
+    )
 
 
 def build_image_question_text(group, answer):

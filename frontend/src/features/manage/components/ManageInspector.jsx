@@ -18,6 +18,7 @@ export default function ManageInspector({
   setSelectedItem,
   setEditingZone,
   uploadQuestionMedia,
+  uploadImageGroupMedia,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -304,7 +305,7 @@ export default function ManageInspector({
           group={group}
           selectedItem={selectedIsImageItem ? selectedItem : null}
           availableTags={availableTags}
-          onUploadFile={(file) => uploadQuestionMedia(file, selectedItem)}
+          onUploadFile={(file) => uploadImageGroupMedia(group.id, file)}
           onSave={async (saveResult) => {
             const savedGroup = saveResult?.group;
             const savedItems = saveResult?.items || [];

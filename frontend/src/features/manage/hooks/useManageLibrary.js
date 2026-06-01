@@ -12,6 +12,9 @@ import {
   deleteGroup as deleteGroupRequest,
   listGroups
 } from "../../../api/groups";
+import {
+  uploadImageGroupMedia as uploadImageGroupMediaRequest
+} from "../../../api/imageGroups";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
@@ -281,6 +284,12 @@ export function useManageLibrary(mode) {
     return data;
   }
 
+  async function uploadImageGroupMedia(groupId, file) {
+    if (!file || !groupId) return;
+
+    return uploadImageGroupMediaRequest(groupId, file);
+  }
+
   function handleSort(field) {
     // Clicking the current column toggles direction; clicking a new column
     // starts with ascending order.
@@ -401,6 +410,7 @@ export function useManageLibrary(mode) {
     tagFilter,
     handleSort,
     uploadQuestionMedia,
+    uploadImageGroupMedia,
     isCreatingQuestion,
     isCreatingGroup,
     loadAllGroups,
