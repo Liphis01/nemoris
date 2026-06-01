@@ -86,10 +86,12 @@ export function QuestionEditorShell({
   );
 }
 
-export function QuestionEditorField({ label, children }) {
+export function QuestionEditorField({ label, children, compact = false }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-      <span style={labelStyle}>{label}</span>
+    <label style={{ display: "flex", flexDirection: "column", gap: compact ? "4px" : "7px" }}>
+      <span style={compact ? { ...labelStyle, fontSize: "12px" } : labelStyle}>
+        {label}
+      </span>
       {children}
     </label>
   );
@@ -368,7 +370,11 @@ export function TagEditor({
   availableTags = [],
   onTagInputChange,
   onAddTag,
-  onRemoveTag
+  onRemoveTag,
+  chipStyle,
+  compact = false,
+  inputOverrideStyle,
+  labelOverrideStyle
 }) {
   const currentTagKeys = new Set(tags.map(tagKey));
   const suggestedTags = availableTags.filter(tag =>
@@ -377,7 +383,7 @@ export function TagEditor({
 
   return (
     <div>
-      <div style={{ ...labelStyle, marginBottom: "8px" }}>
+      <div style={{ ...labelStyle, marginBottom: compact ? "6px" : "8px", ...labelOverrideStyle }}>
         Tags
       </div>
       {tags.length > 0 && (
@@ -385,8 +391,8 @@ export function TagEditor({
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: "8px",
-            marginBottom: "10px"
+            gap: compact ? "6px" : "8px",
+            marginBottom: compact ? "7px" : "10px"
           }}
         >
           {tags.map(tag => (
@@ -399,7 +405,8 @@ export function TagEditor({
                 color: "#ccc",
                 display: "inline-flex",
                 gap: "8px",
-                padding: "6px 9px"
+                padding: compact ? "4px 8px" : "6px 9px",
+                ...chipStyle
               }}
             >
               #{tag}
@@ -426,7 +433,7 @@ export function TagEditor({
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) auto",
-          gap: "8px"
+          gap: compact ? "6px" : "8px"
         }}
       >
         <AutocompleteInput
@@ -441,9 +448,13 @@ export function TagEditor({
           }}
           placeholder="Ajouter un tag"
           suggestions={suggestedTags}
-          style={inputStyle}
+          style={{ ...inputStyle, ...inputOverrideStyle }}
         />
-        <button type="button" onClick={() => onAddTag?.()} style={buttonStyle}>
+        <button
+          type="button"
+          onClick={() => onAddTag?.()}
+          style={compact ? { ...buttonStyle, padding: "8px 12px" } : buttonStyle}
+        >
           Ajouter
         </button>
       </div>

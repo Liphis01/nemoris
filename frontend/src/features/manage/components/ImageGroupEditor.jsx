@@ -113,6 +113,25 @@ function imagePreviewButtonStyle(hasImage) {
   };
 }
 
+const compactHeaderInputStyle = {
+  ...inputStyle,
+  borderRadius: "8px",
+  fontSize: "13px",
+  padding: "8px 10px"
+};
+
+const compactHeaderButtonStyle = {
+  padding: "8px 12px"
+};
+
+const imageGroupHeaderTagChipStyle = {
+  background: "#322814",
+  border: "1px solid #6f5520",
+  color: "#f5d27b",
+  fontSize: "12px",
+  fontWeight: 700
+};
+
 const ImageGroupItemRow = memo(function ImageGroupItemRow({
   aliasInputValue,
   item,
@@ -832,24 +851,24 @@ export default function ImageGroupEditor({
       <div
         style={{
           borderBottom: "1px solid #2a2a2a",
-          padding: "18px",
+          padding: "12px 14px",
           display: "grid",
-          gap: "14px"
+          gap: "9px"
         }}
       >
         <div
           style={{
             alignItems: "center",
             display: "flex",
-            gap: "12px",
+            gap: "10px",
             justifyContent: "space-between"
           }}
         >
           <div>
-            <div style={{ color: "#777", fontSize: "12px", marginBottom: "6px" }}>
+            <div style={{ color: "#777", fontSize: "11px", marginBottom: "3px" }}>
               Groupe d'images
             </div>
-            <div style={{ color: "#eee", fontSize: "20px", fontWeight: 800 }}>
+            <div style={{ color: "#eee", fontSize: "17px", fontWeight: 800 }}>
               {editableGroup?.name || "Sans titre"}
             </div>
           </div>
@@ -862,8 +881,8 @@ export default function ImageGroupEditor({
               disabled={!hasUnsavedChanges}
               style={
                 hasUnsavedChanges
-                  ? pendingSaveButtonStyle
-                  : disabledSaveButtonStyle
+                  ? { ...pendingSaveButtonStyle, ...compactHeaderButtonStyle }
+                  : { ...disabledSaveButtonStyle, ...compactHeaderButtonStyle }
               }
             >
               {hasUnsavedChanges && <span aria-hidden="true" style={pendingSaveDotStyle} />}
@@ -876,33 +895,37 @@ export default function ImageGroupEditor({
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: "12px"
+            gap: "8px"
           }}
         >
-          <QuestionEditorField label="Nom du groupe">
+          <QuestionEditorField label="Nom du groupe" compact>
             <input
               value={editableGroup?.name || ""}
               onChange={(event) => updateGroupField("name", event.target.value)}
-              style={inputStyle}
+              style={compactHeaderInputStyle}
             />
           </QuestionEditorField>
 
-          <QuestionEditorField label="Image de couverture / URL">
+          <QuestionEditorField label="Image de couverture / URL" compact>
             <input
               value={editableGroup?.media || ""}
               onChange={(event) => updateGroupField("media", event.target.value)}
-              style={inputStyle}
+              style={compactHeaderInputStyle}
             />
           </QuestionEditorField>
         </div>
 
         <TagEditor
+          compact
           tags={sharedTags}
           tagInput={tagInput}
           availableTags={availableTags}
           onTagInputChange={setTagInput}
           onAddTag={addTag}
           onRemoveTag={removeTag}
+          chipStyle={imageGroupHeaderTagChipStyle}
+          inputOverrideStyle={compactHeaderInputStyle}
+          labelOverrideStyle={{ fontSize: "12px" }}
         />
 
         <div
@@ -910,7 +933,7 @@ export default function ImageGroupEditor({
             alignItems: "center",
             display: "flex",
             flexWrap: "wrap",
-            gap: "10px"
+            gap: "8px"
           }}
         >
           <input
@@ -927,12 +950,17 @@ export default function ImageGroupEditor({
             disabled={!onUploadFile || uploading}
             style={{
               ...primaryButtonStyle,
+              ...compactHeaderButtonStyle,
               opacity: !onUploadFile || uploading ? 0.6 : 1
             }}
           >
             {uploading ? "Import..." : "Importer des images"}
           </button>
-          <button type="button" onClick={addEmptyItem} style={buttonStyle}>
+          <button
+            type="button"
+            onClick={addEmptyItem}
+            style={{ ...buttonStyle, ...compactHeaderButtonStyle }}
+          >
             Ajouter une ligne
           </button>
           {saveStatus && (
