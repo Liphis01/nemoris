@@ -104,6 +104,12 @@ export default function MapEditor({
   }
 
   function handleHorizontalChipWheel(event) {
+    const chip = event.target?.closest?.("[data-chip-wheel-target]");
+
+    if (!chip || !event.currentTarget.contains(chip)) {
+      return;
+    }
+
     const strip = event.currentTarget;
     const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
 
@@ -575,7 +581,6 @@ export default function MapEditor({
                       flexWrap: "nowrap",
                       gap: "5px",
                       minWidth: 0,
-                      overscrollBehavior: "contain",
                       overflowX: "auto",
                       overflowY: "hidden",
                       paddingRight: "24px",
@@ -585,6 +590,7 @@ export default function MapEditor({
                     {(editableGroup.tags || []).map((tag) => (
                       <span
                         key={tag}
+                        data-chip-wheel-target
                         style={{
                           alignItems: "center",
                           background: "#242424",
@@ -842,7 +848,6 @@ export default function MapEditor({
                     gap: "6px",
                     minHeight: "27px",
                     minWidth: 0,
-                    overscrollBehavior: "contain",
                     overflowX: "auto",
                     overflowY: "hidden",
                     paddingRight: "24px",
@@ -852,6 +857,7 @@ export default function MapEditor({
                   {(editingZone.data?.aliases || []).map((alias, index) => (
                     <div
                       key={index}
+                      data-chip-wheel-target
                       style={{
                         alignItems: "center",
                         background: "#333",

@@ -260,7 +260,6 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
                 gap: "6px",
                 minHeight: "27px",
                 minWidth: 0,
-                overscrollBehavior: "contain",
                 overflowX: "auto",
                 overflowY: "hidden",
                 paddingRight: "24px",
@@ -270,6 +269,7 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
               {(item.aliases || []).map((alias, index) => (
                 <div
                   key={`${alias}-${index}`}
+                  data-chip-wheel-target
                   style={{
                     alignItems: "center",
                     background: "#333",
@@ -612,6 +612,12 @@ export default function ImageGroupEditor({
   }, [updateItem]);
 
   const handleHorizontalChipWheel = useCallback((event) => {
+    const chip = event.target?.closest?.("[data-chip-wheel-target]");
+
+    if (!chip || !event.currentTarget.contains(chip)) {
+      return;
+    }
+
     const strip = event.currentTarget;
     const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
 
