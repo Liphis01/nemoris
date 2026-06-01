@@ -4,6 +4,7 @@ How do you suggest I create conveniently the group for flags ? Should I download
 
 Have a look at how when I create a new question I'm asked which type I want to create. I want the same UI for the currently available types upon creating groups. Be careful, group maps require a svg to display something on the preview so you'll have to handle the link between the map choice and the preview.
 
+garder les images de meme groupe dans un dossier commun ?
 
 ## Product Suggestions
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.
@@ -24,6 +25,10 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - add a “Copy locally” or “Importer depuis l’URL” button.
 
 ## quick fixes
+- ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe
+- l'auto scroll se fait sur tous les éléments du groupe quand je modifie seulement un seul
+- dans la review je veux une grille avec les images en petit (comme jetpunk)
+- les aliases des images doivent etre comme dans maps
 - mettre un bouton dans recap pour changer la qualité de toutes les zones trouvées
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
@@ -33,6 +38,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - trouver un meilleur agencement pour les aliases dans map preview
 
 ## bugs
+- j'ai fait un groupe d'images avec quelques erreurs. à la fin de la review j'ai été requestionné sur les images ratées. je ne les ai pas faites et je suis retourné au menu princ. en revenant, plus de questions.
 - la taille des images doit être limitée
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
@@ -59,6 +65,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - stocker uniquement l'id des groupes dans les questions pour alléger
 
 ## ideas
+- permettre de convertir un svg en groupe d'images (pour les shapes de pays)
 - mettre une option de favoris et de difficile sur les questions (pour les voir plus souvent et aider le scheduler)
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel

@@ -103,6 +103,18 @@ function imagePreviewStyle(hasImage) {
   };
 }
 
+function imagePreviewButtonStyle(hasImage) {
+  return {
+    ...imagePreviewStyle(hasImage),
+    alignItems: "center",
+    cursor: hasImage ? "zoom-in" : "default",
+    display: "flex",
+    justifyContent: "center",
+    overflow: "hidden",
+    padding: 0
+  };
+}
+
 export default function ImageGroupEditor({
   group,
   availableTags = [],
@@ -121,6 +133,7 @@ export default function ImageGroupEditor({
   const [saveStatus, setSaveStatus] = useState("");
   const [uploading, setUploading] = useState(false);
   const [initialSignature, setInitialSignature] = useState("");
+  const [previewItem, setPreviewItem] = useState(null);
   const fileInputRef = useRef(null);
   const saveImageItemsRef = useRef(null);
 
@@ -357,6 +370,22 @@ export default function ImageGroupEditor({
     return registerPendingSaveHandler(saveIfDirty);
   }, [registerPendingSaveHandler]);
 
+  useEffect(() => {
+    if (!previewItem) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setPreviewItem(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [previewItem]);
+
   return (
     <div
       style={{
@@ -535,11 +564,23 @@ export default function ImageGroupEditor({
               }}
             >
               {mediaSrc ? (
-                <img
-                  src={mediaSrc}
-                  alt={item.answer || "image"}
-                  style={imagePreviewStyle(true)}
-                />
+                <button
+                  type="button"
+                  onClick={() => setPreviewItem(item)}
+                  aria-label={`Agrandir ${item.answer || "l'image"}`}
+                  title="Agrandir l'image"
+                  style={imagePreviewButtonStyle(true)}
+                >
+                  <img
+                    src={mediaSrc}
+                    alt={item.answer || "image"}
+                    style={{
+                      maxHeight: "100%",
+                      maxWidth: "100%",
+                      objectFit: "contain"
+                    }}
+                  />
+                </button>
               ) : (
                 <div
                   style={{
@@ -623,6 +664,92 @@ export default function ImageGroupEditor({
           );
         })}
       </div>
+
+      {previewItem && (
+        <div
+          role="presentation"
+          onClick={() => setPreviewItem(null)}
+          style={{
+            alignItems: "center",
+            background: "rgba(0, 0, 0, 0.82)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: "28px",
+            position: "fixed",
+            zIndex: 1000
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "#111",
+              border: "1px solid #333",
+              borderRadius: "12px",
+              boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
+              boxSizing: "border-box",
+              display: "grid",
+              gridTemplateRows: "auto auto",
+              maxHeight: "86vh",
+              width: "min(82vw, 900px)",
+              overflow: "hidden",
+              padding: "14px",
+              position: "relative"
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewItem(null)}
+              aria-label="Fermer l'image agrandie"
+              style={{
+                alignItems: "center",
+                background: "#1f1f1f",
+                border: "1px solid #3a3a3a",
+                borderRadius: "999px",
+                color: "#ddd",
+                cursor: "pointer",
+                display: "flex",
+                fontSize: "20px",
+                height: "34px",
+                justifyContent: "center",
+                lineHeight: 1,
+                position: "absolute",
+                right: "12px",
+                top: "12px",
+                width: "34px",
+                zIndex: 1
+              }}
+            >
+              ×
+            </button>
+
+            <img
+              src={resolveMediaUrl(previewItem.media)}
+              alt={previewItem.answer || "image"}
+              style={{
+                background: "#0d0d0d",
+                borderRadius: "8px",
+                display: "block",
+                height: "min(62vh, 560px)",
+                objectFit: "contain",
+                width: "100%"
+              }}
+            />
+
+            <div
+              style={{
+                color: "#eee",
+                fontSize: "16px",
+                fontWeight: 800,
+                padding: "12px 44px 0",
+                textAlign: "center"
+              }}
+            >
+              {previewItem.answer || "Image"}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
