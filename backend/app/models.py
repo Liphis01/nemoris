@@ -125,12 +125,15 @@ class Progress(Base):
     reps = Column(Integer, default=0)
     lapses = Column(Integer, default=0)
     interval = Column(Integer, default=0)
+    ideal_interval = Column(Integer, nullable=True)
     last_review = Column(Date, nullable=True)
     next_review = Column(Date)
+    ideal_next_review = Column(Date, nullable=True)
     fsrs_card = Column(JSON, nullable=True)
     fsrs_version = Column(String, nullable=True)
     # Append-only review snapshots used by the UI for history/stats. The active
-    # scheduling state is stored in the scalar columns above.
+    # schedule is interval/next_review; ideal_* remembers the pre-rebalance
+    # target that catch-up smoothing should keep anchored.
     history = Column(JSON, default=list)
 
     question = relationship(

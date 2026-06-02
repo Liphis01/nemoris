@@ -13,6 +13,8 @@ def serialize_progress(progress):
             "lapses": 0,
             "last_review": None,
             "next_review": None,
+            "ideal_interval": None,
+            "ideal_next_review": None,
             "fsrs_state": None,
             "fsrs_version": None,
             "history": []
@@ -38,6 +40,12 @@ def serialize_progress(progress):
         "next_review": (
             progress.next_review.isoformat()
             if progress.next_review
+            else None
+        ),
+        "ideal_interval": progress.ideal_interval,
+        "ideal_next_review": (
+            progress.ideal_next_review.isoformat()
+            if progress.ideal_next_review
             else None
         ),
         "fsrs_state": fsrs_state,

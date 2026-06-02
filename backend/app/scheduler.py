@@ -392,9 +392,10 @@ def rebalance_review_calendar(entries, daily_target, today=None):
     Spread existing scheduled review dates from today onward.
 
     Entries are plain dicts so this function stays independent from SQLAlchemy.
-    Each entry should include question_id, next_review, last_review, interval,
-    and difficulty. The returned list keeps the input order and replaces only
-    next_review/interval scheduling fields.
+    Each entry should include question_id, next_review, ideal_next_review,
+    last_review, interval, ideal_interval, and difficulty. The returned list
+    keeps the input order and replaces only next_review/interval scheduling
+    fields; ideal_* is copied through unchanged.
     """
     today = today or date.today()
     daily_limit = soft_rebalance_daily_limit(daily_target)
@@ -403,7 +404,10 @@ def rebalance_review_calendar(entries, daily_target, today=None):
 
     def normalized_entry(index, entry):
         original_next_review = entry.get("next_review") or today
-        effective_due_date = max(today, original_next_review)
+        ideal_next_review = (
+            entry.get("ideal_next_review") or original_next_review
+        )
+        effective_due_date = max(today, ideal_next_review)
         difficulty = entry.get("difficulty") or 5.0
         question_id = entry.get("question_id")
         current_type = type_key(entry.get("type_q"))
@@ -412,6 +416,7 @@ def rebalance_review_calendar(entries, daily_target, today=None):
             "index": index,
             "entry": entry,
             "original_next_review": original_next_review,
+            "ideal_next_review": ideal_next_review,
             "effective_due_date": effective_due_date,
             "difficulty": difficulty,
             "question_id": question_id if question_id is not None else 0,
@@ -435,7 +440,7 @@ def rebalance_review_calendar(entries, daily_target, today=None):
             for type_items in by_type.values():
                 type_items.sort(
                     key=lambda item: (
-                        item["original_next_review"],
+                        item["ideal_next_review"],
                         -item["difficulty"],
                         item["question_id"]
                     )
@@ -444,7 +449,7 @@ def rebalance_review_calendar(entries, daily_target, today=None):
             type_order = sorted(
                 by_type,
                 key=lambda current_type: (
-                    by_type[current_type][0]["original_next_review"],
+                    by_type[current_type][0]["ideal_next_review"],
                     current_type
                 )
             )
@@ -480,8 +485,10 @@ def rebalance_review_calendar(entries, daily_target, today=None):
         assigned[item["index"]] = {
             **entry,
             "original_next_review": item["original_next_review"],
+            "ideal_next_review": entry.get("ideal_next_review"),
             "effective_due_date": item["effective_due_date"],
             "interval": interval,
+            "ideal_interval": entry.get("ideal_interval"),
             "next_review": next_review,
             "fsrs_card": set_fsrs_card_due_date(
                 entry.get("fsrs_card"),

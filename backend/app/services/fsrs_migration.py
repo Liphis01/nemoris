@@ -146,14 +146,19 @@ def write_fsrs_progress(progress, card, reps=None, lapses=None):
 
     if next_review:
         progress.next_review = next_review
+        progress.ideal_next_review = next_review
 
     if progress.last_review and progress.next_review:
         progress.interval = max(
             0,
             (progress.next_review - progress.last_review).days
         )
+        progress.ideal_interval = progress.interval
     elif progress.interval is None:
         progress.interval = 0
+        progress.ideal_interval = 0
+    elif progress.ideal_interval is None:
+        progress.ideal_interval = progress.interval
 
 
 def migrate_progress_to_fsrs_v6(db):

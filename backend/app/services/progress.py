@@ -24,7 +24,9 @@ def create_initial_progress(question_id: int):
         reps=0,
         lapses=0,
         interval=0,
+        ideal_interval=None,
         next_review=date.today(),
+        ideal_next_review=None,
         fsrs_card=new_fsrs_card_data(question_id),
         fsrs_version=FSRS_VERSION,
         history=[]
@@ -50,6 +52,11 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
     # SQLAlchemy may not detect in-place mutation on JSON columns reliably, so
     # build a fresh list before assigning it back.
     history = list(progress.history or [])
+    ideal_interval = scheduling.get("ideal_interval", scheduling["interval"])
+    ideal_next_review = scheduling.get(
+        "ideal_next_review",
+        scheduling["next_review"]
+    )
 
     entry = {
         "reviewed_on": scheduling["last_review"].isoformat(),
@@ -59,12 +66,10 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
         "reps": scheduling["reps"],
         "lapses": scheduling["lapses"],
         "interval": scheduling["interval"],
-        "next_review": scheduling["next_review"].isoformat()
+        "next_review": scheduling["next_review"].isoformat(),
+        "ideal_interval": ideal_interval,
+        "ideal_next_review": ideal_next_review.isoformat()
     }
-
-    if "ideal_interval" in scheduling:
-        entry["ideal_interval"] = scheduling["ideal_interval"]
-        entry["ideal_next_review"] = scheduling["ideal_next_review"].isoformat()
 
     if scheduling.get("favorite_boost"):
         entry["favorite_boost"] = True
@@ -84,13 +89,21 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
 
 
 def write_scheduling(progress: Progress, quality: int, scheduling: dict):
+    ideal_interval = scheduling.get("ideal_interval", scheduling["interval"])
+    ideal_next_review = scheduling.get(
+        "ideal_next_review",
+        scheduling["next_review"]
+    )
+
     progress.stability = scheduling["stability"]
     progress.difficulty = scheduling["difficulty"]
     progress.reps = scheduling["reps"]
     progress.lapses = scheduling["lapses"]
     progress.interval = scheduling["interval"]
+    progress.ideal_interval = ideal_interval
     progress.last_review = scheduling["last_review"]
     progress.next_review = scheduling["next_review"]
+    progress.ideal_next_review = ideal_next_review
     progress.fsrs_card = scheduling.get("fsrs_card")
     progress.fsrs_version = scheduling.get("fsrs_version", FSRS_VERSION)
 
@@ -116,8 +129,10 @@ def restore_progress_from_history(progress: Progress, history):
         progress.reps = 0
         progress.lapses = 0
         progress.interval = 0
+        progress.ideal_interval = None
         progress.last_review = None
         progress.next_review = date.today()
+        progress.ideal_next_review = None
         progress.fsrs_card = new_fsrs_card_data(progress.question_id)
         progress.fsrs_version = FSRS_VERSION
         return
@@ -125,6 +140,9 @@ def restore_progress_from_history(progress: Progress, history):
     latest = history[-1]
     last_review = parse_history_date(latest.get("reviewed_on"))
     next_review = parse_history_date(latest.get("next_review"))
+    ideal_next_review = (
+        parse_history_date(latest.get("ideal_next_review")) or next_review
+    )
 
     progress.stability = _number_from_history(latest, "stability", 1.0)
     progress.difficulty = _number_from_history(latest, "difficulty", 5.0)
@@ -141,8 +159,15 @@ def restore_progress_from_history(progress: Progress, history):
         caster=int
     )
     progress.interval = _number_from_history(latest, "interval", 0, caster=int)
+    progress.ideal_interval = _number_from_history(
+        latest,
+        "ideal_interval",
+        progress.interval,
+        caster=int
+    )
     progress.last_review = last_review
     progress.next_review = next_review or date.today()
+    progress.ideal_next_review = ideal_next_review
     progress.fsrs_card = None
     progress.fsrs_version = FSRS_VERSION
 
@@ -255,6 +280,8 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
             scheduling,
             favorite=metadata.get("favorite", False)
         )
+        scheduling["ideal_interval"] = scheduling["interval"]
+        scheduling["ideal_next_review"] = scheduling["next_review"]
         items.append((progress, quality, scheduling))
 
         if progress.question_id is not None:
@@ -316,8 +343,10 @@ def rebalance_progress_calendar(db, today=None):
             "progress_id": progress.id,
             "question_id": progress.question_id,
             "next_review": progress.next_review,
+            "ideal_next_review": progress.ideal_next_review,
             "last_review": progress.last_review,
             "interval": progress.interval or 0,
+            "ideal_interval": progress.ideal_interval,
             "difficulty": progress.difficulty,
             "type_q": type_q,
             "fsrs_card": progress.fsrs_card

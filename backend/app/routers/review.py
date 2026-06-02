@@ -95,8 +95,10 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         "stability": progress.stability,
         "difficulty": progress.difficulty,
         "interval": progress.interval,
+        "ideal_interval": progress.ideal_interval,
         "last_review": progress.last_review,
         "next_review": progress.next_review,
+        "ideal_next_review": progress.ideal_next_review,
         "reps": progress.reps,
         "lapses": progress.lapses,
         "history": progress.history or []
@@ -122,8 +124,10 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         "stability": progress.stability,
         "difficulty": progress.difficulty,
         "interval": progress.interval,
+        "ideal_interval": progress.ideal_interval,
         "last_review": progress.last_review,
         "next_review": progress.next_review,
+        "ideal_next_review": progress.ideal_next_review,
         "reps": progress.reps,
         "lapses": progress.lapses,
         "history": progress.history or []

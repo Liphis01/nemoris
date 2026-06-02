@@ -30,6 +30,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter une recherche dans calender
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
+- enlever l'id des questions dans les cards de manage (pour laisser la place au bouton fav)
 
 ## bugs
 - recentrer les svg

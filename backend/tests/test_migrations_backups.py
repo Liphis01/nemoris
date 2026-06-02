@@ -135,7 +135,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004"]
+                ["0001", "0002", "0003", "0004", "0005"]
             )
             self.assertIsNotNone(result["backup"])
 
@@ -147,6 +147,8 @@ class MigrationTests(unittest.TestCase):
             self.assertIn("stability", progress_columns)
             self.assertIn("fsrs_card", progress_columns)
             self.assertIn("history", progress_columns)
+            self.assertIn("ideal_interval", progress_columns)
+            self.assertIn("ideal_next_review", progress_columns)
 
             with sqlite3.connect(database_file) as connection:
                 type_q = connection.execute(
@@ -158,10 +160,19 @@ class MigrationTests(unittest.TestCase):
                 migration_count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
+                ideal_interval, ideal_next_review = connection.execute(
+                    """
+                    SELECT ideal_interval, ideal_next_review
+                    FROM progress
+                    WHERE id = 1
+                    """
+                ).fetchone()
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 4)
+            self.assertEqual(migration_count, 5)
+            self.assertEqual(ideal_interval, 0)
+            self.assertEqual(ideal_next_review, "2026-01-01")
 
             backup_path = Path(result["backup"]["path"])
 
@@ -203,11 +214,124 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004"]
+                ["0001", "0002", "0003", "0004", "0005"]
             )
             self.assertIsNone(result["backup"])
             self.assertIn("questions", table_names(database_file))
             self.assertIn("schema_migrations", table_names(database_file))
+
+    def test_ideal_schedule_migration_backfills_from_history_then_current(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in ("0001", "0002", "0003", "0004"):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE progress (
+                        id INTEGER PRIMARY KEY,
+                        question_id INTEGER UNIQUE,
+                        interval INTEGER,
+                        next_review DATE,
+                        history JSON
+                    )
+                    """
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO progress (
+                        id,
+                        question_id,
+                        interval,
+                        next_review,
+                        history
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            1,
+                            1,
+                            8,
+                            "2026-01-08",
+                            json.dumps([
+                                {
+                                    "interval": 5,
+                                    "next_review": "2026-01-05"
+                                },
+                                {
+                                    "ideal_interval": 7,
+                                    "ideal_next_review": "2026-01-07",
+                                    "interval": 8,
+                                    "next_review": "2026-01-08"
+                                }
+                            ])
+                        ),
+                        (
+                            2,
+                            2,
+                            6,
+                            "2026-01-06",
+                            json.dumps([
+                                {
+                                    "interval": 4,
+                                    "next_review": "2026-01-04"
+                                }
+                            ])
+                        ),
+                        (3, 3, 9, "2026-01-09", json.dumps([]))
+                    ]
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0005"]
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT id, ideal_interval, ideal_next_review
+                    FROM progress
+                    ORDER BY id
+                    """
+                ).fetchall()
+
+            self.assertEqual(
+                rows,
+                [
+                    (1, 7, "2026-01-07"),
+                    (2, 4, "2026-01-04"),
+                    (3, 9, "2026-01-09")
+                ]
+            )
 
 
 if __name__ == "__main__":

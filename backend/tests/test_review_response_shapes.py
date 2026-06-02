@@ -36,6 +36,8 @@ PROGRESS_KEYS = {
     "lapses",
     "last_review",
     "next_review",
+    "ideal_interval",
+    "ideal_next_review",
     "fsrs_state",
     "fsrs_version",
     "history"

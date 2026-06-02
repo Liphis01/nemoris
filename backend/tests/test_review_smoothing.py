@@ -60,13 +60,17 @@ def rebalance_entry(
     next_review,
     difficulty=5.0,
     last_review=None,
-    type_q=None
+    type_q=None,
+    ideal_next_review=None,
+    ideal_interval=None
 ):
     return {
         "question_id": question_id,
         "next_review": next_review,
+        "ideal_next_review": ideal_next_review,
         "last_review": last_review,
         "interval": 0,
+        "ideal_interval": ideal_interval,
         "difficulty": difficulty,
         "type_q": type_q
     }
@@ -270,6 +274,68 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
         self.assertEqual(assigned[1]["next_review"], future_day)
 
+    def test_rebalance_can_pull_future_items_back_toward_ideal(self):
+        today = date(2026, 1, 10)
+        ideal_day = today + timedelta(days=2)
+        active_day = today + timedelta(days=6)
+        entries = [
+            rebalance_entry(
+                1,
+                active_day,
+                ideal_next_review=ideal_day,
+                ideal_interval=2
+            )
+        ]
+
+        assigned = rebalance_review_calendar(entries, 50, today=today)
+
+        self.assertEqual(assigned[0]["next_review"], ideal_day)
+        self.assertEqual(assigned[0]["ideal_next_review"], ideal_day)
+        self.assertEqual(assigned[0]["ideal_interval"], 2)
+
+    def test_rebalance_never_moves_before_today_when_ideal_is_overdue(self):
+        today = date(2026, 1, 10)
+        entries = [
+            rebalance_entry(
+                1,
+                today + timedelta(days=6),
+                ideal_next_review=today - timedelta(days=3),
+                ideal_interval=3
+            )
+        ]
+
+        assigned = rebalance_review_calendar(entries, 50, today=today)
+
+        self.assertEqual(assigned[0]["next_review"], today)
+        self.assertEqual(
+            assigned[0]["ideal_next_review"],
+            today - timedelta(days=3)
+        )
+
+    def test_rebalance_reuses_ideal_anchor_across_successive_runs(self):
+        today = date(2026, 1, 10)
+        ideal_day = today + timedelta(days=1)
+        entries = [
+            rebalance_entry(
+                index,
+                ideal_day + timedelta(days=5),
+                ideal_next_review=ideal_day,
+                ideal_interval=1
+            )
+            for index in range(3)
+        ]
+
+        first = rebalance_review_calendar(entries, 1, today=today)
+        second = rebalance_review_calendar(first, 1, today=today)
+
+        self.assertEqual(
+            [item["next_review"] for item in first],
+            [item["next_review"] for item in second]
+        )
+        self.assertTrue(
+            all(item["ideal_next_review"] == ideal_day for item in second)
+        )
+
     def test_rebalance_orders_overdue_by_age_difficulty_and_id(self):
         today = date(2026, 1, 10)
         entries = [
@@ -348,7 +414,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         next_review,
         stability=1.0,
         difficulty=5.0,
-        reps=0
+        reps=0,
+        ideal_interval=None,
+        ideal_next_review=None
     ):
         progress = Progress(
             question_id=question_id,
@@ -357,7 +425,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             reps=reps,
             lapses=0,
             interval=0,
+            ideal_interval=ideal_interval,
             next_review=next_review,
+            ideal_next_review=ideal_next_review,
             history=[]
         )
         self.db.add(progress)
@@ -389,6 +459,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(response["next_review"], today + timedelta(days=3))
         self.assertEqual(response["interval"], 3)
+        self.assertEqual(response["ideal_next_review"], today + timedelta(days=2))
+        self.assertEqual(response["ideal_interval"], 2)
+        self.assertEqual(progress.ideal_next_review, today + timedelta(days=2))
+        self.assertEqual(progress.ideal_interval, 2)
         self.assertEqual(progress.history[-1]["ideal_interval"], 2)
         self.assertEqual(
             progress.history[-1]["ideal_next_review"],
@@ -418,6 +492,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             response["next_review"],
             today + timedelta(days=response["interval"])
         )
+        self.assertEqual(response["ideal_interval"], response["interval"])
+        self.assertEqual(response["ideal_next_review"], response["next_review"])
+        self.assertEqual(progress.ideal_interval, response["interval"])
+        self.assertEqual(progress.ideal_next_review, response["next_review"])
 
     def test_map_answer_smooths_batch_against_existing_load(self):
         today = date.today()
@@ -467,8 +545,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(response["next_review"], today)
         self.assertEqual(response["interval"], 0)
+        self.assertEqual(response["ideal_next_review"], today)
+        self.assertEqual(response["ideal_interval"], 0)
         self.assertEqual(progress.next_review, today)
         self.assertEqual(progress.interval, 0)
+        self.assertEqual(progress.ideal_next_review, today)
+        self.assertEqual(progress.ideal_interval, 0)
         self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
         self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
 
@@ -753,6 +835,29 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(unchanged.lapses, 1)
         self.assertEqual(unchanged.history, [{"reviewed_on": "2026-01-01"}])
 
+    def test_rebalance_route_uses_ideal_anchor_without_mutating_it(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=50), db=self.db)
+        self.add_question(1)
+        progress = self.add_progress(
+            1,
+            today + timedelta(days=6),
+            reps=1,
+            ideal_interval=2,
+            ideal_next_review=today + timedelta(days=2)
+        )
+        progress.last_review = today
+        progress.interval = 6
+        self.db.commit()
+
+        response = rebalance_review(db=self.db)
+
+        self.assertEqual(response["moved"], 1)
+        self.assertEqual(progress.next_review, today + timedelta(days=2))
+        self.assertEqual(progress.interval, 2)
+        self.assertEqual(progress.ideal_next_review, today + timedelta(days=2))
+        self.assertEqual(progress.ideal_interval, 2)
+
     def test_rebalance_route_mixes_question_types_per_day(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
@@ -896,6 +1001,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertGreater(text_progress.stability, map_progress.stability)
         self.assertEqual(text_progress.fsrs_card["state"], 2)
         self.assertEqual(map_progress.fsrs_card["state"], 2)
+        self.assertEqual(text_progress.ideal_next_review, text_progress.next_review)
+        self.assertEqual(map_progress.ideal_next_review, map_progress.next_review)
 
     def test_fsrs_migration_backfills_scalar_rows_without_history(self):
         today = date(2026, 1, 10)
@@ -921,6 +1028,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.fsrs_card["difficulty"], 6.0)
         self.assertTrue(progress.fsrs_card["due"].startswith(due.isoformat()))
         self.assertEqual(progress.next_review, due)
+        self.assertEqual(progress.ideal_next_review, due)
+        self.assertEqual(progress.ideal_interval, 12)
 
     def test_review_route_does_not_rebalance_calendar(self):
         today = date.today()

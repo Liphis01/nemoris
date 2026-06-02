@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 from typing import Callable
@@ -160,6 +160,136 @@ def _migration_normalize_legacy_question_types(connection):
     )
 
 
+def _parse_migration_date(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    text = str(value)
+
+    try:
+        return datetime.fromisoformat(text).date().isoformat()
+    except ValueError:
+        try:
+            return date.fromisoformat(text).isoformat()
+        except ValueError:
+            return None
+
+
+def _parse_migration_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_migration_history(value):
+    if not value:
+        return []
+
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+    if not isinstance(value, list):
+        return []
+
+    return [
+        entry
+        for entry in value
+        if isinstance(entry, dict)
+    ]
+
+
+def _history_schedule(history, interval_field, date_field):
+    for entry in reversed(history):
+        interval = _parse_migration_int(entry.get(interval_field))
+        next_review = _parse_migration_date(entry.get(date_field))
+
+        if interval is not None and next_review:
+            return interval, next_review
+
+    return None
+
+
+def _migration_progress_ideal_schedule_columns(connection):
+    if not _table_exists(connection, "progress"):
+        return
+
+    existing_columns = _column_names(connection, "progress")
+    columns = {
+        "ideal_interval": "INTEGER",
+        "ideal_next_review": "DATE"
+    }
+
+    for column_name, column_type in columns.items():
+        if column_name not in existing_columns:
+            connection.exec_driver_sql(
+                f"ALTER TABLE progress ADD COLUMN {column_name} {column_type}"
+            )
+
+    rows = connection.exec_driver_sql(
+        """
+        SELECT id, interval, next_review, history, ideal_interval, ideal_next_review
+        FROM progress
+        """
+    ).fetchall()
+
+    for row in rows:
+        (
+            progress_id,
+            interval,
+            next_review,
+            history,
+            ideal_interval,
+            ideal_next_review
+        ) = row
+
+        if ideal_interval is not None and ideal_next_review:
+            continue
+
+        history_items = _parse_migration_history(history)
+        scheduling = (
+            _history_schedule(
+                history_items,
+                "ideal_interval",
+                "ideal_next_review"
+            )
+            or _history_schedule(history_items, "interval", "next_review")
+        )
+
+        if not scheduling:
+            current_next_review = _parse_migration_date(next_review)
+
+            if not current_next_review:
+                continue
+
+            scheduling = (
+                _parse_migration_int(interval) or 0,
+                current_next_review
+            )
+
+        connection.exec_driver_sql(
+            """
+            UPDATE progress
+            SET ideal_interval = ?, ideal_next_review = ?
+            WHERE id = ?
+            """,
+            (
+                scheduling[0],
+                scheduling[1],
+                progress_id
+            )
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -181,6 +311,12 @@ MIGRATIONS = [
         version="0004",
         name="normalize_legacy_question_types",
         run=_migration_normalize_legacy_question_types,
+        requires_backup=True
+    ),
+    Migration(
+        version="0005",
+        name="progress_ideal_schedule_columns",
+        run=_migration_progress_ideal_schedule_columns,
         requires_backup=True
     )
 ]
