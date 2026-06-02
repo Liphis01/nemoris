@@ -13,10 +13,11 @@ vi.mock("../../api/dailyGrove", () => ({
 
 function groveStatus(overrides = {}) {
   return {
-    current_streak: 5,
-    longest_streak: 8,
+    current_streak: 35,
+    longest_streak: 36,
     last_completed_on: "2026-06-01",
     rest_leaves: 1,
+    fallen_leaves: 1,
     protected_dates: [],
     seen_milestones: [3],
     today: "2026-06-02",
@@ -28,22 +29,32 @@ function groveStatus(overrides = {}) {
     already_complete: false,
     blocked: false,
     milestone_reached: null,
-    next_milestone: 7,
-    milestone_progress: {
-      current: 5,
+    shield_capacity: 2,
+    shield_growth: {
+      current: 7,
       target: 7,
-      remaining: 2,
-      percent: 60
+      remaining: 0,
+      percent: 100,
+      next_award_at: 35,
+      growing: true
+    },
+    shield_event: null,
+    next_milestone: 60,
+    milestone_progress: {
+      current: 35,
+      target: 60,
+      remaining: 25,
+      percent: 17
     },
     grove_stage: {
-      key: "young_grove",
-      label: "Jeune bosquet"
+      key: "canopy",
+      label: "Canopée"
     },
     ...overrides
   };
 }
 
-describe("Menu daily grove", () => {
+describe("Menu daily plant", () => {
   beforeEach(() => {
     getDailyGroveStatus.mockResolvedValue(groveStatus());
     completeDailyGrove.mockResolvedValue(groveStatus());
@@ -54,8 +65,8 @@ describe("Menu daily grove", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the grove status in the menu", async () => {
-    render(
+  it("renders the plant status in the menu", async () => {
+    const { container } = render(
       <Menu
         setMode={vi.fn()}
         startupNotice={null}
@@ -63,21 +74,30 @@ describe("Menu daily grove", () => {
       />
     );
 
-    expect(await screen.findByText("Jeune bosquet")).toBeInTheDocument();
+    expect(await screen.findByText("Fleur ouverte")).toBeInTheDocument();
+    expect(screen.getByText("Plante Nemoris")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "Illustration animée de la plante Nemoris"
+      })
+    ).toBeInTheDocument();
     expect(screen.getByText("3 révisions à terminer")).toBeInTheDocument();
-    expect(screen.getByText("Record 8 j")).toBeInTheDocument();
-    expect(screen.getByText("1/2 feuille")).toBeInTheDocument();
+    expect(screen.getByText("Record 36 j")).toBeInTheDocument();
+    expect(screen.getByText("1/2 feuilles de garde")).toBeInTheDocument();
+    expect(container.querySelectorAll(".grove-art-shield-active")).toHaveLength(1);
+    expect(container.querySelectorAll(".grove-art-regrowing-bud")).toHaveLength(1);
+    expect(container.querySelectorAll(".grove-art-fallen-leaf")).toHaveLength(1);
     expect(completeDailyGrove).not.toHaveBeenCalled();
   });
 
-  it("auto-completes the grove when the menu opens with no due work", async () => {
+  it("auto-completes the plant when the menu opens with no due work", async () => {
     getDailyGroveStatus.mockResolvedValue(groveStatus({
       due_count: 0,
       eligible: true,
       can_complete_today: true
     }));
     completeDailyGrove.mockResolvedValue(groveStatus({
-      current_streak: 6,
+      current_streak: 36,
       due_count: 0,
       today_complete: true,
       eligible: false,
@@ -103,7 +123,7 @@ describe("Menu daily grove", () => {
       expect(completeDailyGrove).toHaveBeenCalledTimes(1);
     });
 
-    expect(await screen.findByText("Bosquet arrosé")).toBeInTheDocument();
-    expect(screen.getByText("6")).toBeInTheDocument();
+    expect(await screen.findByText("Plante arrosée")).toBeInTheDocument();
+    expect(screen.getByText("36")).toBeInTheDocument();
   });
 });

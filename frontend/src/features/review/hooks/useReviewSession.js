@@ -383,7 +383,7 @@ export function useReviewSession(active) {
 
         if (!cancelled) {
           setDailyGroveCompletionError(
-            error.message || "Bosquet impossible à synchroniser."
+            error.message || "Plante impossible à synchroniser."
           );
         }
       } finally {

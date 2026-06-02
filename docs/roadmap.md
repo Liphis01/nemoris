@@ -1,6 +1,8 @@
 # TODO
 
+- une vraie image de grove qui évolue
 - setup github pour tout automatiser
+- uniformiser le style partout
 
 ## Product Suggestions
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.

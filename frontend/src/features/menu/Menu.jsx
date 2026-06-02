@@ -3,6 +3,7 @@ import {
   completeDailyGrove,
   getDailyGroveStatus
 } from "../../api/dailyGrove";
+import GroveArtwork from "./GroveArtwork";
 import "./Menu.css";
 
 const destinations = [
@@ -44,12 +45,6 @@ const destinations = [
   }
 ];
 
-const workflowItems = [
-  "Revoir",
-  "Organiser",
-  "Explorer"
-];
-
 const reviewTypes = [
   { label: "Texte", accent: "violet" },
   { label: "Map", accent: "amber" },
@@ -57,17 +52,35 @@ const reviewTypes = [
   { label: "Timeline", accent: "blue" }
 ];
 
+const plantStageLabels = {
+  dormant: "Graine dormante",
+  seedling: "Jeune pousse",
+  sprout: "Premier bourgeon",
+  young_grove: "Feuille de garde",
+  grove: "Bouton lumineux",
+  canopy: "Fleur ouverte",
+  forest: "Fleur radieuse",
+  ancient_forest: "Fleur rare",
+  sanctuary: "Floraison Nemoris"
+};
+
 function groveStatusLabel(status, loading, checking, error) {
   if (loading) return "Chargement...";
   if (error) return "Synchronisation indisponible";
-  if (checking) return "Arrosage du bosquet...";
-  if (!status) return "Bosquet indisponible";
-  if (status.today_complete) return "Bosquet arrosé";
+  if (checking) return "Arrosage de la plante...";
+  if (!status) return "Plante indisponible";
+  if (status.today_complete) return "Plante arrosée";
   if ((status.due_count || 0) > 0) {
     return `${status.due_count} révision${status.due_count > 1 ? "s" : ""} à terminer`;
   }
 
   return "Check-in prêt";
+}
+
+function plantStageLabel(status) {
+  const key = status?.grove_stage?.key;
+
+  return plantStageLabels[key] || status?.grove_stage?.label || "Graine dormante";
 }
 
 function GrovePanel({
@@ -79,7 +92,8 @@ function GrovePanel({
   const streak = status?.current_streak || 0;
   const longest = status?.longest_streak || 0;
   const restLeaves = status?.rest_leaves || 0;
-  const stage = status?.grove_stage?.label || "Graine dormante";
+  const shieldCapacity = status?.shield_capacity || 0;
+  const stage = plantStageLabel(status);
   const milestone = status?.next_milestone;
   const progress = status?.milestone_progress || {};
   const rawProgressPercent = Math.max(0, Math.min(100, progress.percent || 0));
@@ -89,10 +103,10 @@ function GrovePanel({
   const statusLabel = groveStatusLabel(status, loading, checking, error);
 
   return (
-    <section className="menu-grove-panel" aria-label="Bosquet Nemoris">
+    <section className="menu-grove-panel" aria-label="Plante Nemoris">
       <div className="menu-grove-header">
         <div>
-          <div className="menu-overline">Nemoris Grove</div>
+          <div className="menu-overline">Plante Nemoris</div>
           <div className="menu-grove-stage">{stage}</div>
         </div>
 
@@ -101,6 +115,13 @@ function GrovePanel({
           <span>jour{streak > 1 ? "s" : ""}</span>
         </div>
       </div>
+
+      <GroveArtwork
+        status={status}
+        loading={loading}
+        checking={checking}
+        error={error}
+      />
 
       <div className="menu-grove-track" aria-hidden="true">
         <div
@@ -119,7 +140,7 @@ function GrovePanel({
 
       <div className="menu-grove-meta">
         <span>Record {longest} j</span>
-        <span>{restLeaves}/2 feuille{restLeaves > 1 ? "s" : ""}</span>
+        <span>{restLeaves}/{shieldCapacity} feuilles de garde</span>
         <span>
           {milestone
             ? `Cap ${milestone} j`
@@ -195,7 +216,7 @@ export default function Menu({
 
           if (!cancelled) {
             setDailyGroveError(
-              completionError.message || "Bosquet impossible à synchroniser."
+              completionError.message || "Plante impossible à synchroniser."
             );
           }
         } finally {
@@ -208,7 +229,7 @@ export default function Menu({
 
         if (!cancelled) {
           setDailyGroveError(
-            error.message || "Bosquet impossible à synchroniser."
+            error.message || "Plante impossible à synchroniser."
           );
           setDailyGroveLoading(false);
         }
@@ -226,7 +247,7 @@ export default function Menu({
     <div className="menu-screen">
       <div className="menu-layout">
         <aside className="menu-identity" aria-label="Nemoris">
-          <div>
+          <div className="menu-brand-block">
             <div className="menu-brand-row">
               <div className="menu-brand-mark" aria-hidden="true">
                 N
@@ -242,24 +263,15 @@ export default function Menu({
             <p className="menu-subtitle">
               L'outil ultime pour apprendre et réviser efficacement grâce à la répétition espacée.
             </p>
+          </div>
 
+          <div className="menu-grove-anchor">
             <GrovePanel
               status={dailyGrove}
               loading={dailyGroveLoading}
               checking={dailyGroveChecking}
               error={dailyGroveError}
             />
-          </div>
-
-          <div className="menu-workflow" aria-label="Navigation principale">
-            {workflowItems.map((item, index) => (
-              <div className="menu-workflow-item" key={item}>
-                <span className="menu-workflow-index">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span>{item}</span>
-              </div>
-            ))}
           </div>
         </aside>
 

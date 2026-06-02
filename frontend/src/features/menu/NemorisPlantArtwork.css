@@ -1,0 +1,253 @@
+.nemoris-plant {
+  display: block;
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.nemoris-plant__body,
+.nemoris-plant__shield-leaf,
+.nemoris-plant__regrowing-bud,
+.nemoris-plant__fallen-leaf {
+  display: block;
+  pointer-events: none;
+  position: absolute;
+  user-select: none;
+}
+
+.nemoris-plant__body {
+  filter:
+    drop-shadow(0 16px 20px rgba(0, 0, 0, 0.28))
+    drop-shadow(0 0 28px rgba(126, 226, 168, 0.08));
+  inset: 0;
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+}
+
+.nemoris-plant--stage-100 .nemoris-plant__body {
+  filter:
+    drop-shadow(0 18px 22px rgba(0, 0, 0, 0.32))
+    drop-shadow(0 0 28px rgba(255, 204, 122, 0.16))
+    drop-shadow(0 0 20px rgba(255, 101, 122, 0.1));
+}
+
+.nemoris-plant__shield-layer,
+.nemoris-plant__fallen-layer {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.nemoris-plant__shield-leaf,
+.nemoris-plant__regrowing-bud {
+  filter:
+    drop-shadow(0 0 8px rgba(126, 226, 168, 0.28))
+    drop-shadow(0 5px 6px rgba(0, 0, 0, 0.22));
+  transform:
+    translate(-50%, -50%)
+    scaleX(var(--shield-flip))
+    rotate(var(--shield-rotate));
+  transform-origin: 50% 82%;
+}
+
+.nemoris-plant__shield-leaf {
+  animation: nemoris-shield-breathe 4.8s ease-in-out infinite;
+}
+
+.nemoris-plant__shield-leaf--2 {
+  animation-delay: 0.28s;
+}
+
+.nemoris-plant__shield-leaf--3 {
+  animation-delay: 0.52s;
+}
+
+.nemoris-plant__regrowing-bud {
+  opacity: var(--growth-opacity);
+  transform:
+    translate(-50%, -50%)
+    scaleX(var(--shield-flip))
+    rotate(var(--shield-rotate))
+    scale(var(--growth-scale));
+}
+
+.nemoris-plant__fallen-leaf {
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.24));
+  opacity: var(--fallen-opacity);
+  transform: translate(-50%, -50%) rotate(var(--fallen-rotate));
+  transform-origin: center;
+}
+
+.nemoris-plant__fallen-leaf {
+  animation: nemoris-fallen-idle 5.6s ease-in-out infinite;
+  animation-delay: var(--fallen-delay);
+}
+
+.nemoris-plant.is-growing .nemoris-plant__body {
+  animation: nemoris-body-grow 760ms cubic-bezier(0.2, 0.9, 0.2, 1.08) both;
+}
+
+.nemoris-plant.is-blooming .nemoris-plant__body {
+  animation:
+    nemoris-body-grow 760ms cubic-bezier(0.2, 0.9, 0.2, 1.08) both,
+    nemoris-bloom-pulse 1.25s ease-out 120ms both;
+}
+
+.nemoris-plant.is-shield-regrown .nemoris-plant__shield-leaf:last-of-type {
+  animation: nemoris-shield-grow 920ms cubic-bezier(0.2, 0.9, 0.2, 1.1) both;
+}
+
+.nemoris-plant.is-shield-growing .nemoris-plant__regrowing-bud {
+  animation: nemoris-bud-grow 900ms cubic-bezier(0.2, 0.9, 0.2, 1.1) both;
+}
+
+.nemoris-plant.is-shield-falling .nemoris-plant__fallen-leaf:last-of-type {
+  animation: nemoris-leaf-fall 1.1s cubic-bezier(0.18, 0.72, 0.24, 1) both;
+}
+
+@keyframes nemoris-body-grow {
+  0% {
+    opacity: 0.72;
+    transform: translateY(8px) scale(0.94);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.025);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes nemoris-bloom-pulse {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 16px 20px rgba(0, 0, 0, 0.28))
+      drop-shadow(0 0 16px rgba(255, 204, 122, 0.12));
+  }
+
+  50% {
+    filter:
+      drop-shadow(0 16px 20px rgba(0, 0, 0, 0.28))
+      drop-shadow(0 0 34px rgba(255, 204, 122, 0.46))
+      drop-shadow(0 0 24px rgba(255, 101, 122, 0.3));
+  }
+}
+
+@keyframes nemoris-shield-breathe {
+  0%,
+  100% {
+    transform:
+      translate(-50%, -50%)
+      scaleX(var(--shield-flip))
+      rotate(var(--shield-rotate))
+      scale(0.99);
+  }
+
+  50% {
+    transform:
+      translate(-50%, -53%)
+      scaleX(var(--shield-flip))
+      rotate(var(--shield-rotate))
+      scale(1.035);
+  }
+}
+
+@keyframes nemoris-shield-grow {
+  0% {
+    opacity: 0;
+    transform:
+      translate(-50%, -35%)
+      scaleX(var(--shield-flip))
+      rotate(calc(var(--shield-rotate) - 12deg))
+      scale(0.12);
+  }
+
+  68% {
+    opacity: 1;
+    transform:
+      translate(-50%, -55%)
+      scaleX(var(--shield-flip))
+      rotate(calc(var(--shield-rotate) + 3deg))
+      scale(1.1);
+  }
+
+  100% {
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      scaleX(var(--shield-flip))
+      rotate(var(--shield-rotate))
+      scale(1);
+  }
+}
+
+@keyframes nemoris-bud-grow {
+  0% {
+    opacity: 0.24;
+    transform:
+      translate(-50%, -50%)
+      scaleX(var(--shield-flip))
+      rotate(var(--shield-rotate))
+      scale(0.18);
+  }
+
+  72% {
+    opacity: 1;
+    transform:
+      translate(-50%, -54%)
+      scaleX(var(--shield-flip))
+      rotate(var(--shield-rotate))
+      scale(1.04);
+  }
+
+  100% {
+    opacity: var(--growth-opacity);
+    transform:
+      translate(-50%, -50%)
+      scaleX(var(--shield-flip))
+      rotate(var(--shield-rotate))
+      scale(var(--growth-scale));
+  }
+}
+
+@keyframes nemoris-fallen-idle {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) rotate(var(--fallen-rotate));
+  }
+
+  50% {
+    transform: translate(-50%, calc(-50% + 2px)) rotate(calc(var(--fallen-rotate) + 2deg));
+  }
+}
+
+@keyframes nemoris-leaf-fall {
+  0% {
+    opacity: 0;
+    transform: translate(-75%, -190%) rotate(calc(var(--fallen-rotate) - 45deg)) scale(0.82);
+  }
+
+  58% {
+    opacity: 0.98;
+    transform: translate(-56%, -82%) rotate(calc(var(--fallen-rotate) + 16deg)) scale(1.03);
+  }
+
+  100% {
+    opacity: var(--fallen-opacity);
+    transform: translate(-50%, -50%) rotate(var(--fallen-rotate)) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nemoris-plant * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

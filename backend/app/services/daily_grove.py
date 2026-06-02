@@ -7,7 +7,7 @@ from .progress import progress_has_started
 
 
 DAILY_GROVE_KEY = "daily_grove"
-REST_LEAF_CAP = 2
+MAX_SHIELD_CAPACITY = 3
 MILESTONES = (3, 7, 14, 30, 60, 100, 365)
 
 DEFAULT_DAILY_GROVE_STATE = {
@@ -15,6 +15,7 @@ DEFAULT_DAILY_GROVE_STATE = {
     "longest_streak": 0,
     "last_completed_on": None,
     "rest_leaves": 0,
+    "fallen_leaves": 0,
     "protected_dates": [],
     "seen_milestones": []
 }
@@ -85,6 +86,17 @@ def _normalize_date_list(values):
     ]
 
 
+def shield_capacity_for_streak(streak):
+    if streak >= 100:
+        return 3
+    if streak >= 30:
+        return 2
+    if streak >= 7:
+        return 1
+
+    return 0
+
+
 def normalize_daily_grove_state(value):
     data = value if isinstance(value, dict) else {}
     current_streak = _int_at_least(data.get("current_streak"))
@@ -92,9 +104,14 @@ def normalize_daily_grove_state(value):
         current_streak,
         _int_at_least(data.get("longest_streak"))
     )
+    shield_capacity = shield_capacity_for_streak(current_streak)
     rest_leaves = min(
-        REST_LEAF_CAP,
+        shield_capacity,
         _int_at_least(data.get("rest_leaves"))
+    )
+    fallen_leaves = min(
+        MAX_SHIELD_CAPACITY,
+        _int_at_least(data.get("fallen_leaves"))
     )
 
     return {
@@ -104,6 +121,7 @@ def normalize_daily_grove_state(value):
             _date_from_iso(data.get("last_completed_on"))
         ),
         "rest_leaves": rest_leaves,
+        "fallen_leaves": fallen_leaves,
         "protected_dates": _normalize_date_list(data.get("protected_dates")),
         "seen_milestones": _normalize_known_milestones(
             data.get("seen_milestones")
@@ -220,6 +238,42 @@ def milestone_progress(streak):
     }
 
 
+def shield_growth_for_state(state):
+    streak = state["current_streak"]
+    rest_leaves = state["rest_leaves"]
+    fallen_leaves = state["fallen_leaves"]
+    cycle_day = streak % 7
+
+    if streak <= 0:
+        current = 0
+        remaining = 7
+        next_award_at = 7
+    elif cycle_day == 0:
+        current = 7
+        remaining = 0
+        next_award_at = streak
+    else:
+        current = cycle_day
+        remaining = 7 - cycle_day
+        next_award_at = streak + remaining
+
+    capacity = shield_capacity_for_streak(streak)
+    target_capacity = max(
+        capacity,
+        shield_capacity_for_streak(next_award_at)
+    )
+    growing = rest_leaves < target_capacity or fallen_leaves > 0
+
+    return {
+        "current": current,
+        "target": 7,
+        "remaining": remaining,
+        "percent": min(100, round((current / 7) * 100)),
+        "next_award_at": next_award_at,
+        "growing": growing
+    }
+
+
 def build_daily_grove_status(
     db,
     today=None,
@@ -228,7 +282,8 @@ def build_daily_grove_status(
     already_complete=False,
     blocked=False,
     milestone_reached=None,
-    protected_dates_used=None
+    protected_dates_used=None,
+    shield_event=None
 ):
     today = today or date.today()
     state = state or get_daily_grove_state(db)
@@ -249,6 +304,9 @@ def build_daily_grove_status(
         "blocked": blocked,
         "milestone_reached": milestone_reached,
         "protected_dates_used": protected_dates_used or [],
+        "shield_capacity": shield_capacity_for_streak(streak),
+        "shield_growth": shield_growth_for_state(state),
+        "shield_event": shield_event,
         "next_milestone": next_milestone_for_streak(streak),
         "milestone_progress": milestone_progress(streak),
         "grove_stage": grove_stage_for_streak(streak)
@@ -269,13 +327,17 @@ def _apply_completion_to_state(state, today):
         return state, {
             "already_complete": True,
             "milestone_reached": None,
-            "protected_dates_used": []
+            "protected_dates_used": [],
+            "shield_event": None
         }
 
     current_streak = state["current_streak"]
     rest_leaves = state["rest_leaves"]
+    fallen_leaves = state["fallen_leaves"]
     protected_dates = list(state["protected_dates"])
     protected_dates_used = []
+    shield_event = None
+    streak_broken = False
 
     if last_completed_on and today > last_completed_on:
         gap_days = (today - last_completed_on).days - 1
@@ -288,42 +350,88 @@ def _apply_completion_to_state(state, today):
                 protected_count
             )
             rest_leaves -= protected_count
+            fallen_leaves = min(
+                MAX_SHIELD_CAPACITY,
+                fallen_leaves + protected_count
+            )
             protected_dates = sorted(
                 set(protected_dates + protected_dates_used)
             )
 
             if protected_count < gap_days:
                 current_streak = 0
+                streak_broken = True
+
+            if protected_count > 0 or streak_broken:
+                shield_event = {
+                    "type": "broken" if streak_broken else "protected",
+                    "leaves_used": protected_count,
+                    "leaves_regrown": 0,
+                    "streak_broken": streak_broken
+                }
     elif last_completed_on and today < last_completed_on:
         return state, {
             "already_complete": True,
             "milestone_reached": None,
-            "protected_dates_used": []
+            "protected_dates_used": [],
+            "shield_event": None
         }
 
     next_streak = current_streak + 1
     longest_streak = max(state["longest_streak"], next_streak)
-    seen_milestones = list(state["seen_milestones"])
+    seen_milestones = [] if streak_broken else list(state["seen_milestones"])
     milestone_reached = None
 
     if next_streak in MILESTONES and next_streak not in seen_milestones:
         milestone_reached = next_streak
         seen_milestones.append(next_streak)
 
+    shield_capacity = shield_capacity_for_streak(next_streak)
+    leaves_before_regrowth = rest_leaves
+
     if next_streak > 0 and next_streak % 7 == 0:
-        rest_leaves = min(REST_LEAF_CAP, rest_leaves + 1)
+        rest_leaves = min(shield_capacity, rest_leaves + 1)
+
+    leaves_regrown = rest_leaves - leaves_before_regrowth
+
+    if leaves_regrown > 0:
+        fallen_leaves = max(0, fallen_leaves - leaves_regrown)
+        shield_event = {
+            "type": "regrown",
+            "leaves_used": shield_event["leaves_used"] if shield_event else 0,
+            "leaves_regrown": leaves_regrown,
+            "streak_broken": streak_broken
+        }
+
+    if not shield_event:
+        next_state_preview = {
+            **state,
+            "current_streak": next_streak,
+            "rest_leaves": rest_leaves,
+            "fallen_leaves": fallen_leaves
+        }
+
+        if shield_growth_for_state(next_state_preview)["growing"]:
+            shield_event = {
+                "type": "growth",
+                "leaves_used": 0,
+                "leaves_regrown": 0,
+                "streak_broken": False
+            }
 
     return {
         "current_streak": next_streak,
         "longest_streak": longest_streak,
         "last_completed_on": today.isoformat(),
         "rest_leaves": rest_leaves,
+        "fallen_leaves": fallen_leaves,
         "protected_dates": protected_dates,
         "seen_milestones": sorted(seen_milestones)
     }, {
         "already_complete": False,
         "milestone_reached": milestone_reached,
-        "protected_dates_used": protected_dates_used
+        "protected_dates_used": protected_dates_used,
+        "shield_event": shield_event
     }
 
 
@@ -367,5 +475,6 @@ def complete_daily_grove(db, today=None):
         state=saved_state,
         completed=True,
         milestone_reached=result["milestone_reached"],
-        protected_dates_used=result["protected_dates_used"]
+        protected_dates_used=result["protected_dates_used"],
+        shield_event=result["shield_event"]
     )

@@ -27,7 +27,11 @@
   flex-direction: column;
   justify-content: space-between;
   min-height: 560px;
-  padding: 8px 0;
+  padding: 0;
+}
+
+.menu-brand-block {
+  flex: 0 0 auto;
 }
 
 .menu-brand-row {
@@ -87,6 +91,10 @@
   margin-top: 28px;
   max-width: 380px;
   padding: 16px;
+}
+
+.menu-grove-anchor {
+  flex: 0 0 auto;
 }
 
 .menu-grove-header,
@@ -172,30 +180,6 @@
   gap: 8px;
   margin-top: 14px;
   text-transform: uppercase;
-}
-
-.menu-workflow {
-  border-left: 1px solid #2a2a2a;
-  display: grid;
-  gap: 12px;
-  padding-left: 18px;
-}
-
-.menu-workflow-item {
-  align-items: center;
-  color: #d6d6d6;
-  display: flex;
-  font-size: 15px;
-  font-weight: 700;
-  gap: 12px;
-  min-height: 32px;
-}
-
-.menu-workflow-index {
-  color: #666666;
-  font-size: 12px;
-  font-weight: 800;
-  min-width: 22px;
 }
 
 .menu-actions {
@@ -527,20 +511,6 @@
   .menu-grove-panel {
     max-width: 620px;
   }
-
-  .menu-workflow {
-    border-left: 0;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-top: 26px;
-    padding-left: 0;
-  }
-
-  .menu-workflow-item {
-    background: #181818;
-    border: 1px solid #2a2a2a;
-    border-radius: 8px;
-    padding: 10px 12px;
-  }
 }
 
 @media (max-width: 700px) {
@@ -569,10 +539,6 @@
   .menu-subtitle {
     font-size: 15px;
     margin-top: 18px;
-  }
-
-  .menu-workflow {
-    grid-template-columns: 1fr;
   }
 
   .menu-notice {
@@ -610,5 +576,13 @@
 
   .menu-destination {
     min-height: 148px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-grove-track-fill {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

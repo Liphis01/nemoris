@@ -1,4 +1,37 @@
+import GroveArtwork from "../../menu/GroveArtwork";
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
+
+function shouldShowGroveEvent(completion) {
+  return Boolean(completion?.milestone_reached || completion?.shield_event);
+}
+
+function groveEventLabel(completion) {
+  if (completion?.milestone_reached && completion?.shield_event?.type === "regrown") {
+    return `Floraison des ${completion.milestone_reached} jours : une feuille de garde repousse`;
+  }
+
+  if (completion?.milestone_reached) {
+    return `La plante grandit : floraison des ${completion.milestone_reached} jours`;
+  }
+
+  if (completion?.shield_event?.type === "broken") {
+    return "Les feuilles de garde sont tombées : une nouvelle série commence";
+  }
+
+  if (completion?.shield_event?.type === "protected") {
+    return "Une feuille de garde a protégé la série";
+  }
+
+  if (completion?.shield_event?.type === "regrown") {
+    return "Une feuille de garde repousse";
+  }
+
+  if (completion?.shield_event?.type === "growth") {
+    return "Une feuille de garde pousse doucement";
+  }
+
+  return "La plante grandit";
+}
 
 export default function ReviewSession({
   setMode,
@@ -241,7 +274,7 @@ export default function ReviewSession({
                   textTransform: "uppercase"
                 }}
               >
-                Bosquet Nemoris
+                Plante Nemoris
               </div>
 
               <div
@@ -256,10 +289,10 @@ export default function ReviewSession({
                   !dailyGroveCompletionError &&
                   !dailyGroveCompletion &&
                   "Validation du jour..."}
-                {dailyGroveCompletionLoading && "Arrosage du bosquet..."}
+                {dailyGroveCompletionLoading && "Arrosage de la plante..."}
                 {!dailyGroveCompletionLoading &&
                   dailyGroveCompletionError &&
-                  "Synchronisation du bosquet impossible"}
+                  "Synchronisation de la plante impossible"}
                 {!dailyGroveCompletionLoading &&
                   !dailyGroveCompletionError &&
                   dailyGroveCompletion?.today_complete &&
@@ -273,21 +306,29 @@ export default function ReviewSession({
 
               {!dailyGroveCompletionLoading &&
                 !dailyGroveCompletionError &&
-                dailyGroveCompletion?.milestone_reached && (
-                <div
-                  style={{
-                    background: "rgba(255, 204, 122, 0.1)",
-                    border: "1px solid rgba(255, 204, 122, 0.2)",
-                    borderRadius: "8px",
-                    color: "#ffcc7a",
-                    fontSize: "13px",
-                    fontWeight: "800",
-                    marginTop: "10px",
-                    padding: "8px 10px"
-                  }}
-                >
-                  Floraison des {dailyGroveCompletion.milestone_reached} jours
-                </div>
+                shouldShowGroveEvent(dailyGroveCompletion) && (
+                <>
+                  <GroveArtwork
+                    status={dailyGroveCompletion}
+                    celebrating
+                    className="grove-art-review-growth"
+                  />
+
+                  <div
+                    style={{
+                      background: "rgba(255, 204, 122, 0.1)",
+                      border: "1px solid rgba(255, 204, 122, 0.2)",
+                      borderRadius: "8px",
+                      color: "#ffcc7a",
+                      fontSize: "13px",
+                      fontWeight: "800",
+                      marginTop: "10px",
+                      padding: "8px 10px"
+                    }}
+                  >
+                    {groveEventLabel(dailyGroveCompletion)}
+                  </div>
+                </>
               )}
 
               {dailyGroveCompletionError && (

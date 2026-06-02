@@ -9,7 +9,8 @@ from app.models import AppSetting, Progress, Question
 from app.services.daily_grove import (
     DAILY_GROVE_KEY,
     complete_daily_grove,
-    get_daily_grove_state
+    get_daily_grove_state,
+    shield_capacity_for_streak
 )
 
 
@@ -29,6 +30,7 @@ class DailyGroveTests(unittest.TestCase):
             "longest_streak": 0,
             "last_completed_on": None,
             "rest_leaves": 0,
+            "fallen_leaves": 0,
             "protected_dates": [],
             "seen_milestones": []
         }
@@ -74,6 +76,9 @@ class DailyGroveTests(unittest.TestCase):
         self.assertEqual(result["current_streak"], 1)
         self.assertEqual(result["longest_streak"], 1)
         self.assertEqual(result["last_completed_on"], today.isoformat())
+        self.assertEqual(result["shield_capacity"], 0)
+        self.assertEqual(result["fallen_leaves"], 0)
+        self.assertEqual(result["shield_event"]["type"], "growth")
 
     def test_same_day_completion_is_idempotent(self):
         today = date(2026, 6, 2)
@@ -86,6 +91,7 @@ class DailyGroveTests(unittest.TestCase):
         self.assertTrue(second["already_complete"])
         self.assertEqual(second["current_streak"], 1)
         self.assertEqual(second["last_completed_on"], today.isoformat())
+        self.assertIsNone(second["shield_event"])
 
     def test_due_started_reviews_block_completion(self):
         today = date(2026, 6, 2)
@@ -113,42 +119,60 @@ class DailyGroveTests(unittest.TestCase):
         self.assertEqual(result["current_streak"], 5)
         self.assertEqual(result["longest_streak"], 5)
 
-    def test_rest_leaf_protects_one_missed_day(self):
+    def test_shield_capacity_grows_by_streak_stage(self):
+        self.assertEqual(shield_capacity_for_streak(0), 0)
+        self.assertEqual(shield_capacity_for_streak(6), 0)
+        self.assertEqual(shield_capacity_for_streak(7), 1)
+        self.assertEqual(shield_capacity_for_streak(29), 1)
+        self.assertEqual(shield_capacity_for_streak(30), 2)
+        self.assertEqual(shield_capacity_for_streak(99), 2)
+        self.assertEqual(shield_capacity_for_streak(100), 3)
+        self.assertEqual(shield_capacity_for_streak(365), 3)
+
+    def test_shield_leaf_protects_one_missed_day_and_falls(self):
         today = date(2026, 6, 2)
         missed = today - timedelta(days=1)
         self.set_grove_state(
-            current_streak=5,
-            longest_streak=5,
+            current_streak=35,
+            longest_streak=35,
             last_completed_on=(today - timedelta(days=2)).isoformat(),
             rest_leaves=1
         )
 
         result = complete_daily_grove(self.db, today=today)
 
-        self.assertEqual(result["current_streak"], 6)
+        self.assertEqual(result["current_streak"], 36)
         self.assertEqual(result["rest_leaves"], 0)
+        self.assertEqual(result["fallen_leaves"], 1)
         self.assertEqual(result["protected_dates_used"], [missed.isoformat()])
         self.assertEqual(result["protected_dates"], [missed.isoformat()])
+        self.assertEqual(result["shield_event"]["type"], "protected")
+        self.assertEqual(result["shield_event"]["leaves_used"], 1)
 
-    def test_uncovered_gap_resets_streak_after_consuming_available_leaf(self):
+    def test_uncovered_gap_resets_streak_after_all_shields_fall(self):
         today = date(2026, 6, 2)
         protected = today - timedelta(days=2)
         self.set_grove_state(
-            current_streak=5,
-            longest_streak=5,
+            current_streak=35,
+            longest_streak=35,
             last_completed_on=(today - timedelta(days=3)).isoformat(),
-            rest_leaves=1
+            rest_leaves=1,
+            seen_milestones=[3, 7, 14, 30]
         )
 
         result = complete_daily_grove(self.db, today=today)
 
         self.assertEqual(result["current_streak"], 1)
-        self.assertEqual(result["longest_streak"], 5)
+        self.assertEqual(result["longest_streak"], 35)
         self.assertEqual(result["rest_leaves"], 0)
+        self.assertEqual(result["fallen_leaves"], 1)
+        self.assertEqual(result["seen_milestones"], [])
         self.assertEqual(
             result["protected_dates_used"],
             [protected.isoformat()]
         )
+        self.assertEqual(result["shield_event"]["type"], "broken")
+        self.assertTrue(result["shield_event"]["streak_broken"])
 
     def test_milestone_is_reported_once(self):
         today = date(2026, 6, 2)
@@ -165,36 +189,89 @@ class DailyGroveTests(unittest.TestCase):
         self.assertEqual(first["seen_milestones"], [3])
         self.assertIsNone(second["milestone_reached"])
 
-    def test_seven_day_milestones_award_rest_leaf_up_to_cap(self):
+    def test_weekly_completion_regrows_shield_up_to_stage_capacity(self):
         today = date(2026, 6, 2)
         self.set_grove_state(
             current_streak=6,
             longest_streak=6,
             last_completed_on=(today - timedelta(days=1)).isoformat(),
-            rest_leaves=2
+            fallen_leaves=1
         )
 
-        capped = complete_daily_grove(self.db, today=today)
-        self.assertEqual(capped["current_streak"], 7)
-        self.assertEqual(capped["rest_leaves"], 2)
-        self.assertEqual(capped["milestone_reached"], 7)
+        first_shield = complete_daily_grove(self.db, today=today)
+        self.assertEqual(first_shield["current_streak"], 7)
+        self.assertEqual(first_shield["shield_capacity"], 1)
+        self.assertEqual(first_shield["rest_leaves"], 1)
+        self.assertEqual(first_shield["fallen_leaves"], 0)
+        self.assertEqual(first_shield["milestone_reached"], 7)
+        self.assertEqual(first_shield["shield_event"]["type"], "regrown")
 
         next_day = today + timedelta(days=1)
         self.db.query(AppSetting).delete()
         self.db.commit()
         self.set_grove_state(
-            current_streak=13,
-            longest_streak=13,
+            current_streak=34,
+            longest_streak=34,
             last_completed_on=today.isoformat(),
             rest_leaves=1,
-            seen_milestones=[7]
+            fallen_leaves=1,
+            seen_milestones=[3, 7, 14, 30]
         )
 
         awarded = complete_daily_grove(self.db, today=next_day)
 
-        self.assertEqual(awarded["current_streak"], 14)
+        self.assertEqual(awarded["current_streak"], 35)
+        self.assertEqual(awarded["shield_capacity"], 2)
         self.assertEqual(awarded["rest_leaves"], 2)
-        self.assertEqual(awarded["milestone_reached"], 14)
+        self.assertEqual(awarded["fallen_leaves"], 0)
+        self.assertIsNone(awarded["milestone_reached"])
+        self.assertEqual(awarded["shield_event"]["type"], "regrown")
+
+    def test_weekly_regrowth_respects_current_stage_capacity(self):
+        today = date(2026, 6, 2)
+        self.set_grove_state(
+            current_streak=13,
+            longest_streak=13,
+            last_completed_on=(today - timedelta(days=1)).isoformat(),
+            rest_leaves=1,
+            fallen_leaves=1,
+            seen_milestones=[3, 7]
+        )
+
+        result = complete_daily_grove(self.db, today=today)
+
+        self.assertEqual(result["current_streak"], 14)
+        self.assertEqual(result["shield_capacity"], 1)
+        self.assertEqual(result["rest_leaves"], 1)
+        self.assertEqual(result["fallen_leaves"], 1)
+        self.assertEqual(result["milestone_reached"], 14)
+
+    def test_broken_streak_can_reach_milestone_again(self):
+        today = date(2026, 6, 2)
+        self.set_grove_state(
+            current_streak=35,
+            longest_streak=35,
+            last_completed_on=(today - timedelta(days=2)).isoformat(),
+            rest_leaves=0,
+            seen_milestones=[3, 7, 14, 30]
+        )
+
+        broken = complete_daily_grove(self.db, today=today)
+        day_two = complete_daily_grove(
+            self.db,
+            today=today + timedelta(days=1)
+        )
+        day_three = complete_daily_grove(
+            self.db,
+            today=today + timedelta(days=2)
+        )
+
+        self.assertEqual(broken["current_streak"], 1)
+        self.assertEqual(broken["seen_milestones"], [])
+        self.assertEqual(day_two["current_streak"], 2)
+        self.assertEqual(day_three["current_streak"], 3)
+        self.assertEqual(day_three["milestone_reached"], 3)
+        self.assertEqual(day_three["seen_milestones"], [3])
 
 
 if __name__ == "__main__":
