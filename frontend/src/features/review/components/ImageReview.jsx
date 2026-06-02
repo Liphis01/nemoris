@@ -168,14 +168,17 @@ export default function ImageReview({
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
           borderRadius: "18px",
-          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "calc(100vh - 180px)",
           ...fadeInStyle
         }}
       >
       <div
         style={{
           borderBottom: "1px solid #262626",
-          padding: "22px 24px 18px"
+          padding: "22px 24px 18px",
+          flexShrink: 0
         }}
       >
         <div
@@ -229,7 +232,7 @@ export default function ImageReview({
         </div>
       </div>
 
-      <div style={{ padding: "18px" }}>
+      <div style={{ padding: "18px", overflow: "auto", flex: 1, minHeight: 0 }}>
         <div
           style={{
             display: "grid",
@@ -382,9 +385,11 @@ export default function ImageReview({
             );
           })}
         </div>
+      </div>
 
+      <div style={{ padding: "18px", borderTop: "1px solid #262626", flexShrink: 0 }}>
         {!resultMode && (
-          <div style={{ marginTop: "20px" }}>
+          <div style={{ marginBottom: "18px" }}>
             <input
               autoFocus
               ref={inputRef}
@@ -417,8 +422,7 @@ export default function ImageReview({
             display: "flex",
             flexWrap: "wrap",
             gap: "10px",
-            justifyContent: "space-between",
-            marginTop: "18px"
+            justifyContent: "space-between"
           }}
         >
           <div

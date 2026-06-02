@@ -51,13 +51,14 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
-- heatmap des questions les plus durs pour les maps
+- heatmap des zones les plus durs pour les maps
 - bloquer les questions nouvelles tant qu'on décide pas de les mettre dans la review (genre brouillon)
 - un mode pour renforcer les points faibles
 - importer/exporter db
 - ajouter une recherche dans calendar
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
+- type liste ? (= juste énumérer)
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
