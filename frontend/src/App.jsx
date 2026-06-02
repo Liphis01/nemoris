@@ -4,6 +4,7 @@ import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
 import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import Stats from "./features/stats/components/Stats";
+import Settings from "./features/settings/components/Settings";
 import { getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
@@ -141,6 +142,10 @@ function App() {
           setMode={setMode}
           onOpenQuestion={openQuestionIdInManage}
         />
+      )}
+
+      {mode === "settings" && (
+        <Settings setMode={setMode} />
       )}
     </div>
   );

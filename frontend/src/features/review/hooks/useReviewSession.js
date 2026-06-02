@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getReview,
-  getReviewSettings,
-  rebalanceReviewCalendar,
   reviseAnswer,
-  sendAnswer,
-  updateReviewSettings
+  sendAnswer
 } from "../../../api/review";
 
 
@@ -42,11 +39,6 @@ export function useReviewSession(active) {
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [catchupTarget, setCatchupTarget] = useState(50);
-  const [catchupTargetDraft, setCatchupTargetDraft] = useState("50");
-  const [catchupTargetSaving, setCatchupTargetSaving] = useState(false);
-  const [reviewReady, setReviewReady] = useState(false);
-  const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [bonusReviewLoading, setBonusReviewLoading] = useState(false);
@@ -261,7 +253,6 @@ export function useReviewSession(active) {
     if (!active) {
       clearTextAnswerTimeout();
       setSelectedTextQuality(null);
-      setReviewReady(false);
       setReviewLoading(false);
       setReviewError("");
       setBonusReviewLoading(false);
@@ -274,8 +265,7 @@ export function useReviewSession(active) {
 
     let cancelled = false;
 
-    async function prepareReview() {
-      setReviewReady(false);
+    async function loadReview() {
       setReviewLoading(true);
       setReviewError("");
       setBonusReviewLoading(false);
@@ -289,17 +279,12 @@ export function useReviewSession(active) {
       textAnswerRequestsRef.current = {};
 
       try {
-        const settings = await getReviewSettings();
-        const target = settings.catchup_daily_target || 50;
+        const data = await getReview();
 
         if (cancelled) return;
 
-        setCatchupTarget(target);
-        setCatchupTargetDraft(String(target));
-
-        if (!cancelled) {
-          setReviewReady(true);
-        }
+        setQuestions(data);
+        setReviewLoading(false);
       } catch (error) {
         console.error(error);
 
@@ -310,7 +295,7 @@ export function useReviewSession(active) {
       }
     }
 
-    prepareReview();
+    loadReview();
 
     return () => {
       cancelled = true;
@@ -322,69 +307,6 @@ export function useReviewSession(active) {
       clearTextAnswerTimeout();
     };
   }, [clearTextAnswerTimeout]);
-
-  useEffect(() => {
-    if (!active || !reviewReady) return;
-
-    // The backend owns due selection and runtime grouping.
-    setReviewLoading(true);
-    getReview()
-      .then((data) => {
-        setQuestions(data);
-        setCurrentIndex(0);
-        setShowAnswer(false);
-        setSelectedTextQuality(null);
-        setAnsweredTextByIndex({});
-        setReturnToLastQuestionArmed(false);
-        setBonusReviewStarted(false);
-        textAnswerRequestsRef.current = {};
-        setReviewError("");
-        setReviewLoading(false);
-      })
-      .catch((error) => {
-        console.error(error);
-        setReviewError(error.message || "Impossible de charger la session.");
-        setReviewLoading(false);
-      });
-  }, [
-    active,
-    reviewReady,
-    reviewRefreshKey
-  ]);
-
-  async function saveCatchupTarget() {
-    const parsed = Number(catchupTargetDraft);
-    const nextTarget = Number.isFinite(parsed)
-      ? Math.max(1, Math.floor(parsed))
-      : catchupTarget;
-
-    if (nextTarget === catchupTarget) {
-      setCatchupTargetDraft(String(catchupTarget));
-      return;
-    }
-
-    setCatchupTargetSaving(true);
-
-    try {
-      const settings = await updateReviewSettings({
-        catchup_daily_target: nextTarget
-      });
-      const savedTarget = settings.catchup_daily_target || nextTarget;
-
-      setCatchupTarget(savedTarget);
-      setCatchupTargetDraft(String(savedTarget));
-      await rebalanceReviewCalendar();
-      setReviewError("");
-      setBonusReviewStarted(false);
-      setReviewRefreshKey(prev => prev + 1);
-    } catch (error) {
-      console.error(error);
-      setCatchupTargetDraft(String(catchupTarget));
-      setReviewError(error.message || "Impossible de préparer la session.");
-    } finally {
-      setCatchupTargetSaving(false);
-    }
-  }
 
   const startBonusReview = useCallback(async () => {
     if (bonusReviewLoading || !canStartBonusReview) return;
@@ -482,13 +404,9 @@ export function useReviewSession(active) {
     returnToLastQuestion,
     startBonusReview,
     selectedTextQuality,
-    catchupTargetDraft,
-    catchupTargetSaving,
     questions,
     reviewError,
     reviewLoading,
-    saveCatchupTarget,
-    setCatchupTargetDraft,
     setShowAnswer,
     showAnswer
   };

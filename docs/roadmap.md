@@ -38,6 +38,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
+- timeline sépare les zones en deux (il suffit de décaler d'une demi zone)
 
 ## features
 - mettre un truc addictif de day streaks

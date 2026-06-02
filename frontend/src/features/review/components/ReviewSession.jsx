@@ -1,15 +1,5 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 
-const inputStyle = {
-  background: "#151515",
-  border: "1px solid #2a2a2a",
-  color: "#eee",
-  borderRadius: "10px",
-  padding: "10px 12px",
-  fontSize: "14px",
-  outline: "none"
-};
-
 export default function ReviewSession({
   setMode,
   questions,
@@ -27,10 +17,6 @@ export default function ReviewSession({
   canStartBonusReview,
   startBonusReview,
   bonusReviewLoading,
-  catchupTargetDraft,
-  setCatchupTargetDraft,
-  saveCatchupTarget,
-  catchupTargetSaving,
   reviewLoading,
   reviewError
 }) {
@@ -113,59 +99,6 @@ export default function ReviewSession({
           >
             ← Retour
           </button>
-
-        </div>
-
-        {/* SESSION SETTINGS */}
-        <div
-          style={{
-            background: "#181818",
-            border: "1px solid #262626",
-            borderRadius: "16px",
-            padding: "18px",
-            marginBottom: "26px",
-            display: "flex",
-            gap: "16px",
-            flexWrap: "wrap",
-            alignItems: "flex-end"
-          }}
-        >
-
-          {/* TARGET */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              width: "130px"
-            }}
-          >
-            <div
-              style={{
-                color: "#777",
-                fontSize: "12px",
-                fontWeight: "600"
-              }}
-            >
-              OBJECTIF/JOUR
-            </div>
-
-            <input
-              type="number"
-              min="1"
-              max="10000"
-              value={catchupTargetDraft}
-              disabled={catchupTargetSaving}
-              onChange={(e) => setCatchupTargetDraft(e.target.value)}
-              onBlur={saveCatchupTarget}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-              }}
-              style={inputStyle}
-            />
-          </div>
 
         </div>
 
