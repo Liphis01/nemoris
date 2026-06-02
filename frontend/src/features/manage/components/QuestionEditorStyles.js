@@ -72,6 +72,22 @@ export const disabledSaveButtonStyle = {
   transition: "background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, opacity 0.16s ease"
 };
 
+export const cancelButtonStyle = {
+  ...buttonStyle,
+  background: "#25252b",
+  border: "1px solid #444",
+  color: "#d7d7d7"
+};
+
+export const disabledCancelButtonStyle = {
+  ...cancelButtonStyle,
+  background: "#202020",
+  border: "1px solid #333",
+  color: "#777",
+  cursor: "not-allowed",
+  opacity: 0.72
+};
+
 export const dangerButtonStyle = {
   ...buttonStyle,
   background: "#641c1c",

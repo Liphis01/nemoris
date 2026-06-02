@@ -23,11 +23,11 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
-- enlever l'id des questions dans les cards de manage (pour laisser la place au bouton fav)
 - bloquer le bouton annuler dans manage si on n'a pas fait de changement (peut être changer le rouge parce que trop agressif pour un simple annuler)
 - dans recap, cliquer sur une zone ne doit pas zoomer dessus
 
 ## bugs
+- je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas

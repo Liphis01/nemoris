@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import {
   buttonStyle,
+  cancelButtonStyle,
   dangerButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   inputStyle,
   labelStyle,
@@ -478,6 +480,11 @@ export function QuestionEditorActions({
       : primaryButtonStyle;
   const showPendingDot = hasUnsavedChanges && !isSubmitDisabled;
 
+  const isCancelDisabled = !hasUnsavedChanges && isSubmitDisabled;
+  const cancelStyle = isCancelDisabled
+    ? disabledCancelButtonStyle
+    : cancelButtonStyle;
+
   return (
     <div
       style={{
@@ -502,7 +509,13 @@ export function QuestionEditorActions({
       </button>
 
       {onCancel && (
-        <button type="button" onClick={onCancel} style={dangerButtonStyle}>
+        <button
+          type="button"
+          disabled={isCancelDisabled}
+          onClick={onCancel}
+          title={isCancelDisabled ? "Aucune modification à annuler" : undefined}
+          style={cancelStyle}
+        >
           Annuler
         </button>
       )}
