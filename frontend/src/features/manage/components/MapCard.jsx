@@ -179,19 +179,6 @@ export default function MapCard({
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
           />
-
-          <div
-            style={{
-              color: "#555",
-              fontSize: "10px",
-              flexShrink: 0,
-              minWidth: "28px",
-              textAlign: "right"
-            }}
-          >
-            #{q.id}
-          </div>
-
         </div>
 
         {/* GROUP */}
