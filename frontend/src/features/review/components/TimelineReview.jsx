@@ -2241,7 +2241,12 @@ function TimelineCanvas({
   );
 }
 
-export default function TimelineReview({ group, reviewItems, onComplete }) {
+export default function TimelineReview({
+  group,
+  reviewItems,
+  onComplete,
+  submitAnswer = sendTimelineAnswer
+}) {
   const sortedItems = useMemo(
     () => sortReviewItems(reviewItems || []),
     [reviewItems]
@@ -2422,7 +2427,7 @@ export default function TimelineReview({ group, reviewItems, onComplete }) {
     setError("");
 
     try {
-      const response = await sendTimelineAnswer(payload);
+      const response = await submitAnswer(payload);
       const resultOrder = new Map(orderedItems.map((item, index) => [
         item.question_id,
         index

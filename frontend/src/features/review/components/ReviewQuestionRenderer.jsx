@@ -14,6 +14,10 @@ export default function ReviewQuestionRenderer({
     handleMapComplete,
     handleImageComplete,
     handleTimelineComplete,
+    submitMapAnswer,
+    submitImageAnswer,
+    submitTimelineAnswer,
+    trainingMode = false,
 }) {
     if (!q) return null;
 
@@ -29,6 +33,8 @@ export default function ReviewQuestionRenderer({
                 group={q}
                 reviewZones={q.items}
                 onComplete={handleMapComplete}
+                submitAnswer={submitMapAnswer}
+                showQualityControls={!trainingMode}
             />
         );
     }
@@ -40,6 +46,8 @@ export default function ReviewQuestionRenderer({
                 group={q}
                 reviewItems={q.items || []}
                 onComplete={handleImageComplete}
+                submitAnswer={submitImageAnswer}
+                showQualityControls={!trainingMode}
             />
         );
     }
@@ -51,6 +59,7 @@ export default function ReviewQuestionRenderer({
                 group={q}
                 reviewItems={q.items || []}
                 onComplete={handleTimelineComplete}
+                submitAnswer={submitTimelineAnswer}
             />
         );
     }
@@ -65,6 +74,7 @@ export default function ReviewQuestionRenderer({
             handleAnswer={handleTextAnswer}
             currentQuality={currentTextQuality}
             selectedQuality={selectedTextQuality}
+            showQualityButtons={!trainingMode}
         />
     );
 }

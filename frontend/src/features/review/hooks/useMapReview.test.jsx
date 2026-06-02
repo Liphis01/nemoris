@@ -1,10 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useMapReview } from "./useMapReview";
+import { sendMapAnswer } from "../../../api/review";
 
 vi.mock("../../../api/review", () => ({
   sendMapAnswer: vi.fn()
 }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 function labels(rows) {
   return rows.map(row => row.item.label);
@@ -151,5 +156,35 @@ describe("useMapReview recap sorting", () => {
       "Beta",
       "Gamma"
     ]);
+  });
+
+  it("uses an injected submit callback instead of the scheduled answer API", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, onComplete, submitAnswer)
+    );
+
+    act(() => {
+      result.current.handleZoneSelect("a");
+    });
+    act(() => {
+      result.current.finishMap();
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith({
+      1: 2,
+      2: 0
+    });
+    expect(sendMapAnswer).not.toHaveBeenCalled();
+    expect(onComplete).toHaveBeenCalledWith([2]);
   });
 });

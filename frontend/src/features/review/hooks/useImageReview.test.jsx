@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   defaultImageSuccessQuality,
   matchesImageAnswer,
@@ -11,6 +11,10 @@ import { sendImageAnswer } from "../../../api/review";
 vi.mock("../../../api/review", () => ({
   sendImageAnswer: vi.fn()
 }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 function imageItem(questionId, answer, aliases = []) {
   return {
@@ -210,5 +214,34 @@ describe("useImageReview", () => {
     expect(result.current.resultMode).toBe(true);
     expect(result.current.lockedMissedQuestionIds).toEqual([]);
     expect(Object.values(result.current.qualityByQuestionId)).toEqual([2, 2]);
+  });
+
+  it("uses an injected submit callback instead of the scheduled answer API", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, onComplete, submitAnswer)
+    );
+    const found = answerActive(result);
+    const missed = items.find(item => item.question_id !== found.question_id);
+
+    act(() => {
+      result.current.finishReview();
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith({
+      [found.question_id]: 2,
+      [missed.question_id]: 0
+    });
+    expect(sendImageAnswer).not.toHaveBeenCalled();
+    expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
   });
 });

@@ -13,6 +13,7 @@ from .routers import (
     questions,
     review,
     stats,
+    training,
     uploads
 )
 from .services.startup import run_startup_rebalance_with_session
@@ -46,6 +47,7 @@ def create_app():
     app.include_router(collections.router)
     app.include_router(review.router)
     app.include_router(stats.router)
+    app.include_router(training.router)
     app.include_router(maps.router)
     app.include_router(image_groups.router)
     app.include_router(uploads.router)

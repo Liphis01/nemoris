@@ -88,7 +88,11 @@ function completeQualities(items, qualityByQuestionId, foundQuestionIds) {
 }
 
 
-export function useImageReview(reviewItems, onComplete) {
+export function useImageReview(
+  reviewItems,
+  onComplete,
+  submitAnswer = sendImageAnswer
+) {
   const reviewKey = useMemo(
     () => idsFor(reviewItems).join("|"),
     [reviewItems]
@@ -229,7 +233,7 @@ export function useImageReview(reviewItems, onComplete) {
       foundQuestionIds
     );
 
-    await sendImageAnswer(qualities);
+    await submitAnswer(qualities);
 
     const failedQuestionIds = Object.entries(qualities)
       .filter(([, quality]) => quality === 0)

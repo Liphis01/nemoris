@@ -143,7 +143,11 @@ function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
 }
 
 
-export function useMapReview(reviewZones, onComplete) {
+export function useMapReview(
+  reviewZones,
+  onComplete,
+  submitAnswer = sendMapAnswer
+) {
   // This hook turns a runtime map group into an interactive recall session:
   // matching typed answers, tracking found zones, then sending per-zone grades.
   const [input, setInput] = useState("");
@@ -307,7 +311,7 @@ export function useMapReview(reviewZones, onComplete) {
   async function sendResult() {
     // Send one quality per atomic map question, then tell the parent review
     // session which zones should be re-queued.
-    await sendMapAnswer(qualityByQuestionId);
+    await submitAnswer(qualityByQuestionId);
 
     const failedQuestionIds = Object.entries(qualityByQuestionId)
       .filter(([, quality]) => quality === 0)

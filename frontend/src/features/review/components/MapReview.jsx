@@ -84,7 +84,13 @@ const recapHeaderColumns = [
   { key: "quality", label: "Qualité" }
 ];
 
-export default function MapReview({ group, reviewZones, onComplete }) {
+export default function MapReview({
+  group,
+  reviewZones,
+  onComplete,
+  submitAnswer,
+  showQualityControls = true
+}) {
   const {
     dueCodes,
     feedbackTone,
@@ -116,11 +122,17 @@ export default function MapReview({ group, reviewZones, onComplete }) {
     showRecap,
     showRecapSections,
     toggleRecapSort
-  } = useMapReview(reviewZones, onComplete);
+  } = useMapReview(reviewZones, onComplete, submitAnswer);
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
+  const recapGridColumns = showQualityControls
+    ? recapTableGridColumns
+    : "minmax(0, 1fr)";
+  const visibleRecapHeaderColumns = showQualityControls
+    ? recapHeaderColumns
+    : recapHeaderColumns.filter(column => column.key === "answer");
   const foundBulkQuality = useMemo(() => {
     if (foundQuestionIds.length === 0) return null;
 
@@ -469,7 +481,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                 onClick={sendResult}
                 style={successButton}
               >
-                Valider
+                {showQualityControls ? "Valider" : "Continuer"}
               </button>
             </div>
 
@@ -514,8 +526,14 @@ export default function MapReview({ group, reviewZones, onComplete }) {
               </div>
 
               <div style={recapTableStyle}>
-                <div className="map-recap-table-header" style={recapTableHeaderStyle}>
-                  {recapHeaderColumns.map(({ key, label }) => {
+                <div
+                  className="map-recap-table-header"
+                  style={{
+                    ...recapTableHeaderStyle,
+                    gridTemplateColumns: recapGridColumns
+                  }}
+                >
+                  {visibleRecapHeaderColumns.map(({ key, label }) => {
                     const isActive = recapSort.key === key;
                     const nextDirection = isActive && recapSort.direction === "asc"
                       ? "desc"
@@ -558,7 +576,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                   className="app-scrollbar"
                   style={recapTableBodyStyle}
                 >
-                  {foundQuestionIds.length > 0 && (
+                  {showQualityControls && foundQuestionIds.length > 0 && (
                     <div className="map-recap-bulk-row" style={recapBulkQualityStyle}>
                       <div style={recapBulkQualityTextStyle}>
                         <div style={recapBulkQualityTitleStyle}>
@@ -651,6 +669,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                           }}
                           style={{
                             ...recapRowStyle,
+                            gridTemplateColumns: recapGridColumns,
                             ...(isFocused ? recapRowFocusedStyle : {}),
                             borderLeft: isFound
                               ? "3px solid rgba(126, 226, 168, 0.75)"
@@ -662,6 +681,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                             {item.label}
                           </div>
 
+                          {showQualityControls && (
                           <div style={recapMetricCellStyle}>
                             {historyStats.reviews > 0 ? (
                               <>
@@ -676,12 +696,16 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                               <span style={zoneHistoryMetaStyle}>Nouveau</span>
                             )}
                           </div>
+                          )}
 
+                          {showQualityControls && (
                           <div style={recapIntervalCellStyle}>
                             {projectedInterval}
                             <span style={recapIntervalUnitStyle}> j</span>
                           </div>
+                          )}
 
+                          {showQualityControls && (
                           <div style={recapQualityCellStyle}>
                             {qualityOptions.map(({ value: qVal, icon, title }) => {
 
@@ -717,6 +741,7 @@ export default function MapReview({ group, reviewZones, onComplete }) {
                               );
                             })}
                           </div>
+                          )}
                         </div>
                       </Fragment>
                     );

@@ -437,6 +437,12 @@
   --accent-bg: rgba(182, 156, 255, 0.1);
 }
 
+.menu-destination-amber {
+  --accent: #ffcc7a;
+  --accent-border: rgba(255, 204, 122, 0.32);
+  --accent-bg: rgba(255, 204, 122, 0.1);
+}
+
 .menu-destination-green {
   --accent: #7ee2a8;
   --accent-border: rgba(126, 226, 168, 0.32);

@@ -70,7 +70,13 @@ function tileBorder({ isActive, isFound, isLockedMissed }) {
   return "1px solid #292929";
 }
 
-export default function ImageReview({ group, reviewItems, onComplete }) {
+export default function ImageReview({
+  group,
+  reviewItems,
+  onComplete,
+  submitAnswer,
+  showQualityControls = true
+}) {
   const inputRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const {
@@ -89,7 +95,7 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
     sendResult,
     setInput,
     setQuality
-  } = useImageReview(reviewItems, onComplete);
+  } = useImageReview(reviewItems, onComplete, submitAnswer);
 
   function focusAnswerInput() {
     window.requestAnimationFrame(() => {
@@ -332,7 +338,7 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
                   {revealed ? answerLabel(row.item) : ""}
                 </span>
 
-                {resultMode && (
+                {resultMode && showQualityControls && (
                   <span
                     style={{
                       alignItems: "center",
@@ -435,7 +441,7 @@ export default function ImageReview({ group, reviewItems, onComplete }) {
                 color: "#7ee2a8"
               }}
             >
-              Valider
+              {showQualityControls ? "Valider" : "Continuer"}
             </button>
           ) : (
             <button type="button" onClick={finishReview} style={buttonStyle}>

@@ -1,5 +1,11 @@
 # TODO
 
+
+## vérifier
+- j'ai l'impression que l'ordre des items de group en training met d'abord les questions ratées puis aléatoire
+
+- Add a time record for each tag and group that you can try to beat in training
+- Make sure all return to menu buttons are exactly the same (I prefer the "← Retour" one)
 - setup github pour tout automatiser
 - uniformiser le style partout
 
@@ -17,8 +23,6 @@ Desktop hardening: automatic backups, restore flow, portable data location choos
 AI-assisted authoring: generate draft questions, aliases, distractors, timeline entries, or map labels from selected text/URLs, but keep review data user-verifiable.
 Challenge modes: timed runs, streaks, personal records, “hard mode”, but keep them separate from normal FSRS progress so they do not distort memory scheduling.
 Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
-
-## vérifier
 
 
 ## quick fixes
@@ -60,6 +64,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - stocker uniquement l'id des groupes dans les questions pour alléger
 
 ## ideas
+- daily habit mechanics: streaks, reminders, rewards, but keep them separate from core review so they do not distort scheduling.
 - permettre de convertir un svg en groupe d'images (pour les shapes de pays)
 - mettre une option de favoris et de difficile sur les questions (pour les voir plus souvent et aider le scheduler)
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible

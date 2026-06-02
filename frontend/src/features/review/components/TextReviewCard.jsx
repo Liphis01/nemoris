@@ -77,7 +77,8 @@ export default function TextReviewCard({
     setShowAnswer,
     handleAnswer,
     currentQuality,
-    selectedQuality
+    selectedQuality,
+    showQualityButtons = true
 }) {
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
@@ -234,32 +235,50 @@ export default function TextReviewCard({
                             {q.answer}
                         </div>
 
-                        {/* BUTTONS */}
-                        <div
-                            style={{
-                                display: "flex",
-                                gap: "14px",
-                                flexWrap: "wrap"
-                            }}
-                        >
+                        {showQualityButtons ? (
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: "14px",
+                                    flexWrap: "wrap"
+                                }}
+                            >
 
-                            {answerOptions.map(option => (
-                                <button
-                                    key={option.value}
-                                    aria-pressed={displayQuality === option.value}
-                                    disabled={isAnswering}
-                                    onClick={() => handleAnswer(option.value)}
-                                    style={getAnswerButtonStyle(
-                                        option,
-                                        displayQuality,
-                                        isAnswering
-                                    )}
-                                >
-                                    {option.label}
-                                </button>
-                            ))}
+                                {answerOptions.map(option => (
+                                    <button
+                                        key={option.value}
+                                        aria-pressed={displayQuality === option.value}
+                                        disabled={isAnswering}
+                                        onClick={() => handleAnswer(option.value)}
+                                        style={getAnswerButtonStyle(
+                                            option,
+                                            displayQuality,
+                                            isAnswering
+                                        )}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
 
-                        </div>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => handleAnswer()}
+                                style={{
+                                    background: "#233228",
+                                    border: "1px solid #385544",
+                                    borderRadius: "12px",
+                                    color: "#d7f5df",
+                                    cursor: "pointer",
+                                    fontSize: "15px",
+                                    fontWeight: "700",
+                                    padding: "14px 18px"
+                                }}
+                            >
+                                Continuer
+                            </button>
+                        )}
 
                     </div>
                 )}

@@ -111,11 +111,15 @@ def _serialize_review_items(questions):
     )
 
 
+def serialize_review_items(questions):
+    return _serialize_review_items(questions)
+
+
 def get_review_items(db, include_new=False):
     today = date.today()
     due_questions = _due_questions(db, today)
 
     if due_questions or not include_new:
-        return _serialize_review_items(due_questions)
+        return serialize_review_items(due_questions)
 
-    return _serialize_review_items(_new_questions(db))
+    return serialize_review_items(_new_questions(db))

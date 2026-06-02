@@ -11,6 +11,15 @@ const destinations = [
     icon: "✎"
   },
   {
+    mode: "training",
+    eyebrow: "Libre",
+    title: "Entrainement",
+    description: "Pratiquer un groupe ou un tag sans modifier le planning.",
+    detail: "Sans score",
+    accent: "amber",
+    icon: "◎"
+  },
+  {
     mode: "calendar",
     eyebrow: "Planning",
     title: "Calendrier",
