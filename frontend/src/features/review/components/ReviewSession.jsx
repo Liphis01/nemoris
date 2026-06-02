@@ -1,4 +1,5 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
+import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
 export default function ReviewSession({
   setMode,
@@ -85,7 +86,7 @@ export default function ReviewSession({
 
           </div>
 
-          <button
+          <ReturnToMenuButton
             onClick={() => setMode("menu")}
             style={{
               background: "#1a1a1a",
@@ -96,9 +97,7 @@ export default function ReviewSession({
               cursor: "pointer",
               fontSize: "14px"
             }}
-          >
-            ← Retour
-          </button>
+          />
 
         </div>
 

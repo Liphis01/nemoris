@@ -4,8 +4,6 @@
 ## vérifier
 - j'ai l'impression que l'ordre des items de group en training met d'abord les questions ratées puis aléatoire
 
-- Add a time record for each tag and group that you can try to beat in training
-- Make sure all return to menu buttons are exactly the same (I prefer the "← Retour" one)
 - setup github pour tout automatiser
 - uniformiser le style partout
 
@@ -59,6 +57,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
 - type liste ? (= juste énumérer)
+- indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

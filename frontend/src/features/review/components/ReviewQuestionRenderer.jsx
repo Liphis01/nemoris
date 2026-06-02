@@ -18,6 +18,9 @@ export default function ReviewQuestionRenderer({
     submitImageAnswer,
     submitTimelineAnswer,
     trainingMode = false,
+    trainingElapsedMs = null,
+    trainingBestTimeMs = null,
+    trainingBestPercent = null,
 }) {
     if (!q) return null;
 
@@ -48,6 +51,9 @@ export default function ReviewQuestionRenderer({
                 onComplete={handleImageComplete}
                 submitAnswer={submitImageAnswer}
                 showQualityControls={!trainingMode}
+                trainingElapsedMs={trainingElapsedMs}
+                trainingBestTimeMs={trainingBestTimeMs}
+                trainingBestPercent={trainingBestPercent}
             />
         );
     }

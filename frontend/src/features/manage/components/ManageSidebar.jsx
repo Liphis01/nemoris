@@ -1,4 +1,5 @@
 import AutocompleteInput from "../../../shared/AutocompleteInput";
+import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
 const sortOptions = [
   { value: "id", label: "Ajout" },
@@ -329,7 +330,7 @@ export default function ManageSidebar({
             </div>
           </div>
 
-          <button
+          <ReturnToMenuButton
             onClick={() => runManageTransition(() => {
               setSelectedItem(null);
               setMode("menu");
@@ -343,9 +344,7 @@ export default function ManageSidebar({
               cursor: "pointer",
               fontSize: "13px"
             }}
-          >
-            ←
-          </button>
+          />
 
         </div>
 

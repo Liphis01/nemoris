@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
+import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { useTrainingSession } from "../hooks/useTrainingSession";
 import {
   formatDuration,
@@ -143,9 +144,7 @@ function ScopeSelector({
           </h1>
         </div>
 
-        <button type="button" onClick={() => setMode("menu")} style={buttonStyle}>
-          Retour menu
-        </button>
+        <ReturnToMenuButton onClick={() => setMode("menu")} style={buttonStyle} />
       </div>
 
       {scopesLoading && (
@@ -375,26 +374,6 @@ export default function TrainingSession({ setMode }) {
                 <div style={{ color: "#777", fontSize: "14px" }}>
                   {session.allQuestionIds.length} items dans ce scope
                 </div>
-                {session.recordEligible && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "8px",
-                      marginTop: "12px"
-                    }}
-                  >
-                    <span style={sessionMetricStyle}>
-                      Temps {formatDuration(session.completedRunElapsedMs)}
-                    </span>
-                    <span style={sessionMetricStyle}>
-                      Score à battre {formatRecordPercent(displayedRecord)}
-                    </span>
-                    <span style={sessionMetricStyle}>
-                      Temps parfait {formatDuration(displayedRecord?.best_time_ms)}
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -405,13 +384,7 @@ export default function TrainingSession({ setMode }) {
                 >
                   Changer
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("menu")}
-                  style={buttonStyle}
-                >
-                  Retour menu
-                </button>
+                <ReturnToMenuButton onClick={() => setMode("menu")} style={buttonStyle} />
               </div>
             </div>
 
@@ -608,6 +581,9 @@ export default function TrainingSession({ setMode }) {
                   submitImageAnswer={session.submitImageTrainingAnswer}
                   submitTimelineAnswer={session.submitTimelineTrainingAnswer}
                   trainingMode
+                  trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
+                  trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
+                  trainingBestPercent={session.recordEligible ? formatRecordPercent(displayedRecord) : null}
                 />
               </>
             )}

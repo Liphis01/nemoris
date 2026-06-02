@@ -75,7 +75,10 @@ export default function ImageReview({
   reviewItems,
   onComplete,
   submitAnswer,
-  showQualityControls = true
+  showQualityControls = true,
+  trainingElapsedMs = null,
+  trainingBestTimeMs = null,
+  trainingBestPercent = null
 }) {
   const inputRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
@@ -194,8 +197,24 @@ export default function ImageReview({
             <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
               {resultMode ? "IMAGE RESULT" : "IMAGE"}
             </div>
-            <div style={{ color: "#f3f3f3", fontSize: "28px", fontWeight: 800, marginTop: "12px" }}>
-              {group.name || "Images"}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "12px" }}>
+              <div style={{ color: "#f3f3f3", fontSize: "28px", fontWeight: 800 }}>
+                {group.name || "Images"}
+              </div>
+              {trainingElapsedMs !== null && !resultMode && (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "6px 10px", textAlign: "center" }}>
+                    <div style={{ color: "#999", fontSize: "9px", fontWeight: 800, textTransform: "uppercase" }}>Temps</div>
+                    <div style={{ color: "#e8e8e8", fontSize: "14px", fontWeight: 800 }}>{Math.floor(trainingElapsedMs / 1000)}s</div>
+                  </div>
+                  {trainingBestTimeMs && (
+                    <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "6px 10px", textAlign: "center" }}>
+                      <div style={{ color: "#999", fontSize: "9px", fontWeight: 800, textTransform: "uppercase" }}>Meilleur</div>
+                      <div style={{ color: "#e8e8e8", fontSize: "14px", fontWeight: 800 }}>{Math.floor(trainingBestTimeMs / 1000)}s</div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

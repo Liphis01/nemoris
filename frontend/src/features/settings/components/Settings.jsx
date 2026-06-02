@@ -5,6 +5,7 @@ import {
   updateReviewSettings
 } from "../../../api/review";
 import "./Settings.css";
+import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
 function normalizeTarget(value, fallback) {
   const parsed = Number(value);
@@ -97,13 +98,10 @@ export default function Settings({ setMode }) {
             <p>Rythme de révision et rééquilibrage du calendrier.</p>
           </div>
 
-          <button
-            type="button"
+          <ReturnToMenuButton
             onClick={() => setMode("menu")}
             className="settings-back"
-          >
-            ← Retour
-          </button>
+          />
         </header>
 
         <main className="settings-grid">

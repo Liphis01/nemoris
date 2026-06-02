@@ -5,6 +5,7 @@ import {
 } from "../../../shared/questionTypes";
 import { resolveMediaUrl } from "../../../shared/media";
 import CalendarGroupRecap from "./CalendarGroupRecap";
+import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
 const monthFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "long",
@@ -1161,7 +1162,7 @@ export default function ReviewCalendar({
             </h1>
           </div>
 
-          <button
+          <ReturnToMenuButton
             onClick={() => setMode("menu")}
             style={{
               background: "#1a1a1a",
@@ -1172,9 +1173,7 @@ export default function ReviewCalendar({
               cursor: "pointer",
               fontSize: "14px"
             }}
-          >
-            ← Retour
-          </button>
+          />
         </div>
 
         <div

@@ -5,6 +5,7 @@ import {
   getQuestionTypeChipStyle,
   questionTypeChipStyles
 } from "../../../shared/questionTypes";
+import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
 const typeOrder = ["text", "map", "timeline", "image"];
 
@@ -770,8 +771,7 @@ export default function Stats({
             </div>
           </div>
 
-          <button
-            type="button"
+          <ReturnToMenuButton
             onClick={() => setMode("menu")}
             style={{
               background: "#1a1a1a",
@@ -782,9 +782,7 @@ export default function Stats({
               fontSize: "14px",
               padding: "10px 14px"
             }}
-          >
-            ← Retour
-          </button>
+          />
         </div>
 
         {error && (
