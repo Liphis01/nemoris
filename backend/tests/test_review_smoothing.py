@@ -230,6 +230,28 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(counts[today + timedelta(days=1)], 57)
         self.assertNotIn(today + timedelta(days=2), counts)
 
+    def test_rebalance_initial_daily_loads_consume_today_capacity(self):
+        today = date(2026, 1, 10)
+        entries = [
+            rebalance_entry(index, today - timedelta(days=3))
+            for index in range(4)
+        ]
+
+        assigned = rebalance_review_calendar(
+            entries,
+            2,
+            today=today,
+            initial_daily_loads={today: 2}
+        )
+        counts = {}
+
+        for scheduling_result in assigned:
+            day = scheduling_result["next_review"]
+            counts[day] = counts.get(day, 0) + 1
+
+        self.assertEqual(counts[today], 1)
+        self.assertEqual(counts[today + timedelta(days=1)], 3)
+
     def test_rebalance_leaves_future_days_inside_soft_target(self):
         today = date(2026, 1, 10)
         future_day = today + timedelta(days=3)
@@ -857,6 +879,79 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.interval, 2)
         self.assertEqual(progress.ideal_next_review, today + timedelta(days=2))
         self.assertEqual(progress.ideal_interval, 2)
+
+    def test_rebalance_route_counts_reviews_already_completed_today(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
+
+        for question_id in range(1, 4):
+            self.add_question(question_id)
+            progress = self.add_progress(
+                question_id,
+                today + timedelta(days=10),
+                reps=1,
+                ideal_interval=10,
+                ideal_next_review=today + timedelta(days=10)
+            )
+            progress.history = [
+                {
+                    "reviewed_on": today.isoformat(),
+                    "quality": 2
+                }
+            ]
+
+        for question_id in range(101, 106):
+            self.add_question(question_id)
+            self.add_progress(
+                question_id,
+                today + timedelta(days=6),
+                reps=1,
+                ideal_interval=0,
+                ideal_next_review=today - timedelta(days=1)
+            )
+
+        self.db.commit()
+
+        response = rebalance_review(db=self.db)
+        scheduled_today = (
+            self.db.query(Progress)
+            .filter(Progress.next_review == today)
+            .count()
+        )
+
+        self.assertEqual(response["daily_target"], 4)
+        self.assertEqual(scheduled_today, 2)
+        self.assertEqual(scheduled_today + 3, 5)
+
+    def test_rebalance_route_prioritizes_earlier_ideal_dates(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+
+        for question_id, ideal_next_review in [
+            (1, today + timedelta(days=1)),
+            (2, today - timedelta(days=2)),
+            (3, today)
+        ]:
+            self.add_question(question_id)
+            self.add_progress(
+                question_id,
+                today + timedelta(days=6),
+                reps=1,
+                ideal_interval=max(0, (ideal_next_review - today).days),
+                ideal_next_review=ideal_next_review
+            )
+
+        self.db.commit()
+
+        rebalance_review(db=self.db)
+        scheduled = {
+            progress.question_id: progress.next_review
+            for progress in self.db.query(Progress).all()
+        }
+
+        self.assertEqual(scheduled[2], today)
+        self.assertEqual(scheduled[3], today)
+        self.assertEqual(scheduled[1], today + timedelta(days=1))
 
     def test_rebalance_route_mixes_question_types_per_day(self):
         today = date.today()

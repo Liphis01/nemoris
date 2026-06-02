@@ -48,6 +48,20 @@ def progress_is_new(progress: Progress | None):
     return not progress_has_started(progress)
 
 
+def count_reviews_on_day(progresses, day):
+    count = 0
+
+    for progress in progresses:
+        for entry in progress.history or []:
+            if not isinstance(entry, dict):
+                continue
+
+            if parse_history_date(entry.get("reviewed_on")) == day:
+                count += 1
+
+    return count
+
+
 def record_answer_history(progress: Progress, quality: int, scheduling: dict):
     # SQLAlchemy may not detect in-place mutation on JSON columns reliably, so
     # build a fresh list before assigning it back.
@@ -326,6 +340,7 @@ def apply_scheduling(db, progress: Progress, quality: int, today=None):
 
 
 def rebalance_progress_calendar(db, today=None):
+    today = today or date.today()
     settings = get_review_settings(db)
     daily_target = settings["catchup_daily_target"]
     progress_rows = [
@@ -356,7 +371,10 @@ def rebalance_progress_calendar(db, today=None):
     rebalanced = rebalance_review_calendar(
         entries,
         daily_target,
-        today=today
+        today=today,
+        initial_daily_loads={
+            today: count_reviews_on_day(progresses, today)
+        }
     )
     updated_count = 0
     moved_count = 0

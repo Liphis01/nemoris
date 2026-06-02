@@ -387,7 +387,12 @@ def soft_rebalance_daily_limit(daily_target):
     )
 
 
-def rebalance_review_calendar(entries, daily_target, today=None):
+def rebalance_review_calendar(
+    entries,
+    daily_target,
+    today=None,
+    initial_daily_loads=None
+):
     """
     Spread existing scheduled review dates from today onward.
 
@@ -395,12 +400,22 @@ def rebalance_review_calendar(entries, daily_target, today=None):
     Each entry should include question_id, next_review, ideal_next_review,
     last_review, interval, ideal_interval, and difficulty. The returned list
     keeps the input order and replaces only next_review/interval scheduling
-    fields; ideal_* is copied through unchanged.
+    fields; ideal_* is copied through unchanged. initial_daily_loads can seed
+    capacity already consumed by reviews completed earlier in the day.
     """
     today = today or date.today()
     daily_limit = soft_rebalance_daily_limit(daily_target)
     assigned_loads = {}
     assigned = [None] * len(entries)
+
+    for day, count in (initial_daily_loads or {}).items():
+        try:
+            normalized_count = int(count)
+        except (TypeError, ValueError):
+            continue
+
+        if normalized_count > 0:
+            assigned_loads[day] = normalized_count
 
     def normalized_entry(index, entry):
         original_next_review = entry.get("next_review") or today

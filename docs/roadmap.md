@@ -31,6 +31,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
 - enlever l'id des questions dans les cards de manage (pour laisser la place au bouton fav)
+- bloquer le bouton annuler dans manage si on n'a pas fait de changement (peut être changer le rouge parce que trop agressif pour un simple annuler)
 
 ## bugs
 - recentrer les svg
