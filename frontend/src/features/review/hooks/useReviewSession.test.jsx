@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { completeDailyGrove } from "../../../api/dailyGrove";
 import { useReviewSession } from "./useReviewSession";
 import {
   getReview,
@@ -12,10 +11,6 @@ vi.mock("../../../api/review", () => ({
   getReview: vi.fn(),
   reviseAnswer: vi.fn(),
   sendAnswer: vi.fn()
-}));
-
-vi.mock("../../../api/dailyGrove", () => ({
-  completeDailyGrove: vi.fn()
 }));
 
 describe("useReviewSession", () => {
@@ -30,12 +25,6 @@ describe("useReviewSession", () => {
     ]);
     sendAnswer.mockResolvedValue({});
     reviseAnswer.mockResolvedValue({});
-    completeDailyGrove.mockResolvedValue({
-      current_streak: 1,
-      due_count: 0,
-      today_complete: true,
-      completed: true
-    });
   });
 
   afterEach(() => {
@@ -102,49 +91,6 @@ describe("useReviewSession", () => {
 
     expect(result.current.currentIndex).toBe(1);
     expect(result.current.canStartBonusReview).toBe(true);
-  });
-
-  it("completes the daily grove after scheduled answers settle", async () => {
-    let resolveAnswer;
-    const answerPromise = new Promise(resolve => {
-      resolveAnswer = resolve;
-    });
-    sendAnswer.mockReturnValue(answerPromise);
-
-    const { result } = renderHook(() => useReviewSession(true));
-
-    await waitFor(() => {
-      expect(result.current.questions).toHaveLength(1);
-    });
-
-    vi.useFakeTimers();
-
-    act(() => {
-      result.current.handleTextAnswer(2);
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(240);
-    });
-
-    expect(result.current.canStartBonusReview).toBe(true);
-    expect(completeDailyGrove).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
-
-    await act(async () => {
-      resolveAnswer({});
-      await answerPromise;
-    });
-
-    await waitFor(() => {
-      expect(completeDailyGrove).toHaveBeenCalledTimes(1);
-    });
-
-    expect(result.current.dailyGroveCompletion).toMatchObject({
-      current_streak: 1,
-      today_complete: true
-    });
   });
 
   it("offers bonus review when scheduled review is empty", async () => {

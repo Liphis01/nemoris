@@ -1,6 +1,5 @@
 # TODO
 
-- une vraie image de grove qui évolue
 - setup github pour tout automatiser
 - uniformiser le style partout
 
@@ -38,13 +37,11 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - timeline sépare les zones en deux (il suffit de décaler d'une demi zone)
 
 ## features
-- mettre un truc addictif de day streaks
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
 - mode entrainement
-- mode difficile (similaire à jetpunk : on ne voit pas les réponses possibles, pas le droit à l'erreur...)
 - dans manage, afficher toutes les stats d'une question
 - ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
-- mettre les différents modes de jetpunk pour les maps et alterner selon les jours
+- mettre les différents modes de jetpunk pour les maps et alterner selon les jours (commencer par le mode facile, puis alterner les modes et identifier les mode compliqués pour chaque question pour les faire réapparaître plus souvent)
 - mettre en évidence les zones trop petites (c.f. jetpunk)
 - scraper le site de émilien
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues

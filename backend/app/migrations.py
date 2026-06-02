@@ -290,6 +290,16 @@ def _migration_progress_ideal_schedule_columns(connection):
         )
 
 
+def _migration_remove_daily_grove_setting(connection):
+    if not _table_exists(connection, "app_settings"):
+        return
+
+    connection.exec_driver_sql(
+        "DELETE FROM app_settings WHERE key = ?",
+        ("daily_grove",)
+    )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -318,6 +328,11 @@ MIGRATIONS = [
         name="progress_ideal_schedule_columns",
         run=_migration_progress_ideal_schedule_columns,
         requires_backup=True
+    ),
+    Migration(
+        version="0006",
+        name="remove_daily_grove_setting",
+        run=_migration_remove_daily_grove_setting
     )
 ]
 

@@ -135,7 +135,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005"]
+                ["0001", "0002", "0003", "0004", "0005", "0006"]
             )
             self.assertIsNotNone(result["backup"])
 
@@ -170,7 +170,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 5)
+            self.assertEqual(migration_count, 6)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -214,7 +214,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005"]
+                ["0001", "0002", "0003", "0004", "0005", "0006"]
             )
             self.assertIsNone(result["backup"])
             self.assertIn("questions", table_names(database_file))
@@ -312,7 +312,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0005"]
+                ["0005", "0006"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -332,6 +332,67 @@ class MigrationTests(unittest.TestCase):
                     (3, 9, "2026-01-09")
                 ]
             )
+
+    def test_daily_grove_setting_migration_removes_removed_habit_state(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in ("0001", "0002", "0003", "0004", "0005"):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE app_settings (
+                        key VARCHAR PRIMARY KEY,
+                        value JSON NOT NULL
+                    )
+                    """
+                )
+                connection.executemany(
+                    "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+                    [
+                        ("daily_grove", json.dumps({"current_streak": 12})),
+                        ("review", json.dumps({"catchup_daily_target": 50}))
+                    ]
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0006"]
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    "SELECT key FROM app_settings ORDER BY key"
+                ).fetchall()
+
+            self.assertEqual(rows, [("review",)])
 
 
 if __name__ == "__main__":

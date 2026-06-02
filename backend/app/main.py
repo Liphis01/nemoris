@@ -7,7 +7,6 @@ from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
 from .routers import (
     collections,
-    daily_grove,
     groups,
     image_groups,
     maps,
@@ -45,7 +44,6 @@ def create_app():
     app.include_router(questions.router)
     app.include_router(groups.router)
     app.include_router(collections.router)
-    app.include_router(daily_grove.router)
     app.include_router(review.router)
     app.include_router(stats.router)
     app.include_router(maps.router)

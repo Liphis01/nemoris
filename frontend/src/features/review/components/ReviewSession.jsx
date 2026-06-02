@@ -1,37 +1,4 @@
-import GroveArtwork from "../../menu/GroveArtwork";
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
-
-function shouldShowGroveEvent(completion) {
-  return Boolean(completion?.milestone_reached || completion?.shield_event);
-}
-
-function groveEventLabel(completion) {
-  if (completion?.milestone_reached && completion?.shield_event?.type === "regrown") {
-    return `Floraison des ${completion.milestone_reached} jours : une feuille de garde repousse`;
-  }
-
-  if (completion?.milestone_reached) {
-    return `La plante grandit : floraison des ${completion.milestone_reached} jours`;
-  }
-
-  if (completion?.shield_event?.type === "broken") {
-    return "Les feuilles de garde sont tombées : une nouvelle série commence";
-  }
-
-  if (completion?.shield_event?.type === "protected") {
-    return "Une feuille de garde a protégé la série";
-  }
-
-  if (completion?.shield_event?.type === "regrown") {
-    return "Une feuille de garde repousse";
-  }
-
-  if (completion?.shield_event?.type === "growth") {
-    return "Une feuille de garde pousse doucement";
-  }
-
-  return "La plante grandit";
-}
 
 export default function ReviewSession({
   setMode,
@@ -50,9 +17,6 @@ export default function ReviewSession({
   canStartBonusReview,
   startBonusReview,
   bonusReviewLoading,
-  dailyGroveCompletion,
-  dailyGroveCompletionError,
-  dailyGroveCompletionLoading,
   reviewLoading,
   reviewError
 }) {
@@ -250,99 +214,6 @@ export default function ReviewSession({
               }}
             >
               Toutes les questions ont été révisées.
-            </div>
-
-            <div
-              style={{
-                background: "#171d19",
-                border: "1px solid rgba(126, 226, 168, 0.2)",
-                borderRadius: "12px",
-                color: "#cfe9d8",
-                margin: "24px auto 0",
-                maxWidth: "420px",
-                padding: "14px 16px",
-                textAlign: "left"
-              }}
-            >
-              <div
-                style={{
-                  color: "#7ee2a8",
-                  fontSize: "11px",
-                  fontWeight: "800",
-                  letterSpacing: "0.06em",
-                  marginBottom: "6px",
-                  textTransform: "uppercase"
-                }}
-              >
-                Plante Nemoris
-              </div>
-
-              <div
-                style={{
-                  color: "#e8f6ed",
-                  fontSize: "16px",
-                  fontWeight: "750",
-                  lineHeight: 1.35
-                }}
-              >
-                {!dailyGroveCompletionLoading &&
-                  !dailyGroveCompletionError &&
-                  !dailyGroveCompletion &&
-                  "Validation du jour..."}
-                {dailyGroveCompletionLoading && "Arrosage de la plante..."}
-                {!dailyGroveCompletionLoading &&
-                  dailyGroveCompletionError &&
-                  "Synchronisation de la plante impossible"}
-                {!dailyGroveCompletionLoading &&
-                  !dailyGroveCompletionError &&
-                  dailyGroveCompletion?.today_complete &&
-                  `Série de ${dailyGroveCompletion.current_streak} jour${dailyGroveCompletion.current_streak > 1 ? "s" : ""}`}
-                {!dailyGroveCompletionLoading &&
-                  !dailyGroveCompletionError &&
-                  dailyGroveCompletion &&
-                  !dailyGroveCompletion.today_complete &&
-                  `${dailyGroveCompletion.due_count || 0} révision${dailyGroveCompletion.due_count > 1 ? "s" : ""} encore due${dailyGroveCompletion.due_count > 1 ? "s" : ""}`}
-              </div>
-
-              {!dailyGroveCompletionLoading &&
-                !dailyGroveCompletionError &&
-                shouldShowGroveEvent(dailyGroveCompletion) && (
-                <>
-                  <GroveArtwork
-                    status={dailyGroveCompletion}
-                    celebrating
-                    className="grove-art-review-growth"
-                  />
-
-                  <div
-                    style={{
-                      background: "rgba(255, 204, 122, 0.1)",
-                      border: "1px solid rgba(255, 204, 122, 0.2)",
-                      borderRadius: "8px",
-                      color: "#ffcc7a",
-                      fontSize: "13px",
-                      fontWeight: "800",
-                      marginTop: "10px",
-                      padding: "8px 10px"
-                    }}
-                  >
-                    {groveEventLabel(dailyGroveCompletion)}
-                  </div>
-                </>
-              )}
-
-              {dailyGroveCompletionError && (
-                <div
-                  style={{
-                    color: "#ffb3b3",
-                    fontSize: "13px",
-                    lineHeight: 1.4,
-                    marginTop: "8px"
-                  }}
-                >
-                  {dailyGroveCompletionError}
-                </div>
-              )}
             </div>
 
             {canReturnToLastQuestion && (
