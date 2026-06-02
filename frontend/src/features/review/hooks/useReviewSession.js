@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { completeDailyGrove } from "../../../api/dailyGrove";
 import {
   getReview,
   reviseAnswer,
@@ -46,9 +47,13 @@ export function useReviewSession(active) {
   const [selectedTextQuality, setSelectedTextQuality] = useState(null);
   const [answeredTextByIndex, setAnsweredTextByIndex] = useState({});
   const [returnToLastQuestionArmed, setReturnToLastQuestionArmed] = useState(false);
+  const [dailyGroveCompletion, setDailyGroveCompletion] = useState(null);
+  const [dailyGroveCompletionLoading, setDailyGroveCompletionLoading] = useState(false);
+  const [dailyGroveCompletionError, setDailyGroveCompletionError] = useState("");
   const textAnswerTimeoutRef = useRef(null);
   const textAnswerPendingRef = useRef(false);
   const textAnswerRequestsRef = useRef({});
+  const dailyGroveCompletionRequestedRef = useRef(false);
 
   const current = questions[currentIndex];
   const lastQuestionIndex = currentIndex - 1;
@@ -259,7 +264,11 @@ export function useReviewSession(active) {
       setBonusReviewStarted(false);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setDailyGroveCompletion(null);
+      setDailyGroveCompletionLoading(false);
+      setDailyGroveCompletionError("");
       textAnswerRequestsRef.current = {};
+      dailyGroveCompletionRequestedRef.current = false;
       return;
     }
 
@@ -276,7 +285,11 @@ export function useReviewSession(active) {
       setSelectedTextQuality(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setDailyGroveCompletion(null);
+      setDailyGroveCompletionLoading(false);
+      setDailyGroveCompletionError("");
       textAnswerRequestsRef.current = {};
+      dailyGroveCompletionRequestedRef.current = false;
 
       try {
         const data = await getReview();
@@ -325,7 +338,11 @@ export function useReviewSession(active) {
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
       setBonusReviewStarted(data.length === 0 || data.every(reviewItemIsNew));
+      setDailyGroveCompletion(null);
+      setDailyGroveCompletionLoading(false);
+      setDailyGroveCompletionError("");
       textAnswerRequestsRef.current = {};
+      dailyGroveCompletionRequestedRef.current = true;
     } catch (error) {
       console.error(error);
       setReviewError(error.message || "Impossible de charger les questions bonus.");
@@ -335,6 +352,59 @@ export function useReviewSession(active) {
   }, [
     bonusReviewLoading,
     canStartBonusReview,
+    waitForTextAnswerRequests
+  ]);
+
+  useEffect(() => {
+    if (!active) return;
+    if (reviewLoading || reviewError) return;
+    if (bonusReviewStarted) return;
+    if (questions.length === 0 || currentIndex < questions.length) return;
+    if (dailyGroveCompletionRequestedRef.current) return;
+
+    let cancelled = false;
+    dailyGroveCompletionRequestedRef.current = true;
+    setDailyGroveCompletionLoading(true);
+    setDailyGroveCompletionError("");
+
+    async function completeGroveAfterAnswers() {
+      try {
+        await waitForTextAnswerRequests();
+
+        if (cancelled) return;
+
+        const completion = await completeDailyGrove();
+
+        if (!cancelled) {
+          setDailyGroveCompletion(completion);
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (!cancelled) {
+          setDailyGroveCompletionError(
+            error.message || "Bosquet impossible à synchroniser."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setDailyGroveCompletionLoading(false);
+        }
+      }
+    }
+
+    completeGroveAfterAnswers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active,
+    bonusReviewStarted,
+    currentIndex,
+    questions.length,
+    reviewError,
+    reviewLoading,
     waitForTextAnswerRequests
   ]);
 
@@ -395,6 +465,9 @@ export function useReviewSession(active) {
     bonusReviewLoading,
     canStartBonusReview,
     currentIndex,
+    dailyGroveCompletion,
+    dailyGroveCompletionError,
+    dailyGroveCompletionLoading,
     handleImageComplete,
     handleMapComplete,
     handleTimelineComplete,

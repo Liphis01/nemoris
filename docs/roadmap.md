@@ -1,5 +1,7 @@
 # TODO
 
+- setup github pour tout automatiser
+
 ## Product Suggestions
 Add training mode separate from scheduled review: browse a collection/tag/map/timeline without affecting progress unless explicitly chosen.
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
@@ -16,22 +18,15 @@ Challenge modes: timed runs, streaks, personal records, “hard mode”, but kee
 Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
 
 ## vérifier
-- j'ai fait un groupe d'images avec quelques erreurs. à la fin de la review j'ai été requestionné sur les images ratées. je ne les ai pas faites et je suis retourné au menu princ. en revenant, plus de questions.
+
 
 ## quick fixes
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe
-- l'auto scroll se fait sur tous les éléments du groupe quand je modifie seulement un seul
-- dans la review je veux une grille avec les images en petit (comme jetpunk)
-- les aliases des images doivent etre comme dans maps
-- mettre un bouton dans recap pour changer la qualité de toutes les zones trouvées
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
-- pouvoir trier les réponses dans le recap de map
-- ajouter une recherche dans calender
-- ajouter un timer pour les questions
-- trouver un meilleur agencement pour les aliases dans map preview
 - enlever l'id des questions dans les cards de manage (pour laisser la place au bouton fav)
 - bloquer le bouton annuler dans manage si on n'a pas fait de changement (peut être changer le rouge parce que trop agressif pour un simple annuler)
+- dans recap, cliquer sur une zone ne doit pas zoomer dessus
 
 ## bugs
 - recentrer les svg
@@ -57,6 +52,9 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - bloquer les questions nouvelles tant qu'on décide pas de les mettre dans la review (genre brouillon)
 - un mode pour renforcer les points faibles
 - importer/exporter db
+- ajouter une recherche dans calendar
+- ajouter un timer pour les questions
+- trouver un meilleur agencement pour les aliases dans map preview
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...

@@ -17,6 +17,9 @@ export default function ReviewSession({
   canStartBonusReview,
   startBonusReview,
   bonusReviewLoading,
+  dailyGroveCompletion,
+  dailyGroveCompletionError,
+  dailyGroveCompletionLoading,
   reviewLoading,
   reviewError
 }) {
@@ -214,6 +217,91 @@ export default function ReviewSession({
               }}
             >
               Toutes les questions ont été révisées.
+            </div>
+
+            <div
+              style={{
+                background: "#171d19",
+                border: "1px solid rgba(126, 226, 168, 0.2)",
+                borderRadius: "12px",
+                color: "#cfe9d8",
+                margin: "24px auto 0",
+                maxWidth: "420px",
+                padding: "14px 16px",
+                textAlign: "left"
+              }}
+            >
+              <div
+                style={{
+                  color: "#7ee2a8",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  letterSpacing: "0.06em",
+                  marginBottom: "6px",
+                  textTransform: "uppercase"
+                }}
+              >
+                Bosquet Nemoris
+              </div>
+
+              <div
+                style={{
+                  color: "#e8f6ed",
+                  fontSize: "16px",
+                  fontWeight: "750",
+                  lineHeight: 1.35
+                }}
+              >
+                {!dailyGroveCompletionLoading &&
+                  !dailyGroveCompletionError &&
+                  !dailyGroveCompletion &&
+                  "Validation du jour..."}
+                {dailyGroveCompletionLoading && "Arrosage du bosquet..."}
+                {!dailyGroveCompletionLoading &&
+                  dailyGroveCompletionError &&
+                  "Synchronisation du bosquet impossible"}
+                {!dailyGroveCompletionLoading &&
+                  !dailyGroveCompletionError &&
+                  dailyGroveCompletion?.today_complete &&
+                  `Série de ${dailyGroveCompletion.current_streak} jour${dailyGroveCompletion.current_streak > 1 ? "s" : ""}`}
+                {!dailyGroveCompletionLoading &&
+                  !dailyGroveCompletionError &&
+                  dailyGroveCompletion &&
+                  !dailyGroveCompletion.today_complete &&
+                  `${dailyGroveCompletion.due_count || 0} révision${dailyGroveCompletion.due_count > 1 ? "s" : ""} encore due${dailyGroveCompletion.due_count > 1 ? "s" : ""}`}
+              </div>
+
+              {!dailyGroveCompletionLoading &&
+                !dailyGroveCompletionError &&
+                dailyGroveCompletion?.milestone_reached && (
+                <div
+                  style={{
+                    background: "rgba(255, 204, 122, 0.1)",
+                    border: "1px solid rgba(255, 204, 122, 0.2)",
+                    borderRadius: "8px",
+                    color: "#ffcc7a",
+                    fontSize: "13px",
+                    fontWeight: "800",
+                    marginTop: "10px",
+                    padding: "8px 10px"
+                  }}
+                >
+                  Floraison des {dailyGroveCompletion.milestone_reached} jours
+                </div>
+              )}
+
+              {dailyGroveCompletionError && (
+                <div
+                  style={{
+                    color: "#ffb3b3",
+                    fontSize: "13px",
+                    lineHeight: 1.4,
+                    marginTop: "8px"
+                  }}
+                >
+                  {dailyGroveCompletionError}
+                </div>
+              )}
             </div>
 
             {canReturnToLastQuestion && (

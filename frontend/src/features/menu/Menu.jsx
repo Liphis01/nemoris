@@ -1,3 +1,8 @@
+import { useEffect, useState } from "react";
+import {
+  completeDailyGrove,
+  getDailyGroveStatus
+} from "../../api/dailyGrove";
 import "./Menu.css";
 
 const destinations = [
@@ -52,6 +57,79 @@ const reviewTypes = [
   { label: "Timeline", accent: "blue" }
 ];
 
+function groveStatusLabel(status, loading, checking, error) {
+  if (loading) return "Chargement...";
+  if (error) return "Synchronisation indisponible";
+  if (checking) return "Arrosage du bosquet...";
+  if (!status) return "Bosquet indisponible";
+  if (status.today_complete) return "Bosquet arrosé";
+  if ((status.due_count || 0) > 0) {
+    return `${status.due_count} révision${status.due_count > 1 ? "s" : ""} à terminer`;
+  }
+
+  return "Check-in prêt";
+}
+
+function GrovePanel({
+  status,
+  loading,
+  checking,
+  error
+}) {
+  const streak = status?.current_streak || 0;
+  const longest = status?.longest_streak || 0;
+  const restLeaves = status?.rest_leaves || 0;
+  const stage = status?.grove_stage?.label || "Graine dormante";
+  const milestone = status?.next_milestone;
+  const progress = status?.milestone_progress || {};
+  const rawProgressPercent = Math.max(0, Math.min(100, progress.percent || 0));
+  const progressPercent = streak > 0
+    ? Math.max(6, rawProgressPercent)
+    : rawProgressPercent;
+  const statusLabel = groveStatusLabel(status, loading, checking, error);
+
+  return (
+    <section className="menu-grove-panel" aria-label="Bosquet Nemoris">
+      <div className="menu-grove-header">
+        <div>
+          <div className="menu-overline">Nemoris Grove</div>
+          <div className="menu-grove-stage">{stage}</div>
+        </div>
+
+        <div className="menu-grove-streak">
+          <strong>{streak}</strong>
+          <span>jour{streak > 1 ? "s" : ""}</span>
+        </div>
+      </div>
+
+      <div className="menu-grove-track" aria-hidden="true">
+        <div
+          className="menu-grove-track-fill"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      <div className="menu-grove-status">{statusLabel}</div>
+
+      {status?.milestone_reached && (
+        <div className="menu-grove-bloom">
+          Floraison des {status.milestone_reached} jours
+        </div>
+      )}
+
+      <div className="menu-grove-meta">
+        <span>Record {longest} j</span>
+        <span>{restLeaves}/2 feuille{restLeaves > 1 ? "s" : ""}</span>
+        <span>
+          {milestone
+            ? `Cap ${milestone} j`
+            : "Tous les caps atteints"}
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function DestinationButton({ item, setMode }) {
   return (
     <button
@@ -82,6 +160,68 @@ export default function Menu({
   startupNotice,
   onDismissStartupNotice
 }) {
+  const [dailyGrove, setDailyGrove] = useState(null);
+  const [dailyGroveLoading, setDailyGroveLoading] = useState(true);
+  const [dailyGroveChecking, setDailyGroveChecking] = useState(false);
+  const [dailyGroveError, setDailyGroveError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDailyGrove() {
+      setDailyGroveLoading(true);
+      setDailyGroveError("");
+
+      try {
+        const status = await getDailyGroveStatus();
+
+        if (cancelled) return;
+
+        setDailyGrove(status);
+        setDailyGroveLoading(false);
+
+        if (!status?.eligible) return;
+
+        setDailyGroveChecking(true);
+
+        try {
+          const completed = await completeDailyGrove();
+
+          if (!cancelled) {
+            setDailyGrove(completed);
+          }
+        } catch (completionError) {
+          console.error(completionError);
+
+          if (!cancelled) {
+            setDailyGroveError(
+              completionError.message || "Bosquet impossible à synchroniser."
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setDailyGroveChecking(false);
+          }
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (!cancelled) {
+          setDailyGroveError(
+            error.message || "Bosquet impossible à synchroniser."
+          );
+          setDailyGroveLoading(false);
+        }
+      }
+    }
+
+    loadDailyGrove();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="menu-screen">
       <div className="menu-layout">
@@ -102,6 +242,13 @@ export default function Menu({
             <p className="menu-subtitle">
               L'outil ultime pour apprendre et réviser efficacement grâce à la répétition espacée.
             </p>
+
+            <GrovePanel
+              status={dailyGrove}
+              loading={dailyGroveLoading}
+              checking={dailyGroveChecking}
+              error={dailyGroveError}
+            />
           </div>
 
           <div className="menu-workflow" aria-label="Navigation principale">
