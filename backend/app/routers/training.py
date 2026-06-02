@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
-from ..schemas import TimelineAnswerRequest
+from ..schemas import TimelineAnswerRequest, TrainingAttemptRecordRequest
 from ..services.training import (
     get_training_items,
     grade_training_timeline,
-    list_training_scopes
+    list_training_scopes,
+    record_training_attempt
 )
 
 
@@ -41,3 +42,12 @@ def grade_timeline_training(
     db: Session = Depends(get_db)
 ):
     return grade_training_timeline(db, data.items)
+
+
+@router.post("/training/groups/{group_id}/attempt_record")
+def save_group_attempt_record(
+    group_id: int,
+    data: TrainingAttemptRecordRequest,
+    db: Session = Depends(get_db)
+):
+    return record_training_attempt(db, group_id, data)

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -7,6 +9,18 @@ from ..serializers import serialize_progress
 from .map_zones import merge_tags
 from .review import serialize_review_items
 from .timeline import grade_timeline_answer, validate_timeline_data
+
+
+TRAINING_RECORD_KEY = "training_record"
+TRAINING_RECORD_FIELDS = {
+    "best_found_percent",
+    "best_found_count",
+    "best_found_elapsed_ms",
+    "best_found_at",
+    "best_time_ms",
+    "best_time_at",
+    "question_count"
+}
 
 
 def normalize_scope_tag(value):
@@ -29,6 +43,19 @@ def _training_question_query(db):
         )
         .order_by(Question.id)
     )
+
+
+def serialize_training_record(data):
+    record = (data or {}).get(TRAINING_RECORD_KEY)
+
+    if not isinstance(record, dict):
+        return None
+
+    return {
+        key: record[key]
+        for key in TRAINING_RECORD_FIELDS
+        if key in record
+    }
 
 
 def list_training_scopes(db):
@@ -85,7 +112,8 @@ def list_training_scopes(db):
                 "name": group.name,
                 "media": group.media,
                 "tags": tags_by_group_id.get(group.id, []),
-                "question_count": question_count
+                "question_count": question_count,
+                "training_record": serialize_training_record(group.data)
             }
             for group, question_count in groups
         ],
@@ -96,6 +124,105 @@ def list_training_scopes(db):
             }
             for key in sorted(tag_names_by_key)
         ]
+    }
+
+
+def _current_utc_timestamp():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _found_percent(found_count, question_count):
+    return round((found_count / question_count) * 100, 2)
+
+
+def _should_update_best_found(record, percent, elapsed_ms):
+    previous_percent = record.get("best_found_percent")
+
+    if previous_percent is None:
+        return True
+
+    if percent > previous_percent:
+        return True
+
+    if percent < previous_percent:
+        return False
+
+    previous_elapsed = record.get("best_found_elapsed_ms")
+
+    return previous_elapsed is None or elapsed_ms < previous_elapsed
+
+
+def record_training_attempt(db, group_id, payload):
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    current_question_count = (
+        db.query(Question.id)
+        .filter(Question.group_id == group.id)
+        .count()
+    )
+
+    if current_question_count <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Group has no training items"
+        )
+
+    if payload.question_count != current_question_count:
+        raise HTTPException(
+            status_code=400,
+            detail="Training question count no longer matches the group"
+        )
+
+    if payload.found_count > payload.question_count:
+        raise HTTPException(
+            status_code=400,
+            detail="found_count cannot exceed question_count"
+        )
+
+    group_data = dict(group.data or {})
+    record = dict(serialize_training_record(group_data) or {})
+    timestamp = _current_utc_timestamp()
+    percent = _found_percent(payload.found_count, payload.question_count)
+    is_new_best_percent = False
+    is_new_best_time = False
+
+    if _should_update_best_found(record, percent, payload.elapsed_ms):
+        record.update({
+            "best_found_percent": percent,
+            "best_found_count": payload.found_count,
+            "best_found_elapsed_ms": payload.elapsed_ms,
+            "best_found_at": timestamp,
+            "question_count": payload.question_count
+        })
+        is_new_best_percent = True
+
+    if payload.found_count == payload.question_count:
+        best_time_ms = record.get("best_time_ms")
+
+        if best_time_ms is None or payload.elapsed_ms < best_time_ms:
+            record.update({
+                "best_time_ms": payload.elapsed_ms,
+                "best_time_at": timestamp,
+                "question_count": payload.question_count
+            })
+            is_new_best_time = True
+
+    group_data[TRAINING_RECORD_KEY] = record
+    group.data = group_data
+    db.commit()
+    db.refresh(group)
+
+    return {
+        "training_record": serialize_training_record(group.data),
+        "is_new_best_percent": is_new_best_percent,
+        "is_new_best_time": is_new_best_time
     }
 
 

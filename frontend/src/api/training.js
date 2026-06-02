@@ -36,3 +36,14 @@ export function gradeTrainingTimeline(items) {
     body: JSON.stringify({ items })
   });
 }
+
+
+export function recordGroupTrainingAttempt(groupId, payload) {
+  return requestJson(`/training/groups/${groupId}/attempt_record`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}

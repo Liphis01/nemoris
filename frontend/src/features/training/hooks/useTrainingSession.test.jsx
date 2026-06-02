@@ -4,20 +4,30 @@ import { useTrainingSession } from "./useTrainingSession";
 import {
   getTrainingItems,
   gradeTrainingTimeline,
-  listTrainingScopes
+  listTrainingScopes,
+  recordGroupTrainingAttempt
 } from "../../../api/training";
 
 vi.mock("../../../api/training", () => ({
   getTrainingItems: vi.fn(),
   gradeTrainingTimeline: vi.fn(),
-  listTrainingScopes: vi.fn()
+  listTrainingScopes: vi.fn(),
+  recordGroupTrainingAttempt: vi.fn()
 }));
 
 
 describe("useTrainingSession", () => {
+  let performanceNowSpy;
+
   beforeEach(() => {
     listTrainingScopes.mockResolvedValue({
-      groups: [{ id: 5, name: "Europe", type_group: "map", question_count: 2 }],
+      groups: [{
+        id: 5,
+        name: "Europe",
+        type_group: "map",
+        question_count: 2,
+        training_record: null
+      }],
       tags: [{ name: "geo", count: 3 }]
     });
     getTrainingItems.mockResolvedValue([
@@ -29,10 +39,27 @@ describe("useTrainingSession", () => {
       }
     ]);
     gradeTrainingTimeline.mockResolvedValue({ status: "ok", results: [] });
+    recordGroupTrainingAttempt.mockResolvedValue({
+      training_record: {
+        best_found_percent: 100,
+        best_found_count: 2,
+        best_found_elapsed_ms: 5500,
+        best_found_at: "2026-06-02T10:00:00+00:00",
+        best_time_ms: 5500,
+        best_time_at: "2026-06-02T10:00:00+00:00",
+        question_count: 2
+      },
+      is_new_best_percent: true,
+      is_new_best_time: true
+    });
+    performanceNowSpy = vi
+      .spyOn(performance, "now")
+      .mockReturnValue(1000);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    performanceNowSpy?.mockRestore();
     vi.useRealTimers();
   });
 
@@ -170,5 +197,172 @@ describe("useTrainingSession", () => {
     });
 
     expect(gradeTrainingTimeline).toHaveBeenCalledWith(payload);
+  });
+
+  it("saves a clean full group attempt record once", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 5500,
+        question_count: 2,
+        found_count: 2
+      });
+    });
+    expect(result.current.recordSaveStatus).toBe("saved");
+    expect(result.current.recordResult.is_new_best_time).toBe(true);
+    expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
+  });
+
+  it("saves partial full group score but skips retry attempts", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    recordGroupTrainingAttempt.mockResolvedValueOnce({
+      training_record: {
+        best_found_percent: 50,
+        best_found_count: 1,
+        best_found_elapsed_ms: 4000,
+        best_found_at: "2026-06-02T10:00:00+00:00",
+        question_count: 2
+      },
+      is_new_best_percent: true,
+      is_new_best_time: false
+    });
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(5000);
+
+    act(() => {
+      result.current.handleMapComplete([11]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 4000,
+        question_count: 2,
+        found_count: 1
+      });
+    });
+
+    act(() => {
+      result.current.retryFailedItems();
+    });
+
+    performanceNowSpy.mockReturnValue(7000);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    expect(recordGroupTrainingAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts full group attempts as record-eligible runs", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(5000);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledTimes(1);
+    });
+
+    performanceNowSpy.mockReturnValue(10000);
+
+    act(() => {
+      result.current.restartFullScope();
+    });
+
+    performanceNowSpy.mockReturnValue(13000);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledTimes(2);
+    });
   });
 });

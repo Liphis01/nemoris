@@ -11,9 +11,14 @@ from app.routers.training import grade_timeline_training
 from app.schemas import (
     TimelineAnswerItem,
     TimelineAnswerRequest,
-    TimelineDateValue
+    TimelineDateValue,
+    TrainingAttemptRecordRequest
 )
-from app.services.training import get_training_items, list_training_scopes
+from app.services.training import (
+    get_training_items,
+    list_training_scopes,
+    record_training_attempt
+)
 
 
 def point_timeline(year):
@@ -183,7 +188,17 @@ class TrainingTests(unittest.TestCase):
             type_group="map",
             name="World",
             media="world.svg",
-            data={}
+            data={
+                "training_record": {
+                    "best_found_percent": 100,
+                    "best_found_count": 1,
+                    "best_found_elapsed_ms": 4000,
+                    "best_found_at": "2026-06-01T10:00:00+00:00",
+                    "best_time_ms": 4000,
+                    "best_time_at": "2026-06-01T10:00:00+00:00",
+                    "question_count": 1
+                }
+            }
         )
         self.db.add(group)
         self.add_question(1, type_q="map", tags=["Geo", "geo"], group=group)
@@ -196,10 +211,224 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(response["groups"][0]["id"], group.id)
         self.assertEqual(response["groups"][0]["question_count"], 1)
         self.assertEqual(response["groups"][0]["tags"], ["Geo"])
+        self.assertEqual(
+            response["groups"][0]["training_record"]["best_found_percent"],
+            100
+        )
         self.assertEqual(response["tags"], [
             {"name": "Geo", "count": 2},
             {"name": "History", "count": 2}
         ])
+
+    def test_first_clean_attempt_saves_best_percent_and_time(self):
+        group = QuestionGroup(
+            id=40,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={"theme": "blue"}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.add_question(2, type_q="map", group=group)
+        self.db.commit()
+
+        response = record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=12345,
+                question_count=2,
+                found_count=2
+            )
+        )
+
+        record = response["training_record"]
+        self.assertTrue(response["is_new_best_percent"])
+        self.assertTrue(response["is_new_best_time"])
+        self.assertEqual(record["best_found_percent"], 100)
+        self.assertEqual(record["best_found_count"], 2)
+        self.assertEqual(record["best_found_elapsed_ms"], 12345)
+        self.assertEqual(record["best_time_ms"], 12345)
+        self.assertEqual(record["question_count"], 2)
+        self.assertEqual(group.data["theme"], "blue")
+
+    def test_partial_attempt_updates_best_percent_but_not_clean_time(self):
+        group = QuestionGroup(
+            id=41,
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="image", group=group)
+        self.add_question(2, type_q="image", group=group)
+        self.db.commit()
+
+        response = record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=5000,
+                question_count=2,
+                found_count=1
+            )
+        )
+
+        record = response["training_record"]
+        self.assertTrue(response["is_new_best_percent"])
+        self.assertFalse(response["is_new_best_time"])
+        self.assertEqual(record["best_found_percent"], 50)
+        self.assertEqual(record["best_found_count"], 1)
+        self.assertNotIn("best_time_ms", record)
+
+    def test_lower_percent_does_not_overwrite_and_tie_uses_shorter_time(self):
+        group = QuestionGroup(
+            id=42,
+            type_group="map",
+            name="World",
+            media=None,
+            data={
+                "training_record": {
+                    "best_found_percent": 50,
+                    "best_found_count": 1,
+                    "best_found_elapsed_ms": 5000,
+                    "best_found_at": "2026-06-01T10:00:00+00:00",
+                    "question_count": 2
+                }
+            }
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.add_question(2, type_q="map", group=group)
+        self.db.commit()
+
+        lower = record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=2000,
+                question_count=2,
+                found_count=0
+            )
+        )
+        slower_tie = record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=6000,
+                question_count=2,
+                found_count=1
+            )
+        )
+        faster_tie = record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=4000,
+                question_count=2,
+                found_count=1
+            )
+        )
+
+        self.assertFalse(lower["is_new_best_percent"])
+        self.assertFalse(slower_tie["is_new_best_percent"])
+        self.assertTrue(faster_tie["is_new_best_percent"])
+        self.assertEqual(
+            faster_tie["training_record"]["best_found_elapsed_ms"],
+            4000
+        )
+
+    def test_faster_clean_time_preserves_better_percent_elapsed(self):
+        group = QuestionGroup(
+            id=43,
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={
+                "training_record": {
+                    "best_found_percent": 100,
+                    "best_found_count": 2,
+                    "best_found_elapsed_ms": 6000,
+                    "best_found_at": "2026-06-01T10:00:00+00:00",
+                    "best_time_ms": 9000,
+                    "best_time_at": "2026-06-01T10:00:00+00:00",
+                    "question_count": 2
+                }
+            }
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="image", group=group)
+        self.add_question(2, type_q="image", group=group)
+        self.db.commit()
+
+        response = record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=7000,
+                question_count=2,
+                found_count=2
+            )
+        )
+
+        record = response["training_record"]
+        self.assertFalse(response["is_new_best_percent"])
+        self.assertTrue(response["is_new_best_time"])
+        self.assertEqual(record["best_found_elapsed_ms"], 6000)
+        self.assertEqual(record["best_time_ms"], 7000)
+
+    def test_invalid_training_attempt_records_are_rejected(self):
+        group = QuestionGroup(
+            id=44,
+            type_group="map",
+            name="World",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as missing_group:
+            record_training_attempt(
+                self.db,
+                999,
+                TrainingAttemptRecordRequest(
+                    elapsed_ms=1000,
+                    question_count=1,
+                    found_count=1
+                )
+            )
+
+        self.assertEqual(missing_group.exception.status_code, 404)
+
+        with self.assertRaises(HTTPException) as mismatched_count:
+            record_training_attempt(
+                self.db,
+                group.id,
+                TrainingAttemptRecordRequest(
+                    elapsed_ms=1000,
+                    question_count=2,
+                    found_count=1
+                )
+            )
+
+        self.assertEqual(mismatched_count.exception.status_code, 400)
+
+        with self.assertRaises(HTTPException) as invalid_found:
+            record_training_attempt(
+                self.db,
+                group.id,
+                TrainingAttemptRecordRequest(
+                    elapsed_ms=1000,
+                    question_count=1,
+                    found_count=2
+                )
+            )
+
+        self.assertEqual(invalid_found.exception.status_code, 400)
 
     def test_training_timeline_grading_does_not_mutate_progress(self):
         history = [{

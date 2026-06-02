@@ -184,6 +184,12 @@ class TimelineAnswerRequest(BaseModel):
     items: Dict[int, TimelineAnswerItem]
 
 
+class TrainingAttemptRecordRequest(BaseModel):
+    elapsed_ms: int = Field(gt=0)
+    question_count: int = Field(ge=0)
+    found_count: int = Field(ge=0)
+
+
 class MapZoneBulkItem(BaseModel):
 
     id: Optional[int] = None

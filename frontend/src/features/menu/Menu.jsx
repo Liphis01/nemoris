@@ -114,10 +114,6 @@ export default function Menu({
               <h1>Nemoris</h1>
             </div>
           </div>
-
-          <p className="menu-subtitle">
-            Réviser, organiser et suivre les connaissances sans quitter le flux de travail.
-          </p>
         </header>
 
         {startupNotice && (

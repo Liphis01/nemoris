@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTrainingItems,
   gradeTrainingTimeline,
-  listTrainingScopes
+  listTrainingScopes,
+  recordGroupTrainingAttempt
 } from "../../../api/training";
 
 
@@ -109,6 +110,14 @@ export function useTrainingSession(active = true) {
   const [trainingLoading, setTrainingLoading] = useState(false);
   const [trainingError, setTrainingError] = useState("");
   const [failedQuestionIds, setFailedQuestionIds] = useState(() => new Set());
+  const [runMode, setRunMode] = useState("full");
+  const [runStartedAt, setRunStartedAt] = useState(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [completedElapsedMs, setCompletedElapsedMs] = useState(null);
+  const [recordSaveStatus, setRecordSaveStatus] = useState("idle");
+  const [recordSaveError, setRecordSaveError] = useState("");
+  const [recordResult, setRecordResult] = useState(null);
+  const recordSubmittedRef = useRef(false);
 
   const current = questions[currentIndex];
   const failedCount = failedQuestionIds.size;
@@ -124,13 +133,40 @@ export function useTrainingSession(active = true) {
     () => originalQuestions.flatMap(getReviewItemQuestionIds),
     [originalQuestions]
   );
+  const recordEligible = Boolean(
+    activeScope?.type === "group" &&
+    runMode === "full" &&
+    allQuestionIds.length > 0
+  );
+  const completedRunElapsedMs = completedElapsedMs ?? elapsedMs;
+  const attemptFoundCount = recordEligible
+    ? Math.max(0, allQuestionIds.length - failedQuestionIds.size)
+    : 0;
 
-  const resetRun = useCallback((items) => {
+  const resetRecordAttempt = useCallback((items, nextRunMode, scope) => {
+    const shouldStartTimer = Boolean(
+      scope?.type === "group" &&
+      nextRunMode === "full" &&
+      (items || []).length > 0
+    );
+
+    setRunMode(nextRunMode);
+    setRunStartedAt(shouldStartTimer ? performance.now() : null);
+    setElapsedMs(0);
+    setCompletedElapsedMs(null);
+    setRecordSaveStatus("idle");
+    setRecordSaveError("");
+    setRecordResult(null);
+    recordSubmittedRef.current = false;
+  }, []);
+
+  const resetRun = useCallback((items, nextRunMode = "full") => {
     setQuestions(items || []);
     setCurrentIndex(0);
     setShowAnswer(false);
     setFailedQuestionIds(new Set());
-  }, []);
+    resetRecordAttempt(items, nextRunMode, activeScope);
+  }, [activeScope, resetRecordAttempt]);
 
   const loadScopes = useCallback(async () => {
     setScopesLoading(true);
@@ -158,6 +194,7 @@ export function useTrainingSession(active = true) {
     setCurrentIndex(0);
     setShowAnswer(false);
     setFailedQuestionIds(new Set());
+    resetRecordAttempt([], "full", scope);
     setTrainingLoading(true);
     setTrainingError("");
 
@@ -168,13 +205,14 @@ export function useTrainingSession(active = true) {
       setQuestions(data || []);
       setCurrentIndex(0);
       setShowAnswer(false);
+      resetRecordAttempt(data || [], "full", scope);
     } catch (error) {
       console.error(error);
       setTrainingError(error.message || "Impossible de preparer l'entrainement.");
     } finally {
       setTrainingLoading(false);
     }
-  }, []);
+  }, [resetRecordAttempt]);
 
   const returnToScopeSelector = useCallback(() => {
     setActiveScope(null);
@@ -184,7 +222,8 @@ export function useTrainingSession(active = true) {
     setShowAnswer(false);
     setFailedQuestionIds(new Set());
     setTrainingError("");
-  }, []);
+    resetRecordAttempt([], "full", null);
+  }, [resetRecordAttempt]);
 
   const restartFullScope = useCallback(() => {
     resetRun(originalQuestions);
@@ -193,7 +232,10 @@ export function useTrainingSession(active = true) {
   const retryFailedItems = useCallback(() => {
     if (failedQuestionIds.size === 0) return;
 
-    resetRun(filterReviewItemsByQuestionIds(originalQuestions, failedQuestionIds));
+    resetRun(
+      filterReviewItemsByQuestionIds(originalQuestions, failedQuestionIds),
+      "retry"
+    );
   }, [failedQuestionIds, originalQuestions, resetRun]);
 
   const handleTextAnswer = useCallback(() => {
@@ -235,11 +277,112 @@ export function useTrainingSession(active = true) {
       setFailedQuestionIds(new Set());
       setTrainingLoading(false);
       setTrainingError("");
+      resetRecordAttempt([], "full", null);
       return;
     }
 
     loadScopes();
-  }, [active, loadScopes]);
+  }, [active, loadScopes, resetRecordAttempt]);
+
+  useEffect(() => {
+    if (runStartedAt === null) return undefined;
+
+    const updateElapsed = () => {
+      setElapsedMs(Math.max(1, Math.round(performance.now() - runStartedAt)));
+    };
+
+    updateElapsed();
+
+    const intervalId = window.setInterval(updateElapsed, 250);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [runStartedAt]);
+
+  useEffect(() => {
+    if (!isComplete || runStartedAt === null) return;
+
+    const finalElapsed = Math.max(
+      1,
+      Math.round(performance.now() - runStartedAt)
+    );
+
+    setElapsedMs(finalElapsed);
+    setCompletedElapsedMs(finalElapsed);
+    setRunStartedAt(null);
+  }, [isComplete, runStartedAt]);
+
+  useEffect(() => {
+    if (
+      !isComplete ||
+      !recordEligible ||
+      completedElapsedMs === null ||
+      recordSubmittedRef.current
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const groupId = activeScope.id;
+    const payload = {
+      elapsed_ms: Math.max(1, Math.round(completedElapsedMs)),
+      question_count: allQuestionIds.length,
+      found_count: attemptFoundCount
+    };
+
+    recordSubmittedRef.current = true;
+    setRecordSaveStatus("saving");
+    setRecordSaveError("");
+
+    recordGroupTrainingAttempt(groupId, payload)
+      .then((response) => {
+        if (cancelled) return;
+
+        setRecordResult(response);
+        setRecordSaveStatus("saved");
+        setActiveScope(prev => (
+          prev?.type === "group" && prev.id === groupId
+            ? {
+              ...prev,
+              training_record: response.training_record
+            }
+            : prev
+        ));
+        setScopes(prev => ({
+          ...prev,
+          groups: (prev.groups || []).map(group =>
+            group.id === groupId
+              ? {
+                ...group,
+                training_record: response.training_record
+              }
+              : group
+          )
+        }));
+      })
+      .catch((error) => {
+        console.error(error);
+
+        if (!cancelled) {
+          setRecordSaveStatus("error");
+          setRecordSaveError(
+            error.message || "Impossible d'enregistrer le record."
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeScope,
+    allQuestionIds.length,
+    attemptFoundCount,
+    completedElapsedMs,
+    isComplete,
+    recordEligible
+  ]);
 
   useEffect(() => {
     if (!active) return;
@@ -279,7 +422,11 @@ export function useTrainingSession(active = true) {
   return {
     activeScope,
     allQuestionIds,
+    attemptFoundCount,
+    completedElapsedMs,
+    completedRunElapsedMs,
     currentIndex,
+    elapsedMs,
     failedCount,
     failedQuestionIds,
     handleImageComplete,
@@ -291,6 +438,10 @@ export function useTrainingSession(active = true) {
     loadScopes,
     originalQuestions,
     questions,
+    recordEligible,
+    recordResult,
+    recordSaveError,
+    recordSaveStatus,
     restartFullScope,
     retryFailedItems,
     returnToScopeSelector,

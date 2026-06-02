@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import { useTrainingSession } from "../hooks/useTrainingSession";
+import {
+  formatDuration,
+  formatPercent,
+  formatRecordPercent
+} from "../trainingRecordUtils";
 
 
 const panelStyle = {
@@ -33,6 +38,43 @@ const disabledButtonStyle = {
   color: "#777",
   cursor: "not-allowed",
   opacity: 0.55
+};
+
+const sessionMetricStyle = {
+  background: "#181818",
+  border: "1px solid #2b2b2b",
+  borderRadius: "8px",
+  color: "#bbb",
+  fontSize: "12px",
+  fontWeight: "800",
+  padding: "7px 9px"
+};
+
+const completionMetricStyle = {
+  background: "#141414",
+  border: "1px solid #282828",
+  borderRadius: "8px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "6px",
+  padding: "14px"
+};
+
+const completionMetricLabelStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: "800",
+  textTransform: "uppercase"
+};
+
+const recordBadgeStyle = {
+  background: "#233228",
+  border: "1px solid #385544",
+  borderRadius: "999px",
+  color: "#d7f5df",
+  fontSize: "13px",
+  fontWeight: "800",
+  padding: "8px 12px"
 };
 
 
@@ -183,14 +225,16 @@ function ScopeSelector({
               }}
             >
               {scopeType === "group" && groups.map(group => (
+                (() => {
+                  const record = group.training_record;
+
+                  return (
                 <button
                   type="button"
                   key={group.id}
                   onClick={() => startScope({
+                    ...group,
                     type: "group",
-                    id: group.id,
-                    name: group.name,
-                    type_group: group.type_group
                   })}
                   style={{
                     ...buttonStyle,
@@ -205,11 +249,29 @@ function ScopeSelector({
                   <span style={{ color: "#ffcc7a", fontSize: "12px", textTransform: "uppercase" }}>
                     {group.type_group}
                   </span>
+                  <span
+                    style={{
+                      color: "#f3f3f3",
+                      fontSize: "28px",
+                      fontWeight: "900",
+                      lineHeight: 1
+                    }}
+                  >
+                    {formatRecordPercent(record)}
+                  </span>
+                  <span style={{ color: "#888", fontSize: "12px", fontWeight: "800" }}>
+                    meilleur score
+                  </span>
                   <span style={{ fontSize: "18px" }}>{group.name}</span>
                   <span style={{ color: "#999", fontSize: "13px" }}>
                     {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
+                    {record?.best_time_ms
+                      ? ` · temps parfait ${formatDuration(record.best_time_ms)}`
+                      : ""}
                   </span>
                 </button>
+                  );
+                })()
               ))}
 
               {scopeType === "tag" && tags.map(tag => (
@@ -250,6 +312,12 @@ function ScopeSelector({
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
   const currentQuestion = session.questions[session.currentIndex];
+  const activeRecord = session.activeScope?.training_record || null;
+  const displayedRecord = session.recordResult?.training_record || activeRecord;
+  const completedPercent = formatPercent(
+    session.attemptFoundCount,
+    session.allQuestionIds.length
+  );
 
   return (
     <div
@@ -307,6 +375,26 @@ export default function TrainingSession({ setMode }) {
                 <div style={{ color: "#777", fontSize: "14px" }}>
                   {session.allQuestionIds.length} items dans ce scope
                 </div>
+                {session.recordEligible && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      marginTop: "12px"
+                    }}
+                  >
+                    <span style={sessionMetricStyle}>
+                      Temps {formatDuration(session.completedRunElapsedMs)}
+                    </span>
+                    <span style={sessionMetricStyle}>
+                      Score à battre {formatRecordPercent(displayedRecord)}
+                    </span>
+                    <span style={sessionMetricStyle}>
+                      Temps parfait {formatDuration(displayedRecord?.best_time_ms)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -362,6 +450,68 @@ export default function TrainingSession({ setMode }) {
                 <div style={{ color: "#888", marginBottom: "26px" }}>
                   {session.failedCount} item{session.failedCount > 1 ? "s" : ""} a revoir.
                 </div>
+
+                {session.recordEligible && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "10px",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                      margin: "0 auto 22px",
+                      maxWidth: "620px"
+                    }}
+                  >
+                    <div style={completionMetricStyle}>
+                      <span style={completionMetricLabelStyle}>Score</span>
+                      <strong>{completedPercent}</strong>
+                    </div>
+                    <div style={completionMetricStyle}>
+                      <span style={completionMetricLabelStyle}>Trouvés</span>
+                      <strong>
+                        {session.attemptFoundCount} / {session.allQuestionIds.length}
+                      </strong>
+                    </div>
+                    <div style={completionMetricStyle}>
+                      <span style={completionMetricLabelStyle}>Temps</span>
+                      <strong>{formatDuration(session.completedRunElapsedMs)}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {session.recordSaveStatus === "saving" && (
+                  <div style={{ color: "#888", marginBottom: "18px" }}>
+                    Enregistrement du record...
+                  </div>
+                )}
+
+                {session.recordSaveStatus === "error" && (
+                  <div style={{ color: "#ff9c9c", marginBottom: "18px" }}>
+                    {session.recordSaveError}
+                  </div>
+                )}
+
+                {session.recordResult && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      justifyContent: "center",
+                      marginBottom: "18px"
+                    }}
+                  >
+                    {session.recordResult.is_new_best_percent && (
+                      <span style={recordBadgeStyle}>
+                        Nouveau meilleur score
+                      </span>
+                    )}
+                    {session.recordResult.is_new_best_time && (
+                      <span style={recordBadgeStyle}>
+                        Nouveau record de temps
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <div
                   style={{
