@@ -1,553 +1,186 @@
-const cardStyle = {
-    background: "#181818",
-    border: "1px solid #2a2a2a",
-    borderRadius: "18px",
-    padding: "22px",
-    cursor: "pointer",
-    transition: "all 0.15s ease",
-    textAlign: "left"
-};
+import "./Menu.css";
 
-const badgeStyle = {
-    display: "inline-flex",
-    alignItems: "center",
-    padding: "4px 10px",
-    borderRadius: "999px",
-    fontSize: "11px",
-    fontWeight: "700",
-    letterSpacing: "0.04em",
-    marginBottom: "14px"
-};
+const destinations = [
+  {
+    mode: "manage",
+    eyebrow: "Bibliothèque",
+    title: "Gestionnaire",
+    description: "Questions, tags, groupes, collections et maps.",
+    detail: "Édition rapide",
+    accent: "violet",
+    icon: "✎"
+  },
+  {
+    mode: "calendar",
+    eyebrow: "Planning",
+    title: "Calendrier",
+    description: "Charge quotidienne, retard et prochaines reviews.",
+    detail: "Vue par jour",
+    accent: "green",
+    icon: "▦"
+  },
+  {
+    mode: "stats",
+    eyebrow: "Analyse",
+    title: "Statistiques",
+    description: "Rétention, favoris, charge et points faibles.",
+    detail: "Suivi global",
+    accent: "blue",
+    icon: "▥"
+  },
+  {
+    mode: "settings",
+    eyebrow: "Rythme",
+    title: "Réglages",
+    description: "Objectif quotidien et calendrier de review.",
+    detail: "Paramètres",
+    accent: "neutral",
+    icon: "⚙"
+  }
+];
+
+const workflowItems = [
+  "Revoir",
+  "Organiser",
+  "Explorer"
+];
+
+const reviewTypes = [
+  { label: "Texte", accent: "violet" },
+  { label: "Map", accent: "amber" },
+  { label: "Image", accent: "green" },
+  { label: "Timeline", accent: "blue" }
+];
+
+function DestinationButton({ item, setMode }) {
+  return (
+    <button
+      type="button"
+      className={`menu-destination menu-destination-${item.accent}`}
+      onClick={() => setMode(item.mode)}
+    >
+      <span className="menu-destination-icon" aria-hidden="true">
+        {item.icon}
+      </span>
+
+      <span className="menu-destination-body">
+        <span className="menu-eyebrow">{item.eyebrow}</span>
+        <strong>{item.title}</strong>
+        <span>{item.description}</span>
+      </span>
+
+      <span className="menu-destination-meta">
+        <span>{item.detail}</span>
+        <span aria-hidden="true">→</span>
+      </span>
+    </button>
+  );
+}
 
 export default function Menu({
-    setMode,
-    startupNotice,
-    onDismissStartupNotice
+  setMode,
+  startupNotice,
+  onDismissStartupNotice
 }) {
-
-    return (
-        <div
-            style={{
-                minHeight: "100vh",
-                background: "#111",
-                color: "#eee",
-                display: "flex",
-                justifyContent: "center",
-                padding: "60px 20px",
-                boxSizing: "border-box"
-            }}
-        >
-
-            <div
-                style={{
-                    width: "100%",
-                    maxWidth: "950px"
-                }}
-            >
-
-                {/* HEADER */}
-                <div
-                    style={{
-                        marginBottom: "40px"
-                    }}
-                >
-
-                    <div
-                        style={{
-                            color: "#777",
-                            fontSize: "13px",
-                            marginBottom: "10px",
-                            letterSpacing: "0.08em"
-                        }}
-                    >
-                        SPACED REPETITION SYSTEM
-                    </div>
-
-                    <h1
-                        style={{
-                            margin: 0,
-                            fontSize: "70px",
-                            lineHeight: 1,
-                            fontWeight: "800",
-                            marginBottom: "14px"
-                        }}
-                    >
-                        Nemoris
-                    </h1>
+  return (
+    <div className="menu-screen">
+      <div className="menu-layout">
+        <aside className="menu-identity" aria-label="Nemoris">
+          <div>
+            <div className="menu-brand-row">
+              <div className="menu-brand-mark" aria-hidden="true">
+                N
+              </div>
+              <div>
+                <div className="menu-overline">
+                  Spaced repetition system
                 </div>
-
-                {startupNotice && (
-                    <div
-                        style={{
-                            alignItems: "center",
-                            background: "linear-gradient(180deg, #17211b 0%, #141b16 100%)",
-                            border: "1px solid rgba(126, 226, 168, 0.24)",
-                            borderRadius: "14px",
-                            color: "#d8f6e2",
-                            display: "flex",
-                            gap: "14px",
-                            justifyContent: "space-between",
-                            marginBottom: "22px",
-                            padding: "14px 16px",
-                            boxShadow: "0 14px 34px rgba(0, 0, 0, 0.18)"
-                        }}
-                    >
-                        <div style={{ textAlign: "left" }}>
-                            <div
-                                style={{
-                                    color: "#7ee2a8",
-                                    fontSize: "11px",
-                                    fontWeight: "800",
-                                    letterSpacing: "0.06em",
-                                    marginBottom: "4px",
-                                    textTransform: "uppercase"
-                                }}
-                            >
-                                Calendrier rééquilibré
-                            </div>
-
-                            <div
-                                style={{
-                                    color: "#cfe9d8",
-                                    fontSize: "14px",
-                                    lineHeight: 1.45
-                                }}
-                            >
-                                {startupNotice.moved} question{startupNotice.moved > 1 ? "s" : ""} déplacée{startupNotice.moved > 1 ? "s" : ""} pour garder environ {startupNotice.daily_target}/jour.
-                            </div>
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={onDismissStartupNotice}
-                            style={{
-                                alignItems: "center",
-                                background: "rgba(126, 226, 168, 0.08)",
-                                border: "1px solid rgba(126, 226, 168, 0.22)",
-                                borderRadius: "999px",
-                                color: "#a7e7bc",
-                                cursor: "pointer",
-                                display: "inline-flex",
-                                fontSize: "16px",
-                                height: "30px",
-                                justifyContent: "center",
-                                lineHeight: 1,
-                                padding: 0,
-                                width: "30px"
-                            }}
-                            aria-label="Masquer"
-                            title="Masquer"
-                        >
-                            ×
-                        </button>
-                    </div>
-                )}
-
-                {/* MAIN GRID */}
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "1.4fr 1fr",
-                        gap: "18px"
-                    }}
-                >
-
-                    {/* REVIEW */}
-                    <div
-                        onClick={() => setMode("quiz")}
-                        style={{
-                            ...cardStyle,
-                            minHeight: "240px",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                            background:
-                                "linear-gradient(180deg, #1a1a1a 0%, #151515 100%)"
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = "translateY(-2px)";
-                            e.currentTarget.style.border =
-                                "1px solid #3a3a3a";
-                            e.currentTarget.style.background =
-                                "linear-gradient(180deg, #202020 0%, #181818 100%)";
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "translateY(0px)";
-                            e.currentTarget.style.border =
-                                "1px solid #2a2a2a";
-                            e.currentTarget.style.background =
-                                "linear-gradient(180deg, #1a1a1a 0%, #151515 100%)";
-                        }}
-                    >
-
-                        <div>
-
-                            <div
-                                style={{
-                                    ...badgeStyle,
-                                    background: "#3d2b14",
-                                    color: "#ffcc7a"
-                                }}
-                            >
-                                REVIEW
-                            </div>
-
-                            <div
-                                style={{
-                                    fontSize: "34px",
-                                    fontWeight: "800",
-                                    marginBottom: "14px",
-                                    lineHeight: 1.05
-                                }}
-                            >
-                                Révision du jour
-                            </div>
-
-                            <div
-                                style={{
-                                    color: "#8a8a8a",
-                                    lineHeight: 1.6,
-                                    maxWidth: "520px"
-                                }}
-                            >
-                                Lance une session de review avec les questions dues :
-                                texte, maps, images et futurs types.
-                            </div>
-
-                        </div>
-
-                        <div
-                            style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                marginTop: "30px"
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    color: "#666",
-                                    fontSize: "13px"
-                                }}
-                            >
-                                Spaced repetition
-                            </div>
-
-                            <div
-                                style={{
-                                    fontSize: "28px"
-                                }}
-                            >
-                                →
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                    {/* RIGHT COLUMN */}
-                    <div
-                        style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "18px"
-                        }}
-                    >
-
-                        {/* MANAGE */}
-                        <div
-                            onClick={() => setMode("manage")}
-                            style={{
-                                ...cardStyle,
-                                flex: 1
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(-2px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #3a3a3a";
-                                e.currentTarget.style.background = "#1d1d1d";
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(0px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #2a2a2a";
-                                e.currentTarget.style.background = "#181818";
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    ...badgeStyle,
-                                    background: "#2b2047",
-                                    color: "#b69cff"
-                                }}
-                            >
-                                MANAGE
-                            </div>
-
-                            <div
-                                style={{
-                                    fontSize: "22px",
-                                    fontWeight: "700",
-                                    marginBottom: "10px"
-                                }}
-                            >
-                                Gestionnaire
-                            </div>
-
-                            <div
-                                style={{
-                                    color: "#888",
-                                    fontSize: "14px",
-                                    lineHeight: 1.5
-                                }}
-                            >
-                                Modifier les questions, tags,
-                                groupes, collections et maps.
-                            </div>
-
-                        </div>
-
-                        {/* CALENDAR */}
-                        <div
-                            onClick={() => setMode("calendar")}
-                            style={{
-                                ...cardStyle,
-                                flex: 1,
-                                background:
-                                    "linear-gradient(180deg, #171a18 0%, #141614 100%)"
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(-2px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #3a3a3a";
-                                e.currentTarget.style.background =
-                                    "linear-gradient(180deg, #1d241f 0%, #171a18 100%)";
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(0px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #2a2a2a";
-                                e.currentTarget.style.background =
-                                    "linear-gradient(180deg, #171a18 0%, #141614 100%)";
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    ...badgeStyle,
-                                    background: "#163524",
-                                    color: "#7ee2a8"
-                                }}
-                            >
-                                CALENDAR
-                            </div>
-
-                            <div
-                                style={{
-                                    fontSize: "22px",
-                                    fontWeight: "700",
-                                    marginBottom: "10px"
-                                }}
-                            >
-                                Calendrier
-                            </div>
-
-                            <div
-                                style={{
-                                    color: "#888",
-                                    fontSize: "14px",
-                                    lineHeight: 1.5
-                                }}
-                            >
-                                Voir les questions dues par jour et préparer les prochaines reviews.
-                            </div>
-
-                        </div>
-
-                        {/* STATS */}
-                        <div
-                            onClick={() => setMode("stats")}
-                            style={{
-                                ...cardStyle,
-                                flex: 1,
-                                background:
-                                    "linear-gradient(180deg, #171a20 0%, #14161a 100%)"
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(-2px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #3a3a3a";
-                                e.currentTarget.style.background =
-                                    "linear-gradient(180deg, #1c2230 0%, #171a20 100%)";
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(0px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #2a2a2a";
-                                e.currentTarget.style.background =
-                                    "linear-gradient(180deg, #171a20 0%, #14161a 100%)";
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    ...badgeStyle,
-                                    background: "#14283d",
-                                    color: "#8fc7ff"
-                                }}
-                            >
-                                STATS
-                            </div>
-
-                            <div
-                                style={{
-                                    fontSize: "22px",
-                                    fontWeight: "700",
-                                    marginBottom: "10px"
-                                }}
-                            >
-                                Statistiques
-                            </div>
-
-                            <div
-                                style={{
-                                    color: "#888",
-                                    fontSize: "14px",
-                                    lineHeight: 1.5
-                                }}
-                            >
-                                Suivre la charge, la rétention, les favoris et les points faibles.
-                            </div>
-
-                        </div>
-
-                        {/* SETTINGS */}
-                        <div
-                            onClick={() => setMode("settings")}
-                            style={{
-                                ...cardStyle,
-                                flex: 1,
-                                background:
-                                    "linear-gradient(180deg, #17191b 0%, #141516 100%)"
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(-2px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #3a3a3a";
-                                e.currentTarget.style.background =
-                                    "linear-gradient(180deg, #20252a 0%, #17191b 100%)";
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform =
-                                    "translateY(0px)";
-                                e.currentTarget.style.border =
-                                    "1px solid #2a2a2a";
-                                e.currentTarget.style.background =
-                                    "linear-gradient(180deg, #17191b 0%, #141516 100%)";
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    ...badgeStyle,
-                                    background: "#26313a",
-                                    color: "#b8d7e8"
-                                }}
-                            >
-                                PARAMÈTRES
-                            </div>
-
-                            <div
-                                style={{
-                                    fontSize: "22px",
-                                    fontWeight: "700",
-                                    marginBottom: "10px"
-                                }}
-                            >
-                                Réglages
-                            </div>
-
-                            <div
-                                style={{
-                                    color: "#888",
-                                    fontSize: "14px",
-                                    lineHeight: 1.5
-                                }}
-                            >
-                                Objectif quotidien et calendrier de review.
-                            </div>
-
-                        </div>
-
-                        {/* FUTURE BLOCK */}
-                        <div
-                            style={{
-                                ...cardStyle,
-                                background:
-                                    "linear-gradient(180deg, #171717 0%, #141414 100%)"
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    color: "#666",
-                                    fontSize: "11px",
-                                    fontWeight: "700",
-                                    letterSpacing: "0.08em",
-                                    marginBottom: "12px"
-                                }}
-                            >
-                                TYPES SUPPORTÉS
-                            </div>
-
-                            <div
-                                style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: "8px"
-                                }}
-                            >
-
-                                {[
-                                    ["TEXT", "#2b2047", "#b69cff"],
-                                    ["MAP", "#3d2b14", "#ffcc7a"],
-                                    ["IMAGE", "#163524", "#7ee2a8"],
-                                    ["AUDIO", "#3a1d2d", "#ff9ccc"]
-                                ].map(([label, bg, color]) => (
-                                    <div
-                                        key={label}
-                                        style={{
-                                            background: bg,
-                                            color,
-                                            padding: "5px 10px",
-                                            borderRadius: "999px",
-                                            fontSize: "11px",
-                                            fontWeight: "700"
-                                        }}
-                                    >
-                                        {label}
-                                    </div>
-                                ))}
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
+                <h1>Nemoris</h1>
+              </div>
             </div>
 
-        </div>
-    );
+            <p className="menu-subtitle">
+              L'outil ultime pour apprendre et réviser efficacement grâce à la répétition espacée.
+            </p>
+          </div>
+
+          <div className="menu-workflow" aria-label="Navigation principale">
+            {workflowItems.map((item, index) => (
+              <div className="menu-workflow-item" key={item}>
+                <span className="menu-workflow-index">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <main className="menu-actions" aria-label="Actions">
+          {startupNotice && (
+            <div className="menu-notice">
+              <div>
+                <div className="menu-notice-title">
+                  Calendrier rééquilibré
+                </div>
+                <div className="menu-notice-text">
+                  {startupNotice.moved} question{startupNotice.moved > 1 ? "s" : ""} déplacée{startupNotice.moved > 1 ? "s" : ""} pour garder environ {startupNotice.daily_target}/jour.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="menu-notice-close"
+                onClick={onDismissStartupNotice}
+                aria-label="Masquer"
+                title="Masquer"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="menu-review"
+            onClick={() => setMode("quiz")}
+          >
+            <span className="menu-review-main">
+              <span className="menu-pill menu-pill-amber">Review</span>
+              <span className="menu-review-title">Révision du jour</span>
+              <span className="menu-review-text">
+                Lance la session due avec les questions texte, maps, images et timelines.
+              </span>
+            </span>
+
+            <span className="menu-review-side">
+              <span className="menu-play" aria-hidden="true">▶</span>
+              <span>Démarrer</span>
+            </span>
+
+            <span className="menu-review-types" aria-label="Types supportés">
+              {reviewTypes.map((type) => (
+                <span
+                  className={`menu-type-chip menu-type-${type.accent}`}
+                  key={type.label}
+                >
+                  {type.label}
+                </span>
+              ))}
+            </span>
+          </button>
+
+          <div className="menu-destination-grid">
+            {destinations.map((item) => (
+              <DestinationButton
+                item={item}
+                key={item.mode}
+                setMode={setMode}
+              />
+            ))}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

@@ -297,57 +297,28 @@ export default function MapReview({ group, reviewZones, onComplete }) {
             </div>
           </div>
 
-          {/* PROGRESS BAR */}
-          <div>
+          <div
+            style={{
+              background: "#111",
+              border: "1px solid #2a2a2a",
+              borderRadius: "999px",
+              height: "10px",
+              overflow: "hidden"
+            }}
+          >
             <div
               style={{
-                height: "10px",
-                borderRadius: "999px",
-                background: feedbackTone === "incorrect"
-                  ? "rgba(127, 29, 29, 0.45)"
-                  : feedbackTone === "correct"
-                    ? "rgba(20, 83, 45, 0.42)"
-                  : "#111",
-                overflow: "hidden",
-                border: feedbackTone === "incorrect"
-                  ? "1px solid rgba(248, 113, 113, 0.9)"
-                  : feedbackTone === "correct"
-                    ? "1px solid rgba(134, 239, 172, 0.85)"
-                  : "1px solid #2a2a2a",
-                boxShadow: feedbackTone === "incorrect"
-                  ? "0 0 0 4px rgba(248, 113, 113, 0.12), 0 0 24px rgba(239, 68, 68, 0.35)"
-                  : feedbackTone === "correct"
-                    ? "0 0 0 4px rgba(134, 239, 172, 0.12), 0 0 24px rgba(34, 197, 94, 0.28)"
-                  : "none",
-                transition: "background 0.18s ease, border 0.18s ease, box-shadow 0.18s ease"
+                background: "linear-gradient(90deg, #f0c36a, #8fc7ff)",
+                height: "100%",
+                transition: "width 0.2s ease",
+                width: `${progressPercent}%`
               }}
-            >
-              <div
-                style={{
-                  width: `${progressPercent}%`,
-                  height: "100%",
-                  background: feedbackTone === "incorrect"
-                    ? "linear-gradient(90deg, #ef4444, #fb7185)"
-                    : feedbackTone === "correct"
-                      ? "linear-gradient(90deg, #86efac, #4ade80)"
-                    : "linear-gradient(90deg, #38bdf8, #60a5fa)",
-                  transition: "width 0.2s ease, background 0.18s ease"
-                }}
-              />
-            </div>
+            />
+          </div>
 
-            <div
-              style={{
-                marginTop: "8px",
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "12px",
-                color: "#777"
-              }}
-            >
-              <span>{reviewZones.length - foundQuestionIds.length} restantes</span>
-              <span>{Math.round(progressPercent)}%</span>
-            </div>
+          <div style={{ color: "#777", display: "flex", fontSize: "12px", justifyContent: "space-between", marginTop: "8px" }}>
+            <span>{remainingZones.length} restantes</span>
+            <span>{showRecap ? "Résultat" : "En cours"}</span>
           </div>
         </div>
 
