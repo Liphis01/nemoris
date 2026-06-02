@@ -4,35 +4,7 @@ import {
   rebalanceReviewCalendar,
   updateReviewSettings
 } from "../../../api/review";
-
-const panelStyle = {
-  background: "#181818",
-  border: "1px solid #262626",
-  borderRadius: "10px",
-  padding: "22px"
-};
-
-const inputStyle = {
-  background: "#151515",
-  border: "1px solid #2a2a2a",
-  color: "#eee",
-  borderRadius: "8px",
-  padding: "10px 12px",
-  fontSize: "14px",
-  outline: "none",
-  width: "140px"
-};
-
-const buttonStyle = {
-  background: "#1f2d24",
-  border: "1px solid #385544",
-  color: "#d7f5df",
-  borderRadius: "8px",
-  cursor: "pointer",
-  fontSize: "14px",
-  fontWeight: "650",
-  padding: "10px 14px"
-};
+import "./Settings.css";
 
 function normalizeTarget(value, fallback) {
   const parsed = Number(value);
@@ -116,179 +88,100 @@ export default function Settings({ setMode }) {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#111",
-        color: "#eee",
-        padding: "30px 24px 80px",
-        boxSizing: "border-box"
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "780px",
-          margin: "0 auto"
-        }}
-      >
-        <div
-          style={{
-            alignItems: "flex-start",
-            display: "flex",
-            gap: "20px",
-            justifyContent: "space-between",
-            marginBottom: "28px"
-          }}
-        >
-          <div>
-            <div
-              style={{
-                color: "#666",
-                fontSize: "12px",
-                letterSpacing: "0.08em",
-                marginBottom: "8px"
-              }}
-            >
-              SETTINGS
-            </div>
-
-            <h1
-              style={{
-                fontSize: "38px",
-                lineHeight: 1,
-                margin: "0 0 12px"
-              }}
-            >
-              Paramètres
-            </h1>
+    <div className="settings-screen">
+      <div className="settings-shell">
+        <header className="settings-header">
+          <div className="settings-title-block">
+            <div className="settings-overline">Paramètres</div>
+            <h1>Paramètres</h1>
+            <p>Rythme de révision et rééquilibrage du calendrier.</p>
           </div>
 
           <button
             type="button"
             onClick={() => setMode("menu")}
-            style={{
-              background: "#1a1a1a",
-              border: "1px solid #2a2a2a",
-              borderRadius: "8px",
-              color: "#bbb",
-              cursor: "pointer",
-              fontSize: "14px",
-              padding: "10px 14px"
-            }}
+            className="settings-back"
           >
             ← Retour
           </button>
-        </div>
+        </header>
 
-        <div style={panelStyle}>
-          {loading ? (
-            <div
-              style={{
-                color: "#777",
-                padding: "32px 0",
-                textAlign: "center"
-              }}
-            >
-              Chargement des paramètres...
-            </div>
-          ) : (
-            <>
-              <div
-                style={{
-                  color: "#777",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  letterSpacing: "0.06em",
-                  marginBottom: "10px"
-                }}
-              >
-                REVIEW
+        <main className="settings-grid">
+          <section className="settings-panel">
+            <div className="settings-section-head">
+              <span className="settings-section-icon" aria-hidden="true">
+                ↻
+              </span>
+
+              <div>
+                <div className="settings-overline">Review</div>
+                <h2>Rythme quotidien</h2>
               </div>
+            </div>
 
-              <label
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  marginBottom: "18px"
-                }}
-              >
-                <span
-                  style={{
-                    color: "#e5e5e5",
-                    fontSize: "16px",
-                    fontWeight: "700"
-                  }}
-                >
-                  Objectif quotidien
-                </span>
+            {loading ? (
+              <div className="settings-loading">
+                Chargement des paramètres...
+              </div>
+            ) : (
+              <>
+                <label className="settings-field">
+                  <span className="settings-label">Objectif quotidien</span>
 
-                <input
-                  aria-label="Objectif quotidien"
-                  type="number"
-                  min="1"
-                  max="10000"
-                  value={draft}
-                  disabled={saving}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      saveTarget();
-                    }
-                  }}
-                  style={inputStyle}
-                />
-              </label>
+                  <span className="settings-control">
+                    <input
+                      aria-label="Objectif quotidien"
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={draft}
+                      disabled={saving}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          saveTarget();
+                        }
+                      }}
+                      className="settings-input"
+                    />
+                    <span className="settings-unit">questions / jour</span>
+                  </span>
+                </label>
 
-              <div
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "12px"
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={saveTarget}
-                  disabled={saving}
-                  style={{
-                    ...buttonStyle,
-                    background: saving ? "#202020" : buttonStyle.background,
-                    color: saving ? "#888" : buttonStyle.color,
-                    cursor: saving ? "default" : "pointer"
-                  }}
-                >
-                  {saving ? "Enregistrement..." : "Enregistrer"}
-                </button>
-
-                {status && (
-                  <div
-                    style={{
-                      color: "#9bd9aa",
-                      fontSize: "14px"
-                    }}
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    onClick={saveTarget}
+                    disabled={saving}
+                    className="settings-save"
                   >
-                    {status}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                    {saving ? "Enregistrement..." : "Enregistrer"}
+                  </button>
 
-          {error && (
-            <div
-              role="alert"
-              style={{
-                color: "#ff9c9c",
-                fontSize: "14px",
-                marginTop: "18px"
-              }}
-            >
-              {error}
+                  {status && (
+                    <div className="settings-status" role="status">
+                      {status}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {error && (
+              <div role="alert" className="settings-alert">
+                {error}
+              </div>
+            )}
+          </section>
+
+          <aside className="settings-summary" aria-label="Résumé">
+            <div className="settings-summary-card">
+              <div className="settings-overline">Objectif actif</div>
+              <strong>{loading ? "..." : target}</strong>
+              <span>questions / jour</span>
             </div>
-          )}
-        </div>
+          </aside>
+        </main>
       </div>
     </div>
   );

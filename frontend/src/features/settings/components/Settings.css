@@ -1,0 +1,343 @@
+.settings-screen {
+  background:
+    linear-gradient(180deg, rgba(255, 204, 122, 0.035) 0%, transparent 32%),
+    linear-gradient(135deg, rgba(143, 199, 255, 0.03) 0%, transparent 30%),
+    #101010;
+  box-sizing: border-box;
+  color: #eeeeee;
+  min-height: calc(100svh - 48px);
+  padding: 22px 0 56px;
+  text-align: left;
+  width: 100%;
+}
+
+.settings-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 auto;
+  max-width: 980px;
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-header {
+  align-items: flex-start;
+  background: #171717;
+  border: 1px solid #292929;
+  border-left: 3px solid #b8d7e8;
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 20px;
+}
+
+.settings-title-block {
+  min-width: 0;
+}
+
+.settings-overline {
+  color: #7f7f7f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.settings-title-block h1 {
+  color: #f4f4f4;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  margin: 7px 0 10px;
+}
+
+.settings-title-block p {
+  color: #a3a3a3;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.settings-back,
+.settings-save {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  border-radius: 8px;
+  box-sizing: border-box;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.settings-back {
+  background: #1d1d1d;
+  border: 1px solid #303030;
+  color: #cfcfcf;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+}
+
+.settings-back:hover {
+  background: #222222;
+  border-color: #444444;
+  color: #f0f0f0;
+}
+
+.settings-back:focus-visible,
+.settings-save:focus-visible,
+.settings-input:focus-visible {
+  outline: 2px solid #ffcc7a;
+  outline-offset: 3px;
+}
+
+.settings-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  min-width: 0;
+}
+
+.settings-panel,
+.settings-summary-card {
+  background: #171717;
+  border: 1px solid #292929;
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+}
+
+.settings-panel {
+  min-width: 0;
+  padding: 22px;
+}
+
+.settings-section-head {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.settings-section-icon {
+  align-items: center;
+  background: rgba(184, 215, 232, 0.09);
+  border: 1px solid rgba(184, 215, 232, 0.32);
+  border-radius: 8px;
+  color: #b8d7e8;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 21px;
+  height: 44px;
+  justify-content: center;
+  line-height: 1;
+  width: 44px;
+}
+
+.settings-section-head h2 {
+  color: #f0f0f0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 5px 0 0;
+}
+
+.settings-loading {
+  align-items: center;
+  background: #141414;
+  border: 1px solid #252525;
+  border-radius: 8px;
+  color: #888888;
+  display: flex;
+  justify-content: center;
+  min-height: 150px;
+  padding: 24px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.settings-label {
+  color: #e5e5e5;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.settings-control {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-input {
+  appearance: textfield;
+  background: #141414;
+  border: 1px solid #2d2d2d;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #eeeeee;
+  font: inherit;
+  font-size: 15px;
+  height: 42px;
+  min-width: 0;
+  padding: 10px 12px;
+  width: 150px;
+}
+
+.settings-input:disabled {
+  color: #777777;
+}
+
+.settings-input::-webkit-inner-spin-button,
+.settings-input::-webkit-outer-spin-button {
+  opacity: 0.65;
+}
+
+.settings-unit {
+  color: #969696;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.settings-save {
+  background: #1f2d24;
+  border: 1px solid #385544;
+  color: #d7f5df;
+  padding: 11px 15px;
+}
+
+.settings-save:hover:not(:disabled) {
+  background: #26372b;
+  border-color: #4b7359;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  transform: translateY(-1px);
+}
+
+.settings-save:disabled {
+  background: #202020;
+  border-color: #303030;
+  color: #888888;
+  cursor: default;
+}
+
+.settings-status,
+.settings-alert {
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 9px 11px;
+}
+
+.settings-status {
+  background: #17211b;
+  border: 1px solid rgba(126, 226, 168, 0.24);
+  color: #9bd9aa;
+}
+
+.settings-alert {
+  background: #261717;
+  border: 1px solid rgba(255, 156, 156, 0.28);
+  color: #ff9c9c;
+  margin-top: 18px;
+}
+
+.settings-summary {
+  min-width: 0;
+}
+
+.settings-summary-card {
+  padding: 18px;
+}
+
+.settings-summary-card strong {
+  color: #ffffff;
+  display: block;
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  margin: 14px 0 6px;
+}
+
+.settings-summary-card span {
+  color: #969696;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 800px) {
+  .settings-screen {
+    padding: 8px 0 40px;
+  }
+
+  .settings-header {
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .settings-title-block h1 {
+    font-size: 30px;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel {
+    padding: 18px;
+  }
+
+  .settings-back {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 460px) {
+  .settings-control {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-input {
+    width: 100%;
+  }
+
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-save,
+  .settings-status {
+    width: 100%;
+  }
+}

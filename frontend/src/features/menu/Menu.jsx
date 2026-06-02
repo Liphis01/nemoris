@@ -71,6 +71,20 @@ function DestinationButton({ item, setMode }) {
   );
 }
 
+function ReviewVisual() {
+  return (
+    <span className="menu-review-visual" aria-hidden="true">
+      <span className="menu-review-lane menu-review-lane-violet" />
+      <span className="menu-review-lane menu-review-lane-amber" />
+      <span className="menu-review-lane menu-review-lane-green" />
+      <span className="menu-review-lane menu-review-lane-blue" />
+      <span className="menu-review-node menu-review-node-one" />
+      <span className="menu-review-node menu-review-node-two" />
+      <span className="menu-review-node menu-review-node-three" />
+    </span>
+  );
+}
+
 export default function Menu({
   setMode,
   startupNotice,
@@ -78,51 +92,49 @@ export default function Menu({
 }) {
   return (
     <div className="menu-screen">
-      <div className="menu-layout">
-        <aside className="menu-identity" aria-label="Nemoris">
-          <div className="menu-brand-block">
-            <div className="menu-brand-row">
-              <div className="menu-brand-mark" aria-hidden="true">
-                N
-              </div>
-              <div>
-                <div className="menu-overline">
-                  Spaced repetition system
-                </div>
-                <h1>Nemoris</h1>
-              </div>
+      <div className="menu-shell">
+        <header className="menu-topbar" aria-label="Nemoris">
+          <div className="menu-brand-row">
+            <div className="menu-brand-mark" aria-hidden="true">
+              N
             </div>
-
-            <p className="menu-subtitle">
-              L'outil ultime pour apprendre et réviser efficacement grâce à la répétition espacée.
-            </p>
+            <div>
+              <div className="menu-overline">
+                Spaced repetition system
+              </div>
+              <h1>Nemoris</h1>
+            </div>
           </div>
-        </aside>
 
-        <main className="menu-actions" aria-label="Actions">
-          {startupNotice && (
-            <div className="menu-notice">
-              <div>
-                <div className="menu-notice-title">
-                  Calendrier rééquilibré
-                </div>
-                <div className="menu-notice-text">
-                  {startupNotice.moved} question{startupNotice.moved > 1 ? "s" : ""} déplacée{startupNotice.moved > 1 ? "s" : ""} pour garder environ {startupNotice.daily_target}/jour.
-                </div>
+          <p className="menu-subtitle">
+            Réviser, organiser et suivre les connaissances sans quitter le flux de travail.
+          </p>
+        </header>
+
+        {startupNotice && (
+          <div className="menu-notice">
+            <div>
+              <div className="menu-notice-title">
+                Calendrier rééquilibré
               </div>
-
-              <button
-                type="button"
-                className="menu-notice-close"
-                onClick={onDismissStartupNotice}
-                aria-label="Masquer"
-                title="Masquer"
-              >
-                ×
-              </button>
+              <div className="menu-notice-text">
+                {startupNotice.moved} question{startupNotice.moved > 1 ? "s" : ""} déplacée{startupNotice.moved > 1 ? "s" : ""} pour garder environ {startupNotice.daily_target}/jour.
+              </div>
             </div>
-          )}
 
+            <button
+              type="button"
+              className="menu-notice-close"
+              onClick={onDismissStartupNotice}
+              aria-label="Masquer"
+              title="Masquer"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        <main className="menu-command-grid" aria-label="Actions">
           <button
             type="button"
             className="menu-review"
@@ -135,6 +147,8 @@ export default function Menu({
                 Lance la session due avec les questions texte, maps, images et timelines.
               </span>
             </span>
+
+            <ReviewVisual />
 
             <span className="menu-review-side">
               <span className="menu-play" aria-hidden="true">▶</span>
@@ -153,15 +167,22 @@ export default function Menu({
             </span>
           </button>
 
-          <div className="menu-destination-grid">
-            {destinations.map((item) => (
-              <DestinationButton
-                item={item}
-                key={item.mode}
-                setMode={setMode}
-              />
-            ))}
-          </div>
+          <section className="menu-destinations" aria-label="Espaces de travail">
+            <div className="menu-destinations-header">
+              <span className="menu-eyebrow">Espaces</span>
+              <strong>Aller vers</strong>
+            </div>
+
+            <div className="menu-destination-list">
+              {destinations.map((item) => (
+                <DestinationButton
+                  item={item}
+                  key={item.mode}
+                  setMode={setMode}
+                />
+              ))}
+            </div>
+          </section>
         </main>
       </div>
     </div>
