@@ -11,24 +11,24 @@ const qualityOptions = [
 
 const buttonStyle = {
   border: "1px solid #333",
-  borderRadius: "10px",
+  borderRadius: "8px",
   background: "#232323",
   color: "#eee",
   cursor: "pointer",
   fontWeight: 700,
-  padding: "12px 16px"
+  padding: "10px 14px"
 };
 
 const inputStyle = {
   width: "100%",
-  padding: "14px 16px",
+  padding: "12px 14px",
   background: "#101010",
   color: "#eee",
   border: "1px solid #2d2d2d",
-  borderRadius: "12px",
+  borderRadius: "10px",
   boxSizing: "border-box",
   outline: "none",
-  fontSize: "15px"
+  fontSize: "14px"
 };
 
 function QualityButton({ option, selected, onClick }) {
@@ -81,6 +81,8 @@ export default function ImageReview({
   trainingBestPercent = null
 }) {
   const inputRef = useRef(null);
+  const containerRef = useRef(null);
+  const activeTileRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const {
     activeQuestionId,
@@ -149,6 +151,11 @@ export default function ImageReview({
 
     window.requestAnimationFrame(() => {
       inputRef.current?.focus({ preventScroll: true });
+
+      const tile = activeTileRef.current;
+      if (!tile) return;
+
+      tile.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
     });
   }, [activeQuestionId, previewRow, resultMode]);
 
@@ -173,14 +180,14 @@ export default function ImageReview({
           borderRadius: "18px",
           display: "flex",
           flexDirection: "column",
-          maxHeight: "calc(100vh - 180px)",
+          maxHeight: "calc(100vh - 140px)",
           ...fadeInStyle
         }}
       >
       <div
         style={{
           borderBottom: "1px solid #262626",
-          padding: "22px 24px 18px",
+          padding: "16px 18px 14px",
           flexShrink: 0
         }}
       >
@@ -188,29 +195,29 @@ export default function ImageReview({
           style={{
             alignItems: "flex-start",
             display: "flex",
-            gap: "20px",
+            gap: "16px",
             justifyContent: "space-between",
-            marginBottom: "16px"
+            marginBottom: "12px"
           }}
         >
           <div>
             <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
               {resultMode ? "IMAGE RESULT" : "IMAGE"}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "12px" }}>
-              <div style={{ color: "#f3f3f3", fontSize: "28px", fontWeight: 800 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "10px", flexWrap: "wrap" }}>
+              <div style={{ color: "#f3f3f3", fontSize: "24px", fontWeight: 800, lineHeight: 1 }}>
                 {group.name || "Images"}
               </div>
               {trainingElapsedMs !== null && !resultMode && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "6px 10px", textAlign: "center" }}>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "5px 8px", textAlign: "center" }}>
                     <div style={{ color: "#999", fontSize: "9px", fontWeight: 800, textTransform: "uppercase" }}>Temps</div>
-                    <div style={{ color: "#e8e8e8", fontSize: "14px", fontWeight: 800 }}>{Math.floor(trainingElapsedMs / 1000)}s</div>
+                    <div style={{ color: "#e8e8e8", fontSize: "13px", fontWeight: 800 }}>{Math.floor(trainingElapsedMs / 1000)}s</div>
                   </div>
                   {trainingBestTimeMs && (
-                    <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "6px 10px", textAlign: "center" }}>
+                    <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "5px 8px", textAlign: "center" }}>
                       <div style={{ color: "#999", fontSize: "9px", fontWeight: 800, textTransform: "uppercase" }}>Meilleur</div>
-                      <div style={{ color: "#e8e8e8", fontSize: "14px", fontWeight: 800 }}>{Math.floor(trainingBestTimeMs / 1000)}s</div>
+                      <div style={{ color: "#e8e8e8", fontSize: "13px", fontWeight: 800 }}>{Math.floor(trainingBestTimeMs / 1000)}s</div>
                     </div>
                   )}
                 </div>
@@ -231,7 +238,7 @@ export default function ImageReview({
             background: "#111",
             border: "1px solid #2a2a2a",
             borderRadius: "999px",
-            height: "10px",
+            height: "8px",
             overflow: "hidden"
           }}
         >
@@ -245,18 +252,18 @@ export default function ImageReview({
           />
         </div>
 
-        <div style={{ color: "#777", display: "flex", fontSize: "12px", justifyContent: "space-between", marginTop: "8px" }}>
+        <div style={{ color: "#777", display: "flex", fontSize: "11px", justifyContent: "space-between", marginTop: "6px" }}>
           <span>{remainingCount} restantes</span>
           <span>{resultMode ? "Résultat" : "En cours"}</span>
         </div>
       </div>
 
-      <div style={{ padding: "18px", overflow: "auto", flex: 1, minHeight: 0 }}>
+      <div ref={containerRef} style={{ padding: "14px", overflow: "auto", flex: 1, minHeight: 0 }}>
         <div
           style={{
             display: "grid",
-            gap: "12px",
-            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))"
+            gap: "10px",
+            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))"
           }}
         >
           {gridItems.map((row) => {
@@ -267,6 +274,7 @@ export default function ImageReview({
             return (
               <div
                 key={row.item.question_id}
+                ref={row.item.question_id === activeQuestionId ? activeTileRef : null}
                 onClick={() => selectTile(row.item.question_id)}
                 onKeyDown={(event) => {
                   if (!selectable || (event.key !== "Enter" && event.key !== " ")) {
@@ -289,11 +297,11 @@ export default function ImageReview({
                   color: "#eee",
                   cursor: selectable ? "pointer" : "default",
                   display: "grid",
-                  gap: "10px",
-                  gridTemplateRows: "126px minmax(24px, auto) auto",
-                  minHeight: resultMode ? "236px" : "182px",
+                  gap: "8px",
+                  gridTemplateRows: "116px minmax(20px, auto) auto",
+                  minHeight: resultMode ? "220px" : "170px",
                   overflow: "hidden",
-                  padding: "10px",
+                  padding: "8px",
                   textAlign: "left",
                   transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease"
                 }}
@@ -406,9 +414,9 @@ export default function ImageReview({
         </div>
       </div>
 
-      <div style={{ padding: "18px", borderTop: "1px solid #262626", flexShrink: 0 }}>
+      <div style={{ padding: "14px", borderTop: "1px solid #262626", flexShrink: 0 }}>
         {!resultMode && (
-          <div style={{ marginBottom: "18px" }}>
+          <div style={{ marginBottom: "14px" }}>
             <input
               autoFocus
               ref={inputRef}

@@ -23,7 +23,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
-- bloquer le bouton annuler dans manage si on n'a pas fait de changement (peut être changer le rouge parce que trop agressif pour un simple annuler)
 - dans recap, cliquer sur une zone ne doit pas zoomer dessus
 
 ## bugs
