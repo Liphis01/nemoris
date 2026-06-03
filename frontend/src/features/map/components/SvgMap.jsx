@@ -222,24 +222,38 @@ export default function SvgMap({
     useEffect(() => {
         if (!focusCode || !wrapperRef.current) return;
 
-        // Center and zoom on a selected zone by translating its rendered screen
-        // box back into the map's unscaled coordinate space.
-        const target = zoneElementsRef.current.find(({ code }) => code === focusCode);
-        if (!target?.el) return;
+        // Find ALL elements with this code (large zones like Argentina, Australia have multiple paths)
+        const allTargets = zoneElementsRef.current.filter(({ code }) => code === focusCode);
+        if (allTargets.length === 0) return;
 
         const wrapperRect = wrapperRef.current.getBoundingClientRect();
         if (!wrapperRect.width || !wrapperRect.height) return;
 
-        const renderedBox = target.el.getBoundingClientRect();
-        if (!renderedBox.width || !renderedBox.height) return;
+        // Calculate combined bounding box of all paths for this zone
+        let minLeft = Infinity;
+        let minTop = Infinity;
+        let maxRight = -Infinity;
+        let maxBottom = -Infinity;
+
+        for (const target of allTargets) {
+            const renderedBox = target.el.getBoundingClientRect();
+            if (renderedBox.width > 0 && renderedBox.height > 0) {
+                minLeft = Math.min(minLeft, renderedBox.left);
+                minTop = Math.min(minTop, renderedBox.top);
+                maxRight = Math.max(maxRight, renderedBox.right);
+                maxBottom = Math.max(maxBottom, renderedBox.bottom);
+            }
+        }
+
+        if (!isFinite(minLeft) || !isFinite(minTop)) return;
 
         const currentScale = transformRef.current.scale || 1;
         const currentOffset = transformRef.current.offset || { x: 0, y: 0 };
         const box = {
-            x: (renderedBox.left - wrapperRect.left - currentOffset.x) / currentScale,
-            y: (renderedBox.top - wrapperRect.top - currentOffset.y) / currentScale,
-            width: renderedBox.width / currentScale,
-            height: renderedBox.height / currentScale
+            x: (minLeft - wrapperRect.left - currentOffset.x) / currentScale,
+            y: (minTop - wrapperRect.top - currentOffset.y) / currentScale,
+            width: (maxRight - minLeft) / currentScale,
+            height: (maxBottom - minTop) / currentScale
         };
 
         const padding = 0.48;

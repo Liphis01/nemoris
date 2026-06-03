@@ -20,6 +20,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 
 
 ## quick fixes
+- ajouter le timer final dans la recap d'entrainement de maps
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
@@ -27,6 +28,8 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 
 ## bugs
 - je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
+- le zoom des gros pays bug. j'ai l'impression que ça zoom sur la partie inférieure droite des pays mais quand il sont petits ça se voit pas
+- le cycle de tab dans les groupes de map revient à la même zone : A raté, B réussi, A raté, C raté, D réussi, A raté,... (on revient toujours à A)
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
