@@ -6,6 +6,7 @@
 
 - setup github pour tout automatiser
 - uniformiser le style partout
+- vérifier quelle version de fsrs j'ai (peut etre pas la dernière car dans create_initial_progress j'initialise les stability et difficulty à 1.0 et 5.0 au lieu de faire en fonction de la première réponse)
 
 ## Product Suggestions
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
@@ -28,7 +29,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 
 ## bugs
 - je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
-- le zoom des gros pays bug. j'ai l'impression que ça zoom sur la partie inférieure droite des pays mais quand il sont petits ça se voit pas
 - le cycle de tab dans les groupes de map revient à la même zone : A raté, B réussi, A raté, C raté, D réussi, A raté,... (on revient toujours à A)
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
@@ -38,12 +38,8 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 
 ## features
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
-- mode entrainement
-- dans manage, afficher toutes les stats d'une question
-- ajouter une section "stats" pour voir les stats globales (nombre de questions, nombre de thèmes, etc...) et par thème (nombre de questions, progression, etc...)
 - mettre les différents modes de jetpunk pour les maps et alterner selon les jours (commencer par le mode facile, puis alterner les modes et identifier les mode compliqués pour chaque question pour les faire réapparaître plus souvent)
 - mettre en évidence les zones trop petites (c.f. jetpunk)
-- scraper le site de émilien
 - le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
 - agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
@@ -52,10 +48,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - un mode pour renforcer les points faibles
 - importer/exporter db
 - ajouter une recherche dans calendar
-- ajouter un timer pour les questions
 - trouver un meilleur agencement pour les aliases dans map preview
-- type liste ? (= juste énumérer)
-- indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
@@ -76,3 +69,35 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - faire un menu settings
 - systeme de mmr
 - différentes langues disponibles
+- scraper le site de émilien
+- indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
+- type liste ? (= juste énumérer)
+
+
+
+
+Conseils/idées issus de la littérature scientifique :
+- varier les contextes
+- "cite les pays frontaliers de l'allemagne"
+- indices (progressifs)
+- mode free recall (?)
+- objectif de rétention par thème : par exemple 85 %, 90 %, 95%
+- bloquer un trop gros load de nouvelles questions
+- autoriser réviser en avance
+- afficher une prédiction sur la proba de s'en souvenir ajdhui
+- mettre un statut sur les questions : new / learning / fragile / stable / mastered
+- faire un mode différent pour les nouvelles questions ? apprentissage into quiz ?
+- ajouter un input pour les questions textes puis créer automatiquement des cartes "différence entre X et Y" après avoir identifié des confusions récurrentes entre certains auteurs ou autre ("quel auteur est associé au naturalisme ?", "madame bovary vs germinal", "classe ces auteurs par mouvement littéraire")
+- dans l'entraînement : mode "mes erreurs récentes", "différences proches"
+- interleaving : mélanger intelligement les thèmes proches
+- option pour questions timeline : "qui est antérieur : X ou Y ?"
+- créer plusieurs chemins vers la même connaissance : date > événement / événement > date (i.e. générer automatiquement des cartes inverses).
+associer les paires, retrouver à partir d'une image, trouver tous les éléments d'une catégorie
+- accompagner un palais mental
+- accompagner pour PAO (table de 00-99)
+- pour chaque carte, faire un bouton : créer une image mentale absurde (mini-histoire, lien phonétique, lien spatial, image visuelle absurde)
+- graphe de connaissances pour faire des questions synthèse, comparer, expliquer, match
+- signaler les cartes trop longues
+- éviter la charge cognitive ! signaler cartes trop longes, écran minimaliste
+- feature transformer info brute en questions efficaces : import d'un texte > extraction automatique de faits > proposition de questions > détection des dates, lieux, personnes > génération de cartes "inverses"/"pourquoi"/"différence entre" > validation manuelle
+- au lieu de faire directement les questions, le user écrit des connaissances qui font un knowledge graph qui permet de générer automatiquement les questions
