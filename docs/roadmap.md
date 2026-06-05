@@ -7,6 +7,7 @@
 - setup github pour tout automatiser
 - uniformiser le style partout
 - vérifier quelle version de fsrs j'ai (peut etre pas la dernière car dans create_initial_progress j'initialise les stability et difficulty à 1.0 et 5.0 au lieu de faire en fonction de la première réponse)
+- que signifie 304 Not Modified ? seulement certaines images l'ont
 
 ## Product Suggestions
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
@@ -26,6 +27,11 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
 - dans recap, cliquer sur une zone ne doit pas zoomer dessus
+- la scroll bar des groupes images (review et training) est super moche
+- limiter la taille des images dans les questions et éventuellement cliquer dessus pour les agrandir
+- enter dans la review/training devrait scroll tout en bas de la page
+- ajouter une ligne dans un groupe d'images doit scroll à la nouvelle ligne et ajouter bouton annuler
+- si le groupe est modifié il faut reset le record dans entraînement
 
 ## bugs
 - je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
@@ -35,6 +41,8 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 - timeline sépare les zones en deux (il suffit de décaler d'une demi zone)
+- les cellules des images grossisent pour les réponses dans training + on ne voit pas les noms en entier pour les plus longs
+- la recherche dans manage devrait aussi regarder dans les aliases
 
 ## features
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
@@ -49,6 +57,10 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - importer/exporter db
 - ajouter une recherche dans calendar
 - trouver un meilleur agencement pour les aliases dans map preview
+- mettre des groupes en favoris pour les faire réapparaître plus souvent (qui se met sur toutes les questions du groupe)
+- pouvoir choisir quels questions bonus faire (et sélectionner une sous partie d'un groupe notamment)
+- supprimer une question appelle le rebalancing ?
+- permettre d'accepter une réponse fausse si faute de frappe
 
 ## refactors
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
@@ -76,7 +88,8 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 
 
 
-Conseils/idées issus de la littérature scientifique :
+# Conseils/idées issus de la littérature scientifique :
+
 - varier les contextes
 - "cite les pays frontaliers de l'allemagne"
 - indices (progressifs)

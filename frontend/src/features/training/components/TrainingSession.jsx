@@ -516,7 +516,7 @@ export default function TrainingSession({ setMode }) {
                     onClick={session.returnToScopeSelector}
                     style={buttonStyle}
                   >
-                    Retour
+                    ← Retour
                   </button>
                 </div>
               </div>

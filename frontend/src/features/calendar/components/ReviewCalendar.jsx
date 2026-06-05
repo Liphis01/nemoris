@@ -643,7 +643,7 @@ function EventCard({
           }}
           style={cardActionButtonStyle}
         >
-          Gérer dans Manage ↗
+          Ouvrir dans le gestionnaire ↗
         </button>
       </div>
     </div>
@@ -1740,7 +1740,7 @@ export default function ReviewCalendar({
                     }}
                     style={backButtonStyle}
                   >
-                    Retour à la liste
+                    ← Retour
                   </button>
                 </div>
               ) : (
