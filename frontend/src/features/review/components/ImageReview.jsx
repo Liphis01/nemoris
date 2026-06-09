@@ -303,7 +303,7 @@ export default function ImageReview({
                   display: "grid",
                   gap: "8px",
                   gridTemplateRows: "116px minmax(20px, auto) auto",
-                  minHeight: resultMode ? "220px" : "170px",
+                  minHeight: resultMode && showQualityControls ? "220px" : "170px",
                   overflow: "hidden",
                   padding: "8px",
                   textAlign: "left",

@@ -26,7 +26,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
-- la scroll bar des groupes images (review et training) est super moche
 - limiter la taille des images dans les questions et éventuellement cliquer dessus pour les agrandir
 - enter dans la review/training devrait scroll tout en bas de la page
 - ajouter une ligne dans un groupe d'images doit scroll à la nouvelle ligne et ajouter bouton annuler
@@ -39,7 +38,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
-- timeline sépare les zones en deux (il suffit de décaler d'une demi zone)
+- timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - les cellules des images grossisent pour les réponses dans training + on ne voit pas les noms en entier pour les plus longs
 - la recherche dans manage devrait aussi regarder dans les aliases
 
