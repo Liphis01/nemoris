@@ -258,7 +258,11 @@ export default function ImageReview({
         </div>
       </div>
 
-      <div ref={containerRef} style={{ padding: "14px", overflow: "auto", flex: 1, minHeight: 0 }}>
+      <div
+        ref={containerRef}
+        className="app-scrollbar"
+        style={{ padding: "14px", overflow: "auto", flex: 1, minHeight: 0 }}
+      >
         <div
           style={{
             display: "grid",
