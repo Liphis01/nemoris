@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
@@ -126,6 +126,8 @@ export default function MapReview({
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
+  const [recapFocusCode, setRecapFocusCode] = useState(null);
+  const [recapFocusVersion, setRecapFocusVersion] = useState(0);
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
   const recapGridColumns = showQualityControls
     ? recapTableGridColumns
@@ -178,12 +180,20 @@ export default function MapReview({
     centerListItem(list, row);
   }, []);
 
-  const focusRecapCode = useCallback((code) => {
+  const selectRecapCode = useCallback((code) => {
     if (!code) return;
 
     setFocusedCode(code);
     window.requestAnimationFrame(() => scrollRecapRowIntoView(code));
   }, [scrollRecapRowIntoView, setFocusedCode]);
+
+  const focusRecapCode = useCallback((code) => {
+    if (!code) return;
+
+    selectRecapCode(code);
+    setRecapFocusCode(code);
+    setRecapFocusVersion(version => version + 1);
+  }, [selectRecapCode]);
 
   const handleZoomRemaining = useCallback(() => {
     focusNextRemainingZone();
@@ -520,8 +530,9 @@ export default function MapReview({
                   missed={missedCodes}
                   dueItems={[]}
                   selected={focusedCode}
-                  focusCode={focusedCode}
-                  onSelect={focusRecapCode}
+                  focusCode={recapFocusCode}
+                  focusVersion={recapFocusVersion}
+                  onSelect={selectRecapCode}
                 />
               </div>
 
