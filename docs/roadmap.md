@@ -28,7 +28,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - faire un bouton toggle pour l'era dans la preview
 - limiter la taille des images dans les questions et éventuellement cliquer dessus pour les agrandir
 - enter dans la review/training devrait scroll tout en bas de la page
-- ajouter une ligne dans un groupe d'images doit scroll à la nouvelle ligne et ajouter bouton annuler
+- ajouter bouton annuler dans les autres types
 - si le groupe est modifié il faut reset le record dans entraînement
 
 ## bugs

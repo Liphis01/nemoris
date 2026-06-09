@@ -122,6 +122,22 @@ describe("ImageGroupEditor", () => {
     await screen.findByDisplayValue("Country 250 updated");
   });
 
+  it("scrolls to a newly added image row", async () => {
+    await renderEditor(makeImageItems(40));
+    const scroller = screen.getByTestId("image-group-items-scroll");
+
+    expect(scroller.scrollTop).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter une ligne" }));
+
+    await waitFor(() => {
+      expect(scroller.scrollTop).toBeGreaterThan(0);
+      expect(
+        document.querySelector("[data-image-group-item-id^='new-image-']")
+      ).toBeInTheDocument();
+    });
+  });
+
   it("saves all items and deleted ids while only rendering the window", async () => {
     await renderEditor();
 

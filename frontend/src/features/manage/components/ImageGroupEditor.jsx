@@ -412,6 +412,7 @@ export default function ImageGroupEditor({
   const fileInputRef = useRef(null);
   const aliasInputRefs = useRef({});
   const itemsScrollRef = useRef(null);
+  const pendingScrollItemTempIdRef = useRef(null);
   const currentGroupRef = useRef(group);
   const saveImageItemsRef = useRef(null);
   const groupId = group?.id;
@@ -480,6 +481,7 @@ export default function ImageGroupEditor({
     setDeletedItemIds([]);
     setAliasInputByTempId({});
     aliasInputRefs.current = {};
+    pendingScrollItemTempIdRef.current = null;
     setItemsScrollTop(0);
     if (itemsScrollRef.current) {
       itemsScrollRef.current.scrollTop = 0;
@@ -548,21 +550,6 @@ export default function ImageGroupEditor({
     };
   }, []);
 
-  useEffect(() => {
-    if (loading || selectedItemIndex < 0) return;
-
-    const nextScrollTop = Math.max(
-      0,
-      selectedItemIndex * IMAGE_GROUP_ROW_SLOT_HEIGHT
-    );
-
-    if (itemsScrollRef.current) {
-      itemsScrollRef.current.scrollTop = nextScrollTop;
-    }
-
-    setItemsScrollTop(nextScrollTop);
-  }, [loading, selectedItemId, selectedItemIndex]);
-
   const updateGroupField = useCallback((field, value) => {
     setEditableGroup(prev => ({
       ...(prev || {}),
@@ -573,6 +560,45 @@ export default function ImageGroupEditor({
   const handleItemsScroll = useCallback((event) => {
     setItemsScrollTop(event.currentTarget.scrollTop);
   }, []);
+
+  const scrollToItemIndex = useCallback((itemIndex) => {
+    const scrollElement = itemsScrollRef.current;
+    if (!scrollElement || itemIndex < 0) return;
+
+    const viewportHeight = scrollElement.clientHeight ||
+      itemsViewportHeight ||
+      IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT;
+    const maxScrollTop = Math.max(
+      0,
+      (items.length * IMAGE_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
+    );
+    const nextScrollTop = Math.min(
+      maxScrollTop,
+      Math.max(0, itemIndex * IMAGE_GROUP_ROW_SLOT_HEIGHT)
+    );
+
+    scrollElement.scrollTop = nextScrollTop;
+    setItemsScrollTop(nextScrollTop);
+  }, [items.length, itemsViewportHeight]);
+
+  useEffect(() => {
+    if (loading || selectedItemIndex < 0) return;
+
+    scrollToItemIndex(selectedItemIndex);
+  }, [loading, scrollToItemIndex, selectedItemId, selectedItemIndex]);
+
+  useEffect(() => {
+    if (loading || !pendingScrollItemTempIdRef.current) return;
+
+    const targetIndex = items.findIndex(
+      item => item.tempId === pendingScrollItemTempIdRef.current
+    );
+
+    if (targetIndex < 0) return;
+
+    pendingScrollItemTempIdRef.current = null;
+    scrollToItemIndex(targetIndex);
+  }, [items, loading, scrollToItemIndex]);
 
   const updateItem = useCallback((tempId, patch) => {
     setItems(prev =>
@@ -656,17 +682,20 @@ export default function ImageGroupEditor({
   }, []);
 
   const addEmptyItem = useCallback(() => {
+    const nextItem = normalizeItem({
+      answer: "",
+      media: "",
+      data: {
+        aliases: []
+      },
+      group: editableGroup,
+      group_id: editableGroup?.id
+    });
+
+    pendingScrollItemTempIdRef.current = nextItem.tempId;
     setItems(prev => [
       ...prev,
-      normalizeItem({
-        answer: "",
-        media: "",
-        data: {
-          aliases: []
-        },
-        group: editableGroup,
-        group_id: editableGroup?.id
-      })
+      nextItem
     ]);
   }, [editableGroup]);
 
@@ -739,6 +768,7 @@ export default function ImageGroupEditor({
         }));
       }
 
+      pendingScrollItemTempIdRef.current = uploadedItems[0]?.tempId || null;
       setItems(prev => [...prev, ...uploadedItems]);
     } catch (error) {
       console.error(error);
