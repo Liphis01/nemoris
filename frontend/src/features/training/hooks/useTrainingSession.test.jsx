@@ -16,6 +16,9 @@ vi.mock("../../../api/training", () => ({
 }));
 
 
+const TRAINING_FINGERPRINT = "training-fingerprint";
+
+
 describe("useTrainingSession", () => {
   let performanceNowSpy;
 
@@ -206,6 +209,7 @@ describe("useTrainingSession", () => {
         type_q: "map",
         name: "Europe",
         media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
         items: [
           { question_id: 10, code: "fr", label: "France" },
           { question_id: 11, code: "de", label: "Germany" }
@@ -237,12 +241,59 @@ describe("useTrainingSession", () => {
       expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
         elapsed_ms: 5500,
         question_count: 2,
-        found_count: 2
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT
       });
     });
     expect(result.current.recordSaveStatus).toBe("saved");
     expect(result.current.recordResult.is_new_best_time).toBe(true);
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
+  });
+
+  it("surfaces stale record save errors", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    recordGroupTrainingAttempt.mockRejectedValueOnce(
+      new Error("Training content changed; restart the session")
+    );
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.recordSaveStatus).toBe("error");
+    });
+    expect(result.current.recordSaveError).toBe(
+      "Training content changed; restart the session"
+    );
   });
 
   it("saves partial full group score but skips retry attempts", async () => {
@@ -252,6 +303,7 @@ describe("useTrainingSession", () => {
         type_q: "map",
         name: "Europe",
         media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
         items: [
           { question_id: 10, code: "fr", label: "France" },
           { question_id: 11, code: "de", label: "Germany" }
@@ -294,7 +346,8 @@ describe("useTrainingSession", () => {
       expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
         elapsed_ms: 4000,
         question_count: 2,
-        found_count: 1
+        found_count: 1,
+        content_fingerprint: TRAINING_FINGERPRINT
       });
     });
 
@@ -318,6 +371,7 @@ describe("useTrainingSession", () => {
         type_q: "map",
         name: "Europe",
         media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
         items: [
           { question_id: 10, code: "fr", label: "France" },
           { question_id: 11, code: "de", label: "Germany" }

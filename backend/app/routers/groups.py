@@ -138,6 +138,15 @@ def update_group(
         if field in updates:
             setattr(group, field, updates[field])
 
+    if (
+        group.type_group == "map" and
+        "media" in updates and
+        not media_points_to_same_static_file(old_media, group.media)
+    ):
+        from ..services.training import clear_training_record
+
+        clear_training_record(group)
+
     db.commit()
     db.refresh(group)
 

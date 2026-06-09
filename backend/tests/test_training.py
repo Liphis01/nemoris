@@ -9,13 +9,16 @@ from app.database import Base
 from app.models import Progress, Question, QuestionGroup
 from app.routers.training import grade_timeline_training
 from app.schemas import (
+    QuestionUpdate,
     TimelineAnswerItem,
     TimelineAnswerRequest,
     TimelineDateValue,
     TrainingAttemptRecordRequest
 )
+from app.services.questions import delete_question, update_question
 from app.services.training import (
     get_training_items,
+    group_training_fingerprint,
     list_training_scopes,
     record_training_attempt
 )
@@ -49,6 +52,7 @@ class TrainingTests(unittest.TestCase):
         type_q="text",
         question=None,
         answer=None,
+        media=None,
         tags=None,
         data=None,
         group=None,
@@ -61,7 +65,7 @@ class TrainingTests(unittest.TestCase):
             type_q=type_q,
             question=question or f"Question {question_id}",
             answer=answer or f"Answer {question_id}",
-            media=None,
+            media=media,
             tags=tags or [],
             data=data or {},
             group=group
@@ -80,6 +84,25 @@ class TrainingTests(unittest.TestCase):
             )
 
         return item
+
+    def record_request(self, group, elapsed_ms, question_count, found_count):
+        return TrainingAttemptRecordRequest(
+            elapsed_ms=elapsed_ms,
+            question_count=question_count,
+            found_count=found_count,
+            content_fingerprint=group_training_fingerprint(self.db, group)
+        )
+
+    def seed_training_record(self, group, record):
+        record = {
+            **record,
+            "content_fingerprint": group_training_fingerprint(self.db, group)
+        }
+        group.data = {
+            **(group.data or {}),
+            "training_record": record
+        }
+        self.db.commit()
 
     def test_group_training_returns_all_group_items_in_review_shape(self):
         today = date.today()
@@ -127,6 +150,10 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(
             {item["question_id"] for item in response[0]["items"]},
             {1, 2}
+        )
+        self.assertEqual(
+            response[0]["training_fingerprint"],
+            group_training_fingerprint(self.db, group)
         )
 
     def test_tag_training_is_exact_case_insensitive(self):
@@ -188,23 +215,22 @@ class TrainingTests(unittest.TestCase):
             type_group="map",
             name="World",
             media="world.svg",
-            data={
-                "training_record": {
-                    "best_found_percent": 100,
-                    "best_found_count": 1,
-                    "best_found_elapsed_ms": 4000,
-                    "best_found_at": "2026-06-01T10:00:00+00:00",
-                    "best_time_ms": 4000,
-                    "best_time_at": "2026-06-01T10:00:00+00:00",
-                    "question_count": 1
-                }
-            }
+            data={}
         )
         self.db.add(group)
         self.add_question(1, type_q="map", tags=["Geo", "geo"], group=group)
         self.add_question(2, tags=["geo", "History"])
         self.add_question(3, tags=["history"])
         self.db.commit()
+        self.seed_training_record(group, {
+            "best_found_percent": 100,
+            "best_found_count": 1,
+            "best_found_elapsed_ms": 4000,
+            "best_found_at": "2026-06-01T10:00:00+00:00",
+            "best_time_ms": 4000,
+            "best_time_at": "2026-06-01T10:00:00+00:00",
+            "question_count": 1
+        })
 
         response = list_training_scopes(self.db)
 
@@ -219,6 +245,30 @@ class TrainingTests(unittest.TestCase):
             {"name": "Geo", "count": 2},
             {"name": "History", "count": 2}
         ])
+
+    def test_scopes_hide_legacy_records_without_fingerprint(self):
+        group = QuestionGroup(
+            id=31,
+            type_group="map",
+            name="World",
+            media="world.svg",
+            data={
+                "training_record": {
+                    "best_found_percent": 100,
+                    "best_found_count": 1,
+                    "best_found_elapsed_ms": 4000,
+                    "best_found_at": "2026-06-01T10:00:00+00:00",
+                    "question_count": 1
+                }
+            }
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.db.commit()
+
+        response = list_training_scopes(self.db)
+
+        self.assertIsNone(response["groups"][0]["training_record"])
 
     def test_first_clean_attempt_saves_best_percent_and_time(self):
         group = QuestionGroup(
@@ -236,11 +286,7 @@ class TrainingTests(unittest.TestCase):
         response = record_training_attempt(
             self.db,
             group.id,
-            TrainingAttemptRecordRequest(
-                elapsed_ms=12345,
-                question_count=2,
-                found_count=2
-            )
+            self.record_request(group, 12345, 2, 2)
         )
 
         record = response["training_record"]
@@ -251,6 +297,10 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(record["best_found_elapsed_ms"], 12345)
         self.assertEqual(record["best_time_ms"], 12345)
         self.assertEqual(record["question_count"], 2)
+        self.assertEqual(
+            record["content_fingerprint"],
+            group_training_fingerprint(self.db, group)
+        )
         self.assertEqual(group.data["theme"], "blue")
 
     def test_partial_attempt_updates_best_percent_but_not_clean_time(self):
@@ -269,11 +319,7 @@ class TrainingTests(unittest.TestCase):
         response = record_training_attempt(
             self.db,
             group.id,
-            TrainingAttemptRecordRequest(
-                elapsed_ms=5000,
-                question_count=2,
-                found_count=1
-            )
+            self.record_request(group, 5000, 2, 1)
         )
 
         record = response["training_record"]
@@ -289,47 +335,34 @@ class TrainingTests(unittest.TestCase):
             type_group="map",
             name="World",
             media=None,
-            data={
-                "training_record": {
-                    "best_found_percent": 50,
-                    "best_found_count": 1,
-                    "best_found_elapsed_ms": 5000,
-                    "best_found_at": "2026-06-01T10:00:00+00:00",
-                    "question_count": 2
-                }
-            }
+            data={}
         )
         self.db.add(group)
         self.add_question(1, type_q="map", group=group)
         self.add_question(2, type_q="map", group=group)
         self.db.commit()
+        self.seed_training_record(group, {
+            "best_found_percent": 50,
+            "best_found_count": 1,
+            "best_found_elapsed_ms": 5000,
+            "best_found_at": "2026-06-01T10:00:00+00:00",
+            "question_count": 2
+        })
 
         lower = record_training_attempt(
             self.db,
             group.id,
-            TrainingAttemptRecordRequest(
-                elapsed_ms=2000,
-                question_count=2,
-                found_count=0
-            )
+            self.record_request(group, 2000, 2, 0)
         )
         slower_tie = record_training_attempt(
             self.db,
             group.id,
-            TrainingAttemptRecordRequest(
-                elapsed_ms=6000,
-                question_count=2,
-                found_count=1
-            )
+            self.record_request(group, 6000, 2, 1)
         )
         faster_tie = record_training_attempt(
             self.db,
             group.id,
-            TrainingAttemptRecordRequest(
-                elapsed_ms=4000,
-                question_count=2,
-                found_count=1
-            )
+            self.record_request(group, 4000, 2, 1)
         )
 
         self.assertFalse(lower["is_new_best_percent"])
@@ -346,31 +379,26 @@ class TrainingTests(unittest.TestCase):
             type_group="image",
             name="Flags",
             media=None,
-            data={
-                "training_record": {
-                    "best_found_percent": 100,
-                    "best_found_count": 2,
-                    "best_found_elapsed_ms": 6000,
-                    "best_found_at": "2026-06-01T10:00:00+00:00",
-                    "best_time_ms": 9000,
-                    "best_time_at": "2026-06-01T10:00:00+00:00",
-                    "question_count": 2
-                }
-            }
+            data={}
         )
         self.db.add(group)
         self.add_question(1, type_q="image", group=group)
         self.add_question(2, type_q="image", group=group)
         self.db.commit()
+        self.seed_training_record(group, {
+            "best_found_percent": 100,
+            "best_found_count": 2,
+            "best_found_elapsed_ms": 6000,
+            "best_found_at": "2026-06-01T10:00:00+00:00",
+            "best_time_ms": 9000,
+            "best_time_at": "2026-06-01T10:00:00+00:00",
+            "question_count": 2
+        })
 
         response = record_training_attempt(
             self.db,
             group.id,
-            TrainingAttemptRecordRequest(
-                elapsed_ms=7000,
-                question_count=2,
-                found_count=2
-            )
+            self.record_request(group, 7000, 2, 2)
         )
 
         record = response["training_record"]
@@ -398,7 +426,8 @@ class TrainingTests(unittest.TestCase):
                 TrainingAttemptRecordRequest(
                     elapsed_ms=1000,
                     question_count=1,
-                    found_count=1
+                    found_count=1,
+                    content_fingerprint="missing"
                 )
             )
 
@@ -408,11 +437,7 @@ class TrainingTests(unittest.TestCase):
             record_training_attempt(
                 self.db,
                 group.id,
-                TrainingAttemptRecordRequest(
-                    elapsed_ms=1000,
-                    question_count=2,
-                    found_count=1
-                )
+                self.record_request(group, 1000, 2, 1)
             )
 
         self.assertEqual(mismatched_count.exception.status_code, 400)
@@ -421,14 +446,125 @@ class TrainingTests(unittest.TestCase):
             record_training_attempt(
                 self.db,
                 group.id,
-                TrainingAttemptRecordRequest(
-                    elapsed_ms=1000,
-                    question_count=1,
-                    found_count=2
-                )
+                self.record_request(group, 1000, 1, 2)
             )
 
         self.assertEqual(invalid_found.exception.status_code, 400)
+
+    def test_stale_same_count_training_attempt_is_rejected(self):
+        group = QuestionGroup(
+            id=45,
+            type_group="map",
+            name="World",
+            media="world.svg",
+            data={}
+        )
+        self.db.add(group)
+        first = self.add_question(
+            1,
+            type_q="map",
+            answer="France",
+            data={"code": "fr", "aliases": []},
+            group=group
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            answer="Germany",
+            data={"code": "de", "aliases": []},
+            group=group
+        )
+        self.db.commit()
+        stale_fingerprint = group_training_fingerprint(self.db, group)
+        first.answer = "France changed"
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as stale_attempt:
+            record_training_attempt(
+                self.db,
+                group.id,
+                TrainingAttemptRecordRequest(
+                    elapsed_ms=1000,
+                    question_count=2,
+                    found_count=2,
+                    content_fingerprint=stale_fingerprint
+                )
+            )
+
+        self.assertEqual(stale_attempt.exception.status_code, 409)
+
+    def test_generic_grouped_question_edits_invalidate_records(self):
+        group = QuestionGroup(
+            id=46,
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={"theme": "blue"}
+        )
+        self.db.add(group)
+        self.add_question(
+            1,
+            type_q="image",
+            answer="France",
+            media="/static/france.png",
+            data={"aliases": ["FR"], "favorite": True},
+            group=group
+        )
+        self.add_question(
+            2,
+            type_q="image",
+            answer="Germany",
+            media="/static/germany.png",
+            data={"aliases": []},
+            group=group
+        )
+        self.db.commit()
+        self.seed_training_record(group, {
+            "best_found_percent": 100,
+            "best_found_count": 2,
+            "best_found_elapsed_ms": 5000,
+            "best_found_at": "2026-06-01T10:00:00+00:00",
+            "question_count": 2
+        })
+
+        update_question(
+            self.db,
+            1,
+            QuestionUpdate(tags=["geo"])
+        )
+        self.assertIn("training_record", group.data)
+
+        update_question(
+            self.db,
+            1,
+            QuestionUpdate(data={"aliases": ["France flag"], "favorite": True})
+        )
+        self.assertNotIn("training_record", group.data)
+        self.assertEqual(group.data["theme"], "blue")
+
+    def test_generic_grouped_question_delete_invalidates_records(self):
+        group = QuestionGroup(
+            id=47,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.add_question(2, type_q="map", group=group)
+        self.db.commit()
+        self.seed_training_record(group, {
+            "best_found_percent": 100,
+            "best_found_count": 2,
+            "best_found_elapsed_ms": 5000,
+            "best_found_at": "2026-06-01T10:00:00+00:00",
+            "question_count": 2
+        })
+
+        delete_question(self.db, 1)
+
+        self.assertNotIn("training_record", group.data)
 
     def test_training_timeline_grading_does_not_mutate_progress(self):
         history = [{

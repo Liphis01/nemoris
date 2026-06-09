@@ -25,6 +25,7 @@ describe("questionFilters", () => {
       question: "ile de france",
       answer: "Ile-de-France",
       tags: ["geo", "map"],
+      data: { aliases: ["Region parisienne"] },
       progress: null
     },
     {
@@ -33,6 +34,7 @@ describe("questionFilters", () => {
       question: "Flags - Cote d Ivoire",
       answer: "Cote-d Ivoire",
       tags: ["flags"],
+      aliases: ["Orange white green"],
       progress: { next_review: "2000-01-01", reps: 2 }
     }
   ];
@@ -80,6 +82,28 @@ describe("questionFilters", () => {
       tagFilter: "",
       questionTypeFilter: "image",
       dueOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([4]);
+  });
+
+  it("matches aliases from question data and direct question fields", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "region parisienne",
+      tagFilter: "",
+      questionTypeFilter: "",
+      dueOnly: false,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([3]);
+
+    expect(filterAndSortQuestions({
+      questions,
+      search: "orange white",
+      tagFilter: "",
+      questionTypeFilter: "",
+      dueOnly: false,
       sortField: "id",
       sortOrder: "asc"
     }).map(question => question.id)).toEqual([4]);

@@ -18,6 +18,7 @@ from app.services.image_groups import (
     upload_image_group_media
 )
 from app.services.questions import create_question
+from app.services.training import group_training_fingerprint
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\npng-data"
@@ -40,6 +41,23 @@ class ImageGroupTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+    def seed_training_record(self, group, question_count=2):
+        group.data = {
+            **(group.data or {}),
+            "training_record": {
+                "best_found_percent": 100,
+                "best_found_count": question_count,
+                "best_found_elapsed_ms": 4000,
+                "best_found_at": "2026-06-01T10:00:00+00:00",
+                "question_count": question_count,
+                "content_fingerprint": group_training_fingerprint(
+                    self.db,
+                    group
+                )
+            }
+        }
+        self.db.commit()
 
     def test_image_schema_and_group_compatibility(self):
         group = QuestionGroup(
@@ -230,6 +248,95 @@ class ImageGroupTests(unittest.TestCase):
 
         self.assertEqual(response["createdQuestionIds"], [])
         self.assertEqual(response["updatedQuestionIds"], [changed.id])
+
+    def test_bulk_save_invalidates_record_only_on_image_training_content(self):
+        group = QuestionGroup(
+            type_group="image",
+            name="Flags",
+            media="cover.png",
+            data={"theme": "blue"}
+        )
+        first = Question(
+            type_q="image",
+            question="Flags - France",
+            answer="France",
+            media="/static/france.png",
+            tags=["flags"],
+            data={"aliases": ["FR"], "favorite": True},
+            group=group
+        )
+        second = Question(
+            type_q="image",
+            question="Flags - Germany",
+            answer="Germany",
+            media="/static/germany.png",
+            tags=["flags"],
+            data={"aliases": ["DE"]},
+            group=group
+        )
+
+        self.db.add_all([group, first, second])
+        self.db.commit()
+        self.seed_training_record(group)
+
+        save_image_group_items(
+            self.db,
+            group.id,
+            ImageGroupItemsBulkUpdate(
+                group={
+                    "name": "European flags",
+                    "media": "cover-new.png",
+                    "tags": ["geo"]
+                },
+                items=[
+                    {
+                        "id": first.id,
+                        "answer": "France",
+                        "media": "/static/france.png",
+                        "aliases": ["FR"],
+                        "data": {"favorite": False}
+                    },
+                    {
+                        "id": second.id,
+                        "answer": "Germany",
+                        "media": "/static/germany.png",
+                        "aliases": ["DE"]
+                    }
+                ],
+                deleted_item_ids=[]
+            )
+        )
+        self.assertIn("training_record", group.data)
+
+        save_image_group_items(
+            self.db,
+            group.id,
+            ImageGroupItemsBulkUpdate(
+                group={
+                    "name": "European flags",
+                    "media": "cover-new.png",
+                    "tags": ["geo"]
+                },
+                items=[
+                    {
+                        "id": first.id,
+                        "answer": "France",
+                        "media": "/static/france.png",
+                        "aliases": ["French Republic"],
+                        "data": {"favorite": False}
+                    },
+                    {
+                        "id": second.id,
+                        "answer": "Germany",
+                        "media": "/static/germany.png",
+                        "aliases": ["DE"]
+                    }
+                ],
+                deleted_item_ids=[]
+            )
+        )
+        self.assertNotIn("training_record", group.data)
+        self.assertEqual(group.data["theme"], "blue")
 
     def test_list_image_group_items_returns_editor_shape(self):
         group = QuestionGroup(

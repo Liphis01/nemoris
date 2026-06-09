@@ -114,10 +114,19 @@ function matchesType(question, questionTypeFilter) {
 
 function matchesSearch(question, search) {
   const normalizedSearch = normalizeSearchText(search);
+  const directAliases = Array.isArray(question?.aliases) ? question.aliases : [];
+  const dataAliases = Array.isArray(question?.data?.aliases)
+    ? question.data.aliases
+    : [];
+  const searchableValues = [
+    question.question,
+    question.answer,
+    ...directAliases,
+    ...dataAliases
+  ];
 
-  return (
-    normalizeSearchText(question.question).includes(normalizedSearch) ||
-    normalizeSearchText(question.answer).includes(normalizedSearch)
+  return searchableValues.some(value =>
+    normalizeSearchText(value).includes(normalizedSearch)
   );
 }
 

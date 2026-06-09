@@ -188,6 +188,7 @@ class TrainingAttemptRecordRequest(BaseModel):
     elapsed_ms: int = Field(gt=0)
     question_count: int = Field(ge=0)
     found_count: int = Field(ge=0)
+    content_fingerprint: str = Field(min_length=1)
 
 
 class MapZoneBulkItem(BaseModel):

@@ -89,6 +89,10 @@ def save_map_group_zones(db, group_id: int, payload):
     group_updates = {}
     shared_tags_provided = False
     shared_tags = None
+    old_group_media = group.media
+    content_changed = False
+
+    from .training import clear_training_record, question_training_signature
 
     if payload.group:
         # Group edits travel with zone saves so map title/media changes and zone
@@ -102,6 +106,9 @@ def save_map_group_zones(db, group_id: int, payload):
         if "tags" in group_updates:
             shared_tags_provided = True
             shared_tags = group_updates.get("tags") or []
+
+    if "media" in group_updates and (old_group_media or "") != (group.media or ""):
+        content_changed = True
 
     existing_zones = (
         db.query(Question)
@@ -182,22 +189,43 @@ def save_map_group_zones(db, group_id: int, payload):
                 existing_by_code[code] = zone
                 created_ids.append(zone.id)
                 created_codes.append(code)
+                content_changed = True
             else:
                 # Updating answer/aliases preserves the existing question id and
                 # progress history for that zone.
+                old_signature = question_training_signature(
+                    zone.type_q,
+                    zone.answer,
+                    zone.media,
+                    zone.data or {}
+                )
+                desired_data = {
+                    "code": code,
+                    "aliases": aliases
+                }
+                desired_signature = question_training_signature(
+                    zone.type_q,
+                    zone_payload.answer or "",
+                    zone.media,
+                    desired_data
+                )
+
+                if old_signature != desired_signature:
+                    content_changed = True
+
                 zone.answer = zone_payload.answer or ""
                 zone.question = f"{group.name} - {code}"
                 if shared_tags_provided:
                     zone.tags = shared_tags
-                zone.data = {
-                    "code": code,
-                    "aliases": aliases
-                }
+                zone.data = desired_data
                 updated_ids.append(zone.id)
                 updated_codes.append(code)
 
             if zone.id not in touched_ids:
                 touched_ids.append(zone.id)
+
+        if content_changed:
+            clear_training_record(group)
 
         db.commit()
     except Exception:

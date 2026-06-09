@@ -29,6 +29,12 @@ function getReviewItemQuestionIds(item) {
 }
 
 
+function getTrainingFingerprint(items) {
+  return (items || []).find(item => item?.training_fingerprint)
+    ?.training_fingerprint || null;
+}
+
+
 function filterReviewItemsByQuestionIds(items, questionIds) {
   const idSet = questionIds instanceof Set
     ? questionIds
@@ -133,10 +139,17 @@ export function useTrainingSession(active = true) {
     () => originalQuestions.flatMap(getReviewItemQuestionIds),
     [originalQuestions]
   );
+  const trainingFingerprint = useMemo(
+    () => activeScope?.type === "group"
+      ? getTrainingFingerprint(originalQuestions)
+      : null,
+    [activeScope?.type, originalQuestions]
+  );
   const recordEligible = Boolean(
     activeScope?.type === "group" &&
     runMode === "full" &&
-    allQuestionIds.length > 0
+    allQuestionIds.length > 0 &&
+    trainingFingerprint
   );
   const completedRunElapsedMs = completedElapsedMs ?? elapsedMs;
   const attemptFoundCount = recordEligible
@@ -328,7 +341,8 @@ export function useTrainingSession(active = true) {
     const payload = {
       elapsed_ms: Math.max(1, Math.round(completedElapsedMs)),
       question_count: allQuestionIds.length,
-      found_count: attemptFoundCount
+      found_count: attemptFoundCount,
+      content_fingerprint: trainingFingerprint
     };
 
     recordSubmittedRef.current = true;
@@ -381,7 +395,8 @@ export function useTrainingSession(active = true) {
     attemptFoundCount,
     completedElapsedMs,
     isComplete,
-    recordEligible
+    recordEligible,
+    trainingFingerprint
   ]);
 
   useEffect(() => {

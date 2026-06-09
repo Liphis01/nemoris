@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -19,7 +21,8 @@ TRAINING_RECORD_FIELDS = {
     "best_found_at",
     "best_time_ms",
     "best_time_at",
-    "question_count"
+    "question_count",
+    "content_fingerprint"
 }
 
 
@@ -45,10 +48,182 @@ def _training_question_query(db):
     )
 
 
-def serialize_training_record(data):
+def _clean_string(value):
+    return str(value or "").strip()
+
+
+def _normalized_aliases(data):
+    aliases = (data or {}).get("aliases", [])
+
+    return sorted([
+        _clean_string(alias)
+        for alias in aliases
+        if _clean_string(alias)
+    ])
+
+
+def question_training_signature(type_q, answer=None, media=None, data=None):
+    if type_q == "map":
+        return {
+            "answer": _clean_string(answer),
+            "code": _clean_string((data or {}).get("code")),
+            "aliases": _normalized_aliases(data)
+        }
+
+    if type_q == "image":
+        return {
+            "answer": _clean_string(answer),
+            "media": _clean_string(media),
+            "aliases": _normalized_aliases(data)
+        }
+
+    return None
+
+
+def _group_training_fingerprint_payload(group, questions):
+    items = []
+
+    for question in sorted(questions or [], key=lambda item: item.id or 0):
+        if question.type_q != group.type_group:
+            continue
+
+        signature = question_training_signature(
+            question.type_q,
+            question.answer,
+            question.media,
+            question.data or {}
+        )
+
+        if signature is None:
+            continue
+
+        items.append({
+            "id": question.id,
+            **signature
+        })
+
+    payload = {
+        "group_id": group.id,
+        "type_group": group.type_group,
+        "items": items
+    }
+
+    if group.type_group == "map":
+        payload["media"] = _clean_string(group.media)
+
+    return payload
+
+
+def _hash_training_fingerprint_payload(payload):
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True
+    )
+
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def training_fingerprints_for_groups(db, groups):
+    groups = list(groups or [])
+    group_ids = [
+        group.id
+        for group in groups
+        if group.id is not None
+    ]
+    questions_by_group_id = {
+        group_id: []
+        for group_id in group_ids
+    }
+
+    if group_ids:
+        questions = (
+            db.query(Question)
+            .filter(
+                Question.group_id.in_(group_ids),
+                Question.type_q.in_(["map", "image"])
+            )
+            .order_by(Question.id)
+            .all()
+        )
+
+        for question in questions:
+            questions_by_group_id.setdefault(question.group_id, []).append(
+                question
+            )
+
+    return {
+        group.id: _hash_training_fingerprint_payload(
+            _group_training_fingerprint_payload(
+                group,
+                questions_by_group_id.get(group.id, [])
+            )
+        )
+        for group in groups
+    }
+
+
+def group_training_fingerprint(db, group):
+    if isinstance(group, int):
+        group = (
+            db.query(QuestionGroup)
+            .filter(QuestionGroup.id == group)
+            .first()
+        )
+
+    if not group:
+        return None
+
+    return training_fingerprints_for_groups(db, [group]).get(group.id)
+
+
+def clear_training_record(group):
+    group_data = dict(group.data or {})
+
+    if TRAINING_RECORD_KEY not in group_data:
+        return False
+
+    del group_data[TRAINING_RECORD_KEY]
+    group.data = group_data
+    return True
+
+
+def clear_training_record_for_group_id(db, group_id):
+    if not group_id:
+        return False
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        return False
+
+    return clear_training_record(group)
+
+
+def clear_training_records_for_group_ids(db, group_ids):
+    cleared = False
+
+    for group_id in sorted(set(group_ids or [])):
+        cleared = clear_training_record_for_group_id(db, group_id) or cleared
+
+    return cleared
+
+
+def serialize_training_record(data, content_fingerprint=None):
     record = (data or {}).get(TRAINING_RECORD_KEY)
 
     if not isinstance(record, dict):
+        return None
+
+    if (
+        content_fingerprint is not None and
+        record.get("content_fingerprint") != content_fingerprint
+    ):
         return None
 
     return {
@@ -70,6 +245,10 @@ def list_training_scopes(db):
         .all()
     )
     group_ids = [group.id for group, _ in groups]
+    fingerprints_by_group_id = training_fingerprints_for_groups(
+        db,
+        [group for group, _ in groups]
+    )
     grouped_tag_rows = (
         db.query(Question.group_id, Question.tags)
         .filter(
@@ -113,7 +292,10 @@ def list_training_scopes(db):
                 "media": group.media,
                 "tags": tags_by_group_id.get(group.id, []),
                 "question_count": question_count,
-                "training_record": serialize_training_record(group.data)
+                "training_record": serialize_training_record(
+                    group.data,
+                    fingerprints_by_group_id.get(group.id)
+                )
             }
             for group, question_count in groups
         ],
@@ -162,10 +344,17 @@ def record_training_attempt(db, group_id, payload):
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    current_question_count = (
-        db.query(Question.id)
-        .filter(Question.group_id == group.id)
-        .count()
+    current_questions = (
+        db.query(Question)
+        .filter(
+            Question.group_id == group.id,
+            Question.type_q == group.type_group
+        )
+        .all()
+    )
+    current_question_count = len(current_questions)
+    content_fingerprint = _hash_training_fingerprint_payload(
+        _group_training_fingerprint_payload(group, current_questions)
     )
 
     if current_question_count <= 0:
@@ -180,6 +369,12 @@ def record_training_attempt(db, group_id, payload):
             detail="Training question count no longer matches the group"
         )
 
+    if payload.content_fingerprint != content_fingerprint:
+        raise HTTPException(
+            status_code=409,
+            detail="Training content changed; restart the session"
+        )
+
     if payload.found_count > payload.question_count:
         raise HTTPException(
             status_code=400,
@@ -187,11 +382,14 @@ def record_training_attempt(db, group_id, payload):
         )
 
     group_data = dict(group.data or {})
-    record = dict(serialize_training_record(group_data) or {})
+    record = dict(
+        serialize_training_record(group_data, content_fingerprint) or {}
+    )
     timestamp = _current_utc_timestamp()
     percent = _found_percent(payload.found_count, payload.question_count)
     is_new_best_percent = False
     is_new_best_time = False
+    record["content_fingerprint"] = content_fingerprint
 
     if _should_update_best_found(record, percent, payload.elapsed_ms):
         record.update({
@@ -220,7 +418,10 @@ def record_training_attempt(db, group_id, payload):
     db.refresh(group)
 
     return {
-        "training_record": serialize_training_record(group.data),
+        "training_record": serialize_training_record(
+            group.data,
+            content_fingerprint
+        ),
         "is_new_best_percent": is_new_best_percent,
         "is_new_best_time": is_new_best_time
     }
@@ -248,7 +449,14 @@ def get_training_items(db, scope_type, group_id=None, tag=None):
             .filter(Question.group_id == group_id)
             .all()
         )
-        return serialize_review_items(questions)
+        items = serialize_review_items(questions)
+        content_fingerprint = group_training_fingerprint(db, group_id)
+
+        for item in items:
+            if item.get("group_id") == group_id:
+                item["training_fingerprint"] = content_fingerprint
+
+        return items
 
     if scope_type == "tag":
         normalized_tag = normalize_scope_tag(tag)
