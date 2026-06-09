@@ -41,16 +41,6 @@ const disabledButtonStyle = {
   opacity: 0.55
 };
 
-const sessionMetricStyle = {
-  background: "#181818",
-  border: "1px solid #2b2b2b",
-  borderRadius: "8px",
-  color: "#bbb",
-  fontSize: "12px",
-  fontWeight: "800",
-  padding: "7px 9px"
-};
-
 const completionMetricStyle = {
   background: "#141414",
   border: "1px solid #282828",
@@ -583,7 +573,6 @@ export default function TrainingSession({ setMode }) {
                   trainingMode
                   trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
                   trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
-                  trainingBestPercent={session.recordEligible ? formatRecordPercent(displayedRecord) : null}
                 />
               </>
             )}

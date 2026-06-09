@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
 import { useImageReview } from "../hooks/useImageReview";
@@ -31,6 +32,57 @@ const inputStyle = {
   fontSize: "14px"
 };
 
+const answerTooltipGap = 8;
+const answerTooltipGutter = 12;
+const answerTooltipMaxWidth = 360;
+const answerTooltipMinWidth = 220;
+
+function clamp(value, min, max) {
+  if (max < min) return min;
+
+  return Math.min(Math.max(value, min), max);
+}
+
+function hasTextOverflow(element) {
+  if (!element) return false;
+
+  return element.scrollWidth > element.clientWidth + 1;
+}
+
+function getAnswerTooltipPosition(anchor) {
+  const rect = anchor.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const availableWidth = Math.max(
+    160,
+    viewportWidth - answerTooltipGutter * 2
+  );
+  const width = Math.min(
+    answerTooltipMaxWidth,
+    Math.max(answerTooltipMinWidth, rect.width),
+    availableWidth
+  );
+  const left = clamp(
+    rect.left + rect.width / 2 - width / 2,
+    answerTooltipGutter,
+    viewportWidth - width - answerTooltipGutter
+  );
+  const shouldPlaceAbove = rect.bottom + 96 > viewportHeight;
+  const top = shouldPlaceAbove
+    ? Math.max(answerTooltipGutter, rect.top - answerTooltipGap)
+    : Math.min(
+      viewportHeight - answerTooltipGutter,
+      rect.bottom + answerTooltipGap
+    );
+
+  return {
+    left,
+    top,
+    transform: shouldPlaceAbove ? "translateY(-100%)" : "none",
+    width
+  };
+}
+
 function QualityButton({ option, selected, onClick }) {
   return (
     <button
@@ -49,6 +101,148 @@ function QualityButton({ option, selected, onClick }) {
     >
       {option.label}
     </button>
+  );
+}
+
+function ImageAnswerLabel({ color, label, revealed }) {
+  const labelRef = useRef(null);
+  const tooltipId = useId();
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const canShowTooltip = revealed && label && hasOverflow;
+
+  const updateOverflow = useCallback(() => {
+    const nextHasOverflow = revealed && hasTextOverflow(labelRef.current);
+
+    setHasOverflow((current) =>
+      current === nextHasOverflow ? current : nextHasOverflow
+    );
+
+    return nextHasOverflow;
+  }, [revealed]);
+
+  const closeTooltip = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const showTooltip = useCallback(() => {
+    const nextHasOverflow = updateOverflow();
+    const anchor = labelRef.current;
+
+    if (!revealed || !label || !nextHasOverflow || !anchor) return;
+
+    setPosition(getAnswerTooltipPosition(anchor));
+    setOpen(true);
+  }, [label, revealed, updateOverflow]);
+
+  useLayoutEffect(() => {
+    updateOverflow();
+
+    const anchor = labelRef.current;
+    const resizeObserver = anchor && "ResizeObserver" in window
+      ? new window.ResizeObserver(updateOverflow)
+      : null;
+
+    resizeObserver?.observe(anchor);
+    window.addEventListener("resize", updateOverflow);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateOverflow);
+    };
+  }, [label, updateOverflow]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        closeTooltip();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeTooltip);
+    window.addEventListener("scroll", closeTooltip, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeTooltip);
+      window.removeEventListener("scroll", closeTooltip, true);
+    };
+  }, [closeTooltip, open]);
+
+  useEffect(() => {
+    if ((!canShowTooltip || !revealed) && open) {
+      closeTooltip();
+    }
+  }, [canShowTooltip, closeTooltip, open, revealed]);
+
+  const tooltip = canShowTooltip && open && position && typeof document !== "undefined"
+    ? createPortal(
+      <div
+        id={tooltipId}
+        role="tooltip"
+        style={{
+          animation: "fadeIn 0.12s ease",
+          background: "rgba(22, 22, 22, 0.98)",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          borderRadius: "10px",
+          boxShadow: "0 18px 42px rgba(0, 0, 0, 0.45)",
+          boxSizing: "border-box",
+          color: "#f0f0f0",
+          fontSize: "13px",
+          fontWeight: 800,
+          left: `${position.left}px`,
+          lineHeight: 1.4,
+          maxHeight: "180px",
+          overflowWrap: "anywhere",
+          overflowY: "auto",
+          padding: "9px 11px",
+          pointerEvents: "none",
+          position: "fixed",
+          textAlign: "left",
+          top: `${position.top}px`,
+          transform: position.transform,
+          whiteSpace: "normal",
+          width: `${position.width}px`,
+          zIndex: 1000
+        }}
+      >
+        {label}
+      </div>,
+      document.body
+    )
+    : null;
+
+  return (
+    <>
+      <span
+        ref={labelRef}
+        aria-describedby={canShowTooltip && open ? tooltipId : undefined}
+        data-image-answer-label
+        onBlur={closeTooltip}
+        onFocus={showTooltip}
+        onPointerEnter={showTooltip}
+        onPointerLeave={closeTooltip}
+        tabIndex={canShowTooltip ? 0 : undefined}
+        style={{
+          color,
+          fontSize: "13px",
+          fontWeight: 800,
+          minHeight: "20px",
+          overflow: "hidden",
+          outline: "none",
+          textAlign: "center",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }}
+      >
+        {revealed ? label : ""}
+      </span>
+      {tooltip}
+    </>
   );
 }
 
@@ -77,8 +271,7 @@ export default function ImageReview({
   submitAnswer,
   showQualityControls = true,
   trainingElapsedMs = null,
-  trainingBestTimeMs = null,
-  trainingBestPercent = null
+  trainingBestTimeMs = null
 }) {
   const inputRef = useRef(null);
   const containerRef = useRef(null);
@@ -356,21 +549,11 @@ export default function ImageReview({
                   )}
                 </span>
 
-                <span
-                  style={{
-                    color: row.isLockedMissed ? "#ff9aa5" : row.isFound ? "#86efac" : "#777",
-                    fontSize: "13px",
-                    fontWeight: 800,
-                    minHeight: "20px",
-                    overflow: "hidden",
-                    textAlign: "center",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap"
-                  }}
-                  title={revealed ? answerLabel(row.item) : ""}
-                >
-                  {revealed ? answerLabel(row.item) : ""}
-                </span>
+                <ImageAnswerLabel
+                  color={row.isLockedMissed ? "#ff9aa5" : row.isFound ? "#86efac" : "#777"}
+                  label={answerLabel(row.item)}
+                  revealed={revealed}
+                />
 
                 {resultMode && showQualityControls && (
                   <span

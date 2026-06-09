@@ -20,7 +20,6 @@ export default function ReviewQuestionRenderer({
     trainingMode = false,
     trainingElapsedMs = null,
     trainingBestTimeMs = null,
-    trainingBestPercent = null,
 }) {
     if (!q) return null;
 
@@ -53,7 +52,6 @@ export default function ReviewQuestionRenderer({
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
                 trainingBestTimeMs={trainingBestTimeMs}
-                trainingBestPercent={trainingBestPercent}
             />
         );
     }
