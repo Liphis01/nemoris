@@ -38,8 +38,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
-- les cellules des images grossisent pour les réponses dans training + on ne voit pas les noms en entier pour les plus longs
-- la recherche dans manage devrait aussi regarder dans les aliases
 
 ## features
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)

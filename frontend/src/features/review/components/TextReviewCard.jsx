@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fadeInStyle } from "../../../shared/styles";
 import { resolveMediaUrl } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
@@ -49,6 +51,8 @@ const answerOptions = [
     }
 ];
 
+const previewShortcutKeys = new Set(["Enter", "0", "1", "2", "3"]);
+
 function getAnswerButtonStyle(option, displayQuality, isAnswering) {
     const isSelected = displayQuality === option.value;
 
@@ -70,6 +74,117 @@ function getAnswerButtonStyle(option, displayQuality, isAnswering) {
     };
 }
 
+function TextMediaPreview({ src, alt, onClose }) {
+    useEffect(() => {
+        function handleKeyDown(event) {
+            const isInsidePreview = Boolean(
+                event.target?.closest?.("[data-text-media-preview]")
+            );
+
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+                return;
+            }
+
+            if (!isInsidePreview && previewShortcutKeys.has(event.key)) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }
+
+        window.addEventListener("keydown", handleKeyDown, true);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown, true);
+        };
+    }, [onClose]);
+
+    if (typeof document === "undefined") {
+        return null;
+    }
+
+    return createPortal(
+        <div
+            role="presentation"
+            onClick={onClose}
+            style={{
+                alignItems: "center",
+                background: "rgba(0, 0, 0, 0.82)",
+                display: "flex",
+                inset: 0,
+                justifyContent: "center",
+                padding: "28px",
+                position: "fixed",
+                zIndex: 1000
+            }}
+        >
+            <div
+                aria-label="Image agrandie"
+                aria-modal="true"
+                data-text-media-preview
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+                role="dialog"
+                style={{
+                    background: "#111",
+                    border: "1px solid #333",
+                    borderRadius: "12px",
+                    boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
+                    boxSizing: "border-box",
+                    maxHeight: "86vh",
+                    overflow: "hidden",
+                    padding: "14px",
+                    position: "relative",
+                    width: "min(82vw, 900px)"
+                }}
+            >
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Fermer l'image agrandie"
+                    style={{
+                        alignItems: "center",
+                        background: "#1f1f1f",
+                        border: "1px solid #3a3a3a",
+                        borderRadius: "999px",
+                        color: "#ddd",
+                        cursor: "pointer",
+                        display: "flex",
+                        fontSize: "20px",
+                        height: "34px",
+                        justifyContent: "center",
+                        lineHeight: 1,
+                        position: "absolute",
+                        right: "12px",
+                        top: "12px",
+                        width: "34px",
+                        zIndex: 1
+                    }}
+                >
+                    ×
+                </button>
+
+                <img
+                    src={src}
+                    alt={alt}
+                    style={{
+                        background: "#0d0d0d",
+                        borderRadius: "8px",
+                        display: "block",
+                        height: "68vh",
+                        maxHeight: "620px",
+                        objectFit: "contain",
+                        width: "100%"
+                    }}
+                />
+            </div>
+        </div>,
+        document.body
+    );
+}
+
 export default function TextReviewCard({
     q,
     currentIndex,
@@ -80,22 +195,45 @@ export default function TextReviewCard({
     selectedQuality,
     showQualityButtons = true
 }) {
+    const answerActionsRef = useRef(null);
+    const [mediaPreviewOpen, setMediaPreviewOpen] = useState(false);
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
     const mediaSrc = resolveMediaUrl(q.media);
     const typeStyle = getQuestionTypeChipStyle(q.type_q);
 
+    useEffect(() => {
+        setMediaPreviewOpen(false);
+    }, [currentIndex, mediaSrc]);
+
+    useEffect(() => {
+        if (!showAnswer) return undefined;
+
+        const scrollFrame = window.requestAnimationFrame(() => {
+            answerActionsRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "end",
+                inline: "nearest"
+            });
+        });
+
+        return () => {
+            window.cancelAnimationFrame(scrollFrame);
+        };
+    }, [showAnswer]);
+
     return (
-        <div
-            key={currentIndex}
-            style={{
-                background: "#181818",
-                border: "1px solid #262626",
-                borderRadius: "22px",
-                overflow: "hidden",
-                ...fadeInStyle
-            }}
-        >
+        <>
+            <div
+                key={currentIndex}
+                style={{
+                    background: "#181818",
+                    border: "1px solid #262626",
+                    borderRadius: "22px",
+                    overflow: "hidden",
+                    ...fadeInStyle
+                }}
+            >
 
             {/* HEADER */}
             <div
@@ -165,16 +303,39 @@ export default function TextReviewCard({
 
                 {/* IMAGE */}
                 {mediaSrc && (
-                    <img
-                        src={mediaSrc}
-                        alt="question"
+                    <button
+                        type="button"
+                        aria-label="Agrandir l'image de la question"
+                        onClick={() => setMediaPreviewOpen(true)}
+                        onKeyDown={(event) => event.stopPropagation()}
                         style={{
-                            width: "100%",
-                            borderRadius: "18px",
+                            alignItems: "center",
+                            background: "#101010",
+                            border: "1px solid #262626",
+                            borderRadius: "12px",
+                            cursor: "zoom-in",
+                            display: "inline-flex",
+                            height: "154px",
+                            justifyContent: "center",
                             marginTop: "18px",
-                            border: "1px solid #2a2a2a"
+                            maxWidth: "260px",
+                            overflow: "hidden",
+                            padding: "10px",
+                            width: "100%"
                         }}
-                    />
+                    >
+                        <img
+                            src={mediaSrc}
+                            alt="question"
+                            style={{
+                                borderRadius: "8px",
+                                display: "block",
+                                maxHeight: "132px",
+                                maxWidth: "100%",
+                                objectFit: "contain"
+                            }}
+                        />
+                    </button>
                 )}
 
                 {/* SHOW ANSWER */}
@@ -237,6 +398,7 @@ export default function TextReviewCard({
 
                         {showQualityButtons ? (
                             <div
+                                ref={answerActionsRef}
                                 style={{
                                     display: "flex",
                                     gap: "14px",
@@ -263,6 +425,7 @@ export default function TextReviewCard({
                             </div>
                         ) : (
                             <button
+                                ref={answerActionsRef}
                                 type="button"
                                 onClick={() => handleAnswer()}
                                 style={{
@@ -285,6 +448,15 @@ export default function TextReviewCard({
 
             </div>
 
-        </div>
+            </div>
+
+            {mediaSrc && mediaPreviewOpen && (
+                <TextMediaPreview
+                    src={mediaSrc}
+                    alt="question"
+                    onClose={() => setMediaPreviewOpen(false)}
+                />
+            )}
+        </>
     );
 }
