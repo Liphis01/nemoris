@@ -75,6 +75,24 @@ function buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet) {
 }
 
 
+function getNextRemainingZone(reviewZones, foundQuestionIdSet, currentCode) {
+  if (reviewZones.length === 0) return null;
+
+  const currentIndex = reviewZones.findIndex(item => item.code === currentCode);
+  const startIndex = currentIndex >= 0 ? currentIndex : -1;
+
+  for (let offset = 1; offset <= reviewZones.length; offset += 1) {
+    const item = reviewZones[(startIndex + offset) % reviewZones.length];
+
+    if (item && !foundQuestionIdSet.has(item.question_id)) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+
 const initialRecapSort = {
   key: null,
   direction: "asc"
@@ -283,15 +301,11 @@ export function useMapReview(
   }
 
   function focusNextRemainingZone() {
-    if (remainingZones.length === 0) return;
-
-    const currentIndex = remainingZones.findIndex(
-      item => item.code === remainingFocusCode
-    );
-    const nextIndex = currentIndex >= 0
-      ? (currentIndex + 1) % remainingZones.length
-      : 0;
-    const nextCode = remainingZones[nextIndex]?.code;
+    const nextCode = getNextRemainingZone(
+      reviewZones,
+      foundQuestionIdSet,
+      remainingFocusCode
+    )?.code;
 
     if (!nextCode) return;
 

@@ -187,4 +187,36 @@ describe("useMapReview recap sorting", () => {
     expect(sendMapAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
+
+  it("continues tab focus after a correctly answered focused zone", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" }),
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" })
+    ];
+    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+
+    act(() => {
+      result.current.focusNextRemainingZone();
+    });
+    act(() => {
+      result.current.focusNextRemainingZone();
+    });
+
+    expect(result.current.remainingFocusCode).toBe("b");
+
+    act(() => {
+      result.current.setInput("Beta");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.focusNextRemainingZone();
+    });
+
+    expect(result.current.foundQuestionIds).toEqual([2]);
+    expect(result.current.remainingFocusCode).toBe("c");
+  });
 });
