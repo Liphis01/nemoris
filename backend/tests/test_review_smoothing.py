@@ -36,6 +36,10 @@ from app.services.map_modes import (
     calibrate_map_quality,
     choose_map_review_mode
 )
+from app.services.image_modes import (
+    calibrate_image_quality,
+    choose_image_review_mode
+)
 from app.schemas import (
     AnswerRequest,
     MapAnswerRequest,
@@ -135,6 +139,42 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
         self.assertEqual(
             choose_map_review_mode([strong], context),
+            "type_all"
+        )
+
+    def test_image_mode_quality_calibration_caps_easier_modes(self):
+        self.assertEqual(calibrate_image_quality(3, "type_all", 2), 3)
+        self.assertEqual(calibrate_image_quality(3, "type_prompt", 20), 2)
+        self.assertEqual(
+            calibrate_image_quality(3, "multiple_choice_label", 20),
+            1
+        )
+        self.assertEqual(
+            calibrate_image_quality(3, "multiple_choice_image", 20),
+            1
+        )
+        self.assertEqual(calibrate_image_quality(3, "click_prompt", 4), 1)
+        self.assertEqual(calibrate_image_quality(3, "click_prompt", 8), 2)
+        self.assertEqual(calibrate_image_quality(3, "click_prompt", 20), 3)
+        self.assertEqual(calibrate_image_quality(0, "click_prompt", 20), 0)
+
+    def test_image_review_mode_selector_uses_difficulty_size_and_variety(self):
+        hard = Question(type_q="image", answer="Hard")
+        hard.progress = Progress(reps=0, difficulty=5.0, history=[])
+        strong = Question(type_q="image", answer="Strong")
+        strong.progress = Progress(
+            reps=4,
+            difficulty=3.0,
+            history=[{"image_mode": "type_prompt"} for _ in range(4)]
+        )
+        context = [hard, strong]
+
+        self.assertEqual(
+            choose_image_review_mode([hard], context),
+            "multiple_choice_label"
+        )
+        self.assertEqual(
+            choose_image_review_mode([strong], context),
             "type_all"
         )
 

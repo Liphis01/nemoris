@@ -33,6 +33,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - le hover de souris bug sur la map (training click)
 - dans le mode click de map, remplir un peu de rouge dans la barre de progression après une erreur
 - bloquer le clic sur les zones déjà trouvées dans le mode click de map
+- tab pour skip dans nommer
 
 ## bugs
 

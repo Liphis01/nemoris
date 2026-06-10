@@ -85,14 +85,17 @@ export function sendMapAnswer(items, mode = undefined) {
 }
 
 
-export function sendImageAnswer(items) {
+export function sendImageAnswer(items, mode = undefined) {
   // items is an object of question_id -> quality, one entry per atomic image.
   return requestOk("/answer_image", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      items,
+      ...(mode ? { mode } : {})
+    })
   });
 }
 

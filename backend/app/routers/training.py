@@ -27,6 +27,7 @@ def get_training(
     group_id: Optional[int] = None,
     tag: Optional[str] = None,
     map_mode: Optional[str] = None,
+    image_mode: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     return get_training_items(
@@ -34,7 +35,8 @@ def get_training(
         scope_type=scope_type,
         group_id=group_id,
         tag=tag,
-        map_mode=map_mode
+        map_mode=map_mode,
+        image_mode=image_mode
     )
 
 

@@ -165,6 +165,51 @@ class TrainingTests(unittest.TestCase):
             group_training_fingerprint(self.db, group)
         )
 
+    def test_image_group_training_accepts_mode_and_context_items(self):
+        group = QuestionGroup(
+            id=11,
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(
+            1,
+            type_q="image",
+            answer="France",
+            media="/static/france.png",
+            tags=["Geo"],
+            group=group
+        )
+        self.add_question(
+            2,
+            type_q="image",
+            answer="Germany",
+            media="/static/germany.png",
+            tags=["Geo"],
+            group=group
+        )
+        self.db.commit()
+
+        response = get_training_items(
+            self.db,
+            scope_type="group",
+            group_id=group.id,
+            image_mode="multiple_choice_image"
+        )
+
+        self.assertEqual(len(response), 1)
+        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["group_id"], group.id)
+        self.assertEqual(response[0]["mode"], "multiple_choice_image")
+        self.assertEqual(len(response[0]["items"]), 2)
+        self.assertEqual(len(response[0]["context_items"]), 2)
+        self.assertEqual(
+            response[0]["training_fingerprint"],
+            group_training_fingerprint(self.db, group)
+        )
+
     def test_tag_training_is_exact_case_insensitive(self):
         today = date.today()
         group = QuestionGroup(
@@ -369,6 +414,59 @@ class TrainingTests(unittest.TestCase):
             50
         )
 
+    def test_image_training_records_are_saved_per_mode(self):
+        group = QuestionGroup(
+            id=402,
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="image", group=group)
+        self.add_question(2, type_q="image", group=group)
+        self.db.commit()
+
+        choices = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(
+                group,
+                9000,
+                2,
+                2,
+                mode="multiple_choice_image"
+            )
+        )
+        type_prompt = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(
+                group,
+                7000,
+                2,
+                1,
+                mode="type_prompt"
+            )
+        )
+
+        self.assertEqual(
+            choices["training_records"]["multiple_choice_image"]["best_time_ms"],
+            9000
+        )
+        self.assertEqual(
+            type_prompt["training_records"]["type_prompt"]["best_found_percent"],
+            50
+        )
+        self.assertEqual(
+            group.data["training_records"]["multiple_choice_image"]["best_time_ms"],
+            9000
+        )
+        self.assertEqual(
+            group.data["training_record"]["best_found_percent"],
+            50
+        )
+
     def test_partial_attempt_updates_best_percent_but_not_clean_time(self):
         group = QuestionGroup(
             id=41,
@@ -394,6 +492,10 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(record["best_found_percent"], 50)
         self.assertEqual(record["best_found_count"], 1)
         self.assertNotIn("best_time_ms", record)
+        self.assertEqual(
+            response["training_records"]["type_prompt"]["best_found_percent"],
+            50
+        )
 
     def test_lower_percent_does_not_overwrite_and_tie_uses_shorter_time(self):
         group = QuestionGroup(
@@ -592,6 +694,13 @@ class TrainingTests(unittest.TestCase):
             "best_found_at": "2026-06-01T10:00:00+00:00",
             "question_count": 2
         })
+        group.data = {
+            **group.data,
+            "training_records": {
+                "type_prompt": group.data["training_record"]
+            }
+        }
+        self.db.commit()
 
         update_question(
             self.db,
@@ -599,6 +708,7 @@ class TrainingTests(unittest.TestCase):
             QuestionUpdate(tags=["geo"])
         )
         self.assertIn("training_record", group.data)
+        self.assertIn("training_records", group.data)
 
         update_question(
             self.db,
@@ -606,6 +716,7 @@ class TrainingTests(unittest.TestCase):
             QuestionUpdate(data={"aliases": ["France flag"], "favorite": True})
         )
         self.assertNotIn("training_record", group.data)
+        self.assertNotIn("training_records", group.data)
         self.assertEqual(group.data["theme"], "blue")
 
     def test_generic_grouped_question_delete_invalidates_records(self):

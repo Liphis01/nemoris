@@ -8,10 +8,17 @@ import {
   formatRecordPercent
 } from "../trainingRecordUtils";
 import {
-  MAP_MODE_TYPE_ALL,
+  defaultMapMode,
   MAP_MODES,
+  mapModeDetails,
   mapModeLabels
 } from "../../review/mapModes";
+import {
+  defaultImageMode,
+  IMAGE_MODES,
+  imageModeDetails,
+  imageModeLabels
+} from "../../review/imageModes";
 
 
 const panelStyle = {
@@ -73,32 +80,181 @@ const recordBadgeStyle = {
   padding: "8px 12px"
 };
 
-const modeTileGridStyle = {
-  display: "grid",
-  gap: "8px",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  width: "100%"
-};
-
-const modeTileStyle = {
-  background: "#141414",
-  border: "1px solid #2c2c2c",
-  borderRadius: "8px",
-  color: "#eee",
-  cursor: "pointer",
-  padding: "10px",
-  textAlign: "left"
-};
-
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 
+function modeConfigForGroup(group) {
+  if (group?.type_group === "map") {
+    return {
+      defaultMode: defaultMapMode,
+      details: mapModeDetails,
+      labels: mapModeLabels,
+      modes: MAP_MODES
+    };
+  }
+
+  if (group?.type_group === "image") {
+    return {
+      defaultMode: defaultImageMode,
+      details: imageModeDetails,
+      labels: imageModeLabels,
+      modes: IMAGE_MODES
+    };
+  }
+
+  return null;
+}
+
+
 function recordForMode(group, mode) {
+  const config = modeConfigForGroup(group);
+
   return group?.training_records?.[mode] || (
-    mode === MAP_MODE_TYPE_ALL ? group?.training_record : null
+    mode === config?.defaultMode ? group?.training_record : null
+  );
+}
+
+
+function modeGlyph(mode) {
+  if (mode === "type_all") return "Aa";
+  if (mode === "click_prompt") return ">";
+  if (mode === "type_prompt") return "T";
+  if (mode === "multiple_choice") return "4";
+  if (mode === "multiple_choice_label") return "A4";
+  if (mode === "multiple_choice_image") return "I4";
+
+  return "?";
+}
+
+
+function ModeRecordChip({ group, mode, labels }) {
+  const record = recordForMode(group, mode);
+  const complete = record?.best_found_percent >= 100;
+
+  return (
+    <span
+      style={{
+        alignItems: "center",
+        background: complete ? "#1d3a2b" : "#141414",
+        border: complete ? "1px solid #2f6b45" : "1px solid #2a2a2a",
+        borderRadius: "999px",
+        color: complete ? "#7ee2a8" : "#aaa",
+        display: "inline-flex",
+        fontSize: "11px",
+        fontWeight: 900,
+        gap: "6px",
+        minHeight: "28px",
+        padding: "4px 8px"
+      }}
+    >
+      <span>{modeGlyph(mode)}</span>
+      <span>{labels[mode]}</span>
+      <span style={{ color: complete ? "#c8f7d5" : "#777" }}>
+        {formatRecordPercent(record)}
+      </span>
+    </span>
+  );
+}
+
+
+function ModePicker({ group, onBack, startScope }) {
+  const config = modeConfigForGroup(group);
+
+  if (!config) return null;
+
+  return (
+    <div style={{ ...panelStyle, marginBottom: "18px", padding: "16px" }}>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "12px",
+          justifyContent: "space-between",
+          marginBottom: "12px"
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "#777", fontSize: "11px", fontWeight: 900, marginBottom: "5px", textTransform: "uppercase" }}>
+            Mode {group.type_group}
+          </div>
+          <div style={{ color: "#f3f3f3", fontSize: "20px", fontWeight: 900, overflowWrap: "anywhere" }}>
+            {group.name}
+          </div>
+        </div>
+        <button type="button" onClick={onBack} style={buttonStyle}>
+          Retour
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gap: "8px" }}>
+        {config.modes.map(mode => {
+          const record = recordForMode(group, mode);
+          const complete = record?.best_found_percent >= 100;
+
+          return (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => startScope({
+                ...group,
+                type: "group"
+              }, mode)}
+              style={{
+                ...buttonStyle,
+                alignItems: "center",
+                background: "#141414",
+                border: complete ? "1px solid #2f6b45" : "1px solid #2c2c2c",
+                display: "grid",
+                gap: "12px",
+                gridTemplateColumns: "42px minmax(0, 1fr) auto",
+                minHeight: "70px",
+                textAlign: "left",
+                width: "100%"
+              }}
+            >
+              <span
+                style={{
+                  alignItems: "center",
+                  background: complete ? "#1d3a2b" : "#202020",
+                  border: "1px solid #333",
+                  borderRadius: "8px",
+                  color: complete ? "#7ee2a8" : "#9ad8ff",
+                  display: "flex",
+                  fontSize: "13px",
+                  fontWeight: 900,
+                  height: "38px",
+                  justifyContent: "center",
+                  width: "38px"
+                }}
+              >
+                {modeGlyph(mode)}
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ color: "#f3f3f3", display: "block", fontSize: "15px", fontWeight: 900 }}>
+                  {config.labels[mode]}
+                </span>
+                <span style={{ color: "#888", display: "block", fontSize: "12px", fontWeight: 600, marginTop: "4px" }}>
+                  {config.details[mode]}
+                </span>
+              </span>
+              <span style={{ minWidth: "86px", textAlign: "right" }}>
+                <span style={{ color: complete ? "#7ee2a8" : "#f3f3f3", display: "block", fontSize: "20px", fontWeight: 900 }}>
+                  {formatRecordPercent(record)}
+                </span>
+                <span style={{ color: "#888", display: "block", fontSize: "11px", marginTop: "4px" }}>
+                  {record?.best_time_ms
+                    ? formatDuration(record.best_time_ms)
+                    : "-"}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -113,6 +269,7 @@ function ScopeSelector({
 }) {
   const [scopeType, setScopeType] = useState("group");
   const [search, setSearch] = useState("");
+  const [modeGroup, setModeGroup] = useState(null);
   const normalizedSearch = normalizeText(search);
   const groups = useMemo(
     () => (scopes.groups || []).filter(group =>
@@ -235,91 +392,51 @@ function ScopeSelector({
               Aucun choix disponible.
             </div>
           ) : (
+            <>
+            {scopeType === "group" && modeGroup && (
+              <ModePicker
+                group={modeGroup}
+                onBack={() => setModeGroup(null)}
+                startScope={startScope}
+              />
+            )}
+
             <div
               style={{
                 display: "grid",
                 gap: "10px",
-                gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))"
+                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))"
               }}
             >
               {scopeType === "group" && groups.map(group => {
-                if (group.type_group === "map") {
-                  return (
-                    <div
-                      key={group.id}
-                      style={{
-                        ...panelStyle,
-                        alignItems: "flex-start",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "10px",
-                        minHeight: "150px",
-                        padding: "14px"
-                      }}
-                    >
-                      <span style={{ color: "#ffcc7a", fontSize: "12px", fontWeight: "800", textTransform: "uppercase" }}>
-                        map
-                      </span>
-                      <span style={{ color: "#f3f3f3", fontSize: "18px", fontWeight: "800" }}>
-                        {group.name}
-                      </span>
-                      <span style={{ color: "#999", fontSize: "13px" }}>
-                        {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
-                      </span>
-
-                      <div style={modeTileGridStyle}>
-                        {MAP_MODES.map(mode => {
-                          const record = recordForMode(group, mode);
-
-                          return (
-                            <button
-                              key={mode}
-                              type="button"
-                              onClick={() => startScope({
-                                ...group,
-                                type: "group"
-                              }, mode)}
-                              style={modeTileStyle}
-                            >
-                              <span style={{ color: "#9ad8ff", display: "block", fontSize: "12px", fontWeight: "800", marginBottom: "5px" }}>
-                                {mapModeLabels[mode]}
-                              </span>
-                              <span style={{ color: "#f3f3f3", display: "block", fontSize: "22px", fontWeight: "900", lineHeight: 1 }}>
-                                {formatRecordPercent(record)}
-                              </span>
-                              <span style={{ color: "#888", display: "block", fontSize: "10px", fontWeight: "800", marginTop: "4px" }}>
-                                meilleur score
-                              </span>
-                              <span style={{ color: "#888", display: "block", fontSize: "11px", marginTop: "4px" }}>
-                                {record?.best_time_ms
-                                  ? `temps parfait ${formatDuration(record.best_time_ms)}`
-                                  : "—"}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                }
-
-                const record = group.training_record;
+                const config = modeConfigForGroup(group);
+                const defaultRecord = config
+                  ? recordForMode(group, config.defaultMode)
+                  : group.training_record;
 
                 return (
                   <button
                     type="button"
                     key={group.id}
-                    onClick={() => startScope({
-                      ...group,
-                      type: "group",
-                    })}
+                    onClick={() => {
+                      if (config) {
+                        setModeGroup(group);
+                      } else {
+                        startScope({
+                          ...group,
+                          type: "group",
+                        });
+                      }
+                    }}
                     style={{
                       ...buttonStyle,
                       alignItems: "flex-start",
+                      background: modeGroup?.id === group.id ? "#1d2428" : buttonStyle.background,
+                      border: modeGroup?.id === group.id ? "1px solid #355161" : buttonStyle.border,
                       display: "flex",
                       flexDirection: "column",
                       gap: "8px",
-                      minHeight: "104px",
+                      minHeight: "136px",
                       textAlign: "left"
                     }}
                   >
@@ -334,18 +451,38 @@ function ScopeSelector({
                         lineHeight: 1
                       }}
                     >
-                      {formatRecordPercent(record)}
+                      {formatRecordPercent(defaultRecord)}
                     </span>
                     <span style={{ color: "#888", fontSize: "12px", fontWeight: "800" }}>
-                      meilleur score
+                      meilleur score par defaut
                     </span>
                     <span style={{ fontSize: "18px" }}>{group.name}</span>
                     <span style={{ color: "#999", fontSize: "13px" }}>
                       {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
-                      {record?.best_time_ms
-                        ? ` · temps parfait ${formatDuration(record.best_time_ms)}`
+                      {defaultRecord?.best_time_ms
+                        ? ` · temps parfait ${formatDuration(defaultRecord.best_time_ms)}`
                         : ""}
                     </span>
+                    {config && (
+                      <span
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          marginTop: "auto",
+                          width: "100%"
+                        }}
+                      >
+                        {config.modes.map(mode => (
+                          <ModeRecordChip
+                            key={mode}
+                            group={group}
+                            labels={config.labels}
+                            mode={mode}
+                          />
+                        ))}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -377,6 +514,7 @@ function ScopeSelector({
                 </button>
               ))}
             </div>
+            </>
           )}
         </>
       )}
@@ -388,8 +526,14 @@ function ScopeSelector({
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
   const currentQuestion = session.questions[session.currentIndex];
-  const activeRecord = session.activeScope?.mapMode
-    ? recordForMode(session.activeScope, session.activeScope.mapMode)
+  const activeGroupMode = (
+    session.activeScope?.groupMode ||
+    session.activeScope?.mapMode ||
+    session.activeScope?.imageMode
+  );
+  const activeModeConfig = modeConfigForGroup(session.activeScope);
+  const activeRecord = activeGroupMode
+    ? recordForMode(session.activeScope, activeGroupMode)
     : session.activeScope?.training_record || null;
   const displayedRecord = session.recordResult?.training_record || activeRecord;
   const completedPercent = formatPercent(
@@ -452,8 +596,8 @@ export default function TrainingSession({ setMode }) {
                 </h1>
                 <div style={{ color: "#777", fontSize: "14px" }}>
                   {session.allQuestionIds.length} items dans ce scope
-                  {session.activeScope?.mapMode
-                    ? ` · ${mapModeLabels[session.activeScope.mapMode]}`
+                  {activeGroupMode && activeModeConfig
+                    ? ` · ${activeModeConfig.labels[activeGroupMode]}`
                     : ""}
                 </div>
               </div>

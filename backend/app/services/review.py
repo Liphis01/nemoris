@@ -15,6 +15,7 @@ from .timeline import (
     serialize_timeline_review_group,
     serialize_timeline_review_item
 )
+from .image_modes import choose_image_review_mode
 from .map_modes import choose_map_review_mode
 from .progress import progress_has_started, progress_is_new
 
@@ -84,14 +85,13 @@ def _serialize_review_items(questions):
             group_id = question.group.id
 
             if group_id not in image_grouped_items:
-                image_grouped_items[group_id] = serialize_image_review_group(
-                    question.group,
-                    question.tags or []
-                )
+                image_grouped_items[group_id] = {
+                    "group": question.group,
+                    "tags": question.tags or [],
+                    "questions": []
+                }
 
-            image_grouped_items[group_id]["items"].append(
-                serialize_image_review_item(question)
-            )
+            image_grouped_items[group_id]["questions"].append(question)
             continue
 
         if question.type_q == "timeline":
@@ -136,7 +136,37 @@ def _serialize_review_items(questions):
         ]
         map_review_groups.append(map_group)
 
-    return review_items + map_review_groups + list(image_grouped_items.values())
+    image_review_groups = []
+
+    for group_data in image_grouped_items.values():
+        group = group_data["group"]
+        due_questions = sorted(group_data["questions"], key=lambda item: item.id)
+        context_questions = sorted(
+            [
+                item
+                for item in (group.questions or [])
+                if item.type_q == "image"
+            ],
+            key=lambda item: item.id
+        )
+        context_items = [
+            serialize_image_review_item(item)
+            for item in context_questions
+        ]
+        mode = choose_image_review_mode(due_questions, context_questions)
+        image_group = serialize_image_review_group(
+            group,
+            group_data["tags"],
+            mode=mode,
+            context_items=context_items
+        )
+        image_group["items"] = [
+            serialize_image_review_item(item)
+            for item in due_questions
+        ]
+        image_review_groups.append(image_group)
+
+    return review_items + map_review_groups + image_review_groups
 
 
 def serialize_review_items(questions):

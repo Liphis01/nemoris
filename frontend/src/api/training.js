@@ -25,6 +25,10 @@ export function getTrainingItems(options = {}) {
     params.set("map_mode", options.mapMode);
   }
 
+  if (options.imageMode) {
+    params.set("image_mode", options.imageMode);
+  }
+
   const query = params.toString();
 
   return requestJson(`/training${query ? `?${query}` : ""}`);

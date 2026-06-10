@@ -75,6 +75,8 @@ IMAGE_GROUP_KEYS = {
     "name",
     "media",
     "tags",
+    "mode",
+    "context_items",
     "items"
 }
 IMAGE_ITEM_KEYS = {
@@ -463,8 +465,24 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(image_group["name"], "Flags")
         self.assertEqual(image_group["tags"], ["flags"])
         self.assertEqual(len(image_group["items"]), 2)
+        self.assertIn(
+            image_group["mode"],
+            {
+                "type_all",
+                "click_prompt",
+                "type_prompt",
+                "multiple_choice_label",
+                "multiple_choice_image"
+            }
+        )
+        self.assertEqual(len(image_group["context_items"]), 2)
 
         for item in image_group["items"]:
+            self.assertEqual(set(item), IMAGE_ITEM_KEYS)
+            self.assert_progress_shape(item["progress"])
+            self.assert_projected_intervals_shape(item["projected_intervals"])
+
+        for item in image_group["context_items"]:
             self.assertEqual(set(item), IMAGE_ITEM_KEYS)
             self.assert_progress_shape(item["progress"])
             self.assert_projected_intervals_shape(item["projected_intervals"])
@@ -538,9 +556,9 @@ class ReviewResponseShapeTests(unittest.TestCase):
 
         response = answer_image(
             ImageAnswerRequest(items={
-                item_a.id: 2,
+                item_a.id: 3,
                 item_b.id: 0
-            }),
+            }, mode="multiple_choice_image"),
             db=self.db
         )
 
@@ -555,9 +573,15 @@ class ReviewResponseShapeTests(unittest.TestCase):
             )
         }
         self.assertEqual(qualities_by_question_id, {
-            item_a.id: 2,
+            item_a.id: 1,
             item_b.id: 0
         })
+        item_a_history = item_a.progress.history[-1]
+        self.assertEqual(item_a_history["image_mode"], "multiple_choice_image")
+        self.assertEqual(item_a_history["raw_quality"], 3)
+        self.assertEqual(item_a_history["effective_quality"], 1)
+        self.assertEqual(item_a_history["image_context_count"], 2)
+        self.assertEqual(item_a_history["image_choice_count"], 2)
 
     def test_answer_timeline_endpoint_returns_per_item_result_shapes(self):
         fixture = self.seed_review_contract_fixture()
@@ -651,6 +675,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertEqual(set(image_group_payload), IMAGE_GROUP_KEYS)
         self.assertEqual(image_group_payload["type_q"], "image")
+        self.assertEqual(image_group_payload["mode"], "type_prompt")
+        self.assertEqual(image_group_payload["context_items"], [])
         self.assertEqual(image_group_payload["items"], [])
         self.assertNotIn("progress", image_group_payload)
 

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ImageReview from "./ImageReview";
 import { useImageReview } from "../hooks/useImageReview";
+import { IMAGE_MODE_TYPE_PROMPT } from "../imageModes";
 
 vi.mock("../hooks/useImageReview", () => ({
   useImageReview: vi.fn()
@@ -41,11 +42,17 @@ function mockImageReviewState({ resultMode = false, rowOverrides = {} } = {}) {
   useImageReview.mockReturnValue({
     activeQuestionId: row.item.question_id,
     answeredCount: row.isFound ? 1 : 0,
+    choiceOptions: [],
+    currentPromptItem: item,
     feedbackTone: "",
     finishReview: noop,
     gridItems: [row],
+    handleChoiceSelect: noop,
+    handleImageSelect: noop,
     handleSubmit: noop,
     input: "",
+    mode: IMAGE_MODE_TYPE_PROMPT,
+    promptLabel: item.label,
     progressPercent: row.isFound ? 100 : 0,
     remainingCount: row.isFound ? 0 : 1,
     resultMode,
@@ -53,7 +60,8 @@ function mockImageReviewState({ resultMode = false, rowOverrides = {} } = {}) {
     selectNextItem: noop,
     sendResult: noop,
     setInput: noop,
-    setQuality: noop
+    setQuality: noop,
+    skipCurrentPrompt: noop
   });
 
   return row;

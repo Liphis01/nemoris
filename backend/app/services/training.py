@@ -8,6 +8,10 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_progress
+from .image_modes import (
+    DEFAULT_IMAGE_MODE,
+    normalize_image_mode
+)
 from .map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
@@ -29,6 +33,7 @@ TRAINING_RECORD_FIELDS = {
     "question_count",
     "content_fingerprint"
 }
+MODE_GROUP_TYPES = {"map", "image"}
 
 
 def normalize_scope_tag(value):
@@ -246,6 +251,26 @@ def serialize_training_record(data, content_fingerprint=None):
     }
 
 
+def default_training_mode_for_group_type(group_type):
+    if group_type == "map":
+        return DEFAULT_MAP_MODE
+
+    if group_type == "image":
+        return DEFAULT_IMAGE_MODE
+
+    return None
+
+
+def normalize_training_mode_for_group_type(group_type, mode):
+    if group_type == "map":
+        return normalize_map_mode(mode)
+
+    if group_type == "image":
+        return normalize_image_mode(mode)
+
+    return None
+
+
 def _serialize_record(record, content_fingerprint=None):
     if not isinstance(record, dict):
         return None
@@ -263,14 +288,18 @@ def _serialize_record(record, content_fingerprint=None):
     }
 
 
-def serialize_training_records(data, content_fingerprint=None):
+def serialize_training_records(data, content_fingerprint=None, group_type="map"):
     data = data or {}
     raw_records = data.get(TRAINING_RECORDS_KEY)
     records = {}
+    default_mode = default_training_mode_for_group_type(group_type)
 
     if isinstance(raw_records, dict):
         for mode, record in raw_records.items():
-            normalized_mode = normalize_map_mode(mode)
+            normalized_mode = normalize_training_mode_for_group_type(
+                group_type,
+                mode
+            )
 
             if normalized_mode != mode:
                 continue
@@ -282,8 +311,8 @@ def serialize_training_records(data, content_fingerprint=None):
 
     legacy_record = serialize_training_record(data, content_fingerprint)
 
-    if legacy_record and DEFAULT_MAP_MODE not in records:
-        records[DEFAULT_MAP_MODE] = legacy_record
+    if legacy_record and default_mode and default_mode not in records:
+        records[default_mode] = legacy_record
 
     return records
 
@@ -354,9 +383,10 @@ def list_training_scopes(db):
                 "training_records": (
                     serialize_training_records(
                         group.data,
-                        fingerprints_by_group_id.get(group.id)
+                        fingerprints_by_group_id.get(group.id),
+                        group.type_group
                     )
-                    if group.type_group == "map"
+                    if group.type_group in MODE_GROUP_TYPES
                     else {}
                 )
             }
@@ -445,11 +475,11 @@ def record_training_attempt(db, group_id, payload):
         )
 
     group_data = dict(group.data or {})
-    mode = (
-        normalize_map_mode(payload.mode)
-        if group.type_group == "map"
-        else None
+    mode = normalize_training_mode_for_group_type(
+        group.type_group,
+        payload.mode
     )
+    default_mode = default_training_mode_for_group_type(group.type_group)
     existing_records = (
         group_data.get(TRAINING_RECORDS_KEY)
         if isinstance(group_data.get(TRAINING_RECORDS_KEY), dict)
@@ -464,7 +494,7 @@ def record_training_attempt(db, group_id, payload):
         else serialize_training_record(group_data, content_fingerprint)
     )
 
-    if mode == DEFAULT_MAP_MODE and not existing_record:
+    if mode == default_mode and not existing_record:
         existing_record = serialize_training_record(
             group_data,
             content_fingerprint
@@ -503,7 +533,7 @@ def record_training_attempt(db, group_id, payload):
         records[mode] = record
         group_data[TRAINING_RECORDS_KEY] = records
 
-        if mode == DEFAULT_MAP_MODE:
+        if mode == default_mode:
             group_data[TRAINING_RECORD_KEY] = record
     else:
         group_data[TRAINING_RECORD_KEY] = record
@@ -512,15 +542,19 @@ def record_training_attempt(db, group_id, payload):
     db.commit()
     db.refresh(group)
     training_records = (
-        serialize_training_records(group.data, content_fingerprint)
-        if group.type_group == "map"
+        serialize_training_records(
+            group.data,
+            content_fingerprint,
+            group.type_group
+        )
+        if group.type_group in MODE_GROUP_TYPES
         else {}
     )
 
     return {
         "training_record": (
-            training_records.get(mode or DEFAULT_MAP_MODE)
-            if group.type_group == "map"
+            training_records.get(mode or default_mode)
+            if group.type_group in MODE_GROUP_TYPES
             else serialize_training_record(group.data, content_fingerprint)
         ),
         "training_records": training_records,
@@ -529,7 +563,14 @@ def record_training_attempt(db, group_id, payload):
     }
 
 
-def get_training_items(db, scope_type, group_id=None, tag=None, map_mode=None):
+def get_training_items(
+    db,
+    scope_type,
+    group_id=None,
+    tag=None,
+    map_mode=None,
+    image_mode=None
+):
     if scope_type == "group":
         if group_id is None:
             raise HTTPException(
@@ -537,13 +578,13 @@ def get_training_items(db, scope_type, group_id=None, tag=None, map_mode=None):
                 detail="group_id is required for group training"
             )
 
-        group_exists = (
-            db.query(QuestionGroup.id)
+        group = (
+            db.query(QuestionGroup)
             .filter(QuestionGroup.id == group_id)
             .first()
         )
 
-        if not group_exists:
+        if not group:
             raise HTTPException(status_code=404, detail="Group not found")
 
         questions = (
@@ -554,12 +595,15 @@ def get_training_items(db, scope_type, group_id=None, tag=None, map_mode=None):
         items = serialize_review_items(questions)
         content_fingerprint = group_training_fingerprint(db, group_id)
         normalized_map_mode = normalize_map_mode(map_mode)
+        normalized_image_mode = normalize_image_mode(image_mode)
 
         for item in items:
             if item.get("group_id") == group_id:
                 item["training_fingerprint"] = content_fingerprint
                 if item.get("type_q") == "map":
                     item["mode"] = normalized_map_mode
+                elif item.get("type_q") == "image":
+                    item["mode"] = normalized_image_mode
 
         return items
 

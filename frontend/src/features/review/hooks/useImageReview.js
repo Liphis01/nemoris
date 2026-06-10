@@ -1,5 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { sendImageAnswer } from "../../../api/review";
+import {
+  IMAGE_MODE_CLICK_PROMPT,
+  IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+  IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_TYPE_ALL,
+  IMAGE_MODE_TYPE_PROMPT,
+  normalizeImageMode
+} from "../imageModes";
 
 
 export function normalizeImageAnswer(value = "") {
@@ -88,50 +96,162 @@ function completeQualities(items, qualityByQuestionId, foundQuestionIds) {
 }
 
 
+function buildAnswerLookup(items) {
+  const lookup = new Map();
+
+  (items || []).forEach(item => {
+    [
+      item?.label,
+      item?.answer,
+      ...(item?.aliases || item?.data?.aliases || [])
+    ].forEach(value => {
+      const normalized = normalizeImageAnswer(value);
+
+      if (normalized && !lookup.has(normalized)) {
+        lookup.set(normalized, item);
+      }
+    });
+  });
+
+  return lookup;
+}
+
+
+function buildChoiceOptions(target, contextItems) {
+  if (!target) return [];
+
+  const distractors = shuffled(
+    (contextItems || []).filter(item =>
+      item.question_id !== target.question_id && (item.label || item.answer)
+    )
+  ).slice(0, 3);
+
+  return shuffled([target, ...distractors]);
+}
+
+
+function isPromptMode(mode) {
+  return mode !== IMAGE_MODE_TYPE_ALL;
+}
+
+
+function shouldHighlightPromptImage(mode) {
+  return (
+    mode === IMAGE_MODE_TYPE_PROMPT ||
+    mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+  );
+}
+
+
 export function useImageReview(
   reviewItems,
   onComplete,
-  submitAnswer = sendImageAnswer
+  submitAnswer = sendImageAnswer,
+  options = {}
 ) {
+  const mode = normalizeImageMode(options.mode);
+  const contextItems = options.contextItems?.length
+    ? options.contextItems
+    : reviewItems;
   const reviewKey = useMemo(
-    () => idsFor(reviewItems).join("|"),
-    [reviewItems]
+    () => `${mode}:${idsFor(reviewItems).join("|")}`,
+    [mode, reviewItems]
   );
   const shuffledItems = useMemo(
     () => shuffled(reviewItems),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reviewKey]
   );
+  const promptQueue = useMemo(
+    () => isPromptMode(mode) ? shuffled(reviewItems) : shuffledItems,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mode, reviewKey, shuffledItems]
+  );
   const [activeQuestionId, setActiveQuestionId] = useState(null);
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
+  const [resolvedQuestionIds, setResolvedQuestionIds] = useState([]);
   const [lockedMissedQuestionIds, setLockedMissedQuestionIds] = useState([]);
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
   const [resultMode, setResultMode] = useState(false);
 
+  useEffect(() => {
+    setActiveQuestionId(null);
+    setInput("");
+    setFoundQuestionIds([]);
+    setResolvedQuestionIds([]);
+    setLockedMissedQuestionIds([]);
+    setQualityByQuestionId({});
+    setFeedbackTone(null);
+    setResultMode(false);
+  }, [reviewKey]);
+
   const foundQuestionIdSet = useMemo(
     () => questionIdSet(foundQuestionIds),
     [foundQuestionIds]
+  );
+  const resolvedQuestionIdSet = useMemo(
+    () => questionIdSet(resolvedQuestionIds),
+    [resolvedQuestionIds]
   );
   const lockedMissedQuestionIdSet = useMemo(
     () => questionIdSet(lockedMissedQuestionIds),
     [lockedMissedQuestionIds]
   );
+  const currentPromptItem = useMemo(
+    () =>
+      isPromptMode(mode)
+        ? promptQueue.find(item => !resolvedQuestionIdSet.has(item.question_id)) || null
+        : null,
+    [mode, promptQueue, resolvedQuestionIdSet]
+  );
   const activeItem = useMemo(() => {
+    if (shouldHighlightPromptImage(mode)) {
+      return currentPromptItem;
+    }
+
+    if (mode !== IMAGE_MODE_TYPE_ALL) {
+      return null;
+    }
+
     const effectiveActiveQuestionId =
       activeQuestionId ||
       shuffledItems.find(item => !foundQuestionIdSet.has(item.question_id))?.question_id;
 
     return shuffledItems.find(item => item.question_id === effectiveActiveQuestionId) || null;
-  }, [activeQuestionId, foundQuestionIdSet, shuffledItems]);
+  }, [
+    activeQuestionId,
+    currentPromptItem,
+    foundQuestionIdSet,
+    mode,
+    shuffledItems
+  ]);
+  const answerLookup = useMemo(
+    () => buildAnswerLookup(shuffledItems),
+    [shuffledItems]
+  );
+  const choiceOptions = useMemo(
+    () => buildChoiceOptions(currentPromptItem, contextItems),
+    [contextItems, currentPromptItem]
+  );
+  const completedQuestionIdSet = isPromptMode(mode)
+    ? resolvedQuestionIdSet
+    : foundQuestionIdSet;
+  const completedCount = completedQuestionIdSet.size;
   const answeredCount = foundQuestionIds.length;
   const progressPercent = shuffledItems.length
-    ? (answeredCount / shuffledItems.length) * 100
+    ? (completedCount / shuffledItems.length) * 100
     : 0;
 
   function selectItem(questionId) {
-    if (resultMode || foundQuestionIdSet.has(questionId)) return;
+    if (
+      resultMode ||
+      mode !== IMAGE_MODE_TYPE_ALL ||
+      foundQuestionIdSet.has(questionId)
+    ) {
+      return;
+    }
 
     setActiveQuestionId(questionId);
     setInput("");
@@ -139,7 +259,7 @@ export function useImageReview(
   }
 
   function selectNextItem() {
-    if (resultMode || !activeItem) return;
+    if (resultMode || mode !== IMAGE_MODE_TYPE_ALL || !activeItem) return;
 
     const nextQuestionId = firstUnfoundFrom(
       shuffledItems,
@@ -170,40 +290,141 @@ export function useImageReview(
     setResultMode(true);
   }
 
-  function handleSubmit() {
-    if (resultMode || !activeItem) return;
+  function rememberFound(item) {
+    if (!item) return foundQuestionIds;
 
-    if (!matchesImageAnswer(activeItem, input)) {
-      if (input.trim()) {
-        setFeedbackTone("incorrect");
-      }
-      return;
-    }
-
-    const nextFoundIds = foundQuestionIds.includes(activeItem.question_id)
+    const nextFoundIds = foundQuestionIds.includes(item.question_id)
       ? foundQuestionIds
-      : [...foundQuestionIds, activeItem.question_id];
-    const nextFoundSet = questionIdSet(nextFoundIds);
-    const nextQualities = {
-      ...qualityByQuestionId,
-      [activeItem.question_id]: defaultImageSuccessQuality()
-    };
+      : [...foundQuestionIds, item.question_id];
 
     setFoundQuestionIds(nextFoundIds);
-    setQualityByQuestionId(nextQualities);
-    setInput("");
-    setFeedbackTone(null);
+    setQualityByQuestionId(prev => ({
+      ...prev,
+      [item.question_id]: prev[item.question_id] ?? defaultImageSuccessQuality()
+    }));
 
-    if (nextFoundIds.length >= shuffledItems.length) {
-      enterResultMode(nextFoundIds, nextQualities);
+    return nextFoundIds;
+  }
+
+  function rememberResolved(item) {
+    if (!item || !isPromptMode(mode)) return;
+
+    setResolvedQuestionIds(prev =>
+      prev.includes(item.question_id) ? prev : [...prev, item.question_id]
+    );
+  }
+
+  function markFound(item) {
+    if (!item) return;
+
+    const nextFoundIds = rememberFound(item);
+
+    rememberResolved(item);
+    setInput("");
+    setFeedbackTone("correct");
+
+    if (
+      mode === IMAGE_MODE_TYPE_ALL &&
+      nextFoundIds.length >= shuffledItems.length
+    ) {
+      enterResultMode(nextFoundIds, {
+        ...qualityByQuestionId,
+        [item.question_id]: defaultImageSuccessQuality()
+      });
+    }
+  }
+
+  function markMissed(item) {
+    if (!item) return;
+
+    rememberResolved(item);
+    setInput("");
+    setFeedbackTone("incorrect");
+  }
+
+  useEffect(() => {
+    if (resultMode || shuffledItems.length === 0) return;
+
+    const allComplete = shuffledItems.every(item =>
+      completedQuestionIdSet.has(item.question_id)
+    );
+
+    if (!allComplete) return;
+
+    enterResultMode(foundQuestionIds, qualityByQuestionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    completedQuestionIdSet,
+    foundQuestionIds,
+    mode,
+    qualityByQuestionId,
+    resultMode,
+    shuffledItems
+  ]);
+
+  function handleSubmit() {
+    if (resultMode) return;
+
+    if (mode === IMAGE_MODE_TYPE_PROMPT) {
+      if (currentPromptItem && matchesImageAnswer(currentPromptItem, input)) {
+        markFound(currentPromptItem);
+      } else if (input.trim()) {
+        setFeedbackTone("incorrect");
+      }
+
       return;
     }
 
-    setActiveQuestionId(firstUnfoundFrom(
-      shuffledItems,
-      nextFoundSet,
-      activeItem.question_id
-    ));
+    if (mode !== IMAGE_MODE_TYPE_ALL) return;
+
+    const match = answerLookup.get(normalizeImageAnswer(input));
+
+    if (match && !foundQuestionIdSet.has(match.question_id)) {
+      markFound(match);
+    } else if (input.trim()) {
+      setFeedbackTone("incorrect");
+    }
+  }
+
+  function handleImageSelect(questionId) {
+    if (
+      resultMode ||
+      (
+        mode !== IMAGE_MODE_CLICK_PROMPT &&
+        mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+      ) ||
+      !currentPromptItem
+    ) {
+      return;
+    }
+
+    if (currentPromptItem.question_id === questionId) {
+      markFound(currentPromptItem);
+    } else {
+      markMissed(currentPromptItem);
+    }
+  }
+
+  function handleChoiceSelect(questionId) {
+    if (
+      resultMode ||
+      mode !== IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+      !currentPromptItem
+    ) {
+      return;
+    }
+
+    if (currentPromptItem.question_id === questionId) {
+      markFound(currentPromptItem);
+    } else {
+      markMissed(currentPromptItem);
+    }
+  }
+
+  function skipCurrentPrompt() {
+    if (mode !== IMAGE_MODE_TYPE_PROMPT || !currentPromptItem) return;
+
+    markMissed(currentPromptItem);
   }
 
   function finishReview() {
@@ -233,7 +454,7 @@ export function useImageReview(
       foundQuestionIds
     );
 
-    await submitAnswer(qualities);
+    await submitAnswer(qualities, mode);
 
     const failedQuestionIds = Object.entries(qualities)
       .filter(([, quality]) => quality === 0)
@@ -242,6 +463,7 @@ export function useImageReview(
     setActiveQuestionId(null);
     setInput("");
     setFoundQuestionIds([]);
+    setResolvedQuestionIds([]);
     setLockedMissedQuestionIds([]);
     setQualityByQuestionId({});
     setFeedbackTone(null);
@@ -250,14 +472,23 @@ export function useImageReview(
     onComplete(failedQuestionIds);
   }
 
+  const displayItems = (
+    mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode
+      ? choiceOptions
+      : shuffledItems
+  );
+  const activeQuestionIdForGrid = activeItem?.question_id || null;
   const gridItems = useMemo(() => (
-    shuffledItems.map(item => {
+    displayItems.map(item => {
       const isFound = foundQuestionIdSet.has(item.question_id);
       const isLockedMissed = lockedMissedQuestionIdSet.has(item.question_id);
 
       return {
         item,
-        isActive: !resultMode && activeItem?.question_id === item.question_id,
+        isActive: (
+          !resultMode &&
+          activeQuestionIdForGrid === item.question_id
+        ),
         isFound,
         isLockedMissed,
         quality: isFound
@@ -268,33 +499,41 @@ export function useImageReview(
       };
     })
   ), [
-    activeItem?.question_id,
+    activeQuestionIdForGrid,
+    displayItems,
     foundQuestionIdSet,
     lockedMissedQuestionIdSet,
     qualityByQuestionId,
-    resultMode,
-    shuffledItems
+    resultMode
   ]);
 
   return {
     activeItem,
-    activeQuestionId: activeItem?.question_id || null,
+    activeQuestionId: activeQuestionIdForGrid,
     answeredCount,
+    choiceOptions,
+    currentPromptItem,
     feedbackTone,
     finishReview,
     foundQuestionIds,
     gridItems,
+    handleChoiceSelect,
+    handleImageSelect,
     handleSubmit,
     input,
     lockedMissedQuestionIds,
+    mode,
     progressPercent,
+    promptLabel: currentPromptItem?.label || currentPromptItem?.answer || "",
     qualityByQuestionId,
-    remainingCount: Math.max(0, shuffledItems.length - answeredCount),
+    remainingCount: Math.max(0, shuffledItems.length - completedCount),
+    resolvedQuestionIds,
     resultMode,
     selectItem,
     selectNextItem,
     sendResult,
     setInput,
-    setQuality
+    setQuality,
+    skipCurrentPrompt
   };
 }

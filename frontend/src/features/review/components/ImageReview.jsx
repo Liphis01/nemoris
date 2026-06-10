@@ -2,6 +2,15 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import { resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
+import {
+  IMAGE_MODE_CLICK_PROMPT,
+  IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+  IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_TYPE_ALL,
+  IMAGE_MODE_TYPE_PROMPT,
+  imageModeLabels,
+  normalizeImageMode
+} from "../imageModes";
 import { useImageReview } from "../hooks/useImageReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
@@ -268,6 +277,8 @@ function tileBorder({ isActive, isFound, isLockedMissed }) {
 export default function ImageReview({
   group,
   reviewItems,
+  contextItems = reviewItems,
+  mode: requestedMode,
   onComplete,
   submitAnswer,
   showQualityControls = true,
@@ -281,11 +292,17 @@ export default function ImageReview({
   const {
     activeQuestionId,
     answeredCount,
+    choiceOptions,
+    currentPromptItem,
     feedbackTone,
     finishReview,
     gridItems,
+    handleChoiceSelect,
+    handleImageSelect,
     handleSubmit,
     input,
+    mode,
+    promptLabel,
     progressPercent,
     remainingCount,
     resultMode,
@@ -293,16 +310,59 @@ export default function ImageReview({
     selectNextItem,
     sendResult,
     setInput,
-    setQuality
-  } = useImageReview(reviewItems, onComplete, submitAnswer);
+    setQuality,
+    skipCurrentPrompt
+  } = useImageReview(reviewItems, onComplete, submitAnswer, {
+    contextItems,
+    mode: requestedMode
+  });
+  const normalizedMode = normalizeImageMode(mode);
+  const showTextInput = (
+    normalizedMode === IMAGE_MODE_TYPE_ALL ||
+    normalizedMode === IMAGE_MODE_TYPE_PROMPT
+  );
+  const showPromptPanel = normalizedMode !== IMAGE_MODE_TYPE_ALL && !resultMode;
+  const showLabelChoices = (
+    normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
+    !resultMode
+  );
+  const answersByClick = (
+    normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
+    normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+  );
+  const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
+  const feedbackCopy = feedbackTone === "incorrect"
+    ? answersByClick
+      ? "Mauvaise image."
+      : showLabelChoices
+        ? "Mauvais choix."
+        : "Réponse incorrecte."
+    : feedbackTone === "correct"
+      ? "Bonne réponse."
+      : normalizedMode === IMAGE_MODE_TYPE_ALL
+        ? "Tape les réponses."
+        : normalizedMode === IMAGE_MODE_CLICK_PROMPT
+          ? "Clique la bonne image."
+          : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+            ? "Choisis la bonne image."
+            : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+              ? "Choisis le bon nom."
+              : "Tape le nom de l'image.";
 
   function focusAnswerInput() {
+    if (!showTextInput) return;
+
     window.requestAnimationFrame(() => {
       inputRef.current?.focus({ preventScroll: true });
     });
   }
 
   function selectTile(questionId) {
+    if (answersByClick) {
+      handleImageSelect(questionId);
+      return;
+    }
+
     selectItem(questionId);
     focusAnswerInput();
   }
@@ -327,9 +387,11 @@ export default function ImageReview({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         setPreviewRow(null);
-        window.requestAnimationFrame(() => {
-          inputRef.current?.focus({ preventScroll: true });
-        });
+        if (showTextInput) {
+          window.requestAnimationFrame(() => {
+            inputRef.current?.focus({ preventScroll: true });
+          });
+        }
       }
     }
 
@@ -338,10 +400,11 @@ export default function ImageReview({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [previewRow]);
+  }, [previewRow, showTextInput]);
 
   useEffect(() => {
     if (resultMode || previewRow) return;
+    if (!showTextInput) return;
 
     window.requestAnimationFrame(() => {
       inputRef.current?.focus({ preventScroll: true });
@@ -351,7 +414,7 @@ export default function ImageReview({
 
       tile.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
     });
-  }, [activeQuestionId, previewRow, resultMode]);
+  }, [activeQuestionId, previewRow, resultMode, showTextInput]);
 
   if (gridItems.length === 0) {
     return null;
@@ -361,7 +424,12 @@ export default function ImageReview({
     <>
       <div
         onKeyDownCapture={(event) => {
-          if (resultMode || previewRow || event.key !== "Tab") {
+          if (
+            resultMode ||
+            previewRow ||
+            event.key !== "Tab" ||
+            normalizedMode !== IMAGE_MODE_TYPE_ALL
+          ) {
             return;
           }
 
@@ -396,7 +464,7 @@ export default function ImageReview({
         >
           <div style={{ flex: "1 1 auto", minWidth: 0 }}>
             <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
-              {resultMode ? "IMAGE RESULT" : "IMAGE"}
+              {resultMode ? "IMAGE RESULT" : `IMAGE · ${imageModeLabels[normalizedMode]}`}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "10px", flexWrap: "wrap" }}>
               <div style={{ color: "#f3f3f3", fontSize: "24px", fontWeight: 800, lineHeight: 1 }}>
@@ -459,7 +527,13 @@ export default function ImageReview({
           {gridItems.map((row) => {
             const mediaSrc = resolveMediaUrl(row.item.media);
             const revealed = row.isFound || resultMode;
-            const selectable = !resultMode && !row.isFound;
+            const selectable = !resultMode && (
+              answersByClick ||
+              (
+                normalizedMode === IMAGE_MODE_TYPE_ALL &&
+                !row.isFound
+              )
+            );
 
             return (
               <div
@@ -595,7 +669,50 @@ export default function ImageReview({
       </div>
 
       <div style={{ padding: "14px", borderTop: "1px solid #262626", flexShrink: 0 }}>
-        {!resultMode && (
+        {showPromptPanel && (
+          <div
+            style={{
+              background: "#121212",
+              border: "1px solid #2a2a2a",
+              borderRadius: "10px",
+              marginBottom: "12px",
+              padding: "12px 14px"
+            }}
+          >
+            <div
+              style={{
+                color: "#777",
+                fontSize: "11px",
+                fontWeight: 800,
+                marginBottom: "6px",
+                textTransform: "uppercase"
+              }}
+            >
+              {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
+                normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+                ? "Image demandée"
+                : "Image surlignée"}
+            </div>
+            <div
+              style={{
+                color: "#f3f3f3",
+                fontSize: "20px",
+                fontWeight: 900,
+                lineHeight: 1.2,
+                overflowWrap: "anywhere"
+              }}
+            >
+              {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
+                normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+                ? promptLabel
+                : currentPromptItem
+                  ? "Trouve son nom"
+                  : " "}
+            </div>
+          </div>
+        )}
+
+        {!resultMode && showTextInput && (
           <div style={{ marginBottom: "14px" }}>
             <input
               autoFocus
@@ -609,7 +726,9 @@ export default function ImageReview({
                   focusAnswerInput();
                 }
               }}
-              placeholder="Tape la réponse..."
+              placeholder={normalizedMode === IMAGE_MODE_TYPE_PROMPT
+                ? "Nom de l'image..."
+                : "Tape une image..."}
               style={{
                 ...inputStyle,
                 border: feedbackTone === "incorrect"
@@ -620,6 +739,35 @@ export default function ImageReview({
                   : "none"
               }}
             />
+          </div>
+        )}
+
+        {showLabelChoices && (
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              marginBottom: "14px"
+            }}
+          >
+            {choiceOptions.map(option => (
+              <button
+                key={option.question_id}
+                type="button"
+                onClick={() => handleChoiceSelect(option.question_id)}
+                style={{
+                  ...buttonStyle,
+                  background: "#141414",
+                  border: "1px solid #303030",
+                  minHeight: "44px",
+                  overflowWrap: "anywhere",
+                  textAlign: "center"
+                }}
+              >
+                {answerLabel(option)}
+              </button>
+            ))}
           </div>
         )}
 
@@ -634,11 +782,15 @@ export default function ImageReview({
         >
           <div
             style={{
-              color: feedbackTone === "incorrect" ? "#fca5a5" : "#777",
+              color: feedbackTone === "incorrect"
+                ? "#fca5a5"
+                : feedbackTone === "correct"
+                  ? "#86efac"
+                  : "#777",
               fontSize: "13px"
             }}
           >
-            {feedbackTone === "incorrect" ? "Réponse incorrecte." : " "}
+              {feedbackCopy}
           </div>
 
           {resultMode ? (
@@ -655,9 +807,23 @@ export default function ImageReview({
               {showQualityControls ? "Valider" : "Continuer"}
             </button>
           ) : (
-            <button type="button" onClick={finishReview} style={buttonStyle}>
-              Terminer
-            </button>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              {normalizedMode === IMAGE_MODE_TYPE_ALL && (
+                <button type="button" onClick={selectNextTile} style={buttonStyle}>
+                  Image suivante
+                </button>
+              )}
+
+              {canSkipPrompt && (
+                <button type="button" onClick={skipCurrentPrompt} style={buttonStyle}>
+                  Passer
+                </button>
+              )}
+
+              <button type="button" onClick={finishReview} style={buttonStyle}>
+                Terminer
+              </button>
+            </div>
           )}
         </div>
       </div>

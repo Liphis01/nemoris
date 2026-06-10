@@ -94,7 +94,8 @@ function scopeRequestOptions(scope) {
     return {
       scopeType: "group",
       groupId: scope.id,
-      ...(scope.mapMode ? { mapMode: scope.mapMode } : {})
+      ...(scope.mapMode ? { mapMode: scope.mapMode } : {}),
+      ...(scope.imageMode ? { imageMode: scope.imageMode } : {})
     };
   }
 
@@ -201,11 +202,14 @@ export function useTrainingSession(active = true) {
     }
   }, []);
 
-  const startScope = useCallback(async (scope, mapMode = null) => {
-    const nextScope = mapMode
+  const startScope = useCallback(async (scope, groupMode = null) => {
+    const groupTypeForMode = scope.type_group || "map";
+    const nextScope = groupMode
       ? {
         ...scope,
-        mapMode
+        groupMode,
+        ...(groupTypeForMode === "map" ? { mapMode: groupMode } : {}),
+        ...(groupTypeForMode === "image" ? { imageMode: groupMode } : {})
       }
       : scope;
 
@@ -351,7 +355,15 @@ export function useTrainingSession(active = true) {
       question_count: allQuestionIds.length,
       found_count: attemptFoundCount,
       content_fingerprint: trainingFingerprint,
-      ...(activeScope.mapMode ? { mode: activeScope.mapMode } : {})
+      ...(activeScope.groupMode || activeScope.mapMode || activeScope.imageMode
+        ? {
+          mode: (
+            activeScope.groupMode ||
+            activeScope.mapMode ||
+            activeScope.imageMode
+          )
+        }
+        : {})
     };
 
     recordSubmittedRef.current = true;

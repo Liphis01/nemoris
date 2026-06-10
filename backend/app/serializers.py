@@ -1,4 +1,5 @@
 from .scheduler import preview_intervals
+from .services.image_modes import DEFAULT_IMAGE_MODE, normalize_image_mode
 from .services.map_modes import DEFAULT_MAP_MODE, normalize_map_mode
 
 
@@ -159,7 +160,7 @@ def serialize_map_review_zone(question):
     }
 
 
-def serialize_image_review_group(group, tags=None):
+def serialize_image_review_group(group, tags=None, mode=None, context_items=None):
     # Runtime aggregation object: image rows stay independently scheduled, but
     # review can keep related due images in one focused screen.
     return {
@@ -172,6 +173,10 @@ def serialize_image_review_group(group, tags=None):
         "media": group.media,
 
         "tags": tags or [],
+
+        "mode": normalize_image_mode(mode or DEFAULT_IMAGE_MODE),
+
+        "context_items": context_items or [],
 
         "items": []
     }

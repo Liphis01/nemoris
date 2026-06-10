@@ -51,6 +51,8 @@ export default function ReviewQuestionRenderer({
                 key={currentIndex}
                 group={q}
                 reviewItems={q.items || []}
+                contextItems={q.context_items || q.items || []}
+                mode={q.mode}
                 onComplete={handleImageComplete}
                 submitAnswer={submitImageAnswer}
                 showQualityControls={!trainingMode}

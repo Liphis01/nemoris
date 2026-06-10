@@ -21,6 +21,23 @@ MapMode = Literal[
     "multiple_choice"
 ]
 
+ImageMode = Literal[
+    "type_all",
+    "click_prompt",
+    "type_prompt",
+    "multiple_choice_label",
+    "multiple_choice_image"
+]
+
+TrainingGroupMode = Literal[
+    "type_all",
+    "click_prompt",
+    "type_prompt",
+    "multiple_choice",
+    "multiple_choice_label",
+    "multiple_choice_image"
+]
+
 
 # =========================================================
 # GROUPS
@@ -167,6 +184,7 @@ class MapAnswerRequest(BaseModel):
 
 class ImageAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
+    mode: Optional[ImageMode] = None
 
 
 TimelinePrecision = Literal[
@@ -197,7 +215,7 @@ class TrainingAttemptRecordRequest(BaseModel):
     question_count: int = Field(ge=0)
     found_count: int = Field(ge=0)
     content_fingerprint: str = Field(min_length=1)
-    mode: Optional[MapMode] = None
+    mode: Optional[TrainingGroupMode] = None
 
 
 class MapZoneBulkItem(BaseModel):

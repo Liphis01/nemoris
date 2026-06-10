@@ -328,6 +328,90 @@ describe("useTrainingSession", () => {
     expect(result.current.activeScope.training_records.multiple_choice.best_time_ms).toBe(5500);
   });
 
+  it("passes selected image mode through training fetch and record save", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 6,
+        type_q: "image",
+        name: "Flags",
+        mode: "multiple_choice_image",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 20, label: "France", media: "/static/france.png" },
+          { question_id: 21, label: "Germany", media: "/static/germany.png" }
+        ],
+        context_items: [
+          { question_id: 20, label: "France", media: "/static/france.png" },
+          { question_id: 21, label: "Germany", media: "/static/germany.png" }
+        ]
+      }
+    ]);
+    recordGroupTrainingAttempt.mockResolvedValueOnce({
+      training_record: {
+        best_found_percent: 100,
+        best_found_count: 2,
+        best_found_elapsed_ms: 5500,
+        best_found_at: "2026-06-02T10:00:00+00:00",
+        best_time_ms: 5500,
+        best_time_at: "2026-06-02T10:00:00+00:00",
+        question_count: 2
+      },
+      training_records: {
+        multiple_choice_image: {
+          best_found_percent: 100,
+          best_found_count: 2,
+          best_found_elapsed_ms: 5500,
+          best_found_at: "2026-06-02T10:00:00+00:00",
+          best_time_ms: 5500,
+          best_time_at: "2026-06-02T10:00:00+00:00",
+          question_count: 2
+        }
+      },
+      is_new_best_percent: true,
+      is_new_best_time: true
+    });
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        type_group: "image",
+        id: 6,
+        name: "Flags",
+        question_count: 2
+      }, "multiple_choice_image");
+    });
+
+    expect(getTrainingItems).toHaveBeenCalledWith({
+      scopeType: "group",
+      groupId: 6,
+      imageMode: "multiple_choice_image"
+    });
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      result.current.handleImageComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(6, {
+        elapsed_ms: 5500,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT,
+        mode: "multiple_choice_image"
+      });
+    });
+    expect(
+      result.current.activeScope.training_records.multiple_choice_image.best_time_ms
+    ).toBe(5500);
+  });
+
   it("surfaces stale record save errors", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {

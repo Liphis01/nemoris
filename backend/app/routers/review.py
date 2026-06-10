@@ -23,6 +23,12 @@ from ..services.map_modes import (
     calibrate_map_quality,
     normalize_map_mode
 )
+from ..services.image_modes import (
+    DEFAULT_IMAGE_MODE,
+    IMAGE_MULTIPLE_CHOICE_MODES,
+    calibrate_image_quality,
+    normalize_image_mode
+)
 from ..services.review import get_review_items
 from ..services.settings import (
     get_review_settings,
@@ -152,11 +158,16 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
 
 @router.post("/answer_image")
 def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
-    apply_answer_batch(db, data.items)
+    apply_answer_batch(
+        db,
+        data.items,
+        image_mode=data.mode or DEFAULT_IMAGE_MODE,
+        require_type="image"
+    )
     return {"status": "ok"}
 
 
-def apply_answer_batch(db, items, map_mode=None, require_type=None):
+def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=None):
     question_ids = list(items.keys())
     questions = (
         db.query(Question)
@@ -198,8 +209,14 @@ def apply_answer_batch(db, items, map_mode=None, require_type=None):
 
     context_counts_by_group_id = {}
     normalized_map_mode = normalize_map_mode(map_mode) if map_mode else None
+    normalized_image_mode = (
+        normalize_image_mode(image_mode)
+        if image_mode
+        else None
+    )
 
-    if normalized_map_mode:
+    if normalized_map_mode or normalized_image_mode:
+        context_type = "map" if normalized_map_mode else "image"
         group_ids = {
             question.group_id
             for question in questions
@@ -212,7 +229,7 @@ def apply_answer_batch(db, items, map_mode=None, require_type=None):
                     db.query(Question)
                     .filter(
                         Question.group_id == group_id,
-                        Question.type_q == "map"
+                        Question.type_q == context_type
                     )
                     .count()
                 )
@@ -247,6 +264,31 @@ def apply_answer_batch(db, items, map_mode=None, require_type=None):
                     "raw_quality": int(quality),
                     "effective_quality": effective_quality
                 }
+            ))
+        elif normalized_image_mode:
+            context_count = context_counts_by_group_id.get(
+                question.group_id if question else None,
+                0
+            )
+            effective_quality = calibrate_image_quality(
+                quality,
+                mode=normalized_image_mode,
+                context_count=context_count
+            )
+            metadata = {
+                "image_mode": normalized_image_mode,
+                "image_context_count": context_count,
+                "raw_quality": int(quality),
+                "effective_quality": effective_quality
+            }
+
+            if normalized_image_mode in IMAGE_MULTIPLE_CHOICE_MODES:
+                metadata["image_choice_count"] = min(4, context_count)
+
+            progress_quality_pairs.append((
+                progress,
+                effective_quality,
+                metadata
             ))
         else:
             progress_quality_pairs.append((progress, quality))

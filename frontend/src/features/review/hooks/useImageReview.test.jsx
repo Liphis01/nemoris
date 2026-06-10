@@ -7,6 +7,13 @@ import {
   useImageReview
 } from "./useImageReview";
 import { sendImageAnswer } from "../../../api/review";
+import {
+  IMAGE_MODE_CLICK_PROMPT,
+  IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+  IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_TYPE_ALL,
+  IMAGE_MODE_TYPE_PROMPT
+} from "../imageModes";
 
 vi.mock("../../../api/review", () => ({
   sendImageAnswer: vi.fn()
@@ -61,7 +68,9 @@ describe("useImageReview", () => {
       imageItem(2, "Germany"),
       imageItem(3, "Spain")
     ];
-    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+    );
     const initialOrder = result.current.gridItems.map(row => row.item.question_id);
 
     act(() => {
@@ -79,7 +88,9 @@ describe("useImageReview", () => {
       imageItem(2, "Germany"),
       imageItem(3, "Spain")
     ];
-    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+    );
     const first = result.current.activeItem;
 
     act(() => {
@@ -107,7 +118,9 @@ describe("useImageReview", () => {
       imageItem(2, "Germany"),
       imageItem(3, "Spain")
     ];
-    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+    );
     const target = result.current.gridItems.find(row =>
       row.item.question_id !== result.current.activeQuestionId
     );
@@ -129,7 +142,9 @@ describe("useImageReview", () => {
       imageItem(2, "Germany"),
       imageItem(3, "Spain")
     ];
-    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+    );
     const currentIndex = result.current.gridItems.findIndex(row => row.isActive);
     const expectedNext = result.current.gridItems[
       (currentIndex + 1) % result.current.gridItems.length
@@ -193,11 +208,14 @@ describe("useImageReview", () => {
       await result.current.sendResult();
     });
 
-    expect(sendImageAnswer).toHaveBeenCalledWith({
-      [found.question_id]: 3,
-      [missedIds[0]]: 0,
-      [missedIds[1]]: 0
-    });
+    expect(sendImageAnswer).toHaveBeenCalledWith(
+      {
+        [found.question_id]: 3,
+        [missedIds[0]]: 0,
+        [missedIds[1]]: 0
+      },
+      IMAGE_MODE_TYPE_PROMPT
+    );
     expect(onComplete).toHaveBeenCalledWith(expect.arrayContaining(missedIds));
   });
 
@@ -237,11 +255,142 @@ describe("useImageReview", () => {
       await result.current.sendResult();
     });
 
-    expect(submitAnswer).toHaveBeenCalledWith({
-      [found.question_id]: 2,
-      [missed.question_id]: 0
-    });
+    expect(submitAnswer).toHaveBeenCalledWith(
+      {
+        [found.question_id]: 2,
+        [missed.question_id]: 0
+      },
+      IMAGE_MODE_TYPE_PROMPT
+    );
     expect(sendImageAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
+  });
+
+  it("type_all accepts any remaining image answer, not only the active tile", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+    );
+    const inactive = result.current.gridItems.find(row =>
+      row.item.question_id !== result.current.activeQuestionId
+    ).item;
+
+    act(() => {
+      result.current.setInput(inactive.answer);
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+
+    expect(result.current.foundQuestionIds).toContain(inactive.question_id);
+  });
+
+  it("type_prompt skip marks the current image missed and advances", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_PROMPT })
+    );
+    const skipped = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.skipCurrentPrompt();
+    });
+
+    expect(result.current.resolvedQuestionIds).toContain(skipped.question_id);
+    expect(result.current.foundQuestionIds).not.toContain(skipped.question_id);
+    expect(result.current.currentPromptItem.question_id).not.toBe(
+      skipped.question_id
+    );
+  });
+
+  it("click_prompt resolves correct and wrong image clicks", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_CLICK_PROMPT
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+    const wrong = items.find(item => item.question_id !== prompt.question_id);
+
+    act(() => {
+      result.current.handleImageSelect(wrong.question_id);
+    });
+
+    expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
+    expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
+
+    const nextPrompt = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleImageSelect(nextPrompt.question_id);
+    });
+
+    expect(result.current.foundQuestionIds).toContain(nextPrompt.question_id);
+    expect(result.current.resultMode).toBe(true);
+  });
+
+  it("multiple_choice_label chooses from labels for the target image", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        contextItems: items
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+
+    expect(result.current.choiceOptions).toHaveLength(4);
+    expect(result.current.choiceOptions.map(item => item.question_id)).toContain(
+      prompt.question_id
+    );
+
+    act(() => {
+      result.current.handleChoiceSelect(prompt.question_id);
+    });
+
+    expect(result.current.foundQuestionIds).toContain(prompt.question_id);
+  });
+
+  it("multiple_choice_image shows image choices and resolves by clicked image", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+        contextItems: items
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+
+    expect(result.current.gridItems).toHaveLength(4);
+    expect(result.current.gridItems.map(row => row.item.question_id)).toContain(
+      prompt.question_id
+    );
+
+    act(() => {
+      result.current.handleImageSelect(prompt.question_id);
+    });
+
+    expect(result.current.foundQuestionIds).toContain(prompt.question_id);
   });
 });
