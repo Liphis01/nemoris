@@ -70,14 +70,17 @@ export function reviseAnswer(questionId, quality) {
 }
 
 
-export function sendMapAnswer(items) {
+export function sendMapAnswer(items, mode = undefined) {
   // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestOk("/answer_map", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      items,
+      ...(mode ? { mode } : {})
+    })
   });
 }
 

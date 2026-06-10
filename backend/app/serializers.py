@@ -1,4 +1,5 @@
 from .scheduler import preview_intervals
+from .services.map_modes import DEFAULT_MAP_MODE, normalize_map_mode
 
 
 def serialize_progress(progress):
@@ -112,7 +113,7 @@ def serialize_review_question_item(question):
     }
 
 
-def serialize_map_review_group(group, tags=None):
+def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
     # Runtime aggregation object: this is intentionally not a database question
     # type. It groups due map-zone questions for a single review screen.
     return {
@@ -125,6 +126,10 @@ def serialize_map_review_group(group, tags=None):
         "media": group.media,
 
         "tags": tags or [],
+
+        "mode": normalize_map_mode(mode or DEFAULT_MAP_MODE),
+
+        "context_items": context_items or [],
 
         "items": []
     }

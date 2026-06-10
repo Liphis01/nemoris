@@ -14,6 +14,13 @@ GroupType = Literal[
     "image"
 ]
 
+MapMode = Literal[
+    "type_all",
+    "click_prompt",
+    "type_prompt",
+    "multiple_choice"
+]
+
 
 # =========================================================
 # GROUPS
@@ -155,6 +162,7 @@ class ReviewSettings(BaseModel):
 
 class MapAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
+    mode: Optional[MapMode] = None
 
 
 class ImageAnswerRequest(BaseModel):
@@ -189,6 +197,7 @@ class TrainingAttemptRecordRequest(BaseModel):
     question_count: int = Field(ge=0)
     found_count: int = Field(ge=0)
     content_fingerprint: str = Field(min_length=1)
+    mode: Optional[MapMode] = None
 
 
 class MapZoneBulkItem(BaseModel):

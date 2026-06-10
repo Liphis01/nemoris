@@ -18,6 +18,11 @@ from ..services.progress import (
     rebalance_progress_calendar,
     replace_latest_scheduling
 )
+from ..services.map_modes import (
+    DEFAULT_MAP_MODE,
+    calibrate_map_quality,
+    normalize_map_mode
+)
 from ..services.review import get_review_items
 from ..services.settings import (
     get_review_settings,
@@ -136,7 +141,12 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
 
 @router.post("/answer_map")
 def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
-    apply_answer_batch(db, data.items)
+    apply_answer_batch(
+        db,
+        data.items,
+        map_mode=data.mode or DEFAULT_MAP_MODE,
+        require_type="map"
+    )
     return {"status": "ok"}
 
 
@@ -146,8 +156,32 @@ def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
-def apply_answer_batch(db, items):
+def apply_answer_batch(db, items, map_mode=None, require_type=None):
     question_ids = list(items.keys())
+    questions = (
+        db.query(Question)
+        .filter(Question.id.in_(question_ids))
+        .all()
+    )
+    question_map = {
+        question.id: question
+        for question in questions
+    }
+    if require_type:
+        wrong_type_ids = [
+            question_id
+            for question_id in question_ids
+            if (
+                question_id in question_map and
+                question_map[question_id].type_q != require_type
+            )
+        ]
+
+        if wrong_type_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Questions are not {require_type}: {wrong_type_ids}"
+            )
 
     # One grouped submit can grade many independent questions. Fetch existing
     # progress rows in one query, then create any missing rows while iterating.
@@ -162,9 +196,31 @@ def apply_answer_batch(db, items):
         for progress in existing_progresses
     }
 
+    context_counts_by_group_id = {}
+    normalized_map_mode = normalize_map_mode(map_mode) if map_mode else None
+
+    if normalized_map_mode:
+        group_ids = {
+            question.group_id
+            for question in questions
+            if question.group_id is not None
+        }
+
+        if group_ids:
+            for group_id in group_ids:
+                context_counts_by_group_id[group_id] = (
+                    db.query(Question)
+                    .filter(
+                        Question.group_id == group_id,
+                        Question.type_q == "map"
+                    )
+                    .count()
+                )
+
     progress_quality_pairs = []
 
     for question_id, quality in items.items():
+        question = question_map.get(question_id)
         progress = progress_map.get(question_id)
 
         if not progress:
@@ -172,7 +228,28 @@ def apply_answer_batch(db, items):
             db.add(progress)
             progress_map[question_id] = progress
 
-        progress_quality_pairs.append((progress, quality))
+        if normalized_map_mode:
+            context_count = context_counts_by_group_id.get(
+                question.group_id if question else None,
+                0
+            )
+            effective_quality = calibrate_map_quality(
+                quality,
+                mode=normalized_map_mode,
+                context_count=context_count
+            )
+            progress_quality_pairs.append((
+                progress,
+                effective_quality,
+                {
+                    "map_mode": normalized_map_mode,
+                    "map_context_count": context_count,
+                    "raw_quality": int(quality),
+                    "effective_quality": effective_quality
+                }
+            ))
+        else:
+            progress_quality_pairs.append((progress, quality))
 
     apply_scheduling_batch(db, progress_quality_pairs)
 

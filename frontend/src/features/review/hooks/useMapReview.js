@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { sendMapAnswer } from "../../../api/review";
+import {
+  MAP_MODE_CLICK_PROMPT,
+  MAP_MODE_MULTIPLE_CHOICE,
+  MAP_MODE_TYPE_ALL,
+  MAP_MODE_TYPE_PROMPT,
+  normalizeMapMode
+} from "../mapModes";
 
 
 function normalize(str = "") {
@@ -75,7 +82,7 @@ function buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet) {
 }
 
 
-function getNextRemainingZone(reviewZones, foundQuestionIdSet, currentCode) {
+function getNextRemainingZone(reviewZones, completedQuestionIdSet, currentCode) {
   if (reviewZones.length === 0) return null;
 
   const currentIndex = reviewZones.findIndex(item => item.code === currentCode);
@@ -84,7 +91,7 @@ function getNextRemainingZone(reviewZones, foundQuestionIdSet, currentCode) {
   for (let offset = 1; offset <= reviewZones.length; offset += 1) {
     const item = reviewZones[(startIndex + offset) % reviewZones.length];
 
-    if (item && !foundQuestionIdSet.has(item.question_id)) {
+    if (item && !completedQuestionIdSet.has(item.question_id)) {
       return item;
     }
   }
@@ -161,15 +168,69 @@ function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
 }
 
 
+function answerValues(item) {
+  const aliases = item.aliases || item.data?.aliases || [];
+
+  return [item.label, ...aliases].filter(Boolean);
+}
+
+
+function itemMatchesInput(item, input) {
+  const normalizedInput = normalize(input);
+
+  if (!normalizedInput) return false;
+
+  return answerValues(item).some(value => normalize(value) === normalizedInput);
+}
+
+
+function shuffle(items) {
+  const next = [...items];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  return next;
+}
+
+
+function itemKey(items) {
+  return (items || []).map(item => item.question_id).join("|");
+}
+
+
+function buildChoiceOptions(target, contextItems) {
+  if (!target) return [];
+
+  const distractors = shuffle(
+    (contextItems || []).filter(item =>
+      item.question_id !== target.question_id && item.label
+    )
+  ).slice(0, 3);
+
+  return shuffle([target, ...distractors]);
+}
+
+
 export function useMapReview(
   reviewZones,
   onComplete,
-  submitAnswer = sendMapAnswer
+  submitAnswer = sendMapAnswer,
+  options = {}
 ) {
   // This hook turns a runtime map group into an interactive recall session:
-  // matching typed answers, tracking found zones, then sending per-zone grades.
+  // matching typed answers, prompt resolution, recap quality editing, and
+  // per-zone grade submission.
+  const mode = normalizeMapMode(options.mode);
+  const contextItems = options.contextItems?.length
+    ? options.contextItems
+    : reviewZones;
+  const isPromptMode = mode !== MAP_MODE_TYPE_ALL;
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
+  const [resolvedQuestionIds, setResolvedQuestionIds] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
@@ -178,6 +239,21 @@ export function useMapReview(
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
+  const reviewKey = `${mode}:${itemKey(reviewZones)}`;
+
+  useEffect(() => {
+    setInput("");
+    setFoundQuestionIds([]);
+    setResolvedQuestionIds([]);
+    setShowRecap(false);
+    setQualityByQuestionId({});
+    setFocusedCode(null);
+    setRemainingFocusCode(null);
+    setFocusVersion(0);
+    setIncorrectFlashId(0);
+    setCorrectFlashId(0);
+    setRecapSort(initialRecapSort);
+  }, [reviewKey]);
 
   useEffect(() => {
     if (!incorrectFlashId && !correctFlashId) {
@@ -192,15 +268,22 @@ export function useMapReview(
     return () => window.clearTimeout(timeout);
   }, [incorrectFlashId, correctFlashId]);
 
+  const promptQueue = useMemo(
+    () => {
+      // Lock the random order to the current mode/session key.
+      const currentReviewKey = reviewKey;
+
+      return currentReviewKey && isPromptMode ? shuffle(reviewZones) : reviewZones;
+    },
+    [isPromptMode, reviewKey, reviewZones]
+  );
+
   const zoneByAnswer = useMemo(() => {
     // Build a normalized lookup from every label and alias to its zone item.
     const lookup = new Map();
 
     reviewZones.forEach(item => {
-      const aliases = item.aliases || item.data?.aliases || [];
-      const values = [item.label, ...aliases];
-
-      values.forEach(value => {
+      answerValues(item).forEach(value => {
         const normalized = normalize(value);
 
         if (normalized && !lookup.has(normalized)) {
@@ -212,21 +295,31 @@ export function useMapReview(
     return lookup;
   }, [reviewZones]);
 
-  const zoneByCode = useMemo(() => {
-    const lookup = new Map();
-
-    reviewZones.forEach(item => {
-      if (item.code) {
-        lookup.set(item.code, item);
-      }
-    });
-
-    return lookup;
-  }, [reviewZones]);
-
   const foundQuestionIdSet = useMemo(
     () => new Set(foundQuestionIds),
     [foundQuestionIds]
+  );
+
+  const resolvedQuestionIdSet = useMemo(
+    () => new Set(resolvedQuestionIds),
+    [resolvedQuestionIds]
+  );
+
+  const completedQuestionIdSet = isPromptMode
+    ? resolvedQuestionIdSet
+    : foundQuestionIdSet;
+
+  const currentPromptItem = useMemo(
+    () =>
+      isPromptMode
+        ? promptQueue.find(item => !resolvedQuestionIdSet.has(item.question_id))
+        : null,
+    [isPromptMode, promptQueue, resolvedQuestionIdSet]
+  );
+
+  const choiceOptions = useMemo(
+    () => buildChoiceOptions(currentPromptItem, contextItems),
+    [contextItems, currentPromptItem]
   );
 
   const foundCodes = useMemo(
@@ -247,43 +340,89 @@ export function useMapReview(
 
   const remainingZones = useMemo(
     () =>
-      reviewZones.filter(item => !foundQuestionIdSet.has(item.question_id)),
-    [foundQuestionIdSet, reviewZones]
+      reviewZones.filter(item => !completedQuestionIdSet.has(item.question_id)),
+    [completedQuestionIdSet, reviewZones]
   );
 
-  const dueCodes = useMemo(
-    () => reviewZones.map(item => item.code),
-    [reviewZones]
-  );
+  const dueCodes = useMemo(() => {
+    if (mode === MAP_MODE_TYPE_PROMPT || mode === MAP_MODE_MULTIPLE_CHOICE) {
+      return currentPromptItem?.code ? [currentPromptItem.code] : [];
+    }
+
+    return remainingZones.map(item => item.code);
+  }, [currentPromptItem, mode, remainingZones]);
 
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
 
-    const nextFoundQuestionIdSet = new Set(foundQuestionIds);
-    const allZonesFound = reviewZones.every(item =>
-      nextFoundQuestionIdSet.has(item.question_id)
+    const allZonesComplete = reviewZones.every(item =>
+      completedQuestionIdSet.has(item.question_id)
     );
 
-    if (!allZonesFound) return;
+    if (!allZonesComplete) return;
 
     setQualityByQuestionId(
-      buildInitialQualityByQuestionId(reviewZones, nextFoundQuestionIdSet)
+      buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet)
     );
     setShowRecap(true);
-  }, [foundQuestionIds, reviewZones, showRecap]);
+  }, [
+    completedQuestionIdSet,
+    foundQuestionIdSet,
+    reviewZones,
+    showRecap
+  ]);
 
-  function markFound(item) {
-    // Do not count a zone twice if the user types an alias after clicking it.
-    if (!item || foundQuestionIdSet.has(item.question_id)) return;
+  function rememberFound(item) {
+    if (!item) return;
 
     setFoundQuestionIds(prev =>
       prev.includes(item.question_id) ? prev : [...prev, item.question_id]
     );
+  }
+
+  function rememberResolved(item) {
+    if (!item || !isPromptMode) return;
+
+    setResolvedQuestionIds(prev =>
+      prev.includes(item.question_id) ? prev : [...prev, item.question_id]
+    );
+  }
+
+  function markFound(item) {
+    // Do not count a zone twice if the user types an alias after finding it.
+    if (!item || foundQuestionIdSet.has(item.question_id)) return;
+
+    rememberFound(item);
+    rememberResolved(item);
     setCorrectFlashId(Date.now());
     setIncorrectFlashId(0);
+    setInput("");
+  }
+
+  function markMissed(item) {
+    if (!item) return;
+
+    rememberResolved(item);
+    setIncorrectFlashId(Date.now());
+    setCorrectFlashId(0);
+    setInput("");
   }
 
   function handleSubmit() {
+    if (mode === MAP_MODE_TYPE_PROMPT) {
+      if (currentPromptItem && itemMatchesInput(currentPromptItem, input)) {
+        markFound(currentPromptItem);
+      } else if (input.trim()) {
+        setIncorrectFlashId(Date.now());
+        setCorrectFlashId(0);
+        setInput("");
+      }
+
+      return;
+    }
+
+    if (mode !== MAP_MODE_TYPE_ALL) return;
+
     const match = zoneByAnswer.get(normalize(input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
@@ -297,13 +436,45 @@ export function useMapReview(
   }
 
   function handleZoneSelect(code) {
-    markFound(zoneByCode.get(code));
+    if (mode !== MAP_MODE_CLICK_PROMPT || !currentPromptItem) {
+      return;
+    }
+
+    if (currentPromptItem.code === code) {
+      markFound(currentPromptItem);
+    } else {
+      markMissed(currentPromptItem);
+    }
+  }
+
+  function handleChoiceSelect(questionId) {
+    if (mode !== MAP_MODE_MULTIPLE_CHOICE || !currentPromptItem) {
+      return;
+    }
+
+    if (currentPromptItem.question_id === questionId) {
+      markFound(currentPromptItem);
+    } else {
+      markMissed(currentPromptItem);
+    }
+  }
+
+  function skipCurrentPrompt() {
+    if (!currentPromptItem) return;
+
+    markMissed(currentPromptItem);
   }
 
   function focusNextRemainingZone() {
+    if (currentPromptItem) {
+      setRemainingFocusCode(currentPromptItem.code);
+      setFocusVersion(version => version + 1);
+      return;
+    }
+
     const nextCode = getNextRemainingZone(
       reviewZones,
-      foundQuestionIdSet,
+      completedQuestionIdSet,
       remainingFocusCode
     )?.code;
 
@@ -325,7 +496,7 @@ export function useMapReview(
   async function sendResult() {
     // Send one quality per atomic map question, then tell the parent review
     // session which zones should be re-queued.
-    await submitAnswer(qualityByQuestionId);
+    await submitAnswer(qualityByQuestionId, mode);
 
     const failedQuestionIds = Object.entries(qualityByQuestionId)
       .filter(([, quality]) => quality === 0)
@@ -333,6 +504,7 @@ export function useMapReview(
 
     setShowRecap(false);
     setFoundQuestionIds([]);
+    setResolvedQuestionIds([]);
     setQualityByQuestionId({});
     setFocusedCode(null);
     setRemainingFocusCode(null);
@@ -368,8 +540,11 @@ export function useMapReview(
     }));
   }
 
+  const completedCount = isPromptMode
+    ? resolvedQuestionIds.length
+    : foundQuestionIds.length;
   const progressPercent = reviewZones.length
-    ? (foundQuestionIds.length / reviewZones.length) * 100
+    ? (completedCount / reviewZones.length) * 100
     : 0;
   const isIncorrectFlash = incorrectFlashId > 0;
   const isCorrectFlash = correctFlashId > 0;
@@ -421,8 +596,16 @@ export function useMapReview(
   }, [reviewZones, foundQuestionIdSet, qualityByQuestionId, recapSort]);
   const hasCorrectRecapRows = recapRows.some(row => row.isFound);
   const hasWrongRecapRows = recapRows.some(row => !row.isFound);
+  const targetHighlightCode = (
+    mode === MAP_MODE_TYPE_PROMPT ||
+    mode === MAP_MODE_MULTIPLE_CHOICE
+  )
+    ? currentPromptItem?.code || null
+    : null;
 
   return {
+    choiceOptions,
+    currentPromptItem,
     dueCodes,
     feedbackTone,
     focusedCode,
@@ -432,19 +615,24 @@ export function useMapReview(
     foundCodes,
     foundQuestionIdSet,
     finishMap,
+    handleChoiceSelect,
     handleSubmit,
     handleZoneSelect,
     input,
+    mode,
     qualityByQuestionId,
     missedCodes,
     progressPercent,
+    promptCode: currentPromptItem?.code || null,
+    promptLabel: currentPromptItem?.label || "",
     recapMissCount,
     recapRows,
     recapSort,
     recapSuccessCount,
     recapSuccessRate,
-    remainingFocusCode,
+    remainingFocusCode: targetHighlightCode || remainingFocusCode,
     remainingZones,
+    selectedCode: targetHighlightCode,
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,
@@ -452,6 +640,7 @@ export function useMapReview(
     setQuality,
     showRecap,
     showRecapSections: hasCorrectRecapRows && hasWrongRecapRows,
+    skipCurrentPrompt,
     toggleRecapSort
   };
 }

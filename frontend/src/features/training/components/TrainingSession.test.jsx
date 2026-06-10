@@ -52,7 +52,7 @@ describe("TrainingSession", () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
     expect(await screen.findByText("88%")).toBeInTheDocument();
-    expect(screen.getByText("meilleur score")).toBeInTheDocument();
+    expect(screen.getAllByText("meilleur score")).toHaveLength(4);
     expect(screen.getByText(/temps parfait 1:30/)).toBeInTheDocument();
   });
 });

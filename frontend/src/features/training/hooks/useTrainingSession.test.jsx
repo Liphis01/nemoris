@@ -250,6 +250,84 @@ describe("useTrainingSession", () => {
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
   });
 
+  it("passes selected map mode through training fetch and record save", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        mode: "multiple_choice",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    recordGroupTrainingAttempt.mockResolvedValueOnce({
+      training_record: {
+        best_found_percent: 100,
+        best_found_count: 2,
+        best_found_elapsed_ms: 5500,
+        best_found_at: "2026-06-02T10:00:00+00:00",
+        best_time_ms: 5500,
+        best_time_at: "2026-06-02T10:00:00+00:00",
+        question_count: 2
+      },
+      training_records: {
+        multiple_choice: {
+          best_found_percent: 100,
+          best_found_count: 2,
+          best_found_elapsed_ms: 5500,
+          best_found_at: "2026-06-02T10:00:00+00:00",
+          best_time_ms: 5500,
+          best_time_at: "2026-06-02T10:00:00+00:00",
+          question_count: 2
+        }
+      },
+      is_new_best_percent: true,
+      is_new_best_time: true
+    });
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      }, "multiple_choice");
+    });
+
+    expect(getTrainingItems).toHaveBeenCalledWith({
+      scopeType: "group",
+      groupId: 5,
+      mapMode: "multiple_choice"
+    });
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 5500,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT,
+        mode: "multiple_choice"
+      });
+    });
+    expect(result.current.activeScope.training_records.multiple_choice.best_time_ms).toBe(5500);
+  });
+
   it("surfaces stale record save errors", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {

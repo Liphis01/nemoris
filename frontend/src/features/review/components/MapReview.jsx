@@ -4,6 +4,14 @@ import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
 import { useMapReview } from "../hooks/useMapReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
+import {
+  MAP_MODE_CLICK_PROMPT,
+  MAP_MODE_MULTIPLE_CHOICE,
+  MAP_MODE_TYPE_ALL,
+  MAP_MODE_TYPE_PROMPT,
+  mapModeLabels,
+  normalizeMapMode
+} from "../mapModes";
 
 const typeBadgeStyle = {
   display: "flex",
@@ -92,9 +100,13 @@ export default function MapReview({
   submitAnswer,
   showQualityControls = true,
   trainingElapsedMs = null,
-  trainingBestTimeMs = null
+  trainingBestTimeMs = null,
+  mode: modeProp,
+  contextItems = []
 }) {
+  const normalizedMode = normalizeMapMode(modeProp || group.mode);
   const {
+    choiceOptions,
     dueCodes,
     feedbackTone,
     focusedCode,
@@ -104,11 +116,14 @@ export default function MapReview({
     foundCodes,
     foundQuestionIdSet,
     finishMap,
+    handleChoiceSelect,
     handleSubmit,
     handleZoneSelect,
     input,
+    mode,
     qualityByQuestionId,
     missedCodes,
+    promptLabel,
     progressPercent,
     recapMissCount,
     recapRows,
@@ -117,6 +132,7 @@ export default function MapReview({
     recapSuccessRate,
     remainingFocusCode,
     remainingZones,
+    selectedCode,
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,
@@ -124,8 +140,12 @@ export default function MapReview({
     setQuality,
     showRecap,
     showRecapSections,
+    skipCurrentPrompt,
     toggleRecapSort
-  } = useMapReview(reviewZones, onComplete, submitAnswer);
+  } = useMapReview(reviewZones, onComplete, submitAnswer, {
+    mode: normalizedMode,
+    contextItems
+  });
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
@@ -139,6 +159,22 @@ export default function MapReview({
     ? recapHeaderColumns
     : recapHeaderColumns.filter(column => column.key === "answer");
   const showTrainingTimer = trainingElapsedMs !== null && !showRecap;
+  const showTextInput = mode === MAP_MODE_TYPE_ALL || mode === MAP_MODE_TYPE_PROMPT;
+  const showPromptPanel = mode !== MAP_MODE_TYPE_ALL && !showRecap;
+  const canSkipPrompt = mode === MAP_MODE_TYPE_PROMPT;
+  const feedbackCopy = feedbackTone === "incorrect"
+    ? mode === MAP_MODE_TYPE_PROMPT
+      ? "Réponse incorrecte."
+      : "Mauvaise zone."
+    : feedbackTone === "correct"
+      ? "Bonne réponse."
+      : mode === MAP_MODE_TYPE_ALL
+        ? "Tape les réponses."
+        : mode === MAP_MODE_CLICK_PROMPT
+          ? "Clique la zone demandée."
+          : mode === MAP_MODE_MULTIPLE_CHOICE
+            ? "Choisis la réponse."
+            : "Tape le nom de la zone.";
   const foundBulkQuality = useMemo(() => {
     if (foundQuestionIds.length === 0) return null;
 
@@ -271,7 +307,7 @@ export default function MapReview({
           >
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               <div style={typeBadgeStyle}>
-                🗺 MAP
+                MAP · {mapModeLabels[mode]}
               </div>
 
               <div
@@ -381,6 +417,7 @@ export default function MapReview({
               dueItems={dueCodes}
               focusCode={remainingFocusCode}
               focusVersion={focusVersion}
+              selected={selectedCode || undefined}
               zoneLabels={foundZoneLabels}
               onSelect={handleZoneSelect}
             />
@@ -393,28 +430,60 @@ export default function MapReview({
             padding: "20px 24px"
           }}
         >
-          <input
-            autoFocus
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            placeholder="Tape une zone..."
-            style={{
-              ...inputStyle,
-              border: feedbackTone === "incorrect"
-                ? "1px solid rgba(248, 113, 113, 0.9)"
-                : feedbackTone === "correct"
-                  ? "1px solid rgba(134, 239, 172, 0.85)"
-                : inputStyle.border,
-              boxShadow: feedbackTone === "incorrect"
-                ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
-                : feedbackTone === "correct"
-                  ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
-                : "none",
-              transition: "border 0.18s ease, box-shadow 0.18s ease"
-            }}
-          />
+          {showPromptPanel && (
+            <div style={promptPanelStyle}>
+              <div style={promptKickerStyle}>
+                {mode === MAP_MODE_CLICK_PROMPT
+                  ? "Zone demandée"
+                  : mode === MAP_MODE_MULTIPLE_CHOICE
+                    ? "Zone surlignée"
+                    : "Nom attendu"}
+              </div>
+              <div style={promptValueStyle}>
+                {mode === MAP_MODE_CLICK_PROMPT ? promptLabel : "Zone surlignée"}
+              </div>
+            </div>
+          )}
+
+          {showTextInput && (
+            <input
+              autoFocus
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              placeholder={mode === MAP_MODE_TYPE_PROMPT ? "Nom de la zone..." : "Tape une zone..."}
+              style={{
+                ...inputStyle,
+                border: feedbackTone === "incorrect"
+                  ? "1px solid rgba(248, 113, 113, 0.9)"
+                  : feedbackTone === "correct"
+                    ? "1px solid rgba(134, 239, 172, 0.85)"
+                  : inputStyle.border,
+                boxShadow: feedbackTone === "incorrect"
+                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
+                  : feedbackTone === "correct"
+                    ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
+                  : "none",
+                transition: "border 0.18s ease, box-shadow 0.18s ease"
+              }}
+            />
+          )}
+
+          {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
+            <div style={choiceGridStyle}>
+              {choiceOptions.map(option => (
+                <button
+                  key={option.question_id}
+                  type="button"
+                  onClick={() => handleChoiceSelect(option.question_id)}
+                  style={choiceButtonStyle}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* FOOTER */}
           {!showRecap && (
@@ -439,11 +508,7 @@ export default function MapReview({
                   transition: "color 0.18s ease"
                 }}
               >
-                {feedbackTone === "incorrect"
-                  ? "Réponse incorrecte, essaie encore."
-                  : feedbackTone === "correct"
-                    ? "Bonne réponse."
-                    : "Clique sur la carte ou tape les réponses."}
+                {feedbackCopy}
               </div>
 
               <div
@@ -465,8 +530,23 @@ export default function MapReview({
                     opacity: remainingZones.length === 0 ? 0.55 : 1
                   }}
                 >
-                  Zone suivante
+                  {mode === MAP_MODE_TYPE_ALL ? "Zone suivante" : "Recentrer"}
                 </button>
+
+                {canSkipPrompt && (
+                  <button
+                    type="button"
+                    onClick={skipCurrentPrompt}
+                    disabled={remainingZones.length === 0}
+                    style={{
+                      ...buttonStyle,
+                      cursor: remainingZones.length === 0 ? "not-allowed" : "pointer",
+                      opacity: remainingZones.length === 0 ? 0.55 : 1
+                    }}
+                  >
+                    Passer
+                  </button>
+                )}
 
                 <button
                   onClick={finishMap}
@@ -798,6 +878,45 @@ const activeMapPanelStyle = {
   overflow: "hidden",
   border: "1px solid #262626",
   height: "clamp(300px, 55vh, 480px)"
+};
+
+const promptPanelStyle = {
+  background: "#121212",
+  border: "1px solid #2a2a2a",
+  borderRadius: "12px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "5px",
+  marginBottom: "14px",
+  padding: "14px 16px"
+};
+
+const promptKickerStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: "800",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const promptValueStyle = {
+  color: "#f3f3f3",
+  fontSize: "20px",
+  fontWeight: "800",
+  lineHeight: 1.15
+};
+
+const choiceGridStyle = {
+  display: "grid",
+  gap: "10px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
+};
+
+const choiceButtonStyle = {
+  ...buttonStyle,
+  background: "#181818",
+  minHeight: "54px",
+  textAlign: "left"
 };
 
 const overlayStyle = {

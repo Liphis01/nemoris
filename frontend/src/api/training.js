@@ -21,6 +21,10 @@ export function getTrainingItems(options = {}) {
     params.set("tag", options.tag);
   }
 
+  if (options.mapMode) {
+    params.set("map_mode", options.mapMode);
+  }
+
   const query = params.toString();
 
   return requestJson(`/training${query ? `?${query}` : ""}`);

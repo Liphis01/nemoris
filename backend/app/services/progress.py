@@ -62,7 +62,12 @@ def count_reviews_on_day(progresses, day):
     return count
 
 
-def record_answer_history(progress: Progress, quality: int, scheduling: dict):
+def record_answer_history(
+    progress: Progress,
+    quality: int,
+    scheduling: dict,
+    metadata=None
+):
     # SQLAlchemy may not detect in-place mutation on JSON columns reliably, so
     # build a fresh list before assigning it back.
     history = list(progress.history or [])
@@ -97,12 +102,20 @@ def record_answer_history(progress: Progress, quality: int, scheduling: dict):
         entry["fsrs_state"] = scheduling["fsrs_state"]
         entry["fsrs_version"] = scheduling["fsrs_version"]
 
+    if metadata:
+        entry.update(metadata)
+
     history.append(entry)
 
     progress.history = history
 
 
-def write_scheduling(progress: Progress, quality: int, scheduling: dict):
+def write_scheduling(
+    progress: Progress,
+    quality: int,
+    scheduling: dict,
+    metadata=None
+):
     ideal_interval = scheduling.get("ideal_interval", scheduling["interval"])
     ideal_next_review = scheduling.get(
         "ideal_next_review",
@@ -121,7 +134,7 @@ def write_scheduling(progress: Progress, quality: int, scheduling: dict):
     progress.fsrs_card = scheduling.get("fsrs_card")
     progress.fsrs_version = scheduling.get("fsrs_version", FSRS_VERSION)
 
-    record_answer_history(progress, quality, scheduling)
+    record_answer_history(progress, quality, scheduling, metadata=metadata)
 
     return scheduling
 
@@ -272,6 +285,15 @@ def load_question_review_metadata(db, question_ids):
     }
 
 
+def _normalize_progress_quality_pair(pair):
+    if len(pair) == 2:
+        progress, quality = pair
+        return progress, quality, None
+
+    progress, quality, metadata = pair
+    return progress, quality, metadata
+
+
 def apply_scheduling_batch(db, progress_quality_pairs, today=None):
     # Central write path for review answers. It computes raw scheduling first,
     # then smooths the whole batch so longer intervals claim flexible slots
@@ -281,12 +303,16 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
     candidate_dates = set()
     question_ids = {
         progress.question_id
-        for progress, _ in progress_quality_pairs
+        for progress, _, _ in [
+            _normalize_progress_quality_pair(pair)
+            for pair in progress_quality_pairs
+        ]
         if progress.question_id is not None
     }
     question_metadata = load_question_review_metadata(db, question_ids)
 
-    for progress, quality in progress_quality_pairs:
+    for pair in progress_quality_pairs:
+        progress, quality, history_metadata = _normalize_progress_quality_pair(pair)
         metadata = question_metadata.get(progress.question_id, {})
         scheduling = update_progress(progress, quality, today=today)
         scheduling["type_q"] = metadata.get("type_q")
@@ -296,7 +322,7 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
         )
         scheduling["ideal_interval"] = scheduling["interval"]
         scheduling["ideal_next_review"] = scheduling["next_review"]
-        items.append((progress, quality, scheduling))
+        items.append((progress, quality, scheduling, history_metadata))
 
         if progress.question_id is not None:
             exclude_question_ids.add(progress.question_id)
@@ -320,13 +346,21 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
         exclude_question_ids=exclude_question_ids
     )
     smoothed_schedules = assign_smoothed_schedules(
-        [scheduling for _, _, scheduling in items],
+        [scheduling for _, _, scheduling, _ in items],
         daily_loads,
         daily_type_loads=daily_type_loads
     )
 
-    for (progress, quality, _), scheduling in zip(items, smoothed_schedules):
-        write_scheduling(progress, quality, scheduling)
+    for (progress, quality, _, history_metadata), scheduling in zip(
+        items,
+        smoothed_schedules
+    ):
+        write_scheduling(
+            progress,
+            quality,
+            scheduling,
+            metadata=history_metadata
+        )
 
     return smoothed_schedules
 

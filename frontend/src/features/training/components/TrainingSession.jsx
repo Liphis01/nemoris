@@ -7,6 +7,11 @@ import {
   formatPercent,
   formatRecordPercent
 } from "../trainingRecordUtils";
+import {
+  MAP_MODE_TYPE_ALL,
+  MAP_MODES,
+  mapModeLabels
+} from "../../review/mapModes";
 
 
 const panelStyle = {
@@ -68,9 +73,33 @@ const recordBadgeStyle = {
   padding: "8px 12px"
 };
 
+const modeTileGridStyle = {
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  width: "100%"
+};
+
+const modeTileStyle = {
+  background: "#141414",
+  border: "1px solid #2c2c2c",
+  borderRadius: "8px",
+  color: "#eee",
+  cursor: "pointer",
+  padding: "10px",
+  textAlign: "left"
+};
+
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+
+function recordForMode(group, mode) {
+  return group?.training_records?.[mode] || (
+    mode === MAP_MODE_TYPE_ALL ? group?.training_record : null
+  );
 }
 
 
@@ -213,55 +242,113 @@ function ScopeSelector({
                 gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))"
               }}
             >
-              {scopeType === "group" && groups.map(group => (
-                (() => {
-                  const record = group.training_record;
-
+              {scopeType === "group" && groups.map(group => {
+                if (group.type_group === "map") {
                   return (
-                <button
-                  type="button"
-                  key={group.id}
-                  onClick={() => startScope({
-                    ...group,
-                    type: "group",
-                  })}
-                  style={{
-                    ...buttonStyle,
-                    alignItems: "flex-start",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    minHeight: "104px",
-                    textAlign: "left"
-                  }}
-                >
-                  <span style={{ color: "#ffcc7a", fontSize: "12px", textTransform: "uppercase" }}>
-                    {group.type_group}
-                  </span>
-                  <span
+                    <div
+                      key={group.id}
+                      style={{
+                        ...panelStyle,
+                        alignItems: "flex-start",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                        minHeight: "150px",
+                        padding: "14px"
+                      }}
+                    >
+                      <span style={{ color: "#ffcc7a", fontSize: "12px", fontWeight: "800", textTransform: "uppercase" }}>
+                        map
+                      </span>
+                      <span style={{ color: "#f3f3f3", fontSize: "18px", fontWeight: "800" }}>
+                        {group.name}
+                      </span>
+                      <span style={{ color: "#999", fontSize: "13px" }}>
+                        {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
+                      </span>
+
+                      <div style={modeTileGridStyle}>
+                        {MAP_MODES.map(mode => {
+                          const record = recordForMode(group, mode);
+
+                          return (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => startScope({
+                                ...group,
+                                type: "group"
+                              }, mode)}
+                              style={modeTileStyle}
+                            >
+                              <span style={{ color: "#9ad8ff", display: "block", fontSize: "12px", fontWeight: "800", marginBottom: "5px" }}>
+                                {mapModeLabels[mode]}
+                              </span>
+                              <span style={{ color: "#f3f3f3", display: "block", fontSize: "22px", fontWeight: "900", lineHeight: 1 }}>
+                                {formatRecordPercent(record)}
+                              </span>
+                              <span style={{ color: "#888", display: "block", fontSize: "10px", fontWeight: "800", marginTop: "4px" }}>
+                                meilleur score
+                              </span>
+                              <span style={{ color: "#888", display: "block", fontSize: "11px", marginTop: "4px" }}>
+                                {record?.best_time_ms
+                                  ? `temps parfait ${formatDuration(record.best_time_ms)}`
+                                  : "—"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+
+                const record = group.training_record;
+
+                return (
+                  <button
+                    type="button"
+                    key={group.id}
+                    onClick={() => startScope({
+                      ...group,
+                      type: "group",
+                    })}
                     style={{
-                      color: "#f3f3f3",
-                      fontSize: "28px",
-                      fontWeight: "900",
-                      lineHeight: 1
+                      ...buttonStyle,
+                      alignItems: "flex-start",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                      minHeight: "104px",
+                      textAlign: "left"
                     }}
                   >
-                    {formatRecordPercent(record)}
-                  </span>
-                  <span style={{ color: "#888", fontSize: "12px", fontWeight: "800" }}>
-                    meilleur score
-                  </span>
-                  <span style={{ fontSize: "18px" }}>{group.name}</span>
-                  <span style={{ color: "#999", fontSize: "13px" }}>
-                    {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
-                    {record?.best_time_ms
-                      ? ` · temps parfait ${formatDuration(record.best_time_ms)}`
-                      : ""}
-                  </span>
-                </button>
-                  );
-                })()
-              ))}
+                    <span style={{ color: "#ffcc7a", fontSize: "12px", textTransform: "uppercase" }}>
+                      {group.type_group}
+                    </span>
+                    <span
+                      style={{
+                        color: "#f3f3f3",
+                        fontSize: "28px",
+                        fontWeight: "900",
+                        lineHeight: 1
+                      }}
+                    >
+                      {formatRecordPercent(record)}
+                    </span>
+                    <span style={{ color: "#888", fontSize: "12px", fontWeight: "800" }}>
+                      meilleur score
+                    </span>
+                    <span style={{ fontSize: "18px" }}>{group.name}</span>
+                    <span style={{ color: "#999", fontSize: "13px" }}>
+                      {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
+                      {record?.best_time_ms
+                        ? ` · temps parfait ${formatDuration(record.best_time_ms)}`
+                        : ""}
+                    </span>
+                  </button>
+                );
+              })}
 
               {scopeType === "tag" && tags.map(tag => (
                 <button
@@ -301,7 +388,9 @@ function ScopeSelector({
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
   const currentQuestion = session.questions[session.currentIndex];
-  const activeRecord = session.activeScope?.training_record || null;
+  const activeRecord = session.activeScope?.mapMode
+    ? recordForMode(session.activeScope, session.activeScope.mapMode)
+    : session.activeScope?.training_record || null;
   const displayedRecord = session.recordResult?.training_record || activeRecord;
   const completedPercent = formatPercent(
     session.attemptFoundCount,
@@ -363,6 +452,9 @@ export default function TrainingSession({ setMode }) {
                 </h1>
                 <div style={{ color: "#777", fontSize: "14px" }}>
                   {session.allQuestionIds.length} items dans ce scope
+                  {session.activeScope?.mapMode
+                    ? ` · ${mapModeLabels[session.activeScope.mapMode]}`
+                    : ""}
                 </div>
               </div>
 

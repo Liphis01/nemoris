@@ -32,6 +32,10 @@ from app.scheduler import (
     rebalance_review_calendar,
     smoothing_radius_days
 )
+from app.services.map_modes import (
+    calibrate_map_quality,
+    choose_map_review_mode
+)
 from app.schemas import (
     AnswerRequest,
     MapAnswerRequest,
@@ -104,6 +108,35 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(favorite_interval(2), 1)
         self.assertEqual(favorite_interval(3), 2)
         self.assertEqual(favorite_interval(10), 7)
+
+    def test_map_mode_quality_calibration_caps_easier_modes(self):
+        self.assertEqual(calibrate_map_quality(3, "type_all", 2), 3)
+        self.assertEqual(calibrate_map_quality(3, "type_prompt", 20), 2)
+        self.assertEqual(calibrate_map_quality(3, "multiple_choice", 20), 1)
+        self.assertEqual(calibrate_map_quality(3, "click_prompt", 4), 1)
+        self.assertEqual(calibrate_map_quality(3, "click_prompt", 8), 2)
+        self.assertEqual(calibrate_map_quality(3, "click_prompt", 20), 3)
+        self.assertEqual(calibrate_map_quality(0, "click_prompt", 20), 0)
+
+    def test_map_review_mode_selector_uses_difficulty_size_and_variety(self):
+        hard = Question(type_q="map", answer="Hard", data={"code": "hard"})
+        hard.progress = Progress(reps=0, difficulty=5.0, history=[])
+        strong = Question(type_q="map", answer="Strong", data={"code": "strong"})
+        strong.progress = Progress(
+            reps=4,
+            difficulty=3.0,
+            history=[{"map_mode": "type_prompt"} for _ in range(4)]
+        )
+        context = [hard, strong]
+
+        self.assertEqual(
+            choose_map_review_mode([hard], context),
+            "multiple_choice"
+        )
+        self.assertEqual(
+            choose_map_review_mode([strong], context),
+            "type_all"
+        )
 
     def test_again_projected_interval_is_immediate_retry(self):
         progress = Progress(

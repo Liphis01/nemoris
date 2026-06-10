@@ -57,6 +57,8 @@ MAP_GROUP_KEYS = {
     "name",
     "media",
     "tags",
+    "mode",
+    "context_items",
     "items"
 }
 MAP_ZONE_KEYS = {
@@ -412,8 +414,18 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(map_group["tags"], ["geo", "map"])
         self.assertNotIn("question_id", map_group)
         self.assertEqual(len(map_group["items"]), 2)
+        self.assertIn(
+            map_group["mode"],
+            {"type_all", "click_prompt", "type_prompt", "multiple_choice"}
+        )
+        self.assertEqual(len(map_group["context_items"]), 2)
 
         for zone in map_group["items"]:
+            self.assertEqual(set(zone), MAP_ZONE_KEYS)
+            self.assert_progress_shape(zone["progress"])
+            self.assert_projected_intervals_shape(zone["projected_intervals"])
+
+        for zone in map_group["context_items"]:
             self.assertEqual(set(zone), MAP_ZONE_KEYS)
             self.assert_progress_shape(zone["progress"])
             self.assert_projected_intervals_shape(zone["projected_intervals"])
@@ -470,7 +482,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             MapAnswerRequest(items={
                 zone_a.id: 2,
                 zone_b.id: 0
-            }),
+            }, mode="click_prompt"),
             db=self.db
         )
 
@@ -485,9 +497,14 @@ class ReviewResponseShapeTests(unittest.TestCase):
             )
         }
         self.assertEqual(qualities_by_question_id, {
-            zone_a.id: 2,
+            zone_a.id: 1,
             zone_b.id: 0
         })
+        zone_a_history = zone_a.progress.history[-1]
+        self.assertEqual(zone_a_history["map_mode"], "click_prompt")
+        self.assertEqual(zone_a_history["raw_quality"], 2)
+        self.assertEqual(zone_a_history["effective_quality"], 1)
+        self.assertEqual(zone_a_history["map_context_count"], 2)
 
     def test_review_endpoint_returns_missed_map_items_after_group_submit(self):
         fixture = self.seed_review_contract_fixture()
@@ -613,6 +630,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         map_group_payload = serialize_map_review_group(map_group, tags=["geo"])
         self.assertEqual(set(map_group_payload), MAP_GROUP_KEYS)
         self.assertEqual(map_group_payload["type_q"], "map")
+        self.assertEqual(map_group_payload["mode"], "type_all")
+        self.assertEqual(map_group_payload["context_items"], [])
         self.assertEqual(map_group_payload["items"], [])
         self.assertNotIn("progress", map_group_payload)
 

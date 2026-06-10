@@ -8,12 +8,17 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_progress
+from .map_modes import (
+    DEFAULT_MAP_MODE,
+    normalize_map_mode
+)
 from .map_zones import merge_tags
 from .review import serialize_review_items
 from .timeline import grade_timeline_answer, validate_timeline_data
 
 
 TRAINING_RECORD_KEY = "training_record"
+TRAINING_RECORDS_KEY = "training_records"
 TRAINING_RECORD_FIELDS = {
     "best_found_percent",
     "best_found_count",
@@ -180,11 +185,19 @@ def group_training_fingerprint(db, group):
 
 def clear_training_record(group):
     group_data = dict(group.data or {})
+    changed = False
 
-    if TRAINING_RECORD_KEY not in group_data:
+    if TRAINING_RECORD_KEY in group_data:
+        del group_data[TRAINING_RECORD_KEY]
+        changed = True
+
+    if TRAINING_RECORDS_KEY in group_data:
+        del group_data[TRAINING_RECORDS_KEY]
+        changed = True
+
+    if not changed:
         return False
 
-    del group_data[TRAINING_RECORD_KEY]
     group.data = group_data
     return True
 
@@ -231,6 +244,48 @@ def serialize_training_record(data, content_fingerprint=None):
         for key in TRAINING_RECORD_FIELDS
         if key in record
     }
+
+
+def _serialize_record(record, content_fingerprint=None):
+    if not isinstance(record, dict):
+        return None
+
+    if (
+        content_fingerprint is not None and
+        record.get("content_fingerprint") != content_fingerprint
+    ):
+        return None
+
+    return {
+        key: record[key]
+        for key in TRAINING_RECORD_FIELDS
+        if key in record
+    }
+
+
+def serialize_training_records(data, content_fingerprint=None):
+    data = data or {}
+    raw_records = data.get(TRAINING_RECORDS_KEY)
+    records = {}
+
+    if isinstance(raw_records, dict):
+        for mode, record in raw_records.items():
+            normalized_mode = normalize_map_mode(mode)
+
+            if normalized_mode != mode:
+                continue
+
+            serialized = _serialize_record(record, content_fingerprint)
+
+            if serialized:
+                records[normalized_mode] = serialized
+
+    legacy_record = serialize_training_record(data, content_fingerprint)
+
+    if legacy_record and DEFAULT_MAP_MODE not in records:
+        records[DEFAULT_MAP_MODE] = legacy_record
+
+    return records
 
 
 def list_training_scopes(db):
@@ -295,6 +350,14 @@ def list_training_scopes(db):
                 "training_record": serialize_training_record(
                     group.data,
                     fingerprints_by_group_id.get(group.id)
+                ),
+                "training_records": (
+                    serialize_training_records(
+                        group.data,
+                        fingerprints_by_group_id.get(group.id)
+                    )
+                    if group.type_group == "map"
+                    else {}
                 )
             }
             for group, question_count in groups
@@ -382,9 +445,32 @@ def record_training_attempt(db, group_id, payload):
         )
 
     group_data = dict(group.data or {})
-    record = dict(
-        serialize_training_record(group_data, content_fingerprint) or {}
+    mode = (
+        normalize_map_mode(payload.mode)
+        if group.type_group == "map"
+        else None
     )
+    existing_records = (
+        group_data.get(TRAINING_RECORDS_KEY)
+        if isinstance(group_data.get(TRAINING_RECORDS_KEY), dict)
+        else {}
+    )
+    existing_record = (
+        _serialize_record(
+            existing_records.get(mode),
+            content_fingerprint
+        )
+        if mode
+        else serialize_training_record(group_data, content_fingerprint)
+    )
+
+    if mode == DEFAULT_MAP_MODE and not existing_record:
+        existing_record = serialize_training_record(
+            group_data,
+            content_fingerprint
+        )
+
+    record = dict(existing_record or {})
     timestamp = _current_utc_timestamp()
     percent = _found_percent(payload.found_count, payload.question_count)
     is_new_best_percent = False
@@ -412,22 +498,38 @@ def record_training_attempt(db, group_id, payload):
             })
             is_new_best_time = True
 
-    group_data[TRAINING_RECORD_KEY] = record
+    if mode:
+        records = dict(existing_records)
+        records[mode] = record
+        group_data[TRAINING_RECORDS_KEY] = records
+
+        if mode == DEFAULT_MAP_MODE:
+            group_data[TRAINING_RECORD_KEY] = record
+    else:
+        group_data[TRAINING_RECORD_KEY] = record
+
     group.data = group_data
     db.commit()
     db.refresh(group)
+    training_records = (
+        serialize_training_records(group.data, content_fingerprint)
+        if group.type_group == "map"
+        else {}
+    )
 
     return {
-        "training_record": serialize_training_record(
-            group.data,
-            content_fingerprint
+        "training_record": (
+            training_records.get(mode or DEFAULT_MAP_MODE)
+            if group.type_group == "map"
+            else serialize_training_record(group.data, content_fingerprint)
         ),
+        "training_records": training_records,
         "is_new_best_percent": is_new_best_percent,
         "is_new_best_time": is_new_best_time
     }
 
 
-def get_training_items(db, scope_type, group_id=None, tag=None):
+def get_training_items(db, scope_type, group_id=None, tag=None, map_mode=None):
     if scope_type == "group":
         if group_id is None:
             raise HTTPException(
@@ -451,10 +553,13 @@ def get_training_items(db, scope_type, group_id=None, tag=None):
         )
         items = serialize_review_items(questions)
         content_fingerprint = group_training_fingerprint(db, group_id)
+        normalized_map_mode = normalize_map_mode(map_mode)
 
         for item in items:
             if item.get("group_id") == group_id:
                 item["training_fingerprint"] = content_fingerprint
+                if item.get("type_q") == "map":
+                    item["mode"] = normalized_map_mode
 
         return items
 

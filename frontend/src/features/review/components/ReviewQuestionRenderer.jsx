@@ -34,6 +34,8 @@ export default function ReviewQuestionRenderer({
                 key={currentIndex}
                 group={q}
                 reviewZones={q.items}
+                contextItems={q.context_items || q.items || []}
+                mode={q.mode}
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
                 showQualityControls={!trainingMode}

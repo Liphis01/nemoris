@@ -1,7 +1,7 @@
 # TODO
 
-
 ## vérifier
+
 - j'ai l'impression que l'ordre des items de group en training met d'abord les questions ratées puis aléatoire
 - si le groupe est modifié il faut reset le record dans entraînement
 
@@ -11,25 +11,31 @@
 - que signifie 304 Not Modified ? seulement certaines images l'ont
 
 ## Product Suggestions
+
 Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
 Add settings UI for scheduler targets, per-type daily weights, theme/display preferences, backup location, import behavior.
 Improve content ingestion: CSV import/export UI, “import from URL”, local media copy, duplicate detection, and batch tag/collection editing.
 Add map review mode variants: visible answer list, hidden answer list, strict JetPunk-style mode, small-zone emphasis.
 
 ## Long term improvements
+
 Desktop hardening: automatic backups, restore flow, portable data location chooser, startup health checks.
 AI-assisted authoring: generate draft questions, aliases, distractors, timeline entries, or map labels from selected text/URLs, but keep review data user-verifiable.
 Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
 
-
 ## quick fixes
+
 - ajouter le timer final dans la recap d'entrainement de maps
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
 - ajouter bouton annuler dans les autres types
+- le hover de souris bug sur la map (training click)
+- dans le mode click de map, remplir un peu de rouge dans la barre de progression après une erreur
+- bloquer le clic sur les zones déjà trouvées dans le mode click de map
 
 ## bugs
+
 - je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
 - recentrer les svg
 - le texte des cards est décalé vers la droite (à cause du MAP)
@@ -38,6 +44,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 
 ## features
+
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
 - mettre les différents modes de jetpunk pour les maps et alterner selon les jours (commencer par le mode facile, puis alterner les modes et identifier les mode compliqués pour chaque question pour les faire réapparaître plus souvent)
 - mettre en évidence les zones trop petites (c.f. jetpunk)
@@ -54,12 +61,15 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - pouvoir choisir quels questions bonus faire (et sélectionner une sous partie d'un groupe notamment)
 - supprimer une question appelle le rebalancing ?
 - permettre d'accepter une réponse fausse si faute de frappe
+- aller chercher dans les questions à tags similaires pour proposer un qcm ?
 
 ## refactors
+
 - refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
 - stocker uniquement l'id des groupes dans les questions pour alléger
 
 ## ideas
+
 - daily habit mechanics: streaks, reminders, rewards, but keep them separate from core review so they do not distort scheduling.
 - permettre de convertir un svg en groupe d'images (pour les shapes de pays)
 - mettre une option de favoris et de difficile sur les questions (pour les voir plus souvent et aider le scheduler)
@@ -78,10 +88,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
 - type liste ? (= juste énumérer)
 
-
-
-
-# Conseils/idées issus de la littérature scientifique :
+## Conseils/idées issus de la littérature scientifique
 
 - varier les contextes
 - "cite les pays frontaliers de l'allemagne"

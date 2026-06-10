@@ -85,12 +85,20 @@ class TrainingTests(unittest.TestCase):
 
         return item
 
-    def record_request(self, group, elapsed_ms, question_count, found_count):
+    def record_request(
+        self,
+        group,
+        elapsed_ms,
+        question_count,
+        found_count,
+        mode=None
+    ):
         return TrainingAttemptRecordRequest(
             elapsed_ms=elapsed_ms,
             question_count=question_count,
             found_count=found_count,
-            content_fingerprint=group_training_fingerprint(self.db, group)
+            content_fingerprint=group_training_fingerprint(self.db, group),
+            mode=mode
         )
 
     def seed_training_record(self, group, record):
@@ -146,6 +154,7 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(len(response), 1)
         self.assertEqual(response[0]["type_q"], "map")
         self.assertEqual(response[0]["group_id"], group.id)
+        self.assertEqual(response[0]["mode"], "type_all")
         self.assertEqual(response[0]["tags"], ["Geo"])
         self.assertEqual(
             {item["question_id"] for item in response[0]["items"]},
@@ -241,6 +250,10 @@ class TrainingTests(unittest.TestCase):
             response["groups"][0]["training_record"]["best_found_percent"],
             100
         )
+        self.assertEqual(
+            response["groups"][0]["training_records"]["type_all"]["best_found_percent"],
+            100
+        )
         self.assertEqual(response["tags"], [
             {"name": "Geo", "count": 2},
             {"name": "History", "count": 2}
@@ -302,6 +315,59 @@ class TrainingTests(unittest.TestCase):
             group_training_fingerprint(self.db, group)
         )
         self.assertEqual(group.data["theme"], "blue")
+
+    def test_map_training_records_are_saved_per_mode(self):
+        group = QuestionGroup(
+            id=401,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.add_question(2, type_q="map", group=group)
+        self.db.commit()
+
+        click = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(
+                group,
+                9000,
+                2,
+                2,
+                mode="click_prompt"
+            )
+        )
+        type_all = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(
+                group,
+                7000,
+                2,
+                1,
+                mode="type_all"
+            )
+        )
+
+        self.assertEqual(
+            click["training_records"]["click_prompt"]["best_time_ms"],
+            9000
+        )
+        self.assertEqual(
+            type_all["training_records"]["type_all"]["best_found_percent"],
+            50
+        )
+        self.assertEqual(
+            group.data["training_records"]["click_prompt"]["best_time_ms"],
+            9000
+        )
+        self.assertEqual(
+            group.data["training_record"]["best_found_percent"],
+            50
+        )
 
     def test_partial_attempt_updates_best_percent_but_not_clean_time(self):
         group = QuestionGroup(

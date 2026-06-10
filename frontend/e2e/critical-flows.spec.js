@@ -72,6 +72,7 @@ test("map recap sends per-zone quality", async ({ page }) => {
   await expect(page.getByText("Session terminée")).toBeVisible();
   expect(state.mapAnswerRequests).toEqual([
     {
+      mode: "type_all",
       items: {
         10: 2
       }

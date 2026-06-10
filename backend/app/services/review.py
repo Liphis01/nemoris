@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
-from ..models import Progress, Question
+from ..models import Progress, Question, QuestionGroup
 from ..serializers import (
     serialize_image_review_group,
     serialize_image_review_item,
@@ -15,6 +15,7 @@ from .timeline import (
     serialize_timeline_review_group,
     serialize_timeline_review_item
 )
+from .map_modes import choose_map_review_mode
 from .progress import progress_has_started, progress_is_new
 
 
@@ -24,6 +25,8 @@ def _question_query(db):
         .options(
             joinedload(Question.progress),
             joinedload(Question.group)
+            .joinedload(QuestionGroup.questions)
+            .joinedload(Question.progress)
         )
         .order_by(Question.id)
     )
@@ -68,14 +71,13 @@ def _serialize_review_items(questions):
             group_id = question.group.id
 
             if group_id not in map_grouped_items:
-                map_grouped_items[group_id] = serialize_map_review_group(
-                    question.group,
-                    question.tags or []
-                )
+                map_grouped_items[group_id] = {
+                    "group": question.group,
+                    "tags": question.tags or [],
+                    "questions": []
+                }
 
-            map_grouped_items[group_id]["items"].append(
-                serialize_map_review_zone(question)
-            )
+            map_grouped_items[group_id]["questions"].append(question)
             continue
 
         if question.group and question.group.type_group == "image":
@@ -104,11 +106,37 @@ def _serialize_review_items(questions):
     if timeline_items:
         review_items.append(serialize_timeline_review_group(timeline_items))
 
-    return (
-        review_items +
-        list(map_grouped_items.values()) +
-        list(image_grouped_items.values())
-    )
+    map_review_groups = []
+
+    for group_data in map_grouped_items.values():
+        group = group_data["group"]
+        due_questions = sorted(group_data["questions"], key=lambda item: item.id)
+        context_questions = sorted(
+            [
+                item
+                for item in (group.questions or [])
+                if item.type_q == "map"
+            ],
+            key=lambda item: item.id
+        )
+        context_items = [
+            serialize_map_review_zone(item)
+            for item in context_questions
+        ]
+        mode = choose_map_review_mode(due_questions, context_questions)
+        map_group = serialize_map_review_group(
+            group,
+            group_data["tags"],
+            mode=mode,
+            context_items=context_items
+        )
+        map_group["items"] = [
+            serialize_map_review_zone(item)
+            for item in due_questions
+        ]
+        map_review_groups.append(map_group)
+
+    return review_items + map_review_groups + list(image_grouped_items.values())
 
 
 def serialize_review_items(questions):

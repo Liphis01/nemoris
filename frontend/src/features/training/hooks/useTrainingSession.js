@@ -93,7 +93,8 @@ function scopeRequestOptions(scope) {
   if (scope?.type === "group") {
     return {
       scopeType: "group",
-      groupId: scope.id
+      groupId: scope.id,
+      ...(scope.mapMode ? { mapMode: scope.mapMode } : {})
     };
   }
 
@@ -200,25 +201,32 @@ export function useTrainingSession(active = true) {
     }
   }, []);
 
-  const startScope = useCallback(async (scope) => {
-    setActiveScope(scope);
+  const startScope = useCallback(async (scope, mapMode = null) => {
+    const nextScope = mapMode
+      ? {
+        ...scope,
+        mapMode
+      }
+      : scope;
+
+    setActiveScope(nextScope);
     setOriginalQuestions([]);
     setQuestions([]);
     setCurrentIndex(0);
     setShowAnswer(false);
     setFailedQuestionIds(new Set());
-    resetRecordAttempt([], "full", scope);
+    resetRecordAttempt([], "full", nextScope);
     setTrainingLoading(true);
     setTrainingError("");
 
     try {
-      const data = await getTrainingItems(scopeRequestOptions(scope));
+      const data = await getTrainingItems(scopeRequestOptions(nextScope));
 
       setOriginalQuestions(data || []);
       setQuestions(data || []);
       setCurrentIndex(0);
       setShowAnswer(false);
-      resetRecordAttempt(data || [], "full", scope);
+      resetRecordAttempt(data || [], "full", nextScope);
     } catch (error) {
       console.error(error);
       setTrainingError(error.message || "Impossible de preparer l'entrainement.");
@@ -342,7 +350,8 @@ export function useTrainingSession(active = true) {
       elapsed_ms: Math.max(1, Math.round(completedElapsedMs)),
       question_count: allQuestionIds.length,
       found_count: attemptFoundCount,
-      content_fingerprint: trainingFingerprint
+      content_fingerprint: trainingFingerprint,
+      ...(activeScope.mapMode ? { mode: activeScope.mapMode } : {})
     };
 
     recordSubmittedRef.current = true;
@@ -359,7 +368,8 @@ export function useTrainingSession(active = true) {
           prev?.type === "group" && prev.id === groupId
             ? {
               ...prev,
-              training_record: response.training_record
+              training_record: response.training_record,
+              training_records: response.training_records || prev.training_records
             }
             : prev
         ));
@@ -369,7 +379,8 @@ export function useTrainingSession(active = true) {
             group.id === groupId
               ? {
                 ...group,
-                training_record: response.training_record
+                training_record: response.training_record,
+                training_records: response.training_records || group.training_records
               }
               : group
           )

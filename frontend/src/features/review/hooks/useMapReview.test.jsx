@@ -46,10 +46,16 @@ describe("useMapReview recap sorting", () => {
     const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
 
     act(() => {
-      result.current.handleZoneSelect("b");
+      result.current.setInput("Beta");
     });
     act(() => {
-      result.current.handleZoneSelect("a");
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.setInput("Alpha");
+    });
+    act(() => {
+      result.current.handleSubmit();
     });
 
     expect(labels(result.current.recapRows)).toEqual([
@@ -109,10 +115,16 @@ describe("useMapReview recap sorting", () => {
     const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
 
     act(() => {
-      result.current.handleZoneSelect("a");
+      result.current.setInput("Alpha");
     });
     act(() => {
-      result.current.handleZoneSelect("b");
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.setInput("Beta");
+    });
+    act(() => {
+      result.current.handleSubmit();
     });
     act(() => {
       result.current.finishMap();
@@ -170,7 +182,10 @@ describe("useMapReview recap sorting", () => {
     );
 
     act(() => {
-      result.current.handleZoneSelect("a");
+      result.current.setInput("Alpha");
+    });
+    act(() => {
+      result.current.handleSubmit();
     });
     act(() => {
       result.current.finishMap();
@@ -183,7 +198,7 @@ describe("useMapReview recap sorting", () => {
     expect(submitAnswer).toHaveBeenCalledWith({
       1: 2,
       2: 0
-    });
+    }, "type_all");
     expect(sendMapAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
@@ -218,5 +233,83 @@ describe("useMapReview recap sorting", () => {
 
     expect(result.current.foundQuestionIds).toEqual([2]);
     expect(result.current.remainingFocusCode).toBe("c");
+  });
+
+  it("keeps clicks from answering type_all mode", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" })
+    ];
+    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+
+    act(() => {
+      result.current.handleZoneSelect("a");
+    });
+
+    expect(result.current.foundQuestionIds).toEqual([]);
+  });
+
+  it("click_prompt resolves the asked zone by clicking the map", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "click_prompt"
+      })
+    );
+    const targetCode = result.current.promptCode;
+
+    act(() => {
+      result.current.handleZoneSelect(targetCode);
+    });
+
+    expect(result.current.foundQuestionIds).toHaveLength(1);
+  });
+
+  it("type_prompt accepts the highlighted zone name and supports skip", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "type_prompt"
+      })
+    );
+    const firstLabel = result.current.promptLabel;
+
+    act(() => {
+      result.current.setInput(firstLabel);
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.skipCurrentPrompt();
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(Object.values(result.current.qualityByQuestionId).sort()).toEqual([0, 2]);
+  });
+
+  it("multiple_choice resolves a target from answer buttons", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "multiple_choice",
+        contextItems: reviewZones
+      })
+    );
+    const target = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleChoiceSelect(target.question_id);
+    });
+
+    expect(result.current.foundQuestionIds).toEqual([target.question_id]);
   });
 });
