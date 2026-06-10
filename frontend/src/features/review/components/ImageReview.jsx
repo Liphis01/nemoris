@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
 import { useImageReview } from "../hooks/useImageReview";
+import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const qualityOptions = [
   { value: 1, label: "1 · Dur", background: "#35311f", color: "#ffd36b" },
@@ -393,7 +394,7 @@ export default function ImageReview({
             marginBottom: "12px"
           }}
         >
-          <div>
+          <div style={{ flex: "1 1 auto", minWidth: 0 }}>
             <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
               {resultMode ? "IMAGE RESULT" : "IMAGE"}
             </div>
@@ -402,18 +403,10 @@ export default function ImageReview({
                 {group.name || "Images"}
               </div>
               {trainingElapsedMs !== null && !resultMode && (
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "5px 8px", textAlign: "center" }}>
-                    <div style={{ color: "#999", fontSize: "9px", fontWeight: 800, textTransform: "uppercase" }}>Temps</div>
-                    <div style={{ color: "#e8e8e8", fontSize: "13px", fontWeight: 800 }}>{Math.floor(trainingElapsedMs / 1000)}s</div>
-                  </div>
-                  {trainingBestTimeMs && (
-                    <div style={{ background: "#181818", border: "1px solid #2b2b2b", borderRadius: "6px", padding: "5px 8px", textAlign: "center" }}>
-                      <div style={{ color: "#999", fontSize: "9px", fontWeight: 800, textTransform: "uppercase" }}>Meilleur</div>
-                      <div style={{ color: "#e8e8e8", fontSize: "13px", fontWeight: 800 }}>{Math.floor(trainingBestTimeMs / 1000)}s</div>
-                    </div>
-                  )}
-                </div>
+                <TrainingTimerPanel
+                  elapsedMs={trainingElapsedMs}
+                  bestTimeMs={trainingBestTimeMs}
+                />
               )}
             </div>
           </div>

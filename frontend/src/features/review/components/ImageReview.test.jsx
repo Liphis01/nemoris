@@ -120,4 +120,17 @@ describe("ImageReview answer label preview", () => {
       expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     });
   });
+
+  it("shows the training timer while answering image groups", () => {
+    mockImageReviewState();
+    renderImageReview({
+      trainingElapsedMs: 12345,
+      trainingBestTimeMs: 90000
+    });
+
+    expect(screen.getByText("Temps")).toBeInTheDocument();
+    expect(screen.getByText("12s")).toBeInTheDocument();
+    expect(screen.getByText("Meilleur")).toBeInTheDocument();
+    expect(screen.getByText("1:30")).toBeInTheDocument();
+  });
 });

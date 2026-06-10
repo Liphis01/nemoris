@@ -37,6 +37,8 @@ export default function ReviewQuestionRenderer({
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
                 showQualityControls={!trainingMode}
+                trainingElapsedMs={trainingElapsedMs}
+                trainingBestTimeMs={trainingBestTimeMs}
             />
         );
     }

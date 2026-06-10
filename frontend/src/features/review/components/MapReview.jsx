@@ -3,6 +3,7 @@ import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
 import { useMapReview } from "../hooks/useMapReview";
+import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const typeBadgeStyle = {
   display: "flex",
@@ -89,7 +90,9 @@ export default function MapReview({
   reviewZones,
   onComplete,
   submitAnswer,
-  showQualityControls = true
+  showQualityControls = true,
+  trainingElapsedMs = null,
+  trainingBestTimeMs = null
 }) {
   const {
     dueCodes,
@@ -135,6 +138,7 @@ export default function MapReview({
   const visibleRecapHeaderColumns = showQualityControls
     ? recapHeaderColumns
     : recapHeaderColumns.filter(column => column.key === "answer");
+  const showTrainingTimer = trainingElapsedMs !== null && !showRecap;
   const foundBulkQuality = useMemo(() => {
     if (foundQuestionIds.length === 0) return null;
 
@@ -265,20 +269,39 @@ export default function MapReview({
               marginBottom: "16px"
             }}
           >
-            <div>
+            <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               <div style={typeBadgeStyle}>
                 🗺 MAP
               </div>
 
               <div
                 style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "12px",
                   marginTop: "14px",
-                  fontSize: "28px",
-                  fontWeight: "700",
-                  color: "#f3f3f3"
+                  minWidth: 0
                 }}
               >
-                {group.name || group.media}
+                <div
+                  style={{
+                    color: "#f3f3f3",
+                    fontSize: "28px",
+                    fontWeight: "700",
+                    lineHeight: 1.15,
+                    minWidth: 0
+                  }}
+                >
+                  {group.name || group.media}
+                </div>
+
+                {showTrainingTimer && (
+                  <TrainingTimerPanel
+                    elapsedMs={trainingElapsedMs}
+                    bestTimeMs={trainingBestTimeMs}
+                  />
+                )}
               </div>
             </div>
 

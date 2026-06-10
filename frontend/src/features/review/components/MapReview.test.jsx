@@ -36,7 +36,7 @@ const reviewZones = [
   }
 ];
 
-function renderMapReview(showQualityControls) {
+function renderMapReview(showQualityControls, props = {}) {
   return render(
     <MapReview
       group={{ name: "Europe", media: "europe.svg" }}
@@ -44,6 +44,7 @@ function renderMapReview(showQualityControls) {
       onComplete={vi.fn()}
       submitAnswer={vi.fn().mockResolvedValue({})}
       showQualityControls={showQualityControls}
+      {...props}
     />
   );
 }
@@ -82,4 +83,21 @@ describe("MapReview recap map focus", () => {
       expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-version", "1");
     }
   );
+
+  it("shows the training timer while answering map groups", async () => {
+    renderMapReview(false, {
+      trainingElapsedMs: 12345,
+      trainingBestTimeMs: 90000
+    });
+
+    expect(screen.getByText("Temps")).toBeInTheDocument();
+    expect(screen.getByText("12s")).toBeInTheDocument();
+    expect(screen.getByText("Meilleur")).toBeInTheDocument();
+    expect(screen.getByText("1:30")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+
+    expect(await screen.findByRole("button", { name: "Continuer" })).toBeInTheDocument();
+    expect(screen.queryByText("Temps")).not.toBeInTheDocument();
+  });
 });
