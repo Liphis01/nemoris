@@ -26,6 +26,9 @@ from app.services.timeline import (
     serialize_timeline_review_group,
     serialize_timeline_review_item
 )
+from app.services.map_modes import map_mode_difficulty
+from app.services.image_modes import image_mode_difficulty
+from app.scheduler import preview_intervals
 
 
 PROGRESS_KEYS = {
@@ -432,6 +435,18 @@ class ReviewResponseShapeTests(unittest.TestCase):
             self.assert_progress_shape(zone["progress"])
             self.assert_projected_intervals_shape(zone["projected_intervals"])
 
+        mode_difficulty = map_mode_difficulty(
+            map_group["mode"],
+            len(map_group["context_items"])
+        )
+        self.assertEqual(
+            map_group["items"][0]["projected_intervals"],
+            preview_intervals(
+                fixture["map_zones"][0].progress,
+                mode_difficulty=mode_difficulty
+            )
+        )
+
         self.assertEqual(
             {zone["question_id"] for zone in map_group["items"]},
             {zone.id for zone in fixture["map_zones"]}
@@ -487,6 +502,18 @@ class ReviewResponseShapeTests(unittest.TestCase):
             self.assert_progress_shape(item["progress"])
             self.assert_projected_intervals_shape(item["projected_intervals"])
 
+        mode_difficulty = image_mode_difficulty(
+            image_group["mode"],
+            len(image_group["context_items"])
+        )
+        self.assertEqual(
+            image_group["items"][0]["projected_intervals"],
+            preview_intervals(
+                fixture["image_items"][0].progress,
+                mode_difficulty=mode_difficulty
+            )
+        )
+
         self.assertEqual(
             {item["question_id"] for item in image_group["items"]},
             {item.id for item in fixture["image_items"]}
@@ -515,14 +542,20 @@ class ReviewResponseShapeTests(unittest.TestCase):
             )
         }
         self.assertEqual(qualities_by_question_id, {
-            zone_a.id: 1,
+            zone_a.id: 2,
             zone_b.id: 0
         })
         zone_a_history = zone_a.progress.history[-1]
         self.assertEqual(zone_a_history["map_mode"], "click_prompt")
         self.assertEqual(zone_a_history["raw_quality"], 2)
-        self.assertEqual(zone_a_history["effective_quality"], 1)
+        self.assertEqual(zone_a_history["effective_quality"], 2)
         self.assertEqual(zone_a_history["map_context_count"], 2)
+        self.assertTrue(zone_a_history["mode_adjusted"])
+        self.assertAlmostEqual(
+            zone_a_history["mode_difficulty"],
+            map_mode_difficulty("click_prompt", 2)
+        )
+        self.assertIn("mode_reward_factor", zone_a_history)
 
     def test_review_endpoint_returns_missed_map_items_after_group_submit(self):
         fixture = self.seed_review_contract_fixture()
@@ -573,15 +606,21 @@ class ReviewResponseShapeTests(unittest.TestCase):
             )
         }
         self.assertEqual(qualities_by_question_id, {
-            item_a.id: 1,
+            item_a.id: 3,
             item_b.id: 0
         })
         item_a_history = item_a.progress.history[-1]
         self.assertEqual(item_a_history["image_mode"], "multiple_choice_image")
         self.assertEqual(item_a_history["raw_quality"], 3)
-        self.assertEqual(item_a_history["effective_quality"], 1)
+        self.assertEqual(item_a_history["effective_quality"], 3)
         self.assertEqual(item_a_history["image_context_count"], 2)
         self.assertEqual(item_a_history["image_choice_count"], 2)
+        self.assertTrue(item_a_history["mode_adjusted"])
+        self.assertEqual(
+            item_a_history["mode_difficulty"],
+            image_mode_difficulty("multiple_choice_image", 2)
+        )
+        self.assertIn("mode_reward_factor", item_a_history)
 
     def test_answer_timeline_endpoint_returns_per_item_result_shapes(self):
         fixture = self.seed_review_contract_fixture()

@@ -30,15 +30,16 @@ from app.scheduler import (
     legacy_quality_to_fsrs_rating,
     preview_intervals,
     rebalance_review_calendar,
-    smoothing_radius_days
+    smoothing_radius_days,
+    update_progress
 )
 from app.services.map_modes import (
-    calibrate_map_quality,
-    choose_map_review_mode
+    choose_map_review_mode,
+    map_mode_difficulty
 )
 from app.services.image_modes import (
-    calibrate_image_quality,
-    choose_image_review_mode
+    choose_image_review_mode,
+    image_mode_difficulty
 )
 from app.schemas import (
     AnswerRequest,
@@ -113,14 +114,14 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(favorite_interval(3), 2)
         self.assertEqual(favorite_interval(10), 7)
 
-    def test_map_mode_quality_calibration_caps_easier_modes(self):
-        self.assertEqual(calibrate_map_quality(3, "type_all", 2), 3)
-        self.assertEqual(calibrate_map_quality(3, "type_prompt", 20), 2)
-        self.assertEqual(calibrate_map_quality(3, "multiple_choice", 20), 1)
-        self.assertEqual(calibrate_map_quality(3, "click_prompt", 4), 1)
-        self.assertEqual(calibrate_map_quality(3, "click_prompt", 8), 2)
-        self.assertEqual(calibrate_map_quality(3, "click_prompt", 20), 3)
-        self.assertEqual(calibrate_map_quality(0, "click_prompt", 20), 0)
+    def test_map_mode_difficulty_uses_type_all_as_reference(self):
+        self.assertEqual(map_mode_difficulty("type_all", 2), 1.0)
+        self.assertEqual(map_mode_difficulty("type_prompt", 20), 1.15)
+        self.assertEqual(map_mode_difficulty("multiple_choice", 20), 0.5)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 1), 0.4)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 4), 0.675)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 16), 0.8125)
+        self.assertLess(map_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_map_review_mode_selector_uses_difficulty_size_and_variety(self):
         hard = Question(type_q="map", answer="Hard", data={"code": "hard"})
@@ -142,21 +143,21 @@ class SchedulerSmoothingTests(unittest.TestCase):
             "type_all"
         )
 
-    def test_image_mode_quality_calibration_caps_easier_modes(self):
-        self.assertEqual(calibrate_image_quality(3, "type_all", 2), 3)
-        self.assertEqual(calibrate_image_quality(3, "type_prompt", 20), 2)
+    def test_image_mode_difficulty_uses_type_all_as_reference(self):
+        self.assertEqual(image_mode_difficulty("type_all", 2), 1.0)
+        self.assertEqual(image_mode_difficulty("type_prompt", 20), 1.15)
         self.assertEqual(
-            calibrate_image_quality(3, "multiple_choice_label", 20),
-            1
+            image_mode_difficulty("multiple_choice_label", 20),
+            0.5
         )
         self.assertEqual(
-            calibrate_image_quality(3, "multiple_choice_image", 20),
-            1
+            image_mode_difficulty("multiple_choice_image", 20),
+            0.5
         )
-        self.assertEqual(calibrate_image_quality(3, "click_prompt", 4), 1)
-        self.assertEqual(calibrate_image_quality(3, "click_prompt", 8), 2)
-        self.assertEqual(calibrate_image_quality(3, "click_prompt", 20), 3)
-        self.assertEqual(calibrate_image_quality(0, "click_prompt", 20), 0)
+        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 1), 0.4)
+        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 4), 0.675)
+        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 16), 0.8125)
+        self.assertLess(image_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_image_review_mode_selector_uses_difficulty_size_and_variety(self):
         hard = Question(type_q="image", answer="Hard")
@@ -191,6 +192,144 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
 
         self.assertEqual(preview_intervals(progress)[0], 0)
+
+    def review_progress(self):
+        today = date(2026, 1, 10)
+        return Progress(
+            question_id=1,
+            stability=5.0,
+            difficulty=5.0,
+            reps=4,
+            lapses=0,
+            interval=5,
+            last_review=today - timedelta(days=5),
+            next_review=today,
+            history=[]
+        )
+
+    def test_type_all_mode_matches_reference_fsrs_scheduling(self):
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+
+        reference = update_progress(
+            progress,
+            2,
+            today=today,
+            enable_fuzzing=False
+        )
+        type_all = update_progress(
+            progress,
+            2,
+            today=today,
+            mode_difficulty=1.0,
+            enable_fuzzing=False
+        )
+
+        self.assertEqual(type_all["stability"], reference["stability"])
+        self.assertEqual(type_all["difficulty"], reference["difficulty"])
+        self.assertEqual(type_all["interval"], reference["interval"])
+        self.assertEqual(type_all["next_review"], reference["next_review"])
+
+    def test_easier_mode_penalizes_misses_more_than_type_all(self):
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+
+        reference = update_progress(
+            progress,
+            0,
+            today=today,
+            mode_difficulty=1.0,
+            enable_fuzzing=False
+        )
+        easier = update_progress(
+            progress,
+            0,
+            today=today,
+            mode_difficulty=0.5,
+            enable_fuzzing=False
+        )
+
+        self.assertLess(easier["stability"], reference["stability"])
+        self.assertGreater(easier["difficulty"], reference["difficulty"])
+        self.assertEqual(easier["interval"], 0)
+        self.assertEqual(easier["next_review"], today)
+
+    def test_easier_mode_rewards_correct_answers_less_than_type_all(self):
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+
+        reference = update_progress(
+            progress,
+            3,
+            today=today,
+            mode_difficulty=1.0,
+            enable_fuzzing=False
+        )
+        easier = update_progress(
+            progress,
+            3,
+            today=today,
+            mode_difficulty=0.5,
+            enable_fuzzing=False
+        )
+
+        self.assertLess(easier["stability"], reference["stability"])
+        self.assertGreater(easier["difficulty"], reference["difficulty"])
+        self.assertLessEqual(easier["interval"], reference["interval"])
+
+    def test_type_prompt_rewards_hits_and_forgives_misses(self):
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+
+        reference_miss = update_progress(
+            progress,
+            0,
+            today=today,
+            mode_difficulty=1.0,
+            enable_fuzzing=False
+        )
+        type_prompt_miss = update_progress(
+            progress,
+            0,
+            today=today,
+            mode_difficulty=1.15,
+            enable_fuzzing=False
+        )
+        reference_hit = update_progress(
+            progress,
+            3,
+            today=today,
+            mode_difficulty=1.0,
+            enable_fuzzing=False
+        )
+        type_prompt_hit = update_progress(
+            progress,
+            3,
+            today=today,
+            mode_difficulty=1.15,
+            enable_fuzzing=False
+        )
+
+        self.assertGreater(
+            type_prompt_miss["stability"],
+            reference_miss["stability"]
+        )
+        self.assertLess(
+            type_prompt_miss["difficulty"],
+            reference_miss["difficulty"]
+        )
+        self.assertGreater(
+            type_prompt_hit["stability"],
+            reference_hit["stability"]
+        )
+        self.assertLess(
+            type_prompt_hit["difficulty"],
+            reference_hit["difficulty"]
+        )
+        self.assertGreaterEqual(
+            type_prompt_hit["interval"],
+            reference_hit["interval"]
+        )
 
     def test_interval_zero_and_one_do_not_move(self):
         today = date(2026, 1, 1)

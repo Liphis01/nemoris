@@ -1,6 +1,12 @@
 from .scheduler import preview_intervals
-from .services.image_modes import DEFAULT_IMAGE_MODE, normalize_image_mode
-from .services.map_modes import DEFAULT_MAP_MODE, normalize_map_mode
+from .services.image_modes import (
+    DEFAULT_IMAGE_MODE,
+    normalize_image_mode
+)
+from .services.map_modes import (
+    DEFAULT_MAP_MODE,
+    normalize_map_mode
+)
 
 
 def serialize_progress(progress):
@@ -136,7 +142,7 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
     }
 
 
-def serialize_map_review_zone(question):
+def serialize_map_review_zone(question, mode_difficulty=None):
     # A map zone is still one Question row. The review UI uses code/aliases to
     # match typed answers and projected_intervals to label recap choices.
     return {
@@ -155,7 +161,8 @@ def serialize_map_review_zone(question):
 
         "projected_intervals": preview_intervals(
             question.progress,
-            favorite=bool((question.data or {}).get("favorite"))
+            favorite=bool((question.data or {}).get("favorite")),
+            mode_difficulty=mode_difficulty
         )
     }
 
@@ -182,7 +189,7 @@ def serialize_image_review_group(group, tags=None, mode=None, context_items=None
     }
 
 
-def serialize_image_review_item(question):
+def serialize_image_review_item(question, mode_difficulty=None):
     return {
         "question_id": question.id,
 
@@ -204,6 +211,7 @@ def serialize_image_review_item(question):
 
         "projected_intervals": preview_intervals(
             question.progress,
-            favorite=bool((question.data or {}).get("favorite"))
+            favorite=bool((question.data or {}).get("favorite")),
+            mode_difficulty=mode_difficulty
         )
     }

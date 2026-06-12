@@ -102,6 +102,15 @@ def record_answer_history(
         entry["fsrs_state"] = scheduling["fsrs_state"]
         entry["fsrs_version"] = scheduling["fsrs_version"]
 
+    for key in (
+        "mode_adjusted",
+        "mode_difficulty",
+        "mode_penalty_factor",
+        "mode_reward_factor"
+    ):
+        if key in scheduling:
+            entry[key] = scheduling[key]
+
     if metadata:
         entry.update(metadata)
 
@@ -314,7 +323,17 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
     for pair in progress_quality_pairs:
         progress, quality, history_metadata = _normalize_progress_quality_pair(pair)
         metadata = question_metadata.get(progress.question_id, {})
-        scheduling = update_progress(progress, quality, today=today)
+        mode_difficulty = (
+            history_metadata.get("mode_difficulty")
+            if isinstance(history_metadata, dict)
+            else None
+        )
+        scheduling = update_progress(
+            progress,
+            quality,
+            today=today,
+            mode_difficulty=mode_difficulty
+        )
         scheduling["type_q"] = metadata.get("type_q")
         scheduling = apply_favorite_review_frequency(
             scheduling,

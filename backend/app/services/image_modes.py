@@ -1,3 +1,6 @@
+import math
+
+
 IMAGE_MODE_TYPE_ALL = "type_all"
 IMAGE_MODE_CLICK_PROMPT = "click_prompt"
 IMAGE_MODE_TYPE_PROMPT = "type_prompt"
@@ -12,6 +15,9 @@ IMAGE_MODES = (
     IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
 )
 DEFAULT_IMAGE_MODE = IMAGE_MODE_TYPE_PROMPT
+IMAGE_TYPE_ALL_DIFFICULTY = 1.0
+IMAGE_TYPE_PROMPT_DIFFICULTY = 1.15
+IMAGE_MULTIPLE_CHOICE_DIFFICULTY = 0.5
 
 IMAGE_MULTIPLE_CHOICE_MODES = {
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -25,36 +31,37 @@ def normalize_image_mode(mode):
     return value if value in IMAGE_MODES else DEFAULT_IMAGE_MODE
 
 
-def calibrate_image_quality(raw_quality, mode=None, context_count=0):
+def image_click_prompt_difficulty(context_count=0):
+    try:
+        count = max(1, int(context_count))
+    except (TypeError, ValueError):
+        count = 1
+
+    return max(0.4, min(0.95, 0.95 - (0.55 / math.sqrt(count))))
+
+
+def image_mode_difficulty(mode=None, context_count=0):
     mode = normalize_image_mode(mode)
 
+    if mode == IMAGE_MODE_TYPE_PROMPT:
+        return IMAGE_TYPE_PROMPT_DIFFICULTY
+
+    if mode in IMAGE_MULTIPLE_CHOICE_MODES:
+        return IMAGE_MULTIPLE_CHOICE_DIFFICULTY
+
+    if mode == IMAGE_MODE_CLICK_PROMPT:
+        return image_click_prompt_difficulty(context_count)
+
+    return IMAGE_TYPE_ALL_DIFFICULTY
+
+
+def calibrate_image_quality(raw_quality, mode=None, context_count=0):
     try:
         quality = int(raw_quality)
     except (TypeError, ValueError):
         quality = 0
 
-    quality = max(0, min(3, quality))
-
-    if quality <= 0:
-        return 0
-
-    if mode == IMAGE_MODE_TYPE_ALL:
-        return quality
-
-    if mode == IMAGE_MODE_TYPE_PROMPT:
-        return min(quality, 2)
-
-    if mode in IMAGE_MULTIPLE_CHOICE_MODES:
-        return min(quality, 1)
-
-    if mode == IMAGE_MODE_CLICK_PROMPT:
-        if context_count <= 4:
-            return min(quality, 1)
-
-        if context_count <= 10:
-            return min(quality, 2)
-
-    return quality
+    return max(0, min(3, quality))
 
 
 def _progress_started(progress):

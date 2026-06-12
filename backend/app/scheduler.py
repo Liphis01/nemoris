@@ -14,6 +14,50 @@ APP_QUALITY_HARD = 1
 APP_QUALITY_GOOD = 2
 APP_QUALITY_EASY = 3
 FAVORITE_INTERVAL_MULTIPLIER = 0.7
+MODE_REFERENCE_DIFFICULTY = 1.0
+MIN_STABILITY = 0.1
+MIN_DIFFICULTY = 1.0
+MAX_DIFFICULTY = 10.0
+MIN_FAILURE_PENALTY_FACTOR = 0.5
+MAX_FAILURE_PENALTY_FACTOR = 2.5
+MAX_SUCCESS_REWARD_FACTOR = 1.5
+
+
+def clamp(value, lower, upper):
+    return max(lower, min(upper, value))
+
+
+def normalize_mode_difficulty(mode_difficulty=None):
+    try:
+        difficulty = float(mode_difficulty)
+    except (TypeError, ValueError):
+        return MODE_REFERENCE_DIFFICULTY
+
+    if not math.isfinite(difficulty) or difficulty <= 0:
+        return MODE_REFERENCE_DIFFICULTY
+
+    return difficulty
+
+
+def failure_penalty_factor(mode_difficulty=None):
+    return clamp(
+        1 / normalize_mode_difficulty(mode_difficulty),
+        MIN_FAILURE_PENALTY_FACTOR,
+        MAX_FAILURE_PENALTY_FACTOR
+    )
+
+
+def success_reward_factor(mode_difficulty=None):
+    difficulty = normalize_mode_difficulty(mode_difficulty)
+
+    if difficulty <= MODE_REFERENCE_DIFFICULTY:
+        return 0.5 + (0.5 * difficulty)
+
+    return clamp(
+        difficulty,
+        MODE_REFERENCE_DIFFICULTY,
+        MAX_SUCCESS_REWARD_FACTOR
+    )
 
 
 def review_datetime_for_date(day):
@@ -514,7 +558,151 @@ def rebalance_review_calendar(
     return assigned
 
 
-def update_progress(progress, quality, today=None):
+def _mode_adjustment_anchor(progress, card, field, default):
+    value = getattr(card, field, None)
+
+    if value is not None:
+        return float(value)
+
+    return float(progress_value(progress, field, default))
+
+
+def _adjust_interval_for_success(
+    previous_interval,
+    base_interval,
+    reward_factor
+):
+    if base_interval <= previous_interval:
+        return base_interval
+
+    adjusted = previous_interval + (
+        (base_interval - previous_interval) * reward_factor
+    )
+
+    if reward_factor < MODE_REFERENCE_DIFFICULTY:
+        interval = math.floor(adjusted)
+    elif reward_factor > MODE_REFERENCE_DIFFICULTY:
+        interval = math.ceil(adjusted)
+    else:
+        interval = base_interval
+
+    return clamp(max(1, interval), 0, FSRS_MAXIMUM_INTERVAL)
+
+
+def apply_mode_difficulty_to_review(
+    progress,
+    rating,
+    card,
+    reviewed_card,
+    last_review,
+    next_review,
+    review_datetime,
+    mode_difficulty=None
+):
+    mode_difficulty = normalize_mode_difficulty(mode_difficulty)
+    base_interval = max(0, (next_review - last_review).days)
+
+    if mode_difficulty == MODE_REFERENCE_DIFFICULTY:
+        return {
+            "card": reviewed_card,
+            "interval": base_interval,
+            "next_review": next_review,
+            "mode_difficulty": mode_difficulty
+        }
+
+    previous_stability = _mode_adjustment_anchor(
+        progress,
+        card,
+        "stability",
+        1.0
+    )
+    previous_difficulty = _mode_adjustment_anchor(
+        progress,
+        card,
+        "difficulty",
+        5.0
+    )
+    previous_interval = int(progress_value(progress, "interval", 0))
+    stability = reviewed_card.stability
+    difficulty = reviewed_card.difficulty
+    result = {
+        "card": reviewed_card,
+        "interval": base_interval,
+        "next_review": next_review,
+        "mode_difficulty": mode_difficulty,
+        "mode_adjusted": True
+    }
+
+    if rating == Rating.Again:
+        penalty_factor = failure_penalty_factor(mode_difficulty)
+
+        if stability is not None and stability < previous_stability:
+            stability = previous_stability + (
+                (stability - previous_stability) * penalty_factor
+            )
+
+        if difficulty is not None and difficulty > previous_difficulty:
+            difficulty = previous_difficulty + (
+                (difficulty - previous_difficulty) * penalty_factor
+            )
+
+        reviewed_card.due = review_datetime
+        result.update({
+            "interval": 0,
+            "next_review": date_from_review_datetime(reviewed_card.due),
+            "mode_penalty_factor": penalty_factor
+        })
+    else:
+        reward_factor = success_reward_factor(mode_difficulty)
+
+        if stability is not None and stability > previous_stability:
+            stability = previous_stability + (
+                (stability - previous_stability) * reward_factor
+            )
+
+        if difficulty is not None and difficulty < previous_difficulty:
+            difficulty = previous_difficulty + (
+                (difficulty - previous_difficulty) * reward_factor
+            )
+
+        interval = _adjust_interval_for_success(
+            previous_interval,
+            base_interval,
+            reward_factor
+        )
+
+        if interval != base_interval:
+            next_review = last_review + timedelta(days=interval)
+            reviewed_card.due = review_datetime_for_date(next_review)
+
+        result.update({
+            "interval": interval,
+            "next_review": next_review,
+            "mode_reward_factor": reward_factor
+        })
+
+    if stability is not None:
+        reviewed_card.stability = max(MIN_STABILITY, stability)
+
+    if difficulty is not None:
+        reviewed_card.difficulty = clamp(
+            difficulty,
+            MIN_DIFFICULTY,
+            MAX_DIFFICULTY
+        )
+
+    result["card"] = reviewed_card
+
+    return result
+
+
+def update_progress(
+    progress,
+    quality,
+    today=None,
+    mode_difficulty=None,
+    enable_fuzzing=True
+):
     """
     Apply an FSRS v6 scheduling step.
 
@@ -524,7 +712,7 @@ def update_progress(progress, quality, today=None):
     """
     today = today or date.today()
     rating = app_quality_to_fsrs_rating(quality)
-    scheduler = create_fsrs_scheduler(enable_fuzzing=True)
+    scheduler = create_fsrs_scheduler(enable_fuzzing=enable_fuzzing)
     review_datetime = review_datetime_for_date(today)
     card = fsrs_card_for_progress(progress, today=today)
     reviewed_card, review_log = scheduler.review_card(
@@ -544,12 +732,25 @@ def update_progress(progress, quality, today=None):
         reviewed_card.due = review_datetime
         next_review = today
 
-    return {
+    mode_adjustment = apply_mode_difficulty_to_review(
+        progress,
+        rating,
+        card,
+        reviewed_card,
+        last_review,
+        next_review,
+        review_datetime,
+        mode_difficulty=mode_difficulty
+    )
+    reviewed_card = mode_adjustment["card"]
+    next_review = mode_adjustment["next_review"]
+
+    scheduling = {
         "stability": reviewed_card.stability,
         "difficulty": reviewed_card.difficulty,
         "reps": reps,
         "lapses": lapses,
-        "interval": max(0, (next_review - last_review).days),
+        "interval": mode_adjustment["interval"],
         "next_review": next_review,
         "last_review": last_review,
         "fsrs_card": fsrs_card_to_dict(reviewed_card),
@@ -559,8 +760,21 @@ def update_progress(progress, quality, today=None):
         "fsrs_review_log": review_log.to_dict()
     }
 
+    for key in (
+        "mode_difficulty",
+        "mode_adjusted",
+        "mode_penalty_factor",
+        "mode_reward_factor"
+    ):
+        if key in mode_adjustment:
+            if key == "mode_difficulty" and mode_difficulty is None:
+                continue
+            scheduling[key] = mode_adjustment[key]
 
-def preview_intervals(progress, favorite=False):
+    return scheduling
+
+
+def preview_intervals(progress, favorite=False, mode_difficulty=None):
     # The map recap can show what each button would schedule before the user
     # commits a quality choice.
     today = date.today()
@@ -583,9 +797,20 @@ def preview_intervals(progress, favorite=False):
         )
         next_review = date_from_review_datetime(reviewed_card.due)
         last_review = date_from_review_datetime(reviewed_card.last_review)
-        interval = max(0, (next_review - last_review).days)
         if rating == Rating.Again:
-            interval = 0
+            reviewed_card.due = review_datetime
+            next_review = today
+        mode_adjustment = apply_mode_difficulty_to_review(
+            progress,
+            rating,
+            card,
+            reviewed_card,
+            last_review,
+            next_review,
+            review_datetime,
+            mode_difficulty=mode_difficulty
+        )
+        interval = mode_adjustment["interval"]
         intervals[quality] = favorite_interval(interval) if favorite else interval
 
     return intervals

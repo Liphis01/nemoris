@@ -1,3 +1,6 @@
+import math
+
+
 MAP_MODE_TYPE_ALL = "type_all"
 MAP_MODE_CLICK_PROMPT = "click_prompt"
 MAP_MODE_TYPE_PROMPT = "type_prompt"
@@ -10,6 +13,9 @@ MAP_MODES = (
     MAP_MODE_MULTIPLE_CHOICE
 )
 DEFAULT_MAP_MODE = MAP_MODE_TYPE_ALL
+MAP_TYPE_ALL_DIFFICULTY = 1.0
+MAP_TYPE_PROMPT_DIFFICULTY = 1.15
+MAP_MULTIPLE_CHOICE_DIFFICULTY = 0.5
 
 
 def normalize_map_mode(mode):
@@ -18,36 +24,37 @@ def normalize_map_mode(mode):
     return value if value in MAP_MODES else DEFAULT_MAP_MODE
 
 
-def calibrate_map_quality(raw_quality, mode=None, context_count=0):
+def map_click_prompt_difficulty(context_count=0):
+    try:
+        count = max(1, int(context_count))
+    except (TypeError, ValueError):
+        count = 1
+
+    return max(0.4, min(0.95, 0.95 - (0.55 / math.sqrt(count))))
+
+
+def map_mode_difficulty(mode=None, context_count=0):
     mode = normalize_map_mode(mode)
 
+    if mode == MAP_MODE_TYPE_PROMPT:
+        return MAP_TYPE_PROMPT_DIFFICULTY
+
+    if mode == MAP_MODE_MULTIPLE_CHOICE:
+        return MAP_MULTIPLE_CHOICE_DIFFICULTY
+
+    if mode == MAP_MODE_CLICK_PROMPT:
+        return map_click_prompt_difficulty(context_count)
+
+    return MAP_TYPE_ALL_DIFFICULTY
+
+
+def calibrate_map_quality(raw_quality, mode=None, context_count=0):
     try:
         quality = int(raw_quality)
     except (TypeError, ValueError):
         quality = 0
 
-    quality = max(0, min(3, quality))
-
-    if quality <= 0:
-        return 0
-
-    if mode == MAP_MODE_TYPE_ALL:
-        return quality
-
-    if mode == MAP_MODE_TYPE_PROMPT:
-        return min(quality, 2)
-
-    if mode == MAP_MODE_MULTIPLE_CHOICE:
-        return min(quality, 1)
-
-    if mode == MAP_MODE_CLICK_PROMPT:
-        if context_count <= 4:
-            return min(quality, 1)
-
-        if context_count <= 10:
-            return min(quality, 2)
-
-    return quality
+    return max(0, min(3, quality))
 
 
 def _progress_started(progress):

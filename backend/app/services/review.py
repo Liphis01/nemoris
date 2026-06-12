@@ -15,8 +15,8 @@ from .timeline import (
     serialize_timeline_review_group,
     serialize_timeline_review_item
 )
-from .image_modes import choose_image_review_mode
-from .map_modes import choose_map_review_mode
+from .image_modes import choose_image_review_mode, image_mode_difficulty
+from .map_modes import choose_map_review_mode, map_mode_difficulty
 from .progress import progress_has_started, progress_is_new
 
 
@@ -119,11 +119,18 @@ def _serialize_review_items(questions):
             ],
             key=lambda item: item.id
         )
+        mode = choose_map_review_mode(due_questions, context_questions)
+        mode_difficulty = map_mode_difficulty(
+            mode,
+            context_count=len(context_questions)
+        )
         context_items = [
-            serialize_map_review_zone(item)
+            serialize_map_review_zone(
+                item,
+                mode_difficulty=mode_difficulty
+            )
             for item in context_questions
         ]
-        mode = choose_map_review_mode(due_questions, context_questions)
         map_group = serialize_map_review_group(
             group,
             group_data["tags"],
@@ -131,7 +138,10 @@ def _serialize_review_items(questions):
             context_items=context_items
         )
         map_group["items"] = [
-            serialize_map_review_zone(item)
+            serialize_map_review_zone(
+                item,
+                mode_difficulty=mode_difficulty
+            )
             for item in due_questions
         ]
         map_review_groups.append(map_group)
@@ -149,11 +159,18 @@ def _serialize_review_items(questions):
             ],
             key=lambda item: item.id
         )
+        mode = choose_image_review_mode(due_questions, context_questions)
+        mode_difficulty = image_mode_difficulty(
+            mode,
+            context_count=len(context_questions)
+        )
         context_items = [
-            serialize_image_review_item(item)
+            serialize_image_review_item(
+                item,
+                mode_difficulty=mode_difficulty
+            )
             for item in context_questions
         ]
-        mode = choose_image_review_mode(due_questions, context_questions)
         image_group = serialize_image_review_group(
             group,
             group_data["tags"],
@@ -161,7 +178,10 @@ def _serialize_review_items(questions):
             context_items=context_items
         )
         image_group["items"] = [
-            serialize_image_review_item(item)
+            serialize_image_review_item(
+                item,
+                mode_difficulty=mode_difficulty
+            )
             for item in due_questions
         ]
         image_review_groups.append(image_group)

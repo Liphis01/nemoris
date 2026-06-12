@@ -21,12 +21,14 @@ from ..services.progress import (
 from ..services.map_modes import (
     DEFAULT_MAP_MODE,
     calibrate_map_quality,
+    map_mode_difficulty,
     normalize_map_mode
 )
 from ..services.image_modes import (
     DEFAULT_IMAGE_MODE,
     IMAGE_MULTIPLE_CHOICE_MODES,
     calibrate_image_quality,
+    image_mode_difficulty,
     normalize_image_mode
 )
 from ..services.review import get_review_items
@@ -250,19 +252,21 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
                 question.group_id if question else None,
                 0
             )
-            effective_quality = calibrate_map_quality(
-                quality,
-                mode=normalized_map_mode,
+            raw_quality = calibrate_map_quality(quality)
+            difficulty = map_mode_difficulty(
+                normalized_map_mode,
                 context_count=context_count
             )
             progress_quality_pairs.append((
                 progress,
-                effective_quality,
+                raw_quality,
                 {
                     "map_mode": normalized_map_mode,
                     "map_context_count": context_count,
-                    "raw_quality": int(quality),
-                    "effective_quality": effective_quality
+                    "raw_quality": raw_quality,
+                    "effective_quality": raw_quality,
+                    "mode_adjusted": difficulty != 1.0,
+                    "mode_difficulty": difficulty
                 }
             ))
         elif normalized_image_mode:
@@ -270,16 +274,18 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
                 question.group_id if question else None,
                 0
             )
-            effective_quality = calibrate_image_quality(
-                quality,
-                mode=normalized_image_mode,
+            raw_quality = calibrate_image_quality(quality)
+            difficulty = image_mode_difficulty(
+                normalized_image_mode,
                 context_count=context_count
             )
             metadata = {
                 "image_mode": normalized_image_mode,
                 "image_context_count": context_count,
-                "raw_quality": int(quality),
-                "effective_quality": effective_quality
+                "raw_quality": raw_quality,
+                "effective_quality": raw_quality,
+                "mode_adjusted": difficulty != 1.0,
+                "mode_difficulty": difficulty
             }
 
             if normalized_image_mode in IMAGE_MULTIPLE_CHOICE_MODES:
@@ -287,7 +293,7 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
 
             progress_quality_pairs.append((
                 progress,
-                effective_quality,
+                raw_quality,
                 metadata
             ))
         else:

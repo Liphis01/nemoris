@@ -23,6 +23,9 @@ Desktop hardening: automatic backups, restore flow, portable data location choos
 AI-assisted authoring: generate draft questions, aliases, distractors, timeline entries, or map labels from selected text/URLs, but keep review data user-verifiable.
 Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
 
+## Urgent
+- 
+
 ## quick fixes
 
 - ajouter le timer final dans la recap d'entrainement de maps
@@ -34,6 +37,9 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - dans le mode click de map, remplir un peu de rouge dans la barre de progression après une erreur
 - bloquer le clic sur les zones déjà trouvées dans le mode click de map
 - tab pour skip dans nommer
+- augmenter la difficulté des qcm en proposant des réponses plus proches
+- qcm d'images : faire dans l'ordre et toujours scroller vers la question
+- essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
 
 ## bugs
 
@@ -43,6 +49,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
+- quand je suis en cours de review et que le jour suivant commence ça rebalance pas correctement je crois
 
 ## features
 
