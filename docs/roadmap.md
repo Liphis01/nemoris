@@ -33,12 +33,11 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
 - ajouter bouton annuler dans les autres types
-- dans le mode click de map, remplir un peu de rouge dans la barre de progression après une erreur
-- bloquer le clic sur les zones déjà trouvées dans le mode click de map
 - tab pour skip dans nommer
 - augmenter la difficulté des qcm en proposant des réponses plus proches
 - qcm d'images : faire dans l'ordre et toujours scroller vers la question
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
+- limiter le nombre d'images pour le mode "cliquer image" sinon horrible de chercher
 
 ## bugs
 

@@ -62,26 +62,6 @@ function questionIdSet(ids) {
 }
 
 
-function firstUnfoundFrom(items, foundSet, activeQuestionId) {
-  if (items.length === 0) return null;
-
-  const startIndex = Math.max(
-    0,
-    items.findIndex(item => item.question_id === activeQuestionId)
-  );
-
-  for (let offset = 1; offset <= items.length; offset += 1) {
-    const item = items[(startIndex + offset) % items.length];
-
-    if (item && !foundSet.has(item.question_id)) {
-      return item.question_id;
-    }
-  }
-
-  return null;
-}
-
-
 function completeQualities(items, qualityByQuestionId, foundQuestionIds) {
   const foundSet = questionIdSet(foundQuestionIds);
   const complete = {};
@@ -135,6 +115,11 @@ function isPromptMode(mode) {
 }
 
 
+function shouldUseGridPromptOrder(mode) {
+  return mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL;
+}
+
+
 function shouldHighlightPromptImage(mode) {
   return (
     mode === IMAGE_MODE_TYPE_PROMPT ||
@@ -163,11 +148,16 @@ export function useImageReview(
     [reviewKey]
   );
   const promptQueue = useMemo(
-    () => isPromptMode(mode) ? shuffled(reviewItems) : shuffledItems,
+    () => {
+      if (!isPromptMode(mode)) return shuffledItems;
+
+      return shouldUseGridPromptOrder(mode)
+        ? shuffledItems
+        : shuffled(reviewItems);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mode, reviewKey, shuffledItems]
   );
-  const [activeQuestionId, setActiveQuestionId] = useState(null);
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
   const [resolvedQuestionIds, setResolvedQuestionIds] = useState([]);
@@ -177,7 +167,6 @@ export function useImageReview(
   const [resultMode, setResultMode] = useState(false);
 
   useEffect(() => {
-    setActiveQuestionId(null);
     setInput("");
     setFoundQuestionIds([]);
     setResolvedQuestionIds([]);
@@ -211,21 +200,10 @@ export function useImageReview(
       return currentPromptItem;
     }
 
-    if (mode !== IMAGE_MODE_TYPE_ALL) {
-      return null;
-    }
-
-    const effectiveActiveQuestionId =
-      activeQuestionId ||
-      shuffledItems.find(item => !foundQuestionIdSet.has(item.question_id))?.question_id;
-
-    return shuffledItems.find(item => item.question_id === effectiveActiveQuestionId) || null;
+    return null;
   }, [
-    activeQuestionId,
     currentPromptItem,
-    foundQuestionIdSet,
-    mode,
-    shuffledItems
+    mode
   ]);
   const answerLookup = useMemo(
     () => buildAnswerLookup(shuffledItems),
@@ -240,36 +218,19 @@ export function useImageReview(
     : foundQuestionIdSet;
   const completedCount = completedQuestionIdSet.size;
   const answeredCount = foundQuestionIds.length;
+  const wrongAnsweredCount = resultMode
+    ? lockedMissedQuestionIds.length
+    : Math.max(0, completedCount - answeredCount);
   const progressPercent = shuffledItems.length
     ? (completedCount / shuffledItems.length) * 100
     : 0;
 
-  function selectItem(questionId) {
-    if (
-      resultMode ||
-      mode !== IMAGE_MODE_TYPE_ALL ||
-      foundQuestionIdSet.has(questionId)
-    ) {
-      return;
-    }
-
-    setActiveQuestionId(questionId);
-    setInput("");
-    setFeedbackTone(null);
+  function selectItem() {
+    return;
   }
 
   function selectNextItem() {
-    if (resultMode || mode !== IMAGE_MODE_TYPE_ALL || !activeItem) return;
-
-    const nextQuestionId = firstUnfoundFrom(
-      shuffledItems,
-      foundQuestionIdSet,
-      activeItem.question_id
-    );
-
-    if (!nextQuestionId || nextQuestionId === activeItem.question_id) return;
-
-    selectItem(nextQuestionId);
+    return;
   }
 
   function enterResultMode(nextFoundIds, nextQualities) {
@@ -286,7 +247,6 @@ export function useImageReview(
     ));
     setInput("");
     setFeedbackTone(null);
-    setActiveQuestionId(null);
     setResultMode(true);
   }
 
@@ -460,7 +420,6 @@ export function useImageReview(
       .filter(([, quality]) => quality === 0)
       .map(([questionId]) => Number(questionId));
 
-    setActiveQuestionId(null);
     setInput("");
     setFoundQuestionIds([]);
     setResolvedQuestionIds([]);
@@ -534,6 +493,7 @@ export function useImageReview(
     sendResult,
     setInput,
     setQuality,
-    skipCurrentPrompt
+    skipCurrentPrompt,
+    wrongAnsweredCount
   };
 }

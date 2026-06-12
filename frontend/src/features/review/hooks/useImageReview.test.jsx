@@ -82,7 +82,7 @@ describe("useImageReview", () => {
     );
   });
 
-  it("marks correct answers as quality 2 and advances to another unfinished image", () => {
+  it("type_all marks typed answers as quality 2 without selecting an image", () => {
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany"),
@@ -91,7 +91,10 @@ describe("useImageReview", () => {
     const { result } = renderHook(() =>
       useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
-    const first = result.current.activeItem;
+
+    expect(result.current.activeItem).toBeNull();
+    expect(result.current.activeQuestionId).toBeNull();
+    expect(result.current.gridItems.every(row => !row.isActive)).toBe(true);
 
     act(() => {
       result.current.setInput("wrong");
@@ -100,19 +103,21 @@ describe("useImageReview", () => {
       result.current.handleSubmit();
     });
     act(() => {
-      result.current.setInput(first.answer);
+      result.current.setInput("Germany");
     });
     act(() => {
       result.current.handleSubmit();
     });
 
-    expect(result.current.foundQuestionIds).toContain(first.question_id);
-    expect(result.current.qualityByQuestionId[first.question_id]).toBe(2);
-    expect(result.current.activeItem.question_id).not.toBe(first.question_id);
+    expect(result.current.foundQuestionIds).toContain(2);
+    expect(result.current.qualityByQuestionId[2]).toBe(2);
+    expect(result.current.activeItem).toBeNull();
+    expect(result.current.activeQuestionId).toBeNull();
+    expect(result.current.gridItems.every(row => !row.isActive)).toBe(true);
     expect(result.current.resultMode).toBe(false);
   });
 
-  it("selects an unfinished image by click and clears the shared input", () => {
+  it("type_all ignores image selection and keeps the shared input", () => {
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany"),
@@ -121,9 +126,7 @@ describe("useImageReview", () => {
     const { result } = renderHook(() =>
       useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
-    const target = result.current.gridItems.find(row =>
-      row.item.question_id !== result.current.activeQuestionId
-    );
+    const target = result.current.gridItems[0];
 
     act(() => {
       result.current.setInput("draft");
@@ -132,33 +135,14 @@ describe("useImageReview", () => {
       result.current.selectItem(target.item.question_id);
     });
 
-    expect(result.current.activeQuestionId).toBe(target.item.question_id);
-    expect(result.current.input).toBe("");
-  });
-
-  it("selects the next unfinished image in shuffled order", () => {
-    const items = [
-      imageItem(1, "France"),
-      imageItem(2, "Germany"),
-      imageItem(3, "Spain")
-    ];
-    const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
-    );
-    const currentIndex = result.current.gridItems.findIndex(row => row.isActive);
-    const expectedNext = result.current.gridItems[
-      (currentIndex + 1) % result.current.gridItems.length
-    ];
-
-    act(() => {
-      result.current.setInput("draft");
-    });
     act(() => {
       result.current.selectNextItem();
     });
 
-    expect(result.current.activeQuestionId).toBe(expectedNext.item.question_id);
-    expect(result.current.input).toBe("");
+    expect(result.current.activeItem).toBeNull();
+    expect(result.current.activeQuestionId).toBeNull();
+    expect(result.current.input).toBe("draft");
+    expect(result.current.gridItems.every(row => !row.isActive)).toBe(true);
   });
 
   it("finishes on the same grid with found qualities editable and misses locked", async () => {
@@ -266,7 +250,7 @@ describe("useImageReview", () => {
     expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
   });
 
-  it("type_all accepts any remaining image answer, not only the active tile", () => {
+  it("type_all accepts remaining image answers in any order", () => {
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany"),
@@ -275,18 +259,22 @@ describe("useImageReview", () => {
     const { result } = renderHook(() =>
       useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
-    const inactive = result.current.gridItems.find(row =>
-      row.item.question_id !== result.current.activeQuestionId
-    ).item;
 
     act(() => {
-      result.current.setInput(inactive.answer);
+      result.current.setInput("Spain");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.setInput("France");
     });
     act(() => {
       result.current.handleSubmit();
     });
 
-    expect(result.current.foundQuestionIds).toContain(inactive.question_id);
+    expect(result.current.foundQuestionIds).toEqual([3, 1]);
+    expect(result.current.activeQuestionId).toBeNull();
   });
 
   it("type_prompt skip marks the current image missed and advances", () => {
@@ -365,6 +353,42 @@ describe("useImageReview", () => {
     });
 
     expect(result.current.foundQuestionIds).toContain(prompt.question_id);
+  });
+
+  it("multiple_choice_label follows the visible image grid order", () => {
+    const randomSpy = vi.spyOn(Math, "random");
+
+    randomSpy
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(0.99);
+
+    try {
+      const items = [
+        imageItem(1, "France"),
+        imageItem(2, "Germany"),
+        imageItem(3, "Spain"),
+        imageItem(4, "Italy")
+      ];
+      const { result } = renderHook(() =>
+        useImageReview(items, vi.fn(), undefined, {
+          mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+          contextItems: items
+        })
+      );
+      const gridOrder = result.current.gridItems.map(row => row.item.question_id);
+
+      expect(result.current.currentPromptItem.question_id).toBe(gridOrder[0]);
+
+      act(() => {
+        result.current.handleChoiceSelect(gridOrder[0]);
+      });
+
+      expect(result.current.currentPromptItem.question_id).toBe(gridOrder[1]);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 
   it("multiple_choice_image shows image choices and resolves by clicked image", () => {

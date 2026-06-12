@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ImageReview from "./ImageReview";
 import { useImageReview } from "../hooks/useImageReview";
-import { IMAGE_MODE_TYPE_PROMPT } from "../imageModes";
+import { IMAGE_MODE_TYPE_ALL, IMAGE_MODE_TYPE_PROMPT } from "../imageModes";
 
 vi.mock("../hooks/useImageReview", () => ({
   useImageReview: vi.fn()
@@ -23,7 +23,12 @@ function setElementWidth(element, { clientWidth, scrollWidth }) {
   });
 }
 
-function mockImageReviewState({ resultMode = false, rowOverrides = {} } = {}) {
+function mockImageReviewState({
+  mode = IMAGE_MODE_TYPE_PROMPT,
+  resultMode = false,
+  rowOverrides = {},
+  hookOverrides = {}
+} = {}) {
   const item = {
     question_id: 1,
     answer: "Very long answer that should need a prettier preview",
@@ -40,7 +45,7 @@ function mockImageReviewState({ resultMode = false, rowOverrides = {} } = {}) {
   };
 
   useImageReview.mockReturnValue({
-    activeQuestionId: row.item.question_id,
+    activeQuestionId: row.isActive ? row.item.question_id : null,
     answeredCount: row.isFound ? 1 : 0,
     choiceOptions: [],
     currentPromptItem: item,
@@ -51,7 +56,7 @@ function mockImageReviewState({ resultMode = false, rowOverrides = {} } = {}) {
     handleImageSelect: noop,
     handleSubmit: noop,
     input: "",
-    mode: IMAGE_MODE_TYPE_PROMPT,
+    mode,
     promptLabel: item.label,
     progressPercent: row.isFound ? 100 : 0,
     remainingCount: row.isFound ? 0 : 1,
@@ -61,7 +66,9 @@ function mockImageReviewState({ resultMode = false, rowOverrides = {} } = {}) {
     sendResult: noop,
     setInput: noop,
     setQuality: noop,
-    skipCurrentPrompt: noop
+    skipCurrentPrompt: noop,
+    wrongAnsweredCount: row.isLockedMissed ? 1 : 0,
+    ...hookOverrides
   });
 
   return row;
@@ -140,5 +147,46 @@ describe("ImageReview answer label preview", () => {
     expect(screen.getByText("12s")).toBeInTheDocument();
     expect(screen.getByText("Meilleur")).toBeInTheDocument();
     expect(screen.getByText("1:30")).toBeInTheDocument();
+  });
+
+  it("shows image misses as a striped progress bar segment", () => {
+    mockImageReviewState({
+      resultMode: true,
+      rowOverrides: {
+        isActive: false,
+        isFound: false,
+        isLockedMissed: true,
+        quality: 0
+      },
+      hookOverrides: {
+        answeredCount: 0,
+        remainingCount: 0,
+        wrongAnsweredCount: 1
+      }
+    });
+    const { container } = renderImageReview();
+
+    expect(container.querySelector("[data-image-progress-correct]"))
+      .toHaveStyle({ width: "0%" });
+    expect(container.querySelector("[data-image-progress-wrong]"))
+      .toHaveStyle({ width: "100%" });
+    expect(container.querySelector("[data-image-progress-wrong]").style.background)
+      .toContain("repeating-linear-gradient");
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toHaveAttribute("aria-valuenow", "1");
+  });
+
+  it("does not show a next-image control in type_all mode", () => {
+    mockImageReviewState({
+      mode: IMAGE_MODE_TYPE_ALL,
+      rowOverrides: {
+        isActive: false,
+        isFound: false
+      }
+    });
+    renderImageReview();
+
+    expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
+    expect(screen.getByText("Terminer")).toBeInTheDocument();
   });
 });

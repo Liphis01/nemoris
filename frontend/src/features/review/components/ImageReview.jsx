@@ -303,15 +303,13 @@ export default function ImageReview({
     input,
     mode,
     promptLabel,
-    progressPercent,
     remainingCount,
     resultMode,
-    selectItem,
-    selectNextItem,
     sendResult,
     setInput,
     setQuality,
-    skipCurrentPrompt
+    skipCurrentPrompt,
+    wrongAnsweredCount
   } = useImageReview(reviewItems, onComplete, submitAnswer, {
     contextItems,
     mode: requestedMode
@@ -331,6 +329,13 @@ export default function ImageReview({
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
   );
   const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
+  const completedQuestionCount = answeredCount + wrongAnsweredCount;
+  const correctProgressPercent = reviewItems.length
+    ? Math.min((answeredCount / reviewItems.length) * 100, 100)
+    : 0;
+  const wrongProgressPercent = reviewItems.length
+    ? Math.min((wrongAnsweredCount / reviewItems.length) * 100, 100)
+    : 0;
   const feedbackCopy = feedbackTone === "incorrect"
     ? answersByClick
       ? "Mauvaise image."
@@ -358,18 +363,9 @@ export default function ImageReview({
   }
 
   function selectTile(questionId) {
-    if (answersByClick) {
-      handleImageSelect(questionId);
-      return;
-    }
+    if (!answersByClick) return;
 
-    selectItem(questionId);
-    focusAnswerInput();
-  }
-
-  function selectNextTile() {
-    selectNextItem();
-    focusAnswerInput();
+    handleImageSelect(questionId);
   }
 
   function openPreview(row) {
@@ -423,19 +419,6 @@ export default function ImageReview({
   return (
     <>
       <div
-        onKeyDownCapture={(event) => {
-          if (
-            resultMode ||
-            previewRow ||
-            event.key !== "Tab" ||
-            normalizedMode !== IMAGE_MODE_TYPE_ALL
-          ) {
-            return;
-          }
-
-          event.preventDefault();
-          selectNextTile();
-        }}
         style={{
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
@@ -488,22 +471,55 @@ export default function ImageReview({
         </div>
 
         <div
+          aria-label="Progression"
+          aria-valuemax={reviewItems.length}
+          aria-valuemin={0}
+          aria-valuenow={completedQuestionCount}
+          role="progressbar"
           style={{
-            background: "#111",
+            background: "linear-gradient(180deg, #0d0d0d, #141414)",
             border: "1px solid #2a2a2a",
             borderRadius: "999px",
+            boxShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.55)",
             height: "8px",
             overflow: "hidden"
           }}
         >
           <div
             style={{
-              background: "linear-gradient(90deg, #f0c36a, #8fc7ff)",
+              display: "flex",
               height: "100%",
-              transition: "width 0.2s ease",
-              width: `${progressPercent}%`
+              width: "100%"
             }}
-          />
+          >
+            <div
+              data-image-progress-correct
+              style={{
+                background: "linear-gradient(90deg, #2563eb, #38bdf8)",
+                boxShadow: correctProgressPercent > 0
+                  ? "0 0 14px rgba(56, 189, 248, 0.22)"
+                  : "none",
+                height: "100%",
+                transition: "width 0.22s ease",
+                width: `${correctProgressPercent}%`
+              }}
+            />
+            <div
+              data-image-progress-wrong
+              style={{
+                background: [
+                  "repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.34) 0 4px, rgba(17, 24, 39, 0) 4px 8px)",
+                  "linear-gradient(90deg, #f59e0b, #f97316)"
+                ].join(", "),
+                boxShadow: wrongProgressPercent > 0
+                  ? "0 0 14px rgba(245, 158, 11, 0.24)"
+                  : "none",
+                height: "100%",
+                transition: "width 0.22s ease",
+                width: `${wrongProgressPercent}%`
+              }}
+            />
+          </div>
         </div>
 
         <div style={{ color: "#777", display: "flex", fontSize: "11px", justifyContent: "space-between", marginTop: "6px" }}>
@@ -527,19 +543,15 @@ export default function ImageReview({
           {gridItems.map((row) => {
             const mediaSrc = resolveMediaUrl(row.item.media);
             const revealed = row.isFound || resultMode;
-            const selectable = !resultMode && (
-              answersByClick ||
-              (
-                normalizedMode === IMAGE_MODE_TYPE_ALL &&
-                !row.isFound
-              )
-            );
+            const selectable = !resultMode && answersByClick;
 
             return (
               <div
                 key={row.item.question_id}
                 ref={row.item.question_id === activeQuestionId ? activeTileRef : null}
-                onClick={() => selectTile(row.item.question_id)}
+                onClick={selectable
+                  ? () => selectTile(row.item.question_id)
+                  : undefined}
                 onKeyDown={(event) => {
                   if (!selectable || (event.key !== "Enter" && event.key !== " ")) {
                     return;
@@ -808,12 +820,6 @@ export default function ImageReview({
             </button>
           ) : (
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              {normalizedMode === IMAGE_MODE_TYPE_ALL && (
-                <button type="button" onClick={selectNextTile} style={buttonStyle}>
-                  Image suivante
-                </button>
-              )}
-
               {canSkipPrompt && (
                 <button type="button" onClick={skipCurrentPrompt} style={buttonStyle}>
                   Passer
