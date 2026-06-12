@@ -46,6 +46,7 @@ const answerTooltipGap = 8;
 const answerTooltipGutter = 12;
 const answerTooltipMaxWidth = 360;
 const answerTooltipMinWidth = 220;
+const imageRowPositionTolerance = 6;
 
 function clamp(value, min, max) {
   if (max < min) return min;
@@ -274,6 +275,116 @@ function tileBorder({ isActive, isFound, isLockedMissed }) {
   return "1px solid #292929";
 }
 
+function tileOffset(element, key) {
+  const offsetKey = key === "left" ? "offsetLeft" : "offsetTop";
+  const rectKey = key === "left" ? "left" : "top";
+  const offset = element?.[offsetKey];
+
+  if (Number.isFinite(offset)) return offset;
+
+  return element?.getBoundingClientRect?.()[rectKey] || 0;
+}
+
+function isIncompleteImageRowItem(row) {
+  return !row.isFound && !row.isLockedMissed;
+}
+
+function buildVisualImageRows(gridItems, tileElements) {
+  const rows = [];
+
+  gridItems.forEach(row => {
+    const element = tileElements.get(row.item.question_id);
+
+    if (!element) return;
+
+    const top = tileOffset(element, "top");
+    const left = tileOffset(element, "left");
+    const visualRow = rows.find(existing =>
+      Math.abs(existing.top - top) <= imageRowPositionTolerance
+    );
+    const rowItem = {
+      element,
+      left,
+      questionId: row.item.question_id,
+      row
+    };
+
+    if (visualRow) {
+      visualRow.items.push(rowItem);
+      visualRow.top = Math.min(visualRow.top, top);
+      return;
+    }
+
+    rows.push({
+      items: [rowItem],
+      top
+    });
+  });
+
+  return rows
+    .sort((left, right) => left.top - right.top)
+    .map(row => ({
+      ...row,
+      items: row.items.sort((left, right) => left.left - right.left)
+    }));
+}
+
+function imageVisualRowHasIncompleteItem(row) {
+  return row.items.some(item => isIncompleteImageRowItem(item.row));
+}
+
+function findImageVisualRowIndex(rows, questionId) {
+  return rows.findIndex(row =>
+    row.items.some(item => item.questionId === questionId)
+  );
+}
+
+function findAdjacentIncompleteImageRowIndex(rows, startIndex, direction) {
+  if (startIndex < 0 || rows.length <= 1) return -1;
+
+  for (let offset = 1; offset < rows.length; offset += 1) {
+    const index = (
+      startIndex + offset * direction + rows.length
+    ) % rows.length;
+
+    if (imageVisualRowHasIncompleteItem(rows[index])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function findTypeAllScrollAnchorRowIndex(rows, container, direction) {
+  const incompleteRowIndexes = rows
+    .map((row, index) => (
+      imageVisualRowHasIncompleteItem(row) ? index : null
+    ))
+    .filter(index => index !== null);
+
+  if (incompleteRowIndexes.length === 0) return -1;
+
+  const scrollTop = container?.scrollTop || 0;
+
+  if (direction < 0) {
+    return [...incompleteRowIndexes].reverse().find(index =>
+      rows[index].top <= scrollTop + imageRowPositionTolerance
+    ) ?? incompleteRowIndexes[0];
+  }
+
+  return incompleteRowIndexes.find(index =>
+    rows[index].top >= scrollTop - imageRowPositionTolerance
+  ) ?? incompleteRowIndexes[incompleteRowIndexes.length - 1];
+}
+
+function scrollImageVisualRowIntoView(row) {
+  row?.items[0]?.element?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+    inline: "nearest"
+  });
+}
+
 export default function ImageReview({
   group,
   reviewItems,
@@ -288,6 +399,8 @@ export default function ImageReview({
   const inputRef = useRef(null);
   const containerRef = useRef(null);
   const activeTileRef = useRef(null);
+  const tileElementsRef = useRef(new Map());
+  const previousFoundQuestionIdsRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const {
     activeQuestionId,
@@ -296,6 +409,7 @@ export default function ImageReview({
     currentPromptItem,
     feedbackTone,
     finishReview,
+    foundQuestionIds,
     gridItems,
     handleChoiceSelect,
     handleImageSelect,
@@ -354,13 +468,80 @@ export default function ImageReview({
               ? "Choisis le bon nom."
               : "Tape le nom de l'image.";
 
-  function focusAnswerInput() {
+  const focusAnswerInput = useCallback(() => {
     if (!showTextInput) return;
 
     window.requestAnimationFrame(() => {
       inputRef.current?.focus({ preventScroll: true });
     });
-  }
+  }, [showTextInput]);
+
+  const registerTileElement = useCallback((questionId, element, isActive) => {
+    if (element) {
+      tileElementsRef.current.set(questionId, element);
+    } else {
+      tileElementsRef.current.delete(questionId);
+    }
+
+    if (isActive) {
+      activeTileRef.current = element;
+    }
+  }, []);
+
+  const scrollFromCompletedTypeAllQuestion = useCallback((questionId) => {
+    if (normalizedMode !== IMAGE_MODE_TYPE_ALL || resultMode) return false;
+
+    const visualRows = buildVisualImageRows(
+      gridItems,
+      tileElementsRef.current
+    );
+    const completedRowIndex = findImageVisualRowIndex(
+      visualRows,
+      questionId
+    );
+
+    if (
+      completedRowIndex < 0 ||
+      imageVisualRowHasIncompleteItem(visualRows[completedRowIndex])
+    ) {
+      return false;
+    }
+
+    const targetRowIndex = findAdjacentIncompleteImageRowIndex(
+      visualRows,
+      completedRowIndex,
+      1
+    );
+
+    if (targetRowIndex < 0) return false;
+
+    scrollImageVisualRowIntoView(visualRows[targetRowIndex]);
+    return true;
+  }, [gridItems, normalizedMode, resultMode]);
+
+  const scrollToAdjacentTypeAllRow = useCallback((direction) => {
+    if (normalizedMode !== IMAGE_MODE_TYPE_ALL || resultMode) return false;
+
+    const visualRows = buildVisualImageRows(
+      gridItems,
+      tileElementsRef.current
+    );
+    const anchorRowIndex = findTypeAllScrollAnchorRowIndex(
+      visualRows,
+      containerRef.current,
+      direction
+    );
+    const targetRowIndex = findAdjacentIncompleteImageRowIndex(
+      visualRows,
+      anchorRowIndex,
+      direction
+    );
+
+    if (targetRowIndex < 0) return false;
+
+    scrollImageVisualRowIntoView(visualRows[targetRowIndex]);
+    return true;
+  }, [gridItems, normalizedMode, resultMode]);
 
   function selectTile(questionId) {
     if (!answersByClick) return;
@@ -411,6 +592,36 @@ export default function ImageReview({
       tile.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
     });
   }, [activeQuestionId, previewRow, resultMode, showTextInput]);
+
+  useEffect(() => {
+    const previousFoundQuestionIds = previousFoundQuestionIdsRef.current;
+
+    previousFoundQuestionIdsRef.current = foundQuestionIds;
+
+    if (
+      previousFoundQuestionIds === null ||
+      normalizedMode !== IMAGE_MODE_TYPE_ALL ||
+      resultMode ||
+      previewRow
+    ) {
+      return;
+    }
+
+    const previousFoundQuestionIdSet = new Set(previousFoundQuestionIds);
+    const newlyFoundQuestionId = foundQuestionIds.find(questionId =>
+      !previousFoundQuestionIdSet.has(questionId)
+    );
+
+    if (!newlyFoundQuestionId) return;
+
+    scrollFromCompletedTypeAllQuestion(newlyFoundQuestionId);
+  }, [
+    foundQuestionIds,
+    normalizedMode,
+    previewRow,
+    resultMode,
+    scrollFromCompletedTypeAllQuestion
+  ]);
 
   if (gridItems.length === 0) {
     return null;
@@ -531,7 +742,14 @@ export default function ImageReview({
       <div
         ref={containerRef}
         className="app-scrollbar"
-        style={{ padding: "14px", overflow: "auto", flex: 1, minHeight: 0 }}
+        data-image-grid-scroll
+        style={{
+          padding: "14px",
+          overflow: "auto",
+          flex: 1,
+          minHeight: 0,
+          position: "relative"
+        }}
       >
         <div
           style={{
@@ -548,7 +766,15 @@ export default function ImageReview({
             return (
               <div
                 key={row.item.question_id}
-                ref={row.item.question_id === activeQuestionId ? activeTileRef : null}
+                data-image-question-id={row.item.question_id}
+                data-image-review-tile
+                ref={(element) => {
+                  registerTileElement(
+                    row.item.question_id,
+                    element,
+                    row.item.question_id === activeQuestionId
+                  );
+                }}
                 onClick={selectable
                   ? () => selectTile(row.item.question_id)
                   : undefined}
@@ -732,6 +958,17 @@ export default function ImageReview({
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
+                if (
+                  event.key === "Tab" &&
+                  normalizedMode === IMAGE_MODE_TYPE_ALL &&
+                  !resultMode
+                ) {
+                  event.preventDefault();
+                  scrollToAdjacentTypeAllRow(event.shiftKey ? -1 : 1);
+                  focusAnswerInput();
+                  return;
+                }
+
                 if (event.key === "Enter") {
                   event.preventDefault();
                   handleSubmit();

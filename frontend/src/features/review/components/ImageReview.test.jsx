@@ -10,6 +10,28 @@ vi.mock("../hooks/useImageReview", () => ({
 
 const noop = vi.fn();
 
+function imageItem(questionId, answer = `Image ${questionId}`) {
+  return {
+    question_id: questionId,
+    answer,
+    label: answer,
+    media: `/static/image-${questionId}.png`
+  };
+}
+
+function imageGridRow(questionId, options = {}) {
+  const item = imageItem(questionId, options.answer);
+
+  return {
+    isActive: false,
+    isFound: false,
+    isLockedMissed: false,
+    quality: null,
+    ...options,
+    item: options.item || item
+  };
+}
+
 function setElementWidth(element, { clientWidth, scrollWidth }) {
   Object.defineProperties(element, {
     clientWidth: {
@@ -21,6 +43,33 @@ function setElementWidth(element, { clientWidth, scrollWidth }) {
       value: scrollWidth
     }
   });
+}
+
+function setTileLayout(container, layoutByQuestionId) {
+  Object.entries(layoutByQuestionId).forEach(([questionId, layout]) => {
+    const tile = container.querySelector(
+      `[data-image-question-id="${questionId}"]`
+    );
+
+    Object.defineProperties(tile, {
+      offsetLeft: {
+        configurable: true,
+        value: layout.left
+      },
+      offsetTop: {
+        configurable: true,
+        value: layout.top
+      },
+      scrollIntoView: {
+        configurable: true,
+        value: vi.fn()
+      }
+    });
+  });
+}
+
+function tileFor(container, questionId) {
+  return container.querySelector(`[data-image-question-id="${questionId}"]`);
 }
 
 function mockImageReviewState({
@@ -51,6 +100,7 @@ function mockImageReviewState({
     currentPromptItem: item,
     feedbackTone: "",
     finishReview: noop,
+    foundQuestionIds: row.isFound ? [row.item.question_id] : [],
     gridItems: [row],
     handleChoiceSelect: noop,
     handleImageSelect: noop,
@@ -84,6 +134,61 @@ function renderImageReview(props = {}) {
       {...props}
     />
   );
+}
+
+function renderImageReviewWithState(initialState) {
+  let hookState = initialState;
+  const props = {
+    reviewItems: hookState.gridItems.map(row => row.item)
+  };
+
+  useImageReview.mockImplementation(() => hookState);
+
+  const rendered = renderImageReview(props);
+
+  return {
+    ...rendered,
+    setHookState(nextState) {
+      hookState = nextState;
+      rendered.rerender(
+        <ImageReview
+          group={{ name: "Images" }}
+          reviewItems={props.reviewItems}
+          onComplete={noop}
+          submitAnswer={noop}
+        />
+      );
+    }
+  };
+}
+
+function typeAllHookState({ rows, foundQuestionIds = [] }) {
+  return {
+    activeQuestionId: null,
+    answeredCount: foundQuestionIds.length,
+    choiceOptions: [],
+    currentPromptItem: null,
+    feedbackTone: "",
+    finishReview: noop,
+    foundQuestionIds,
+    gridItems: rows,
+    handleChoiceSelect: noop,
+    handleImageSelect: noop,
+    handleSubmit: noop,
+    input: "",
+    mode: IMAGE_MODE_TYPE_ALL,
+    promptLabel: "",
+    progressPercent: rows.length ? (foundQuestionIds.length / rows.length) * 100 : 0,
+    remainingCount: Math.max(0, rows.length - foundQuestionIds.length),
+    resultMode: false,
+    selectItem: noop,
+    selectNextItem: noop,
+    sendResult: noop,
+    setInput: noop,
+    setQuality: noop,
+    skipCurrentPrompt: noop,
+    wrongAnsweredCount: 0
+  };
 }
 
 describe("ImageReview answer label preview", () => {
@@ -188,5 +293,237 @@ describe("ImageReview answer label preview", () => {
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
     expect(screen.getByText("Terminer")).toBeInTheDocument();
+  });
+
+  it("scrolls to the next incomplete visual row when a type_all row is completed", async () => {
+    const initialRows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const completedRows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2, { isFound: true, quality: 2 }),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const { container, setHookState } = renderImageReviewWithState(
+      typeAllHookState({ rows: initialRows, foundQuestionIds: [1] })
+    );
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 }
+    });
+
+    setHookState(typeAllHookState({
+      rows: completedRows,
+      foundQuestionIds: [1, 2]
+    }));
+
+    await waitFor(() => {
+      expect(tileFor(container, 3).scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "start",
+        inline: "nearest"
+      });
+    });
+    expect(tileFor(container, 1).scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-scroll when a type_all row still has unfinished images", async () => {
+    const initialRows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const partiallyCompletedRows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const { container, setHookState } = renderImageReviewWithState(
+      typeAllHookState({ rows: initialRows })
+    );
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 }
+    });
+
+    setHookState(typeAllHookState({
+      rows: partiallyCompletedRows,
+      foundQuestionIds: [1]
+    }));
+
+    await waitFor(() => {
+      expect(tileFor(container, 1).scrollIntoView).not.toHaveBeenCalled();
+      expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
+    });
+  });
+
+  it("skips complete rows and wraps when auto-scrolling after type_all row completion", async () => {
+    const initialRows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2),
+      imageGridRow(3, { isFound: true, quality: 2 }),
+      imageGridRow(4, { isFound: true, quality: 2 }),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const completedRows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2, { isFound: true, quality: 2 }),
+      imageGridRow(3, { isFound: true, quality: 2 }),
+      imageGridRow(4, { isFound: true, quality: 2 }),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container, setHookState } = renderImageReviewWithState(
+      typeAllHookState({ rows: initialRows, foundQuestionIds: [1, 3, 4] })
+    );
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    setHookState(typeAllHookState({
+      rows: completedRows,
+      foundQuestionIds: [1, 2, 3, 4]
+    }));
+
+    await waitFor(() => {
+      expect(tileFor(container, 5).scrollIntoView).toHaveBeenCalled();
+    });
+
+    const wrapInitialRows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3, { isFound: true, quality: 2 }),
+      imageGridRow(4, { isFound: true, quality: 2 }),
+      imageGridRow(5, { isFound: true, quality: 2 }),
+      imageGridRow(6)
+    ];
+    const wrapCompletedRows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3, { isFound: true, quality: 2 }),
+      imageGridRow(4, { isFound: true, quality: 2 }),
+      imageGridRow(5, { isFound: true, quality: 2 }),
+      imageGridRow(6, { isFound: true, quality: 2 })
+    ];
+
+    setHookState(typeAllHookState({
+      rows: wrapInitialRows,
+      foundQuestionIds: [3, 4, 5]
+    }));
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    setHookState(typeAllHookState({
+      rows: wrapCompletedRows,
+      foundQuestionIds: [3, 4, 5, 6]
+    }));
+
+    await waitFor(() => {
+      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalled();
+    });
+  });
+
+  it("uses Tab and Shift+Tab to scroll between incomplete type_all rows without moving focus", async () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container } = renderImageReviewWithState(
+      typeAllHookState({ rows })
+    );
+    const scrollArea = container.querySelector("[data-image-grid-scroll]");
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 3).scrollIntoView).toHaveBeenCalled();
+    });
+    expect(document.activeElement).toBe(input);
+
+    scrollArea.scrollTop = 200;
+
+    expect(fireEvent.keyDown(input, { key: "Tab", shiftKey: true })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalled();
+    });
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("does not auto-scroll for wrong or duplicate type_all answers", async () => {
+    const rows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const { container, setHookState } = renderImageReviewWithState(
+      typeAllHookState({ rows, foundQuestionIds: [1] })
+    );
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 }
+    });
+
+    fireEvent.change(input, { target: { value: "wrong" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    setHookState(typeAllHookState({ rows, foundQuestionIds: [1] }));
+
+    await waitFor(() => {
+      expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    fireEvent.change(input, { target: { value: "Image 1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    setHookState(typeAllHookState({ rows, foundQuestionIds: [1] }));
+
+    await waitFor(() => {
+      expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
+    });
   });
 });
