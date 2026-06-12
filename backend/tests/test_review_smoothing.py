@@ -23,6 +23,8 @@ from app.services.startup import run_startup_rebalance
 from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
 from app.scheduler import (
     FSRS_VERSION,
+    MAX_DIFFICULTY,
+    MIN_STABILITY,
     app_quality_to_fsrs_rating,
     assign_smoothed_schedules,
     choose_smoothed_review_date,
@@ -253,6 +255,30 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreater(easier["difficulty"], reference["difficulty"])
         self.assertEqual(easier["interval"], 0)
         self.assertEqual(easier["next_review"], today)
+
+    def test_easier_mode_miss_keeps_penalty_gradient(self):
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+
+        reference = update_progress(
+            progress,
+            0,
+            today=today,
+            mode_difficulty=1.0,
+            enable_fuzzing=False
+        )
+        easier = update_progress(
+            progress,
+            0,
+            today=today,
+            mode_difficulty=0.5,
+            enable_fuzzing=False
+        )
+
+        self.assertLess(easier["stability"], reference["stability"])
+        self.assertGreater(easier["stability"], MIN_STABILITY)
+        self.assertGreater(easier["difficulty"], reference["difficulty"])
+        self.assertLess(easier["difficulty"], MAX_DIFFICULTY)
 
     def test_easier_mode_rewards_correct_answers_less_than_type_all(self):
         today = date(2026, 1, 10)

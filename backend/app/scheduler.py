@@ -60,6 +60,32 @@ def success_reward_factor(mode_difficulty=None):
     )
 
 
+def _apply_failure_stability_penalty(previous, current, penalty_factor):
+    adjusted = previous + ((current - previous) * penalty_factor)
+
+    if adjusted >= MIN_STABILITY:
+        return adjusted
+
+    if penalty_factor <= MODE_REFERENCE_DIFFICULTY:
+        return adjusted
+
+    extra_penalty = 1 - (1 / penalty_factor)
+    return current - ((current - MIN_STABILITY) * extra_penalty)
+
+
+def _apply_failure_difficulty_penalty(previous, current, penalty_factor):
+    adjusted = previous + ((current - previous) * penalty_factor)
+
+    if adjusted <= MAX_DIFFICULTY:
+        return adjusted
+
+    if penalty_factor <= MODE_REFERENCE_DIFFICULTY:
+        return adjusted
+
+    extra_penalty = 1 - (1 / penalty_factor)
+    return current + ((MAX_DIFFICULTY - current) * extra_penalty)
+
+
 def review_datetime_for_date(day):
     day = day or date.today()
     return datetime(
@@ -637,13 +663,17 @@ def apply_mode_difficulty_to_review(
         penalty_factor = failure_penalty_factor(mode_difficulty)
 
         if stability is not None and stability < previous_stability:
-            stability = previous_stability + (
-                (stability - previous_stability) * penalty_factor
+            stability = _apply_failure_stability_penalty(
+                previous_stability,
+                stability,
+                penalty_factor
             )
 
         if difficulty is not None and difficulty > previous_difficulty:
-            difficulty = previous_difficulty + (
-                (difficulty - previous_difficulty) * penalty_factor
+            difficulty = _apply_failure_difficulty_penalty(
+                previous_difficulty,
+                difficulty,
+                penalty_factor
             )
 
         reviewed_card.due = review_datetime

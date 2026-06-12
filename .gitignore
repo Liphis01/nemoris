@@ -4,6 +4,7 @@ __pycache__/
 venv/
 backend/build/
 backend/*.spec
+backend/simulation_reports/
 
 # Node
 node_modules/

@@ -70,6 +70,8 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - supprimer une question appelle le rebalancing ?
 - permettre d'accepter une réponse fausse si faute de frappe
 - aller chercher dans les questions à tags similaires pour proposer un qcm ?
+- ajouter une barre de progression qui montre la maîtrise d'une question dans manage (et éventuellement un historique de la progression en fonction du temps)
+- fine tune les difficultés des modes en fonction des prédictions des reviews en prenant type_all en ref
 
 ## refactors
 
