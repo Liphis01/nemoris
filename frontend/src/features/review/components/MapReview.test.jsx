@@ -100,4 +100,58 @@ describe("MapReview recap map focus", () => {
     expect(await screen.findByRole("button", { name: "Continuer" })).toBeInTheDocument();
     expect(screen.queryByText("Temps")).not.toBeInTheDocument();
   });
+
+  it("shows click prompt misses as a separate progress bar segment", async () => {
+    const { container } = renderMapReview(false, {
+      mode: "click_prompt",
+      reviewZones: [
+        {
+          question_id: 1,
+          code: "alpha",
+          label: "Alpha",
+          progress: {}
+        }
+      ]
+    });
+
+    fireEvent.click(screen.getByTestId("active-map"));
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-map-progress-correct]"))
+        .toHaveStyle({ width: "0%" });
+      expect(container.querySelector("[data-map-progress-wrong]"))
+        .toHaveStyle({ width: "100%" });
+    });
+    expect(container.querySelector("[data-map-progress-wrong]").style.background)
+      .toContain("repeating-linear-gradient");
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toHaveAttribute("aria-valuenow", "1");
+  });
+
+  it("shows colorblind-friendly recap status treatments", async () => {
+    const { container } = renderMapReview(true, {
+      mode: "type_all"
+    });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+
+    await screen.findByRole("button", { name: "Valider" });
+
+    const foundStatus = container.querySelector('[data-map-recap-status="found"]');
+    const missedStatus = container.querySelector('[data-map-recap-status="missed"]');
+
+    expect(foundStatus).toHaveTextContent("Trouvée");
+    expect(missedStatus).toHaveTextContent("À revoir");
+    expect(foundStatus.closest(".map-recap-row"))
+      .toHaveAttribute("data-map-recap-row", "found");
+    expect(missedStatus.closest(".map-recap-row"))
+      .toHaveAttribute("data-map-recap-row", "missed");
+    expect(missedStatus.style.background).toContain("repeating-linear-gradient");
+    expect(missedStatus.closest(".map-recap-row").style.background)
+      .toContain("repeating-linear-gradient");
+  });
 });

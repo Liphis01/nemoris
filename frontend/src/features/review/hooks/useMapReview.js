@@ -338,6 +338,17 @@ export function useMapReview(
     [foundQuestionIdSet, reviewZones]
   );
 
+  const activeMissedCodes = useMemo(
+    () =>
+      reviewZones
+        .filter(item =>
+          resolvedQuestionIdSet.has(item.question_id) &&
+          !foundQuestionIdSet.has(item.question_id)
+        )
+        .map(item => item.code),
+    [foundQuestionIdSet, resolvedQuestionIdSet, reviewZones]
+  );
+
   const remainingZones = useMemo(
     () =>
       reviewZones.filter(item => !completedQuestionIdSet.has(item.question_id)),
@@ -437,6 +448,12 @@ export function useMapReview(
 
   function handleZoneSelect(code) {
     if (mode !== MAP_MODE_CLICK_PROMPT || !currentPromptItem) {
+      return;
+    }
+
+    const clickedItem = reviewZones.find(item => item.code === code);
+
+    if (clickedItem && resolvedQuestionIdSet.has(clickedItem.question_id)) {
       return;
     }
 
@@ -604,6 +621,7 @@ export function useMapReview(
     : null;
 
   return {
+    activeMissedCodes,
     choiceOptions,
     currentPromptItem,
     dueCodes,

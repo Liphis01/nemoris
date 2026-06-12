@@ -267,6 +267,61 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.foundQuestionIds).toHaveLength(1);
   });
 
+  it("click_prompt ignores clicks on already found zones", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "click_prompt"
+      })
+    );
+    const foundTarget = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleZoneSelect(foundTarget.code);
+    });
+
+    const nextTarget = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleZoneSelect(foundTarget.code);
+    });
+
+    expect(result.current.foundQuestionIds).toEqual([foundTarget.question_id]);
+    expect(result.current.currentPromptItem.question_id).toBe(nextTarget.question_id);
+    expect(result.current.showRecap).toBe(false);
+  });
+
+  it("click_prompt ignores clicks on already missed zones", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "click_prompt"
+      })
+    );
+    const missedTarget = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.skipCurrentPrompt();
+    });
+
+    const nextTarget = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleZoneSelect(missedTarget.code);
+    });
+
+    expect(result.current.activeMissedCodes).toEqual([missedTarget.code]);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.currentPromptItem.question_id).toBe(nextTarget.question_id);
+    expect(result.current.showRecap).toBe(false);
+  });
+
   it("type_prompt accepts the highlighted zone name and supports skip", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),

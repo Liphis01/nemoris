@@ -106,6 +106,7 @@ export default function MapReview({
 }) {
   const normalizedMode = normalizeMapMode(modeProp || group.mode);
   const {
+    activeMissedCodes,
     choiceOptions,
     dueCodes,
     feedbackTone,
@@ -162,6 +163,17 @@ export default function MapReview({
   const showTextInput = mode === MAP_MODE_TYPE_ALL || mode === MAP_MODE_TYPE_PROMPT;
   const showPromptPanel = mode !== MAP_MODE_TYPE_ALL && !showRecap;
   const canSkipPrompt = mode === MAP_MODE_TYPE_PROMPT;
+  const completedQuestionCount = Math.max(0, reviewZones.length - remainingZones.length);
+  const wrongQuestionCount = mode === MAP_MODE_CLICK_PROMPT
+    ? Math.max(0, completedQuestionCount - foundQuestionIds.length)
+    : 0;
+  const correctProgressPercent = reviewZones.length
+    ? Math.min((foundQuestionIds.length / reviewZones.length) * 100, 100)
+    : 0;
+  const wrongProgressPercent = reviewZones.length
+    ? Math.min((wrongQuestionCount / reviewZones.length) * 100, 100)
+    : 0;
+  const showClickPromptProgress = mode === MAP_MODE_CLICK_PROMPT;
   const feedbackCopy = feedbackTone === "incorrect"
     ? mode === MAP_MODE_TYPE_PROMPT
       ? "Réponse incorrecte."
@@ -379,22 +391,67 @@ export default function MapReview({
           </div>
 
           <div
+            aria-label="Progression"
+            aria-valuemax={reviewZones.length}
+            aria-valuemin={0}
+            aria-valuenow={completedQuestionCount}
+            role="progressbar"
             style={{
-              background: "#111",
+              background: "linear-gradient(180deg, #0d0d0d, #141414)",
               border: "1px solid #2a2a2a",
+              boxShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.55)",
               borderRadius: "999px",
               height: "10px",
-              overflow: "hidden"
+              overflow: "hidden",
+              position: "relative"
             }}
           >
-            <div
-              style={{
-                background: "linear-gradient(90deg, #f0c36a, #8fc7ff)",
-                height: "100%",
-                transition: "width 0.2s ease",
-                width: `${progressPercent}%`
-              }}
-            />
+            {showClickPromptProgress ? (
+              <div
+                style={{
+                  display: "flex",
+                  height: "100%",
+                  width: "100%"
+                }}
+              >
+                <div
+                  data-map-progress-correct
+                  style={{
+                    background: "linear-gradient(90deg, #2563eb, #38bdf8)",
+                    boxShadow: correctProgressPercent > 0
+                      ? "0 0 14px rgba(56, 189, 248, 0.22)"
+                      : "none",
+                    height: "100%",
+                    transition: "width 0.22s ease",
+                    width: `${correctProgressPercent}%`
+                  }}
+                />
+                <div
+                  data-map-progress-wrong
+                  style={{
+                    background: [
+                      "repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.34) 0 4px, rgba(17, 24, 39, 0) 4px 8px)",
+                      "linear-gradient(90deg, #f59e0b, #f97316)"
+                    ].join(", "),
+                    boxShadow: wrongProgressPercent > 0
+                      ? "0 0 14px rgba(245, 158, 11, 0.24)"
+                      : "none",
+                    height: "100%",
+                    transition: "width 0.22s ease",
+                    width: `${wrongProgressPercent}%`
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "linear-gradient(90deg, #f0c36a, #8fc7ff)",
+                  height: "100%",
+                  transition: "width 0.2s ease",
+                  width: `${progressPercent}%`
+                }}
+              />
+            )}
           </div>
 
           <div style={{ color: "#777", display: "flex", fontSize: "12px", justifyContent: "space-between", marginTop: "8px" }}>
@@ -414,6 +471,7 @@ export default function MapReview({
             <SvgMap
               svgPath={`/maps/${group.media}`}
               found={foundCodes}
+              missed={mode === MAP_MODE_CLICK_PROMPT ? activeMissedCodes : []}
               dueItems={dueCodes}
               focusCode={remainingFocusCode}
               focusVersion={focusVersion}
@@ -752,6 +810,7 @@ export default function MapReview({
                       (index === 0 || recapRows[index - 1].isFound !== isFound);
                     const isFocused = focusedCode === item.code;
                     const selectedQuality = qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
+                    const recapStatusLabel = isFound ? "Trouvée" : "À revoir";
                     const projectedInterval =
                       item.projected_intervals?.[selectedQuality] ??
                       item.progress?.interval ??
@@ -760,13 +819,21 @@ export default function MapReview({
                     return (
                       <Fragment key={item.question_id}>
                         {showSection && (
-                          <div style={recapSectionStyle}>
-                            {isFound ? "Correct" : "Wrong"}
+                          <div
+                            style={{
+                              ...recapSectionStyle,
+                              ...(isFound
+                                ? recapSectionFoundStyle
+                                : recapSectionMissedStyle)
+                            }}
+                          >
+                            {isFound ? "Trouvées" : "À revoir"}
                           </div>
                         )}
 
                         <div
                           className="map-recap-row"
+                          data-map-recap-row={isFound ? "found" : "missed"}
                           ref={setRecapRowRef(item.code)}
                           role="button"
                           tabIndex={0}
@@ -784,15 +851,29 @@ export default function MapReview({
                           style={{
                             ...recapRowStyle,
                             gridTemplateColumns: recapGridColumns,
+                            ...(isFound ? recapRowFoundStyle : recapRowMissedStyle),
                             ...(isFocused ? recapRowFocusedStyle : {}),
                             borderLeft: isFound
-                              ? "3px solid rgba(126, 226, 168, 0.75)"
-                              : "3px solid rgba(255, 140, 148, 0.75)"
+                              ? "3px solid #38bdf8"
+                              : "3px solid #f59e0b"
                           }}
                           title={item.code ? `Voir ${item.label} sur la carte` : item.label}
                         >
                           <div style={recapAnswerCellStyle}>
-                            {item.label}
+                            <span
+                              data-map-recap-status={isFound ? "found" : "missed"}
+                              style={{
+                                ...recapStatusChipStyle,
+                                ...(isFound
+                                  ? recapStatusChipFoundStyle
+                                  : recapStatusChipMissedStyle)
+                              }}
+                            >
+                              {recapStatusLabel}
+                            </span>
+                            <span style={recapAnswerTextStyle}>
+                              {item.label}
+                            </span>
                           </div>
 
                           {showQualityControls && (
@@ -1063,12 +1144,19 @@ const recapTableBodyStyle = {
 const recapSectionStyle = {
   padding: "10px 14px 8px",
   background: "#111",
-  color: "#8a8a8a",
   fontSize: "11px",
   fontWeight: "700",
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   textAlign: "left"
+};
+
+const recapSectionFoundStyle = {
+  color: "#7dd3fc"
+};
+
+const recapSectionMissedStyle = {
+  color: "#fbbf24"
 };
 
 const recapBulkQualityStyle = {
@@ -1131,12 +1219,59 @@ const recapRowStyle = {
   transition: "background 0.14s ease, box-shadow 0.14s ease"
 };
 
+const recapRowFoundStyle = {
+  background: "linear-gradient(90deg, rgba(37, 99, 235, 0.14), #181818 46%)"
+};
+
+const recapRowMissedStyle = {
+  background: [
+    "repeating-linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0 5px, rgba(245, 158, 11, 0) 5px 10px)",
+    "linear-gradient(90deg, rgba(245, 158, 11, 0.18), #181818 48%)"
+  ].join(", ")
+};
+
 const recapRowFocusedStyle = {
-  background: "#202018",
-  boxShadow: "inset 0 0 0 1px rgba(243, 156, 18, 0.65)"
+  boxShadow: "inset 0 0 0 1px rgba(243, 156, 18, 0.78)"
 };
 
 const recapAnswerCellStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "8px",
+  minWidth: 0,
+  color: "#f3f3f3"
+};
+
+const recapStatusChipStyle = {
+  alignItems: "center",
+  borderRadius: "999px",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: "800",
+  height: "22px",
+  letterSpacing: "0.04em",
+  lineHeight: "22px",
+  padding: "0 8px",
+  textTransform: "uppercase"
+};
+
+const recapStatusChipFoundStyle = {
+  background: "rgba(37, 99, 235, 0.24)",
+  border: "1px solid rgba(56, 189, 248, 0.62)",
+  color: "#bae6fd"
+};
+
+const recapStatusChipMissedStyle = {
+  background: [
+    "repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.3) 0 3px, rgba(17, 24, 39, 0) 3px 6px)",
+    "rgba(245, 158, 11, 0.22)"
+  ].join(", "),
+  border: "1px solid rgba(251, 191, 36, 0.7)",
+  color: "#fde68a"
+};
+
+const recapAnswerTextStyle = {
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",

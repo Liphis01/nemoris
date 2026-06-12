@@ -15,6 +15,8 @@ const zoneStrokeStyle = {
     linejoin: "round"
 };
 
+const dragThresholdPx = 4;
+
 export default function SvgMap({
     svgPath,
     found,
@@ -38,8 +40,13 @@ export default function SvgMap({
     const [start, setStart] = useState({ x: 0, y: 0 });
     const zoneElementsRef = useRef([]);
     const transformRef = useRef({ scale: 1, offset: { x: 0, y: 0 } });
+    const dragStartRef = useRef(null);
+    const didDragRef = useRef(false);
+    const ignoreNextClickRef = useRef(false);
+    const clickResetTimeoutRef = useRef(null);
     const [svgVersion, setSvgVersion] = useState(0);
     const [tooltip, setTooltip] = useState(null);
+    const [hoveredCode, setHoveredCode] = useState(null);
 
     useEffect(() => {
         // Keep the latest transform available to effects/event handlers that
@@ -48,19 +55,42 @@ export default function SvgMap({
     }, [scale, offset]);
 
     function handleMouseDown(e) {
-        if (e.button !== 2) return; // clic droit uniquement
+        if (e.button !== 0 && e.button !== 2) return;
 
-        e.preventDefault(); // empêche menu contextuel
+        if (e.button === 2) {
+            e.preventDefault(); // empêche menu contextuel
+        }
 
+        const currentOffset = transformRef.current.offset || offset;
+        window.clearTimeout(clickResetTimeoutRef.current);
+        ignoreNextClickRef.current = false;
+        didDragRef.current = false;
+        dragStartRef.current = { x: e.clientX, y: e.clientY };
         setIsDragging(true);
         setStart({
-            x: e.clientX - offset.x,
-            y: e.clientY - offset.y
+            x: e.clientX - currentOffset.x,
+            y: e.clientY - currentOffset.y
         });
     }
 
     function handleMouseMove(e) {
         if (!isDragging) return;
+
+        const dragStart = dragStartRef.current;
+
+        if (dragStart && !didDragRef.current) {
+            const distance = Math.hypot(
+                e.clientX - dragStart.x,
+                e.clientY - dragStart.y
+            );
+
+            if (distance < dragThresholdPx) {
+                return;
+            }
+
+            didDragRef.current = true;
+            hideTooltip();
+        }
 
         setOffset({
             x: e.clientX - start.x,
@@ -69,6 +99,16 @@ export default function SvgMap({
     }
 
     function handleMouseUp() {
+        if (didDragRef.current) {
+            ignoreNextClickRef.current = true;
+            window.clearTimeout(clickResetTimeoutRef.current);
+            clickResetTimeoutRef.current = window.setTimeout(() => {
+                ignoreNextClickRef.current = false;
+            }, 0);
+        }
+
+        dragStartRef.current = null;
+        didDragRef.current = false;
         setIsDragging(false);
     }
 
@@ -96,8 +136,15 @@ export default function SvgMap({
         });
     }, [hideTooltip]);
 
+    useEffect(() => () => {
+        window.clearTimeout(clickResetTimeoutRef.current);
+    }, []);
+
     useEffect(() => {
         let cancelled = false;
+
+        setTooltip(null);
+        setHoveredCode(null);
 
         // Vite serves map SVGs from public/maps. After loading, discover every
         // data-code zone so editors can know which SVG regions are assignable.
@@ -161,18 +208,37 @@ export default function SvgMap({
             return "#444";
         };
 
+        const getHoverColor = (code) => {
+            if (selected === code) return "#fbbf24";
+            if (unsavedSet.has(code)) return "#fde047";
+            if (foundSet.has(code)) return "#34d399";
+            if (missedSet.has(code)) return "#fb7185";
+            if (dueSet.has(code)) return "#38bdf8";
+            return "#888";
+        };
+
+        const getDisplayColor = (code) => (
+            hoveredCode === code ? getHoverColor(code) : getColor(code)
+        );
+
         const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
-            el.style.fill = getColor(code);
+            el.style.fill = getDisplayColor(code);
             const tooltipLabel = String(zoneLabels[code] || "");
 
-            const handleClick = () => {
+            const handleClick = (event) => {
+                if (ignoreNextClickRef.current) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    ignoreNextClickRef.current = false;
+                    return;
+                }
+
                 if (code && onSelect) onSelect(code);
             };
 
             const handleEnter = (event) => {
-                if (!foundSet.has(code) && !unsavedSet.has(code) && selected !== code) {
-                    el.style.fill = "#888";
-                }
+                setHoveredCode(code);
+                el.style.fill = getHoverColor(code);
 
                 if (tooltipLabel) {
                     showTooltip(event, tooltipLabel);
@@ -186,6 +252,7 @@ export default function SvgMap({
             };
 
             const handleLeave = () => {
+                setHoveredCode(currentCode => currentCode === code ? null : currentCode);
                 el.style.fill = getColor(code);
                 hideTooltip();
             };
@@ -213,6 +280,7 @@ export default function SvgMap({
         selected,
         dueItems,
         unsaved,
+        hoveredCode,
         zoneLabels,
         onSelect,
         showTooltip,
