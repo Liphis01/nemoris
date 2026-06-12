@@ -24,26 +24,51 @@ def normalize_map_mode(mode):
     return value if value in MAP_MODES else DEFAULT_MAP_MODE
 
 
-def map_click_prompt_difficulty(context_count=0):
+def _tuned_number(tuning, key, default):
+    if not isinstance(tuning, dict):
+        return default
+
+    try:
+        return float(tuning.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def map_click_prompt_difficulty(context_count=0, tuning=None):
     try:
         count = max(1, int(context_count))
     except (TypeError, ValueError):
         count = 1
 
-    return max(0.4, min(0.95, 0.95 - (0.55 / math.sqrt(count))))
+    difficulty = 0.95 - (0.55 / math.sqrt(count))
+
+    if tuning is None:
+        return max(0.4, min(0.95, difficulty))
+
+    difficulty += _tuned_number(tuning, "click_prompt_bias", 0.0)
+
+    return max(0.35, min(0.98, difficulty))
 
 
-def map_mode_difficulty(mode=None, context_count=0):
+def map_mode_difficulty(mode=None, context_count=0, tuning=None):
     mode = normalize_map_mode(mode)
 
     if mode == MAP_MODE_TYPE_PROMPT:
-        return MAP_TYPE_PROMPT_DIFFICULTY
+        return _tuned_number(
+            tuning,
+            "type_prompt_difficulty",
+            MAP_TYPE_PROMPT_DIFFICULTY
+        )
 
     if mode == MAP_MODE_MULTIPLE_CHOICE:
-        return MAP_MULTIPLE_CHOICE_DIFFICULTY
+        return _tuned_number(
+            tuning,
+            "multiple_choice_difficulty",
+            MAP_MULTIPLE_CHOICE_DIFFICULTY
+        )
 
     if mode == MAP_MODE_CLICK_PROMPT:
-        return map_click_prompt_difficulty(context_count)
+        return map_click_prompt_difficulty(context_count, tuning=tuning)
 
     return MAP_TYPE_ALL_DIFFICULTY
 

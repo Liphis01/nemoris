@@ -18,6 +18,7 @@ from .timeline import (
 from .image_modes import choose_image_review_mode, image_mode_difficulty
 from .map_modes import choose_map_review_mode, map_mode_difficulty
 from .progress import progress_has_started, progress_is_new
+from .settings import load_scheduler_tuning_settings
 
 
 def _question_query(db):
@@ -59,7 +60,7 @@ def _new_questions(db):
     ]
 
 
-def _serialize_review_items(questions):
+def _serialize_review_items(questions, scheduler_tuning=None):
     review_items = []
     map_grouped_items = {}
     image_grouped_items = {}
@@ -122,12 +123,14 @@ def _serialize_review_items(questions):
         mode = choose_map_review_mode(due_questions, context_questions)
         mode_difficulty = map_mode_difficulty(
             mode,
-            context_count=len(context_questions)
+            context_count=len(context_questions),
+            tuning=scheduler_tuning
         )
         context_items = [
             serialize_map_review_zone(
                 item,
-                mode_difficulty=mode_difficulty
+                mode_difficulty=mode_difficulty,
+                scheduler_tuning=scheduler_tuning
             )
             for item in context_questions
         ]
@@ -140,7 +143,8 @@ def _serialize_review_items(questions):
         map_group["items"] = [
             serialize_map_review_zone(
                 item,
-                mode_difficulty=mode_difficulty
+                mode_difficulty=mode_difficulty,
+                scheduler_tuning=scheduler_tuning
             )
             for item in due_questions
         ]
@@ -162,12 +166,14 @@ def _serialize_review_items(questions):
         mode = choose_image_review_mode(due_questions, context_questions)
         mode_difficulty = image_mode_difficulty(
             mode,
-            context_count=len(context_questions)
+            context_count=len(context_questions),
+            tuning=scheduler_tuning
         )
         context_items = [
             serialize_image_review_item(
                 item,
-                mode_difficulty=mode_difficulty
+                mode_difficulty=mode_difficulty,
+                scheduler_tuning=scheduler_tuning
             )
             for item in context_questions
         ]
@@ -180,7 +186,8 @@ def _serialize_review_items(questions):
         image_group["items"] = [
             serialize_image_review_item(
                 item,
-                mode_difficulty=mode_difficulty
+                mode_difficulty=mode_difficulty,
+                scheduler_tuning=scheduler_tuning
             )
             for item in due_questions
         ]
@@ -189,15 +196,25 @@ def _serialize_review_items(questions):
     return review_items + map_review_groups + image_review_groups
 
 
-def serialize_review_items(questions):
-    return _serialize_review_items(questions)
+def serialize_review_items(questions, scheduler_tuning=None):
+    return _serialize_review_items(
+        questions,
+        scheduler_tuning=scheduler_tuning
+    )
 
 
 def get_review_items(db, include_new=False):
     today = date.today()
+    scheduler_tuning = load_scheduler_tuning_settings(db)
     due_questions = _due_questions(db, today)
 
     if due_questions or not include_new:
-        return serialize_review_items(due_questions)
+        return serialize_review_items(
+            due_questions,
+            scheduler_tuning=scheduler_tuning
+        )
 
-    return serialize_review_items(_new_questions(db))
+    return serialize_review_items(
+        _new_questions(db),
+        scheduler_tuning=scheduler_tuning
+    )

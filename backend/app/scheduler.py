@@ -21,6 +21,12 @@ MAX_DIFFICULTY = 10.0
 MIN_FAILURE_PENALTY_FACTOR = 0.5
 MAX_FAILURE_PENALTY_FACTOR = 2.5
 MAX_SUCCESS_REWARD_FACTOR = 1.5
+DEFAULT_EASY_REWARD_FLOOR = 0.5
+MIN_EASY_REWARD_FLOOR = 0.35
+MAX_EASY_REWARD_FLOOR = 0.70
+DEFAULT_FAILURE_PENALTY_POWER = 1.0
+MIN_FAILURE_PENALTY_POWER = 0.70
+MAX_FAILURE_PENALTY_POWER = 1.40
 
 
 def clamp(value, lower, upper):
@@ -39,19 +45,64 @@ def normalize_mode_difficulty(mode_difficulty=None):
     return difficulty
 
 
-def failure_penalty_factor(mode_difficulty=None):
+def normalize_easy_reward_floor(value=None):
+    try:
+        reward_floor = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_EASY_REWARD_FLOOR
+
+    if not math.isfinite(reward_floor):
+        return DEFAULT_EASY_REWARD_FLOOR
+
     return clamp(
-        1 / normalize_mode_difficulty(mode_difficulty),
+        reward_floor,
+        MIN_EASY_REWARD_FLOOR,
+        MAX_EASY_REWARD_FLOOR
+    )
+
+
+def normalize_failure_penalty_power(value=None):
+    try:
+        penalty_power = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_FAILURE_PENALTY_POWER
+
+    if not math.isfinite(penalty_power):
+        return DEFAULT_FAILURE_PENALTY_POWER
+
+    return clamp(
+        penalty_power,
+        MIN_FAILURE_PENALTY_POWER,
+        MAX_FAILURE_PENALTY_POWER
+    )
+
+
+def _tuning_value(scheduler_tuning, key, explicit_value=None):
+    if explicit_value is not None:
+        return explicit_value
+
+    if isinstance(scheduler_tuning, dict):
+        return scheduler_tuning.get(key)
+
+    return None
+
+
+def failure_penalty_factor(mode_difficulty=None, failure_penalty_power=None):
+    penalty_power = normalize_failure_penalty_power(failure_penalty_power)
+
+    return clamp(
+        (1 / normalize_mode_difficulty(mode_difficulty)) ** penalty_power,
         MIN_FAILURE_PENALTY_FACTOR,
         MAX_FAILURE_PENALTY_FACTOR
     )
 
 
-def success_reward_factor(mode_difficulty=None):
+def success_reward_factor(mode_difficulty=None, easy_reward_floor=None):
     difficulty = normalize_mode_difficulty(mode_difficulty)
+    reward_floor = normalize_easy_reward_floor(easy_reward_floor)
 
     if difficulty <= MODE_REFERENCE_DIFFICULTY:
-        return 0.5 + (0.5 * difficulty)
+        return reward_floor + ((1 - reward_floor) * difficulty)
 
     return clamp(
         difficulty,
@@ -623,7 +674,9 @@ def apply_mode_difficulty_to_review(
     last_review,
     next_review,
     review_datetime,
-    mode_difficulty=None
+    mode_difficulty=None,
+    easy_reward_floor=None,
+    failure_penalty_power=None
 ):
     mode_difficulty = normalize_mode_difficulty(mode_difficulty)
     base_interval = max(0, (next_review - last_review).days)
@@ -660,7 +713,10 @@ def apply_mode_difficulty_to_review(
     }
 
     if rating == Rating.Again:
-        penalty_factor = failure_penalty_factor(mode_difficulty)
+        penalty_factor = failure_penalty_factor(
+            mode_difficulty,
+            failure_penalty_power=failure_penalty_power
+        )
 
         if stability is not None and stability < previous_stability:
             stability = _apply_failure_stability_penalty(
@@ -683,7 +739,10 @@ def apply_mode_difficulty_to_review(
             "mode_penalty_factor": penalty_factor
         })
     else:
-        reward_factor = success_reward_factor(mode_difficulty)
+        reward_factor = success_reward_factor(
+            mode_difficulty,
+            easy_reward_floor=easy_reward_floor
+        )
 
         if stability is not None and stability > previous_stability:
             stability = previous_stability + (
@@ -731,7 +790,10 @@ def update_progress(
     quality,
     today=None,
     mode_difficulty=None,
-    enable_fuzzing=True
+    enable_fuzzing=True,
+    scheduler_tuning=None,
+    easy_reward_floor=None,
+    failure_penalty_power=None
 ):
     """
     Apply an FSRS v6 scheduling step.
@@ -741,6 +803,16 @@ def update_progress(
     isolated from database mutation.
     """
     today = today or date.today()
+    easy_reward_floor = _tuning_value(
+        scheduler_tuning,
+        "easy_reward_floor",
+        easy_reward_floor
+    )
+    failure_penalty_power = _tuning_value(
+        scheduler_tuning,
+        "failure_penalty_power",
+        failure_penalty_power
+    )
     rating = app_quality_to_fsrs_rating(quality)
     scheduler = create_fsrs_scheduler(enable_fuzzing=enable_fuzzing)
     review_datetime = review_datetime_for_date(today)
@@ -770,7 +842,9 @@ def update_progress(
         last_review,
         next_review,
         review_datetime,
-        mode_difficulty=mode_difficulty
+        mode_difficulty=mode_difficulty,
+        easy_reward_floor=easy_reward_floor,
+        failure_penalty_power=failure_penalty_power
     )
     reviewed_card = mode_adjustment["card"]
     next_review = mode_adjustment["next_review"]
@@ -804,10 +878,27 @@ def update_progress(
     return scheduling
 
 
-def preview_intervals(progress, favorite=False, mode_difficulty=None):
+def preview_intervals(
+    progress,
+    favorite=False,
+    mode_difficulty=None,
+    scheduler_tuning=None,
+    easy_reward_floor=None,
+    failure_penalty_power=None
+):
     # The map recap can show what each button would schedule before the user
     # commits a quality choice.
     today = date.today()
+    easy_reward_floor = _tuning_value(
+        scheduler_tuning,
+        "easy_reward_floor",
+        easy_reward_floor
+    )
+    failure_penalty_power = _tuning_value(
+        scheduler_tuning,
+        "failure_penalty_power",
+        failure_penalty_power
+    )
     scheduler = create_fsrs_scheduler(enable_fuzzing=False)
     card = fsrs_card_for_progress(progress, today=today)
     review_datetime = review_datetime_for_date(today)
@@ -838,7 +929,9 @@ def preview_intervals(progress, favorite=False, mode_difficulty=None):
             last_review,
             next_review,
             review_datetime,
-            mode_difficulty=mode_difficulty
+            mode_difficulty=mode_difficulty,
+            easy_reward_floor=easy_reward_floor,
+            failure_penalty_power=failure_penalty_power
         )
         interval = mode_adjustment["interval"]
         intervals[quality] = favorite_interval(interval) if favorite else interval

@@ -31,26 +31,51 @@ def normalize_image_mode(mode):
     return value if value in IMAGE_MODES else DEFAULT_IMAGE_MODE
 
 
-def image_click_prompt_difficulty(context_count=0):
+def _tuned_number(tuning, key, default):
+    if not isinstance(tuning, dict):
+        return default
+
+    try:
+        return float(tuning.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def image_click_prompt_difficulty(context_count=0, tuning=None):
     try:
         count = max(1, int(context_count))
     except (TypeError, ValueError):
         count = 1
 
-    return max(0.4, min(0.95, 0.95 - (0.55 / math.sqrt(count))))
+    difficulty = 0.95 - (0.55 / math.sqrt(count))
+
+    if tuning is None:
+        return max(0.4, min(0.95, difficulty))
+
+    difficulty += _tuned_number(tuning, "click_prompt_bias", 0.0)
+
+    return max(0.35, min(0.98, difficulty))
 
 
-def image_mode_difficulty(mode=None, context_count=0):
+def image_mode_difficulty(mode=None, context_count=0, tuning=None):
     mode = normalize_image_mode(mode)
 
     if mode == IMAGE_MODE_TYPE_PROMPT:
-        return IMAGE_TYPE_PROMPT_DIFFICULTY
+        return _tuned_number(
+            tuning,
+            "type_prompt_difficulty",
+            IMAGE_TYPE_PROMPT_DIFFICULTY
+        )
 
     if mode in IMAGE_MULTIPLE_CHOICE_MODES:
-        return IMAGE_MULTIPLE_CHOICE_DIFFICULTY
+        return _tuned_number(
+            tuning,
+            "multiple_choice_difficulty",
+            IMAGE_MULTIPLE_CHOICE_DIFFICULTY
+        )
 
     if mode == IMAGE_MODE_CLICK_PROMPT:
-        return image_click_prompt_difficulty(context_count)
+        return image_click_prompt_difficulty(context_count, tuning=tuning)
 
     return IMAGE_TYPE_ALL_DIFFICULTY
 

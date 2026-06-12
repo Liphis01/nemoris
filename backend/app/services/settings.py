@@ -2,15 +2,55 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from ..models import AppSetting
-from ..scheduler import DEFAULT_CATCHUP_DAILY_TARGET, normalize_daily_target
+from ..scheduler import (
+    DEFAULT_CATCHUP_DAILY_TARGET,
+    DEFAULT_EASY_REWARD_FLOOR,
+    DEFAULT_FAILURE_PENALTY_POWER,
+    MAX_EASY_REWARD_FLOOR,
+    MAX_FAILURE_PENALTY_POWER,
+    MIN_EASY_REWARD_FLOOR,
+    MIN_FAILURE_PENALTY_POWER,
+    normalize_daily_target
+)
+from .map_modes import (
+    MAP_MULTIPLE_CHOICE_DIFFICULTY,
+    MAP_TYPE_PROMPT_DIFFICULTY
+)
 
 
 REVIEW_SETTINGS_KEY = "review"
+SCHEDULER_TUNING_SETTINGS_KEY = "scheduler_tuning"
 STARTUP_REBALANCE_NOTICE_KEY = "startup_rebalance_notice"
+MIN_TYPE_PROMPT_DIFFICULTY = 1.00
+MAX_TYPE_PROMPT_DIFFICULTY = 1.35
+MIN_MULTIPLE_CHOICE_DIFFICULTY = 0.30
+MAX_MULTIPLE_CHOICE_DIFFICULTY = 0.80
+MIN_CLICK_PROMPT_BIAS = -0.25
+MAX_CLICK_PROMPT_BIAS = 0.15
 
 DEFAULT_REVIEW_SETTINGS = {
     "catchup_daily_target": DEFAULT_CATCHUP_DAILY_TARGET
 }
+DEFAULT_SCHEDULER_TUNING_SETTINGS = {
+    "type_prompt_difficulty": MAP_TYPE_PROMPT_DIFFICULTY,
+    "multiple_choice_difficulty": MAP_MULTIPLE_CHOICE_DIFFICULTY,
+    "click_prompt_bias": 0.0,
+    "easy_reward_floor": DEFAULT_EASY_REWARD_FLOOR,
+    "failure_penalty_power": DEFAULT_FAILURE_PENALTY_POWER
+}
+
+
+def clamp(value, lower, upper):
+    return max(lower, min(upper, value))
+
+
+def _float_setting(data, key, default, lower, upper):
+    try:
+        value = float(data.get(key, default))
+    except (TypeError, ValueError):
+        value = default
+
+    return clamp(value, lower, upper)
 
 
 def normalize_review_settings(value):
@@ -57,6 +97,79 @@ def save_review_settings(db, settings):
     setting = get_or_create_review_settings_row(db)
     normalized = normalize_review_settings(settings)
     setting.value = normalized
+
+    return normalized
+
+
+def normalize_scheduler_tuning_settings(value):
+    data = value if isinstance(value, dict) else {}
+
+    return {
+        "type_prompt_difficulty": _float_setting(
+            data,
+            "type_prompt_difficulty",
+            DEFAULT_SCHEDULER_TUNING_SETTINGS["type_prompt_difficulty"],
+            MIN_TYPE_PROMPT_DIFFICULTY,
+            MAX_TYPE_PROMPT_DIFFICULTY
+        ),
+        "multiple_choice_difficulty": _float_setting(
+            data,
+            "multiple_choice_difficulty",
+            DEFAULT_SCHEDULER_TUNING_SETTINGS["multiple_choice_difficulty"],
+            MIN_MULTIPLE_CHOICE_DIFFICULTY,
+            MAX_MULTIPLE_CHOICE_DIFFICULTY
+        ),
+        "click_prompt_bias": _float_setting(
+            data,
+            "click_prompt_bias",
+            DEFAULT_SCHEDULER_TUNING_SETTINGS["click_prompt_bias"],
+            MIN_CLICK_PROMPT_BIAS,
+            MAX_CLICK_PROMPT_BIAS
+        ),
+        "easy_reward_floor": _float_setting(
+            data,
+            "easy_reward_floor",
+            DEFAULT_SCHEDULER_TUNING_SETTINGS["easy_reward_floor"],
+            MIN_EASY_REWARD_FLOOR,
+            MAX_EASY_REWARD_FLOOR
+        ),
+        "failure_penalty_power": _float_setting(
+            data,
+            "failure_penalty_power",
+            DEFAULT_SCHEDULER_TUNING_SETTINGS["failure_penalty_power"],
+            MIN_FAILURE_PENALTY_POWER,
+            MAX_FAILURE_PENALTY_POWER
+        )
+    }
+
+
+def load_scheduler_tuning_settings(db):
+    setting = (
+        db.query(AppSetting)
+        .filter(AppSetting.key == SCHEDULER_TUNING_SETTINGS_KEY)
+        .first()
+    )
+
+    return normalize_scheduler_tuning_settings(
+        setting.value if setting else None
+    )
+
+
+def save_scheduler_tuning_settings(db, settings):
+    normalized = normalize_scheduler_tuning_settings(settings)
+    setting = (
+        db.query(AppSetting)
+        .filter(AppSetting.key == SCHEDULER_TUNING_SETTINGS_KEY)
+        .first()
+    )
+
+    if not setting:
+        db.add(AppSetting(
+            key=SCHEDULER_TUNING_SETTINGS_KEY,
+            value=normalized
+        ))
+    else:
+        setting.value = normalized
 
     return normalized
 

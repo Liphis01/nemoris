@@ -35,6 +35,7 @@ from ..services.review import get_review_items
 from ..services.settings import (
     get_review_settings,
     get_startup_rebalance_notice,
+    load_scheduler_tuning_settings,
     save_review_settings
 )
 from ..services.timeline import grade_timeline_answer, validate_timeline_data
@@ -210,6 +211,7 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
     }
 
     context_counts_by_group_id = {}
+    scheduler_tuning = load_scheduler_tuning_settings(db)
     normalized_map_mode = normalize_map_mode(map_mode) if map_mode else None
     normalized_image_mode = (
         normalize_image_mode(image_mode)
@@ -255,7 +257,8 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
             raw_quality = calibrate_map_quality(quality)
             difficulty = map_mode_difficulty(
                 normalized_map_mode,
-                context_count=context_count
+                context_count=context_count,
+                tuning=scheduler_tuning
             )
             progress_quality_pairs.append((
                 progress,
@@ -277,7 +280,8 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
             raw_quality = calibrate_image_quality(quality)
             difficulty = image_mode_difficulty(
                 normalized_image_mode,
-                context_count=context_count
+                context_count=context_count,
+                tuning=scheduler_tuning
             )
             metadata = {
                 "image_mode": normalized_image_mode,
@@ -299,7 +303,11 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
         else:
             progress_quality_pairs.append((progress, quality))
 
-    apply_scheduling_batch(db, progress_quality_pairs)
+    apply_scheduling_batch(
+        db,
+        progress_quality_pairs,
+        scheduler_tuning=scheduler_tuning
+    )
 
     db.commit()
 

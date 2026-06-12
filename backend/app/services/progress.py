@@ -11,7 +11,7 @@ from ..scheduler import (
     rebalance_review_calendar,
     update_progress
 )
-from .settings import get_review_settings
+from .settings import get_review_settings, load_scheduler_tuning_settings
 
 
 def create_initial_progress(question_id: int):
@@ -303,11 +303,21 @@ def _normalize_progress_quality_pair(pair):
     return progress, quality, metadata
 
 
-def apply_scheduling_batch(db, progress_quality_pairs, today=None):
+def apply_scheduling_batch(
+    db,
+    progress_quality_pairs,
+    today=None,
+    scheduler_tuning=None
+):
     # Central write path for review answers. It computes raw scheduling first,
     # then smooths the whole batch so longer intervals claim flexible slots
     # before shorter intervals.
     items = []
+    scheduler_tuning = (
+        scheduler_tuning
+        if scheduler_tuning is not None
+        else load_scheduler_tuning_settings(db)
+    )
     exclude_question_ids = set()
     candidate_dates = set()
     question_ids = {
@@ -332,7 +342,8 @@ def apply_scheduling_batch(db, progress_quality_pairs, today=None):
             progress,
             quality,
             today=today,
-            mode_difficulty=mode_difficulty
+            mode_difficulty=mode_difficulty,
+            scheduler_tuning=scheduler_tuning
         )
         scheduling["type_q"] = metadata.get("type_q")
         scheduling = apply_favorite_review_frequency(

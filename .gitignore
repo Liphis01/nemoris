@@ -5,6 +5,7 @@ venv/
 backend/build/
 backend/*.spec
 backend/simulation_reports/
+backend/tuning_reports/
 
 # Node
 node_modules/

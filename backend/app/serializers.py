@@ -142,7 +142,11 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
     }
 
 
-def serialize_map_review_zone(question, mode_difficulty=None):
+def serialize_map_review_zone(
+    question,
+    mode_difficulty=None,
+    scheduler_tuning=None
+):
     # A map zone is still one Question row. The review UI uses code/aliases to
     # match typed answers and projected_intervals to label recap choices.
     return {
@@ -162,7 +166,8 @@ def serialize_map_review_zone(question, mode_difficulty=None):
         "projected_intervals": preview_intervals(
             question.progress,
             favorite=bool((question.data or {}).get("favorite")),
-            mode_difficulty=mode_difficulty
+            mode_difficulty=mode_difficulty,
+            scheduler_tuning=scheduler_tuning
         )
     }
 
@@ -189,7 +194,11 @@ def serialize_image_review_group(group, tags=None, mode=None, context_items=None
     }
 
 
-def serialize_image_review_item(question, mode_difficulty=None):
+def serialize_image_review_item(
+    question,
+    mode_difficulty=None,
+    scheduler_tuning=None
+):
     return {
         "question_id": question.id,
 
@@ -212,6 +221,7 @@ def serialize_image_review_item(question, mode_difficulty=None):
         "projected_intervals": preview_intervals(
             question.progress,
             favorite=bool((question.data or {}).get("favorite")),
-            mode_difficulty=mode_difficulty
+            mode_difficulty=mode_difficulty,
+            scheduler_tuning=scheduler_tuning
         )
     }
