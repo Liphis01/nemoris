@@ -57,6 +57,7 @@ export default function ManageSidebar({
   groupSortOrder,
   selectGroupSortField,
   toggleGroupSortOrder,
+  resetManageFilters,
   setSelectedItem,
   startCreateQuestion,
   startCreateGroup,
@@ -124,7 +125,8 @@ export default function ManageSidebar({
 
   const toggleButtonStyle = (active, color) => ({
     flex: 1,
-    padding: "10px 12px",
+    minWidth: 0,
+    padding: "10px 8px",
     borderRadius: "10px",
     border: active
       ? `1px solid ${color}`
@@ -138,7 +140,12 @@ export default function ManageSidebar({
     cursor: "pointer",
     transition: "all 0.15s ease",
     fontWeight: "600",
-    fontSize: "13px"
+    fontSize: "13px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    whiteSpace: "nowrap"
   });
 
   function runManageTransition(action) {
@@ -333,6 +340,8 @@ export default function ManageSidebar({
           <ReturnToMenuButton
             onClick={() => runManageTransition(() => {
               setSelectedItem(null);
+              resetManageFilters?.();
+              setViewMode("questions");
               setMode("menu");
             })}
             style={{
@@ -366,7 +375,8 @@ export default function ManageSidebar({
               "#b69cff"
             )}
           >
-            📋 Questions
+            <span aria-hidden="true">📋</span>
+            <span>Questions</span>
           </button>
 
           <button
@@ -379,7 +389,8 @@ export default function ManageSidebar({
               "#ffcc7a"
             )}
           >
-            📁 Groupes
+            <span aria-hidden="true">📁</span>
+            <span>Groupes</span>
           </button>
 
         </div>

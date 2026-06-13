@@ -2,41 +2,17 @@
 
 ## vérifier
 
-- j'ai l'impression que l'ordre des items de group en training met d'abord les questions ratées puis aléatoire
-- si le groupe est modifié il faut reset le record dans entraînement
-
-- setup github pour tout automatiser
-- uniformiser le style partout
-- vérifier quelle version de fsrs j'ai (peut etre pas la dernière car dans create_initial_progress j'initialise les stability et difficulty à 1.0 et 5.0 au lieu de faire en fonction de la première réponse)
-- que signifie 304 Not Modified ? seulement certaines images l'ont
-
-## Product Suggestions
-
-Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
-Add settings UI for scheduler targets, per-type daily weights, theme/display preferences, backup location, import behavior.
-Improve content ingestion: CSV import/export UI, “import from URL”, local media copy, duplicate detection, and batch tag/collection editing.
-Add map review mode variants: visible answer list, hidden answer list, strict JetPunk-style mode, small-zone emphasis.
-
-## Long term improvements
-
-Desktop hardening: automatic backups, restore flow, portable data location chooser, startup health checks.
-AI-assisted authoring: generate draft questions, aliases, distractors, timeline entries, or map labels from selected text/URLs, but keep review data user-verifiable.
-Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.
 
 ## Urgent
-- 
+
 
 ## quick fixes
 
 - ajouter le timer final dans la recap d'entrainement de maps
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
-- enlever le type modifiable dans les questions maps (remplacer par quel mode de jetpunk on veut)
 - faire un bouton toggle pour l'era dans la preview
 - ajouter bouton annuler dans les autres types
 - tab pour skip dans nommer
-- augmenter la difficulté des qcm en proposant des réponses plus proches
-- essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
-- limiter le nombre d'images pour le mode "cliquer image" sinon horrible de chercher
 
 ## bugs
 
@@ -48,7 +24,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - quand je suis en cours de review et que le jour suivant commence ça rebalance pas correctement je crois
 
-## features
+## to do when i have more time
 
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
 - mettre les différents modes de jetpunk pour les maps et alterner selon les jours (commencer par le mode facile, puis alterner les modes et identifier les mode compliqués pour chaque question pour les faire réapparaître plus souvent)
@@ -72,6 +48,10 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - qcm de maps : choisir des zones proches pour les réponses
 - créer un groupe avec les formes de maps à partir de world.svg
 - faire en sorte que les reviews n'aient pas besoin de scroll la page pour répondre
+- setup github pour tout automatiser
+- uniformiser le style partout
+- augmenter la difficulté des qcm en proposant des réponses plus proches
+- essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
 
 ## refactors
 
@@ -125,3 +105,16 @@ associer les paires, retrouver à partir d'une image, trouver tous les élément
 - éviter la charge cognitive ! signaler cartes trop longes, écran minimaliste
 - feature transformer info brute en questions efficaces : import d'un texte > extraction automatique de faits > proposition de questions > détection des dates, lieux, personnes > génération de cartes "inverses"/"pourquoi"/"différence entre" > validation manuelle
 - au lieu de faire directement les questions, le user écrit des connaissances qui font un knowledge graph qui permet de générer automatiquement les questions
+
+## Product Suggestions
+
+Add question history view from Manage: answer history, lapses, interval, next review, manual reschedule.
+Add settings UI for scheduler targets, per-type daily weights, theme/display preferences, backup location, import behavior.
+Improve content ingestion: CSV import/export UI, “import from URL”, local media copy, duplicate detection, and batch tag/collection editing.
+Add map review mode variants: visible answer list, hidden answer list, strict JetPunk-style mode, small-zone emphasis.
+
+## Long term improvements
+
+Desktop hardening: automatic backups, restore flow, portable data location chooser, startup health checks.
+AI-assisted authoring: generate draft questions, aliases, distractors, timeline entries, or map labels from selected text/URLs, but keep review data user-verifiable.
+Optional sync later: only after local data/migrations/backups are strong. Sync will multiply edge cases.

@@ -473,41 +473,6 @@ export default function MapEditor({
             />
           </div>
 
-            {/* TYPE */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "140px"
-            }}
-          >
-            <label
-              style={{
-                fontSize: "12px",
-                color: "#777",
-                marginBottom: "4px"
-              }}
-            >
-              Type
-            </label>
-
-            <select
-              value={editableGroup.type_group}
-              onChange={(e) =>
-                updateGroupField("type_group", e.target.value)
-              }
-              style={{
-                padding: "10px",
-                background: "#111",
-                color: "#eee",
-                border: "1px solid #333",
-                borderRadius: "8px"
-              }}
-            >
-              <option value="map">map</option>
-            </select>
-          </div>
-
             {/* MEDIA */}
           <div
             style={{
