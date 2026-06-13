@@ -6,7 +6,6 @@ from fsrs import Card, Rating, Scheduler, State
 
 DESIRED_RETENTION = 0.9
 DEFAULT_CATCHUP_DAILY_TARGET = 50
-CATCHUP_REBALANCE_TOLERANCE = 1.25
 FSRS_VERSION = "6.3.1"
 FSRS_MAXIMUM_INTERVAL = 36500
 APP_QUALITY_AGAIN = 0
@@ -395,19 +394,65 @@ def increment_type_load(daily_type_loads, day, type_q):
     type_counts[current_type] = type_counts.get(current_type, 0) + 1
 
 
+def normalize_daily_target(daily_target):
+    try:
+        target = int(daily_target)
+    except (TypeError, ValueError):
+        target = DEFAULT_CATCHUP_DAILY_TARGET
+
+    return max(1, target)
+
+
+def daily_load_score(projected_load, daily_target, distance_days):
+    target = normalize_daily_target(daily_target)
+    over_target = max(0, projected_load - target)
+
+    return (distance_days * distance_days) + (
+        (over_target * over_target) / target
+    )
+
+
+def choose_soft_rebalance_date(start_day, daily_loads, daily_target):
+    distance = 0
+    best_day = start_day
+    best_key = None
+
+    while True:
+        candidate = start_day + timedelta(days=distance)
+        projected_load = daily_loads.get(candidate, 0) + 1
+        score = daily_load_score(projected_load, daily_target, distance)
+        key = (score, projected_load, distance, candidate)
+
+        if best_key is None or key < best_key:
+            best_key = key
+            best_day = candidate
+
+        next_distance = distance + 1
+
+        if next_distance * next_distance > best_key[0]:
+            break
+
+        distance = next_distance
+
+    return best_day
+
+
 def choose_smoothed_review_date(
     today,
     ideal_next_review,
     interval,
     daily_loads,
     daily_type_loads=None,
-    type_q=None
+    type_q=None,
+    daily_target=DEFAULT_CATCHUP_DAILY_TARGET
 ):
     candidates = candidate_review_dates(today, ideal_next_review, interval)
     current_type = type_key(type_q) if type_q else None
 
     def candidate_key(candidate):
         offset = (candidate - ideal_next_review).days
+        distance = abs(offset)
+        projected_load = daily_loads.get(candidate, 0) + 1
         type_counts = (daily_type_loads or {}).get(candidate, {})
         same_type_load = (
             type_counts.get(current_type, 0)
@@ -421,10 +466,11 @@ def choose_smoothed_review_date(
         )
 
         return (
-            daily_loads.get(candidate, 0),
+            daily_load_score(projected_load, daily_target, distance),
             same_type_load,
             -other_type_count,
-            abs(offset),
+            projected_load,
+            distance,
             0 if offset >= 0 else 1,
             candidate
         )
@@ -432,7 +478,12 @@ def choose_smoothed_review_date(
     return min(candidates, key=candidate_key)
 
 
-def smooth_scheduling(scheduling, daily_loads, daily_type_loads=None):
+def smooth_scheduling(
+    scheduling,
+    daily_loads,
+    daily_type_loads=None,
+    daily_target=DEFAULT_CATCHUP_DAILY_TARGET
+):
     today = scheduling["last_review"]
     ideal_interval = scheduling["interval"]
     ideal_next_review = scheduling["next_review"]
@@ -442,7 +493,8 @@ def smooth_scheduling(scheduling, daily_loads, daily_type_loads=None):
         ideal_interval,
         daily_loads,
         daily_type_loads=daily_type_loads,
-        type_q=scheduling.get("type_q")
+        type_q=scheduling.get("type_q"),
+        daily_target=daily_target
     )
 
     if next_review == ideal_next_review:
@@ -465,7 +517,12 @@ def smooth_scheduling(scheduling, daily_loads, daily_type_loads=None):
     return smoothed
 
 
-def assign_smoothed_schedules(schedulings, daily_loads, daily_type_loads=None):
+def assign_smoothed_schedules(
+    schedulings,
+    daily_loads,
+    daily_type_loads=None,
+    daily_target=DEFAULT_CATCHUP_DAILY_TARGET
+):
     projected_loads = dict(daily_loads or {})
     projected_type_loads = nested_daily_type_loads(daily_type_loads)
     assigned = [None] * len(schedulings)
@@ -478,7 +535,8 @@ def assign_smoothed_schedules(schedulings, daily_loads, daily_type_loads=None):
         smoothed = smooth_scheduling(
             scheduling,
             projected_loads,
-            daily_type_loads=projected_type_loads
+            daily_type_loads=projected_type_loads,
+            daily_target=daily_target
         )
         assigned[index] = smoothed
 
@@ -491,21 +549,6 @@ def assign_smoothed_schedules(schedulings, daily_loads, daily_type_loads=None):
         )
 
     return assigned
-
-
-def normalize_daily_target(daily_target):
-    try:
-        target = int(daily_target)
-    except (TypeError, ValueError):
-        target = DEFAULT_CATCHUP_DAILY_TARGET
-
-    return max(1, target)
-
-
-def soft_rebalance_daily_limit(daily_target):
-    return math.ceil(
-        normalize_daily_target(daily_target) * CATCHUP_REBALANCE_TOLERANCE
-    )
 
 
 def rebalance_review_calendar(
@@ -522,10 +565,10 @@ def rebalance_review_calendar(
     last_review, interval, ideal_interval, and difficulty. The returned list
     keeps the input order and replaces only next_review/interval scheduling
     fields; ideal_* is copied through unchanged. initial_daily_loads can seed
-    capacity already consumed by reviews completed earlier in the day.
+    load already created by reviews completed earlier in the day.
     """
     today = today or date.today()
-    daily_limit = soft_rebalance_daily_limit(daily_target)
+    daily_target = normalize_daily_target(daily_target)
     assigned_loads = {}
     assigned = [None] * len(entries)
 
@@ -627,10 +670,11 @@ def rebalance_review_calendar(
     )
 
     for item in ordered:
-        next_review = item["effective_due_date"]
-
-        while assigned_loads.get(next_review, 0) >= daily_limit:
-            next_review += timedelta(days=1)
+        next_review = choose_soft_rebalance_date(
+            item["effective_due_date"],
+            assigned_loads,
+            daily_target
+        )
 
         assigned_loads[next_review] = assigned_loads.get(next_review, 0) + 1
 

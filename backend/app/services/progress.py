@@ -318,6 +318,7 @@ def apply_scheduling_batch(
         if scheduler_tuning is not None
         else load_scheduler_tuning_settings(db)
     )
+    daily_target = get_review_settings(db)["catchup_daily_target"]
     exclude_question_ids = set()
     candidate_dates = set()
     question_ids = {
@@ -378,7 +379,8 @@ def apply_scheduling_batch(
     smoothed_schedules = assign_smoothed_schedules(
         [scheduling for _, _, scheduling, _ in items],
         daily_loads,
-        daily_type_loads=daily_type_loads
+        daily_type_loads=daily_type_loads,
+        daily_target=daily_target
     )
 
     for (progress, quality, _, history_metadata), scheduling in zip(
