@@ -55,6 +55,7 @@ export default function ReviewQuestionRenderer({
                 mode={q.mode}
                 onComplete={handleImageComplete}
                 submitAnswer={submitImageAnswer}
+                separateFoundItems={!trainingMode}
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
                 trainingBestTimeMs={trainingBestTimeMs}

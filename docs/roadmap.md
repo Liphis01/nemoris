@@ -35,7 +35,6 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - ajouter bouton annuler dans les autres types
 - tab pour skip dans nommer
 - augmenter la difficulté des qcm en proposant des réponses plus proches
-- qcm d'images : faire dans l'ordre et toujours scroller vers la question
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
 - limiter le nombre d'images pour le mode "cliquer image" sinon horrible de chercher
 
@@ -70,6 +69,9 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - aller chercher dans les questions à tags similaires pour proposer un qcm ?
 - ajouter une barre de progression qui montre la maîtrise d'une question dans manage (et éventuellement un historique de la progression en fonction du temps)
 - fine tune les difficultés des modes en fonction des prédictions des reviews en prenant type_all en ref
+- qcm de maps : choisir des zones proches pour les réponses
+- créer un groupe avec les formes de maps à partir de world.svg
+- faire en sorte que les reviews n'aient pas besoin de scroll la page pour répondre
 
 ## refactors
 
@@ -95,6 +97,7 @@ Optional sync later: only after local data/migrations/backups are strong. Sync w
 - scraper le site de émilien
 - indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
 - type liste ? (= juste énumérer)
+- les questions ratées réapparaissent avec un mode différent (si disponible pour le type de question)
 
 ## Conseils/idées issus de la littérature scientifique
 

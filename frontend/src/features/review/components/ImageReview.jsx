@@ -392,6 +392,7 @@ export default function ImageReview({
   mode: requestedMode,
   onComplete,
   submitAnswer,
+  separateFoundItems = false,
   showQualityControls = true,
   trainingElapsedMs = null,
   trainingBestTimeMs = null
@@ -443,6 +444,13 @@ export default function ImageReview({
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
   );
   const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
+  const shouldSeparateFoundItems = separateFoundItems && !resultMode;
+  const activeGridItems = shouldSeparateFoundItems
+    ? gridItems.filter(row => !row.isFound)
+    : gridItems;
+  const foundGridItems = shouldSeparateFoundItems
+    ? gridItems.filter(row => row.isFound)
+    : [];
   const completedQuestionCount = answeredCount + wrongAnsweredCount;
   const correctProgressPercent = reviewItems.length
     ? Math.min((answeredCount / reviewItems.length) * 100, 100)
@@ -623,6 +631,157 @@ export default function ImageReview({
     scrollFromCompletedTypeAllQuestion
   ]);
 
+  function renderImageTile(
+    row,
+    { allowSelection = true, registerForScroll = true } = {}
+  ) {
+    const mediaSrc = resolveMediaUrl(row.item.media);
+    const revealed = row.isFound || resultMode;
+    const selectable = allowSelection && !resultMode && answersByClick;
+
+    return (
+      <div
+        key={row.item.question_id}
+        data-image-question-id={row.item.question_id}
+        data-image-review-tile
+        ref={registerForScroll
+          ? (element) => {
+            registerTileElement(
+              row.item.question_id,
+              element,
+              row.item.question_id === activeQuestionId
+            );
+          }
+          : undefined}
+        onClick={selectable
+          ? () => selectTile(row.item.question_id)
+          : undefined}
+        onKeyDown={(event) => {
+          if (!selectable || (event.key !== "Enter" && event.key !== " ")) {
+            return;
+          }
+
+          event.preventDefault();
+          selectTile(row.item.question_id);
+        }}
+        role={selectable ? "button" : undefined}
+        tabIndex={selectable ? 0 : -1}
+        style={{
+          background: tileBackground(row),
+          border: tileBorder(row),
+          borderRadius: "12px",
+          boxShadow: row.isActive
+            ? "0 0 0 3px rgba(240, 195, 106, 0.16)"
+            : "none",
+          boxSizing: "border-box",
+          color: "#eee",
+          cursor: selectable ? "pointer" : "default",
+          display: "grid",
+          gap: "8px",
+          gridTemplateRows: "116px minmax(20px, auto) auto",
+          minHeight: resultMode && showQualityControls ? "220px" : "170px",
+          overflow: "hidden",
+          padding: "8px",
+          textAlign: "left",
+          transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease"
+        }}
+      >
+        <span
+          onClick={(event) => {
+            event.stopPropagation();
+            openPreview(row);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            openPreview(row);
+          }}
+          role="button"
+          tabIndex={0}
+          style={{
+            alignItems: "center",
+            background: "#101010",
+            border: "1px solid #262626",
+            borderRadius: "9px",
+            cursor: mediaSrc ? "zoom-in" : "default",
+            display: "flex",
+            height: "126px",
+            justifyContent: "center",
+            overflow: "hidden",
+            width: "100%"
+          }}
+        >
+          {mediaSrc ? (
+            <img
+              src={mediaSrc}
+              alt={revealed ? answerLabel(row.item) : "image"}
+              style={{
+                maxHeight: "112px",
+                maxWidth: "100%",
+                objectFit: "contain"
+              }}
+            />
+          ) : (
+            <span style={{ color: "#666", fontSize: "12px" }}>
+              Image manquante
+            </span>
+          )}
+        </span>
+
+        <ImageAnswerLabel
+          color={row.isLockedMissed ? "#ff9aa5" : row.isFound ? "#86efac" : "#777"}
+          label={answerLabel(row.item)}
+          revealed={revealed}
+        />
+
+        {resultMode && showQualityControls && (
+          <span
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "6px",
+              justifyContent: "center",
+              minHeight: "38px"
+            }}
+          >
+            {row.isLockedMissed ? (
+              <span
+                style={{
+                  background: "#3a1f24",
+                  border: "1px solid #6b2b31",
+                  borderRadius: "9px",
+                  color: "#ff9aa5",
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  padding: "8px 10px"
+                }}
+              >
+                0 · Faux
+              </span>
+            ) : (
+              qualityOptions.map(option => (
+                <QualityButton
+                  key={option.value}
+                  option={option}
+                  selected={row.quality === option.value}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setQuality(row.item.question_id, option.value);
+                  }}
+                />
+              ))
+            )}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   if (gridItems.length === 0) {
     return null;
   }
@@ -752,158 +911,56 @@ export default function ImageReview({
         }}
       >
         <div
+          data-image-active-grid
           style={{
             display: "grid",
             gap: "10px",
             gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))"
           }}
         >
-          {gridItems.map((row) => {
-            const mediaSrc = resolveMediaUrl(row.item.media);
-            const revealed = row.isFound || resultMode;
-            const selectable = !resultMode && answersByClick;
-
-            return (
-              <div
-                key={row.item.question_id}
-                data-image-question-id={row.item.question_id}
-                data-image-review-tile
-                ref={(element) => {
-                  registerTileElement(
-                    row.item.question_id,
-                    element,
-                    row.item.question_id === activeQuestionId
-                  );
-                }}
-                onClick={selectable
-                  ? () => selectTile(row.item.question_id)
-                  : undefined}
-                onKeyDown={(event) => {
-                  if (!selectable || (event.key !== "Enter" && event.key !== " ")) {
-                    return;
-                  }
-
-                  event.preventDefault();
-                  selectTile(row.item.question_id);
-                }}
-                role={selectable ? "button" : undefined}
-                tabIndex={selectable ? 0 : -1}
-                style={{
-                  background: tileBackground(row),
-                  border: tileBorder(row),
-                  borderRadius: "12px",
-                  boxShadow: row.isActive
-                    ? "0 0 0 3px rgba(240, 195, 106, 0.16)"
-                    : "none",
-                  boxSizing: "border-box",
-                  color: "#eee",
-                  cursor: selectable ? "pointer" : "default",
-                  display: "grid",
-                  gap: "8px",
-                  gridTemplateRows: "116px minmax(20px, auto) auto",
-                  minHeight: resultMode && showQualityControls ? "220px" : "170px",
-                  overflow: "hidden",
-                  padding: "8px",
-                  textAlign: "left",
-                  transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease"
-                }}
-              >
-                <span
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openPreview(row);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openPreview(row);
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  style={{
-                    alignItems: "center",
-                    background: "#101010",
-                    border: "1px solid #262626",
-                    borderRadius: "9px",
-                    cursor: mediaSrc ? "zoom-in" : "default",
-                    display: "flex",
-                    height: "126px",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                    width: "100%"
-                  }}
-                >
-                  {mediaSrc ? (
-                    <img
-                      src={mediaSrc}
-                      alt={revealed ? answerLabel(row.item) : "image"}
-                      style={{
-                        maxHeight: "112px",
-                        maxWidth: "100%",
-                        objectFit: "contain"
-                      }}
-                    />
-                  ) : (
-                    <span style={{ color: "#666", fontSize: "12px" }}>
-                      Image manquante
-                    </span>
-                  )}
-                </span>
-
-                <ImageAnswerLabel
-                  color={row.isLockedMissed ? "#ff9aa5" : row.isFound ? "#86efac" : "#777"}
-                  label={answerLabel(row.item)}
-                  revealed={revealed}
-                />
-
-                {resultMode && showQualityControls && (
-                  <span
-                    style={{
-                      alignItems: "center",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "6px",
-                      justifyContent: "center",
-                      minHeight: "38px"
-                    }}
-                  >
-                    {row.isLockedMissed ? (
-                      <span
-                        style={{
-                          background: "#3a1f24",
-                          border: "1px solid #6b2b31",
-                          borderRadius: "9px",
-                          color: "#ff9aa5",
-                          fontSize: "13px",
-                          fontWeight: 800,
-                          padding: "8px 10px"
-                        }}
-                      >
-                        0 · Faux
-                      </span>
-                    ) : (
-                      qualityOptions.map(option => (
-                        <QualityButton
-                          key={option.value}
-                          option={option}
-                          selected={row.quality === option.value}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setQuality(row.item.question_id, option.value);
-                          }}
-                        />
-                      ))
-                    )}
-                  </span>
-                )}
-              </div>
-            );
-          })}
+          {activeGridItems.map(row => renderImageTile(row))}
         </div>
+
+        {foundGridItems.length > 0 && (
+          <div
+            data-image-found-section
+            style={{
+              borderTop: "1px solid #262626",
+              marginTop: "16px",
+              paddingTop: "14px"
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                color: "#86efac",
+                display: "flex",
+                fontSize: "12px",
+                fontWeight: 800,
+                justifyContent: "space-between",
+                marginBottom: "10px",
+                textTransform: "uppercase"
+              }}
+            >
+              <span>Trouvées</span>
+              <span style={{ color: "#6b7280" }}>{foundGridItems.length}</span>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: "10px",
+                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))"
+              }}
+            >
+              {foundGridItems.map(row =>
+                renderImageTile(row, {
+                  allowSelection: false,
+                  registerForScroll: false
+                })
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ padding: "14px", borderTop: "1px solid #262626", flexShrink: 0 }}>

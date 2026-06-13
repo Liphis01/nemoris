@@ -219,8 +219,7 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
         else None
     )
 
-    if normalized_map_mode or normalized_image_mode:
-        context_type = "map" if normalized_map_mode else "image"
+    if normalized_map_mode:
         group_ids = {
             question.group_id
             for question in questions
@@ -233,10 +232,25 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
                     db.query(Question)
                     .filter(
                         Question.group_id == group_id,
-                        Question.type_q == context_type
+                        Question.type_q == "map"
                     )
                     .count()
                 )
+    elif normalized_image_mode:
+        submitted_image_count = 0
+
+        for question in questions:
+            if question.type_q != "image":
+                continue
+
+            submitted_image_count += 1
+            key = question.group_id
+            context_counts_by_group_id[key] = (
+                context_counts_by_group_id.get(key, 0) + 1
+            )
+
+        if submitted_image_count == 0:
+            submitted_image_count = len(question_ids)
 
     progress_quality_pairs = []
 
@@ -275,7 +289,7 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
         elif normalized_image_mode:
             context_count = context_counts_by_group_id.get(
                 question.group_id if question else None,
-                0
+                submitted_image_count
             )
             raw_quality = calibrate_image_quality(quality)
             difficulty = image_mode_difficulty(

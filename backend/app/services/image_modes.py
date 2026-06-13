@@ -18,6 +18,7 @@ DEFAULT_IMAGE_MODE = IMAGE_MODE_TYPE_PROMPT
 IMAGE_TYPE_ALL_DIFFICULTY = 1.0
 IMAGE_TYPE_PROMPT_DIFFICULTY = 1.15
 IMAGE_MULTIPLE_CHOICE_DIFFICULTY = 0.5
+IMAGE_CLICK_PROMPT_MIN_CONTEXT = 10
 
 IMAGE_MULTIPLE_CHOICE_MODES = {
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -141,7 +142,12 @@ def _recent_mode_counts(questions, limit=6):
     return counts
 
 
-def choose_image_review_mode(due_questions, context_questions):
+def choose_image_review_mode(
+    due_questions,
+    context_questions,
+    require_click_prompt_min=False,
+    discouraged_modes=None
+):
     due_questions = list(due_questions or [])
     context_questions = list(context_questions or [])
     context_count = len(context_questions)
@@ -193,6 +199,10 @@ def choose_image_review_mode(due_questions, context_questions):
     for mode, count in recent_counts.items():
         scores[mode] = scores.get(mode, 0) - (0.55 * count)
 
+    for mode in discouraged_modes or []:
+        if mode in IMAGE_MODES:
+            scores[mode] = scores.get(mode, 0) - 0.75
+
     tie_order = {
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 0,
         IMAGE_MODE_MULTIPLE_CHOICE_IMAGE: 1,
@@ -200,8 +210,19 @@ def choose_image_review_mode(due_questions, context_questions):
         IMAGE_MODE_TYPE_PROMPT: 3,
         IMAGE_MODE_TYPE_ALL: 4
     }
+    eligible_modes = list(IMAGE_MODES)
+
+    if (
+        require_click_prompt_min and
+        context_count < IMAGE_CLICK_PROMPT_MIN_CONTEXT
+    ):
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode != IMAGE_MODE_CLICK_PROMPT
+        ]
 
     return max(
-        IMAGE_MODES,
+        eligible_modes,
         key=lambda mode: (scores.get(mode, 0), -tie_order[mode])
     )

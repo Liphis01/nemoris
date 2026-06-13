@@ -21,6 +21,29 @@ from .progress import progress_has_started, progress_is_new
 from .settings import load_scheduler_tuning_settings
 
 
+REVIEW_IMAGE_MAX_CHUNK_SIZE = 30
+
+
+def _balanced_chunks(items, max_size):
+    items = list(items or [])
+
+    if len(items) <= max_size:
+        return [items]
+
+    chunk_count = (len(items) + max_size - 1) // max_size
+    base_size = len(items) // chunk_count
+    extra = len(items) % chunk_count
+    chunks = []
+    start = 0
+
+    for index in range(chunk_count):
+        size = base_size + (1 if index < extra else 0)
+        chunks.append(items[start:start + size])
+        start += size
+
+    return chunks
+
+
 def _question_query(db):
     return (
         db.query(Question)
@@ -60,7 +83,11 @@ def _new_questions(db):
     ]
 
 
-def _serialize_review_items(questions, scheduler_tuning=None):
+def _serialize_review_items(
+    questions,
+    scheduler_tuning=None,
+    scheduled_review=False
+):
     review_items = []
     map_grouped_items = {}
     image_grouped_items = {}
@@ -155,7 +182,7 @@ def _serialize_review_items(questions, scheduler_tuning=None):
     for group_data in image_grouped_items.values():
         group = group_data["group"]
         due_questions = sorted(group_data["questions"], key=lambda item: item.id)
-        context_questions = sorted(
+        all_group_questions = sorted(
             [
                 item
                 for item in (group.questions or [])
@@ -163,43 +190,71 @@ def _serialize_review_items(questions, scheduler_tuning=None):
             ],
             key=lambda item: item.id
         )
-        mode = choose_image_review_mode(due_questions, context_questions)
-        mode_difficulty = image_mode_difficulty(
-            mode,
-            context_count=len(context_questions),
-            tuning=scheduler_tuning
+        question_chunks = (
+            _balanced_chunks(due_questions, REVIEW_IMAGE_MAX_CHUNK_SIZE)
+            if scheduled_review
+            else [due_questions]
         )
-        context_items = [
-            serialize_image_review_item(
-                item,
-                mode_difficulty=mode_difficulty,
-                scheduler_tuning=scheduler_tuning
+        previous_mode = None
+
+        for chunk_questions in question_chunks:
+            context_questions = (
+                chunk_questions
+                if scheduled_review
+                else all_group_questions
             )
-            for item in context_questions
-        ]
-        image_group = serialize_image_review_group(
-            group,
-            group_data["tags"],
-            mode=mode,
-            context_items=context_items
-        )
-        image_group["items"] = [
-            serialize_image_review_item(
-                item,
-                mode_difficulty=mode_difficulty,
-                scheduler_tuning=scheduler_tuning
+            mode = choose_image_review_mode(
+                chunk_questions,
+                context_questions,
+                require_click_prompt_min=scheduled_review,
+                discouraged_modes=(
+                    [previous_mode]
+                    if scheduled_review and previous_mode
+                    else None
+                )
             )
-            for item in due_questions
-        ]
-        image_review_groups.append(image_group)
+            mode_difficulty = image_mode_difficulty(
+                mode,
+                context_count=len(context_questions),
+                tuning=scheduler_tuning
+            )
+            context_items = [
+                serialize_image_review_item(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in context_questions
+            ]
+            image_group = serialize_image_review_group(
+                group,
+                group_data["tags"],
+                mode=mode,
+                context_items=context_items
+            )
+            image_group["items"] = [
+                serialize_image_review_item(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in chunk_questions
+            ]
+            image_review_groups.append(image_group)
+            previous_mode = mode
 
     return review_items + map_review_groups + image_review_groups
 
 
-def serialize_review_items(questions, scheduler_tuning=None):
+def serialize_review_items(
+    questions,
+    scheduler_tuning=None,
+    scheduled_review=False
+):
     return _serialize_review_items(
         questions,
-        scheduler_tuning=scheduler_tuning
+        scheduler_tuning=scheduler_tuning,
+        scheduled_review=scheduled_review
     )
 
 
@@ -211,10 +266,12 @@ def get_review_items(db, include_new=False):
     if due_questions or not include_new:
         return serialize_review_items(
             due_questions,
-            scheduler_tuning=scheduler_tuning
+            scheduler_tuning=scheduler_tuning,
+            scheduled_review=True
         )
 
     return serialize_review_items(
         _new_questions(db),
-        scheduler_tuning=scheduler_tuning
+        scheduler_tuning=scheduler_tuning,
+        scheduled_review=True
     )

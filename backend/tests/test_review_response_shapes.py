@@ -519,6 +519,92 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id for item in fixture["image_items"]}
         )
 
+    def test_review_endpoint_splits_large_image_groups_into_balanced_chunks(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=50,
+            type_group="image",
+            name="Large flags",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        image_items = [
+            self.add_question(
+                100 + index,
+                type_q="image",
+                answer=f"Flag {index}",
+                group=image_group,
+                next_review=today
+            )
+            for index in range(31)
+        ]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        image_groups = [
+            item
+            for item in response
+            if item["type_q"] == "image"
+        ]
+        chunk_sizes = [len(group["items"]) for group in image_groups]
+        returned_ids = {
+            item["question_id"]
+            for group in image_groups
+            for item in group["items"]
+        }
+
+        self.assertEqual(chunk_sizes, [16, 15])
+        self.assertTrue(all(size <= 30 for size in chunk_sizes))
+        self.assertEqual(
+            returned_ids,
+            {item.id for item in image_items}
+        )
+
+        for group in image_groups:
+            self.assertEqual(
+                [item["question_id"] for item in group["context_items"]],
+                [item["question_id"] for item in group["items"]]
+            )
+
+        self.assertNotEqual(image_groups[0]["mode"], image_groups[1]["mode"])
+
+    def test_review_endpoint_does_not_split_thirty_image_items(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=51,
+            type_group="image",
+            name="Compact flags",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        image_items = [
+            self.add_question(
+                200 + index,
+                type_q="image",
+                answer=f"Flag {index}",
+                group=image_group,
+                next_review=today
+            )
+            for index in range(30)
+        ]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        image_groups = [
+            item
+            for item in response
+            if item["type_q"] == "image"
+        ]
+
+        self.assertEqual(len(image_groups), 1)
+        self.assertEqual(len(image_groups[0]["items"]), 30)
+        self.assertEqual(
+            {item["question_id"] for item in image_groups[0]["items"]},
+            {item.id for item in image_items}
+        )
+
     def test_answer_map_endpoint_returns_ack_shape_for_zone_grades(self):
         fixture = self.seed_review_contract_fixture()
         zone_a, zone_b = fixture["map_zones"]
@@ -621,6 +707,81 @@ class ReviewResponseShapeTests(unittest.TestCase):
             image_mode_difficulty("multiple_choice_image", 2)
         )
         self.assertIn("mode_reward_factor", item_a_history)
+
+    def test_review_endpoint_returns_missed_image_items_below_click_minimum(self):
+        fixture = self.seed_review_contract_fixture()
+        item_a, item_b = fixture["image_items"]
+
+        answer_image(
+            ImageAnswerRequest(items={
+                item_a.id: 2,
+                item_b.id: 0
+            }, mode="click_prompt"),
+            db=self.db
+        )
+
+        response = get_review(db=self.db)
+        image_groups = [
+            item
+            for item in response
+            if item["type_q"] == "image"
+        ]
+
+        self.assertEqual(len(image_groups), 1)
+        self.assertEqual(
+            [item["question_id"] for item in image_groups[0]["items"]],
+            [item_b.id]
+        )
+        self.assertEqual(
+            [item["question_id"] for item in image_groups[0]["context_items"]],
+            [item_b.id]
+        )
+        self.assertNotEqual(image_groups[0]["mode"], "click_prompt")
+        self.assertEqual(item_b.progress.next_review, date.today())
+
+    def test_answer_image_uses_submitted_chunk_size_for_mode_metadata(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=60,
+            type_group="image",
+            name="Many flags",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        image_items = [
+            self.add_question(
+                300 + index,
+                type_q="image",
+                answer=f"Flag {index}",
+                group=image_group,
+                next_review=today
+            )
+            for index in range(12)
+        ]
+        self.db.commit()
+        submitted_items = image_items[:5]
+
+        response = answer_image(
+            ImageAnswerRequest(
+                items={
+                    item.id: 2
+                    for item in submitted_items
+                },
+                mode="click_prompt"
+            ),
+            db=self.db
+        )
+
+        self.assertEqual(response, {"status": "ok"})
+
+        history = submitted_items[0].progress.history[-1]
+        self.assertEqual(history["image_mode"], "click_prompt")
+        self.assertEqual(history["image_context_count"], 5)
+        self.assertAlmostEqual(
+            history["mode_difficulty"],
+            image_mode_difficulty("click_prompt", 5)
+        )
 
     def test_answer_timeline_endpoint_returns_per_item_result_shapes(self):
         fixture = self.seed_review_contract_fixture()

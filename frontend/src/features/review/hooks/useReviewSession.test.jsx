@@ -163,6 +163,70 @@ describe("useReviewSession", () => {
     });
   });
 
+  it("keeps small click-prompt image retries in click_prompt mode", async () => {
+    const items = Array.from({ length: 10 }, (_, index) => ({
+      question_id: 100 + index,
+      answer: `Image ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 5,
+        type_q: "image",
+        name: "Flags",
+        mode: "click_prompt",
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete(
+        items.slice(0, 9).map(item => item.question_id)
+      );
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "click_prompt",
+      items: items.slice(0, 9)
+    });
+  });
+
+  it("keeps click-prompt image retries when enough failed items remain", async () => {
+    const items = Array.from({ length: 10 }, (_, index) => ({
+      question_id: 200 + index,
+      answer: `Image ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 5,
+        type_q: "image",
+        name: "Flags",
+        mode: "click_prompt",
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete(
+        items.map(item => item.question_id)
+      );
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "click_prompt",
+      items
+    });
+  });
+
   it("waits for pending text answers before loading bonus questions", async () => {
     let resolveAnswer;
     const answerPromise = new Promise(resolve => {

@@ -181,6 +181,36 @@ class SchedulerSmoothingTests(unittest.TestCase):
             "type_all"
         )
 
+    def test_image_click_prompt_requires_minimum_review_context(self):
+        context = [
+            Question(id=index, type_q="image", answer=f"Image {index}")
+            for index in range(1, 11)
+        ]
+
+        for question in context:
+            question.progress = Progress(
+                reps=1,
+                difficulty=5.0,
+                history=[]
+            )
+
+        self.assertNotEqual(
+            choose_image_review_mode(
+                [context[0]],
+                context[:9],
+                require_click_prompt_min=True
+            ),
+            "click_prompt"
+        )
+        self.assertEqual(
+            choose_image_review_mode(
+                [context[0]],
+                context,
+                require_click_prompt_min=True
+            ),
+            "click_prompt"
+        )
+
     def test_again_projected_interval_is_immediate_retry(self):
         progress = Progress(
             question_id=1,

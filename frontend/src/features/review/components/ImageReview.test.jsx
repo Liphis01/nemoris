@@ -295,6 +295,58 @@ describe("ImageReview answer label preview", () => {
     expect(screen.getByText("Terminer")).toBeInTheDocument();
   });
 
+  it("separates found images from the active grid while answering", () => {
+    const rows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2),
+      imageGridRow(3, { isFound: true, quality: 2 })
+    ];
+    useImageReview.mockReturnValue(
+      typeAllHookState({ rows, foundQuestionIds: [1, 3] })
+    );
+    const { container } = renderImageReview({
+      reviewItems: rows.map(row => row.item),
+      separateFoundItems: true
+    });
+    const activeGrid = container.querySelector("[data-image-active-grid]");
+    const foundSection = container.querySelector("[data-image-found-section]");
+
+    expect(activeGrid.querySelector('[data-image-question-id="1"]'))
+      .not.toBeInTheDocument();
+    expect(activeGrid.querySelector('[data-image-question-id="2"]'))
+      .toBeInTheDocument();
+    expect(activeGrid.querySelector('[data-image-question-id="3"]'))
+      .not.toBeInTheDocument();
+    expect(foundSection.querySelector('[data-image-question-id="1"]'))
+      .toBeInTheDocument();
+    expect(foundSection.querySelector('[data-image-question-id="3"]'))
+      .toBeInTheDocument();
+  });
+
+  it("keeps the full grid together in image result mode", () => {
+    const rows = [
+      imageGridRow(1, { isFound: true, quality: 2 }),
+      imageGridRow(2, { isLockedMissed: true, quality: 0 })
+    ];
+    useImageReview.mockReturnValue({
+      ...typeAllHookState({ rows, foundQuestionIds: [1] }),
+      resultMode: true,
+      wrongAnsweredCount: 1
+    });
+    const { container } = renderImageReview({
+      reviewItems: rows.map(row => row.item),
+      separateFoundItems: true
+    });
+    const activeGrid = container.querySelector("[data-image-active-grid]");
+
+    expect(container.querySelector("[data-image-found-section]"))
+      .not.toBeInTheDocument();
+    expect(activeGrid.querySelector('[data-image-question-id="1"]'))
+      .toBeInTheDocument();
+    expect(activeGrid.querySelector('[data-image-question-id="2"]'))
+      .toBeInTheDocument();
+  });
+
   it("scrolls to the next incomplete visual row when a type_all row is completed", async () => {
     const initialRows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
