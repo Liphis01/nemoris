@@ -99,10 +99,13 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
     )
 
     if not progress:
-        progress = create_initial_progress(data.question_id)
+        progress = create_initial_progress(
+            data.question_id,
+            today=data.review_date
+        )
         db.add(progress)
 
-    apply_scheduling(db, progress, data.quality)
+    apply_scheduling(db, progress, data.quality, today=data.review_date)
     db.commit()
 
     return {
@@ -128,10 +131,18 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
     )
 
     if not progress:
-        progress = create_initial_progress(data.question_id)
+        progress = create_initial_progress(
+            data.question_id,
+            today=data.review_date
+        )
         db.add(progress)
 
-    replace_latest_scheduling(db, progress, data.quality)
+    replace_latest_scheduling(
+        db,
+        progress,
+        data.quality,
+        today=data.review_date
+    )
     db.commit()
 
     return {
@@ -154,7 +165,8 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
         db,
         data.items,
         map_mode=data.mode or DEFAULT_MAP_MODE,
-        require_type="map"
+        require_type="map",
+        today=data.review_date
     )
     return {"status": "ok"}
 
@@ -165,12 +177,20 @@ def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
         db,
         data.items,
         image_mode=data.mode or DEFAULT_IMAGE_MODE,
-        require_type="image"
+        require_type="image",
+        today=data.review_date
     )
     return {"status": "ok"}
 
 
-def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=None):
+def apply_answer_batch(
+    db,
+    items,
+    map_mode=None,
+    image_mode=None,
+    require_type=None,
+    today=None
+):
     question_ids = list(items.keys())
     questions = (
         db.query(Question)
@@ -259,7 +279,7 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
         progress = progress_map.get(question_id)
 
         if not progress:
-            progress = create_initial_progress(question_id)
+            progress = create_initial_progress(question_id, today=today)
             db.add(progress)
             progress_map[question_id] = progress
 
@@ -320,7 +340,8 @@ def apply_answer_batch(db, items, map_mode=None, image_mode=None, require_type=N
     apply_scheduling_batch(
         db,
         progress_quality_pairs,
-        scheduler_tuning=scheduler_tuning
+        scheduler_tuning=scheduler_tuning,
+        today=today
     )
 
     db.commit()
@@ -378,7 +399,7 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
         progress = progress_map.get(question_id)
 
         if not progress:
-            progress = create_initial_progress(question_id)
+            progress = create_initial_progress(question_id, today=data.review_date)
             db.add(progress)
             progress_map[question_id] = progress
 
@@ -393,7 +414,11 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
             "end": grading["end"]
         })
 
-    apply_scheduling_batch(db, progress_quality_pairs)
+    apply_scheduling_batch(
+        db,
+        progress_quality_pairs,
+        today=data.review_date
+    )
 
     for result in results:
         result["progress"] = serialize_progress(

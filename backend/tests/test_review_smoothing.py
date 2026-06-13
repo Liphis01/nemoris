@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import AppSetting, Progress, Question
 from app.routers.review import (
+    answer_image,
     answer_map,
     answer_question,
     answer_timeline,
@@ -45,6 +46,7 @@ from app.services.image_modes import (
 )
 from app.schemas import (
     AnswerRequest,
+    ImageAnswerRequest,
     MapAnswerRequest,
     ReviewSettings,
     TimelineAnswerItem,
@@ -952,6 +954,137 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.ideal_interval, 0)
         self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
         self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
+
+    def test_text_retry_uses_supplied_review_date(self):
+        review_day = date(2026, 1, 1)
+        self.add_question(1, type_q="text")
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(
+                question_id=1,
+                quality=0,
+                review_date=review_day
+            ),
+            db=self.db
+        )
+        answer_question(
+            AnswerRequest(
+                question_id=1,
+                quality=2,
+                review_date=review_day
+            ),
+            db=self.db
+        )
+
+        progress = (
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+        self.assertEqual(progress.last_review, review_day)
+        self.assertEqual(
+            [entry["reviewed_on"] for entry in progress.history],
+            [review_day.isoformat(), review_day.isoformat()]
+        )
+
+    def test_revise_single_answer_uses_supplied_review_date(self):
+        review_day = date(2026, 1, 1)
+        self.add_question(1, type_q="text")
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(
+                question_id=1,
+                quality=0,
+                review_date=review_day
+            ),
+            db=self.db
+        )
+        response = revise_answer_question(
+            AnswerRequest(
+                question_id=1,
+                quality=3,
+                review_date=review_day
+            ),
+            db=self.db
+        )
+
+        progress = (
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+        self.assertEqual(len(response["history"]), 1)
+        self.assertEqual(progress.last_review, review_day)
+        self.assertEqual(progress.history[-1]["reviewed_on"], review_day.isoformat())
+
+    def test_grouped_answers_use_supplied_review_date(self):
+        review_day = date(2026, 1, 1)
+
+        for question_id, type_q in [
+            (1, "map"),
+            (2, "map"),
+            (3, "image"),
+            (4, "image")
+        ]:
+            self.add_question(question_id, type_q=type_q)
+
+        timeline_question = self.add_question(5, type_q="timeline")
+        timeline_question.data = {
+            "timeline": {
+                "kind": "point",
+                "start": {
+                    "year": 2000,
+                    "precision": "year"
+                }
+            }
+        }
+        self.db.commit()
+
+        answer_map(
+            MapAnswerRequest(
+                items={1: 0, 2: 2},
+                review_date=review_day
+            ),
+            db=self.db
+        )
+        answer_image(
+            ImageAnswerRequest(
+                items={3: 0, 4: 2},
+                review_date=review_day
+            ),
+            db=self.db
+        )
+        answer_timeline(
+            TimelineAnswerRequest(
+                items={
+                    5: TimelineAnswerItem(
+                        start=TimelineDateValue(
+                            year=2000,
+                            precision="year"
+                        )
+                    )
+                },
+                review_date=review_day
+            ),
+            db=self.db
+        )
+
+        reviewed_on = {
+            progress.question_id: progress.history[-1]["reviewed_on"]
+            for progress in self.db.query(Progress).all()
+        }
+
+        self.assertEqual(reviewed_on, {
+            1: review_day.isoformat(),
+            2: review_day.isoformat(),
+            3: review_day.isoformat(),
+            4: review_day.isoformat(),
+            5: review_day.isoformat()
+        })
 
     def test_revise_answer_replaces_latest_history_entry(self):
         today = date.today()

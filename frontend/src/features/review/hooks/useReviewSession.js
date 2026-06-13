@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getReview,
+  sendImageAnswer,
+  sendMapAnswer,
+  sendTimelineAnswer,
   reviseAnswer,
   sendAnswer
 } from "../../../api/review";
@@ -15,6 +18,15 @@ function isEditableTarget(target) {
 }
 
 const TEXT_ANSWER_FEEDBACK_MS = 240;
+
+
+function localReviewDateString(now = new Date()) {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
 
 
 function progressIsNew(progress) {
@@ -49,6 +61,7 @@ export function useReviewSession(active) {
   const textAnswerTimeoutRef = useRef(null);
   const textAnswerPendingRef = useRef(false);
   const textAnswerRequestsRef = useRef({});
+  const reviewDateRef = useRef(null);
 
   const current = questions[currentIndex];
   const lastQuestionIndex = currentIndex - 1;
@@ -104,6 +117,18 @@ export function useReviewSession(active) {
     return Promise.allSettled(requests);
   }, []);
 
+  const submitMapAnswer = useCallback((items, mode = undefined) =>
+    sendMapAnswer(items, mode, reviewDateRef.current),
+  []);
+
+  const submitImageAnswer = useCallback((items, mode = undefined) =>
+    sendImageAnswer(items, mode, reviewDateRef.current),
+  []);
+
+  const submitTimelineAnswer = useCallback((items) =>
+    sendTimelineAnswer(items, reviewDateRef.current),
+  []);
+
   const handleTextAnswer = useCallback((quality) => {
     if (!current || textAnswerPendingRef.current) return;
 
@@ -118,8 +143,12 @@ export function useReviewSession(active) {
     const request = existingAnswer
       ? previousRequest
         .catch(() => null)
-        .then(() => reviseAnswer(current.question_id, quality))
-      : sendAnswer(current.question_id, quality);
+        .then(() => reviseAnswer(
+          current.question_id,
+          quality,
+          reviewDateRef.current
+        ))
+      : sendAnswer(current.question_id, quality, reviewDateRef.current);
 
     textAnswerRequestsRef.current[answerIndex] = request;
     request.catch(console.error);
@@ -260,6 +289,7 @@ export function useReviewSession(active) {
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
       textAnswerRequestsRef.current = {};
+      reviewDateRef.current = null;
       return;
     }
 
@@ -277,6 +307,7 @@ export function useReviewSession(active) {
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
       textAnswerRequestsRef.current = {};
+      reviewDateRef.current = localReviewDateString();
 
       try {
         const data = await getReview();
@@ -404,6 +435,9 @@ export function useReviewSession(active) {
     returnToLastQuestion,
     startBonusReview,
     selectedTextQuality,
+    submitImageAnswer,
+    submitMapAnswer,
+    submitTimelineAnswer,
     questions,
     reviewError,
     reviewLoading,

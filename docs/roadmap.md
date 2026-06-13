@@ -2,9 +2,15 @@
 
 ## vérifier
 
-
 ## Urgent
-
+- type_prompt (nommer) doit se faire dans l'ordre des images et tab doit skip à la prochaine image / cliquer sur une autre image
+- le score de training est commun entre plusieurs modes ?
+- dans map qcm, avant de zoom sur la zone suivante, il faut donner un feedback de la réponse précédente
+- le pourcentage global dans training doit être le pourcentage total
+- revenir en arrière d'un mode de training doit rafficher le groupe d'où on vient (et pas le premier groupe de la liste)
+- recentrer les 4 images pour le qcm d'images
+- enlever l'encadré "trouve son nom" pour les qcm de label (map et image)
+- ajouter un truc pour prévenir qu'il faut rajouter des questions ou qu'on a trop de questions en ce moment
 
 ## quick fixes
 

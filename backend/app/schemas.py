@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Annotated, Optional, List, Literal, Any, Dict
+from datetime import date
 
 
 QuestionType = Literal[
@@ -168,6 +169,7 @@ class AnswerRequest(BaseModel):
 
     # 0 = Again/Faux, 1 = Hard/Dur, 2 = Good/Bon, 3 = Easy/Facile
     quality: AnswerQuality
+    review_date: Optional[date] = None
 
 
 class ReviewSettings(BaseModel):
@@ -180,11 +182,13 @@ class ReviewSettings(BaseModel):
 class MapAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[MapMode] = None
+    review_date: Optional[date] = None
 
 
 class ImageAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[ImageMode] = None
+    review_date: Optional[date] = None
 
 
 TimelinePrecision = Literal[
@@ -208,6 +212,7 @@ class TimelineAnswerItem(BaseModel):
 
 class TimelineAnswerRequest(BaseModel):
     items: Dict[int, TimelineAnswerItem]
+    review_date: Optional[date] = None
 
 
 class TrainingAttemptRecordRequest(BaseModel):

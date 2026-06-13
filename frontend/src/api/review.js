@@ -42,7 +42,7 @@ export function getReview(options = {}) {
 }
 
 
-export function sendAnswer(questionId, quality) {
+export function sendAnswer(questionId, quality, reviewDate = undefined) {
   return requestOk("/answer", {
     method: "POST",
     headers: {
@@ -50,13 +50,14 @@ export function sendAnswer(questionId, quality) {
     },
     body: JSON.stringify({
       question_id: questionId,
-      quality
+      quality,
+      ...(reviewDate ? { review_date: reviewDate } : {})
     })
   });
 }
 
 
-export function reviseAnswer(questionId, quality) {
+export function reviseAnswer(questionId, quality, reviewDate = undefined) {
   return requestOk("/answer/revise", {
     method: "POST",
     headers: {
@@ -64,13 +65,14 @@ export function reviseAnswer(questionId, quality) {
     },
     body: JSON.stringify({
       question_id: questionId,
-      quality
+      quality,
+      ...(reviewDate ? { review_date: reviewDate } : {})
     })
   });
 }
 
 
-export function sendMapAnswer(items, mode = undefined) {
+export function sendMapAnswer(items, mode = undefined, reviewDate = undefined) {
   // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestOk("/answer_map", {
     method: "POST",
@@ -79,13 +81,14 @@ export function sendMapAnswer(items, mode = undefined) {
     },
     body: JSON.stringify({
       items,
-      ...(mode ? { mode } : {})
+      ...(mode ? { mode } : {}),
+      ...(reviewDate ? { review_date: reviewDate } : {})
     })
   });
 }
 
 
-export function sendImageAnswer(items, mode = undefined) {
+export function sendImageAnswer(items, mode = undefined, reviewDate = undefined) {
   // items is an object of question_id -> quality, one entry per atomic image.
   return requestOk("/answer_image", {
     method: "POST",
@@ -94,19 +97,23 @@ export function sendImageAnswer(items, mode = undefined) {
     },
     body: JSON.stringify({
       items,
-      ...(mode ? { mode } : {})
+      ...(mode ? { mode } : {}),
+      ...(reviewDate ? { review_date: reviewDate } : {})
     })
   });
 }
 
 
-export function sendTimelineAnswer(items) {
+export function sendTimelineAnswer(items, reviewDate = undefined) {
   // items is an object of question_id -> normalized timeline guesses.
   return requestJson("/answer_timeline", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      items,
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
   });
 }

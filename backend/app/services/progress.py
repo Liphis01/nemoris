@@ -14,9 +14,11 @@ from ..scheduler import (
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
 
-def create_initial_progress(question_id: int):
+def create_initial_progress(question_id: int, today=None):
     # Progress is created lazily on the first answer. At that point the card
-    # should schedule from today just like a first FSRS review.
+    # should schedule from the review session day just like a first FSRS review.
+    today = today or date.today()
+
     return Progress(
         question_id=question_id,
         stability=1.0,
@@ -155,9 +157,10 @@ def _number_from_history(entry, field, default, caster=float):
         return default
 
 
-def restore_progress_from_history(progress: Progress, history):
+def restore_progress_from_history(progress: Progress, history, today=None):
     history = list(history or [])
     progress.history = history
+    today = today or date.today()
 
     if not history:
         progress.stability = 1.0
@@ -167,9 +170,9 @@ def restore_progress_from_history(progress: Progress, history):
         progress.interval = 0
         progress.ideal_interval = None
         progress.last_review = None
-        progress.next_review = date.today()
+        progress.next_review = today
         progress.ideal_next_review = None
-        progress.fsrs_card = new_fsrs_card_data(progress.question_id)
+        progress.fsrs_card = new_fsrs_card_data(progress.question_id, due=today)
         progress.fsrs_version = FSRS_VERSION
         return
 
@@ -202,24 +205,24 @@ def restore_progress_from_history(progress: Progress, history):
         caster=int
     )
     progress.last_review = last_review
-    progress.next_review = next_review or date.today()
+    progress.next_review = next_review or today
     progress.ideal_next_review = ideal_next_review
     progress.fsrs_card = None
     progress.fsrs_version = FSRS_VERSION
 
 
-def replace_latest_scheduling(db, progress: Progress, quality: int):
+def replace_latest_scheduling(db, progress: Progress, quality: int, today=None):
     # Reopening the last review screen should correct the previous grade, not
     # count as another repetition. Roll progress back to the state represented
     # by the penultimate history item, then schedule once with the new quality.
     history = list(progress.history or [])
 
     if not history:
-        return apply_scheduling(db, progress, quality)
+        return apply_scheduling(db, progress, quality, today=today)
 
-    restore_progress_from_history(progress, history[:-1])
+    restore_progress_from_history(progress, history[:-1], today=today)
 
-    return apply_scheduling(db, progress, quality)
+    return apply_scheduling(db, progress, quality, today=today)
 
 
 def load_daily_review_counts(db, dates, exclude_question_ids=None):

@@ -19,7 +19,10 @@ export default function ReviewSession({
   startBonusReview,
   bonusReviewLoading,
   reviewLoading,
-  reviewError
+  reviewError,
+  submitMapAnswer,
+  submitImageAnswer,
+  submitTimelineAnswer
 }) {
   const currentQuestion = questions[currentIndex];
 
@@ -354,6 +357,9 @@ export default function ReviewSession({
               handleMapComplete={handleMapComplete}
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
+              submitMapAnswer={submitMapAnswer}
+              submitImageAnswer={submitImageAnswer}
+              submitTimelineAnswer={submitTimelineAnswer}
             />
 
           </>
