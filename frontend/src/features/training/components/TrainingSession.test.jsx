@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getTrainingItems,
@@ -57,7 +57,12 @@ describe("TrainingSession", () => {
           }
         }
       ],
-      tags: []
+      tags: [
+        {
+          name: "Geo",
+          count: 13
+        }
+      ]
     });
     getTrainingItems.mockResolvedValue([]);
     gradeTrainingTimeline.mockResolvedValue({ status: "ok", results: [] });
@@ -69,26 +74,56 @@ describe("TrainingSession", () => {
     vi.clearAllMocks();
   });
 
-  it("shows group best percent before clean time in the selector", async () => {
+  it("shows compact group records and best time in the selector", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
-    expect(await screen.findAllByText("88%")).toHaveLength(2);
-    expect(screen.getAllByText("meilleur score par defaut")).toHaveLength(2);
-    expect(screen.getByText(/temps parfait 1:30/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sélectionner Europe" })).toBeInTheDocument();
+    expect(await screen.findByText("Score par défaut")).toBeInTheDocument();
+    expect(screen.getAllByText("88%").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("1:30").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("opens adaptive mode lists for map and image groups", async () => {
+  it("opens side-panel mode lists for map and image groups", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
-    fireEvent.click(await screen.findByText("Europe"));
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
 
+    expect(screen.getByText("Modes d'entrainement")).toBeInTheDocument();
     expect(screen.getByText("Tape toutes les zones dans l'ordre que tu veux.")).toBeInTheDocument();
     expect(screen.getByText("Regarde la zone surlignée, puis choisis le nom.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Retour"));
-    fireEvent.click(screen.getByText("Flags"));
+    fireEvent.click(screen.getByRole("button", { name: "Sélectionner Flags" }));
 
     expect(screen.getByText("Tape toutes les images dans l'ordre que tu veux.")).toBeInTheDocument();
     expect(screen.getByText("Lis le nom, puis choisis la bonne image.")).toBeInTheDocument();
+  });
+
+  it("starts a selected group mode from the detail panel", async () => {
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer QCM pour Europe" }));
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "group",
+        groupId: 5,
+        mapMode: "multiple_choice"
+      });
+    });
+  });
+
+  it("starts tag training directly from a compact tile", async () => {
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer le tag Geo" }));
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "tag",
+        tag: "Geo"
+      });
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { useTrainingSession } from "../hooks/useTrainingSession";
@@ -19,6 +19,7 @@ import {
   imageModeDetails,
   imageModeLabels
 } from "../../review/imageModes";
+import "./TrainingSession.css";
 
 
 const panelStyle = {
@@ -130,131 +131,196 @@ function modeGlyph(mode) {
 }
 
 
-function ModeRecordChip({ group, mode, labels }) {
-  const record = recordForMode(group, mode);
-  const complete = record?.best_found_percent >= 100;
+function questionCountLabel(count) {
+  const value = Number(count) || 0;
 
+  return `${value} question${value > 1 ? "s" : ""}`;
+}
+
+
+function recordTimeLabel(record) {
+  return record?.best_time_ms ? formatDuration(record.best_time_ms) : "—";
+}
+
+
+function defaultRecordForGroup(group) {
+  const config = modeConfigForGroup(group);
+
+  return config ? recordForMode(group, config.defaultMode) : group?.training_record;
+}
+
+
+function groupAccent(group) {
+  if (group?.type_group === "map") return "map";
+  if (group?.type_group === "image") return "image";
+
+  return "neutral";
+}
+
+
+function RecordMetric({ label, value }) {
   return (
-    <span
-      style={{
-        alignItems: "center",
-        background: complete ? "#1d3a2b" : "#141414",
-        border: complete ? "1px solid #2f6b45" : "1px solid #2a2a2a",
-        borderRadius: "999px",
-        color: complete ? "#7ee2a8" : "#aaa",
-        display: "inline-flex",
-        fontSize: "11px",
-        fontWeight: 900,
-        gap: "6px",
-        minHeight: "28px",
-        padding: "4px 8px"
-      }}
-    >
-      <span>{modeGlyph(mode)}</span>
-      <span>{labels[mode]}</span>
-      <span style={{ color: complete ? "#c8f7d5" : "#777" }}>
-        {formatRecordPercent(record)}
-      </span>
-    </span>
+    <div className="training-record-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
 
-function ModePicker({ group, onBack, startScope }) {
+function GroupTile({ group, onSelect, selected }) {
   const config = modeConfigForGroup(group);
-
-  if (!config) return null;
+  const defaultRecord = defaultRecordForGroup(group);
+  const accent = groupAccent(group);
 
   return (
-    <div style={{ ...panelStyle, marginBottom: "18px", padding: "16px" }}>
-      <div
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: "12px",
-          justifyContent: "space-between",
-          marginBottom: "12px"
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#777", fontSize: "11px", fontWeight: 900, marginBottom: "5px", textTransform: "uppercase" }}>
-            Mode {group.type_group}
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`Sélectionner ${group.name}`}
+      className={`training-scope-tile training-scope-tile-${accent}${selected ? " is-selected" : ""}`}
+      onClick={onSelect}
+    >
+      <span className="training-scope-tile-main">
+        <span className={`training-scope-badge training-scope-badge-${accent}`}>
+          {group.type_group || "groupe"}
+        </span>
+        <strong>{group.name}</strong>
+        <span>
+          {questionCountLabel(group.question_count)}
+          {config ? ` · ${config.modes.length} modes` : ""}
+        </span>
+      </span>
+
+      <span className="training-scope-score">
+        <strong>{formatRecordPercent(defaultRecord)}</strong>
+        <span>score</span>
+        <span>{recordTimeLabel(defaultRecord)}</span>
+      </span>
+    </button>
+  );
+}
+
+
+function TagTile({ tag, startScope }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Démarrer le tag ${tag.name}`}
+      className="training-scope-tile training-tag-tile"
+      onClick={() => startScope({
+        type: "tag",
+        name: tag.name
+      })}
+    >
+      <span className="training-scope-tile-main">
+        <span className="training-scope-badge training-scope-badge-tag">
+          tag
+        </span>
+        <strong>#{tag.name}</strong>
+        <span>{questionCountLabel(tag.count)}</span>
+      </span>
+
+      <span className="training-scope-score">
+        <strong>→</strong>
+        <span>démarrer</span>
+      </span>
+    </button>
+  );
+}
+
+
+function ModeAction({ config, group, mode, startScope }) {
+  const record = recordForMode(group, mode);
+  const complete = record?.best_found_percent >= 100;
+
+  return (
+    <button
+      type="button"
+      className={`training-mode-action${complete ? " is-complete" : ""}`}
+      onClick={() => startScope({
+        ...group,
+        type: "group"
+      }, mode)}
+      aria-label={`Démarrer ${config.labels[mode]} pour ${group.name}`}
+    >
+      <span className="training-mode-glyph" aria-hidden="true">
+        {modeGlyph(mode)}
+      </span>
+
+      <span className="training-mode-copy">
+        <strong>{config.labels[mode]}</strong>
+        <span>{config.details[mode]}</span>
+      </span>
+
+      <span className="training-mode-record">
+        <strong>{formatRecordPercent(record)}</strong>
+        <span>{recordTimeLabel(record)}</span>
+      </span>
+    </button>
+  );
+}
+
+
+function GroupDetailPanel({ group, startScope }) {
+  if (!group) {
+    return (
+      <aside className="training-detail-panel training-detail-empty" aria-label="Détails du groupe">
+        Sélectionne un groupe.
+      </aside>
+    );
+  }
+
+  const config = modeConfigForGroup(group);
+  const defaultRecord = defaultRecordForGroup(group);
+  const accent = groupAccent(group);
+
+  return (
+    <aside className="training-detail-panel" aria-label="Détails du groupe">
+      <div className="training-detail-head">
+        <span className={`training-scope-badge training-scope-badge-${accent}`}>
+          {group.type_group || "groupe"}
+        </span>
+        <h2>{group.name}</h2>
+        <p>{questionCountLabel(group.question_count)}</p>
+      </div>
+
+      <div className="training-detail-metrics" aria-label="Record du groupe">
+        <RecordMetric label="Score par défaut" value={formatRecordPercent(defaultRecord)} />
+        <RecordMetric label="Temps parfait" value={recordTimeLabel(defaultRecord)} />
+      </div>
+
+      {config ? (
+        <>
+          <div className="training-detail-section-title">
+            Modes d'entrainement
           </div>
-          <div style={{ color: "#f3f3f3", fontSize: "20px", fontWeight: 900, overflowWrap: "anywhere" }}>
-            {group.name}
+          <div className="training-mode-list">
+            {config.modes.map(mode => (
+              <ModeAction
+                config={config}
+                group={group}
+                key={mode}
+                mode={mode}
+                startScope={startScope}
+              />
+            ))}
           </div>
-        </div>
-        <button type="button" onClick={onBack} style={buttonStyle}>
-          Retour
+        </>
+      ) : (
+        <button
+          type="button"
+          className="training-start-button"
+          onClick={() => startScope({
+            ...group,
+            type: "group"
+          })}
+        >
+          <strong>Démarrer ce groupe</strong>
+          <span>{questionCountLabel(group.question_count)}</span>
         </button>
-      </div>
-
-      <div style={{ display: "grid", gap: "8px" }}>
-        {config.modes.map(mode => {
-          const record = recordForMode(group, mode);
-          const complete = record?.best_found_percent >= 100;
-
-          return (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => startScope({
-                ...group,
-                type: "group"
-              }, mode)}
-              style={{
-                ...buttonStyle,
-                alignItems: "center",
-                background: "#141414",
-                border: complete ? "1px solid #2f6b45" : "1px solid #2c2c2c",
-                display: "grid",
-                gap: "12px",
-                gridTemplateColumns: "42px minmax(0, 1fr) auto",
-                minHeight: "70px",
-                textAlign: "left",
-                width: "100%"
-              }}
-            >
-              <span
-                style={{
-                  alignItems: "center",
-                  background: complete ? "#1d3a2b" : "#202020",
-                  border: "1px solid #333",
-                  borderRadius: "8px",
-                  color: complete ? "#7ee2a8" : "#9ad8ff",
-                  display: "flex",
-                  fontSize: "13px",
-                  fontWeight: 900,
-                  height: "38px",
-                  justifyContent: "center",
-                  width: "38px"
-                }}
-              >
-                {modeGlyph(mode)}
-              </span>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ color: "#f3f3f3", display: "block", fontSize: "15px", fontWeight: 900 }}>
-                  {config.labels[mode]}
-                </span>
-                <span style={{ color: "#888", display: "block", fontSize: "12px", fontWeight: 600, marginTop: "4px" }}>
-                  {config.details[mode]}
-                </span>
-              </span>
-              <span style={{ minWidth: "86px", textAlign: "right" }}>
-                <span style={{ color: complete ? "#7ee2a8" : "#f3f3f3", display: "block", fontSize: "20px", fontWeight: 900 }}>
-                  {formatRecordPercent(record)}
-                </span>
-                <span style={{ color: "#888", display: "block", fontSize: "11px", marginTop: "4px" }}>
-                  {record?.best_time_ms
-                    ? formatDuration(record.best_time_ms)
-                    : "-"}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+      )}
+    </aside>
   );
 }
 
@@ -269,7 +335,7 @@ function ScopeSelector({
 }) {
   const [scopeType, setScopeType] = useState("group");
   const [search, setSearch] = useState("");
-  const [modeGroup, setModeGroup] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const normalizedSearch = normalizeText(search);
   const groups = useMemo(
     () => (scopes.groups || []).filter(group =>
@@ -285,61 +351,51 @@ function ScopeSelector({
   );
   const activeRows = scopeType === "group" ? groups : tags;
 
+  useEffect(() => {
+    if (scopeType !== "group") {
+      setSelectedGroup(null);
+      return;
+    }
+
+    setSelectedGroup(current => {
+      if (groups.length === 0) return null;
+
+      if (current) {
+        const matchingGroup = groups.find(group => group.id === current.id);
+
+        if (matchingGroup) return matchingGroup;
+      }
+
+      return groups[0];
+    });
+  }, [groups, scopeType]);
+
   return (
-    <div style={{ ...panelStyle, padding: "24px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "16px",
-          marginBottom: "22px",
-          alignItems: "flex-start"
-        }}
-      >
-        <div>
-          <div
-            style={{
-              color: "#777",
-              fontSize: "12px",
-              fontWeight: "800",
-              marginBottom: "8px",
-              textTransform: "uppercase"
-            }}
-          >
-            Training
-          </div>
-          <h1
-            style={{
-              color: "#f3f3f3",
-              fontSize: "34px",
-              lineHeight: 1.1,
-              margin: 0
-            }}
-          >
+    <div className="training-selector-panel">
+      <div className="training-selector-header">
+        <div className="training-selector-title">
+          <div className="training-selector-overline">Training</div>
+          <h1>
             Entrainement
           </h1>
         </div>
 
-        <ReturnToMenuButton onClick={() => setMode("menu")} style={buttonStyle} />
+        <ReturnToMenuButton
+          onClick={() => setMode("menu")}
+          className="training-selector-back"
+        />
       </div>
 
       {scopesLoading && (
-        <div style={{ color: "#777", padding: "34px 0" }}>
+        <div className="training-selector-state">
           Chargement des choix...
         </div>
       )}
 
       {!scopesLoading && scopesError && (
-        <div
-          style={{
-            border: "1px solid #3a1d1d",
-            borderRadius: "8px",
-            color: "#ff9c9c",
-            padding: "18px"
-          }}
-        >
-          <div style={{ marginBottom: "12px" }}>{scopesError}</div>
-          <button type="button" onClick={loadScopes} style={buttonStyle}>
+        <div className="training-selector-error" role="alert">
+          <div>{scopesError}</div>
+          <button type="button" onClick={loadScopes} className="training-secondary-button">
             Recharger
           </button>
         </div>
@@ -347,174 +403,71 @@ function ScopeSelector({
 
       {!scopesLoading && !scopesError && (
         <>
-          <div
-            style={{
-              display: "grid",
-              gap: "12px",
-              gridTemplateColumns: "auto auto minmax(0, 1fr)",
-              marginBottom: "18px"
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setScopeType("group")}
-              style={scopeType === "group" ? primaryButtonStyle : buttonStyle}
-            >
-              Groupes
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeType("tag")}
-              style={scopeType === "tag" ? primaryButtonStyle : buttonStyle}
-            >
-              Tags
-            </button>
+          <div className="training-selector-controls">
+            <div className="training-segmented" aria-label="Type de scope">
+              <button
+                type="button"
+                aria-pressed={scopeType === "group"}
+                onClick={() => setScopeType("group")}
+                className={scopeType === "group" ? "is-active" : ""}
+              >
+                Groupes
+              </button>
+              <button
+                type="button"
+                aria-pressed={scopeType === "tag"}
+                onClick={() => setScopeType("tag")}
+                className={scopeType === "tag" ? "is-active" : ""}
+              >
+                Tags
+              </button>
+            </div>
             <input
+              aria-label="Rechercher un entrainement"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Recherche..."
-              style={{
-                background: "#101010",
-                border: "1px solid #2f2f2f",
-                borderRadius: "8px",
-                boxSizing: "border-box",
-                color: "#eee",
-                fontSize: "14px",
-                outline: "none",
-                padding: "11px 12px",
-                width: "100%"
-              }}
+              className="training-search-input"
             />
           </div>
 
           {activeRows.length === 0 ? (
-            <div style={{ color: "#777", padding: "34px 0" }}>
+            <div className="training-selector-state">
               Aucun choix disponible.
             </div>
           ) : (
-            <>
-            {scopeType === "group" && modeGroup && (
-              <ModePicker
-                group={modeGroup}
-                onBack={() => setModeGroup(null)}
-                startScope={startScope}
-              />
-            )}
-
-            <div
-              style={{
-                display: "grid",
-                gap: "10px",
-                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))"
-              }}
-            >
-              {scopeType === "group" && groups.map(group => {
-                const config = modeConfigForGroup(group);
-                const defaultRecord = config
-                  ? recordForMode(group, config.defaultMode)
-                  : group.training_record;
-
-                return (
-                  <button
-                    type="button"
+            <div className={`training-selector-body training-selector-body-${scopeType}`}>
+              <div
+                className="training-scope-grid"
+                aria-label={scopeType === "group"
+                  ? "Groupes d'entrainement"
+                  : "Tags d'entrainement"}
+              >
+                {scopeType === "group" && groups.map(group => (
+                  <GroupTile
+                    group={group}
                     key={group.id}
-                    onClick={() => {
-                      if (config) {
-                        setModeGroup(group);
-                      } else {
-                        startScope({
-                          ...group,
-                          type: "group",
-                        });
-                      }
-                    }}
-                    style={{
-                      ...buttonStyle,
-                      alignItems: "flex-start",
-                      background: modeGroup?.id === group.id ? "#1d2428" : buttonStyle.background,
-                      border: modeGroup?.id === group.id ? "1px solid #355161" : buttonStyle.border,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                      minHeight: "136px",
-                      textAlign: "left"
-                    }}
-                  >
-                    <span style={{ color: "#ffcc7a", fontSize: "12px", textTransform: "uppercase" }}>
-                      {group.type_group}
-                    </span>
-                    <span
-                      style={{
-                        color: "#f3f3f3",
-                        fontSize: "28px",
-                        fontWeight: "900",
-                        lineHeight: 1
-                      }}
-                    >
-                      {formatRecordPercent(defaultRecord)}
-                    </span>
-                    <span style={{ color: "#888", fontSize: "12px", fontWeight: "800" }}>
-                      meilleur score par defaut
-                    </span>
-                    <span style={{ fontSize: "18px" }}>{group.name}</span>
-                    <span style={{ color: "#999", fontSize: "13px" }}>
-                      {group.question_count || 0} question{group.question_count > 1 ? "s" : ""}
-                      {defaultRecord?.best_time_ms
-                        ? ` · temps parfait ${formatDuration(defaultRecord.best_time_ms)}`
-                        : ""}
-                    </span>
-                    {config && (
-                      <span
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "6px",
-                          marginTop: "auto",
-                          width: "100%"
-                        }}
-                      >
-                        {config.modes.map(mode => (
-                          <ModeRecordChip
-                            key={mode}
-                            group={group}
-                            labels={config.labels}
-                            mode={mode}
-                          />
-                        ))}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                    onSelect={() => setSelectedGroup(group)}
+                    selected={selectedGroup?.id === group.id}
+                  />
+                ))}
 
-              {scopeType === "tag" && tags.map(tag => (
-                <button
-                  type="button"
-                  key={tag.name}
-                  onClick={() => startScope({
-                    type: "tag",
-                    name: tag.name
-                  })}
-                  style={{
-                    ...buttonStyle,
-                    alignItems: "flex-start",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    minHeight: "92px",
-                    textAlign: "left"
-                  }}
-                >
-                  <span style={{ color: "#b69cff", fontSize: "18px" }}>
-                    #{tag.name}
-                  </span>
-                  <span style={{ color: "#999", fontSize: "13px" }}>
-                    {tag.count || 0} question{tag.count > 1 ? "s" : ""}
-                  </span>
-                </button>
-              ))}
+                {scopeType === "tag" && tags.map(tag => (
+                  <TagTile
+                    key={tag.name}
+                    startScope={startScope}
+                    tag={tag}
+                  />
+                ))}
+              </div>
+
+              {scopeType === "group" && (
+                <GroupDetailPanel
+                  group={selectedGroup}
+                  startScope={startScope}
+                />
+              )}
             </div>
-            </>
           )}
         </>
       )}
