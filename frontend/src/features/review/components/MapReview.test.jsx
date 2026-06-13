@@ -4,12 +4,13 @@ import MapReview from "./MapReview";
 
 vi.mock("../../map/components/SvgMap", () => ({
   default: (props) => {
-    const isRecap = props.selected !== undefined;
+    const isRecap = props.zoneLabels === undefined;
 
     return (
       <button
         type="button"
         data-testid={isRecap ? "recap-map" : "active-map"}
+        data-due-items={(props.dueItems || []).join("|")}
         data-focus-code={props.focusCode || ""}
         data-focus-version={props.focusVersion ?? ""}
         data-selected={props.selected || ""}
@@ -101,6 +102,26 @@ describe("MapReview recap map focus", () => {
     expect(screen.queryByText("Temps")).not.toBeInTheDocument();
   });
 
+  it("uses the right-answer progress style in type_all mode", () => {
+    const { container } = renderMapReview(false, {
+      mode: "type_all"
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("Tape une zone..."), {
+      target: { value: "Alpha" }
+    });
+    fireEvent.keyDown(screen.getByPlaceholderText("Tape une zone..."), {
+      key: "Enter"
+    });
+
+    expect(container.querySelector("[data-map-progress-correct]"))
+      .toHaveStyle({ width: "50%" });
+    expect(container.querySelector("[data-map-progress-wrong]"))
+      .toHaveStyle({ width: "0%" });
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toHaveAttribute("aria-valuenow", "1");
+  });
+
   it("shows click prompt misses as a separate progress bar segment", async () => {
     const { container } = renderMapReview(false, {
       mode: "click_prompt",
@@ -126,6 +147,133 @@ describe("MapReview recap map focus", () => {
       .toContain("repeating-linear-gradient");
     expect(screen.getByRole("progressbar", { name: "Progression" }))
       .toHaveAttribute("aria-valuenow", "1");
+  });
+
+  it("shows type_prompt skips as a separate progress bar segment", async () => {
+    const { container } = renderMapReview(false, {
+      mode: "type_prompt"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Passer" }));
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-map-progress-correct]"))
+        .toHaveStyle({ width: "0%" });
+      expect(container.querySelector("[data-map-progress-wrong]"))
+        .toHaveStyle({ width: "50%" });
+    });
+    expect(container.querySelector("[data-map-progress-wrong]").style.background)
+      .toContain("repeating-linear-gradient");
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toHaveAttribute("aria-valuenow", "1");
+  });
+
+  it("does not skip type_prompt map zones with Tab", () => {
+    const { container } = renderMapReview(false, {
+      mode: "type_prompt"
+    });
+    const input = screen.getByPlaceholderText("Nom de la zone...");
+
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(true);
+
+    expect(container.querySelector("[data-map-progress-wrong]"))
+      .toHaveStyle({ width: "0%" });
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toHaveAttribute("aria-valuenow", "0");
+  });
+
+  it("shows multiple-choice misses as a separate progress bar segment", async () => {
+    const qcmZones = [
+      {
+        question_id: 1,
+        code: "alpha",
+        label: "Alpha",
+        progress: {}
+      },
+      {
+        question_id: 2,
+        code: "beta",
+        label: "Beta",
+        progress: {}
+      }
+    ];
+    const { container } = renderMapReview(false, {
+      mode: "multiple_choice",
+      reviewZones: qcmZones
+    });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const wrongChoice = qcmZones.find(zone => zone.code !== targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: wrongChoice.label }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Faux").closest("button"))
+        .toHaveAttribute("data-map-choice-feedback", "wrong");
+      expect(screen.getByText("Correct").closest("button"))
+        .toHaveAttribute("data-map-choice-feedback", "correct");
+      expect(container.querySelector("[data-map-progress-correct]"))
+        .toHaveStyle({ width: "0%" });
+      expect(container.querySelector("[data-map-progress-wrong]"))
+        .toHaveStyle({ width: "50%" });
+    });
+    expect(container.querySelector("[data-map-progress-wrong]").style.background)
+      .toContain("repeating-linear-gradient");
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toHaveAttribute("aria-valuenow", "1");
+  });
+
+  it("shows correct multiple-choice feedback before moving on visually", async () => {
+    const { container } = renderMapReview(false, {
+      mode: "multiple_choice"
+    });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Correct").closest("button"))
+        .toHaveAttribute("data-map-choice-feedback", "correct");
+      expect(screen.getByText("Correct").closest("button")).toBeDisabled();
+      expect(container.querySelector("[data-map-progress-correct]"))
+        .toHaveStyle({ width: "50%" });
+      expect(container.querySelector("[data-map-progress-wrong]"))
+        .toHaveStyle({ width: "0%" });
+    });
+  });
+
+  it("does not show the multiple-choice prompt card", () => {
+    renderMapReview(false, {
+      mode: "multiple_choice"
+    });
+
+    expect(screen.queryByText("Zone surlignée")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
+  });
+
+  it.each(["click_prompt", "type_prompt", "multiple_choice"])(
+    "does not show the recenter control in %s mode",
+    (mode) => {
+      renderMapReview(false, {
+        mode
+      });
+
+      expect(screen.queryByRole("button", { name: "Recentrer" })).not.toBeInTheDocument();
+    }
+  );
+
+  it("does not show the type_prompt prompt card", () => {
+    renderMapReview(false, {
+      mode: "type_prompt"
+    });
+
+    expect(screen.queryByText("Nom attendu")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zone surlignée")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Nom de la zone...")).toBeInTheDocument();
   });
 
   it("shows colorblind-friendly recap status treatments", async () => {

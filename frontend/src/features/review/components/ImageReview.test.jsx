@@ -385,6 +385,16 @@ describe("ImageReview answer label preview", () => {
     expect(screen.getByText("Terminer")).toBeInTheDocument();
   });
 
+  it("does not show the type_prompt prompt card", () => {
+    renderImageReviewWithState(typePromptHookState({
+      rows: [imageGridRow(1)]
+    }));
+
+    expect(screen.queryByText("Image surlignée")).not.toBeInTheDocument();
+    expect(screen.queryByText("Trouve son nom")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Nom de l'image...")).toBeInTheDocument();
+  });
+
   it("selects a type_prompt image tile by click and restores input focus", async () => {
     const selectItem = vi.fn();
     const rows = [

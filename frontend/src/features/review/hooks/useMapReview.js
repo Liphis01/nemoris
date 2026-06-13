@@ -238,6 +238,7 @@ export function useMapReview(
   const [focusVersion, setFocusVersion] = useState(0);
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
+  const [choiceFeedback, setChoiceFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
 
@@ -252,6 +253,7 @@ export function useMapReview(
     setFocusVersion(0);
     setIncorrectFlashId(0);
     setCorrectFlashId(0);
+    setChoiceFeedback(null);
     setRecapSort(initialRecapSort);
   }, [reviewKey]);
 
@@ -267,6 +269,20 @@ export function useMapReview(
 
     return () => window.clearTimeout(timeout);
   }, [incorrectFlashId, correctFlashId]);
+
+  useEffect(() => {
+    if (!choiceFeedback) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setChoiceFeedback(current =>
+        current?.id === choiceFeedback.id ? null : current
+      );
+    }, 1300);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [choiceFeedback]);
 
   const promptQueue = useMemo(
     () => {
@@ -365,6 +381,7 @@ export function useMapReview(
 
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
+    if (mode === MAP_MODE_MULTIPLE_CHOICE && choiceFeedback) return;
 
     const allZonesComplete = reviewZones.every(item =>
       completedQuestionIdSet.has(item.question_id)
@@ -378,7 +395,9 @@ export function useMapReview(
     setShowRecap(true);
   }, [
     completedQuestionIdSet,
+    choiceFeedback,
     foundQuestionIdSet,
+    mode,
     reviewZones,
     showRecap
   ]);
@@ -465,11 +484,25 @@ export function useMapReview(
   }
 
   function handleChoiceSelect(questionId) {
-    if (mode !== MAP_MODE_MULTIPLE_CHOICE || !currentPromptItem) {
+    if (
+      mode !== MAP_MODE_MULTIPLE_CHOICE ||
+      !currentPromptItem ||
+      choiceFeedback
+    ) {
       return;
     }
 
-    if (currentPromptItem.question_id === questionId) {
+    const isCorrect = currentPromptItem.question_id === questionId;
+
+    setChoiceFeedback({
+      id: Date.now(),
+      correctCode: currentPromptItem.code,
+      correctQuestionId: currentPromptItem.question_id,
+      options: choiceOptions,
+      selectedQuestionId: questionId
+    });
+
+    if (isCorrect) {
       markFound(currentPromptItem);
     } else {
       markMissed(currentPromptItem);
@@ -613,16 +646,23 @@ export function useMapReview(
   }, [reviewZones, foundQuestionIdSet, qualityByQuestionId, recapSort]);
   const hasCorrectRecapRows = recapRows.some(row => row.isFound);
   const hasWrongRecapRows = recapRows.some(row => !row.isFound);
+  const activeChoiceFeedback = mode === MAP_MODE_MULTIPLE_CHOICE
+    ? choiceFeedback
+    : null;
+  const visibleChoiceOptions = activeChoiceFeedback
+    ? activeChoiceFeedback.options
+    : choiceOptions;
   const targetHighlightCode = (
     mode === MAP_MODE_TYPE_PROMPT ||
     mode === MAP_MODE_MULTIPLE_CHOICE
   )
-    ? currentPromptItem?.code || null
+    ? activeChoiceFeedback?.correctCode || currentPromptItem?.code || null
     : null;
 
   return {
     activeMissedCodes,
-    choiceOptions,
+    choiceFeedback: activeChoiceFeedback,
+    choiceOptions: visibleChoiceOptions,
     currentPromptItem,
     dueCodes,
     feedbackTone,

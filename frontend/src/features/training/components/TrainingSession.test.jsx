@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getTrainingItems,
@@ -28,13 +28,40 @@ describe("TrainingSession", () => {
           tags: ["Geo"],
           question_count: 8,
           training_record: {
-            best_found_percent: 87.5,
-            best_found_count: 7,
+            best_found_percent: 100,
+            best_found_count: 8,
             best_found_elapsed_ms: 92000,
             best_found_at: "2026-06-02T10:00:00+00:00",
             best_time_ms: 90000,
             best_time_at: "2026-06-02T10:00:00+00:00",
             question_count: 8
+          },
+          training_records: {
+            type_all: {
+              best_found_percent: 100,
+              best_found_count: 8,
+              best_found_elapsed_ms: 92000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              best_time_ms: 90000,
+              best_time_at: "2026-06-02T10:00:00+00:00",
+              question_count: 8
+            },
+            click_prompt: {
+              best_found_percent: 100,
+              best_found_count: 8,
+              best_found_elapsed_ms: 84000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              best_time_ms: 84000,
+              best_time_at: "2026-06-02T10:00:00+00:00",
+              question_count: 8
+            },
+            type_prompt: {
+              best_found_percent: 50,
+              best_found_count: 4,
+              best_found_elapsed_ms: 45000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              question_count: 8
+            }
           }
         },
         {
@@ -45,6 +72,22 @@ describe("TrainingSession", () => {
           tags: ["Geo"],
           question_count: 5,
           training_records: {
+            type_prompt: {
+              best_found_percent: 100,
+              best_found_count: 5,
+              best_found_elapsed_ms: 31000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              best_time_ms: 31000,
+              best_time_at: "2026-06-02T10:00:00+00:00",
+              question_count: 5
+            },
+            click_prompt: {
+              best_found_percent: 50,
+              best_found_count: 3,
+              best_found_elapsed_ms: 35000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              question_count: 5
+            },
             multiple_choice_image: {
               best_found_percent: 100,
               best_found_count: 5,
@@ -74,13 +117,20 @@ describe("TrainingSession", () => {
     vi.clearAllMocks();
   });
 
-  it("shows compact group records and best time in the selector", async () => {
+  it("shows aggregate group score and keeps time on mode rows", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
-    expect(await screen.findByRole("button", { name: "Sélectionner Europe" })).toBeInTheDocument();
-    expect(await screen.findByText("Score par défaut")).toBeInTheDocument();
-    expect(screen.getAllByText("88%").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText("1:30").length).toBeGreaterThanOrEqual(2);
+    const europeTile = await screen.findByRole("button", { name: "Sélectionner Europe" });
+    const flagsTile = await screen.findByRole("button", { name: "Sélectionner Flags" });
+
+    expect(screen.getByText("Score total")).toBeInTheDocument();
+    expect(screen.queryByText("Score par défaut")).not.toBeInTheDocument();
+    expect(screen.queryByText("Temps parfait")).not.toBeInTheDocument();
+    expect(within(europeTile).getByText("63%")).toBeInTheDocument();
+    expect(within(flagsTile).getByText("50%")).toBeInTheDocument();
+    expect(flagsTile.querySelector(".training-total-score-bar span"))
+      .toHaveStyle({ width: "50%" });
+    expect(screen.getAllByText("1:30").length).toBeGreaterThanOrEqual(1);
   });
 
   it("opens side-panel mode lists for map and image groups", async () => {
@@ -111,6 +161,30 @@ describe("TrainingSession", () => {
         mapMode: "multiple_choice"
       });
     });
+  });
+
+  it("keeps the selected group when returning from a training mode", async () => {
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Flags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer Nommer pour Flags" }));
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "group",
+        groupId: 6,
+        imageMode: "type_prompt"
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Changer" }));
+
+    const flagsTile = await screen.findByRole("button", { name: "Sélectionner Flags" });
+    const europeTile = screen.getByRole("button", { name: "Sélectionner Europe" });
+
+    expect(flagsTile).toHaveAttribute("aria-pressed", "true");
+    expect(europeTile).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("heading", { name: "Flags" })).toBeInTheDocument();
   });
 
   it("starts tag training directly from a compact tile", async () => {

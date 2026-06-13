@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
@@ -93,6 +93,64 @@ const recapHeaderColumns = [
   { key: "quality", label: "Qualité" }
 ];
 
+function choiceFeedbackState(option, feedback) {
+  if (!feedback) return "";
+
+  if (option.question_id === feedback.correctQuestionId) return "correct";
+  if (option.question_id === feedback.selectedQuestionId) return "wrong";
+
+  return "neutral";
+}
+
+
+function choiceFeedbackLabel(option, feedback) {
+  const state = choiceFeedbackState(option, feedback);
+
+  if (state === "correct") return "Correct";
+  if (state === "wrong") return "Faux";
+
+  return "";
+}
+
+
+function getChoiceButtonStyle(option, feedback) {
+  const state = choiceFeedbackState(option, feedback);
+
+  if (state === "correct") {
+    return {
+      ...choiceButtonStyle,
+      background: "linear-gradient(180deg, #183a24, #12291b)",
+      border: "1px solid rgba(134, 239, 172, 0.7)",
+      boxShadow: "0 0 0 3px rgba(34, 197, 94, 0.16)",
+      color: "#d7f5df"
+    };
+  }
+
+  if (state === "wrong") {
+    return {
+      ...choiceButtonStyle,
+      background: [
+        "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.24) 0 4px, rgba(127, 29, 29, 0) 4px 8px)",
+        "linear-gradient(180deg, #3a1d1d, #271414)"
+      ].join(", "),
+      border: "1px solid rgba(248, 113, 113, 0.72)",
+      boxShadow: "0 0 0 3px rgba(248, 113, 113, 0.14)",
+      color: "#ffd7d7"
+    };
+  }
+
+  if (state === "neutral") {
+    return {
+      ...choiceButtonStyle,
+      cursor: "default",
+      opacity: 0.55
+    };
+  }
+
+  return choiceButtonStyle;
+}
+
+
 export default function MapReview({
   group,
   reviewZones,
@@ -107,6 +165,7 @@ export default function MapReview({
   const normalizedMode = normalizeMapMode(modeProp || group.mode);
   const {
     activeMissedCodes,
+    choiceFeedback,
     choiceOptions,
     dueCodes,
     feedbackTone,
@@ -125,7 +184,6 @@ export default function MapReview({
     qualityByQuestionId,
     missedCodes,
     promptLabel,
-    progressPercent,
     recapMissCount,
     recapRows,
     recapSort,
@@ -161,10 +219,15 @@ export default function MapReview({
     : recapHeaderColumns.filter(column => column.key === "answer");
   const showTrainingTimer = trainingElapsedMs !== null && !showRecap;
   const showTextInput = mode === MAP_MODE_TYPE_ALL || mode === MAP_MODE_TYPE_PROMPT;
-  const showPromptPanel = mode !== MAP_MODE_TYPE_ALL && !showRecap;
+  const showPromptPanel = (
+    mode !== MAP_MODE_TYPE_ALL &&
+    mode !== MAP_MODE_TYPE_PROMPT &&
+    mode !== MAP_MODE_MULTIPLE_CHOICE &&
+    !showRecap
+  );
   const canSkipPrompt = mode === MAP_MODE_TYPE_PROMPT;
   const completedQuestionCount = Math.max(0, reviewZones.length - remainingZones.length);
-  const wrongQuestionCount = mode === MAP_MODE_CLICK_PROMPT
+  const wrongQuestionCount = mode !== MAP_MODE_TYPE_ALL
     ? Math.max(0, completedQuestionCount - foundQuestionIds.length)
     : 0;
   const correctProgressPercent = reviewZones.length
@@ -173,7 +236,6 @@ export default function MapReview({
   const wrongProgressPercent = reviewZones.length
     ? Math.min((wrongQuestionCount / reviewZones.length) * 100, 100)
     : 0;
-  const showClickPromptProgress = mode === MAP_MODE_CLICK_PROMPT;
   const feedbackCopy = feedbackTone === "incorrect"
     ? mode === MAP_MODE_TYPE_PROMPT
       ? "Réponse incorrecte."
@@ -251,34 +313,6 @@ export default function MapReview({
     focusNextRemainingZone();
     inputRef.current?.focus({ preventScroll: true });
   }, [focusNextRemainingZone]);
-
-  useEffect(() => {
-    if (showRecap || remainingZones.length === 0) {
-      return undefined;
-    }
-
-    function handleMapKeyDown(event) {
-      if (
-        event.defaultPrevented ||
-        event.key !== "Tab" ||
-        event.shiftKey ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      handleZoomRemaining();
-    }
-
-    window.addEventListener("keydown", handleMapKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleMapKeyDown);
-    };
-  }, [handleZoomRemaining, remainingZones.length, showRecap]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
@@ -406,52 +440,41 @@ export default function MapReview({
               position: "relative"
             }}
           >
-            {showClickPromptProgress ? (
+            <div
+              style={{
+                display: "flex",
+                height: "100%",
+                width: "100%"
+              }}
+            >
               <div
+                data-map-progress-correct
                 style={{
-                  display: "flex",
+                  background: "linear-gradient(90deg, #2563eb, #38bdf8)",
+                  boxShadow: correctProgressPercent > 0
+                    ? "0 0 14px rgba(56, 189, 248, 0.22)"
+                    : "none",
                   height: "100%",
-                  width: "100%"
-                }}
-              >
-                <div
-                  data-map-progress-correct
-                  style={{
-                    background: "linear-gradient(90deg, #2563eb, #38bdf8)",
-                    boxShadow: correctProgressPercent > 0
-                      ? "0 0 14px rgba(56, 189, 248, 0.22)"
-                      : "none",
-                    height: "100%",
-                    transition: "width 0.22s ease",
-                    width: `${correctProgressPercent}%`
-                  }}
-                />
-                <div
-                  data-map-progress-wrong
-                  style={{
-                    background: [
-                      "repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.34) 0 4px, rgba(17, 24, 39, 0) 4px 8px)",
-                      "linear-gradient(90deg, #f59e0b, #f97316)"
-                    ].join(", "),
-                    boxShadow: wrongProgressPercent > 0
-                      ? "0 0 14px rgba(245, 158, 11, 0.24)"
-                      : "none",
-                    height: "100%",
-                    transition: "width 0.22s ease",
-                    width: `${wrongProgressPercent}%`
-                  }}
-                />
-              </div>
-            ) : (
-              <div
-                style={{
-                  background: "linear-gradient(90deg, #f0c36a, #8fc7ff)",
-                  height: "100%",
-                  transition: "width 0.2s ease",
-                  width: `${progressPercent}%`
+                  transition: "width 0.22s ease",
+                  width: `${correctProgressPercent}%`
                 }}
               />
-            )}
+              <div
+                data-map-progress-wrong
+                style={{
+                  background: [
+                    "repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.34) 0 4px, rgba(17, 24, 39, 0) 4px 8px)",
+                    "linear-gradient(90deg, #f59e0b, #f97316)"
+                  ].join(", "),
+                  boxShadow: wrongProgressPercent > 0
+                    ? "0 0 14px rgba(245, 158, 11, 0.24)"
+                    : "none",
+                  height: "100%",
+                  transition: "width 0.22s ease",
+                  width: `${wrongProgressPercent}%`
+                }}
+              />
+            </div>
           </div>
 
           <div style={{ color: "#777", display: "flex", fontSize: "12px", justifyContent: "space-between", marginTop: "8px" }}>
@@ -509,7 +532,11 @@ export default function MapReview({
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSubmit();
+                }
+              }}
               placeholder={mode === MAP_MODE_TYPE_PROMPT ? "Nom de la zone..." : "Tape une zone..."}
               style={{
                 ...inputStyle,
@@ -534,10 +561,17 @@ export default function MapReview({
                 <button
                   key={option.question_id}
                   type="button"
+                  data-map-choice-feedback={choiceFeedbackState(option, choiceFeedback)}
+                  disabled={Boolean(choiceFeedback)}
                   onClick={() => handleChoiceSelect(option.question_id)}
-                  style={choiceButtonStyle}
+                  style={getChoiceButtonStyle(option, choiceFeedback)}
                 >
-                  {option.label}
+                  <span>{option.label}</span>
+                  {choiceFeedbackLabel(option, choiceFeedback) && (
+                    <span style={choiceFeedbackLabelStyle}>
+                      {choiceFeedbackLabel(option, choiceFeedback)}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -578,18 +612,20 @@ export default function MapReview({
                   marginLeft: "auto"
                 }}
               >
-                <button
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={handleZoomRemaining}
-                  disabled={remainingZones.length === 0}
-                  style={{
-                    ...buttonStyle,
-                    cursor: remainingZones.length === 0 ? "not-allowed" : "pointer",
-                    opacity: remainingZones.length === 0 ? 0.55 : 1
-                  }}
-                >
-                  {mode === MAP_MODE_TYPE_ALL ? "Zone suivante" : "Recentrer"}
-                </button>
+                {mode === MAP_MODE_TYPE_ALL && (
+                  <button
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={handleZoomRemaining}
+                    disabled={remainingZones.length === 0}
+                    style={{
+                      ...buttonStyle,
+                      cursor: remainingZones.length === 0 ? "not-allowed" : "pointer",
+                      opacity: remainingZones.length === 0 ? 0.55 : 1
+                    }}
+                  >
+                    Zone suivante
+                  </button>
+                )}
 
                 {canSkipPrompt && (
                   <button
@@ -995,9 +1031,23 @@ const choiceGridStyle = {
 
 const choiceButtonStyle = {
   ...buttonStyle,
+  alignItems: "center",
   background: "#181818",
+  display: "flex",
+  gap: "10px",
+  justifyContent: "space-between",
   minHeight: "54px",
   textAlign: "left"
+};
+
+const choiceFeedbackLabelStyle = {
+  border: "1px solid rgba(255, 255, 255, 0.18)",
+  borderRadius: "999px",
+  flex: "0 0 auto",
+  fontSize: "11px",
+  fontWeight: 900,
+  padding: "3px 8px",
+  textTransform: "uppercase"
 };
 
 const overlayStyle = {

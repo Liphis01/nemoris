@@ -436,7 +436,11 @@ export default function ImageReview({
     normalizedMode === IMAGE_MODE_TYPE_ALL ||
     normalizedMode === IMAGE_MODE_TYPE_PROMPT
   );
-  const showPromptPanel = normalizedMode !== IMAGE_MODE_TYPE_ALL && !resultMode;
+  const showPromptPanel = (
+    normalizedMode !== IMAGE_MODE_TYPE_ALL &&
+    normalizedMode !== IMAGE_MODE_TYPE_PROMPT &&
+    !resultMode
+  );
   const showLabelChoices = (
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
     !resultMode

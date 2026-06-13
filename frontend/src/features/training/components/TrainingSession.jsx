@@ -143,10 +143,41 @@ function recordTimeLabel(record) {
 }
 
 
-function defaultRecordForGroup(group) {
+function recordPercentValue(record) {
+  const percent = Number(record?.best_found_percent);
+
+  if (!Number.isFinite(percent)) return null;
+
+  return Math.min(Math.max(percent, 0), 100);
+}
+
+
+function groupTotalPercent(group) {
   const config = modeConfigForGroup(group);
 
-  return config ? recordForMode(group, config.defaultMode) : group?.training_record;
+  if (!config) {
+    return recordPercentValue(group?.training_record);
+  }
+
+  if (config.modes.length === 0) return null;
+
+  const total = config.modes.reduce((sum, mode) => (
+    sum + (recordPercentValue(recordForMode(group, mode)) || 0)
+  ), 0);
+
+  return total / config.modes.length;
+}
+
+
+function formatTotalPercent(percent) {
+  return Number.isFinite(percent) ? `${Math.round(percent)}%` : "—";
+}
+
+
+function percentBarWidth(percent) {
+  return Number.isFinite(percent)
+    ? `${Math.min(Math.max(percent, 0), 100)}%`
+    : "0%";
 }
 
 
@@ -168,9 +199,25 @@ function RecordMetric({ label, value }) {
 }
 
 
+function TrainingScoreMeter({ percent }) {
+  return (
+    <span
+      className="training-total-score"
+      aria-label={`Score total ${formatTotalPercent(percent)}`}
+    >
+      <strong>{formatTotalPercent(percent)}</strong>
+      <span className="training-total-score-label">total</span>
+      <span className="training-total-score-bar" aria-hidden="true">
+        <span style={{ width: percentBarWidth(percent) }} />
+      </span>
+    </span>
+  );
+}
+
+
 function GroupTile({ group, onSelect, selected }) {
   const config = modeConfigForGroup(group);
-  const defaultRecord = defaultRecordForGroup(group);
+  const totalPercent = groupTotalPercent(group);
   const accent = groupAccent(group);
 
   return (
@@ -192,11 +239,7 @@ function GroupTile({ group, onSelect, selected }) {
         </span>
       </span>
 
-      <span className="training-scope-score">
-        <strong>{formatRecordPercent(defaultRecord)}</strong>
-        <span>score</span>
-        <span>{recordTimeLabel(defaultRecord)}</span>
-      </span>
+      <TrainingScoreMeter percent={totalPercent} />
     </button>
   );
 }
@@ -272,11 +315,14 @@ function GroupDetailPanel({ group, startScope }) {
   }
 
   const config = modeConfigForGroup(group);
-  const defaultRecord = defaultRecordForGroup(group);
+  const totalPercent = groupTotalPercent(group);
   const accent = groupAccent(group);
 
   return (
-    <aside className="training-detail-panel" aria-label="Détails du groupe">
+    <aside
+      className={`training-detail-panel training-detail-panel-${accent}`}
+      aria-label="Détails du groupe"
+    >
       <div className="training-detail-head">
         <span className={`training-scope-badge training-scope-badge-${accent}`}>
           {group.type_group || "groupe"}
@@ -285,9 +331,11 @@ function GroupDetailPanel({ group, startScope }) {
         <p>{questionCountLabel(group.question_count)}</p>
       </div>
 
-      <div className="training-detail-metrics" aria-label="Record du groupe">
-        <RecordMetric label="Score par défaut" value={formatRecordPercent(defaultRecord)} />
-        <RecordMetric label="Temps parfait" value={recordTimeLabel(defaultRecord)} />
+      <div
+        className="training-detail-metrics training-detail-metrics-single"
+        aria-label="Score du groupe"
+      >
+        <RecordMetric label="Score total" value={formatTotalPercent(totalPercent)} />
       </div>
 
       {config ? (
@@ -331,11 +379,12 @@ function ScopeSelector({
   scopesLoading,
   startScope,
   loadScopes,
-  setMode
+  selectedGroupId,
+  setMode,
+  setSelectedGroupId
 }) {
   const [scopeType, setScopeType] = useState("group");
   const [search, setSearch] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState(null);
   const normalizedSearch = normalizeText(search);
   const groups = useMemo(
     () => (scopes.groups || []).filter(group =>
@@ -350,25 +399,26 @@ function ScopeSelector({
     [normalizedSearch, scopes.tags]
   );
   const activeRows = scopeType === "group" ? groups : tags;
+  const selectedGroup = useMemo(
+    () => groups.find(group => group.id === selectedGroupId) || null,
+    [groups, selectedGroupId]
+  );
 
   useEffect(() => {
     if (scopeType !== "group") {
-      setSelectedGroup(null);
       return;
     }
 
-    setSelectedGroup(current => {
+    setSelectedGroupId(currentId => {
       if (groups.length === 0) return null;
 
-      if (current) {
-        const matchingGroup = groups.find(group => group.id === current.id);
-
-        if (matchingGroup) return matchingGroup;
+      if (groups.some(group => group.id === currentId)) {
+        return currentId;
       }
 
-      return groups[0];
+      return groups[0].id;
     });
-  }, [groups, scopeType]);
+  }, [groups, scopeType, setSelectedGroupId]);
 
   return (
     <div className="training-selector-panel">
@@ -437,35 +487,38 @@ function ScopeSelector({
             </div>
           ) : (
             <div className={`training-selector-body training-selector-body-${scopeType}`}>
-              <div
-                className="training-scope-grid"
-                aria-label={scopeType === "group"
-                  ? "Groupes d'entrainement"
-                  : "Tags d'entrainement"}
-              >
-                {scopeType === "group" && groups.map(group => (
-                  <GroupTile
-                    group={group}
-                    key={group.id}
-                    onSelect={() => setSelectedGroup(group)}
-                    selected={selectedGroup?.id === group.id}
-                  />
-                ))}
+              {scopeType === "group" ? (
+                <>
+                  <section className="training-list-column" aria-label="Liste des groupes">
+                    <div className="training-scope-grid" aria-label="Groupes d'entrainement">
+                      {groups.map(group => (
+                        <GroupTile
+                          group={group}
+                          key={group.id}
+                          onSelect={() => setSelectedGroupId(group.id)}
+                          selected={selectedGroupId === group.id}
+                        />
+                      ))}
+                    </div>
+                  </section>
 
-                {scopeType === "tag" && tags.map(tag => (
-                  <TagTile
-                    key={tag.name}
-                    startScope={startScope}
-                    tag={tag}
-                  />
-                ))}
-              </div>
-
-              {scopeType === "group" && (
-                <GroupDetailPanel
-                  group={selectedGroup}
-                  startScope={startScope}
-                />
+                  <div className="training-detail-column">
+                    <GroupDetailPanel
+                      group={selectedGroup}
+                      startScope={startScope}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="training-scope-grid" aria-label="Tags d'entrainement">
+                  {tags.map(tag => (
+                    <TagTile
+                      key={tag.name}
+                      startScope={startScope}
+                      tag={tag}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -478,6 +531,7 @@ function ScopeSelector({
 
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
   const currentQuestion = session.questions[session.currentIndex];
   const activeGroupMode = (
     session.activeScope?.groupMode ||
@@ -511,7 +565,9 @@ export default function TrainingSession({ setMode }) {
             scopesLoading={session.scopesLoading}
             startScope={session.startScope}
             loadScopes={session.loadScopes}
+            selectedGroupId={selectedGroupId}
             setMode={setMode}
+            setSelectedGroupId={setSelectedGroupId}
           />
         )}
 
