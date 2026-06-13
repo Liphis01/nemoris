@@ -446,14 +446,31 @@ def rebalance_progress_calendar(db, today=None):
     for progress, scheduling in zip(progresses, rebalanced):
         next_review_changed = progress.next_review != scheduling["next_review"]
         interval_changed = (progress.interval or 0) != scheduling["interval"]
+        ideal_next_review_changed = (
+            progress.ideal_next_review is None
+            and scheduling.get("ideal_next_review") is not None
+        )
+        ideal_interval_changed = (
+            progress.ideal_interval is None
+            and scheduling.get("ideal_interval") is not None
+        )
 
         if next_review_changed:
             moved_count += 1
 
-        if next_review_changed or interval_changed:
+        if (
+            next_review_changed
+            or interval_changed
+            or ideal_next_review_changed
+            or ideal_interval_changed
+        ):
             updated_count += 1
             progress.next_review = scheduling["next_review"]
             progress.interval = scheduling["interval"]
+            if ideal_next_review_changed:
+                progress.ideal_next_review = scheduling["ideal_next_review"]
+            if ideal_interval_changed:
+                progress.ideal_interval = scheduling["ideal_interval"]
             if scheduling.get("fsrs_card"):
                 progress.fsrs_card = scheduling["fsrs_card"]
                 progress.fsrs_version = FSRS_VERSION

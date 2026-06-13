@@ -538,21 +538,45 @@ def rebalance_review_calendar(
         if normalized_count > 0:
             assigned_loads[day] = normalized_count
 
+    def normalized_interval(value):
+        try:
+            interval = int(value)
+        except (TypeError, ValueError):
+            return None
+
+        return max(0, interval)
+
     def normalized_entry(index, entry):
-        original_next_review = entry.get("next_review") or today
-        ideal_next_review = (
-            entry.get("ideal_next_review") or original_next_review
+        original_next_review = (
+            entry.get("original_next_review")
+            or entry.get("next_review")
+            or today
         )
+        stored_ideal_next_review = entry.get("ideal_next_review")
+        ideal_next_review = stored_ideal_next_review or original_next_review
         effective_due_date = max(today, ideal_next_review)
         difficulty = entry.get("difficulty") or 5.0
         question_id = entry.get("question_id")
         current_type = type_key(entry.get("type_q"))
+        last_review = entry.get("last_review")
+        ideal_interval = normalized_interval(entry.get("ideal_interval"))
+
+        if ideal_interval is None:
+            if stored_ideal_next_review and last_review:
+                ideal_interval = max(0, (ideal_next_review - last_review).days)
+            else:
+                ideal_interval = normalized_interval(entry.get("interval"))
+
+        if ideal_interval is None:
+            interval_start = last_review or today
+            ideal_interval = max(0, (ideal_next_review - interval_start).days)
 
         return {
             "index": index,
             "entry": entry,
             "original_next_review": original_next_review,
             "ideal_next_review": ideal_next_review,
+            "ideal_interval": ideal_interval,
             "effective_due_date": effective_due_date,
             "difficulty": difficulty,
             "question_id": question_id if question_id is not None else 0,
@@ -621,10 +645,10 @@ def rebalance_review_calendar(
         assigned[item["index"]] = {
             **entry,
             "original_next_review": item["original_next_review"],
-            "ideal_next_review": entry.get("ideal_next_review"),
+            "ideal_next_review": item["ideal_next_review"],
             "effective_due_date": item["effective_due_date"],
             "interval": interval,
-            "ideal_interval": entry.get("ideal_interval"),
+            "ideal_interval": item["ideal_interval"],
             "next_review": next_review,
             "fsrs_card": set_fsrs_card_due_date(
                 entry.get("fsrs_card"),

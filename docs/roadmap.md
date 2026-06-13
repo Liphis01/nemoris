@@ -18,9 +18,7 @@
 
 - je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
 - recentrer les svg
-- le texte des cards est décalé vers la droite (à cause du MAP)
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
-- l'autozoom dans recap devrait considérer la taille de la zone pour adapter le zoom
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - quand je suis en cours de review et que le jour suivant commence ça rebalance pas correctement je crois
 

@@ -626,6 +626,45 @@ class SchedulerSmoothingTests(unittest.TestCase):
             all(item["ideal_next_review"] == ideal_day for item in second)
         )
 
+    def test_rebalance_materializes_missing_ideal_anchor_for_idempotence(self):
+        today = date(2026, 1, 10)
+        entries = [
+            rebalance_entry(
+                1,
+                today - timedelta(days=9),
+                difficulty=8.0,
+                last_review=today - timedelta(days=8),
+                type_q="image",
+                ideal_next_review=today - timedelta(days=5),
+                ideal_interval=0
+            ),
+            rebalance_entry(
+                2,
+                today - timedelta(days=7),
+                difficulty=9.0,
+                last_review=today - timedelta(days=13),
+                type_q="image"
+            )
+        ]
+        entries[1]["interval"] = 6
+
+        first = rebalance_review_calendar(
+            entries,
+            1,
+            today=today,
+            initial_daily_loads={today: 1}
+        )
+        second = rebalance_review_calendar(
+            first,
+            1,
+            today=today,
+            initial_daily_loads={today: 1}
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first[1]["ideal_next_review"], today - timedelta(days=7))
+        self.assertEqual(first[1]["ideal_interval"], 6)
+
     def test_rebalance_orders_overdue_by_age_difficulty_and_id(self):
         today = date(2026, 1, 10)
         entries = [
@@ -1147,6 +1186,73 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.interval, 2)
         self.assertEqual(progress.ideal_next_review, today + timedelta(days=2))
         self.assertEqual(progress.ideal_interval, 2)
+
+    def test_rebalance_route_backfills_missing_ideal_anchor_once(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+
+        self.add_question(1, type_q="image")
+        first_progress = self.add_progress(
+            1,
+            today - timedelta(days=9),
+            difficulty=8.0,
+            reps=1,
+            ideal_interval=0,
+            ideal_next_review=today - timedelta(days=5)
+        )
+        first_progress.last_review = today - timedelta(days=8)
+
+        self.add_question(2, type_q="image")
+        missing_anchor = self.add_progress(
+            2,
+            today - timedelta(days=7),
+            difficulty=9.0,
+            reps=1
+        )
+        missing_anchor.last_review = today - timedelta(days=13)
+        missing_anchor.interval = 6
+
+        self.add_question(99)
+        completed_today = self.add_progress(
+            99,
+            today + timedelta(days=10),
+            reps=1,
+            ideal_interval=10,
+            ideal_next_review=today + timedelta(days=10)
+        )
+        completed_today.history = [{"reviewed_on": today.isoformat()}]
+
+        self.db.commit()
+
+        first_response = rebalance_review(db=self.db)
+        first_schedule = {
+            progress.question_id: (
+                progress.next_review,
+                progress.interval,
+                progress.ideal_next_review,
+                progress.ideal_interval
+            )
+            for progress in self.db.query(Progress).all()
+        }
+        second_response = rebalance_review(db=self.db)
+        second_schedule = {
+            progress.question_id: (
+                progress.next_review,
+                progress.interval,
+                progress.ideal_next_review,
+                progress.ideal_interval
+            )
+            for progress in self.db.query(Progress).all()
+        }
+
+        self.assertEqual(first_response["moved"], 2)
+        self.assertEqual(second_response["moved"], 0)
+        self.assertEqual(first_schedule, second_schedule)
+        self.assertEqual(
+            missing_anchor.ideal_next_review,
+            today - timedelta(days=7)
+        )
+        self.assertEqual(missing_anchor.ideal_interval, 6)
 
     def test_rebalance_route_counts_reviews_already_completed_today(self):
         today = date.today()
