@@ -2,7 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ImageReview from "./ImageReview";
 import { useImageReview } from "../hooks/useImageReview";
-import { IMAGE_MODE_TYPE_ALL, IMAGE_MODE_TYPE_PROMPT } from "../imageModes";
+import {
+  IMAGE_MODE_CLICK_PROMPT,
+  IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+  IMAGE_MODE_TYPE_ALL,
+  IMAGE_MODE_TYPE_PROMPT
+} from "../imageModes";
 
 vi.mock("../hooks/useImageReview", () => ({
   useImageReview: vi.fn()
@@ -191,6 +196,91 @@ function typeAllHookState({ rows, foundQuestionIds = [] }) {
   };
 }
 
+function typePromptHookState({
+  rows,
+  activeQuestionId = rows[0]?.item.question_id || null,
+  foundQuestionIds = [],
+  resolvedQuestionIds = [],
+  hookOverrides = {}
+}) {
+  const gridItems = rows.map(row => ({
+    ...row,
+    isActive: row.item.question_id === activeQuestionId
+  }));
+  const activeRow = gridItems.find(row => row.isActive) || gridItems[0] || null;
+
+  return {
+    activeQuestionId,
+    answeredCount: foundQuestionIds.length,
+    choiceOptions: [],
+    currentPromptItem: activeRow?.item || null,
+    feedbackTone: "",
+    finishReview: noop,
+    foundQuestionIds,
+    gridItems,
+    handleChoiceSelect: noop,
+    handleImageSelect: noop,
+    handleSubmit: noop,
+    input: "",
+    mode: IMAGE_MODE_TYPE_PROMPT,
+    promptLabel: "",
+    progressPercent: gridItems.length
+      ? (resolvedQuestionIds.length / gridItems.length) * 100
+      : 0,
+    remainingCount: Math.max(0, gridItems.length - resolvedQuestionIds.length),
+    resultMode: false,
+    selectItem: noop,
+    selectNextItem: noop,
+    sendResult: noop,
+    setInput: noop,
+    setQuality: noop,
+    skipCurrentPrompt: noop,
+    wrongAnsweredCount: Math.max(0, resolvedQuestionIds.length - foundQuestionIds.length),
+    ...hookOverrides
+  };
+}
+
+function imageClickHookState({
+  rows,
+  mode = IMAGE_MODE_CLICK_PROMPT,
+  activeQuestionId = rows[0]?.item.question_id || null,
+  hookOverrides = {}
+}) {
+  const gridItems = rows.map(row => ({
+    ...row,
+    isActive: row.item.question_id === activeQuestionId
+  }));
+  const activeRow = gridItems.find(row => row.isActive) || gridItems[0] || null;
+
+  return {
+    activeQuestionId,
+    answeredCount: 0,
+    choiceOptions: [],
+    currentPromptItem: activeRow?.item || null,
+    feedbackTone: "",
+    finishReview: noop,
+    foundQuestionIds: [],
+    gridItems,
+    handleChoiceSelect: noop,
+    handleImageSelect: noop,
+    handleSubmit: noop,
+    input: "",
+    mode,
+    promptLabel: activeRow?.item?.label || activeRow?.item?.answer || "",
+    progressPercent: 0,
+    remainingCount: gridItems.length,
+    resultMode: false,
+    selectItem: noop,
+    selectNextItem: noop,
+    sendResult: noop,
+    setInput: noop,
+    setQuality: noop,
+    skipCurrentPrompt: noop,
+    wrongAnsweredCount: 0,
+    ...hookOverrides
+  };
+}
+
 describe("ImageReview answer label preview", () => {
   afterEach(() => {
     cleanup();
@@ -293,6 +383,117 @@ describe("ImageReview answer label preview", () => {
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
     expect(screen.getByText("Terminer")).toBeInTheDocument();
+  });
+
+  it("selects a type_prompt image tile by click and restores input focus", async () => {
+    const selectItem = vi.fn();
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2)
+    ];
+    const { container } = renderImageReviewWithState(
+      typePromptHookState({
+        rows,
+        hookOverrides: {
+          selectItem
+        }
+      })
+    );
+    const input = screen.getByPlaceholderText("Nom de l'image...");
+
+    input.blur();
+    fireEvent.click(tileFor(container, 2));
+
+    expect(selectItem).toHaveBeenCalledWith(2);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+  });
+
+  it("uses Tab and Shift+Tab to select type_prompt images without moving focus", async () => {
+    const selectNextItem = vi.fn();
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3)
+    ];
+    renderImageReviewWithState(
+      typePromptHookState({
+        rows,
+        hookOverrides: {
+          selectNextItem
+        }
+      })
+    );
+    const input = screen.getByPlaceholderText("Nom de l'image...");
+
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
+    expect(selectNextItem).toHaveBeenCalledWith(1);
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+
+    selectNextItem.mockClear();
+
+    expect(fireEvent.keyDown(input, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(selectNextItem).toHaveBeenCalledWith(-1);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("opens type_prompt image preview from the zoom control without selecting", () => {
+    const selectItem = vi.fn();
+    const rows = [
+      imageGridRow(1)
+    ];
+    const { container } = renderImageReviewWithState(
+      typePromptHookState({
+        rows,
+        hookOverrides: {
+          selectItem
+        }
+      })
+    );
+    const zoomControl = container.querySelector("[data-image-zoom-control]");
+
+    fireEvent.click(zoomControl);
+
+    expect(selectItem).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Fermer l'image agrandie" }))
+      .toBeInTheDocument();
+  });
+
+  it.each([
+    IMAGE_MODE_CLICK_PROMPT,
+    IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+  ])("keeps zoom separate from image selection in %s mode", (mode) => {
+    const handleImageSelect = vi.fn();
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2)
+    ];
+    const { container } = renderImageReviewWithState(
+      imageClickHookState({
+        rows,
+        mode,
+        hookOverrides: {
+          handleImageSelect
+        }
+      })
+    );
+
+    fireEvent.click(tileFor(container, 2));
+
+    expect(handleImageSelect).toHaveBeenCalledWith(2);
+
+    handleImageSelect.mockClear();
+    fireEvent.click(container.querySelector("[data-image-zoom-control]"));
+
+    expect(handleImageSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Fermer l'image agrandie" }))
+      .toBeInTheDocument();
   });
 
   it("separates found images from the active grid while answering", () => {

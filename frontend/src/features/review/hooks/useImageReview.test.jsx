@@ -277,6 +277,137 @@ describe("useImageReview", () => {
     expect(result.current.activeQuestionId).toBeNull();
   });
 
+  it("type_prompt keeps the review item order for grid and prompts", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+
+    try {
+      const items = [
+        imageItem(1, "France"),
+        imageItem(2, "Germany"),
+        imageItem(3, "Spain"),
+        imageItem(4, "Italy")
+      ];
+      const { result } = renderHook(() =>
+        useImageReview(items, vi.fn(), undefined, {
+          mode: IMAGE_MODE_TYPE_PROMPT
+        })
+      );
+
+      expect(result.current.gridItems.map(row => row.item.question_id)).toEqual([
+        1,
+        2,
+        3,
+        4
+      ]);
+      expect(result.current.currentPromptItem.question_id).toBe(1);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it("type_prompt manual selection changes the active image without grading", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_PROMPT
+      })
+    );
+
+    act(() => {
+      result.current.setInput("draft");
+    });
+    act(() => {
+      result.current.selectItem(3);
+    });
+
+    expect(result.current.currentPromptItem.question_id).toBe(3);
+    expect(result.current.input).toBe("");
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.resolvedQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({});
+  });
+
+  it("type_prompt next selection wraps and skips resolved images", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_PROMPT
+      })
+    );
+
+    act(() => {
+      result.current.selectItem(2);
+    });
+    act(() => {
+      result.current.skipCurrentPrompt();
+    });
+
+    expect(result.current.resolvedQuestionIds).toEqual([2]);
+    expect(result.current.currentPromptItem.question_id).toBe(3);
+
+    act(() => {
+      result.current.selectNextItem(-1);
+    });
+
+    expect(result.current.currentPromptItem.question_id).toBe(1);
+
+    act(() => {
+      result.current.selectNextItem(1);
+    });
+
+    expect(result.current.currentPromptItem.question_id).toBe(3);
+
+    act(() => {
+      result.current.selectNextItem(1);
+    });
+
+    expect(result.current.currentPromptItem.question_id).toBe(1);
+  });
+
+  it("type_prompt answers and skips advance from the current image position", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_PROMPT
+      })
+    );
+
+    act(() => {
+      result.current.selectItem(3);
+    });
+    act(() => {
+      result.current.setInput("Spain");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+
+    expect(result.current.foundQuestionIds).toEqual([3]);
+    expect(result.current.resolvedQuestionIds).toEqual([3]);
+    expect(result.current.currentPromptItem.question_id).toBe(4);
+
+    act(() => {
+      result.current.skipCurrentPrompt();
+    });
+
+    expect(result.current.foundQuestionIds).toEqual([3]);
+    expect(result.current.resolvedQuestionIds).toEqual([3, 4]);
+    expect(result.current.currentPromptItem.question_id).toBe(1);
+  });
+
   it("type_prompt skip marks the current image missed and advances", () => {
     const items = [
       imageItem(1, "France"),

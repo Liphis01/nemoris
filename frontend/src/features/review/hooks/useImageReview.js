@@ -128,6 +128,32 @@ function shouldHighlightPromptImage(mode) {
 }
 
 
+function nextUnresolvedItem(items, startQuestionId, direction, resolvedQuestionIds) {
+  if (!items.length) return null;
+
+  const step = direction < 0 ? -1 : 1;
+  const startIndex = items.findIndex(item => item.question_id === startQuestionId);
+  const anchorIndex = startIndex >= 0
+    ? startIndex
+    : step > 0
+      ? -1
+      : 0;
+
+  for (let offset = 1; offset <= items.length; offset += 1) {
+    const index = (
+      anchorIndex + (offset * step) + items.length
+    ) % items.length;
+    const item = items[index];
+
+    if (!resolvedQuestionIds.has(item.question_id)) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+
 export function useImageReview(
   reviewItems,
   onComplete,
@@ -142,21 +168,26 @@ export function useImageReview(
     () => `${mode}:${idsFor(reviewItems).join("|")}`,
     [mode, reviewItems]
   );
-  const shuffledItems = useMemo(
-    () => shuffled(reviewItems),
+  const sessionItems = useMemo(
+    () => (
+      mode === IMAGE_MODE_TYPE_PROMPT
+        ? [...reviewItems]
+        : shuffled(reviewItems)
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reviewKey]
   );
   const promptQueue = useMemo(
     () => {
-      if (!isPromptMode(mode)) return shuffledItems;
+      if (!isPromptMode(mode)) return sessionItems;
+      if (mode === IMAGE_MODE_TYPE_PROMPT) return sessionItems;
 
       return shouldUseGridPromptOrder(mode)
-        ? shuffledItems
+        ? sessionItems
         : shuffled(reviewItems);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mode, reviewKey, shuffledItems]
+    [mode, reviewKey, sessionItems]
   );
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
@@ -165,6 +196,7 @@ export function useImageReview(
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
   const [resultMode, setResultMode] = useState(false);
+  const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
 
   useEffect(() => {
     setInput("");
@@ -174,6 +206,7 @@ export function useImageReview(
     setQualityByQuestionId({});
     setFeedbackTone(null);
     setResultMode(false);
+    setActivePromptQuestionId(null);
   }, [reviewKey]);
 
   const foundQuestionIdSet = useMemo(
@@ -189,11 +222,23 @@ export function useImageReview(
     [lockedMissedQuestionIds]
   );
   const currentPromptItem = useMemo(
-    () =>
-      isPromptMode(mode)
-        ? promptQueue.find(item => !resolvedQuestionIdSet.has(item.question_id)) || null
-        : null,
-    [mode, promptQueue, resolvedQuestionIdSet]
+    () => {
+      if (!isPromptMode(mode)) return null;
+
+      if (mode === IMAGE_MODE_TYPE_PROMPT && activePromptQuestionId !== null) {
+        const activeItem = promptQueue.find(item =>
+          item.question_id === activePromptQuestionId &&
+          !resolvedQuestionIdSet.has(item.question_id)
+        );
+
+        if (activeItem) return activeItem;
+      }
+
+      return promptQueue.find(item =>
+        !resolvedQuestionIdSet.has(item.question_id)
+      ) || null;
+    },
+    [activePromptQuestionId, mode, promptQueue, resolvedQuestionIdSet]
   );
   const activeItem = useMemo(() => {
     if (shouldHighlightPromptImage(mode)) {
@@ -206,8 +251,8 @@ export function useImageReview(
     mode
   ]);
   const answerLookup = useMemo(
-    () => buildAnswerLookup(shuffledItems),
-    [shuffledItems]
+    () => buildAnswerLookup(sessionItems),
+    [sessionItems]
   );
   const choiceOptions = useMemo(
     () => buildChoiceOptions(currentPromptItem, contextItems),
@@ -221,33 +266,83 @@ export function useImageReview(
   const wrongAnsweredCount = resultMode
     ? lockedMissedQuestionIds.length
     : Math.max(0, completedCount - answeredCount);
-  const progressPercent = shuffledItems.length
-    ? (completedCount / shuffledItems.length) * 100
+  const progressPercent = sessionItems.length
+    ? (completedCount / sessionItems.length) * 100
     : 0;
 
-  function selectItem() {
-    return;
+  function selectItem(questionId) {
+    if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode) return false;
+    if (resolvedQuestionIdSet.has(questionId)) return false;
+
+    const target = promptQueue.find(item => item.question_id === questionId);
+
+    if (!target) return false;
+
+    if (currentPromptItem?.question_id !== questionId) {
+      setInput("");
+      setFeedbackTone(null);
+    }
+
+    setActivePromptQuestionId(questionId);
+    return true;
   }
 
-  function selectNextItem() {
-    return;
+  function selectNextItem(direction = 1) {
+    if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode || !currentPromptItem) {
+      return false;
+    }
+
+    const target = nextUnresolvedItem(
+      promptQueue,
+      currentPromptItem.question_id,
+      direction,
+      resolvedQuestionIdSet
+    );
+
+    if (!target) return false;
+
+    if (target.question_id !== currentPromptItem.question_id) {
+      setInput("");
+      setFeedbackTone(null);
+    }
+
+    setActivePromptQuestionId(target.question_id);
+    return true;
+  }
+
+  function advanceTypePromptAfterResolved(item) {
+    if (mode !== IMAGE_MODE_TYPE_PROMPT || !item) return;
+
+    const nextResolvedQuestionIds = questionIdSet([
+      ...resolvedQuestionIds,
+      item.question_id
+    ]);
+    const nextItem = nextUnresolvedItem(
+      promptQueue,
+      item.question_id,
+      1,
+      nextResolvedQuestionIds
+    );
+
+    setActivePromptQuestionId(nextItem?.question_id || null);
   }
 
   function enterResultMode(nextFoundIds, nextQualities) {
     const foundSet = questionIdSet(nextFoundIds);
-    const missedIds = shuffledItems
+    const missedIds = sessionItems
       .filter(item => !foundSet.has(item.question_id))
       .map(item => item.question_id);
 
     setLockedMissedQuestionIds(missedIds);
     setQualityByQuestionId(completeQualities(
-      shuffledItems,
+      sessionItems,
       nextQualities,
       nextFoundIds
     ));
     setInput("");
     setFeedbackTone(null);
     setResultMode(true);
+    setActivePromptQuestionId(null);
   }
 
   function rememberFound(item) {
@@ -282,10 +377,11 @@ export function useImageReview(
     rememberResolved(item);
     setInput("");
     setFeedbackTone("correct");
+    advanceTypePromptAfterResolved(item);
 
     if (
       mode === IMAGE_MODE_TYPE_ALL &&
-      nextFoundIds.length >= shuffledItems.length
+      nextFoundIds.length >= sessionItems.length
     ) {
       enterResultMode(nextFoundIds, {
         ...qualityByQuestionId,
@@ -300,12 +396,13 @@ export function useImageReview(
     rememberResolved(item);
     setInput("");
     setFeedbackTone("incorrect");
+    advanceTypePromptAfterResolved(item);
   }
 
   useEffect(() => {
-    if (resultMode || shuffledItems.length === 0) return;
+    if (resultMode || sessionItems.length === 0) return;
 
-    const allComplete = shuffledItems.every(item =>
+    const allComplete = sessionItems.every(item =>
       completedQuestionIdSet.has(item.question_id)
     );
 
@@ -319,7 +416,7 @@ export function useImageReview(
     mode,
     qualityByQuestionId,
     resultMode,
-    shuffledItems
+    sessionItems
   ]);
 
   function handleSubmit() {
@@ -409,7 +506,7 @@ export function useImageReview(
 
   async function sendResult() {
     const qualities = completeQualities(
-      shuffledItems,
+      sessionItems,
       qualityByQuestionId,
       foundQuestionIds
     );
@@ -427,6 +524,7 @@ export function useImageReview(
     setQualityByQuestionId({});
     setFeedbackTone(null);
     setResultMode(false);
+    setActivePromptQuestionId(null);
 
     onComplete(failedQuestionIds);
   }
@@ -434,7 +532,7 @@ export function useImageReview(
   const displayItems = (
     mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode
       ? choiceOptions
-      : shuffledItems
+      : sessionItems
   );
   const activeQuestionIdForGrid = activeItem?.question_id || null;
   const gridItems = useMemo(() => (
@@ -485,7 +583,7 @@ export function useImageReview(
     progressPercent,
     promptLabel: currentPromptItem?.label || currentPromptItem?.answer || "",
     qualityByQuestionId,
-    remainingCount: Math.max(0, shuffledItems.length - completedCount),
+    remainingCount: Math.max(0, sessionItems.length - completedCount),
     resolvedQuestionIds,
     resultMode,
     selectItem,

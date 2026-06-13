@@ -420,6 +420,8 @@ export default function ImageReview({
     promptLabel,
     remainingCount,
     resultMode,
+    selectItem,
+    selectNextItem,
     sendResult,
     setInput,
     setQuality,
@@ -443,6 +445,8 @@ export default function ImageReview({
     normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
   );
+  const selectsPromptImage = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
+  const selectsImageByTile = answersByClick || selectsPromptImage;
   const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
   const shouldSeparateFoundItems = separateFoundItems && !resultMode;
   const activeGridItems = shouldSeparateFoundItems
@@ -552,6 +556,12 @@ export default function ImageReview({
   }, [gridItems, normalizedMode, resultMode]);
 
   function selectTile(questionId) {
+    if (selectsPromptImage) {
+      selectItem(questionId);
+      focusAnswerInput();
+      return;
+    }
+
     if (!answersByClick) return;
 
     handleImageSelect(questionId);
@@ -637,7 +647,9 @@ export default function ImageReview({
   ) {
     const mediaSrc = resolveMediaUrl(row.item.media);
     const revealed = row.isFound || resultMode;
-    const selectable = allowSelection && !resultMode && answersByClick;
+    const selectable = allowSelection && !resultMode && selectsImageByTile;
+    const previewByThumbnail = !selectsImageByTile || resultMode;
+    const showTileZoomControl = mediaSrc && selectsImageByTile && !resultMode;
 
     return (
       <div
@@ -687,31 +699,40 @@ export default function ImageReview({
         }}
       >
         <span
-          onClick={(event) => {
-            event.stopPropagation();
-            openPreview(row);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") {
-              return;
+          onClick={previewByThumbnail
+            ? (event) => {
+              event.stopPropagation();
+              openPreview(row);
             }
+            : undefined}
+          onKeyDown={previewByThumbnail
+            ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
 
-            event.preventDefault();
-            event.stopPropagation();
-            openPreview(row);
-          }}
-          role="button"
-          tabIndex={0}
+              event.preventDefault();
+              event.stopPropagation();
+              openPreview(row);
+            }
+            : undefined}
+          role={previewByThumbnail ? "button" : undefined}
+          tabIndex={previewByThumbnail ? 0 : -1}
           style={{
             alignItems: "center",
             background: "#101010",
             border: "1px solid #262626",
             borderRadius: "9px",
-            cursor: mediaSrc ? "zoom-in" : "default",
+            cursor: previewByThumbnail && mediaSrc
+              ? "zoom-in"
+              : selectable
+                ? "pointer"
+                : "default",
             display: "flex",
             height: "126px",
             justifyContent: "center",
             overflow: "hidden",
+            position: "relative",
             width: "100%"
           }}
         >
@@ -729,6 +750,42 @@ export default function ImageReview({
             <span style={{ color: "#666", fontSize: "12px" }}>
               Image manquante
             </span>
+          )}
+          {showTileZoomControl && (
+            <button
+              type="button"
+              aria-label="Agrandir l'image"
+              data-image-zoom-control
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openPreview(row);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+              }}
+              style={{
+                alignItems: "center",
+                background: "rgba(20, 20, 20, 0.86)",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                borderRadius: "7px",
+                color: "#f3f3f3",
+                cursor: "zoom-in",
+                display: "flex",
+                fontSize: "12px",
+                fontWeight: 900,
+                height: "28px",
+                justifyContent: "center",
+                lineHeight: 1,
+                position: "absolute",
+                right: "7px",
+                top: "7px",
+                width: "28px"
+              }}
+              title="Agrandir l'image"
+            >
+              +
+            </button>
           )}
         </span>
 
@@ -1015,6 +1072,17 @@ export default function ImageReview({
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
+                if (
+                  event.key === "Tab" &&
+                  normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
+                  !resultMode
+                ) {
+                  event.preventDefault();
+                  selectNextItem(event.shiftKey ? -1 : 1);
+                  focusAnswerInput();
+                  return;
+                }
+
                 if (
                   event.key === "Tab" &&
                   normalizedMode === IMAGE_MODE_TYPE_ALL &&
