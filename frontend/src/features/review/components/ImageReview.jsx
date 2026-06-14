@@ -261,18 +261,87 @@ function answerLabel(item) {
   return item.label || item.answer || "Image";
 }
 
-function tileBackground({ isActive, isFound, isLockedMissed }) {
-  if (isLockedMissed) return "#211719";
-  if (isFound) return "#17231b";
+function isImageAnswerRevealed(row, resultMode) {
+  return Boolean(
+    resultMode ||
+    row?.isRevealed ||
+    row?.isFound ||
+    row?.isMissed ||
+    row?.isLockedMissed
+  );
+}
+
+function isImageAnswerState(feedbackState) {
+  return feedbackState === "correct" || feedbackState === "missed";
+}
+
+function tileBackground({ feedbackState, isActive, isFound, isLockedMissed, isMissed }) {
+  if (feedbackState === "wrong" || isLockedMissed || (isMissed && !isImageAnswerState(feedbackState))) {
+    return [
+      "repeating-linear-gradient(135deg, rgba(180, 83, 9, 0.24) 0 6px, rgba(180, 83, 9, 0) 6px 12px)",
+      "linear-gradient(180deg, #2f2414, #1f1a12)"
+    ].join(", ");
+  }
+
+  if (isImageAnswerState(feedbackState) || isFound) return "#151f2d";
   if (isActive) return "#211f17";
   return "#151515";
 }
 
-function tileBorder({ isActive, isFound, isLockedMissed }) {
-  if (isLockedMissed) return "1px solid #6b2b31";
-  if (isFound) return "1px solid #2c5c3e";
+function tileBorder({ feedbackState, isActive, isFound, isLockedMissed, isMissed }) {
+  if (feedbackState === "wrong" || isLockedMissed || (isMissed && !isImageAnswerState(feedbackState))) {
+    return "1px solid rgba(251, 191, 36, 0.78)";
+  }
+
+  if (isImageAnswerState(feedbackState) || isFound) {
+    return feedbackState === "missed"
+      ? "2px dashed rgba(96, 165, 250, 0.86)"
+      : "2px solid rgba(96, 165, 250, 0.86)";
+  }
+
   if (isActive) return "1px solid #d6a91c";
   return "1px solid #292929";
+}
+
+function tileBoxShadow({ feedbackState, isActive }) {
+  if (isActive) return "0 0 0 3px rgba(240, 195, 106, 0.16)";
+  if (isImageAnswerState(feedbackState)) return "0 0 0 3px rgba(96, 165, 250, 0.18)";
+  if (feedbackState === "wrong") {
+    return "0 0 0 3px rgba(251, 191, 36, 0.18)";
+  }
+
+  return "none";
+}
+
+function tileFeedbackLabel(feedbackState) {
+  if (feedbackState === "correct") return "Correct";
+  if (feedbackState === "missed") return "Réponse";
+  if (feedbackState === "wrong") return "Faux";
+
+  return "";
+}
+
+function tileFeedbackBadgeStyle(feedbackState) {
+  if (isImageAnswerState(feedbackState)) {
+    return {
+      background: "#1e3a5f",
+      border: "1px solid rgba(147, 197, 253, 0.76)",
+      color: "#dbeafe"
+    };
+  }
+
+  if (feedbackState === "wrong") {
+    return {
+      background: [
+        "repeating-linear-gradient(135deg, rgba(120, 53, 15, 0.36) 0 4px, rgba(120, 53, 15, 0) 4px 8px)",
+        "#3b2a13"
+      ].join(", "),
+      border: "1px solid rgba(251, 191, 36, 0.82)",
+      color: "#fde68a"
+    };
+  }
+
+  return {};
 }
 
 function tileOffset(element, key) {
@@ -286,7 +355,7 @@ function tileOffset(element, key) {
 }
 
 function isIncompleteImageRowItem(row) {
-  return !row.isFound && !row.isLockedMissed;
+  return !row.isFound && !row.isLockedMissed && !row.isMissed;
 }
 
 function buildVisualImageRows(gridItems, tileElements) {
@@ -331,12 +400,6 @@ function buildVisualImageRows(gridItems, tileElements) {
 
 function imageVisualRowHasIncompleteItem(row) {
   return row.items.some(item => isIncompleteImageRowItem(item.row));
-}
-
-function findImageVisualRowIndex(rows, questionId) {
-  return rows.findIndex(row =>
-    row.items.some(item => item.questionId === questionId)
-  );
 }
 
 function findAdjacentIncompleteImageRowIndex(rows, startIndex, direction) {
@@ -385,6 +448,68 @@ function scrollImageVisualRowIntoView(row) {
   });
 }
 
+function imageChoiceFeedbackState(option, feedback) {
+  if (!feedback) return "";
+
+  if (option.question_id === feedback.correctQuestionId) return "correct";
+  if (option.question_id === feedback.selectedQuestionId) return "wrong";
+
+  return "neutral";
+}
+
+function imageChoiceFeedbackLabel(option, feedback) {
+  const state = imageChoiceFeedbackState(option, feedback);
+
+  if (state === "correct") return "Correct";
+  if (state === "wrong") return "Faux";
+
+  return "";
+}
+
+function imageChoiceButtonStyle(option, feedback) {
+  const state = imageChoiceFeedbackState(option, feedback);
+
+  if (state === "correct") {
+    return {
+      ...buttonStyle,
+      background: "linear-gradient(180deg, #1e3a5f, #17253d)",
+      border: "2px solid rgba(147, 197, 253, 0.82)",
+      boxShadow: "0 0 0 3px rgba(96, 165, 250, 0.18)",
+      color: "#dbeafe",
+      minHeight: "44px",
+      overflowWrap: "anywhere",
+      textAlign: "center"
+    };
+  }
+
+  if (state === "wrong") {
+    return {
+      ...buttonStyle,
+      background: [
+        "repeating-linear-gradient(135deg, rgba(180, 83, 9, 0.26) 0 6px, rgba(180, 83, 9, 0) 6px 12px)",
+        "linear-gradient(180deg, #3b2a13, #241b10)"
+      ].join(", "),
+      border: "2px dashed rgba(251, 191, 36, 0.82)",
+      boxShadow: "0 0 0 3px rgba(251, 191, 36, 0.18)",
+      color: "#fde68a",
+      minHeight: "44px",
+      overflowWrap: "anywhere",
+      textAlign: "center"
+    };
+  }
+
+  return {
+    ...buttonStyle,
+    background: "#141414",
+    border: "1px solid #303030",
+    cursor: state === "neutral" ? "default" : buttonStyle.cursor,
+    minHeight: "44px",
+    opacity: state === "neutral" ? 0.55 : 1,
+    overflowWrap: "anywhere",
+    textAlign: "center"
+  };
+}
+
 export default function ImageReview({
   group,
   reviewItems,
@@ -395,7 +520,8 @@ export default function ImageReview({
   separateFoundItems = false,
   showQualityControls = true,
   trainingElapsedMs = null,
-  trainingBestTimeMs = null
+  trainingBestTimeMs = null,
+  fillAvailableHeight = false
 }) {
   const inputRef = useRef(null);
   const containerRef = useRef(null);
@@ -416,6 +542,7 @@ export default function ImageReview({
     handleImageSelect,
     handleSubmit,
     input,
+    interactionFeedback,
     mode,
     promptLabel,
     remainingCount,
@@ -439,10 +566,17 @@ export default function ImageReview({
   const showPromptPanel = (
     normalizedMode !== IMAGE_MODE_TYPE_ALL &&
     normalizedMode !== IMAGE_MODE_TYPE_PROMPT &&
+    (!fillAvailableHeight ||
+      normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
+      normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE) &&
     !resultMode
   );
   const showLabelChoices = (
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
+    !resultMode
+  );
+  const showImageChoiceBoard = (
+    normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE &&
     !resultMode
   );
   const answersByClick = (
@@ -466,6 +600,15 @@ export default function ImageReview({
   const wrongProgressPercent = reviewItems.length
     ? Math.min((wrongAnsweredCount / reviewItems.length) * 100, 100)
     : 0;
+  const tileImageHeight = fillAvailableHeight ? 154 : 188;
+  const tileImageMaxHeight = fillAvailableHeight ? 140 : 174;
+  const tileMinHeight = fillAvailableHeight
+    ? resultMode && showQualityControls ? "260px" : "212px"
+    : resultMode && showQualityControls ? "300px" : "250px";
+  const compactImageGridWidth = "620px";
+  const imageGridColumns = fillAvailableHeight
+    ? "repeat(auto-fit, minmax(170px, 1fr))"
+    : "repeat(auto-fill, minmax(190px, 1fr))";
   const feedbackCopy = feedbackTone === "incorrect"
     ? answersByClick
       ? "Mauvaise image."
@@ -504,36 +647,18 @@ export default function ImageReview({
     }
   }, []);
 
-  const scrollFromCompletedTypeAllQuestion = useCallback((questionId) => {
-    if (normalizedMode !== IMAGE_MODE_TYPE_ALL || resultMode) return false;
+  const scrollImageTileIntoView = useCallback((questionId, block = "center") => {
+    const tile = tileElementsRef.current.get(questionId);
 
-    const visualRows = buildVisualImageRows(
-      gridItems,
-      tileElementsRef.current
-    );
-    const completedRowIndex = findImageVisualRowIndex(
-      visualRows,
-      questionId
-    );
+    if (!tile) return false;
 
-    if (
-      completedRowIndex < 0 ||
-      imageVisualRowHasIncompleteItem(visualRows[completedRowIndex])
-    ) {
-      return false;
-    }
-
-    const targetRowIndex = findAdjacentIncompleteImageRowIndex(
-      visualRows,
-      completedRowIndex,
-      1
-    );
-
-    if (targetRowIndex < 0) return false;
-
-    scrollImageVisualRowIntoView(visualRows[targetRowIndex]);
+    tile.scrollIntoView({
+      behavior: "smooth",
+      block,
+      inline: "nearest"
+    });
     return true;
-  }, [gridItems, normalizedMode, resultMode]);
+  }, []);
 
   const scrollToAdjacentTypeAllRow = useCallback((direction) => {
     if (normalizedMode !== IMAGE_MODE_TYPE_ALL || resultMode) return false;
@@ -623,7 +748,6 @@ export default function ImageReview({
     if (
       previousFoundQuestionIds === null ||
       normalizedMode !== IMAGE_MODE_TYPE_ALL ||
-      resultMode ||
       previewRow
     ) {
       return;
@@ -636,13 +760,35 @@ export default function ImageReview({
 
     if (!newlyFoundQuestionId) return;
 
-    scrollFromCompletedTypeAllQuestion(newlyFoundQuestionId);
+    scrollImageTileIntoView(newlyFoundQuestionId, "center");
   }, [
     foundQuestionIds,
     normalizedMode,
     previewRow,
+    scrollImageTileIntoView
+  ]);
+
+  useEffect(() => {
+    if (
+      !interactionFeedback?.correctQuestionId ||
+      resultMode ||
+      previewRow ||
+      ![
+        IMAGE_MODE_CLICK_PROMPT,
+        IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+      ].includes(normalizedMode)
+    ) {
+      return;
+    }
+
+    scrollImageTileIntoView(interactionFeedback.correctQuestionId, "center");
+  }, [
+    interactionFeedback,
+    normalizedMode,
+    previewRow,
     resultMode,
-    scrollFromCompletedTypeAllQuestion
+    scrollImageTileIntoView
   ]);
 
   function renderImageTile(
@@ -650,7 +796,14 @@ export default function ImageReview({
     { allowSelection = true, registerForScroll = true } = {}
   ) {
     const mediaSrc = resolveMediaUrl(row.item.media);
-    const revealed = row.isFound || resultMode;
+    const revealed = isImageAnswerRevealed(row, resultMode);
+    const isWrongOrMissed = (
+      row.feedbackState === "wrong" ||
+      row.feedbackState === "missed" ||
+      row.isMissed ||
+      row.isLockedMissed
+    );
+    const feedbackBadgeLabel = tileFeedbackLabel(row.feedbackState);
     const selectable = allowSelection && !resultMode && selectsImageByTile;
     const previewByThumbnail = !selectsImageByTile || resultMode;
     const showTileZoomControl = mediaSrc && selectsImageByTile && !resultMode;
@@ -659,6 +812,8 @@ export default function ImageReview({
       <div
         key={row.item.question_id}
         data-image-question-id={row.item.question_id}
+        data-image-feedback={row.feedbackState || (row.isMissed ? "missed" : "")}
+        data-image-revealed={revealed ? "true" : "false"}
         data-image-review-tile
         ref={registerForScroll
           ? (element) => {
@@ -686,18 +841,16 @@ export default function ImageReview({
           background: tileBackground(row),
           border: tileBorder(row),
           borderRadius: "12px",
-          boxShadow: row.isActive
-            ? "0 0 0 3px rgba(240, 195, 106, 0.16)"
-            : "none",
+          boxShadow: tileBoxShadow(row),
           boxSizing: "border-box",
           color: "#eee",
           cursor: selectable ? "pointer" : "default",
           display: "grid",
-          gap: "8px",
-          gridTemplateRows: "116px minmax(20px, auto) auto",
-          minHeight: resultMode && showQualityControls ? "220px" : "170px",
+          gap: "10px",
+          gridTemplateRows: `${tileImageHeight}px minmax(22px, auto) auto`,
+          minHeight: tileMinHeight,
           overflow: "hidden",
-          padding: "8px",
+          padding: "10px",
           textAlign: "left",
           transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease"
         }}
@@ -733,7 +886,7 @@ export default function ImageReview({
                 ? "pointer"
                 : "default",
             display: "flex",
-            height: "126px",
+            height: `${tileImageHeight}px`,
             justifyContent: "center",
             overflow: "hidden",
             position: "relative",
@@ -745,7 +898,7 @@ export default function ImageReview({
               src={mediaSrc}
               alt={revealed ? answerLabel(row.item) : "image"}
               style={{
-                maxHeight: "112px",
+                maxHeight: `${tileImageMaxHeight}px`,
                 maxWidth: "100%",
                 objectFit: "contain"
               }}
@@ -753,6 +906,26 @@ export default function ImageReview({
           ) : (
             <span style={{ color: "#666", fontSize: "12px" }}>
               Image manquante
+            </span>
+          )}
+          {feedbackBadgeLabel && (
+            <span
+              data-image-feedback-badge
+              style={{
+                ...tileFeedbackBadgeStyle(row.feedbackState),
+                borderRadius: "999px",
+                fontSize: "11px",
+                fontWeight: 900,
+                left: "7px",
+                letterSpacing: 0,
+                lineHeight: 1,
+                padding: "6px 8px",
+                position: "absolute",
+                textTransform: "uppercase",
+                top: "7px"
+              }}
+            >
+              {feedbackBadgeLabel}
             </span>
           )}
           {showTileZoomControl && (
@@ -778,13 +951,13 @@ export default function ImageReview({
                 display: "flex",
                 fontSize: "12px",
                 fontWeight: 900,
-                height: "28px",
+                height: "30px",
                 justifyContent: "center",
                 lineHeight: 1,
                 position: "absolute",
                 right: "7px",
                 top: "7px",
-                width: "28px"
+                width: "30px"
               }}
               title="Agrandir l'image"
             >
@@ -794,7 +967,13 @@ export default function ImageReview({
         </span>
 
         <ImageAnswerLabel
-          color={row.isLockedMissed ? "#ff9aa5" : row.isFound ? "#86efac" : "#777"}
+          color={
+            isImageAnswerState(row.feedbackState) || row.isFound
+              ? "#bfdbfe"
+              : isWrongOrMissed
+                ? "#fde68a"
+                : "#777"
+          }
           label={answerLabel(row.item)}
           revealed={revealed}
         />
@@ -843,6 +1022,171 @@ export default function ImageReview({
     );
   }
 
+  function renderImageChoiceTile(row) {
+    const mediaSrc = resolveMediaUrl(row.item.media);
+    const revealed = isImageAnswerRevealed(row, resultMode);
+    const isWrongOrMissed = (
+      row.feedbackState === "wrong" ||
+      row.feedbackState === "missed" ||
+      row.isMissed ||
+      row.isLockedMissed
+    );
+    const feedbackBadgeLabel = tileFeedbackLabel(row.feedbackState);
+
+    return (
+      <div
+        key={row.item.question_id}
+        data-image-choice-tile
+        data-image-question-id={row.item.question_id}
+        data-image-feedback={row.feedbackState || (row.isMissed ? "missed" : "")}
+        data-image-revealed={revealed ? "true" : "false"}
+        data-image-review-tile
+        ref={(element) => {
+          registerTileElement(
+            row.item.question_id,
+            element,
+            row.item.question_id === activeQuestionId
+          );
+        }}
+        onClick={() => selectTile(row.item.question_id)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") {
+            return;
+          }
+
+          event.preventDefault();
+          selectTile(row.item.question_id);
+        }}
+        role="button"
+        tabIndex={0}
+        style={{
+          aspectRatio: "1 / 1",
+          background: tileBackground(row),
+          border: tileBorder(row),
+          borderRadius: "10px",
+          boxShadow: tileBoxShadow(row),
+          boxSizing: "border-box",
+          color: "#eee",
+          cursor: "pointer",
+          display: "grid",
+          gap: "10px",
+          gridTemplateRows: "minmax(0, 1fr) minmax(22px, auto)",
+          minHeight: "0",
+          overflow: "hidden",
+          padding: "10px",
+          textAlign: "left",
+          transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
+          width: "100%"
+        }}
+      >
+        <span
+          style={{
+            alignItems: "center",
+            background: "#101010",
+            border: "1px solid #262626",
+            borderRadius: "8px",
+            display: "flex",
+            height: "100%",
+            justifyContent: "center",
+            minHeight: 0,
+            overflow: "hidden",
+            position: "relative",
+            width: "100%"
+          }}
+        >
+          {mediaSrc ? (
+            <img
+              src={mediaSrc}
+              alt={revealed ? answerLabel(row.item) : "image"}
+              data-image-choice-img
+              style={{
+                display: "block",
+                height: "100%",
+                maxHeight: "100%",
+                maxWidth: "100%",
+                objectFit: "contain",
+                objectPosition: "center",
+                width: "100%"
+              }}
+            />
+          ) : (
+            <span style={{ color: "#666", fontSize: "12px" }}>
+              Image manquante
+            </span>
+          )}
+          {feedbackBadgeLabel && (
+            <span
+              data-image-feedback-badge
+              style={{
+                ...tileFeedbackBadgeStyle(row.feedbackState),
+                borderRadius: "999px",
+                fontSize: "11px",
+                fontWeight: 900,
+                left: "8px",
+                letterSpacing: 0,
+                lineHeight: 1,
+                padding: "6px 8px",
+                position: "absolute",
+                textTransform: "uppercase",
+                top: "8px"
+              }}
+            >
+              {feedbackBadgeLabel}
+            </span>
+          )}
+          {mediaSrc && (
+            <button
+              type="button"
+              aria-label="Agrandir l'image"
+              data-image-zoom-control
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openPreview(row);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+              }}
+              style={{
+                alignItems: "center",
+                background: "rgba(20, 20, 20, 0.86)",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                borderRadius: "7px",
+                color: "#f3f3f3",
+                cursor: "zoom-in",
+                display: "flex",
+                fontSize: "12px",
+                fontWeight: 900,
+                height: "30px",
+                justifyContent: "center",
+                lineHeight: 1,
+                position: "absolute",
+                right: "8px",
+                top: "8px",
+                width: "30px"
+              }}
+              title="Agrandir l'image"
+            >
+              +
+            </button>
+          )}
+        </span>
+
+        <ImageAnswerLabel
+          color={
+            isImageAnswerState(row.feedbackState) || row.isFound
+              ? "#bfdbfe"
+              : isWrongOrMissed
+                ? "#fde68a"
+                : "#777"
+          }
+          label={answerLabel(row.item)}
+          revealed={revealed}
+        />
+      </div>
+    );
+  }
+
   if (gridItems.length === 0) {
     return null;
   }
@@ -850,20 +1194,24 @@ export default function ImageReview({
   return (
     <>
       <div
+        data-image-review-shell
         style={{
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
           borderRadius: "18px",
           display: "flex",
           flexDirection: "column",
-          maxHeight: "calc(100vh - 140px)",
+          height: fillAvailableHeight ? "100%" : "calc(100dvh - 220px)",
+          minHeight: fillAvailableHeight ? 0 : "420px",
+          overflow: "hidden",
           ...fadeInStyle
         }}
       >
       <div
+        data-image-review-header
         style={{
           borderBottom: "1px solid #262626",
-          padding: "16px 18px 14px",
+          padding: fillAvailableHeight ? "8px 12px 9px" : "12px 16px 10px",
           flexShrink: 0
         }}
       >
@@ -871,31 +1219,46 @@ export default function ImageReview({
           style={{
             alignItems: "flex-start",
             display: "flex",
-            gap: "16px",
+            gap: "14px",
             justifyContent: "space-between",
-            marginBottom: "12px"
+            marginBottom: fillAvailableHeight ? "6px" : "8px"
           }}
         >
           <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-            <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
-              {resultMode ? "IMAGE RESULT" : `IMAGE · ${imageModeLabels[normalizedMode]}`}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "10px", flexWrap: "wrap" }}>
-              <div style={{ color: "#f3f3f3", fontSize: "24px", fontWeight: 800, lineHeight: 1 }}>
-                {group.name || "Images"}
+            {fillAvailableHeight ? (
+              <div
+                style={{
+                  color: "#888",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  textTransform: "uppercase"
+                }}
+              >
+                Progression
               </div>
-              {trainingElapsedMs !== null && !resultMode && (
-                <TrainingTimerPanel
-                  elapsedMs={trainingElapsedMs}
-                  bestTimeMs={trainingBestTimeMs}
-                />
-              )}
-            </div>
+            ) : (
+              <>
+                <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
+                  {resultMode ? "IMAGE RESULT" : `IMAGE · ${imageModeLabels[normalizedMode]}`}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
+                  <div style={{ color: "#f3f3f3", fontSize: "20px", fontWeight: 800, lineHeight: 1.1 }}>
+                    {group.name || "Images"}
+                  </div>
+                  {trainingElapsedMs !== null && !resultMode && (
+                    <TrainingTimerPanel
+                      elapsedMs={trainingElapsedMs}
+                      bestTimeMs={trainingBestTimeMs}
+                    />
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
-          <div style={{ color: "#fff", fontSize: "28px", fontWeight: 800, textAlign: "right" }}>
+          <div style={{ color: "#fff", fontSize: "24px", fontWeight: 800, textAlign: "right" }}>
             {answeredCount}
-            <span style={{ color: "#666", fontSize: "18px", marginLeft: "4px" }}>
+            <span style={{ color: "#666", fontSize: "16px", marginLeft: "4px" }}>
               / {reviewItems.length}
             </span>
           </div>
@@ -912,7 +1275,7 @@ export default function ImageReview({
             border: "1px solid #2a2a2a",
             borderRadius: "999px",
             boxShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.55)",
-            height: "8px",
+            height: "7px",
             overflow: "hidden"
           }}
         >
@@ -964,25 +1327,45 @@ export default function ImageReview({
         className="app-scrollbar"
         data-image-grid-scroll
         style={{
-          padding: "14px",
+          padding: "16px",
           overflow: "auto",
           flex: 1,
           minHeight: 0,
-          position: "relative"
+          position: "relative",
+          scrollbarGutter: "stable"
         }}
       >
-        <div
-          data-image-active-grid
-          style={{
-            display: "grid",
-            gap: "10px",
-            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))"
-          }}
-        >
-          {activeGridItems.map(row => renderImageTile(row))}
-        </div>
+        {showImageChoiceBoard ? (
+          <div
+            data-image-choice-board
+            style={{
+              display: "grid",
+              gap: fillAvailableHeight ? "12px" : "14px",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              margin: "0 auto",
+              maxWidth: fillAvailableHeight ? "620px" : "720px",
+              width: fillAvailableHeight ? "min(100%, 620px)" : "min(100%, 720px)"
+            }}
+          >
+            {activeGridItems.map(row => renderImageChoiceTile(row))}
+          </div>
+        ) : (
+          <div
+            data-image-active-grid
+            style={{
+              display: "grid",
+              gap: "12px",
+              gridTemplateColumns: imageGridColumns,
+              margin: fillAvailableHeight ? "0 auto" : undefined,
+              maxWidth: fillAvailableHeight ? compactImageGridWidth : undefined,
+              width: fillAvailableHeight ? `min(100%, ${compactImageGridWidth})` : undefined
+            }}
+          >
+            {activeGridItems.map(row => renderImageTile(row))}
+          </div>
+        )}
 
-        {foundGridItems.length > 0 && (
+        {!showImageChoiceBoard && foundGridItems.length > 0 && (
           <div
             data-image-found-section
             style={{
@@ -1009,14 +1392,16 @@ export default function ImageReview({
             <div
               style={{
                 display: "grid",
-                gap: "10px",
-                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))"
+                gap: "12px",
+                gridTemplateColumns: imageGridColumns,
+                margin: fillAvailableHeight ? "0 auto" : undefined,
+                maxWidth: fillAvailableHeight ? compactImageGridWidth : undefined,
+                width: fillAvailableHeight ? `min(100%, ${compactImageGridWidth})` : undefined
               }}
             >
               {foundGridItems.map(row =>
                 renderImageTile(row, {
-                  allowSelection: false,
-                  registerForScroll: false
+                  allowSelection: false
                 })
               )}
             </div>
@@ -1024,35 +1409,50 @@ export default function ImageReview({
         )}
       </div>
 
-      <div style={{ padding: "14px", borderTop: "1px solid #262626", flexShrink: 0 }}>
+      <div
+        data-image-control-band
+        style={{
+          background: "linear-gradient(180deg, #191919, #171717)",
+          borderTop: "1px solid #262626",
+          flexShrink: 0,
+          padding: "12px 14px"
+        }}
+      >
         {showPromptPanel && (
           <div
             style={{
               background: "#121212",
               border: "1px solid #2a2a2a",
               borderRadius: "10px",
-              marginBottom: "12px",
-              padding: "12px 14px"
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "8px 12px",
+              marginBottom: "10px",
+              padding: fillAvailableHeight ? "8px 10px" : "10px 12px"
             }}
           >
-            <div
-              style={{
-                color: "#777",
-                fontSize: "11px",
-                fontWeight: 800,
-                marginBottom: "6px",
-                textTransform: "uppercase"
-              }}
-            >
-              {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-                normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-                ? "Image demandée"
-                : "Image surlignée"}
-            </div>
+            {!fillAvailableHeight && (
+              <div
+                style={{
+                  color: "#777",
+                  fontSize: "11px",
+                  fontWeight: 800,
+                  minWidth: "112px",
+                  textTransform: "uppercase"
+                }}
+              >
+                {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
+                  normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+                  ? "Image demandée"
+                  : "Image surlignée"}
+              </div>
+            )}
             <div
               style={{
                 color: "#f3f3f3",
-                fontSize: "20px",
+                flex: "1 1 220px",
+                fontSize: "18px",
                 fontWeight: 900,
                 lineHeight: 1.2,
                 overflowWrap: "anywhere"
@@ -1069,7 +1469,7 @@ export default function ImageReview({
         )}
 
         {!resultMode && showTextInput && (
-          <div style={{ marginBottom: "14px" }}>
+          <div style={{ marginBottom: "10px" }}>
             <input
               autoFocus
               ref={inputRef}
@@ -1133,17 +1533,28 @@ export default function ImageReview({
               <button
                 key={option.question_id}
                 type="button"
+                data-image-choice-feedback={imageChoiceFeedbackState(
+                  option,
+                  interactionFeedback
+                )}
+                disabled={Boolean(interactionFeedback)}
                 onClick={() => handleChoiceSelect(option.question_id)}
-                style={{
-                  ...buttonStyle,
-                  background: "#141414",
-                  border: "1px solid #303030",
-                  minHeight: "44px",
-                  overflowWrap: "anywhere",
-                  textAlign: "center"
-                }}
+                style={imageChoiceButtonStyle(option, interactionFeedback)}
               >
-                {answerLabel(option)}
+                <span>{answerLabel(option)}</span>
+                {imageChoiceFeedbackLabel(option, interactionFeedback) && (
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: "11px",
+                      fontWeight: 900,
+                      marginTop: "5px",
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    {imageChoiceFeedbackLabel(option, interactionFeedback)}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1226,7 +1637,7 @@ export default function ImageReview({
               boxSizing: "border-box",
               display: "grid",
               gridTemplateRows:
-                previewRow.isFound || resultMode
+                isImageAnswerRevealed(previewRow, resultMode)
                   ? "auto auto"
                   : "auto",
               maxHeight: "86vh",
@@ -1266,7 +1677,7 @@ export default function ImageReview({
               <img
                 src={resolveMediaUrl(previewRow.item.media)}
                 alt={
-                  previewRow.isFound || resultMode
+                  isImageAnswerRevealed(previewRow, resultMode)
                     ? answerLabel(previewRow.item)
                     : "image"
                 }
@@ -1274,7 +1685,7 @@ export default function ImageReview({
                   background: "#0d0d0d",
                   borderRadius: "8px",
                   display: "block",
-                  height: previewRow.isFound || resultMode
+                  height: isImageAnswerRevealed(previewRow, resultMode)
                     ? "min(62vh, 560px)"
                     : "min(68vh, 620px)",
                   objectFit: "contain",
@@ -1289,7 +1700,7 @@ export default function ImageReview({
                   borderRadius: "8px",
                   color: "#777",
                   display: "flex",
-                  height: previewRow.isFound || resultMode
+                  height: isImageAnswerRevealed(previewRow, resultMode)
                     ? "min(62vh, 560px)"
                     : "min(68vh, 620px)",
                   justifyContent: "center",
@@ -1300,7 +1711,7 @@ export default function ImageReview({
               </div>
             )}
 
-            {(previewRow.isFound || resultMode) && (
+            {isImageAnswerRevealed(previewRow, resultMode) && (
               <div
                 style={{
                   color: "#eee",

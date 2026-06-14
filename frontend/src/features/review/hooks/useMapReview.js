@@ -239,6 +239,7 @@ export function useMapReview(
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
   const [choiceFeedback, setChoiceFeedback] = useState(null);
+  const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
 
@@ -254,6 +255,7 @@ export function useMapReview(
     setIncorrectFlashId(0);
     setCorrectFlashId(0);
     setChoiceFeedback(null);
+    setZoneFeedback(null);
     setRecapSort(initialRecapSort);
   }, [reviewKey]);
 
@@ -283,6 +285,20 @@ export function useMapReview(
       window.clearTimeout(timeout);
     };
   }, [choiceFeedback]);
+
+  useEffect(() => {
+    if (!zoneFeedback) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setZoneFeedback(current =>
+        current?.id === zoneFeedback.id ? null : current
+      );
+    }, 800);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [zoneFeedback]);
 
   const promptQueue = useMemo(
     () => {
@@ -479,6 +495,13 @@ export function useMapReview(
     if (currentPromptItem.code === code) {
       markFound(currentPromptItem);
     } else {
+      if (clickedItem?.code) {
+        setZoneFeedback({
+          id: Date.now(),
+          flashCodes: [clickedItem.code]
+        });
+      }
+
       markMissed(currentPromptItem);
     }
   }
@@ -498,6 +521,7 @@ export function useMapReview(
       id: Date.now(),
       correctCode: currentPromptItem.code,
       correctQuestionId: currentPromptItem.question_id,
+      isCorrect,
       options: choiceOptions,
       selectedQuestionId: questionId
     });
@@ -652,19 +676,23 @@ export function useMapReview(
   const visibleChoiceOptions = activeChoiceFeedback
     ? activeChoiceFeedback.options
     : choiceOptions;
+  const visibleDueCodes = activeChoiceFeedback?.correctCode
+    ? [activeChoiceFeedback.correctCode]
+    : dueCodes;
   const targetHighlightCode = (
     mode === MAP_MODE_TYPE_PROMPT ||
     mode === MAP_MODE_MULTIPLE_CHOICE
   )
     ? activeChoiceFeedback?.correctCode || currentPromptItem?.code || null
     : null;
+  const selectedCode = activeChoiceFeedback ? null : targetHighlightCode;
 
   return {
     activeMissedCodes,
     choiceFeedback: activeChoiceFeedback,
     choiceOptions: visibleChoiceOptions,
     currentPromptItem,
-    dueCodes,
+    dueCodes: visibleDueCodes,
     feedbackTone,
     focusedCode,
     focusNextRemainingZone,
@@ -672,6 +700,7 @@ export function useMapReview(
     foundQuestionIds,
     foundCodes,
     foundQuestionIdSet,
+    flashCodes: zoneFeedback?.flashCodes || [],
     finishMap,
     handleChoiceSelect,
     handleSubmit,
@@ -690,7 +719,7 @@ export function useMapReview(
     recapSuccessRate,
     remainingFocusCode: targetHighlightCode || remainingFocusCode,
     remainingZones,
-    selectedCode: targetHighlightCode,
+    selectedCode,
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,

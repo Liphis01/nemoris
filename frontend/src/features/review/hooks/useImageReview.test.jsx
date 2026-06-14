@@ -424,39 +424,85 @@ describe("useImageReview", () => {
 
     expect(result.current.resolvedQuestionIds).toContain(skipped.question_id);
     expect(result.current.foundQuestionIds).not.toContain(skipped.question_id);
+    expect(result.current.revealedQuestionIds).toContain(skipped.question_id);
+    expect(result.current.gridItems.find(row =>
+      row.item.question_id === skipped.question_id
+    )).toMatchObject({
+      isMissed: true,
+      isRevealed: true
+    });
     expect(result.current.currentPromptItem.question_id).not.toBe(
       skipped.question_id
     );
   });
 
   it("click_prompt resolves correct and wrong image clicks", () => {
+    vi.useFakeTimers();
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany")
     ];
-    const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
-        mode: IMAGE_MODE_CLICK_PROMPT
-      })
-    );
-    const prompt = result.current.currentPromptItem;
-    const wrong = items.find(item => item.question_id !== prompt.question_id);
 
-    act(() => {
-      result.current.handleImageSelect(wrong.question_id);
-    });
+    try {
+      const { result } = renderHook(() =>
+        useImageReview(items, vi.fn(), undefined, {
+          mode: IMAGE_MODE_CLICK_PROMPT
+        })
+      );
+      const prompt = result.current.currentPromptItem;
+      const wrong = items.find(item => item.question_id !== prompt.question_id);
 
-    expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
-    expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
+      act(() => {
+        result.current.handleImageSelect(wrong.question_id);
+      });
 
-    const nextPrompt = result.current.currentPromptItem;
+      expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
+      expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
+      expect(result.current.interactionFeedback).toMatchObject({
+        correctQuestionId: prompt.question_id,
+        isCorrect: false,
+        selectedQuestionId: wrong.question_id
+      });
+      expect(result.current.gridItems.find(row =>
+        row.item.question_id === prompt.question_id
+      )).toMatchObject({
+        feedbackState: "missed",
+        isMissed: true,
+        isRevealed: true
+      });
+      expect(result.current.gridItems.find(row =>
+        row.item.question_id === wrong.question_id
+      )).toMatchObject({
+        feedbackState: "wrong",
+        isMissed: false,
+        isRevealed: false
+      });
 
-    act(() => {
-      result.current.handleImageSelect(nextPrompt.question_id);
-    });
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
 
-    expect(result.current.foundQuestionIds).toContain(nextPrompt.question_id);
-    expect(result.current.resultMode).toBe(true);
+      const nextPrompt = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.handleImageSelect(nextPrompt.question_id);
+      });
+
+      expect(result.current.foundQuestionIds).toContain(nextPrompt.question_id);
+      expect(result.current.interactionFeedback).toMatchObject({
+        correctQuestionId: nextPrompt.question_id,
+        isCorrect: true,
+        selectedQuestionId: nextPrompt.question_id
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
+
+      expect(result.current.resultMode).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("multiple_choice_label chooses from labels for the target image", () => {
@@ -484,6 +530,43 @@ describe("useImageReview", () => {
     });
 
     expect(result.current.foundQuestionIds).toContain(prompt.question_id);
+  });
+
+  it("multiple_choice_label wrong answers reveal the target during feedback", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        contextItems: items
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+    const wrong = result.current.choiceOptions.find(option =>
+      option.question_id !== prompt.question_id
+    );
+
+    act(() => {
+      result.current.handleChoiceSelect(wrong.question_id);
+    });
+
+    expect(result.current.interactionFeedback).toMatchObject({
+      correctQuestionId: prompt.question_id,
+      isCorrect: false,
+      selectedQuestionId: wrong.question_id
+    });
+    expect(result.current.activeQuestionId).toBe(prompt.question_id);
+    expect(result.current.gridItems.find(row =>
+      row.item.question_id === prompt.question_id
+    )).toMatchObject({
+      feedbackState: "missed",
+      isMissed: true,
+      isRevealed: true
+    });
   });
 
   it("multiple_choice_label follows the visible image grid order", () => {
@@ -547,5 +630,48 @@ describe("useImageReview", () => {
     });
 
     expect(result.current.foundQuestionIds).toContain(prompt.question_id);
+  });
+
+  it("multiple_choice_image wrong answers reveal the target and clicked image during feedback", () => {
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+        contextItems: items
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+    const wrong = result.current.gridItems.find(row =>
+      row.item.question_id !== prompt.question_id
+    ).item;
+
+    act(() => {
+      result.current.handleImageSelect(wrong.question_id);
+    });
+
+    expect(result.current.interactionFeedback).toMatchObject({
+      correctQuestionId: prompt.question_id,
+      isCorrect: false,
+      selectedQuestionId: wrong.question_id
+    });
+    expect(result.current.gridItems.find(row =>
+      row.item.question_id === prompt.question_id
+    )).toMatchObject({
+      feedbackState: "missed",
+      isMissed: true,
+      isRevealed: true
+    });
+    expect(result.current.gridItems.find(row =>
+      row.item.question_id === wrong.question_id
+    )).toMatchObject({
+      feedbackState: "wrong",
+      isMissed: false,
+      isRevealed: true
+    });
   });
 });

@@ -26,6 +26,7 @@ export default function SvgMap({
     selected,
     focusCode,
     focusVersion = 0,
+    flashCodes = [],
     zoneLabels = emptyZoneLabels,
     onSelect,
     onCodesLoaded
@@ -197,9 +198,11 @@ export default function SvgMap({
         const foundSet = new Set(found);
         const missedSet = new Set(missed);
         const dueSet = new Set(dueItems);
+        const flashSet = new Set(flashCodes);
         const unsavedSet = new Set(unsaved);
 
         const getColor = (code) => {
+            if (flashSet.has(code)) return "#fb7185";
             if (selected === code) return "#f39c12";
             if (unsavedSet.has(code)) return "#facc15";
             if (foundSet.has(code)) return "#21eb75";
@@ -209,6 +212,7 @@ export default function SvgMap({
         };
 
         const getHoverColor = (code) => {
+            if (flashSet.has(code)) return "#fecdd3";
             if (selected === code) return "#fbbf24";
             if (unsavedSet.has(code)) return "#fde047";
             if (foundSet.has(code)) return "#34d399";
@@ -224,6 +228,19 @@ export default function SvgMap({
         const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
             el.style.fill = getDisplayColor(code);
             const tooltipLabel = String(zoneLabels[code] || "");
+            const flashAnimation = flashSet.has(code) && typeof el.animate === "function"
+                ? el.animate(
+                    [
+                        { fill: "#fb7185" },
+                        { fill: "#fecdd3" },
+                        { fill: "#fb7185" }
+                    ],
+                    {
+                        duration: 360,
+                        iterations: 2
+                    }
+                )
+                : null;
 
             const handleClick = (event) => {
                 if (ignoreNextClickRef.current) {
@@ -263,6 +280,7 @@ export default function SvgMap({
             el.addEventListener("mouseleave", handleLeave);
 
             return () => {
+                flashAnimation?.cancel();
                 el.removeEventListener("click", handleClick);
                 el.removeEventListener("mouseenter", handleEnter);
                 el.removeEventListener("mousemove", handleMove);
@@ -277,6 +295,7 @@ export default function SvgMap({
         svgVersion,
         found,
         missed,
+        flashCodes,
         selected,
         dueItems,
         unsaved,

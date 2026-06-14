@@ -267,6 +267,34 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.foundQuestionIds).toHaveLength(1);
   });
 
+  it("click_prompt wrong clicks flash the clicked zone and miss the target", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+    try {
+      const reviewZones = [
+        zone({ questionId: 1, code: "a", label: "Alpha" }),
+        zone({ questionId: 2, code: "b", label: "Beta" })
+      ];
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, vi.fn(), vi.fn(), {
+          mode: "click_prompt"
+        })
+      );
+
+      expect(result.current.promptCode).toBe("a");
+
+      act(() => {
+        result.current.handleZoneSelect("b");
+      });
+
+      expect(result.current.flashCodes).toEqual(["b"]);
+      expect(result.current.activeMissedCodes).toEqual(["a"]);
+      expect(result.current.foundQuestionIds).toEqual([]);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it("click_prompt ignores clicks on already found zones", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),
@@ -348,6 +376,26 @@ describe("useMapReview recap sorting", () => {
     expect(Object.values(result.current.qualityByQuestionId).sort()).toEqual([0, 2]);
   });
 
+  it("type_prompt skip makes the skipped zone active missed", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "type_prompt"
+      })
+    );
+    const skippedCode = result.current.promptCode;
+
+    act(() => {
+      result.current.skipCurrentPrompt();
+    });
+
+    expect(result.current.activeMissedCodes).toEqual([skippedCode]);
+    expect(result.current.foundQuestionIds).toEqual([]);
+  });
+
   it("multiple_choice resolves a target from answer buttons", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),
@@ -366,5 +414,33 @@ describe("useMapReview recap sorting", () => {
     });
 
     expect(result.current.foundQuestionIds).toEqual([target.question_id]);
+  });
+
+  it("multiple_choice wrong answers keep target visible as missed feedback", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "multiple_choice",
+        contextItems: reviewZones
+      })
+    );
+    const target = result.current.currentPromptItem;
+    const wrong = reviewZones.find(item => item.question_id !== target.question_id);
+
+    act(() => {
+      result.current.handleChoiceSelect(wrong.question_id);
+    });
+
+    expect(result.current.choiceFeedback).toMatchObject({
+      correctCode: target.code,
+      correctQuestionId: target.question_id,
+      isCorrect: false,
+      selectedQuestionId: wrong.question_id
+    });
+    expect(result.current.activeMissedCodes).toEqual([target.code]);
+    expect(result.current.dueCodes).toEqual([target.code]);
   });
 });

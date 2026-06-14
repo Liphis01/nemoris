@@ -1,23 +1,15 @@
 # TODO
 
 ## vérifier
+- l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
+- should i answer "easy" to a question that I just got wrong and came back ? the two tries shouldn't compensate each other, does the current system already do that ?
+- quand je fais terminer sur groupe de question bonus, garder les questions non répondues en "nouveau"
 
 ## Urgent
-- dans map qcm, avant de zoom sur la zone suivante, il faut donner un feedback de la réponse précédente
-- recentrer les 4 images pour le qcm d'images
-- ajouter un truc pour prévenir qu'il faut rajouter des questions ou qu'on a trop de questions en ce moment
-
-MAPS
-click_prompt -> visual feedback (zone qui clignote rouge si faux)
-type_prompt -> change zone color skipped to red and give name
-put "recentrer" button and tab in map multiple_choice and change wrong zones to red
-
-IMAGES
-type_all -> scroll to typed image
-click_prompt -> feedback and display answer on image even if wrong
-type_prompt -> display answer on skipped images
-multiple_choice_label -> afficher les réponses des faux direct + scroll
-multiple_choice_image -> feedback plus afficher réponses fausses
+- ajouter un truc pour prévenir qu'il faut rajouter des questions et bloquer les questions bonus si on est surchargé du schedule
+- dans le chat "fix image order..." : make images a bit smaller to leave space for the name of the group (if you think it's possible, make the images' cells fit exactly twice or three times in the container but not necessarily). also, centered items from the compact shell and the main container should be aligned. also, make the "retour" button in training modes go back to the training selection and get rid of the "changer" button.
+- la séparation des images trouvées et restantes doit aussi se faire en training pour click_prompt (et type_prompt) et enlever le scroll vers les images trouvées (mais pas les fausses) et aussi mettre de côté les images ratées et organiser les trouvées du plus récent au plus ancien de trouvage (même chose pour type_prompt) et garder la séparation pour le recap quality
+- il faut trouver un meilleur système pour choisir le recap quality des images
 
 ## quick fixes
 
@@ -26,6 +18,8 @@ multiple_choice_image -> feedback plus afficher réponses fausses
 - faire un bouton toggle pour l'era dans la preview
 - ajouter bouton annuler dans les autres types
 - tab pour skip dans nommer
+- ajouter des raccourcis clavier pour les nouveaux modes
+- mettre une petite loupe plutôt que le + pour la preview des images
 
 ## bugs
 
@@ -34,6 +28,8 @@ multiple_choice_image -> feedback plus afficher réponses fausses
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - quand je suis en cours de review et que le jour suivant commence ça rebalance pas correctement je crois
+- chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
+- il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 
 ## to do when i have more time
 
@@ -63,6 +59,7 @@ multiple_choice_image -> feedback plus afficher réponses fausses
 - uniformiser le style partout
 - augmenter la difficulté des qcm en proposant des réponses plus proches
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
+- I should be able to see from the menu if I still have to do the review or not
 
 ## refactors
 

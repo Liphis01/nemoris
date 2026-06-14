@@ -11,9 +11,12 @@ vi.mock("../../map/components/SvgMap", () => ({
         type="button"
         data-testid={isRecap ? "recap-map" : "active-map"}
         data-due-items={(props.dueItems || []).join("|")}
+        data-flash-codes={(props.flashCodes || []).join("|")}
         data-focus-code={props.focusCode || ""}
         data-focus-version={props.focusVersion ?? ""}
+        data-missed={(props.missed || []).join("|")}
         data-selected={props.selected || ""}
+        data-zone-labels={JSON.stringify(props.zoneLabels || {})}
         onClick={() => props.onSelect?.("beta")}
       >
         {isRecap ? "Recap map" : "Active map"}
@@ -102,6 +105,34 @@ describe("MapReview recap map focus", () => {
     expect(screen.queryByText("Temps")).not.toBeInTheDocument();
   });
 
+  it("collapses duplicate map chrome in compact visual layout", () => {
+    const { container } = renderMapReview(false, {
+      fillAvailableHeight: true,
+      mode: "click_prompt",
+      trainingElapsedMs: 12345,
+      trainingBestTimeMs: 90000
+    });
+    const shell = container.querySelector("[data-map-review-shell]");
+    const header = container.querySelector("[data-map-review-header]");
+
+    expect(shell).toHaveStyle({
+      height: "100%",
+      minHeight: "0",
+      overflow: "hidden"
+    });
+    expect(header).toHaveTextContent("Progression");
+    expect(header).not.toHaveTextContent("MAP");
+    expect(header).not.toHaveTextContent("Cliquer");
+    expect(header).not.toHaveTextContent("Europe");
+    expect(header).not.toHaveTextContent("Temps");
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toBeInTheDocument();
+    expect(screen.getByText((content) => ["Alpha", "Beta"].includes(content)))
+      .toBeInTheDocument();
+    expect(screen.queryByText("Zone demandée")).not.toBeInTheDocument();
+    expect(screen.queryByText("Clique la zone demandée.")).not.toBeInTheDocument();
+  });
+
   it("uses the right-answer progress style in type_all mode", () => {
     const { container } = renderMapReview(false, {
       mode: "type_all"
@@ -149,10 +180,39 @@ describe("MapReview recap map focus", () => {
       .toHaveAttribute("aria-valuenow", "1");
   });
 
+  it("flashes a wrong click and reveals the requested click_prompt zone", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+    try {
+      renderMapReview(false, {
+        mode: "click_prompt"
+      });
+      const map = screen.getByTestId("active-map");
+
+      expect(screen.getByText("Alpha")).toBeInTheDocument();
+
+      fireEvent.click(map);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("active-map"))
+          .toHaveAttribute("data-flash-codes", "beta");
+        expect(screen.getByTestId("active-map"))
+          .toHaveAttribute("data-missed", "alpha");
+      });
+      expect(JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels))
+        .toMatchObject({ alpha: "Alpha" });
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it("shows type_prompt skips as a separate progress bar segment", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"
     });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetLabel = reviewZones.find(zone => zone.code === targetCode)?.label;
 
     fireEvent.click(screen.getByRole("button", { name: "Passer" }));
 
@@ -166,6 +226,11 @@ describe("MapReview recap map focus", () => {
       .toContain("repeating-linear-gradient");
     expect(screen.getByRole("progressbar", { name: "Progression" }))
       .toHaveAttribute("aria-valuenow", "1");
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-missed", targetCode);
+    const labels = JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels);
+
+    expect(labels[targetCode]).toBe(targetLabel);
   });
 
   it("does not skip type_prompt map zones with Tab", () => {
@@ -214,11 +279,15 @@ describe("MapReview recap map focus", () => {
         .toHaveAttribute("data-map-choice-feedback", "wrong");
       expect(screen.getByText("Correct").closest("button"))
         .toHaveAttribute("data-map-choice-feedback", "correct");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-missed", targetCode);
       expect(container.querySelector("[data-map-progress-correct]"))
         .toHaveStyle({ width: "0%" });
       expect(container.querySelector("[data-map-progress-wrong]"))
         .toHaveStyle({ width: "50%" });
     });
+    expect(JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels))
+      .toHaveProperty(targetCode);
     expect(container.querySelector("[data-map-progress-wrong]").style.background)
       .toContain("repeating-linear-gradient");
     expect(screen.getByRole("progressbar", { name: "Progression" }))
@@ -255,7 +324,32 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
   });
 
-  it.each(["click_prompt", "type_prompt", "multiple_choice"])(
+  it("restores Recentrer and Tab focus for multiple_choice", async () => {
+    renderMapReview(false, {
+      mode: "multiple_choice"
+    });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const recenter = screen.getByRole("button", { name: "Recentrer" });
+
+    fireEvent.click(recenter);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", targetCode);
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "1");
+    });
+
+    fireEvent.keyDown(window, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "2");
+    });
+  });
+
+  it.each(["click_prompt", "type_prompt"])(
     "does not show the recenter control in %s mode",
     (mode) => {
       renderMapReview(false, {

@@ -656,6 +656,7 @@ function TimelineCanvas({
   activeItem,
   activeNumber,
   bounds,
+  compactLayout = false,
   committedAnswers,
   items,
   onDraftChange,
@@ -1937,7 +1938,11 @@ function TimelineCanvas({
         border: "1px solid #282828",
         borderRadius: "18px",
         background: "#121212",
-        minHeight: "650px",
+        display: "flex",
+        flex: compactLayout ? "1 1 auto" : undefined,
+        flexDirection: "column",
+        height: compactLayout ? "100%" : undefined,
+        minHeight: compactLayout ? 0 : "650px",
         overflow: "hidden",
         padding: "18px",
         position: "relative"
@@ -1968,7 +1973,8 @@ function TimelineCanvas({
             {canvasDateLabel}
           </div>
           <div style={{ color: "#777", fontSize: "11px", marginTop: "3px" }}>
-            {canvasDateContext} · Wheel zooms, drag canvas or minimap to move
+            {canvasDateContext}
+            {!compactLayout && " · Wheel zooms, drag canvas or minimap to move"}
           </div>
         </div>
 
@@ -2138,7 +2144,9 @@ function TimelineCanvas({
         onPointerLeave={handleSurfacePointerLeave}
         style={{
           position: "relative",
-          height: "470px",
+          flex: compactLayout ? "1 1 auto" : undefined,
+          height: compactLayout ? "auto" : "470px",
+          minHeight: compactLayout ? "260px" : undefined,
           background: "linear-gradient(180deg, #181818 0%, #101010 100%)",
           border: "1px solid #292929",
           borderRadius: "14px",
@@ -2215,7 +2223,7 @@ function TimelineCanvas({
         {renderActiveAnswer()}
         <TimelineTooltip tooltip={tooltip} />
 
-        {!activeAnswer && (
+        {!compactLayout && !activeAnswer && (
           <div
             style={{
               position: "absolute",
@@ -2245,7 +2253,8 @@ export default function TimelineReview({
   group,
   reviewItems,
   onComplete,
-  submitAnswer = sendTimelineAnswer
+  submitAnswer = sendTimelineAnswer,
+  fillAvailableHeight = false
 }) {
   const sortedItems = useMemo(
     () => sortReviewItems(reviewItems || []),
@@ -2464,6 +2473,10 @@ export default function TimelineReview({
           background: "#181818",
           border: "1px solid #262626",
           borderRadius: "18px",
+          display: "flex",
+          flexDirection: "column",
+          height: fillAvailableHeight ? "100%" : undefined,
+          minHeight: fillAvailableHeight ? 0 : undefined,
           overflow: "hidden",
           boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
           ...fadeInStyle
@@ -2471,7 +2484,8 @@ export default function TimelineReview({
       >
         <div
           style={{
-            padding: "16px 18px 14px",
+            flexShrink: 0,
+            padding: fillAvailableHeight ? "12px 16px 10px" : "16px 18px 14px",
             borderBottom: "1px solid #262626",
             background: "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
           }}
@@ -2482,12 +2496,14 @@ export default function TimelineReview({
               justifyContent: "space-between",
               alignItems: "center",
               gap: "20px",
-              marginBottom: "14px"
+              marginBottom: fillAvailableHeight ? "10px" : "14px"
             }}
           >
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                <div style={typeBadgeStyle}>TIMELINE</div>
+                {!fillAvailableHeight && (
+                  <div style={typeBadgeStyle}>TIMELINE</div>
+                )}
                 <div
                   style={{
                     color: "#777",
@@ -2502,7 +2518,7 @@ export default function TimelineReview({
                 style={{
                   color: "#f3f3f3",
                   display: "-webkit-box",
-                  fontSize: "30px",
+                  fontSize: fillAvailableHeight ? "22px" : "30px",
                   fontWeight: "950",
                   lineHeight: 1.1,
                   overflow: "hidden",
@@ -2575,13 +2591,21 @@ export default function TimelineReview({
           />
         </div>
 
-        <div style={{ padding: "18px" }}>
+        <div
+          style={{
+            display: fillAvailableHeight ? "flex" : undefined,
+            flex: fillAvailableHeight ? "1 1 auto" : undefined,
+            minHeight: fillAvailableHeight ? 0 : undefined,
+            padding: fillAvailableHeight ? "12px 16px" : "18px"
+          }}
+        >
           <TimelineCanvas
             activeAnswer={activeAnswer}
             activeId={activeItem.question_id}
             activeItem={activeItem}
             activeNumber={(orderById.get(activeItem.question_id) || 0) + 1}
             bounds={bounds}
+            compactLayout={fillAvailableHeight}
             committedAnswers={committedAnswers}
             items={orderedItems}
             onDraftChange={setActiveDraft}
@@ -2592,22 +2616,25 @@ export default function TimelineReview({
           />
         </div>
 
-        <div
-          style={{
-            borderTop: "1px solid #262626",
-            padding: "12px 18px"
-          }}
-        >
+        {(error || !fillAvailableHeight) && (
           <div
             style={{
-              color: error ? "#ff9aa5" : "#777",
-              fontSize: "13px",
-              fontWeight: error ? "700" : "500"
+              borderTop: "1px solid #262626",
+              flexShrink: 0,
+              padding: "12px 18px"
             }}
           >
-            {error || "Click the timeline to place an answer. Wheel zooms; the minimap shows where you are."}
+            <div
+              style={{
+                color: error ? "#ff9aa5" : "#777",
+                fontSize: "13px",
+                fontWeight: error ? "700" : "500"
+              }}
+            >
+              {error || "Click the timeline to place an answer. Wheel zooms; the minimap shows where you are."}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {recapResults && (

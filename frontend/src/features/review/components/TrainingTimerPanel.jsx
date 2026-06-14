@@ -23,27 +23,32 @@ function formatTrainingTimer(ms) {
 
 export default function TrainingTimerPanel({
   elapsedMs,
-  bestTimeMs = null
+  bestTimeMs = null,
+  variant = "default"
 }) {
   const bestTimeValue = Number(bestTimeMs);
   const showBestTime = Number.isFinite(bestTimeValue) && bestTimeValue > 0;
+  const prominent = variant === "prominent";
 
   return (
-    <div style={timerPanelStyle}>
-      <div style={timerMainStyle}>
-        <ClockMark />
+    <div
+      data-training-timer-panel={variant}
+      style={prominent ? prominentTimerPanelStyle : timerPanelStyle}
+    >
+      <div style={prominent ? prominentTimerMainStyle : timerMainStyle}>
+        <ClockMark prominent={prominent} />
         <div>
           <div style={timerLabelStyle}>Temps</div>
-          <div style={timerValueStyle}>
+          <div style={prominent ? prominentTimerValueStyle : timerValueStyle}>
             {formatTrainingTimer(elapsedMs)}
           </div>
         </div>
       </div>
 
       {showBestTime && (
-        <div style={bestTimeStyle}>
+        <div style={prominent ? prominentBestTimeStyle : bestTimeStyle}>
           <span style={bestTimeLabelStyle}>Meilleur</span>
-          <strong style={bestTimeValueStyle}>
+          <strong style={prominent ? prominentBestTimeValueStyle : bestTimeValueStyle}>
             {formatTrainingTimer(bestTimeMs)}
           </strong>
         </div>
@@ -52,11 +57,14 @@ export default function TrainingTimerPanel({
   );
 }
 
-function ClockMark() {
+function ClockMark({ prominent = false }) {
   return (
-    <div style={timerMarkerStyle} aria-hidden="true">
-      <span style={clockHourHandStyle} />
-      <span style={clockMinuteHandStyle} />
+    <div
+      style={prominent ? prominentTimerMarkerStyle : timerMarkerStyle}
+      aria-hidden="true"
+    >
+      <span style={prominent ? prominentClockHourHandStyle : clockHourHandStyle} />
+      <span style={prominent ? prominentClockMinuteHandStyle : clockMinuteHandStyle} />
     </div>
   );
 }
@@ -82,6 +90,28 @@ const timerMainStyle = {
   gap: "9px"
 };
 
+const prominentTimerPanelStyle = {
+  alignItems: "center",
+  background:
+    "linear-gradient(135deg, rgba(240, 195, 106, 0.24), rgba(143, 199, 255, 0.1))",
+  border: "1px solid rgba(240, 195, 106, 0.46)",
+  borderRadius: "12px",
+  boxShadow: "0 14px 34px rgba(0, 0, 0, 0.34)",
+  boxSizing: "border-box",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "12px",
+  justifyContent: "flex-end",
+  minHeight: "58px",
+  padding: "8px 12px"
+};
+
+const prominentTimerMainStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "10px"
+};
+
 const timerMarkerStyle = {
   alignItems: "center",
   background: "rgba(240, 195, 106, 0.18)",
@@ -92,6 +122,14 @@ const timerMarkerStyle = {
   justifyContent: "center",
   position: "relative",
   width: "30px"
+};
+
+const prominentTimerMarkerStyle = {
+  ...timerMarkerStyle,
+  background: "rgba(240, 195, 106, 0.22)",
+  border: "1px solid rgba(240, 195, 106, 0.52)",
+  height: "36px",
+  width: "36px"
 };
 
 const clockHourHandStyle = {
@@ -118,6 +156,20 @@ const clockMinuteHandStyle = {
   width: "8px"
 };
 
+const prominentClockHourHandStyle = {
+  ...clockHourHandStyle,
+  height: "11px",
+  left: "17px",
+  top: "8px"
+};
+
+const prominentClockMinuteHandStyle = {
+  ...clockMinuteHandStyle,
+  left: "17px",
+  top: "17px",
+  width: "10px"
+};
+
 const timerLabelStyle = {
   color: "#b9b9b9",
   fontSize: "10px",
@@ -135,6 +187,13 @@ const timerValueStyle = {
   marginTop: "4px"
 };
 
+const prominentTimerValueStyle = {
+  ...timerValueStyle,
+  fontSize: "31px",
+  lineHeight: "32px",
+  marginTop: "3px"
+};
+
 const bestTimeStyle = {
   alignItems: "center",
   background: "rgba(12, 12, 12, 0.46)",
@@ -143,6 +202,16 @@ const bestTimeStyle = {
   display: "flex",
   gap: "7px",
   padding: "7px 8px"
+};
+
+const prominentBestTimeStyle = {
+  ...bestTimeStyle,
+  alignSelf: "stretch",
+  flexDirection: "column",
+  gap: "3px",
+  justifyContent: "center",
+  minWidth: "70px",
+  padding: "7px 9px"
 };
 
 const bestTimeLabelStyle = {
@@ -158,4 +227,10 @@ const bestTimeValueStyle = {
   fontVariantNumeric: "tabular-nums",
   fontWeight: 900,
   lineHeight: 1
+};
+
+const prominentBestTimeValueStyle = {
+  ...bestTimeValueStyle,
+  color: "#f0f0f0",
+  fontSize: "16px"
 };

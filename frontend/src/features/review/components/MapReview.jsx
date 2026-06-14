@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
@@ -160,7 +160,8 @@ export default function MapReview({
   trainingElapsedMs = null,
   trainingBestTimeMs = null,
   mode: modeProp,
-  contextItems = []
+  contextItems = [],
+  fillAvailableHeight = false
 }) {
   const normalizedMode = normalizeMapMode(modeProp || group.mode);
   const {
@@ -169,6 +170,7 @@ export default function MapReview({
     choiceOptions,
     dueCodes,
     feedbackTone,
+    flashCodes,
     focusedCode,
     focusNextRemainingZone,
     focusVersion,
@@ -236,7 +238,7 @@ export default function MapReview({
   const wrongProgressPercent = reviewZones.length
     ? Math.min((wrongQuestionCount / reviewZones.length) * 100, 100)
     : 0;
-  const feedbackCopy = feedbackTone === "incorrect"
+  const baseFeedbackCopy = feedbackTone === "incorrect"
     ? mode === MAP_MODE_TYPE_PROMPT
       ? "Réponse incorrecte."
       : "Mauvaise zone."
@@ -249,6 +251,7 @@ export default function MapReview({
           : mode === MAP_MODE_MULTIPLE_CHOICE
             ? "Choisis la réponse."
             : "Tape le nom de la zone.";
+  const feedbackCopy = fillAvailableHeight && !feedbackTone ? "" : baseFeedbackCopy;
   const foundBulkQuality = useMemo(() => {
     if (foundQuestionIds.length === 0) return null;
 
@@ -262,9 +265,17 @@ export default function MapReview({
   }, [foundQuestionIds, qualityByQuestionId]);
   const foundZoneLabels = useMemo(() => {
     const labels = {};
+    const activeMissedCodeSet = new Set(activeMissedCodes);
 
     reviewZones.forEach(item => {
-      if (!item.code || !item.label || !foundQuestionIdSet.has(item.question_id)) {
+      if (
+        !item.code ||
+        !item.label ||
+        (
+          !foundQuestionIdSet.has(item.question_id) &&
+          !activeMissedCodeSet.has(item.code)
+        )
+      ) {
         return;
       }
 
@@ -272,7 +283,7 @@ export default function MapReview({
     });
 
     return labels;
-  }, [foundQuestionIdSet, reviewZones]);
+  }, [activeMissedCodes, foundQuestionIdSet, reviewZones]);
 
   function setRecapRowRef(code) {
     return (element) => {
@@ -314,6 +325,38 @@ export default function MapReview({
     inputRef.current?.focus({ preventScroll: true });
   }, [focusNextRemainingZone]);
 
+  useEffect(() => {
+    if (
+      mode !== MAP_MODE_MULTIPLE_CHOICE ||
+      showRecap ||
+      remainingZones.length === 0
+    ) {
+      return undefined;
+    }
+
+    function handleMapKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.key !== "Tab" ||
+        event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      handleZoomRemaining();
+    }
+
+    window.addEventListener("keydown", handleMapKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleMapKeyDown);
+    };
+  }, [handleZoomRemaining, mode, remainingZones.length, showRecap]);
+
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
 
@@ -323,21 +366,28 @@ export default function MapReview({
   return (
     <>
       <div
+        data-map-review-shell
         style={{
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
-          borderRadius: "18px",
-          overflow: "hidden",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-          ...fadeInStyle
-        }}
+            borderRadius: "18px",
+            display: "flex",
+            flexDirection: "column",
+            height: fillAvailableHeight ? "100%" : undefined,
+            minHeight: fillAvailableHeight ? 0 : undefined,
+            overflow: "hidden",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+            ...fadeInStyle
+          }}
       >
 
         {/* HEADER */}
         <div
+          data-map-review-header
           style={{
-            padding: "22px 24px 18px",
+            padding: fillAvailableHeight ? "8px 12px 9px" : "22px 24px 18px",
             borderBottom: "1px solid #262626",
+            flexShrink: 0,
             background:
               "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
           }}
@@ -348,43 +398,58 @@ export default function MapReview({
               justifyContent: "space-between",
               alignItems: "flex-start",
               gap: "20px",
-              marginBottom: "16px"
+              marginBottom: fillAvailableHeight ? "6px" : "16px"
             }}
           >
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-              <div style={typeBadgeStyle}>
-                MAP · {mapModeLabels[mode]}
-              </div>
-
-              <div
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "12px",
-                  marginTop: "14px",
-                  minWidth: 0
-                }}
-              >
+              {fillAvailableHeight ? (
                 <div
                   style={{
-                    color: "#f3f3f3",
-                    fontSize: "28px",
-                    fontWeight: "700",
-                    lineHeight: 1.15,
-                    minWidth: 0
+                    color: "#888",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    textTransform: "uppercase"
                   }}
                 >
-                  {group.name || group.media}
+                  Progression
                 </div>
+              ) : (
+                <>
+                  <div style={typeBadgeStyle}>
+                    MAP · {mapModeLabels[mode]}
+                  </div>
 
-                {showTrainingTimer && (
-                  <TrainingTimerPanel
-                    elapsedMs={trainingElapsedMs}
-                    bestTimeMs={trainingBestTimeMs}
-                  />
-                )}
-              </div>
+                  <div
+                    style={{
+                      alignItems: "center",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                      marginTop: "14px",
+                      minWidth: 0
+                    }}
+                  >
+                    <div
+                      style={{
+                        color: "#f3f3f3",
+                        fontSize: "28px",
+                        fontWeight: "700",
+                        lineHeight: 1.15,
+                        minWidth: 0
+                      }}
+                    >
+                      {group.name || group.media}
+                    </div>
+
+                    {showTrainingTimer && (
+                      <TrainingTimerPanel
+                        elapsedMs={trainingElapsedMs}
+                        bestTimeMs={trainingBestTimeMs}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div
@@ -395,7 +460,7 @@ export default function MapReview({
             >
               <div
                 style={{
-                  fontSize: "28px",
+                  fontSize: fillAvailableHeight ? "22px" : "28px",
                   fontWeight: "700",
                   color: "#fff"
                 }}
@@ -486,16 +551,32 @@ export default function MapReview({
         {/* MAP */}
         <div
           style={{
-            padding: "18px",
-            borderBottom: "1px solid #262626"
+            borderBottom: "1px solid #262626",
+            display: fillAvailableHeight ? "flex" : undefined,
+            flex: fillAvailableHeight ? "1 1 auto" : undefined,
+            flexDirection: fillAvailableHeight ? "column" : undefined,
+            minHeight: fillAvailableHeight ? 0 : undefined,
+            padding: fillAvailableHeight ? "12px 16px" : "18px"
           }}
         >
-          <div style={activeMapPanelStyle}>
+          <div
+            style={{
+              ...activeMapPanelStyle,
+              ...(fillAvailableHeight
+                ? {
+                    flex: "1 1 auto",
+                    height: "auto",
+                    minHeight: "260px"
+                  }
+                : {})
+            }}
+          >
             <SvgMap
               svgPath={`/maps/${group.media}`}
               found={foundCodes}
-              missed={mode === MAP_MODE_CLICK_PROMPT ? activeMissedCodes : []}
+              missed={activeMissedCodes}
               dueItems={dueCodes}
+              flashCodes={flashCodes}
               focusCode={remainingFocusCode}
               focusVersion={focusVersion}
               selected={selectedCode || undefined}
@@ -508,18 +589,21 @@ export default function MapReview({
         {/* INPUT */}
         <div
           style={{
-            padding: "20px 24px"
+            flexShrink: 0,
+            padding: fillAvailableHeight ? "12px 16px 14px" : "20px 24px"
           }}
         >
           {showPromptPanel && (
             <div style={promptPanelStyle}>
-              <div style={promptKickerStyle}>
-                {mode === MAP_MODE_CLICK_PROMPT
-                  ? "Zone demandée"
-                  : mode === MAP_MODE_MULTIPLE_CHOICE
-                    ? "Zone surlignée"
-                    : "Nom attendu"}
-              </div>
+              {!fillAvailableHeight && (
+                <div style={promptKickerStyle}>
+                  {mode === MAP_MODE_CLICK_PROMPT
+                    ? "Zone demandée"
+                    : mode === MAP_MODE_MULTIPLE_CHOICE
+                      ? "Zone surlignée"
+                      : "Nom attendu"}
+                </div>
+              )}
               <div style={promptValueStyle}>
                 {mode === MAP_MODE_CLICK_PROMPT ? promptLabel : "Zone surlignée"}
               </div>
@@ -612,7 +696,7 @@ export default function MapReview({
                   marginLeft: "auto"
                 }}
               >
-                {mode === MAP_MODE_TYPE_ALL && (
+                {(mode === MAP_MODE_TYPE_ALL || mode === MAP_MODE_MULTIPLE_CHOICE) && (
                   <button
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={handleZoomRemaining}
@@ -623,7 +707,7 @@ export default function MapReview({
                       opacity: remainingZones.length === 0 ? 0.55 : 1
                     }}
                   >
-                    Zone suivante
+                    {mode === MAP_MODE_TYPE_ALL ? "Zone suivante" : "Recentrer"}
                   </button>
                 )}
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
+import TrainingTimerPanel from "../../review/components/TrainingTimerPanel";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { useTrainingSession } from "../hooks/useTrainingSession";
 import {
@@ -116,6 +117,11 @@ function recordForMode(group, mode) {
   return group?.training_records?.[mode] || (
     mode === config?.defaultMode ? group?.training_record : null
   );
+}
+
+
+function isVisualQuestion(question) {
+  return ["image", "map", "timeline"].includes(question?.type_q);
 }
 
 
@@ -547,6 +553,221 @@ export default function TrainingSession({ setMode }) {
     session.attemptFoundCount,
     session.allQuestionIds.length
   );
+  const hasActiveQuestion = Boolean(
+    session.activeScope &&
+    !session.trainingLoading &&
+    !session.trainingError &&
+    !session.isComplete &&
+    currentQuestion &&
+    session.currentIndex < session.questions.length
+  );
+  const useCompactVisualLayout = hasActiveQuestion && isVisualQuestion(currentQuestion);
+  const compactTrainingElapsedMs = session.activeScope?.type === "group"
+    ? session.completedRunElapsedMs
+    : null;
+
+  if (useCompactVisualLayout) {
+    return (
+      <div
+        data-visual-session-shell
+        style={{
+          background: "#111",
+          boxSizing: "border-box",
+          color: "#eee",
+          display: "flex",
+          flexDirection: "column",
+          height: "calc(100dvh - 48px)",
+          overflow: "hidden"
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            flexDirection: "column",
+            margin: "0 auto",
+            maxWidth: "1280px",
+            minHeight: 0,
+            width: "100%"
+          }}
+        >
+          <div
+            data-visual-session-bar
+            style={{
+              alignItems: "center",
+              background: "#181818",
+              border: "1px solid #262626",
+              borderRadius: "14px",
+              boxSizing: "border-box",
+              display: "grid",
+              flexShrink: 0,
+              gap: "12px",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 520px) minmax(0, 1fr)",
+              marginBottom: "10px",
+              minHeight: "72px",
+              padding: "10px 14px"
+            }}
+          >
+            <div
+              data-visual-session-actions
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                justifyContent: "flex-start",
+                minWidth: 0
+              }}
+            >
+              <ReturnToMenuButton
+                onClick={session.returnToScopeSelector}
+                style={{
+                  ...buttonStyle,
+                  borderRadius: "9px",
+                  fontSize: "13px",
+                  padding: "8px 11px"
+                }}
+              />
+            </div>
+
+            <div
+              data-visual-session-status
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+                justifyContent: "center",
+                minWidth: 0,
+                textAlign: "center"
+              }}
+            >
+              <div
+                style={{
+                  color: "#f0c36a",
+                  fontSize: "11px",
+                  fontWeight: 900,
+                  textTransform: "uppercase"
+                }}
+              >
+                Training
+              </div>
+              <strong
+                data-visual-session-title
+                style={{
+                  color: "#f3f3f3",
+                  display: "block",
+                  fontSize: "17px",
+                  fontWeight: 900,
+                  lineHeight: 1.1,
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {session.labelForActiveScope}
+              </strong>
+              <div
+                style={{
+                  alignItems: "center",
+                  color: "#888",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  gap: "6px 8px",
+                  justifyContent: "center",
+                  lineHeight: 1.2
+                }}
+              >
+                <span>
+                  Question {session.currentIndex + 1} / {session.questions.length}
+                </span>
+                {(currentQuestion.tags || []).map(tag => (
+                  <span
+                    key={tag}
+                    style={{
+                      background: "#2b2047",
+                      borderRadius: "999px",
+                      color: "#b69cff",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      padding: "3px 8px"
+                    }}
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div
+              data-visual-session-secondary
+              style={{
+                alignItems: "center",
+                display: "flex",
+                justifyContent: "flex-end",
+                minWidth: 0
+              }}
+            >
+              {compactTrainingElapsedMs !== null ? (
+                <TrainingTimerPanel
+                  elapsedMs={compactTrainingElapsedMs}
+                  bestTimeMs={displayedRecord?.best_time_ms}
+                  variant="prominent"
+                />
+              ) : (
+                <div
+                  style={{
+                    background: "#141414",
+                    border: "1px solid #282828",
+                    borderRadius: "10px",
+                    color: "#9a9a9a",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    padding: "8px 10px",
+                    textTransform: "uppercase"
+                  }}
+                >
+                  En cours
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div
+            data-visual-renderer
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden"
+            }}
+          >
+            <ReviewQuestionRenderer
+              q={currentQuestion}
+              currentIndex={session.currentIndex}
+              showAnswer={session.showAnswer}
+              setShowAnswer={session.setShowAnswer}
+              handleTextAnswer={session.handleTextAnswer}
+              currentTextQuality={null}
+              selectedTextQuality={null}
+              handleMapComplete={session.handleMapComplete}
+              handleImageComplete={session.handleImageComplete}
+              handleTimelineComplete={session.handleTimelineComplete}
+              submitMapAnswer={session.submitMapTrainingAnswer}
+              submitImageAnswer={session.submitImageTrainingAnswer}
+              submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+              trainingMode
+              trainingElapsedMs={null}
+              trainingBestTimeMs={null}
+              compactVisualLayout
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -612,14 +833,10 @@ export default function TrainingSession({ setMode }) {
               </div>
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
+                <ReturnToMenuButton
                   onClick={session.returnToScopeSelector}
                   style={buttonStyle}
-                >
-                  Changer
-                </button>
-                <ReturnToMenuButton onClick={() => setMode("menu")} style={buttonStyle} />
+                />
               </div>
             </div>
 

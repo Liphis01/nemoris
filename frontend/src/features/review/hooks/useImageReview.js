@@ -76,6 +76,21 @@ function completeQualities(items, qualityByQuestionId, foundQuestionIds) {
 }
 
 
+function uniqueItemsByQuestionId(...itemGroups) {
+  const lookup = new Map();
+
+  itemGroups.forEach(items => {
+    (items || []).forEach(item => {
+      if (item?.question_id !== undefined && item?.question_id !== null) {
+        lookup.set(item.question_id, item);
+      }
+    });
+  });
+
+  return lookup;
+}
+
+
 function buildAnswerLookup(items) {
   const lookup = new Map();
 
@@ -193,8 +208,10 @@ export function useImageReview(
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
   const [resolvedQuestionIds, setResolvedQuestionIds] = useState([]);
   const [lockedMissedQuestionIds, setLockedMissedQuestionIds] = useState([]);
+  const [revealedQuestionIds, setRevealedQuestionIds] = useState([]);
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
+  const [interactionFeedback, setInteractionFeedback] = useState(null);
   const [resultMode, setResultMode] = useState(false);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
 
@@ -203,8 +220,10 @@ export function useImageReview(
     setFoundQuestionIds([]);
     setResolvedQuestionIds([]);
     setLockedMissedQuestionIds([]);
+    setRevealedQuestionIds([]);
     setQualityByQuestionId({});
     setFeedbackTone(null);
+    setInteractionFeedback(null);
     setResultMode(false);
     setActivePromptQuestionId(null);
   }, [reviewKey]);
@@ -220,6 +239,14 @@ export function useImageReview(
   const lockedMissedQuestionIdSet = useMemo(
     () => questionIdSet(lockedMissedQuestionIds),
     [lockedMissedQuestionIds]
+  );
+  const revealedQuestionIdSet = useMemo(
+    () => questionIdSet(revealedQuestionIds),
+    [revealedQuestionIds]
+  );
+  const itemByQuestionId = useMemo(
+    () => uniqueItemsByQuestionId(sessionItems, contextItems, reviewItems),
+    [contextItems, reviewItems, sessionItems]
   );
   const currentPromptItem = useMemo(
     () => {
@@ -258,6 +285,20 @@ export function useImageReview(
     () => buildChoiceOptions(currentPromptItem, contextItems),
     [contextItems, currentPromptItem]
   );
+  const activeInteractionFeedback = (
+    !resultMode &&
+    (
+      mode === IMAGE_MODE_CLICK_PROMPT ||
+      mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+      mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    )
+  )
+    ? interactionFeedback
+    : null;
+  const visibleChoiceOptions = activeInteractionFeedback?.options || choiceOptions;
+  const visualPromptItem = activeInteractionFeedback?.correctQuestionId
+    ? itemByQuestionId.get(activeInteractionFeedback.correctQuestionId) || currentPromptItem
+    : currentPromptItem;
   const completedQuestionIdSet = isPromptMode(mode)
     ? resolvedQuestionIdSet
     : foundQuestionIdSet;
@@ -269,6 +310,20 @@ export function useImageReview(
   const progressPercent = sessionItems.length
     ? (completedCount / sessionItems.length) * 100
     : 0;
+
+  useEffect(() => {
+    if (!interactionFeedback) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setInteractionFeedback(current =>
+        current?.id === interactionFeedback.id ? null : current
+      );
+    }, 1300);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [interactionFeedback]);
 
   function selectItem(questionId) {
     if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode) return false;
@@ -334,6 +389,7 @@ export function useImageReview(
       .map(item => item.question_id);
 
     setLockedMissedQuestionIds(missedIds);
+    setRevealedQuestionIds([]);
     setQualityByQuestionId(completeQualities(
       sessionItems,
       nextQualities,
@@ -341,6 +397,7 @@ export function useImageReview(
     ));
     setInput("");
     setFeedbackTone(null);
+    setInteractionFeedback(null);
     setResultMode(true);
     setActivePromptQuestionId(null);
   }
@@ -359,6 +416,14 @@ export function useImageReview(
     }));
 
     return nextFoundIds;
+  }
+
+  function rememberRevealed(item) {
+    if (!item) return;
+
+    setRevealedQuestionIds(prev =>
+      prev.includes(item.question_id) ? prev : [...prev, item.question_id]
+    );
   }
 
   function rememberResolved(item) {
@@ -393,6 +458,7 @@ export function useImageReview(
   function markMissed(item) {
     if (!item) return;
 
+    rememberRevealed(item);
     rememberResolved(item);
     setInput("");
     setFeedbackTone("incorrect");
@@ -401,6 +467,7 @@ export function useImageReview(
 
   useEffect(() => {
     if (resultMode || sessionItems.length === 0) return;
+    if (interactionFeedback) return;
 
     const allComplete = sessionItems.every(item =>
       completedQuestionIdSet.has(item.question_id)
@@ -413,6 +480,7 @@ export function useImageReview(
   }, [
     completedQuestionIdSet,
     foundQuestionIds,
+    interactionFeedback,
     mode,
     qualityByQuestionId,
     resultMode,
@@ -450,12 +518,25 @@ export function useImageReview(
         mode !== IMAGE_MODE_CLICK_PROMPT &&
         mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
       ) ||
-      !currentPromptItem
+      !currentPromptItem ||
+      interactionFeedback
     ) {
       return;
     }
 
-    if (currentPromptItem.question_id === questionId) {
+    const isCorrect = currentPromptItem.question_id === questionId;
+
+    setInteractionFeedback({
+      id: Date.now(),
+      correctQuestionId: currentPromptItem.question_id,
+      isCorrect,
+      options: mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+        ? choiceOptions
+        : null,
+      selectedQuestionId: questionId
+    });
+
+    if (isCorrect) {
       markFound(currentPromptItem);
     } else {
       markMissed(currentPromptItem);
@@ -466,12 +547,23 @@ export function useImageReview(
     if (
       resultMode ||
       mode !== IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
-      !currentPromptItem
+      !currentPromptItem ||
+      interactionFeedback
     ) {
       return;
     }
 
-    if (currentPromptItem.question_id === questionId) {
+    const isCorrect = currentPromptItem.question_id === questionId;
+
+    setInteractionFeedback({
+      id: Date.now(),
+      correctQuestionId: currentPromptItem.question_id,
+      isCorrect,
+      options: choiceOptions,
+      selectedQuestionId: questionId
+    });
+
+    if (isCorrect) {
       markFound(currentPromptItem);
     } else {
       markMissed(currentPromptItem);
@@ -521,8 +613,10 @@ export function useImageReview(
     setFoundQuestionIds([]);
     setResolvedQuestionIds([]);
     setLockedMissedQuestionIds([]);
+    setRevealedQuestionIds([]);
     setQualityByQuestionId({});
     setFeedbackTone(null);
+    setInteractionFeedback(null);
     setResultMode(false);
     setActivePromptQuestionId(null);
 
@@ -531,14 +625,41 @@ export function useImageReview(
 
   const displayItems = (
     mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode
-      ? choiceOptions
+      ? visibleChoiceOptions
       : sessionItems
   );
-  const activeQuestionIdForGrid = activeItem?.question_id || null;
+  const activeQuestionIdForGrid = (
+    activeInteractionFeedback?.correctQuestionId ||
+    activeItem?.question_id ||
+    null
+  );
   const gridItems = useMemo(() => (
     displayItems.map(item => {
       const isFound = foundQuestionIdSet.has(item.question_id);
       const isLockedMissed = lockedMissedQuestionIdSet.has(item.question_id);
+      const isSessionMissed = (
+        resolvedQuestionIdSet.has(item.question_id) &&
+        !isFound
+      );
+      const feedbackState = activeInteractionFeedback
+        ? item.question_id === activeInteractionFeedback.selectedQuestionId &&
+          item.question_id !== activeInteractionFeedback.correctQuestionId
+          ? "wrong"
+          : item.question_id === activeInteractionFeedback.correctQuestionId
+            ? activeInteractionFeedback.isCorrect ? "correct" : "missed"
+            : ""
+        : "";
+      const isPersistentlyRevealed = revealedQuestionIdSet.has(item.question_id);
+      const isMissed = isLockedMissed || isSessionMissed || feedbackState === "missed";
+      const shouldRevealWrongFeedback = mode !== IMAGE_MODE_CLICK_PROMPT;
+      const isRevealed = (
+        isFound ||
+        isLockedMissed ||
+        isPersistentlyRevealed ||
+        feedbackState === "correct" ||
+        (feedbackState === "wrong" && shouldRevealWrongFeedback) ||
+        feedbackState === "missed"
+      );
 
       return {
         item,
@@ -546,8 +667,11 @@ export function useImageReview(
           !resultMode &&
           activeQuestionIdForGrid === item.question_id
         ),
+        feedbackState,
         isFound,
+        isMissed,
         isLockedMissed,
+        isRevealed,
         quality: isFound
           ? qualityByQuestionId[item.question_id] ?? defaultImageSuccessQuality()
           : isLockedMissed
@@ -556,11 +680,14 @@ export function useImageReview(
       };
     })
   ), [
+    activeInteractionFeedback,
     activeQuestionIdForGrid,
     displayItems,
     foundQuestionIdSet,
     lockedMissedQuestionIdSet,
     qualityByQuestionId,
+    revealedQuestionIdSet,
+    resolvedQuestionIdSet,
     resultMode
   ]);
 
@@ -568,7 +695,7 @@ export function useImageReview(
     activeItem,
     activeQuestionId: activeQuestionIdForGrid,
     answeredCount,
-    choiceOptions,
+    choiceOptions: visibleChoiceOptions,
     currentPromptItem,
     feedbackTone,
     finishReview,
@@ -578,14 +705,16 @@ export function useImageReview(
     handleImageSelect,
     handleSubmit,
     input,
+    interactionFeedback: activeInteractionFeedback,
     lockedMissedQuestionIds,
     mode,
     progressPercent,
-    promptLabel: currentPromptItem?.label || currentPromptItem?.answer || "",
+    promptLabel: visualPromptItem?.label || visualPromptItem?.answer || "",
     qualityByQuestionId,
     remainingCount: Math.max(0, sessionItems.length - completedCount),
     resolvedQuestionIds,
     resultMode,
+    revealedQuestionIds,
     selectItem,
     selectNextItem,
     sendResult,

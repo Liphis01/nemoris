@@ -5,6 +5,7 @@ import { useImageReview } from "../hooks/useImageReview";
 import {
   IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+  IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
   IMAGE_MODE_TYPE_PROMPT
 } from "../imageModes";
@@ -30,7 +31,10 @@ function imageGridRow(questionId, options = {}) {
   return {
     isActive: false,
     isFound: false,
+    isMissed: false,
     isLockedMissed: false,
+    isRevealed: false,
+    feedbackState: "",
     quality: null,
     ...options,
     item: options.item || item
@@ -111,6 +115,7 @@ function mockImageReviewState({
     handleImageSelect: noop,
     handleSubmit: noop,
     input: "",
+    interactionFeedback: null,
     mode,
     promptLabel: item.label,
     progressPercent: row.isFound ? 100 : 0,
@@ -181,6 +186,7 @@ function typeAllHookState({ rows, foundQuestionIds = [] }) {
     handleImageSelect: noop,
     handleSubmit: noop,
     input: "",
+    interactionFeedback: null,
     mode: IMAGE_MODE_TYPE_ALL,
     promptLabel: "",
     progressPercent: rows.length ? (foundQuestionIds.length / rows.length) * 100 : 0,
@@ -222,6 +228,7 @@ function typePromptHookState({
     handleImageSelect: noop,
     handleSubmit: noop,
     input: "",
+    interactionFeedback: null,
     mode: IMAGE_MODE_TYPE_PROMPT,
     promptLabel: "",
     progressPercent: gridItems.length
@@ -265,6 +272,7 @@ function imageClickHookState({
     handleImageSelect: noop,
     handleSubmit: noop,
     input: "",
+    interactionFeedback: null,
     mode,
     promptLabel: activeRow?.item?.label || activeRow?.item?.answer || "",
     progressPercent: 0,
@@ -383,6 +391,87 @@ describe("ImageReview answer label preview", () => {
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
     expect(screen.getByText("Terminer")).toBeInTheDocument();
+  });
+
+  it("uses a viewport-bounded shell with only the image pane scrolling", () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3)
+    ];
+    const { container } = renderImageReviewWithState(
+      typeAllHookState({ rows })
+    );
+    const shell = container.querySelector("[data-image-review-shell]");
+    const scrollPane = container.querySelector("[data-image-grid-scroll]");
+    const controlBand = container.querySelector("[data-image-control-band]");
+
+    expect(shell).toHaveStyle({
+      height: "calc(100dvh - 220px)",
+      minHeight: "420px",
+      overflow: "hidden"
+    });
+    expect(scrollPane).toHaveClass("app-scrollbar");
+    expect(scrollPane).toHaveStyle({
+      overflow: "auto",
+      minHeight: "0"
+    });
+    expect(scrollPane.style.flex).toBe("1 1 0%");
+    expect(scrollPane.style.scrollbarGutter).toBe("stable");
+    expect(scrollPane.querySelector("[data-image-active-grid]"))
+      .toBeInTheDocument();
+    expect(scrollPane.querySelector("input")).not.toBeInTheDocument();
+    expect(controlBand).toContainElement(screen.getByPlaceholderText("Tape une image..."));
+    expect(controlBand).toContainElement(screen.getByText("Terminer"));
+  });
+
+  it("fills a compact visual parent while keeping the image pane scrollable", () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2)
+    ];
+
+    useImageReview.mockReturnValue(typeAllHookState({ rows }));
+    const { container } = renderImageReview({
+      fillAvailableHeight: true,
+      group: { name: "Flags" },
+      reviewItems: rows.map(row => row.item),
+      trainingBestTimeMs: 90000,
+      trainingElapsedMs: 12345
+    });
+    const shell = container.querySelector("[data-image-review-shell]");
+    const header = container.querySelector("[data-image-review-header]");
+    const scrollPane = container.querySelector("[data-image-grid-scroll]");
+    const activeGrid = container.querySelector("[data-image-active-grid]");
+    const firstTile = tileFor(container, 1);
+
+    expect(shell).toHaveStyle({
+      height: "100%",
+      minHeight: "0",
+      overflow: "hidden"
+    });
+    expect(header).toHaveTextContent("Progression");
+    expect(header).not.toHaveTextContent("Flags");
+    expect(header).not.toHaveTextContent("IMAGE");
+    expect(header).not.toHaveTextContent("Tout taper");
+    expect(header).not.toHaveTextContent("Temps");
+    expect(screen.getByRole("progressbar", { name: "Progression" }))
+      .toBeInTheDocument();
+    expect(scrollPane).toHaveClass("app-scrollbar");
+    expect(scrollPane).toHaveStyle({
+      overflow: "auto",
+      minHeight: "0"
+    });
+    expect(activeGrid).toHaveStyle({
+      margin: "0 auto",
+      maxWidth: "620px"
+    });
+    expect(activeGrid.style.gridTemplateColumns)
+      .toContain("minmax(170px, 1fr)");
+    expect(firstTile).toHaveStyle({
+      gridTemplateRows: "154px minmax(22px, auto) auto",
+      minHeight: "212px"
+    });
   });
 
   it("does not show the type_prompt prompt card", () => {
@@ -506,6 +595,227 @@ describe("ImageReview answer label preview", () => {
       .toBeInTheDocument();
   });
 
+  it("uses a dedicated centered 2x2 board for multiple_choice_image", () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const { container } = renderImageReviewWithState(
+      imageClickHookState({
+        rows,
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+      })
+    );
+    const choiceBoard = container.querySelector("[data-image-choice-board]");
+    const scrollPane = container.querySelector("[data-image-grid-scroll]");
+    const controlBand = container.querySelector("[data-image-control-band]");
+    const choiceTiles = choiceBoard.querySelectorAll("[data-image-choice-tile]");
+    const choiceImage = choiceTiles[0].querySelector("[data-image-choice-img]");
+    const imageViewport = choiceImage.parentElement;
+
+    expect(container.querySelector("[data-image-active-grid]"))
+      .not.toBeInTheDocument();
+    expect(choiceBoard).toBeInTheDocument();
+    expect(scrollPane).toContainElement(choiceBoard);
+    expect(controlBand).toHaveTextContent("Image demandée");
+    expect(controlBand).toHaveTextContent("Image 1");
+    expect(scrollPane).not.toHaveTextContent("Image demandée");
+    expect(choiceBoard).toHaveStyle({
+      display: "grid",
+      maxWidth: "720px"
+    });
+    expect(choiceBoard.style.gridTemplateColumns)
+      .toBe("repeat(2, minmax(0, 1fr))");
+    expect(choiceTiles).toHaveLength(4);
+    expect(choiceTiles[0]).toHaveStyle({ aspectRatio: "1 / 1" });
+    expect(imageViewport).toHaveStyle({
+      alignItems: "center",
+      justifyContent: "center"
+    });
+    expect(choiceImage).toHaveStyle({
+      objectFit: "contain",
+      objectPosition: "center"
+    });
+  });
+
+  it("reveals skipped type_prompt image answers on their tiles", () => {
+    const rows = [
+      imageGridRow(1, {
+        isMissed: true,
+        isRevealed: true
+      }),
+      imageGridRow(2)
+    ];
+    const { container } = renderImageReviewWithState(
+      typePromptHookState({
+        rows,
+        activeQuestionId: 2,
+        resolvedQuestionIds: [1]
+      })
+    );
+    const skippedTile = tileFor(container, 1);
+
+    expect(skippedTile).toHaveAttribute("data-image-feedback", "missed");
+    expect(skippedTile).toHaveAttribute("data-image-revealed", "true");
+    expect(skippedTile).toHaveTextContent("Image 1");
+  });
+
+  it("reveals only the target image during wrong click_prompt feedback", () => {
+    const rows = [
+      imageGridRow(1, {
+        feedbackState: "missed",
+        isMissed: true,
+        isRevealed: true
+      }),
+      imageGridRow(2, {
+        feedbackState: "wrong"
+      })
+    ];
+    const { container } = renderImageReviewWithState(
+      imageClickHookState({
+        rows,
+        activeQuestionId: 1,
+        hookOverrides: {
+          feedbackTone: "incorrect",
+          interactionFeedback: {
+            correctQuestionId: 1,
+            isCorrect: false,
+            selectedQuestionId: 2
+          },
+          wrongAnsweredCount: 1
+        }
+      })
+    );
+
+    expect(tileFor(container, 1)).toHaveAttribute("data-image-feedback", "missed");
+    expect(tileFor(container, 1).querySelector("[data-image-feedback-badge]"))
+      .toHaveTextContent("Réponse");
+    expect(tileFor(container, 1)).toHaveTextContent("Image 1");
+    expect(tileFor(container, 2)).toHaveAttribute("data-image-feedback", "wrong");
+    expect(tileFor(container, 2).querySelector("[data-image-feedback-badge]"))
+      .toHaveTextContent("Faux");
+    expect(tileFor(container, 2)).toHaveAttribute("data-image-revealed", "false");
+    expect(tileFor(container, 2)).not.toHaveTextContent("Image 2");
+  });
+
+  it("shows correct and wrong labels immediately in multiple_choice_label and scrolls to the target", async () => {
+    const handleChoiceSelect = vi.fn();
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const initialState = imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleChoiceSelect
+      }
+    });
+    const { container, setHookState } = renderImageReviewWithState(initialState);
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Image 2" }));
+
+    expect(handleChoiceSelect).toHaveBeenCalledWith(2);
+
+    setHookState(imageClickHookState({
+      rows: [
+        imageGridRow(1, {
+          feedbackState: "missed",
+          isMissed: true,
+          isRevealed: true
+        }),
+        imageGridRow(2),
+        imageGridRow(3),
+        imageGridRow(4)
+      ],
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        feedbackTone: "incorrect",
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: false,
+          selectedQuestionId: 2
+        },
+        wrongAnsweredCount: 1
+      }
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Correct").closest("button"))
+        .toHaveAttribute("data-image-choice-feedback", "correct");
+      expect(screen.getByText("Faux").closest("button"))
+        .toHaveAttribute("data-image-choice-feedback", "wrong");
+      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest"
+      });
+    });
+    expect(screen.getByText("Correct").closest("button").style.border)
+      .toContain("solid");
+    expect(screen.getByText("Faux").closest("button").style.background)
+      .toContain("repeating-linear-gradient");
+    expect(screen.getByText("Faux").closest("button").style.border)
+      .toContain("dashed");
+    expect(tileFor(container, 1)).toHaveTextContent("Image 1");
+  });
+
+  it("reveals the target and clicked wrong image during multiple_choice_image feedback", () => {
+    const rows = [
+      imageGridRow(1, {
+        feedbackState: "missed",
+        isMissed: true,
+        isRevealed: true
+      }),
+      imageGridRow(2, {
+        feedbackState: "wrong",
+        isRevealed: true
+      }),
+      imageGridRow(3),
+      imageGridRow(4)
+    ];
+    const { container } = renderImageReviewWithState(
+      imageClickHookState({
+        rows,
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+        activeQuestionId: 1,
+        hookOverrides: {
+          feedbackTone: "incorrect",
+          interactionFeedback: {
+            correctQuestionId: 1,
+            isCorrect: false,
+            selectedQuestionId: 2
+          },
+          wrongAnsweredCount: 1
+        }
+      })
+    );
+
+    expect(tileFor(container, 1)).toHaveAttribute("data-image-feedback", "missed");
+    expect(tileFor(container, 1).querySelector("[data-image-feedback-badge]"))
+      .toHaveTextContent("Réponse");
+    expect(tileFor(container, 1)).toHaveTextContent("Image 1");
+    expect(tileFor(container, 2)).toHaveAttribute("data-image-feedback", "wrong");
+    expect(tileFor(container, 2).querySelector("[data-image-feedback-badge]"))
+      .toHaveTextContent("Faux");
+    expect(tileFor(container, 2)).toHaveTextContent("Image 2");
+  });
+
   it("separates found images from the active grid while answering", () => {
     const rows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
@@ -558,7 +868,7 @@ describe("ImageReview answer label preview", () => {
       .toBeInTheDocument();
   });
 
-  it("scrolls to the next incomplete visual row when a type_all row is completed", async () => {
+  it("scrolls to the exact typed image after a correct type_all answer", async () => {
     const initialRows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
       imageGridRow(2),
@@ -588,16 +898,17 @@ describe("ImageReview answer label preview", () => {
     }));
 
     await waitFor(() => {
-      expect(tileFor(container, 3).scrollIntoView).toHaveBeenCalledWith({
+      expect(tileFor(container, 2).scrollIntoView).toHaveBeenCalledWith({
         behavior: "smooth",
-        block: "start",
+        block: "center",
         inline: "nearest"
       });
     });
     expect(tileFor(container, 1).scrollIntoView).not.toHaveBeenCalled();
+    expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("does not auto-scroll when a type_all row still has unfinished images", async () => {
+  it("still scrolls to the typed image when its row has unfinished images", async () => {
     const initialRows = [
       imageGridRow(1),
       imageGridRow(2),
@@ -627,12 +938,16 @@ describe("ImageReview answer label preview", () => {
     }));
 
     await waitFor(() => {
-      expect(tileFor(container, 1).scrollIntoView).not.toHaveBeenCalled();
-      expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
+      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest"
+      });
     });
+    expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("skips complete rows and wraps when auto-scrolling after type_all row completion", async () => {
+  it("does not wrap to another row after a type_all answer is typed", async () => {
     const initialRows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
       imageGridRow(2),
@@ -668,47 +983,13 @@ describe("ImageReview answer label preview", () => {
     }));
 
     await waitFor(() => {
-      expect(tileFor(container, 5).scrollIntoView).toHaveBeenCalled();
+      expect(tileFor(container, 2).scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest"
+      });
     });
-
-    const wrapInitialRows = [
-      imageGridRow(1),
-      imageGridRow(2),
-      imageGridRow(3, { isFound: true, quality: 2 }),
-      imageGridRow(4, { isFound: true, quality: 2 }),
-      imageGridRow(5, { isFound: true, quality: 2 }),
-      imageGridRow(6)
-    ];
-    const wrapCompletedRows = [
-      imageGridRow(1),
-      imageGridRow(2),
-      imageGridRow(3, { isFound: true, quality: 2 }),
-      imageGridRow(4, { isFound: true, quality: 2 }),
-      imageGridRow(5, { isFound: true, quality: 2 }),
-      imageGridRow(6, { isFound: true, quality: 2 })
-    ];
-
-    setHookState(typeAllHookState({
-      rows: wrapInitialRows,
-      foundQuestionIds: [3, 4, 5]
-    }));
-    setTileLayout(container, {
-      1: { left: 0, top: 0 },
-      2: { left: 160, top: 0 },
-      3: { left: 0, top: 200 },
-      4: { left: 160, top: 200 },
-      5: { left: 0, top: 400 },
-      6: { left: 160, top: 400 }
-    });
-
-    setHookState(typeAllHookState({
-      rows: wrapCompletedRows,
-      foundQuestionIds: [3, 4, 5, 6]
-    }));
-
-    await waitFor(() => {
-      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalled();
-    });
+    expect(tileFor(container, 5).scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("uses Tab and Shift+Tab to scroll between incomplete type_all rows without moving focus", async () => {

@@ -177,7 +177,7 @@ describe("TrainingSession", () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Changer" }));
+    fireEvent.click(screen.getByRole("button", { name: /Retour/ }));
 
     const flagsTile = await screen.findByRole("button", { name: "Sélectionner Flags" });
     const europeTile = screen.getByRole("button", { name: "Sélectionner Europe" });
@@ -185,6 +185,80 @@ describe("TrainingSession", () => {
     expect(flagsTile).toHaveAttribute("aria-pressed", "true");
     expect(europeTile).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("heading", { name: "Flags" })).toBeInTheDocument();
+  });
+
+  it("uses the compact visual shell for active image training", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        type_q: "image",
+        name: "Flags",
+        mode: "type_prompt",
+        tags: ["Geo"],
+        items: [
+          {
+            question_id: 11,
+            answer: "France",
+            label: "France",
+            media: "/static/france.png"
+          }
+        ]
+      }
+    ]);
+
+    const { container } = render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Flags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer Nommer pour Flags" }));
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-visual-session-shell]"))
+        .toBeInTheDocument();
+    });
+
+    const shell = container.querySelector("[data-visual-session-shell]");
+    const bar = container.querySelector("[data-visual-session-bar]");
+    const actions = container.querySelector("[data-visual-session-actions]");
+    const status = container.querySelector("[data-visual-session-status]");
+    const secondary = container.querySelector("[data-visual-session-secondary]");
+    const renderer = container.querySelector("[data-visual-renderer]");
+    const imageHeader = container.querySelector("[data-image-review-header]");
+
+    expect(getTrainingItems).toHaveBeenCalledWith({
+      scopeType: "group",
+      groupId: 6,
+      imageMode: "type_prompt"
+    });
+    expect(shell).toHaveStyle({
+      height: "calc(100dvh - 48px)",
+      overflow: "hidden"
+    });
+    expect(bar).toHaveStyle({
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 520px) minmax(0, 1fr)",
+      minHeight: "72px"
+    });
+    expect(renderer).toHaveStyle({
+      overflow: "hidden",
+      minHeight: "0"
+    });
+    expect(renderer.style.flex).toBe("1 1 0%");
+    expect(actions).toContainElement(screen.getByRole("button", { name: /Retour/ }));
+    expect(screen.queryByRole("button", { name: "Changer" })).not.toBeInTheDocument();
+    expect(status).toHaveTextContent("Training");
+    expect(status).toHaveTextContent("Flags");
+    expect(status).toHaveTextContent("Question 1 / 1");
+    expect(status).toHaveTextContent("#Geo");
+    expect(secondary.querySelector('[data-training-timer-panel="prominent"]'))
+      .toBeInTheDocument();
+    expect(secondary).toHaveTextContent("Temps");
+    expect(secondary).toHaveTextContent("Meilleur");
+    expect(secondary).toHaveTextContent("31s");
+    expect(bar).not.toHaveTextContent("Nommer");
+    expect(imageHeader).not.toHaveTextContent("Flags");
+    expect(imageHeader).not.toHaveTextContent("IMAGE");
+    expect(imageHeader).not.toHaveTextContent("Temps");
+    expect(screen.queryByRole("heading", { name: "Flags" }))
+      .not.toBeInTheDocument();
   });
 
   it("starts tag training directly from a compact tile", async () => {

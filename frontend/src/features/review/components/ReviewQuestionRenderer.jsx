@@ -20,6 +20,7 @@ export default function ReviewQuestionRenderer({
     trainingMode = false,
     trainingElapsedMs = null,
     trainingBestTimeMs = null,
+    compactVisualLayout = false,
 }) {
     if (!q) return null;
 
@@ -41,6 +42,7 @@ export default function ReviewQuestionRenderer({
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
                 trainingBestTimeMs={trainingBestTimeMs}
+                fillAvailableHeight={compactVisualLayout}
             />
         );
     }
@@ -59,6 +61,7 @@ export default function ReviewQuestionRenderer({
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
                 trainingBestTimeMs={trainingBestTimeMs}
+                fillAvailableHeight={compactVisualLayout}
             />
         );
     }
@@ -71,6 +74,7 @@ export default function ReviewQuestionRenderer({
                 reviewItems={q.items || []}
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
+                fillAvailableHeight={compactVisualLayout}
             />
         );
     }
