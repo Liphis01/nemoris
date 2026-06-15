@@ -153,6 +153,41 @@ describe("MapReview recap map focus", () => {
       .toHaveAttribute("aria-valuenow", "1");
   });
 
+  it("focuses the next remaining zone from Zone suivante in type_all", async () => {
+    renderMapReview(false, {
+      mode: "type_all"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Zone suivante" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", "alpha");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "1");
+    });
+    expect(screen.getByPlaceholderText("Tape une zone..."))
+      .toHaveFocus();
+  });
+
+  it("uses Tab as Zone suivante in type_all", async () => {
+    renderMapReview(false, {
+      mode: "type_all"
+    });
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    input.focus();
+    fireEvent.keyDown(window, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", "alpha");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "1");
+    });
+    expect(input).toHaveFocus();
+  });
+
   it("shows click prompt misses as a separate progress bar segment", async () => {
     const { container } = renderMapReview(false, {
       mode: "click_prompt",
@@ -233,20 +268,27 @@ describe("MapReview recap map focus", () => {
     expect(labels[targetCode]).toBe(targetLabel);
   });
 
-  it("does not skip type_prompt map zones with Tab", () => {
+  it("skips type_prompt map zones with Tab", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"
     });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
     const input = screen.getByPlaceholderText("Nom de la zone...");
 
     input.focus();
 
-    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
 
-    expect(container.querySelector("[data-map-progress-wrong]"))
-      .toHaveStyle({ width: "0%" });
+    await waitFor(() => {
+      expect(container.querySelector("[data-map-progress-wrong]"))
+        .toHaveStyle({ width: "50%" });
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-missed", targetCode);
+    });
     expect(screen.getByRole("progressbar", { name: "Progression" }))
-      .toHaveAttribute("aria-valuenow", "0");
+      .toHaveAttribute("aria-valuenow", "1");
+    expect(input).toHaveFocus();
   });
 
   it("shows multiple-choice misses as a separate progress bar segment", async () => {
@@ -357,6 +399,7 @@ describe("MapReview recap map focus", () => {
       });
 
       expect(screen.queryByRole("button", { name: "Recentrer" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Zone suivante" })).not.toBeInTheDocument();
     }
   );
 

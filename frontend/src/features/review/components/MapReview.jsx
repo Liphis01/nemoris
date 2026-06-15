@@ -327,7 +327,7 @@ export default function MapReview({
 
   useEffect(() => {
     if (
-      mode !== MAP_MODE_MULTIPLE_CHOICE ||
+      ![MAP_MODE_TYPE_ALL, MAP_MODE_MULTIPLE_CHOICE].includes(mode) ||
       showRecap ||
       remainingZones.length === 0
     ) {
@@ -617,6 +617,17 @@ export default function MapReview({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
+                if (
+                  e.key === "Tab" &&
+                  mode === MAP_MODE_TYPE_PROMPT &&
+                  !e.shiftKey
+                ) {
+                  e.preventDefault();
+                  skipCurrentPrompt();
+                  inputRef.current?.focus({ preventScroll: true });
+                  return;
+                }
+
                 if (e.key === "Enter") {
                   handleSubmit();
                 }

@@ -605,10 +605,6 @@ export default function ImageReview({
   const tileMinHeight = fillAvailableHeight
     ? resultMode && showQualityControls ? "260px" : "212px"
     : resultMode && showQualityControls ? "300px" : "250px";
-  const compactImageGridWidth = "620px";
-  const imageGridColumns = fillAvailableHeight
-    ? "repeat(auto-fit, minmax(170px, 1fr))"
-    : "repeat(auto-fill, minmax(190px, 1fr))";
   const feedbackCopy = feedbackTone === "incorrect"
     ? answersByClick
       ? "Mauvaise image."
@@ -1060,7 +1056,6 @@ export default function ImageReview({
         role="button"
         tabIndex={0}
         style={{
-          aspectRatio: "1 / 1",
           background: tileBackground(row),
           border: tileBorder(row),
           borderRadius: "10px",
@@ -1071,7 +1066,9 @@ export default function ImageReview({
           display: "grid",
           gap: "10px",
           gridTemplateRows: "minmax(0, 1fr) minmax(22px, auto)",
+          height: "100%",
           minHeight: "0",
+          minWidth: 0,
           overflow: "hidden",
           padding: "10px",
           textAlign: "left",
@@ -1342,9 +1339,12 @@ export default function ImageReview({
               display: "grid",
               gap: fillAvailableHeight ? "12px" : "14px",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+              height: "100%",
               margin: "0 auto",
-              maxWidth: fillAvailableHeight ? "620px" : "720px",
-              width: fillAvailableHeight ? "min(100%, 620px)" : "min(100%, 720px)"
+              maxWidth: "720px",
+              minHeight: 0,
+              width: "min(100%, 720px)"
             }}
           >
             {activeGridItems.map(row => renderImageChoiceTile(row))}
@@ -1355,10 +1355,7 @@ export default function ImageReview({
             style={{
               display: "grid",
               gap: "12px",
-              gridTemplateColumns: imageGridColumns,
-              margin: fillAvailableHeight ? "0 auto" : undefined,
-              maxWidth: fillAvailableHeight ? compactImageGridWidth : undefined,
-              width: fillAvailableHeight ? `min(100%, ${compactImageGridWidth})` : undefined
+              gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))"
             }}
           >
             {activeGridItems.map(row => renderImageTile(row))}
@@ -1393,10 +1390,7 @@ export default function ImageReview({
               style={{
                 display: "grid",
                 gap: "12px",
-                gridTemplateColumns: imageGridColumns,
-                margin: fillAvailableHeight ? "0 auto" : undefined,
-                maxWidth: fillAvailableHeight ? compactImageGridWidth : undefined,
-                width: fillAvailableHeight ? `min(100%, ${compactImageGridWidth})` : undefined
+                gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))"
               }}
             >
               {foundGridItems.map(row =>
@@ -1476,6 +1470,18 @@ export default function ImageReview({
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
+                if (
+                  event.key === "Tab" &&
+                  normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
+                  !event.shiftKey &&
+                  !resultMode
+                ) {
+                  event.preventDefault();
+                  skipCurrentPrompt();
+                  focusAnswerInput();
+                  return;
+                }
+
                 if (
                   event.key === "Tab" &&
                   normalizedMode === IMAGE_MODE_TYPE_PROMPT &&

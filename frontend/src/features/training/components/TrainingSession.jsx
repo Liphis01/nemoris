@@ -870,7 +870,7 @@ export default function TrainingSession({ setMode }) {
                     marginBottom: "10px"
                   }}
                 >
-                  Entrainement termine
+                  Entraînement terminé
                 </div>
                 <div style={{ color: "#888", marginBottom: "26px" }}>
                   {session.failedCount} item{session.failedCount > 1 ? "s" : ""} a revoir.

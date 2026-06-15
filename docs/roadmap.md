@@ -2,12 +2,11 @@
 
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
-- should i answer "easy" to a question that I just got wrong and came back ? the two tries shouldn't compensate each other, does the current system already do that ?
+- should i answer "easy" to a question that I just got wrong and that came back ? the two tries shouldn't compensate each other, instead the first wrong answer should count much more. does the current system already do that ?
 - quand je fais terminer sur groupe de question bonus, garder les questions non répondues en "nouveau"
 
 ## Urgent
 - ajouter un truc pour prévenir qu'il faut rajouter des questions et bloquer les questions bonus si on est surchargé du schedule
-- dans le chat "fix image order..." : make images a bit smaller to leave space for the name of the group (if you think it's possible, make the images' cells fit exactly twice or three times in the container but not necessarily). also, centered items from the compact shell and the main container should be aligned. also, make the "retour" button in training modes go back to the training selection and get rid of the "changer" button.
 - la séparation des images trouvées et restantes doit aussi se faire en training pour click_prompt (et type_prompt) et enlever le scroll vers les images trouvées (mais pas les fausses) et aussi mettre de côté les images ratées et organiser les trouvées du plus récent au plus ancien de trouvage (même chose pour type_prompt) et garder la séparation pour le recap quality
 - il faut trouver un meilleur système pour choisir le recap quality des images
 

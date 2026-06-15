@@ -462,12 +462,8 @@ describe("ImageReview answer label preview", () => {
       overflow: "auto",
       minHeight: "0"
     });
-    expect(activeGrid).toHaveStyle({
-      margin: "0 auto",
-      maxWidth: "620px"
-    });
     expect(activeGrid.style.gridTemplateColumns)
-      .toContain("minmax(170px, 1fr)");
+      .toContain("minmax(190px, 1fr)");
     expect(firstTile).toHaveStyle({
       gridTemplateRows: "154px minmax(22px, auto) auto",
       minHeight: "212px"
@@ -509,8 +505,9 @@ describe("ImageReview answer label preview", () => {
     });
   });
 
-  it("uses Tab and Shift+Tab to select type_prompt images without moving focus", async () => {
+  it("uses Tab to skip and Shift+Tab to select previous type_prompt images without moving focus", async () => {
     const selectNextItem = vi.fn();
+    const skipCurrentPrompt = vi.fn();
     const rows = [
       imageGridRow(1),
       imageGridRow(2),
@@ -520,7 +517,8 @@ describe("ImageReview answer label preview", () => {
       typePromptHookState({
         rows,
         hookOverrides: {
-          selectNextItem
+          selectNextItem,
+          skipCurrentPrompt
         }
       })
     );
@@ -529,16 +527,19 @@ describe("ImageReview answer label preview", () => {
     input.focus();
 
     expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
-    expect(selectNextItem).toHaveBeenCalledWith(1);
+    expect(skipCurrentPrompt).toHaveBeenCalledTimes(1);
+    expect(selectNextItem).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(document.activeElement).toBe(input);
     });
 
     selectNextItem.mockClear();
+    skipCurrentPrompt.mockClear();
 
     expect(fireEvent.keyDown(input, { key: "Tab", shiftKey: true })).toBe(false);
     expect(selectNextItem).toHaveBeenCalledWith(-1);
+    expect(skipCurrentPrompt).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(input);
   });
 
@@ -624,12 +625,15 @@ describe("ImageReview answer label preview", () => {
     expect(scrollPane).not.toHaveTextContent("Image demandée");
     expect(choiceBoard).toHaveStyle({
       display: "grid",
+      height: "100%",
       maxWidth: "720px"
     });
     expect(choiceBoard.style.gridTemplateColumns)
       .toBe("repeat(2, minmax(0, 1fr))");
+    expect(choiceBoard.style.gridTemplateRows)
+      .toBe("repeat(2, minmax(0, 1fr))");
     expect(choiceTiles).toHaveLength(4);
-    expect(choiceTiles[0]).toHaveStyle({ aspectRatio: "1 / 1" });
+    expect(choiceTiles[0]).toHaveStyle({ height: "100%" });
     expect(imageViewport).toHaveStyle({
       alignItems: "center",
       justifyContent: "center"
