@@ -682,4 +682,99 @@ describe("useImageReview", () => {
       isRevealed: true
     });
   });
+
+  it("bulk-updates found image qualities while missed images stay locked at zero", () => {
+    const items = [
+      {
+        ...imageItem(1, "France"),
+        projected_intervals: { 1: 4, 2: 12, 3: 30 }
+      },
+      {
+        ...imageItem(2, "Germany"),
+        projected_intervals: { 1: 6, 2: 18, 3: 45 }
+      },
+      {
+        ...imageItem(3, "Spain"),
+        projected_intervals: { 0: 0, 1: 3, 2: 9, 3: 24 }
+      }
+    ];
+    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const found = answerActive(result);
+
+    act(() => {
+      result.current.finishReview();
+    });
+    act(() => {
+      result.current.setFoundImageQualities(3);
+    });
+
+    expect(result.current.qualityByQuestionId[found.question_id]).toBe(3);
+    items
+      .filter(item => item.question_id !== found.question_id)
+      .forEach(item => {
+        expect(result.current.qualityByQuestionId[item.question_id]).toBe(0);
+      });
+    expect(result.current.foundBulkQuality).toBe(3);
+    expect(result.current.recapRows.find(row =>
+      row.item.question_id === found.question_id
+    ).projectedInterval).toBe(found.projected_intervals[3]);
+  });
+
+  it("sorts image recap rows by the interval for the currently selected quality", () => {
+    const items = [
+      {
+        ...imageItem(1, "Alpha"),
+        progress: { difficulty: 8, interval: 20 },
+        projected_intervals: { 1: 5, 2: 20, 3: 80 }
+      },
+      {
+        ...imageItem(2, "Beta"),
+        progress: { difficulty: 6, interval: 40 },
+        projected_intervals: { 1: 10, 2: 40, 3: 60 }
+      },
+      {
+        ...imageItem(3, "Gamma"),
+        progress: { difficulty: 4, interval: 0 },
+        projected_intervals: { 0: 0, 1: 2, 2: 8, 3: 16 }
+      }
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+    );
+
+    act(() => {
+      result.current.setInput("Alpha");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.setInput("Beta");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.finishReview();
+    });
+    act(() => {
+      result.current.toggleRecapSort("interval");
+    });
+
+    expect(result.current.recapRows.map(row => row.item.answer)).toEqual([
+      "Alpha",
+      "Beta",
+      "Gamma"
+    ]);
+
+    act(() => {
+      result.current.setQuality(1, 3);
+    });
+
+    expect(result.current.recapRows.map(row => row.item.answer)).toEqual([
+      "Beta",
+      "Alpha",
+      "Gamma"
+    ]);
+  });
 });

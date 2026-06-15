@@ -168,6 +168,124 @@ function nextUnresolvedItem(items, startQuestionId, direction, resolvedQuestionI
   return null;
 }
 
+function getHistoryStats(item) {
+  const history = item.progress?.history || [];
+
+  if (history.length > 0) {
+    const successes = history.filter(entry => entry.quality > 0).length;
+
+    return {
+      reviews: history.length,
+      successRate: Math.round((successes / history.length) * 100)
+    };
+  }
+
+  const reps = item.progress?.reps || 0;
+  const lapses = item.progress?.lapses || 0;
+
+  if (reps > 0) {
+    const successes = Math.max(0, reps - lapses);
+
+    return {
+      reviews: reps,
+      successRate: Math.round((successes / reps) * 100)
+    };
+  }
+
+  return {
+    reviews: 0,
+    successRate: null
+  };
+}
+
+
+function getDifficultyScore(item, historyStats) {
+  const explicitDifficulty = Number(item.progress?.difficulty);
+
+  if (Number.isFinite(explicitDifficulty)) {
+    return explicitDifficulty;
+  }
+
+  if (historyStats.successRate !== null) {
+    return 10 - (historyStats.successRate / 10);
+  }
+
+  return 5;
+}
+
+
+function imageAnswerLabel(item) {
+  return item?.label || item?.answer || "Image";
+}
+
+
+function getSelectedQuality(item, isFound, qualityByQuestionId) {
+  return qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
+}
+
+
+function getProjectedInterval(item, selectedQuality) {
+  const value =
+    item.projected_intervals?.[selectedQuality] ??
+    item.progress?.interval ??
+    0;
+  const interval = Number(value);
+
+  return Number.isFinite(interval) ? interval : 0;
+}
+
+
+function compareDefaultRecapRows(a, b) {
+  if (b.difficultyScore !== a.difficultyScore) {
+    return b.difficultyScore - a.difficultyScore;
+  }
+
+  return imageAnswerLabel(a.item).localeCompare(imageAnswerLabel(b.item));
+}
+
+
+function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
+  if (recapSort.key === "answer") {
+    return imageAnswerLabel(a.item).localeCompare(imageAnswerLabel(b.item));
+  }
+
+  if (recapSort.key === "success") {
+    const aRate = a.historyStats.successRate === null
+      ? -1
+      : a.historyStats.successRate;
+    const bRate = b.historyStats.successRate === null
+      ? -1
+      : b.historyStats.successRate;
+
+    return aRate - bRate;
+  }
+
+  if (recapSort.key === "interval") {
+    const aQuality = getSelectedQuality(a.item, a.isFound, qualityByQuestionId);
+    const bQuality = getSelectedQuality(b.item, b.isFound, qualityByQuestionId);
+
+    return (
+      getProjectedInterval(a.item, aQuality) -
+      getProjectedInterval(b.item, bQuality)
+    );
+  }
+
+  if (recapSort.key === "quality") {
+    return (
+      getSelectedQuality(a.item, a.isFound, qualityByQuestionId) -
+      getSelectedQuality(b.item, b.isFound, qualityByQuestionId)
+    );
+  }
+
+  return 0;
+}
+
+
+const initialRecapSort = {
+  key: null,
+  direction: "asc"
+};
+
 
 export function useImageReview(
   reviewItems,
@@ -214,6 +332,7 @@ export function useImageReview(
   const [interactionFeedback, setInteractionFeedback] = useState(null);
   const [resultMode, setResultMode] = useState(false);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
+  const [recapSort, setRecapSort] = useState(initialRecapSort);
 
   useEffect(() => {
     setInput("");
@@ -226,6 +345,7 @@ export function useImageReview(
     setInteractionFeedback(null);
     setResultMode(false);
     setActivePromptQuestionId(null);
+    setRecapSort(initialRecapSort);
   }, [reviewKey]);
 
   const foundQuestionIdSet = useMemo(
@@ -600,6 +720,32 @@ export function useImageReview(
     }));
   }
 
+  function setFoundImageQualities(quality) {
+    const nextQuality = Number(quality);
+
+    if (![1, 2, 3].includes(nextQuality)) {
+      return;
+    }
+
+    setQualityByQuestionId(prev => {
+      if (foundQuestionIdSet.size === 0) return prev;
+
+      const next = { ...prev };
+      foundQuestionIdSet.forEach(id => {
+        next[id] = nextQuality;
+      });
+
+      return next;
+    });
+  }
+
+  function toggleRecapSort(key) {
+    setRecapSort(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
+    }));
+  }
+
   async function sendResult() {
     const qualities = completeQualities(
       sessionItems,
@@ -623,6 +769,7 @@ export function useImageReview(
     setInteractionFeedback(null);
     setResultMode(false);
     setActivePromptQuestionId(null);
+    setRecapSort(initialRecapSort);
 
     onComplete(failedQuestionIds);
   }
@@ -689,10 +836,80 @@ export function useImageReview(
     displayItems,
     foundQuestionIdSet,
     lockedMissedQuestionIdSet,
+    mode,
     qualityByQuestionId,
     revealedQuestionIdSet,
     resolvedQuestionIdSet,
     resultMode
+  ]);
+  const foundBulkQuality = useMemo(() => {
+    if (foundQuestionIds.length === 0) return null;
+
+    const firstQuality = qualityByQuestionId[foundQuestionIds[0]] ??
+      defaultImageSuccessQuality();
+
+    return foundQuestionIds.every(
+      questionId => (
+        qualityByQuestionId[questionId] ?? defaultImageSuccessQuality()
+      ) === firstQuality
+    )
+      ? firstQuality
+      : null;
+  }, [foundQuestionIds, qualityByQuestionId]);
+  const recapSuccessCount = Object.values(qualityByQuestionId)
+    .filter(quality => quality > 0)
+    .length;
+  const recapMissCount = Math.max(0, sessionItems.length - recapSuccessCount);
+  const recapSuccessRate = sessionItems.length
+    ? Math.round((recapSuccessCount / sessionItems.length) * 100)
+    : 0;
+  const recapRows = useMemo(() => (
+    sessionItems
+      .map(item => {
+        const historyStats = getHistoryStats(item);
+        const isFound = foundQuestionIdSet.has(item.question_id);
+        const selectedQuality = getSelectedQuality(
+          item,
+          isFound,
+          qualityByQuestionId
+        );
+
+        return {
+          item,
+          historyStats,
+          isFound,
+          difficultyScore: getDifficultyScore(item, historyStats),
+          selectedQuality,
+          projectedInterval: getProjectedInterval(item, selectedQuality)
+        };
+      })
+      .sort((a, b) => {
+        if (a.isFound !== b.isFound) {
+          return a.isFound ? -1 : 1;
+        }
+
+        if (!recapSort.key) {
+          return compareDefaultRecapRows(a, b);
+        }
+
+        const sortResult = compareActiveRecapSort(
+          a,
+          b,
+          recapSort,
+          qualityByQuestionId
+        );
+
+        if (sortResult !== 0) {
+          return recapSort.direction === "asc" ? sortResult : -sortResult;
+        }
+
+        return compareDefaultRecapRows(a, b);
+      })
+  ), [
+    foundQuestionIdSet,
+    qualityByQuestionId,
+    recapSort,
+    sessionItems
   ]);
 
   return {
@@ -704,6 +921,7 @@ export function useImageReview(
     feedbackTone,
     finishReview,
     foundQuestionIds,
+    foundBulkQuality,
     gridItems,
     handleChoiceSelect,
     handleImageSelect,
@@ -715,6 +933,11 @@ export function useImageReview(
     progressPercent,
     promptLabel: visualPromptItem?.label || visualPromptItem?.answer || "",
     qualityByQuestionId,
+    recapMissCount,
+    recapRows,
+    recapSort,
+    recapSuccessCount,
+    recapSuccessRate,
     remainingCount: Math.max(0, sessionItems.length - completedCount),
     resolvedQuestionIds,
     resolvedQuestionIdsRecentFirst,
@@ -723,9 +946,11 @@ export function useImageReview(
     selectItem,
     selectNextItem,
     sendResult,
+    setFoundImageQualities,
     setInput,
     setQuality,
     skipCurrentPrompt,
+    toggleRecapSort,
     wrongAnsweredCount
   };
 }

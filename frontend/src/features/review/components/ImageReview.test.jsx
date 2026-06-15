@@ -178,7 +178,7 @@ function renderImageReviewWithState(initialState) {
   };
 }
 
-function typeAllHookState({ rows, foundQuestionIds = [] }) {
+function typeAllHookState({ rows, foundQuestionIds = [], hookOverrides = {} }) {
   return {
     activeQuestionId: null,
     answeredCount: foundQuestionIds.length,
@@ -206,8 +206,64 @@ function typeAllHookState({ rows, foundQuestionIds = [] }) {
     setInput: noop,
     setQuality: noop,
     skipCurrentPrompt: noop,
-    wrongAnsweredCount: 0
+    wrongAnsweredCount: 0,
+    ...hookOverrides
   };
+}
+
+function imageResultHookState({
+  rows,
+  foundQuestionIds = rows.filter(row => row.isFound).map(row => row.item.question_id),
+  hookOverrides = {}
+}) {
+  const qualityByQuestionId = Object.fromEntries(
+    rows.map(row => [
+      row.item.question_id,
+      row.isFound ? row.quality ?? 2 : 0
+    ])
+  );
+  const foundQualities = foundQuestionIds.map(id => qualityByQuestionId[id]);
+  const foundBulkQuality = foundQualities.length > 0 &&
+    foundQualities.every(quality => quality === foundQualities[0])
+      ? foundQualities[0]
+      : null;
+  const recapRows = rows.map(row => {
+    const selectedQuality = qualityByQuestionId[row.item.question_id];
+
+    return {
+      item: row.item,
+      isFound: row.isFound,
+      historyStats: row.item.historyStats || {
+        reviews: row.item.progress?.reps || 0,
+        successRate: row.item.progress?.reps ? 100 : null
+      },
+      selectedQuality,
+      projectedInterval:
+        row.item.projected_intervals?.[selectedQuality] ??
+        row.item.progress?.interval ??
+        0
+    };
+  });
+
+  return typeAllHookState({
+    rows,
+    foundQuestionIds,
+    hookOverrides: {
+      foundBulkQuality,
+      qualityByQuestionId,
+      recapMissCount: rows.length - foundQuestionIds.length,
+      recapRows,
+      recapSort: { key: null, direction: "asc" },
+      recapSuccessCount: foundQuestionIds.length,
+      recapSuccessRate: rows.length
+        ? Math.round((foundQuestionIds.length / rows.length) * 100)
+        : 0,
+      remainingCount: 0,
+      resultMode: true,
+      wrongAnsweredCount: rows.length - foundQuestionIds.length,
+      ...hookOverrides
+    }
+  });
 }
 
 function typePromptHookState({
@@ -481,7 +537,7 @@ describe("ImageReview answer label preview", () => {
     expect(activeGrid.style.gridTemplateColumns)
       .toContain("minmax(190px, 1fr)");
     expect(firstTile).toHaveStyle({
-      gridTemplateRows: "154px minmax(22px, auto) auto",
+      gridTemplateRows: "154px minmax(22px, auto)",
       minHeight: "212px"
     });
   });
@@ -966,6 +1022,141 @@ describe("ImageReview answer label preview", () => {
       .toBeInTheDocument();
     expect(activeGrid.querySelector('[data-image-question-id="2"]'))
       .toBeInTheDocument();
+  });
+
+  it("moves image result quality controls into the recap", () => {
+    const setFoundImageQualities = vi.fn();
+    const sendResult = vi.fn();
+    const setQuality = vi.fn();
+    const rows = [
+      imageGridRow(1, {
+        isFound: true,
+        item: {
+          ...imageItem(1),
+          projected_intervals: { 1: 4, 2: 12, 3: 30 },
+          progress: { reps: 2, lapses: 1, interval: 12 }
+        },
+        quality: 2
+      }),
+      imageGridRow(2, {
+        isLockedMissed: true,
+        item: {
+          ...imageItem(2),
+          projected_intervals: { 0: 0, 1: 2, 2: 8, 3: 16 }
+        },
+        quality: 0
+      })
+    ];
+    useImageReview.mockReturnValue(
+      imageResultHookState({
+        rows,
+        hookOverrides: {
+          sendResult,
+          setFoundImageQualities,
+          setQuality
+        }
+      })
+    );
+    const { container } = renderImageReview({
+      reviewItems: rows.map(row => row.item)
+    });
+
+    expect(container.querySelector("[data-image-recap-overlay]"))
+      .toBeInTheDocument();
+    expect(tileFor(container, 1)).not.toHaveTextContent("Bon");
+    expect(screen.getByText("Images trouvées")).toBeInTheDocument();
+    expect(screen.getAllByText("12").length).toBeGreaterThan(0);
+    expect(screen.getByText("0 · Faux")).toBeInTheDocument();
+
+    fireEvent.click(
+      container.querySelector(
+        ".image-recap-bulk-row [data-image-recap-quality=\"3\"]"
+      )
+    );
+    expect(setFoundImageQualities).toHaveBeenCalledWith(3);
+
+    fireEvent.click(
+      container.querySelector(
+        ".image-recap-row[data-image-recap-row=\"found\"] [data-image-recap-quality=\"1\"]"
+      )
+    );
+    expect(setQuality).toHaveBeenCalledWith(1, 1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+    expect(sendResult).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the right recap table to select the large left preview", () => {
+    const rows = [
+      imageGridRow(1, {
+        isFound: true,
+        item: {
+          ...imageItem(1, "France"),
+          projected_intervals: { 1: 4, 2: 12, 3: 30 }
+        },
+        quality: 2
+      }),
+      imageGridRow(2, {
+        isLockedMissed: true,
+        item: {
+          ...imageItem(2, "Germany"),
+          projected_intervals: { 0: 0, 1: 2, 2: 8, 3: 16 }
+        },
+        quality: 0
+      })
+    ];
+    useImageReview.mockReturnValue(imageResultHookState({ rows }));
+    const { container } = renderImageReview({
+      reviewItems: rows.map(row => row.item)
+    });
+    const preview = container.querySelector("[data-image-recap-selected-preview]");
+    const germanyRow = container.querySelector(
+      ".image-recap-row[data-image-recap-row=\"missed\"]"
+    );
+
+    expect(preview).toHaveTextContent("France");
+    expect(container.querySelector(
+      ".image-recap-row[data-image-recap-selected=\"true\"]"
+    )).toHaveTextContent("France");
+
+    fireEvent.click(germanyRow);
+
+    expect(preview).toHaveTextContent("Germany");
+    expect(container.querySelector(
+      ".image-recap-row[data-image-recap-selected=\"true\"]"
+    )).toHaveTextContent("Germany");
+  });
+
+  it("updates the displayed image recap interval when selected quality changes", () => {
+    const rows = [
+      imageGridRow(1, {
+        isFound: true,
+        item: {
+          ...imageItem(1),
+          projected_intervals: { 1: 5, 2: 15, 3: 45 }
+        },
+        quality: 2
+      })
+    ];
+    const initialState = imageResultHookState({ rows });
+    const { setHookState } = renderImageReviewWithState(initialState);
+
+    expect(screen.getAllByText("15").length).toBeGreaterThan(0);
+
+    setHookState(
+      imageResultHookState({
+        rows: [
+          imageGridRow(1, {
+            isFound: true,
+            item: rows[0].item,
+            quality: 3
+          })
+        ]
+      })
+    );
+
+    expect(screen.getAllByText("45").length).toBeGreaterThan(0);
+    expect(screen.queryByText("15")).not.toBeInTheDocument();
   });
 
   it("scrolls to the exact typed image after a correct type_all answer", async () => {

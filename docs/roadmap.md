@@ -1,9 +1,22 @@
 # TODO
+- répondre à nul sur steam
+
+
+
+
+
+
+
+
+
+
 
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
 - should i answer "easy" to a question that I just got wrong and that came back ? the two tries shouldn't compensate each other, instead the first wrong answer should count much more. does the current system already do that ?
 - quand je fais terminer sur groupe de question bonus, garder les questions non répondues en "nouveau"
+- question timeline ratée à un jour près mais "dur" -> corriger et laisser la possibilité de modifier la qualité
+- dans qcm d'images, il y avait une image déjà sélectionnée avant que je clique
 
 ## Urgent
 - ajouter un truc pour prévenir qu'il faut rajouter des questions et bloquer les questions bonus si on est surchargé du schedule

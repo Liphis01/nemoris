@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
@@ -15,9 +15,16 @@ import { useImageReview } from "../hooks/useImageReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const qualityOptions = [
-  { value: 1, label: "1 · Dur", background: "#35311f", color: "#ffd36b" },
-  { value: 2, label: "2 · Bon", background: "#1f2f3a", color: "#8fc7ff" },
-  { value: 3, label: "3 · Facile", background: "#1d3a2b", color: "#7ee2a8" }
+  { value: 1, label: "Dur", background: "#35311f", color: "#ffd36b" },
+  { value: 2, label: "Bon", background: "#1f2f3a", color: "#8fc7ff" },
+  { value: 3, label: "Facile", background: "#1d3a2b", color: "#7ee2a8" }
+];
+
+const imageRecapHeaderColumns = [
+  { key: "answer", label: "Image" },
+  { key: "success", label: "Réussite" },
+  { key: "interval", label: "Intervalle" },
+  { key: "quality", label: "Qualité" }
 ];
 
 const buttonStyle = {
@@ -92,27 +99,6 @@ function getAnswerTooltipPosition(anchor) {
     transform: shouldPlaceAbove ? "translateY(-100%)" : "none",
     width
   };
-}
-
-function QualityButton({ option, selected, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        border: selected ? `1px solid ${option.color}` : "1px solid #333",
-        borderRadius: "9px",
-        background: option.background,
-        color: option.color,
-        cursor: "pointer",
-        fontWeight: 800,
-        minWidth: "74px",
-        padding: "8px 10px"
-      }}
-    >
-      {option.label}
-    </button>
-  );
 }
 
 function ImageAnswerLabel({ color, label, revealed }) {
@@ -510,6 +496,46 @@ function imageChoiceButtonStyle(option, feedback) {
   };
 }
 
+function imageHistoryStats(item) {
+  const history = item.progress?.history || [];
+
+  if (history.length > 0) {
+    const successes = history.filter(entry => entry.quality > 0).length;
+
+    return {
+      reviews: history.length,
+      successRate: Math.round((successes / history.length) * 100)
+    };
+  }
+
+  const reps = item.progress?.reps || 0;
+  const lapses = item.progress?.lapses || 0;
+
+  if (reps > 0) {
+    const successes = Math.max(0, reps - lapses);
+
+    return {
+      reviews: reps,
+      successRate: Math.round((successes / reps) * 100)
+    };
+  }
+
+  return {
+    reviews: 0,
+    successRate: null
+  };
+}
+
+function projectedIntervalForImage(item, quality) {
+  const value =
+    item.projected_intervals?.[quality] ??
+    item.progress?.interval ??
+    0;
+  const interval = Number(value);
+
+  return Number.isFinite(interval) ? interval : 0;
+}
+
 export default function ImageReview({
   group,
   reviewItems,
@@ -530,6 +556,7 @@ export default function ImageReview({
   const tileElementsRef = useRef(new Map());
   const previousFoundQuestionIdsRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
+  const [selectedRecapQuestionId, setSelectedRecapQuestionId] = useState(null);
   const {
     activeQuestionId,
     answeredCount,
@@ -537,6 +564,7 @@ export default function ImageReview({
     currentPromptItem,
     feedbackTone,
     finishReview,
+    foundBulkQuality,
     foundQuestionIds,
     gridItems,
     handleChoiceSelect,
@@ -546,6 +574,12 @@ export default function ImageReview({
     interactionFeedback,
     mode,
     promptLabel,
+    qualityByQuestionId = {},
+    recapMissCount,
+    recapRows = [],
+    recapSort = { key: null, direction: "asc" },
+    recapSuccessCount,
+    recapSuccessRate,
     remainingCount,
     resolvedQuestionIds = [],
     resolvedQuestionIdsRecentFirst,
@@ -553,9 +587,11 @@ export default function ImageReview({
     selectItem,
     selectNextItem,
     sendResult,
+    setFoundImageQualities = () => {},
     setInput,
     setQuality,
     skipCurrentPrompt,
+    toggleRecapSort = () => {},
     wrongAnsweredCount
   } = useImageReview(reviewItems, onComplete, submitAnswer, {
     contextItems,
@@ -620,11 +656,55 @@ export default function ImageReview({
   const wrongProgressPercent = reviewItems.length
     ? Math.min((wrongAnsweredCount / reviewItems.length) * 100, 100)
     : 0;
+  const effectiveRecapRows = useMemo(() => {
+    if (recapRows.length > 0) return recapRows;
+
+    return gridItems.map(row => {
+      const selectedQuality = row.isFound
+        ? qualityByQuestionId[row.item.question_id] ?? row.quality ?? 2
+        : 0;
+
+      return {
+        item: row.item,
+        historyStats: imageHistoryStats(row.item),
+        isFound: row.isFound,
+        selectedQuality,
+        projectedInterval: projectedIntervalForImage(row.item, selectedQuality)
+      };
+    });
+  }, [gridItems, qualityByQuestionId, recapRows]);
+  const selectedRecapRow = useMemo(() => {
+    if (effectiveRecapRows.length === 0) return null;
+
+    return effectiveRecapRows.find(row =>
+      row.item.question_id === selectedRecapQuestionId
+    ) || effectiveRecapRows[0];
+  }, [effectiveRecapRows, selectedRecapQuestionId]);
+  const effectiveRecapSuccessCount = recapSuccessCount ??
+    effectiveRecapRows.filter(row => row.isFound && row.selectedQuality > 0).length;
+  const effectiveRecapMissCount = recapMissCount ??
+    Math.max(0, reviewItems.length - effectiveRecapSuccessCount);
+  const effectiveRecapSuccessRate = recapSuccessRate ??
+    (reviewItems.length
+      ? Math.round((effectiveRecapSuccessCount / reviewItems.length) * 100)
+      : 0);
+  const effectiveFoundBulkQuality = foundBulkQuality !== undefined
+    ? foundBulkQuality
+    : (() => {
+        const foundRows = effectiveRecapRows.filter(row => row.isFound);
+
+        if (foundRows.length === 0) return null;
+
+        const firstQuality = foundRows[0].selectedQuality;
+
+        return foundRows.every(row => row.selectedQuality === firstQuality)
+          ? firstQuality
+          : null;
+      })();
+  const showResultRecap = resultMode && showQualityControls;
   const tileImageHeight = fillAvailableHeight ? 154 : 188;
   const tileImageMaxHeight = fillAvailableHeight ? 140 : 174;
-  const tileMinHeight = fillAvailableHeight
-    ? resultMode && showQualityControls ? "260px" : "212px"
-    : resultMode && showQualityControls ? "300px" : "250px";
+  const tileMinHeight = fillAvailableHeight ? "212px" : "250px";
   const feedbackCopy = feedbackTone === "incorrect"
     ? answersByClick
       ? "Mauvaise image."
@@ -720,6 +800,27 @@ export default function ImageReview({
     setPreviewRow(null);
     focusAnswerInput();
   }
+
+  function selectRecapRow(row) {
+    if (!row?.item?.question_id) return;
+
+    setSelectedRecapQuestionId(row.item.question_id);
+  }
+
+  useEffect(() => {
+    if (!showResultRecap) return;
+
+    if (effectiveRecapRows.length === 0) {
+      setSelectedRecapQuestionId(null);
+      return;
+    }
+
+    if (!effectiveRecapRows.some(row =>
+      row.item.question_id === selectedRecapQuestionId
+    )) {
+      setSelectedRecapQuestionId(effectiveRecapRows[0].item.question_id);
+    }
+  }, [effectiveRecapRows, selectedRecapQuestionId, showResultRecap]);
 
   useEffect(() => {
     if (!previewRow) return undefined;
@@ -870,7 +971,7 @@ export default function ImageReview({
           cursor: selectable ? "pointer" : "default",
           display: "grid",
           gap: "10px",
-          gridTemplateRows: `${tileImageHeight}px minmax(22px, auto) auto`,
+          gridTemplateRows: `${tileImageHeight}px minmax(22px, auto)`,
           minHeight: tileMinHeight,
           overflow: "hidden",
           padding: "10px",
@@ -1000,47 +1101,6 @@ export default function ImageReview({
           label={answerLabel(row.item)}
           revealed={revealed}
         />
-
-        {resultMode && showQualityControls && (
-          <span
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "6px",
-              justifyContent: "center",
-              minHeight: "38px"
-            }}
-          >
-            {row.isLockedMissed ? (
-              <span
-                style={{
-                  background: "#3a1f24",
-                  border: "1px solid #6b2b31",
-                  borderRadius: "9px",
-                  color: "#ff9aa5",
-                  fontSize: "13px",
-                  fontWeight: 800,
-                  padding: "8px 10px"
-                }}
-              >
-                0 · Faux
-              </span>
-            ) : (
-              qualityOptions.map(option => (
-                <QualityButton
-                  key={option.value}
-                  option={option}
-                  selected={row.quality === option.value}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setQuality(row.item.question_id, option.value);
-                  }}
-                />
-              ))
-            )}
-          </span>
-        )}
       </div>
     );
   }
@@ -1207,6 +1267,363 @@ export default function ImageReview({
           label={answerLabel(row.item)}
           revealed={revealed}
         />
+      </div>
+    );
+  }
+
+  function renderImageRecapQualityButton({
+    disabled = false,
+    option,
+    selected,
+    onClick
+  }) {
+    return (
+      <button
+        key={option.value}
+        type="button"
+        aria-pressed={selected}
+        data-image-recap-quality={option.value}
+        disabled={disabled}
+        onClick={onClick}
+        style={{
+          ...imageRecapQualityButtonStyle,
+          background: selected
+            ? option.background
+            : disabled
+              ? "#181818"
+              : "#222",
+          border: selected
+            ? `1px solid ${option.color}`
+            : disabled
+              ? "1px solid #2d2d2d"
+              : "1px solid #333",
+          color: selected
+            ? option.color
+            : disabled
+              ? "#555"
+              : "#aaa",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.65 : 1
+        }}
+        title={option.label}
+      >
+        {option.label}
+      </button>
+    );
+  }
+
+  function renderImageRecap() {
+    if (!showResultRecap) return null;
+
+    return (
+      <div data-image-recap-overlay style={imageRecapOverlayStyle}>
+        <div className="app-scrollbar" style={imageRecapCardStyle}>
+          <div style={imageRecapHeaderStyle}>
+            <div>
+              <div style={imageRecapTypeBadgeStyle}>IMAGE RESULT</div>
+              <div style={imageRecapTitleStyle}>Résultat</div>
+            </div>
+
+            <button
+              type="button"
+              onClick={sendResult}
+              style={imageRecapValidateButtonStyle}
+            >
+              Valider
+            </button>
+          </div>
+
+          <div style={imageRecapStatsGridStyle}>
+            <div style={imageRecapStatStyle}>
+              <div style={imageRecapStatValueStyle}>
+                {effectiveRecapSuccessRate}%
+              </div>
+              <div style={imageRecapStatLabelStyle}>réussite</div>
+            </div>
+
+            <div style={imageRecapStatStyle}>
+              <div style={imageRecapStatValueStyle}>
+                {effectiveRecapSuccessCount}
+                <span style={imageRecapStatMutedStyle}>
+                  {" "}/ {reviewItems.length}
+                </span>
+              </div>
+              <div style={imageRecapStatLabelStyle}>trouvées</div>
+            </div>
+
+            <div style={imageRecapStatStyle}>
+              <div style={imageRecapStatValueStyle}>
+                {effectiveRecapMissCount}
+              </div>
+              <div style={imageRecapStatLabelStyle}>à revoir</div>
+            </div>
+          </div>
+
+          <div className="image-recap-content">
+            <div style={imageRecapPreviewPanelStyle}>
+              <div style={imageRecapPanelHeaderStyle}>
+                <span>Aperçu</span>
+                <span style={imageRecapPanelCountStyle}>
+                  {selectedRecapRow ? answerLabel(selectedRecapRow.item) : ""}
+                </span>
+              </div>
+
+              <div data-image-recap-selected-preview style={imageRecapSelectedPreviewStyle}>
+                {selectedRecapRow ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Agrandir l'image sélectionnée"
+                      onClick={() => openPreview(selectedRecapRow)}
+                      style={{
+                        ...imageRecapSelectedPreviewButtonStyle,
+                        ...(selectedRecapRow.isFound
+                          ? imageRecapSelectedPreviewFoundStyle
+                          : imageRecapSelectedPreviewMissedStyle)
+                      }}
+                      title={answerLabel(selectedRecapRow.item)}
+                    >
+                      {resolveMediaUrl(selectedRecapRow.item.media) ? (
+                        <img
+                          src={resolveMediaUrl(selectedRecapRow.item.media)}
+                          alt={answerLabel(selectedRecapRow.item)}
+                          style={imageRecapSelectedPreviewImageStyle}
+                        />
+                      ) : (
+                        <span style={imageRecapSelectedMissingImageStyle}>
+                          Image manquante
+                        </span>
+                      )}
+                    </button>
+
+                    <div style={imageRecapSelectedMetaStyle}>
+                      <span
+                        style={{
+                          ...imageRecapStatusChipStyle,
+                          ...(selectedRecapRow.isFound
+                            ? imageRecapStatusFoundStyle
+                            : imageRecapStatusMissedStyle)
+                        }}
+                      >
+                        {selectedRecapRow.isFound ? "Trouvée" : "À revoir"}
+                      </span>
+                      <span style={imageRecapSelectedTitleStyle}>
+                        {answerLabel(selectedRecapRow.item)}
+                      </span>
+                      <span style={imageRecapSelectedIntervalStyle}>
+                        {(selectedRecapRow.projectedInterval ??
+                          projectedIntervalForImage(
+                            selectedRecapRow.item,
+                            selectedRecapRow.selectedQuality ?? (
+                              selectedRecapRow.isFound ? 2 : 0
+                            )
+                          ))}
+                        <span style={imageRecapIntervalUnitStyle}> j</span>
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div style={imageRecapSelectedEmptyStyle}>
+                    Image manquante
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={imageRecapTableStyle}>
+              <div
+                className="image-recap-table-header"
+                style={imageRecapTableHeaderStyle}
+              >
+                {imageRecapHeaderColumns.map(({ key, label }) => {
+                  const isActive = recapSort.key === key;
+                  const nextDirection = isActive && recapSort.direction === "asc"
+                    ? "desc"
+                    : "asc";
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-label={`${label} : trier ${
+                        nextDirection === "asc" ? "croissant" : "décroissant"
+                      }`}
+                      aria-pressed={isActive}
+                      onClick={() => toggleRecapSort(key)}
+                      style={{
+                        ...imageRecapHeaderButtonStyle,
+                        ...(isActive ? imageRecapHeaderButtonActiveStyle : {})
+                      }}
+                      title={`${label} : trier ${
+                        nextDirection === "asc" ? "croissant" : "décroissant"
+                      }`}
+                    >
+                      <span style={imageRecapHeaderLabelStyle}>{label}</span>
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          ...imageRecapHeaderSortIndicatorStyle,
+                          opacity: isActive ? 1 : 0
+                        }}
+                      >
+                        {recapSort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="app-scrollbar" style={imageRecapTableBodyStyle}>
+                {effectiveRecapSuccessCount > 0 && (
+                  <div
+                    className="image-recap-bulk-row"
+                    style={imageRecapBulkRowStyle}
+                  >
+                    <div style={imageRecapBulkTextStyle}>
+                      <div style={imageRecapBulkTitleStyle}>
+                        Images trouvées
+                      </div>
+                      <div style={imageRecapBulkMetaStyle}>
+                        {effectiveRecapSuccessCount} qualité{effectiveRecapSuccessCount > 1 ? "s" : ""}
+                      </div>
+                    </div>
+
+                    <div style={imageRecapBulkControlsStyle}>
+                      {qualityOptions.map(option =>
+                        renderImageRecapQualityButton({
+                          option,
+                          selected: effectiveFoundBulkQuality === option.value,
+                          onClick: () => setFoundImageQualities(option.value)
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {effectiveRecapRows.map(row => {
+                  const mediaSrc = resolveMediaUrl(row.item.media);
+                  const statusLabel = row.isFound ? "Trouvée" : "À revoir";
+                  const selectedQuality = row.selectedQuality ?? (
+                    row.isFound ? 2 : 0
+                  );
+                  const projectedInterval = row.projectedInterval ??
+                    projectedIntervalForImage(row.item, selectedQuality);
+
+                  return (
+                    <div
+                      key={row.item.question_id}
+                      className="image-recap-row"
+                      data-image-recap-row={row.isFound ? "found" : "missed"}
+                      data-image-recap-selected={
+                        selectedRecapRow?.item.question_id === row.item.question_id
+                          ? "true"
+                          : "false"
+                      }
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => selectRecapRow(row)}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) {
+                          return;
+                        }
+
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          selectRecapRow(row);
+                        }
+                      }}
+                      style={{
+                        ...imageRecapRowStyle,
+                        ...(row.isFound
+                          ? imageRecapRowFoundStyle
+                          : imageRecapRowMissedStyle),
+                        ...(selectedRecapRow?.item.question_id === row.item.question_id
+                          ? imageRecapRowSelectedStyle
+                          : {}),
+                        borderLeft: row.isFound
+                          ? "3px solid #38bdf8"
+                          : "3px solid #f59e0b"
+                      }}
+                      title={answerLabel(row.item)}
+                    >
+                      <div style={imageRecapAnswerCellStyle}>
+                        <span
+                          data-image-recap-status={row.isFound ? "found" : "missed"}
+                          style={{
+                            ...imageRecapStatusChipStyle,
+                            ...(row.isFound
+                              ? imageRecapStatusFoundStyle
+                              : imageRecapStatusMissedStyle)
+                          }}
+                        >
+                          {statusLabel}
+                        </span>
+
+                        <span style={imageRecapThumbnailStyle}>
+                          {mediaSrc ? (
+                            <img
+                              src={mediaSrc}
+                              alt={answerLabel(row.item)}
+                              style={imageRecapThumbnailImageStyle}
+                            />
+                          ) : (
+                            <span style={imageRecapThumbnailMissingStyle} />
+                          )}
+                        </span>
+
+                        <span style={imageRecapAnswerTextStyle}>
+                          {answerLabel(row.item)}
+                        </span>
+                      </div>
+
+                      <div style={imageRecapMetricCellStyle}>
+                        {row.historyStats?.reviews > 0 ? (
+                          <>
+                            <span style={imageRecapHistoryRateStyle}>
+                              {row.historyStats.successRate}%
+                            </span>
+                            <span style={imageRecapHistoryMetaStyle}>
+                              {row.historyStats.reviews} revue{row.historyStats.reviews > 1 ? "s" : ""}
+                            </span>
+                          </>
+                        ) : (
+                          <span style={imageRecapHistoryMetaStyle}>Nouveau</span>
+                        )}
+                      </div>
+
+                      <div style={imageRecapIntervalCellStyle}>
+                        {projectedInterval}
+                        <span style={imageRecapIntervalUnitStyle}> j</span>
+                      </div>
+
+                      <div style={imageRecapQualityCellStyle}>
+                        {row.isFound ? (
+                          qualityOptions.map(option =>
+                            renderImageRecapQualityButton({
+                              option,
+                              selected: selectedQuality === option.value,
+                              onClick: (event) => {
+                                event.stopPropagation();
+                                setQuality(row.item.question_id, option.value);
+                              }
+                            })
+                          )
+                        ) : (
+                          <span
+                            data-image-recap-locked-quality
+                            style={imageRecapLockedQualityStyle}
+                          >
+                            0 · Faux
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1615,7 +2032,7 @@ export default function ImageReview({
               {feedbackCopy}
           </div>
 
-          {resultMode ? (
+          {resultMode && !showQualityControls ? (
             <button
               type="button"
               onClick={sendResult}
@@ -1626,9 +2043,9 @@ export default function ImageReview({
                 color: "#7ee2a8"
               }}
             >
-              {showQualityControls ? "Valider" : "Continuer"}
+              Continuer
             </button>
-          ) : (
+          ) : !resultMode ? (
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               {canSkipPrompt && (
                 <button type="button" onClick={skipCurrentPrompt} style={buttonStyle}>
@@ -1640,10 +2057,12 @@ export default function ImageReview({
                 Terminer
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
       </div>
+
+      {renderImageRecap()}
 
       {previewRow && (
         <div
@@ -1763,3 +2182,513 @@ export default function ImageReview({
     </>
   );
 }
+
+const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 184px";
+const imageRecapTableGap = "10px";
+const imageRecapTablePadding = "10px 14px";
+const imageRecapStatusStripeBorder = "3px solid transparent";
+
+const imageRecapOverlayStyle = {
+  alignItems: "center",
+  backdropFilter: "blur(6px)",
+  background: "rgba(0,0,0,0.75)",
+  display: "flex",
+  inset: 0,
+  justifyContent: "center",
+  padding: "30px",
+  position: "fixed",
+  zIndex: 1000
+};
+
+const imageRecapCardStyle = {
+  background: "#1a1a1a",
+  border: "1px solid #2a2a2a",
+  borderRadius: "18px",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+  maxHeight: "100%",
+  maxWidth: "1100px",
+  overflow: "auto",
+  padding: "24px",
+  scrollbarGutter: "stable",
+  width: "100%"
+};
+
+const imageRecapHeaderStyle = {
+  alignItems: "center",
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "18px",
+  marginBottom: "22px"
+};
+
+const imageRecapTypeBadgeStyle = {
+  background: "rgba(240, 195, 106, 0.14)",
+  border: "1px solid rgba(240, 195, 106, 0.3)",
+  borderRadius: "999px",
+  color: "#f0c36a",
+  display: "flex",
+  fontSize: "12px",
+  fontWeight: 800,
+  padding: "5px 10px",
+  width: "fit-content"
+};
+
+const imageRecapTitleStyle = {
+  color: "#f3f3f3",
+  fontSize: "26px",
+  fontWeight: 700,
+  marginTop: "12px"
+};
+
+const imageRecapValidateButtonStyle = {
+  ...buttonStyle,
+  background: "#1d3a29",
+  border: "1px solid #2c5c3e",
+  color: "#7ee2a8"
+};
+
+const imageRecapStatsGridStyle = {
+  display: "grid",
+  gap: "10px",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  marginBottom: "18px"
+};
+
+const imageRecapStatStyle = {
+  background: "#181818",
+  border: "1px solid #262626",
+  borderRadius: "12px",
+  minWidth: 0,
+  padding: "12px 14px"
+};
+
+const imageRecapStatValueStyle = {
+  color: "#f3f3f3",
+  fontSize: "22px",
+  fontWeight: 700,
+  lineHeight: "26px"
+};
+
+const imageRecapStatMutedStyle = {
+  color: "#666",
+  fontSize: "14px",
+  marginLeft: "3px"
+};
+
+const imageRecapStatLabelStyle = {
+  color: "#777",
+  fontSize: "12px",
+  marginTop: "3px"
+};
+
+const imageRecapPreviewPanelStyle = {
+  background: "#111",
+  border: "1px solid #262626",
+  borderRadius: "14px",
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "430px",
+  minWidth: 0,
+  overflow: "hidden"
+};
+
+const imageRecapPanelHeaderStyle = {
+  alignItems: "center",
+  background: "#151515",
+  borderBottom: "1px solid #262626",
+  color: "#e5e5e5",
+  display: "flex",
+  fontSize: "12px",
+  fontWeight: 800,
+  justifyContent: "space-between",
+  letterSpacing: "0.08em",
+  padding: "12px 14px",
+  textTransform: "uppercase"
+};
+
+const imageRecapPanelCountStyle = {
+  color: "#777",
+  fontSize: "11px",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const imageRecapSelectedPreviewStyle = {
+  display: "grid",
+  gap: "12px",
+  gridTemplateRows: "minmax(0, 1fr) auto",
+  minHeight: 0,
+  padding: "12px"
+};
+
+const imageRecapSelectedPreviewButtonStyle = {
+  alignItems: "center",
+  background: "#151515",
+  border: "1px solid #303030",
+  borderRadius: "12px",
+  boxSizing: "border-box",
+  cursor: "zoom-in",
+  display: "flex",
+  justifyContent: "center",
+  minHeight: "310px",
+  minWidth: 0,
+  overflow: "hidden",
+  padding: "14px",
+  width: "100%"
+};
+
+const imageRecapSelectedPreviewFoundStyle = {
+  borderColor: "rgba(56, 189, 248, 0.52)",
+  boxShadow: "inset 0 0 0 1px rgba(37, 99, 235, 0.18)"
+};
+
+const imageRecapSelectedPreviewMissedStyle = {
+  background: [
+    "repeating-linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0 5px, rgba(245, 158, 11, 0) 5px 10px)",
+    "#181818"
+  ].join(", "),
+  borderColor: "rgba(251, 191, 36, 0.58)"
+};
+
+const imageRecapSelectedPreviewImageStyle = {
+  display: "block",
+  height: "min(44vh, 340px)",
+  maxHeight: "100%",
+  maxWidth: "100%",
+  objectFit: "contain",
+  width: "100%"
+};
+
+const imageRecapSelectedMissingImageStyle = {
+  color: "#666",
+  fontSize: "13px",
+  overflowWrap: "anywhere",
+  textAlign: "center"
+};
+
+const imageRecapSelectedMetaStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+  minWidth: 0
+};
+
+const imageRecapSelectedTitleStyle = {
+  color: "#f3f3f3",
+  fontSize: "16px",
+  fontWeight: 800,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const imageRecapSelectedIntervalStyle = {
+  color: "#e5e5e5",
+  fontSize: "18px",
+  fontWeight: 800,
+  whiteSpace: "nowrap"
+};
+
+const imageRecapSelectedEmptyStyle = {
+  alignItems: "center",
+  color: "#666",
+  display: "flex",
+  justifyContent: "center",
+  minHeight: "320px"
+};
+
+const imageRecapTableStyle = {
+  background: "#111",
+  border: "1px solid #262626",
+  borderRadius: "14px",
+  minWidth: 0,
+  overflow: "hidden"
+};
+
+const imageRecapTableHeaderStyle = {
+  alignItems: "center",
+  background: "#151515",
+  borderBottom: "1px solid #262626",
+  borderLeft: imageRecapStatusStripeBorder,
+  boxSizing: "border-box",
+  color: "#777",
+  display: "grid",
+  fontSize: "11px",
+  fontWeight: 700,
+  gap: imageRecapTableGap,
+  gridTemplateColumns: imageRecapTableGridColumns,
+  letterSpacing: "0.08em",
+  padding: imageRecapTablePadding,
+  textAlign: "left",
+  textTransform: "uppercase"
+};
+
+const imageRecapHeaderButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  color: "inherit",
+  cursor: "pointer",
+  display: "inline-flex",
+  font: "inherit",
+  fontWeight: "inherit",
+  gap: "5px",
+  justifyContent: "flex-start",
+  letterSpacing: "inherit",
+  lineHeight: "16px",
+  minWidth: 0,
+  padding: 0,
+  textAlign: "left",
+  textTransform: "inherit",
+  width: "100%"
+};
+
+const imageRecapHeaderButtonActiveStyle = {
+  color: "#e5e5e5"
+};
+
+const imageRecapHeaderLabelStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const imageRecapHeaderSortIndicatorStyle = {
+  color: "#e5e5e5",
+  flex: "0 0 10px",
+  fontSize: "12px",
+  lineHeight: "12px",
+  textAlign: "center",
+  width: "10px"
+};
+
+const imageRecapTableBodyStyle = {
+  background: "#242424",
+  display: "flex",
+  flexDirection: "column",
+  gap: "1px",
+  maxHeight: "430px",
+  overflow: "auto",
+  scrollbarGutter: "stable"
+};
+
+const imageRecapBulkRowStyle = {
+  alignItems: "center",
+  background: "#111",
+  borderLeft: imageRecapStatusStripeBorder,
+  boxSizing: "border-box",
+  display: "grid",
+  gap: imageRecapTableGap,
+  gridTemplateColumns: imageRecapTableGridColumns,
+  padding: imageRecapTablePadding
+};
+
+const imageRecapBulkTextStyle = {
+  alignItems: "flex-start",
+  display: "flex",
+  flexDirection: "column",
+  gridColumn: "1 / -2",
+  justifyContent: "center",
+  minWidth: 0
+};
+
+const imageRecapBulkTitleStyle = {
+  color: "#e5e5e5",
+  fontSize: "12px",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const imageRecapBulkMetaStyle = {
+  color: "#777",
+  fontSize: "11px",
+  lineHeight: "15px"
+};
+
+const imageRecapBulkControlsStyle = {
+  display: "flex",
+  flex: "0 0 auto",
+  gap: "6px",
+  justifyContent: "flex-start"
+};
+
+const imageRecapRowStyle = {
+  alignItems: "center",
+  background: "#181818",
+  border: 0,
+  borderLeft: imageRecapStatusStripeBorder,
+  borderRadius: 0,
+  boxSizing: "border-box",
+  color: "#e5e5e5",
+  cursor: "pointer",
+  display: "grid",
+  font: "inherit",
+  gap: imageRecapTableGap,
+  gridTemplateColumns: imageRecapTableGridColumns,
+  minHeight: "62px",
+  padding: imageRecapTablePadding,
+  textAlign: "left",
+  transition: "background 0.14s ease, box-shadow 0.14s ease",
+  width: "100%"
+};
+
+const imageRecapRowFoundStyle = {
+  background: "linear-gradient(90deg, rgba(37, 99, 235, 0.14), #181818 46%)"
+};
+
+const imageRecapRowMissedStyle = {
+  background: [
+    "repeating-linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0 5px, rgba(245, 158, 11, 0) 5px 10px)",
+    "linear-gradient(90deg, rgba(245, 158, 11, 0.18), #181818 48%)"
+  ].join(", ")
+};
+
+const imageRecapRowSelectedStyle = {
+  boxShadow: "inset 0 0 0 1px rgba(240, 195, 106, 0.78)"
+};
+
+const imageRecapAnswerCellStyle = {
+  alignItems: "center",
+  color: "#f3f3f3",
+  display: "flex",
+  gap: "8px",
+  minWidth: 0
+};
+
+const imageRecapStatusChipStyle = {
+  alignItems: "center",
+  borderRadius: "999px",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: 800,
+  height: "22px",
+  letterSpacing: "0.04em",
+  lineHeight: "22px",
+  padding: "0 8px",
+  textTransform: "uppercase"
+};
+
+const imageRecapStatusFoundStyle = {
+  background: "rgba(37, 99, 235, 0.24)",
+  border: "1px solid rgba(56, 189, 248, 0.62)",
+  color: "#bae6fd"
+};
+
+const imageRecapStatusMissedStyle = {
+  background: [
+    "repeating-linear-gradient(135deg, rgba(17, 24, 39, 0.3) 0 3px, rgba(17, 24, 39, 0) 3px 6px)",
+    "rgba(245, 158, 11, 0.22)"
+  ].join(", "),
+  border: "1px solid rgba(251, 191, 36, 0.7)",
+  color: "#fde68a"
+};
+
+const imageRecapThumbnailStyle = {
+  alignItems: "center",
+  background: "#101010",
+  border: "1px solid #2a2a2a",
+  borderRadius: "7px",
+  display: "flex",
+  flex: "0 0 42px",
+  height: "42px",
+  justifyContent: "center",
+  overflow: "hidden",
+  width: "42px"
+};
+
+const imageRecapThumbnailImageStyle = {
+  display: "block",
+  height: "100%",
+  maxHeight: "100%",
+  maxWidth: "100%",
+  objectFit: "contain",
+  width: "100%"
+};
+
+const imageRecapThumbnailMissingStyle = {
+  background: "#262626",
+  borderRadius: "999px",
+  height: "10px",
+  width: "10px"
+};
+
+const imageRecapAnswerTextStyle = {
+  color: "#f3f3f3",
+  fontWeight: 650,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const imageRecapMetricCellStyle = {
+  alignItems: "flex-start",
+  color: "#777",
+  display: "flex",
+  flexDirection: "column",
+  fontSize: "12px",
+  justifyContent: "center",
+  lineHeight: "16px",
+  minWidth: 0
+};
+
+const imageRecapHistoryRateStyle = {
+  color: "#e5e5e5",
+  fontSize: "17px",
+  fontWeight: 700,
+  lineHeight: "20px"
+};
+
+const imageRecapHistoryMetaStyle = {
+  color: "#777",
+  fontSize: "11px",
+  whiteSpace: "nowrap"
+};
+
+const imageRecapIntervalCellStyle = {
+  color: "#e5e5e5",
+  fontSize: "18px",
+  fontWeight: 700,
+  whiteSpace: "nowrap"
+};
+
+const imageRecapIntervalUnitStyle = {
+  color: "#777",
+  fontSize: "12px",
+  fontWeight: 600
+};
+
+const imageRecapQualityCellStyle = {
+  display: "flex",
+  gap: "6px",
+  justifyContent: "flex-start"
+};
+
+const imageRecapQualityButtonStyle = {
+  borderRadius: "9px",
+  fontSize: "12px",
+  fontWeight: 800,
+  height: "34px",
+  lineHeight: "16px",
+  minWidth: "50px",
+  padding: "0 8px"
+};
+
+const imageRecapLockedQualityStyle = {
+  background: "#3a1f24",
+  border: "1px solid #6b2b31",
+  borderRadius: "9px",
+  color: "#ff9aa5",
+  fontSize: "12px",
+  fontWeight: 800,
+  lineHeight: "16px",
+  padding: "8px 10px",
+  whiteSpace: "nowrap"
+};
