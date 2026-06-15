@@ -120,6 +120,12 @@ function mockImageReviewState({
     promptLabel: item.label,
     progressPercent: row.isFound ? 100 : 0,
     remainingCount: row.isFound ? 0 : 1,
+    resolvedQuestionIds: row.isFound || row.isMissed || row.isLockedMissed
+      ? [row.item.question_id]
+      : [],
+    resolvedQuestionIdsRecentFirst: row.isFound || row.isMissed || row.isLockedMissed
+      ? [row.item.question_id]
+      : [],
     resultMode,
     selectItem: noop,
     selectNextItem: noop,
@@ -191,6 +197,8 @@ function typeAllHookState({ rows, foundQuestionIds = [] }) {
     promptLabel: "",
     progressPercent: rows.length ? (foundQuestionIds.length / rows.length) * 100 : 0,
     remainingCount: Math.max(0, rows.length - foundQuestionIds.length),
+    resolvedQuestionIds: [],
+    resolvedQuestionIdsRecentFirst: [],
     resultMode: false,
     selectItem: noop,
     selectNextItem: noop,
@@ -235,6 +243,8 @@ function typePromptHookState({
       ? (resolvedQuestionIds.length / gridItems.length) * 100
       : 0,
     remainingCount: Math.max(0, gridItems.length - resolvedQuestionIds.length),
+    resolvedQuestionIds,
+    resolvedQuestionIdsRecentFirst: [...resolvedQuestionIds].reverse(),
     resultMode: false,
     selectItem: noop,
     selectNextItem: noop,
@@ -251,6 +261,8 @@ function imageClickHookState({
   rows,
   mode = IMAGE_MODE_CLICK_PROMPT,
   activeQuestionId = rows[0]?.item.question_id || null,
+  foundQuestionIds = [],
+  resolvedQuestionIds = [],
   hookOverrides = {}
 }) {
   const gridItems = rows.map(row => ({
@@ -261,12 +273,12 @@ function imageClickHookState({
 
   return {
     activeQuestionId,
-    answeredCount: 0,
+    answeredCount: foundQuestionIds.length,
     choiceOptions: [],
     currentPromptItem: activeRow?.item || null,
     feedbackTone: "",
     finishReview: noop,
-    foundQuestionIds: [],
+    foundQuestionIds,
     gridItems,
     handleChoiceSelect: noop,
     handleImageSelect: noop,
@@ -275,8 +287,12 @@ function imageClickHookState({
     interactionFeedback: null,
     mode,
     promptLabel: activeRow?.item?.label || activeRow?.item?.answer || "",
-    progressPercent: 0,
-    remainingCount: gridItems.length,
+    progressPercent: gridItems.length
+      ? (resolvedQuestionIds.length / gridItems.length) * 100
+      : 0,
+    remainingCount: Math.max(0, gridItems.length - resolvedQuestionIds.length),
+    resolvedQuestionIds,
+    resolvedQuestionIdsRecentFirst: [...resolvedQuestionIds].reverse(),
     resultMode: false,
     selectItem: noop,
     selectNextItem: noop,
@@ -284,7 +300,7 @@ function imageClickHookState({
     setInput: noop,
     setQuality: noop,
     skipCurrentPrompt: noop,
-    wrongAnsweredCount: 0,
+    wrongAnsweredCount: Math.max(0, resolvedQuestionIds.length - foundQuestionIds.length),
     ...hookOverrides
   };
 }
@@ -820,21 +836,34 @@ describe("ImageReview answer label preview", () => {
     expect(tileFor(container, 2)).toHaveTextContent("Image 2");
   });
 
-  it("separates found images from the active grid while answering", () => {
+  it("separates resolved type_prompt images newest first while answering", () => {
+    const selectItem = vi.fn();
     const rows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
       imageGridRow(2),
-      imageGridRow(3, { isFound: true, quality: 2 })
+      imageGridRow(3, {
+        isMissed: true,
+        isRevealed: true
+      })
     ];
     useImageReview.mockReturnValue(
-      typeAllHookState({ rows, foundQuestionIds: [1, 3] })
+      typePromptHookState({
+        rows,
+        activeQuestionId: 2,
+        foundQuestionIds: [1],
+        resolvedQuestionIds: [1, 3],
+        hookOverrides: { selectItem }
+      })
     );
     const { container } = renderImageReview({
       reviewItems: rows.map(row => row.item),
-      separateFoundItems: true
+      separateResolvedItems: true
     });
     const activeGrid = container.querySelector("[data-image-active-grid]");
-    const foundSection = container.querySelector("[data-image-found-section]");
+    const resolvedSection = container.querySelector("[data-image-resolved-section]");
+    const resolvedTiles = Array.from(
+      resolvedSection.querySelectorAll("[data-image-question-id]")
+    );
 
     expect(activeGrid.querySelector('[data-image-question-id="1"]'))
       .not.toBeInTheDocument();
@@ -842,10 +871,77 @@ describe("ImageReview answer label preview", () => {
       .toBeInTheDocument();
     expect(activeGrid.querySelector('[data-image-question-id="3"]'))
       .not.toBeInTheDocument();
-    expect(foundSection.querySelector('[data-image-question-id="1"]'))
-      .toBeInTheDocument();
-    expect(foundSection.querySelector('[data-image-question-id="3"]'))
-      .toBeInTheDocument();
+    expect(resolvedSection).toHaveTextContent("Traitées");
+    expect(resolvedTiles.map(tile => tile.getAttribute("data-image-question-id")))
+      .toEqual(["3", "1"]);
+    expect(resolvedSection.querySelector('[data-image-question-id="3"]'))
+      .toHaveTextContent("Image 3");
+
+    fireEvent.click(resolvedSection.querySelector('[data-image-question-id="3"]'));
+
+    expect(selectItem).not.toHaveBeenCalled();
+  });
+
+  it("puts only the resolved click_prompt target in the treated section", () => {
+    const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    const rows = [
+      imageGridRow(1, {
+        feedbackState: "missed",
+        isMissed: true,
+        isRevealed: true
+      }),
+      imageGridRow(2, {
+        feedbackState: "wrong"
+      }),
+      imageGridRow(3)
+    ];
+    useImageReview.mockReturnValue(
+      imageClickHookState({
+        rows,
+        activeQuestionId: 1,
+        resolvedQuestionIds: [1],
+        hookOverrides: {
+          feedbackTone: "incorrect",
+          interactionFeedback: {
+            correctQuestionId: 1,
+            isCorrect: false,
+            selectedQuestionId: 2
+          },
+          wrongAnsweredCount: 1
+        }
+      })
+    );
+    Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    try {
+      const { container } = renderImageReview({
+        reviewItems: rows.map(row => row.item),
+        separateResolvedItems: true
+      });
+      const activeGrid = container.querySelector("[data-image-active-grid]");
+      const resolvedSection = container.querySelector("[data-image-resolved-section]");
+
+      expect(resolvedSection.querySelector('[data-image-question-id="1"]'))
+        .toBeInTheDocument();
+      expect(resolvedSection.querySelector('[data-image-question-id="2"]'))
+        .not.toBeInTheDocument();
+      expect(activeGrid.querySelector('[data-image-question-id="2"]'))
+        .toBeInTheDocument();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
+          configurable: true,
+          value: originalScrollIntoView
+        });
+      } else {
+        delete window.HTMLElement.prototype.scrollIntoView;
+      }
+    }
   });
 
   it("keeps the full grid together in image result mode", () => {
@@ -860,11 +956,11 @@ describe("ImageReview answer label preview", () => {
     });
     const { container } = renderImageReview({
       reviewItems: rows.map(row => row.item),
-      separateFoundItems: true
+      separateResolvedItems: true
     });
     const activeGrid = container.querySelector("[data-image-active-grid]");
 
-    expect(container.querySelector("[data-image-found-section]"))
+    expect(container.querySelector("[data-image-resolved-section]"))
       .not.toBeInTheDocument();
     expect(activeGrid.querySelector('[data-image-question-id="1"]'))
       .toBeInTheDocument();

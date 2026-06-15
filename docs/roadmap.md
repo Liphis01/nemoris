@@ -7,8 +7,7 @@
 
 ## Urgent
 - ajouter un truc pour prévenir qu'il faut rajouter des questions et bloquer les questions bonus si on est surchargé du schedule
-- la séparation des images trouvées et restantes doit aussi se faire en training pour click_prompt (et type_prompt) et enlever le scroll vers les images trouvées (mais pas les fausses) et aussi mettre de côté les images ratées et organiser les trouvées du plus récent au plus ancien de trouvage (même chose pour type_prompt) et garder la séparation pour le recap quality
-- il faut trouver un meilleur système pour choisir le recap quality des images
+- 
 
 ## quick fixes
 

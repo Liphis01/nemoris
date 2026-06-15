@@ -397,6 +397,7 @@ describe("useImageReview", () => {
 
     expect(result.current.foundQuestionIds).toEqual([3]);
     expect(result.current.resolvedQuestionIds).toEqual([3]);
+    expect(result.current.resolvedQuestionIdsRecentFirst).toEqual([3]);
     expect(result.current.currentPromptItem.question_id).toBe(4);
 
     act(() => {
@@ -405,6 +406,7 @@ describe("useImageReview", () => {
 
     expect(result.current.foundQuestionIds).toEqual([3]);
     expect(result.current.resolvedQuestionIds).toEqual([3, 4]);
+    expect(result.current.resolvedQuestionIdsRecentFirst).toEqual([4, 3]);
     expect(result.current.currentPromptItem.question_id).toBe(1);
   });
 
@@ -457,6 +459,12 @@ describe("useImageReview", () => {
       });
 
       expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
+      expect(result.current.resolvedQuestionIdsRecentFirst).toEqual([
+        prompt.question_id
+      ]);
+      expect(result.current.resolvedQuestionIdsRecentFirst).not.toContain(
+        wrong.question_id
+      );
       expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
       expect(result.current.interactionFeedback).toMatchObject({
         correctQuestionId: prompt.question_id,

@@ -518,6 +518,7 @@ export default function ImageReview({
   onComplete,
   submitAnswer,
   separateFoundItems = false,
+  separateResolvedItems = separateFoundItems,
   showQualityControls = true,
   trainingElapsedMs = null,
   trainingBestTimeMs = null,
@@ -546,6 +547,8 @@ export default function ImageReview({
     mode,
     promptLabel,
     remainingCount,
+    resolvedQuestionIds = [],
+    resolvedQuestionIdsRecentFirst,
     resultMode,
     selectItem,
     selectNextItem,
@@ -586,12 +589,29 @@ export default function ImageReview({
   const selectsPromptImage = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
   const selectsImageByTile = answersByClick || selectsPromptImage;
   const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
-  const shouldSeparateFoundItems = separateFoundItems && !resultMode;
-  const activeGridItems = shouldSeparateFoundItems
-    ? gridItems.filter(row => !row.isFound)
+  const recentResolvedQuestionIds = resolvedQuestionIdsRecentFirst ||
+    [...resolvedQuestionIds].reverse();
+  const resolvedQuestionIdOrder = new Map(
+    recentResolvedQuestionIds.map((questionId, index) => [questionId, index])
+  );
+  const shouldSeparateResolvedItems = (
+    separateResolvedItems &&
+    !resultMode &&
+    (
+      normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
+      normalizedMode === IMAGE_MODE_TYPE_PROMPT
+    )
+  );
+  const activeGridItems = shouldSeparateResolvedItems
+    ? gridItems.filter(row => !resolvedQuestionIdOrder.has(row.item.question_id))
     : gridItems;
-  const foundGridItems = shouldSeparateFoundItems
-    ? gridItems.filter(row => row.isFound)
+  const resolvedGridItems = shouldSeparateResolvedItems
+    ? gridItems
+      .filter(row => resolvedQuestionIdOrder.has(row.item.question_id))
+      .sort((left, right) => (
+        resolvedQuestionIdOrder.get(left.item.question_id) -
+        resolvedQuestionIdOrder.get(right.item.question_id)
+      ))
     : [];
   const completedQuestionCount = answeredCount + wrongAnsweredCount;
   const correctProgressPercent = reviewItems.length
@@ -778,8 +798,15 @@ export default function ImageReview({
       return;
     }
 
+    if (!activeGridItems.some(row =>
+      row.item.question_id === interactionFeedback.correctQuestionId
+    )) {
+      return;
+    }
+
     scrollImageTileIntoView(interactionFeedback.correctQuestionId, "center");
   }, [
+    activeGridItems,
     interactionFeedback,
     normalizedMode,
     previewRow,
@@ -1362,9 +1389,9 @@ export default function ImageReview({
           </div>
         )}
 
-        {!showImageChoiceBoard && foundGridItems.length > 0 && (
+        {!showImageChoiceBoard && resolvedGridItems.length > 0 && (
           <div
-            data-image-found-section
+            data-image-resolved-section
             style={{
               borderTop: "1px solid #262626",
               marginTop: "16px",
@@ -1383,8 +1410,8 @@ export default function ImageReview({
                 textTransform: "uppercase"
               }}
             >
-              <span>Trouvées</span>
-              <span style={{ color: "#6b7280" }}>{foundGridItems.length}</span>
+              <span>Traitées</span>
+              <span style={{ color: "#6b7280" }}>{resolvedGridItems.length}</span>
             </div>
             <div
               style={{
@@ -1393,7 +1420,7 @@ export default function ImageReview({
                 gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))"
               }}
             >
-              {foundGridItems.map(row =>
+              {resolvedGridItems.map(row =>
                 renderImageTile(row, {
                   allowSelection: false
                 })

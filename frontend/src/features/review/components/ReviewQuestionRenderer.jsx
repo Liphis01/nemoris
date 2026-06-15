@@ -2,6 +2,11 @@ import TextReviewCard from "./TextReviewCard";
 import ImageReview from "./ImageReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
+import {
+    IMAGE_MODE_CLICK_PROMPT,
+    IMAGE_MODE_TYPE_PROMPT,
+    normalizeImageMode
+} from "../imageModes";
 
 export default function ReviewQuestionRenderer({
     q,
@@ -48,6 +53,12 @@ export default function ReviewQuestionRenderer({
     }
 
     if (q.type_q === "image" && q.items) {
+        const imageMode = normalizeImageMode(q.mode);
+        const separatesResolvedItems = (
+            imageMode === IMAGE_MODE_CLICK_PROMPT ||
+            imageMode === IMAGE_MODE_TYPE_PROMPT
+        );
+
         return (
             <ImageReview
                 key={currentIndex}
@@ -57,7 +68,7 @@ export default function ReviewQuestionRenderer({
                 mode={q.mode}
                 onComplete={handleImageComplete}
                 submitAnswer={submitImageAnswer}
-                separateFoundItems={!trainingMode}
+                separateResolvedItems={separatesResolvedItems}
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
                 trainingBestTimeMs={trainingBestTimeMs}

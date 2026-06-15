@@ -236,6 +236,10 @@ export function useImageReview(
     () => questionIdSet(resolvedQuestionIds),
     [resolvedQuestionIds]
   );
+  const resolvedQuestionIdsRecentFirst = useMemo(
+    () => [...resolvedQuestionIds].reverse(),
+    [resolvedQuestionIds]
+  );
   const lockedMissedQuestionIdSet = useMemo(
     () => questionIdSet(lockedMissedQuestionIds),
     [lockedMissedQuestionIds]
@@ -713,6 +717,7 @@ export function useImageReview(
     qualityByQuestionId,
     remainingCount: Math.max(0, sessionItems.length - completedCount),
     resolvedQuestionIds,
+    resolvedQuestionIdsRecentFirst,
     resultMode,
     revealedQuestionIds,
     selectItem,
