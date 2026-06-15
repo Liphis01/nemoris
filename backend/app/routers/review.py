@@ -34,7 +34,11 @@ from ..services.image_modes import (
     image_mode_difficulty,
     normalize_image_mode
 )
-from ..services.review import get_bonus_review_status, get_review_items
+from ..services.review import (
+    get_bonus_review_status,
+    get_review_items,
+    get_review_summary
+)
 from ..services.settings import (
     get_review_settings,
     get_startup_rebalance_notice,
@@ -163,6 +167,11 @@ def get_review(
 @router.get("/review/bonus_status")
 def get_bonus_status(db: Session = Depends(get_db)):
     return get_bonus_review_status(db)
+
+
+@router.get("/review/summary")
+def get_summary(db: Session = Depends(get_db)):
+    return get_review_summary(db)
 
 
 @router.post("/answer")

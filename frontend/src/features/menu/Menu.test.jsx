@@ -14,6 +14,7 @@ describe("Menu", () => {
         setMode={vi.fn()}
         startupNotice={null}
         onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 4, has_due: true }}
       />
     );
 
@@ -24,6 +25,22 @@ describe("Menu", () => {
     expect(
       screen.getByRole("button", { name: /Gestionnaire/ })
     ).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("À revoir")).toBeInTheDocument();
+  });
+
+  it("shows an empty review count", () => {
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 0, has_due: false }}
+      />
+    );
+
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("À jour")).toBeInTheDocument();
   });
 
   it("shows the startup rebalance notice when provided", () => {

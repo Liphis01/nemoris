@@ -150,6 +150,11 @@ export async function mockApi(page, options = {}) {
       catchup_daily_target: 50,
       ...(options.reviewSettings || {})
     },
+    reviewSummary: {
+      due_count: options.review?.length || 0,
+      has_due: (options.review?.length || 0) > 0,
+      ...(options.reviewSummary || {})
+    },
     bonusReviewStatus: {
       allowed: true,
       bonus_question_capacity: 315,
@@ -195,6 +200,11 @@ export async function mockApi(page, options = {}) {
 
     if (method === "GET" && path === "/review/startup_notice") {
       await fulfillJson(route, null);
+      return;
+    }
+
+    if (method === "GET" && path === "/review/summary") {
+      await fulfillJson(route, state.reviewSummary);
       return;
     }
 

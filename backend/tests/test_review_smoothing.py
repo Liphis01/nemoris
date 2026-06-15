@@ -16,6 +16,7 @@ from app.routers.review import (
     answer_timeline,
     get_bonus_status,
     get_review,
+    get_summary,
     get_settings,
     get_startup_notice,
     rebalance_review,
@@ -1362,6 +1363,23 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             [item["question_id"] for item in bonus_response],
             [1, 2]
         )
+
+    def test_review_summary_counts_started_due_questions_only(self):
+        today = date.today()
+        self.add_question(1)
+        self.add_progress(1, today, reps=1)
+        self.add_question(2)
+        self.add_progress(2, today + timedelta(days=1), reps=1)
+        self.add_question(3)
+        self.add_progress(3, today, reps=0)
+        self.add_question(4)
+        self.add_progress(4, today - timedelta(days=2), reps=1)
+        self.db.commit()
+
+        summary = get_summary(db=self.db)
+
+        self.assertEqual(summary["due_count"], 2)
+        self.assertTrue(summary["has_due"])
 
     def test_bonus_status_encourages_new_questions_when_schedule_is_low(self):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)

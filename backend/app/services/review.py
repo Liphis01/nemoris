@@ -515,6 +515,16 @@ def get_bonus_review_status(db, today=None):
     }
 
 
+def get_review_summary(db, today=None):
+    today = today or date.today()
+    due_count = _due_question_count(db, today)
+
+    return {
+        "due_count": due_count,
+        "has_due": due_count > 0
+    }
+
+
 def _serialize_review_items(
     questions,
     scheduler_tuning=None,

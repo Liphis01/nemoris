@@ -29,6 +29,11 @@ export function getStartupRebalanceNotice() {
 }
 
 
+export function getReviewSummary() {
+  return requestJson("/review/summary");
+}
+
+
 export function getBonusReviewStatus() {
   return requestJson("/review/bonus_status");
 }

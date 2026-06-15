@@ -80,25 +80,49 @@ function DestinationButton({ item, setMode }) {
   );
 }
 
-function ReviewVisual() {
-  return (
-    <span className="menu-review-visual" aria-hidden="true">
-      <span className="menu-review-lane menu-review-lane-violet" />
-      <span className="menu-review-lane menu-review-lane-amber" />
-      <span className="menu-review-lane menu-review-lane-green" />
-      <span className="menu-review-lane menu-review-lane-blue" />
-      <span className="menu-review-node menu-review-node-one" />
-      <span className="menu-review-node menu-review-node-two" />
-      <span className="menu-review-node menu-review-node-three" />
-    </span>
-  );
+function reviewDueValue(summary, loading, error) {
+  if (loading) {
+    return "...";
+  }
+
+  if (error) {
+    return "!";
+  }
+
+  return String(summary?.due_count ?? 0);
+}
+
+function reviewDueCaption(summary, loading, error) {
+  if (loading) {
+    return "Calcul";
+  }
+
+  if (error) {
+    return "Indisponible";
+  }
+
+  return (summary?.due_count ?? 0) === 0 ? "À jour" : "À revoir";
 }
 
 export default function Menu({
   setMode,
   startupNotice,
-  onDismissStartupNotice
+  onDismissStartupNotice,
+  reviewSummary = null,
+  reviewSummaryLoading = false,
+  reviewSummaryError = ""
 }) {
+  const reviewCountValue = reviewDueValue(
+    reviewSummary,
+    reviewSummaryLoading,
+    reviewSummaryError
+  );
+  const reviewCountCaption = reviewDueCaption(
+    reviewSummary,
+    reviewSummaryLoading,
+    reviewSummaryError
+  );
+
   return (
     <div className="menu-screen">
       <div className="menu-shell">
@@ -142,33 +166,49 @@ export default function Menu({
         <main className="menu-command-grid" aria-label="Actions">
           <button
             type="button"
-            className="menu-review"
+            className={`menu-review${reviewSummaryError ? " menu-review-error" : ""}`}
             onClick={() => setMode("quiz")}
           >
-            <span className="menu-review-main">
-              <span className="menu-pill menu-pill-amber">Review</span>
+            <span className="menu-review-content">
+              <span className="menu-review-topline">
+                <span className="menu-pill menu-pill-amber">Review</span>
+              </span>
+
               <span className="menu-review-title">Révision du jour</span>
               <span className="menu-review-text">
                 Lance la session due avec les questions texte, maps, images et timelines.
               </span>
+
+              <span className="menu-review-types" aria-label="Types supportés">
+                {reviewTypes.map((type) => (
+                  <span
+                    className={`menu-type-chip menu-type-${type.accent}`}
+                    key={type.label}
+                  >
+                    {type.label}
+                  </span>
+                ))}
+              </span>
             </span>
 
-            <ReviewVisual />
+            <span className="menu-review-status" aria-hidden="true">
+              <span className="menu-review-status-label">Aujourd’hui</span>
+              <span className="menu-review-status-value">
+                {reviewCountValue}
+              </span>
+              <span className="menu-review-status-caption">
+                {reviewCountCaption}
+              </span>
+              <span className="menu-review-status-lines">
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
 
-            <span className="menu-review-side">
-              <span className="menu-play" aria-hidden="true">▶</span>
+            <span className="menu-review-action">
               <span>Démarrer</span>
-            </span>
-
-            <span className="menu-review-types" aria-label="Types supportés">
-              {reviewTypes.map((type) => (
-                <span
-                  className={`menu-type-chip menu-type-${type.accent}`}
-                  key={type.label}
-                >
-                  {type.label}
-                </span>
-              ))}
+              <span className="menu-review-action-icon" aria-hidden="true">→</span>
             </span>
           </button>
 

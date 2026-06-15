@@ -1,25 +1,10 @@
-# TODO
-- répondre à nul sur steam
-
-
-
-
-
-
-
-
-
-
-
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
-- should i answer "easy" to a question that I just got wrong and that came back ? the two tries shouldn't compensate each other, instead the first wrong answer should count much more. does the current system already do that ?
-- quand je fais terminer sur groupe de question bonus, garder les questions non répondues en "nouveau"
-- question timeline ratée à un jour près mais "dur" -> corriger et laisser la possibilité de modifier la qualité
+- question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
 - dans qcm d'images, il y avait une image déjà sélectionnée avant que je clique
 
 ## Urgent
-- In bonus questions, I want a button to skip the current question (which would cycle through the text questions and groups and timelines) and one button to go back to the last skipped question.
+- laisser la possibilité de s'entraîner sur un sous ensemble du groupe (éventuellement enregistrer le subset)
 
 ## quick fixes
 
@@ -30,14 +15,13 @@
 - tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
+- s'il n'y a que 1-5 zones à réviser, mettre un mode adéquate
 
 ## bugs
 
-- je fais ma série du jour donc par effet de cascade, les questions remontent à cause du rebalancing et je me retrouve avec des questions en plus à faire quand je relance l'application
 - recentrer les svg
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
-- quand je suis en cours de review et que le jour suivant commence ça rebalance pas correctement je crois
 - chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 

@@ -181,27 +181,34 @@
 
 .menu-review {
   background:
-    linear-gradient(135deg, rgba(255, 204, 122, 0.13), transparent 44%),
-    linear-gradient(180deg, #1d1d1d 0%, #151515 100%);
-  border: 1px solid #302c22;
+    linear-gradient(135deg, rgba(255, 204, 122, 0.08), transparent 36%),
+    #171717;
+  border: 1px solid #2d2a22;
+  border-left: 3px solid #ffcc7a;
   display: grid;
-  gap: 22px;
-  grid-template-columns: minmax(0, 1fr) minmax(156px, 190px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
   grid-template-rows: minmax(0, 1fr) auto;
-  min-height: 390px;
+  min-height: 330px;
   overflow: hidden;
-  padding: 26px;
+  padding: 0;
   position: relative;
 }
 
 .menu-review:hover {
   background:
-    linear-gradient(135deg, rgba(255, 204, 122, 0.17), transparent 44%),
-    linear-gradient(180deg, #222222 0%, #181818 100%);
+    linear-gradient(135deg, rgba(255, 204, 122, 0.11), transparent 36%),
+    #1b1b1b;
 }
 
-.menu-review-main,
-.menu-review-side,
+.menu-review-error {
+  border-left-color: #ff9c9c;
+}
+
+.menu-review-content,
+.menu-review-topline,
+.menu-review-status,
+.menu-review-action,
+.menu-review-status-lines,
 .menu-review-types,
 .menu-destinations,
 .menu-destinations-header,
@@ -210,12 +217,21 @@
   display: flex;
 }
 
-.menu-review-main {
+.menu-review-content {
   align-items: flex-start;
   flex-direction: column;
-  gap: 14px;
+  gap: 15px;
   grid-column: 1;
+  grid-row: 1 / 3;
+  justify-content: center;
   min-width: 0;
+  padding: 28px;
+}
+
+.menu-review-topline {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
 }
 
 .menu-pill,
@@ -254,109 +270,114 @@
   max-width: 520px;
 }
 
-.menu-review-visual {
-  align-self: stretch;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
-    #141414;
-  border: 1px solid #2a2a2a;
-  border-radius: 8px;
+.menu-review-status {
+  align-items: flex-start;
+  background: #141414;
+  border-left: 1px solid #2c2c2c;
   box-sizing: border-box;
-  display: grid;
-  gap: 10px;
   grid-column: 2;
-  grid-row: 1 / 3;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  min-height: 210px;
+  grid-row: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
   overflow: hidden;
-  padding: 18px;
+  padding: 24px;
   position: relative;
 }
 
-.menu-review-lane {
-  align-self: end;
-  border-radius: 8px 8px 2px 2px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.13);
-  min-height: 58px;
-}
-
-.menu-review-lane-violet {
-  background: linear-gradient(180deg, #b69cff 0%, #4a367f 100%);
-  height: 72%;
-}
-
-.menu-review-lane-amber {
-  background: linear-gradient(180deg, #ffcc7a 0%, #80531b 100%);
-  height: 92%;
-}
-
-.menu-review-lane-green {
-  background: linear-gradient(180deg, #7ee2a8 0%, #25623e 100%);
-  height: 54%;
-}
-
-.menu-review-lane-blue {
-  background: linear-gradient(180deg, #8fc7ff 0%, #244e78 100%);
-  height: 78%;
-}
-
-.menu-review-node {
-  background: #f3f3f3;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 999px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
-  height: 9px;
-  position: absolute;
-  width: 9px;
-}
-
-.menu-review-node-one {
-  left: 26px;
-  top: 24px;
-}
-
-.menu-review-node-two {
-  right: 28px;
-  top: 70px;
-}
-
-.menu-review-node-three {
-  bottom: 28px;
-  left: 54%;
-}
-
-.menu-review-side {
-  align-items: flex-end;
-  color: #ffcc7a;
-  flex-direction: column;
-  font-size: 15px;
+.menu-review-status-label {
+  color: #858585;
+  font-size: 11px;
   font-weight: 800;
-  gap: 10px;
-  grid-column: 3;
-  justify-content: space-between;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
-.menu-play {
+.menu-review-status-value {
+  color: #ffffff;
+  font-size: 78px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 0.92;
+  margin-top: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.menu-review-status-caption {
+  color: #ffcc7a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-top: 9px;
+  text-transform: uppercase;
+}
+
+.menu-review-status-lines {
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 22px;
+  width: 100%;
+}
+
+.menu-review-status-lines span {
+  background: #2a2a2a;
+  border-radius: 999px;
+  display: block;
+  height: 4px;
+}
+
+.menu-review-status-lines span:nth-child(1) {
+  background: #b69cff;
+  flex: 1.3;
+}
+
+.menu-review-status-lines span:nth-child(2) {
+  background: #7ee2a8;
+  flex: 0.9;
+}
+
+.menu-review-status-lines span:nth-child(3) {
+  background: #8fc7ff;
+  flex: 1.1;
+}
+
+.menu-review-action {
+  align-items: center;
+  background: rgba(255, 204, 122, 0.06);
+  border-left: 1px solid #2c2c2c;
+  border-top: 1px solid #2c2c2c;
+  color: #ffcc7a;
+  font-size: 14px;
+  font-weight: 800;
+  gap: 12px;
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 17px 20px;
+  text-transform: uppercase;
+}
+
+.menu-review-action-icon {
   align-items: center;
   background: rgba(255, 204, 122, 0.1);
-  border: 1px solid rgba(255, 204, 122, 0.28);
+  border: 1px solid rgba(255, 204, 122, 0.24);
   border-radius: 8px;
   display: inline-flex;
-  font-size: 22px;
-  height: 54px;
+  flex: 0 0 auto;
+  font-size: 18px;
+  height: 34px;
   justify-content: center;
   line-height: 1;
-  width: 54px;
+  width: 34px;
 }
 
 .menu-review-types {
   align-items: center;
-  align-self: end;
   flex-wrap: wrap;
   gap: 8px;
-  grid-column: 1;
-  grid-row: 2;
+  margin-top: 4px;
 }
 
 .menu-type-chip {
@@ -539,18 +560,20 @@
   }
 
   .menu-review {
-    gap: 18px;
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
     min-height: 0;
-    padding: 20px;
   }
 
-  .menu-review-main,
-  .menu-review-side,
-  .menu-review-types,
-  .menu-review-visual {
+  .menu-review-content,
+  .menu-review-status,
+  .menu-review-action {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  .menu-review-content {
+    padding: 22px;
   }
 
   .menu-review-title {
@@ -561,20 +584,20 @@
     font-size: 15px;
   }
 
-  .menu-review-visual {
-    height: 112px;
-    min-height: 112px;
+  .menu-review-status {
+    border-left: 0;
+    border-top: 1px solid #2c2c2c;
+    padding: 20px 22px;
   }
 
-  .menu-review-side {
-    align-items: center;
+  .menu-review-status-value {
+    font-size: 54px;
+  }
+
+  .menu-review-action {
+    border-left: 0;
     flex-direction: row;
-    justify-content: flex-start;
-  }
-
-  .menu-play {
-    height: 44px;
-    width: 44px;
+    padding: 15px 22px;
   }
 
   .menu-destinations {

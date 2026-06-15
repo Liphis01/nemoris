@@ -6,7 +6,7 @@ import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import Stats from "./features/stats/components/Stats";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
-import { getStartupRebalanceNotice } from "./api/review";
+import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
 
@@ -23,6 +23,9 @@ function App() {
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
   const [startupNotice, setStartupNotice] = useState(null);
+  const [reviewSummary, setReviewSummary] = useState(null);
+  const [reviewSummaryLoading, setReviewSummaryLoading] = useState(false);
+  const [reviewSummaryError, setReviewSummaryError] = useState("");
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
 
@@ -63,6 +66,35 @@ function App() {
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (mode !== "menu") return undefined;
+
+    let cancelled = false;
+
+    setReviewSummaryLoading(true);
+    setReviewSummaryError("");
+
+    getReviewSummary()
+      .then((summary) => {
+        if (cancelled) return;
+
+        setReviewSummary(summary);
+        setReviewSummaryLoading(false);
+      })
+      .catch((error) => {
+        console.error(error);
+
+        if (!cancelled) {
+          setReviewSummaryError(error.message || "Impossible de charger la révision.");
+          setReviewSummaryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
 
   function dismissStartupNotice() {
     if (startupNotice?.id) {
@@ -108,6 +140,9 @@ function App() {
           setMode={setMode}
           startupNotice={startupNotice}
           onDismissStartupNotice={dismissStartupNotice}
+          reviewSummary={reviewSummary}
+          reviewSummaryLoading={reviewSummaryLoading}
+          reviewSummaryError={reviewSummaryError}
         />
       )}
 
