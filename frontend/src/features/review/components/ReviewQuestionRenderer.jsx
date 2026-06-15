@@ -8,6 +8,21 @@ import {
     normalizeImageMode
 } from "../imageModes";
 
+function reviewItemRenderKey(q, currentIndex) {
+    const itemIds = Array.isArray(q.items)
+        ? q.items.map(item => item.question_id).join(",")
+        : "";
+    const primaryId = q.group_id ?? q.question_id ?? q.id ?? q.name ?? q.media ?? currentIndex;
+
+    return [
+        q.type_q,
+        primaryId,
+        itemIds,
+        q._reviewRetryOfIndex ?? "",
+        q._reviewSkipId ?? ""
+    ].join(":");
+}
+
 export default function ReviewQuestionRenderer({
     q,
     currentIndex,
@@ -33,11 +48,13 @@ export default function ReviewQuestionRenderer({
         return <div>⚠️ Map vide</div>;
     }
 
+    const renderKey = reviewItemRenderKey(q, currentIndex);
+
     // Grouped map review built from atomic map questions.
     if (q.type_q === "map" && q.media) {
         return (
             <MapReview
-                key={currentIndex}
+                key={renderKey}
                 group={q}
                 reviewZones={q.items}
                 contextItems={q.context_items || q.items || []}
@@ -61,7 +78,7 @@ export default function ReviewQuestionRenderer({
 
         return (
             <ImageReview
-                key={currentIndex}
+                key={renderKey}
                 group={q}
                 reviewItems={q.items || []}
                 contextItems={q.context_items || q.items || []}
@@ -80,7 +97,7 @@ export default function ReviewQuestionRenderer({
     if (q.type_q === "timeline") {
         return (
             <TimelineReview
-                key={currentIndex}
+                key={renderKey}
                 group={q}
                 reviewItems={q.items || []}
                 onComplete={handleTimelineComplete}
@@ -93,6 +110,7 @@ export default function ReviewQuestionRenderer({
     // Text review question.
     return (
         <TextReviewCard
+            key={renderKey}
             q={q}
             currentIndex={currentIndex}
             showAnswer={showAnswer}

@@ -27,9 +27,9 @@ def create_initial_progress(question_id: int, today=None):
         lapses=0,
         interval=0,
         ideal_interval=None,
-        next_review=date.today(),
+        next_review=today,
         ideal_next_review=None,
-        fsrs_card=new_fsrs_card_data(question_id),
+        fsrs_card=new_fsrs_card_data(question_id, due=today),
         fsrs_version=FSRS_VERSION,
         history=[]
     )
@@ -48,6 +48,15 @@ def progress_has_started(progress: Progress | None):
 
 def progress_is_new(progress: Progress | None):
     return not progress_has_started(progress)
+
+
+def should_schedule_answer(progress: Progress | None, quality: int):
+    try:
+        normalized_quality = int(quality)
+    except (TypeError, ValueError):
+        normalized_quality = 0
+
+    return progress_has_started(progress) or normalized_quality > 0
 
 
 def count_reviews_on_day(progresses, day):
@@ -211,18 +220,36 @@ def restore_progress_from_history(progress: Progress, history, today=None):
     progress.fsrs_version = FSRS_VERSION
 
 
-def replace_latest_scheduling(db, progress: Progress, quality: int, today=None):
+def replace_latest_scheduling(
+    db,
+    progress: Progress,
+    quality: int,
+    today=None,
+    metadata=None
+):
     # Reopening the last review screen should correct the previous grade, not
     # count as another repetition. Roll progress back to the state represented
     # by the penultimate history item, then schedule once with the new quality.
     history = list(progress.history or [])
 
     if not history:
-        return apply_scheduling(db, progress, quality, today=today)
+        return apply_scheduling(
+            db,
+            progress,
+            quality,
+            today=today,
+            metadata=metadata
+        )
 
     restore_progress_from_history(progress, history[:-1], today=today)
 
-    return apply_scheduling(db, progress, quality, today=today)
+    return apply_scheduling(
+        db,
+        progress,
+        quality,
+        today=today,
+        metadata=metadata
+    )
 
 
 def load_daily_review_counts(db, dates, exclude_question_ids=None):
@@ -400,10 +427,16 @@ def apply_scheduling_batch(
     return smoothed_schedules
 
 
-def apply_scheduling(db, progress: Progress, quality: int, today=None):
+def apply_scheduling(
+    db,
+    progress: Progress,
+    quality: int,
+    today=None,
+    metadata=None
+):
     return apply_scheduling_batch(
         db,
-        [(progress, quality)],
+        [(progress, quality, metadata)] if metadata else [(progress, quality)],
         today=today
     )[0]
 

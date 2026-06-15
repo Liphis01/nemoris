@@ -150,6 +150,28 @@ export async function mockApi(page, options = {}) {
       catchup_daily_target: 50,
       ...(options.reviewSettings || {})
     },
+    bonusReviewStatus: {
+      allowed: true,
+      bonus_question_capacity: 315,
+      daily_counts: [],
+      daily_target: 50,
+      due_count: 0,
+      estimated_bonus_card_cost: 2,
+      forecast_average: 0,
+      forecast_days: 14,
+      forecast_fill_ratio: 0,
+      forecast_total: 0,
+      full_threshold: 630,
+      low_threshold: 350,
+      state: "low",
+      message: "Le planning prévu est léger.",
+      new_count: 1,
+      scheduled_average: 0,
+      scheduled_total: 0,
+      static_scheduled_total: 0,
+      window_days: 14,
+      ...(options.bonusReviewStatus || {})
+    },
     questions: clone(options.questions || []),
     groups: clone(options.groups || []),
     nextQuestionId: options.nextQuestionId || 100,
@@ -178,6 +200,11 @@ export async function mockApi(page, options = {}) {
 
     if (method === "GET" && path === "/review/settings") {
       await fulfillJson(route, state.reviewSettings);
+      return;
+    }
+
+    if (method === "GET" && path === "/review/bonus_status") {
+      await fulfillJson(route, state.bonusReviewStatus);
       return;
     }
 

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useReviewSession } from "./useReviewSession";
 import {
+  getBonusReviewStatus,
   getReview,
   sendImageAnswer,
   sendMapAnswer,
@@ -11,6 +12,7 @@ import {
 } from "../../../api/review";
 
 vi.mock("../../../api/review", () => ({
+  getBonusReviewStatus: vi.fn(),
   getReview: vi.fn(),
   sendImageAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
@@ -29,6 +31,11 @@ describe("useReviewSession", () => {
         answer: "Answer"
       }
     ]);
+    getBonusReviewStatus.mockResolvedValue({
+      allowed: true,
+      state: "low",
+      message: "Le planning est léger."
+    });
     sendAnswer.mockResolvedValue({});
     sendMapAnswer.mockResolvedValue({});
     sendImageAnswer.mockResolvedValue({});
@@ -206,22 +213,27 @@ describe("useReviewSession", () => {
     act(() => {
       vi.advanceTimersByTime(240);
     });
+    vi.useRealTimers();
 
     expect(result.current.currentIndex).toBe(1);
-    expect(result.current.canStartBonusReview).toBe(true);
+    await waitFor(() => {
+      expect(result.current.canStartBonusReview).toBe(true);
+    });
   });
 
   it("offers bonus review when scheduled review is empty", async () => {
-    getReview
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          question_id: 11,
-          type_q: "text",
-          question: "Bonus",
-          answer: "Answer"
-        }
-      ]);
+    getReview.mockImplementation((options = {}) => Promise.resolve(
+      options.includeNew
+        ? [
+          {
+            question_id: 11,
+            type_q: "text",
+            question: "Bonus",
+            answer: "Answer"
+          }
+        ]
+        : []
+    ));
 
     const { result } = renderHook(() => useReviewSession(true));
 
@@ -230,12 +242,17 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions).toEqual([]);
-    expect(result.current.canStartBonusReview).toBe(true);
+    await waitFor(() => {
+      expect(result.current.canStartBonusReview).toBe(true);
+    });
+    expect(result.current.bonusStatusLoading).toBe(false);
+    expect(result.current.bonusReviewMessage).toBe("Le planning est léger.");
 
     await act(async () => {
       await result.current.startBonusReview();
     });
 
+    expect(getBonusReviewStatus).toHaveBeenCalled();
     expect(getReview).toHaveBeenCalledWith({ includeNew: true });
     expect(result.current.questions).toEqual([
       {
@@ -350,23 +367,25 @@ describe("useReviewSession", () => {
     const answerPromise = new Promise(resolve => {
       resolveAnswer = resolve;
     });
-    getReview
-      .mockResolvedValueOnce([
-        {
-          question_id: 10,
-          type_q: "text",
-          question: "Question",
-          answer: "Answer"
-        }
-      ])
-      .mockResolvedValueOnce([
-        {
-          question_id: 11,
-          type_q: "text",
-          question: "Bonus",
-          answer: "Answer"
-        }
-      ]);
+    getReview.mockImplementation((options = {}) => Promise.resolve(
+      options.includeNew
+        ? [
+          {
+            question_id: 11,
+            type_q: "text",
+            question: "Bonus",
+            answer: "Answer"
+          }
+        ]
+        : [
+          {
+            question_id: 10,
+            type_q: "text",
+            question: "Question",
+            answer: "Answer"
+          }
+        ]
+    ));
     sendAnswer.mockReturnValue(answerPromise);
 
     const { result } = renderHook(() => useReviewSession(true));
@@ -385,7 +404,7 @@ describe("useReviewSession", () => {
       vi.advanceTimersByTime(240);
     });
 
-    expect(result.current.canStartBonusReview).toBe(true);
+    expect(result.current.currentIndex).toBe(1);
 
     let bonusPromise;
 
@@ -411,5 +430,164 @@ describe("useReviewSession", () => {
     ]);
     expect(result.current.currentIndex).toBe(0);
     expect(result.current.canStartBonusReview).toBe(false);
+  });
+
+  it("cycles skipped bonus review items through the active queue", async () => {
+    getReview.mockImplementation((options = {}) => Promise.resolve(
+      options.includeNew
+        ? [
+          {
+            question_id: 11,
+            type_q: "text",
+            question: "Bonus text",
+            answer: "Answer"
+          },
+          {
+            type_q: "timeline",
+            name: "Bonus timeline",
+            items: [
+              {
+                question_id: 12,
+                answer: "1900",
+                timeline: {
+                  kind: "point",
+                  start: { year: 1900 },
+                  precision: "year"
+                }
+              }
+            ]
+          },
+          {
+            group_id: 5,
+            type_q: "image",
+            name: "Bonus images",
+            items: [
+              { question_id: 13, answer: "France" }
+            ]
+          }
+        ]
+        : []
+    ));
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.canStartBonusReview).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    expect(result.current.canSkipCurrentQuestion).toBe(true);
+
+    act(() => {
+      result.current.skipCurrentQuestion();
+    });
+
+    expect(sendAnswer).not.toHaveBeenCalled();
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
+      "Bonus timeline",
+      "Bonus images",
+      "Bonus text"
+    ]);
+    expect(result.current.canReturnToLastSkippedQuestion).toBe(true);
+
+    act(() => {
+      result.current.skipCurrentQuestion();
+    });
+
+    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
+      "Bonus images",
+      "Bonus text",
+      "Bonus timeline"
+    ]);
+
+    act(() => {
+      result.current.returnToLastSkippedQuestion();
+    });
+
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
+      "Bonus timeline",
+      "Bonus images",
+      "Bonus text"
+    ]);
+    expect(result.current.canReturnToLastSkippedQuestion).toBe(false);
+  });
+
+  it("keeps skipped bonus items out of the skipped stack after completion", async () => {
+    getReview.mockImplementation((options = {}) => Promise.resolve(
+      options.includeNew
+        ? [
+          {
+            question_id: 11,
+            type_q: "text",
+            question: "Bonus text",
+            answer: "Answer"
+          },
+          {
+            group_id: 5,
+            type_q: "image",
+            name: "Bonus images",
+            items: [
+              { question_id: 13, answer: "France" }
+            ]
+          }
+        ]
+        : []
+    ));
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.canStartBonusReview).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    act(() => {
+      result.current.skipCurrentQuestion();
+    });
+
+    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
+      "Bonus images",
+      "Bonus text"
+    ]);
+    expect(result.current.canReturnToLastSkippedQuestion).toBe(true);
+
+    act(() => {
+      result.current.handleImageComplete([]);
+    });
+
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.canSkipCurrentQuestion).toBe(false);
+    expect(result.current.canReturnToLastSkippedQuestion).toBe(false);
+  });
+
+  it("blocks bonus review when the schedule status is full", async () => {
+    getReview.mockResolvedValue([]);
+    getBonusReviewStatus.mockResolvedValue({
+      allowed: false,
+      state: "full",
+      message: "Le planning est déjà rempli."
+    });
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.bonusReviewMessage).toBe("Le planning est déjà rempli.");
+    });
+
+    expect(result.current.canStartBonusReview).toBe(false);
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    expect(getReview).not.toHaveBeenCalledWith({ includeNew: true });
   });
 });

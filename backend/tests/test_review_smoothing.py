@@ -1,6 +1,7 @@
 import unittest
 from datetime import date, timedelta
 
+from fastapi import HTTPException
 from fsrs import Rating
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -13,6 +14,7 @@ from app.routers.review import (
     answer_map,
     answer_question,
     answer_timeline,
+    get_bonus_status,
     get_review,
     get_settings,
     get_startup_notice,
@@ -936,7 +938,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
     def test_again_answer_stays_due_today_for_retry(self):
         today = date.today()
         self.add_question(1, type_q="text")
-        progress = self.add_progress(1, today)
+        progress = self.add_progress(1, today, reps=1)
         self.db.commit()
 
         response = answer_question(
@@ -955,7 +957,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
         self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
 
-    def test_text_retry_uses_supplied_review_date(self):
+    def test_bonus_text_retry_uses_supplied_review_date_for_first_schedule(self):
         review_day = date(2026, 1, 1)
         self.add_question(1, type_q="text")
         self.db.commit()
@@ -986,7 +988,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(
             [entry["reviewed_on"] for entry in progress.history],
-            [review_day.isoformat(), review_day.isoformat()]
+            [review_day.isoformat()]
         )
 
     def test_revise_single_answer_uses_supplied_review_date(self):
@@ -1021,6 +1023,81 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(progress.history[-1]["reviewed_on"], review_day.isoformat())
 
+    def test_revise_bonus_text_to_again_removes_created_progress(self):
+        self.add_question(1, type_q="text")
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+        response = revise_answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+
+        self.assertEqual(response["history"], [])
+        self.assertEqual(response["reps"], 0)
+        self.assertIsNone(
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+    def test_revise_correct_bonus_text_preserves_unschedule_marker(self):
+        self.add_question(1, type_q="text")
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+        revise_answer_question(
+            AnswerRequest(question_id=1, quality=3),
+            db=self.db
+        )
+        progress = (
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+        self.assertTrue(progress.history[-1]["started_from_bonus"])
+        self.assertTrue(progress.history[-1]["created_progress"])
+
+        response = revise_answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+
+        self.assertEqual(response["history"], [])
+        self.assertIsNone(
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+    def test_revise_bonus_text_to_again_restores_unstarted_progress(self):
+        today = date.today()
+        self.add_question(1, type_q="text")
+        progress = self.add_progress(1, today, reps=0)
+        self.db.commit()
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+        response = revise_answer_question(
+            AnswerRequest(question_id=1, quality=0),
+            db=self.db
+        )
+
+        self.assertEqual(response["history"], [])
+        self.assertEqual(response["reps"], 0)
+        self.assertEqual(progress.history, [])
+        self.assertEqual(progress.reps, 0)
+        self.assertIsNone(progress.last_review)
+
     def test_grouped_answers_use_supplied_review_date(self):
         review_day = date(2026, 1, 1)
 
@@ -1032,6 +1109,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         ]:
             self.add_question(question_id, type_q=type_q)
 
+        self.add_progress(1, review_day, reps=1)
+        self.add_progress(3, review_day, reps=1)
         timeline_question = self.add_question(5, type_q="timeline")
         timeline_question.data = {
             "timeline": {
@@ -1284,30 +1363,233 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             [1, 2]
         )
 
-    def test_failed_first_answer_becomes_scheduled_before_more_bonus(self):
+    def test_bonus_status_encourages_new_questions_when_schedule_is_low(self):
+        update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
+        self.add_question(1)
+        self.db.commit()
+
+        status = get_bonus_status(db=self.db)
+
+        self.assertTrue(status["allowed"])
+        self.assertEqual(status["state"], "low")
+        self.assertEqual(status["new_count"], 1)
+        self.assertEqual(status["scheduled_total"], 0)
+        self.assertEqual(status["forecast_days"], 14)
+        self.assertEqual(status["forecast_total"], 0)
+        self.assertEqual(status["static_scheduled_total"], 0)
+        self.assertEqual(status["estimated_bonus_card_cost"], 2)
+        self.assertIn("planning prévu est léger", status["message"])
+
+    def test_bonus_review_is_blocked_when_schedule_is_full_until_target_changes(self):
         today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+        self.add_question(1)
+
+        for offset in range(13):
+            question_id = 100 + offset
+            self.add_question(question_id)
+            self.add_progress(
+                question_id,
+                today + timedelta(days=(offset % 6) + 1),
+                reps=1
+            )
+
+        self.db.commit()
+
+        status = get_bonus_status(db=self.db)
+
+        self.assertFalse(status["allowed"])
+        self.assertEqual(status["state"], "full")
+        self.assertEqual(status["static_scheduled_total"], 13)
+        self.assertEqual(status["scheduled_total"], 27)
+        self.assertEqual(status["forecast_total"], 27)
+        self.assertGreaterEqual(status["forecast_total"], status["full_threshold"])
+        self.assertIn("Augmente la cible quotidienne", status["message"])
+
+        with self.assertRaises(HTTPException) as error:
+            get_review(include_new=True, db=self.db)
+
+        self.assertEqual(error.exception.status_code, 409)
+
+        update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
+        unlocked_status = get_bonus_status(db=self.db)
+
+        self.assertTrue(unlocked_status["allowed"])
+        self.assertNotEqual(unlocked_status["state"], "full")
+
+    def test_bonus_status_uses_forecast_refill_before_calling_schedule_low(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+        self.add_question(1)
+
+        for offset in range(7):
+            question_id = 100 + offset
+            self.add_question(question_id)
+            self.add_progress(
+                question_id,
+                today + timedelta(days=(offset % 6) + 1),
+                reps=1
+            )
+
+        self.db.commit()
+
+        status = get_bonus_status(db=self.db)
+
+        self.assertTrue(status["allowed"])
+        self.assertEqual(status["state"], "available")
+        self.assertEqual(status["static_scheduled_total"], 7)
+        self.assertLess(status["static_scheduled_total"], status["low_threshold"])
+        self.assertEqual(status["forecast_total"], status["low_threshold"])
+
+    def test_bonus_review_only_returns_remaining_schedule_capacity(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 5):
+            self.add_question(question_id)
+
+        for offset in range(11):
+            question_id = 100 + offset
+            self.add_question(question_id)
+            self.add_progress(
+                question_id,
+                today + timedelta(days=(offset % 6) + 1),
+                reps=1
+            )
+
+        self.db.commit()
+
+        status = get_bonus_status(db=self.db)
+        response = get_review(include_new=True, db=self.db)
+
+        self.assertEqual(status["forecast_total"], 22)
+        self.assertEqual(status["full_threshold"] - status["forecast_total"], 3)
+        self.assertEqual(status["estimated_bonus_card_cost"], 2)
+        self.assertEqual(status["bonus_question_capacity"], 1)
+        self.assertEqual([item["question_id"] for item in response], [1])
+
+    def test_failed_bonus_text_answer_stays_new_until_correct(self):
         self.add_question(1)
         self.add_question(2)
         self.db.commit()
 
-        answer_question(
+        failed_response = answer_question(
             AnswerRequest(question_id=1, quality=0),
             db=self.db
         )
 
-        response = get_review(include_new=True, db=self.db)
-
+        self.assertEqual(failed_response["reps"], 0)
+        self.assertEqual(failed_response["history"], [])
+        self.assertIsNone(
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+        bonus_response = get_review(include_new=True, db=self.db)
         self.assertEqual(
-            [item["question_id"] for item in response],
-            [1]
+            [item["question_id"] for item in bonus_response],
+            [1, 2]
+        )
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
         )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
             .first()
         )
-        self.assertEqual(progress.next_review, today)
+
+        self.assertIsNotNone(progress)
         self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.history[-1]["quality"], 2)
+
+    def test_failed_bonus_grouped_answers_stay_new_until_correct(self):
+        for question_id, type_q in [
+            (1, "map"),
+            (2, "map"),
+            (3, "image"),
+            (4, "image")
+        ]:
+            self.add_question(question_id, type_q=type_q)
+
+        self.db.commit()
+
+        answer_map(
+            MapAnswerRequest(items={1: 0, 2: 2}),
+            db=self.db
+        )
+        answer_image(
+            ImageAnswerRequest(items={3: 0, 4: 3}),
+            db=self.db
+        )
+
+        progress_by_question_id = {
+            progress.question_id: progress
+            for progress in self.db.query(Progress).all()
+        }
+
+        self.assertNotIn(1, progress_by_question_id)
+        self.assertNotIn(3, progress_by_question_id)
+        self.assertEqual(progress_by_question_id[2].history[-1]["quality"], 2)
+        self.assertEqual(progress_by_question_id[4].history[-1]["quality"], 3)
+
+    def test_failed_bonus_timeline_answer_stays_new_until_correct(self):
+        question = self.add_question(1, type_q="timeline")
+        question.data = {
+            "timeline": {
+                "kind": "point",
+                "start": {
+                    "year": 2000,
+                    "precision": "year"
+                }
+            }
+        }
+        self.db.commit()
+
+        failed_response = answer_timeline(
+            TimelineAnswerRequest(items={
+                1: TimelineAnswerItem(
+                    start=TimelineDateValue(
+                        year=1900,
+                        precision="year"
+                    )
+                )
+            }),
+            db=self.db
+        )
+
+        failed_result = failed_response["results"][0]
+        self.assertEqual(failed_result["quality"], 0)
+        self.assertEqual(failed_result["progress"]["reps"], 0)
+        self.assertIsNone(failed_result["progress"]["next_review"])
+        self.assertIsNone(
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+        answer_timeline(
+            TimelineAnswerRequest(items={
+                1: TimelineAnswerItem(
+                    start=TimelineDateValue(
+                        year=2000,
+                        precision="year"
+                    )
+                )
+            }),
+            db=self.db
+        )
+        progress = (
+            self.db.query(Progress)
+            .filter(Progress.question_id == 1)
+            .first()
+        )
+
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.history[-1]["quality"], 2)
 
     def test_rebalance_route_ignores_unstarted_progress_rows(self):
         today = date.today()

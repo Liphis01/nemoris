@@ -19,8 +19,7 @@
 - dans qcm d'images, il y avait une image déjà sélectionnée avant que je clique
 
 ## Urgent
-- ajouter un truc pour prévenir qu'il faut rajouter des questions et bloquer les questions bonus si on est surchargé du schedule
-- 
+- In bonus questions, I want a button to skip the current question (which would cycle through the text questions and groups and timelines) and one button to go back to the last skipped question.
 
 ## quick fixes
 

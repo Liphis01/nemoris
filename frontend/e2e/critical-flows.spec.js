@@ -25,10 +25,11 @@ test("review session advances a text question", async ({ page }) => {
 
   await expect(page.getByText("Session terminée")).toBeVisible();
   expect(state.answerRequests).toEqual([
-    {
+    expect.objectContaining({
       question_id: 1,
-      quality: 2
-    }
+      quality: 2,
+      review_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
+    })
   ]);
 });
 
@@ -64,19 +65,20 @@ test("map recap sends per-zone quality", async ({ page }) => {
   await page.getByPlaceholder("Tape une zone...").fill("France");
   await page.keyboard.press("Enter");
 
-  await expect(page.getByText("Résultat")).toBeVisible();
+  await expect(page.getByText("MAP RESULT")).toBeVisible();
   await expect(page.getByText("réussite", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Valider" }).click();
 
   await expect(page.getByText("Session terminée")).toBeVisible();
   expect(state.mapAnswerRequests).toEqual([
-    {
+    expect.objectContaining({
       mode: "type_all",
       items: {
         10: 2
-      }
-    }
+      },
+      review_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
+    })
   ]);
 });
 

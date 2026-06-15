@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  getBonusReviewStatus,
   getReview,
   sendImageAnswer,
   sendMapAnswer,
@@ -18,6 +19,71 @@ function isEditableTarget(target) {
 }
 
 const TEXT_ANSWER_FEEDBACK_MS = 240;
+
+
+function nextReviewSkipId(counterRef) {
+  counterRef.current += 1;
+
+  return `skip-${counterRef.current}`;
+}
+
+
+function removeSkippedReviewItemId(ids, id) {
+  if (!id) return ids;
+
+  return ids.filter(itemId => itemId !== id);
+}
+
+
+function stripReviewSkipId(item) {
+  if (!item?._reviewSkipId) return item;
+
+  const { _reviewSkipId, ...rest } = item;
+
+  return rest;
+}
+
+
+function findLastSkippedReviewItem(skippedIds, questions, currentIndex) {
+  for (let index = skippedIds.length - 1; index >= 0; index -= 1) {
+    const id = skippedIds[index];
+    const questionIndex = questions.findIndex(
+      question => question?._reviewSkipId === id
+    );
+
+    if (questionIndex === -1) {
+      continue;
+    }
+
+    if (questionIndex <= currentIndex) {
+      return null;
+    }
+
+    return {
+      id,
+      index: questionIndex
+    };
+  }
+
+  return null;
+}
+
+
+function countFutureSkippedReviewItems(skippedIds, questions, currentIndex) {
+  const futureSkippedIds = new Set();
+
+  for (const id of skippedIds) {
+    const questionIndex = questions.findIndex(
+      question => question?._reviewSkipId === id
+    );
+
+    if (questionIndex > currentIndex) {
+      futureSkippedIds.add(id);
+    }
+  }
+
+  return futureSkippedIds.size;
+}
 
 
 function localReviewDateString(now = new Date()) {
@@ -53,11 +119,16 @@ export function useReviewSession(active) {
   const [showAnswer, setShowAnswer] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [bonusReviewStatus, setBonusReviewStatus] = useState(null);
+  const [bonusStatusLoading, setBonusStatusLoading] = useState(false);
   const [bonusReviewLoading, setBonusReviewLoading] = useState(false);
+  const [bonusReviewActive, setBonusReviewActive] = useState(false);
   const [bonusReviewStarted, setBonusReviewStarted] = useState(false);
   const [selectedTextQuality, setSelectedTextQuality] = useState(null);
   const [answeredTextByIndex, setAnsweredTextByIndex] = useState({});
   const [returnToLastQuestionArmed, setReturnToLastQuestionArmed] = useState(false);
+  const [skippedReviewItemIds, setSkippedReviewItemIds] = useState([]);
+  const reviewSkipIdCounterRef = useRef(0);
   const textAnswerTimeoutRef = useRef(null);
   const textAnswerPendingRef = useRef(false);
   const textAnswerRequestsRef = useRef({});
@@ -83,10 +154,36 @@ export function useReviewSession(active) {
     answeredTextByIndex[lastQuestionIndex] &&
     selectedTextQuality === null
   );
+  const lastSkippedReviewItem = findLastSkippedReviewItem(
+    skippedReviewItemIds,
+    questions,
+    currentIndex
+  );
+  const skippedQuestionCount = countFutureSkippedReviewItems(
+    skippedReviewItemIds,
+    questions,
+    currentIndex
+  );
+  const canSkipCurrentQuestion = Boolean(
+    bonusReviewActive &&
+    current &&
+    currentIndex < questions.length - 1 &&
+    selectedTextQuality === null
+  );
+  const canReturnToLastSkippedQuestion = Boolean(
+    bonusReviewActive &&
+    current &&
+    lastSkippedReviewItem &&
+    selectedTextQuality === null
+  );
   const canStartBonusReview = Boolean(
     !bonusReviewStarted &&
-    currentIndex >= questions.length
+    currentIndex >= questions.length &&
+    bonusReviewStatus?.allowed
   );
+  const bonusReviewMessage = currentIndex >= questions.length
+    ? bonusReviewStatus?.message || ""
+    : "";
 
   const clearTextAnswerTimeout = useCallback(() => {
     if (textAnswerTimeoutRef.current) {
@@ -106,6 +203,73 @@ export function useReviewSession(active) {
     setReturnToLastQuestionArmed(false);
     setCurrentIndex(prev => Math.max(0, prev - 1));
   }, [canReturnToLastQuestion, clearTextAnswerTimeout]);
+
+  const skipCurrentQuestion = useCallback(() => {
+    if (!canSkipCurrentQuestion) return;
+
+    const skipId = current._reviewSkipId || nextReviewSkipId(reviewSkipIdCounterRef);
+
+    clearTextAnswerTimeout();
+    setShowAnswer(false);
+    setSelectedTextQuality(null);
+    setReturnToLastQuestionArmed(false);
+    setQuestions(prev => {
+      if (currentIndex >= prev.length - 1) {
+        return prev;
+      }
+
+      const skipped = {
+        ...prev[currentIndex],
+        _reviewSkipId: skipId
+      };
+
+      return [
+        ...prev.slice(0, currentIndex),
+        ...prev.slice(currentIndex + 1),
+        skipped
+      ];
+    });
+    setSkippedReviewItemIds(prev => [...prev, skipId]);
+  }, [
+    canSkipCurrentQuestion,
+    clearTextAnswerTimeout,
+    current,
+    currentIndex
+  ]);
+
+  const returnToLastSkippedQuestion = useCallback(() => {
+    if (!canReturnToLastSkippedQuestion) return;
+
+    const skippedId = lastSkippedReviewItem.id;
+
+    clearTextAnswerTimeout();
+    setShowAnswer(false);
+    setSelectedTextQuality(null);
+    setReturnToLastQuestionArmed(false);
+    setQuestions(prev => {
+      const skippedIndex = prev.findIndex(
+        question => question?._reviewSkipId === skippedId
+      );
+
+      if (skippedIndex <= currentIndex) {
+        return prev;
+      }
+
+      const skipped = prev[skippedIndex];
+
+      return [
+        ...prev.slice(0, currentIndex),
+        skipped,
+        ...prev.slice(currentIndex, skippedIndex),
+        ...prev.slice(skippedIndex + 1)
+      ];
+    });
+  }, [
+    canReturnToLastSkippedQuestion,
+    clearTextAnswerTimeout,
+    currentIndex,
+    lastSkippedReviewItem
+  ]);
 
   const waitForTextAnswerRequests = useCallback(() => {
     const requests = Object.values(textAnswerRequestsRef.current);
@@ -177,7 +341,7 @@ export function useReviewSession(active) {
           return [
             ...nextQuestions,
             {
-              ...current,
+              ...stripReviewSkipId(current),
               _reviewRetryOfIndex: answerIndex
             }
           ];
@@ -190,6 +354,10 @@ export function useReviewSession(active) {
       setCurrentIndex(prev => prev + 1);
       setReturnToLastQuestionArmed(true);
       setSelectedTextQuality(null);
+      setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
+        prev,
+        current._reviewSkipId
+      ));
       textAnswerTimeoutRef.current = null;
       textAnswerPendingRef.current = false;
     }, TEXT_ANSWER_FEEDBACK_MS);
@@ -214,7 +382,7 @@ export function useReviewSession(active) {
         setQuestions(prev => [
           ...prev,
           {
-            ...current,
+            ...stripReviewSkipId(current),
             items: failedItems,
             _reviewRetryOfIndex: answerIndex
           }
@@ -224,6 +392,10 @@ export function useReviewSession(active) {
 
     setCurrentIndex(prev => prev + 1);
     setReturnToLastQuestionArmed(true);
+    setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
+      prev,
+      current?._reviewSkipId
+    ));
   }
 
   function handleImageComplete(failedQuestionIds = []) {
@@ -240,7 +412,7 @@ export function useReviewSession(active) {
         setQuestions(prev => [
           ...prev,
           {
-            ...current,
+            ...stripReviewSkipId(current),
             items: failedItems,
             _reviewRetryOfIndex: answerIndex
           }
@@ -250,6 +422,10 @@ export function useReviewSession(active) {
 
     setCurrentIndex(prev => prev + 1);
     setReturnToLastQuestionArmed(true);
+    setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
+      prev,
+      current?._reviewSkipId
+    ));
   }
 
   function handleTimelineComplete(failedQuestionIds = []) {
@@ -266,7 +442,7 @@ export function useReviewSession(active) {
         setQuestions(prev => [
           ...prev,
           {
-            ...current,
+            ...stripReviewSkipId(current),
             items: failedItems,
             _reviewRetryOfIndex: answerIndex
           }
@@ -276,6 +452,10 @@ export function useReviewSession(active) {
 
     setCurrentIndex(prev => prev + 1);
     setReturnToLastQuestionArmed(true);
+    setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
+      prev,
+      current?._reviewSkipId
+    ));
   }
 
   useEffect(() => {
@@ -284,10 +464,15 @@ export function useReviewSession(active) {
       setSelectedTextQuality(null);
       setReviewLoading(false);
       setReviewError("");
+      setBonusReviewStatus(null);
+      setBonusStatusLoading(false);
       setBonusReviewLoading(false);
+      setBonusReviewActive(false);
       setBonusReviewStarted(false);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setSkippedReviewItemIds([]);
+      reviewSkipIdCounterRef.current = 0;
       textAnswerRequestsRef.current = {};
       reviewDateRef.current = null;
       return;
@@ -298,7 +483,10 @@ export function useReviewSession(active) {
     async function loadReview() {
       setReviewLoading(true);
       setReviewError("");
+      setBonusReviewStatus(null);
+      setBonusStatusLoading(false);
       setBonusReviewLoading(false);
+      setBonusReviewActive(false);
       setBonusReviewStarted(false);
       setQuestions([]);
       setCurrentIndex(0);
@@ -306,21 +494,29 @@ export function useReviewSession(active) {
       setSelectedTextQuality(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setSkippedReviewItemIds([]);
+      reviewSkipIdCounterRef.current = 0;
       textAnswerRequestsRef.current = {};
       reviewDateRef.current = localReviewDateString();
 
       try {
         const data = await getReview();
+        const bonusStatus = data.length === 0
+          ? await getBonusReviewStatus()
+          : null;
 
         if (cancelled) return;
 
         setQuestions(data);
+        setBonusReviewStatus(bonusStatus);
+        setBonusStatusLoading(false);
         setReviewLoading(false);
       } catch (error) {
         console.error(error);
 
         if (!cancelled) {
           setReviewError(error.message || "Impossible de préparer la session.");
+          setBonusStatusLoading(false);
           setReviewLoading(false);
         }
       }
@@ -339,14 +535,78 @@ export function useReviewSession(active) {
     };
   }, [clearTextAnswerTimeout]);
 
+  useEffect(() => {
+    if (
+      !active ||
+      reviewLoading ||
+      reviewError ||
+      bonusReviewStatus ||
+      bonusReviewStarted ||
+      currentIndex < questions.length
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadBonusStatus() {
+      setBonusStatusLoading(true);
+
+      if (questions.length > 0) {
+        setBonusReviewStatus(null);
+      }
+
+      try {
+        await waitForTextAnswerRequests();
+        const status = await getBonusReviewStatus();
+
+        if (!cancelled) {
+          setBonusReviewStatus(status);
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (!cancelled) {
+          setReviewError(error.message || "Impossible de vérifier le planning bonus.");
+        }
+      } finally {
+        if (!cancelled) {
+          setBonusStatusLoading(false);
+        }
+      }
+    }
+
+    loadBonusStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active,
+    bonusReviewStatus,
+    bonusReviewStarted,
+    currentIndex,
+    questions.length,
+    reviewError,
+    reviewLoading,
+    waitForTextAnswerRequests
+  ]);
+
   const startBonusReview = useCallback(async () => {
-    if (bonusReviewLoading || !canStartBonusReview) return;
+    if (bonusReviewLoading || currentIndex < questions.length) return;
 
     setBonusReviewLoading(true);
     setReviewError("");
 
     try {
       await waitForTextAnswerRequests();
+      const bonusStatus = await getBonusReviewStatus();
+      setBonusReviewStatus(bonusStatus);
+
+      if (!bonusStatus.allowed) {
+        return;
+      }
+
       const data = await getReview({ includeNew: true });
 
       setQuestions(data);
@@ -355,6 +615,8 @@ export function useReviewSession(active) {
       setSelectedTextQuality(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setSkippedReviewItemIds([]);
+      setBonusReviewActive(true);
       setBonusReviewStarted(data.length === 0 || data.every(reviewItemIsNew));
       textAnswerRequestsRef.current = {};
     } catch (error) {
@@ -365,7 +627,8 @@ export function useReviewSession(active) {
     }
   }, [
     bonusReviewLoading,
-    canStartBonusReview,
+    currentIndex,
+    questions.length,
     waitForTextAnswerRequests
   ]);
 
@@ -424,6 +687,9 @@ export function useReviewSession(active) {
 
   return {
     bonusReviewLoading,
+    bonusReviewMessage,
+    bonusReviewStatus,
+    bonusStatusLoading,
     canStartBonusReview,
     currentIndex,
     handleImageComplete,
@@ -431,8 +697,13 @@ export function useReviewSession(active) {
     handleTimelineComplete,
     handleTextAnswer,
     canReturnToLastQuestion,
+    canReturnToLastSkippedQuestion,
+    canSkipCurrentQuestion,
     currentTextQuality: currentTextAnswer?.quality ?? null,
+    returnToLastSkippedQuestion,
     returnToLastQuestion,
+    skipCurrentQuestion,
+    skippedQuestionCount,
     startBonusReview,
     selectedTextQuality,
     submitImageAnswer,

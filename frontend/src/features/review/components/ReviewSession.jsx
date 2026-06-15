@@ -1,15 +1,183 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
   return ["image", "map", "timeline"].includes(question?.type_q);
 }
 
-
 function visualSessionName(question) {
   return question?.name || question?.question || question?.media || "Session visuelle";
 }
 
+function reviewItemCount(question) {
+  return Array.isArray(question?.items) ? question.items.length : 1;
+}
+
+function reviewedQuestionsLabel(count) {
+  return count === 1 ? "1 question revue" : `${count} questions revues`;
+}
+
+function ReviewOutcomePanel({
+  variant,
+  reviewedCount,
+  canReturnToLastQuestion,
+  returnToLastQuestion,
+  canStartBonusReview,
+  startBonusReview,
+  bonusReviewLoading,
+  bonusReviewMessage,
+  bonusReviewStatus,
+  bonusStatusLoading
+}) {
+  const isFinished = variant === "finished";
+  const titleId = `review-outcome-title-${variant}`;
+  const bonusState = bonusStatusLoading
+    ? "loading"
+    : bonusReviewStatus?.state || "unknown";
+  const bonusStatusLabel = bonusStatusLoading
+    ? "Analyse"
+    : canStartBonusReview
+      ? "Bonus disponible"
+      : bonusState === "full"
+        ? "Planning plein"
+        : bonusState === "no_new"
+          ? "Aucun bonus"
+          : "Repos";
+  const showBonusMessage = bonusStatusLoading || Boolean(bonusReviewMessage);
+
+  return (
+    <section
+      aria-labelledby={titleId}
+      className={`review-outcome review-outcome-${variant}`}
+      data-review-outcome={variant}
+    >
+      <div className="review-outcome-main">
+        <div className="review-outcome-kicker">
+          {isFinished ? "Journée bouclée" : "Planning à jour"}
+        </div>
+
+        <h2 className="review-outcome-title" id={titleId}>
+          {isFinished ? "Session terminée" : "Aucune question pour aujourd’hui"}
+        </h2>
+
+        <p className="review-outcome-copy">
+          {isFinished
+            ? "Toutes les questions ont été révisées."
+            : "Rien n’est dû pour le moment. La révision du jour est propre et tu peux garder ton rythme."}
+        </p>
+
+        <div className="review-outcome-metrics" aria-label="Résumé de la session">
+          <div className="review-outcome-metric">
+            <span>{isFinished ? reviewedQuestionsLabel(reviewedCount) : "0 question à revoir"}</span>
+            <strong>{isFinished ? "Révision" : "Aujourd’hui"}</strong>
+          </div>
+          <div className="review-outcome-metric">
+            <span>{bonusStatusLabel}</span>
+            <strong>Suite</strong>
+          </div>
+        </div>
+
+        {showBonusMessage && (
+          <p
+            aria-live="polite"
+            className={`review-outcome-bonus review-outcome-bonus-${bonusState}`}
+          >
+            {bonusStatusLoading
+              ? "Analyse du planning bonus..."
+              : bonusReviewMessage}
+          </p>
+        )}
+
+        {(canReturnToLastQuestion || canStartBonusReview) && (
+          <div className="review-outcome-actions">
+            {canReturnToLastQuestion && (
+              <button
+                className="review-outcome-button review-outcome-button-secondary"
+                type="button"
+                onClick={returnToLastQuestion}
+              >
+                Modifier la dernière réponse
+              </button>
+            )}
+
+            {canStartBonusReview && (
+              <button
+                className="review-outcome-button review-outcome-button-primary"
+                type="button"
+                onClick={startBonusReview}
+                disabled={bonusReviewLoading}
+              >
+                {bonusReviewLoading
+                  ? "Chargement des bonus..."
+                  : "Faire des questions bonus"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="review-outcome-visual" aria-hidden="true">
+        <div className="review-outcome-symbol">
+          {isFinished ? <span className="review-outcome-check" /> : "0"}
+        </div>
+        <div className="review-outcome-lanes">
+          <span className="review-outcome-lane review-outcome-lane-violet" />
+          <span className="review-outcome-lane review-outcome-lane-amber" />
+          <span className="review-outcome-lane review-outcome-lane-green" />
+          <span className="review-outcome-lane review-outcome-lane-blue" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BonusReviewQueueControls({
+  canSkipCurrentQuestion,
+  skipCurrentQuestion,
+  canReturnToLastSkippedQuestion,
+  returnToLastSkippedQuestion,
+  skippedQuestionCount = 0
+}) {
+  if (!canSkipCurrentQuestion && !canReturnToLastSkippedQuestion) {
+    return null;
+  }
+
+  return (
+    <div className="bonus-review-controls" aria-label="Navigation des bonus">
+      {canSkipCurrentQuestion && (
+        <button
+          type="button"
+          className="bonus-review-control bonus-review-control-set-aside"
+          onClick={skipCurrentQuestion}
+          title="Mettre cette question de côté sans la noter"
+          aria-label="Mettre cette question de côté sans la noter"
+        >
+          <span className="bonus-review-control-icon" aria-hidden="true">↷</span>
+          <span>Mettre de côté</span>
+        </button>
+      )}
+
+      {canReturnToLastSkippedQuestion && (
+        <button
+          type="button"
+          className="bonus-review-control bonus-review-control-return"
+          onClick={returnToLastSkippedQuestion}
+          title="Reprendre la dernière question mise de côté"
+          aria-label="Reprendre la dernière question mise de côté"
+        >
+          <span className="bonus-review-control-icon" aria-hidden="true">↩</span>
+          <span>Reprendre</span>
+          {skippedQuestionCount > 0 && (
+            <span className="bonus-review-control-count" aria-label={`${skippedQuestionCount} en attente`}>
+              {skippedQuestionCount}
+            </span>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function ReviewSession({
   setMode,
@@ -25,9 +193,17 @@ export default function ReviewSession({
   handleTimelineComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
+  canSkipCurrentQuestion,
+  skipCurrentQuestion,
+  canReturnToLastSkippedQuestion,
+  returnToLastSkippedQuestion,
+  skippedQuestionCount,
   canStartBonusReview,
   startBonusReview,
+  bonusReviewMessage,
+  bonusReviewStatus,
   bonusReviewLoading,
+  bonusStatusLoading,
   reviewLoading,
   reviewError,
   submitMapAnswer,
@@ -35,6 +211,10 @@ export default function ReviewSession({
   submitTimelineAnswer
 }) {
   const currentQuestion = questions[currentIndex];
+  const reviewedCount = questions.reduce(
+    (total, question) => total + reviewItemCount(question),
+    0
+  );
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
     !reviewError &&
@@ -96,6 +276,14 @@ export default function ReviewSession({
                 minWidth: 0
               }}
             >
+              <BonusReviewQueueControls
+                canSkipCurrentQuestion={canSkipCurrentQuestion}
+                skipCurrentQuestion={skipCurrentQuestion}
+                canReturnToLastSkippedQuestion={canReturnToLastSkippedQuestion}
+                returnToLastSkippedQuestion={returnToLastSkippedQuestion}
+                skippedQuestionCount={skippedQuestionCount}
+              />
+
               {canReturnToLastQuestion && (
                 <button
                   type="button"
@@ -369,42 +557,18 @@ export default function ReviewSession({
 
         {/* EMPTY */}
         {!reviewLoading && !reviewError && questions.length === 0 && (
-          <div
-            style={{
-              background: "#181818",
-              border: "1px solid #262626",
-              borderRadius: "18px",
-              padding: "60px",
-              textAlign: "center",
-              color: "#777"
-            }}
-          >
-            <div>🎉 Aucune question pour aujourd’hui</div>
-
-            {canStartBonusReview && (
-              <button
-                type="button"
-                onClick={startBonusReview}
-                disabled={bonusReviewLoading}
-                style={{
-                  background: bonusReviewLoading ? "#202020" : "#233228",
-                  border: "1px solid #385544",
-                  color: bonusReviewLoading ? "#888" : "#d7f5df",
-                  display: "inline-flex",
-                  padding: "12px 16px",
-                  borderRadius: "12px",
-                  cursor: bonusReviewLoading ? "default" : "pointer",
-                  fontWeight: "650",
-                  fontSize: "14px",
-                  marginTop: "22px"
-                }}
-              >
-                {bonusReviewLoading
-                  ? "Chargement des bonus..."
-                  : "Faire des questions bonus"}
-              </button>
-            )}
-          </div>
+          <ReviewOutcomePanel
+            variant="empty"
+            reviewedCount={0}
+            canReturnToLastQuestion={false}
+            returnToLastQuestion={returnToLastQuestion}
+            canStartBonusReview={canStartBonusReview}
+            startBonusReview={startBonusReview}
+            bonusReviewLoading={bonusReviewLoading}
+            bonusReviewMessage={bonusReviewMessage}
+            bonusReviewStatus={bonusReviewStatus}
+            bonusStatusLoading={bonusStatusLoading}
+          />
         )}
 
         {/* FINISHED */}
@@ -412,88 +576,18 @@ export default function ReviewSession({
           !reviewError &&
           currentIndex >= questions.length &&
           questions.length > 0 && (
-          <div
-            style={{
-              background: "#181818",
-              border: "1px solid #262626",
-              borderRadius: "18px",
-              padding: "60px",
-              textAlign: "center"
-            }}
-          >
-
-            <div
-              style={{
-                fontSize: "42px",
-                marginBottom: "16px"
-              }}
-            >
-              🎉
-            </div>
-
-            <div
-              style={{
-                fontSize: "28px",
-                fontWeight: "700",
-                marginBottom: "10px"
-              }}
-            >
-              Session terminée
-            </div>
-
-            <div
-              style={{
-                color: "#777"
-              }}
-            >
-              Toutes les questions ont été révisées.
-            </div>
-
-            {canReturnToLastQuestion && (
-              <button
-                type="button"
-                onClick={returnToLastQuestion}
-                style={{
-                  background: "#232323",
-                  border: "1px solid #333",
-                  color: "#eee",
-                  padding: "12px 16px",
-                  borderRadius: "12px",
-                  cursor: "pointer",
-                  fontWeight: "650",
-                  fontSize: "14px",
-                  marginTop: "24px"
-                }}
-              >
-                Modifier la dernière réponse
-              </button>
-            )}
-
-            {canStartBonusReview && (
-              <button
-                type="button"
-                onClick={startBonusReview}
-                disabled={bonusReviewLoading}
-                style={{
-                  background: bonusReviewLoading ? "#202020" : "#233228",
-                  border: "1px solid #385544",
-                  color: bonusReviewLoading ? "#888" : "#d7f5df",
-                  padding: "12px 16px",
-                  borderRadius: "12px",
-                  cursor: bonusReviewLoading ? "default" : "pointer",
-                  fontWeight: "650",
-                  fontSize: "14px",
-                  marginTop: "14px",
-                  marginLeft: canReturnToLastQuestion ? "10px" : 0
-                }}
-              >
-                {bonusReviewLoading
-                  ? "Chargement des bonus..."
-                  : "Faire des questions bonus"}
-              </button>
-            )}
-
-          </div>
+          <ReviewOutcomePanel
+            variant="finished"
+            reviewedCount={reviewedCount}
+            canReturnToLastQuestion={canReturnToLastQuestion}
+            returnToLastQuestion={returnToLastQuestion}
+            canStartBonusReview={canStartBonusReview}
+            startBonusReview={startBonusReview}
+            bonusReviewLoading={bonusReviewLoading}
+            bonusReviewMessage={bonusReviewMessage}
+            bonusReviewStatus={bonusReviewStatus}
+            bonusStatusLoading={bonusStatusLoading}
+          />
         )}
 
         {/* QUESTION */}
@@ -529,6 +623,14 @@ export default function ReviewSession({
                 >
                   Question {currentIndex + 1} / {questions.length}
                 </div>
+
+                <BonusReviewQueueControls
+                  canSkipCurrentQuestion={canSkipCurrentQuestion}
+                  skipCurrentQuestion={skipCurrentQuestion}
+                  canReturnToLastSkippedQuestion={canReturnToLastSkippedQuestion}
+                  returnToLastSkippedQuestion={returnToLastSkippedQuestion}
+                  skippedQuestionCount={skippedQuestionCount}
+                />
 
                 {canReturnToLastQuestion && (
                   <button

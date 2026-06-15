@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ReviewSession from "./ReviewSession";
 
@@ -14,9 +14,17 @@ const baseProps = {
   handleTimelineComplete: vi.fn(),
   canReturnToLastQuestion: false,
   returnToLastQuestion: vi.fn(),
+  canSkipCurrentQuestion: false,
+  skipCurrentQuestion: vi.fn(),
+  canReturnToLastSkippedQuestion: false,
+  returnToLastSkippedQuestion: vi.fn(),
+  skippedQuestionCount: 0,
   canStartBonusReview: false,
   startBonusReview: vi.fn(),
+  bonusReviewMessage: "",
+  bonusReviewStatus: null,
   bonusReviewLoading: false,
+  bonusStatusLoading: false,
   reviewLoading: false,
   reviewError: "",
   submitMapAnswer: vi.fn(),
@@ -53,11 +61,51 @@ describe("ReviewSession", () => {
     vi.clearAllMocks();
   });
 
-  it("shows the normal finish panel without daily habit content", () => {
+  it("shows a clear empty review panel with bonus review action", () => {
+    const startBonusReview = vi.fn();
+    const { container } = renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      canStartBonusReview: true,
+      startBonusReview,
+      bonusReviewMessage: "Le planning est léger.",
+      bonusReviewStatus: { allowed: true, state: "low" }
+    });
+
+    const panel = container.querySelector("[data-review-outcome='empty']");
+
+    expect(panel).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Aucune question pour aujourd’hui" }))
+      .toBeInTheDocument();
+    expect(screen.getByText("Planning à jour")).toBeInTheDocument();
+    expect(screen.getByText("0 question à revoir")).toBeInTheDocument();
+    expect(screen.getByText("Bonus disponible")).toBeInTheDocument();
+    expect(screen.getByText("Le planning est léger.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Faire des questions bonus" }))
+      .toBeInTheDocument();
+  });
+
+  it("shows a full schedule message without a bonus action", () => {
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      bonusReviewMessage: "Le planning est déjà rempli.",
+      bonusReviewStatus: { allowed: false, state: "full" }
+    });
+
+    expect(screen.getByText("Planning plein")).toBeInTheDocument();
+    expect(screen.getByText("Le planning est déjà rempli.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Faire des questions bonus" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("shows a polished finish panel without daily habit content", () => {
     renderFinishedReview();
 
     expect(screen.getByText("Session terminée")).toBeInTheDocument();
     expect(screen.getByText("Toutes les questions ont été révisées.")).toBeInTheDocument();
+    expect(screen.getByText("Journée bouclée")).toBeInTheDocument();
+    expect(screen.getByText("1 question revue")).toBeInTheDocument();
   });
 
   it("uses the compact visual shell for active image review", () => {
@@ -128,5 +176,75 @@ describe("ReviewSession", () => {
     expect(screen.getByRole("heading", { name: "Révision" }))
       .toBeInTheDocument();
     expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
+  });
+
+  it("shows bonus skip controls in text review", () => {
+    const skipCurrentQuestion = vi.fn();
+    const returnToLastSkippedQuestion = vi.fn();
+    renderReviewSession({
+      questions: [
+        {
+          id: 1,
+          type_q: "text",
+          question: "Capital?",
+          answer: "Paris"
+        },
+        {
+          id: 2,
+          type_q: "text",
+          question: "Country?",
+          answer: "France"
+        }
+      ],
+      currentIndex: 0,
+      canSkipCurrentQuestion: true,
+      skipCurrentQuestion,
+      canReturnToLastSkippedQuestion: true,
+      returnToLastSkippedQuestion,
+      skippedQuestionCount: 2
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mettre cette question de côté sans la noter" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reprendre la dernière question mise de côté" }));
+
+    expect(skipCurrentQuestion).toHaveBeenCalledTimes(1);
+    expect(returnToLastSkippedQuestion).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("2")).toBeInTheDocument();
+  });
+
+  it("shows bonus skip controls in compact visual review", () => {
+    renderReviewSession({
+      questions: [
+        {
+          type_q: "timeline",
+          name: "Dates",
+          items: [
+            {
+              question_id: 1,
+              answer: "1900",
+              timeline: {
+                kind: "point",
+                start: { year: 1900 },
+                precision: "year"
+              }
+            }
+          ]
+        },
+        {
+          type_q: "text",
+          question: "Capital?",
+          answer: "Paris"
+        }
+      ],
+      currentIndex: 0,
+      canSkipCurrentQuestion: true,
+      canReturnToLastSkippedQuestion: true,
+      skippedQuestionCount: 1
+    });
+
+    expect(screen.getByRole("button", { name: "Mettre cette question de côté sans la noter" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reprendre la dernière question mise de côté" }))
+      .toBeInTheDocument();
   });
 });
