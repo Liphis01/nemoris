@@ -1,5 +1,12 @@
 import math
 
+from .mode_selection import (
+    MODE_AFFINITY_STRONG,
+    MODE_AFFINITY_SUPPORT,
+    question_mode_affinity_counts,
+    weighted_mode_choice
+)
+
 
 IMAGE_MODE_TYPE_ALL = "type_all"
 IMAGE_MODE_CLICK_PROMPT = "click_prompt"
@@ -90,35 +97,6 @@ def calibrate_image_quality(raw_quality, mode=None, context_count=0):
     return max(0, min(3, quality))
 
 
-def _progress_started(progress):
-    history = progress.history if progress else []
-
-    return bool(
-        progress and (
-            (progress.reps or 0) > 0 or
-            progress.last_review or
-            len(history or []) > 0
-        )
-    )
-
-
-def _question_strength(question):
-    progress = question.progress
-
-    if not _progress_started(progress):
-        return "hard"
-
-    difficulty = float(progress.difficulty or 5.0)
-
-    if difficulty >= 6.7 or (progress.lapses or 0) > 0:
-        return "hard"
-
-    if difficulty <= 4.2 and (progress.reps or 0) >= 3:
-        return "strong"
-
-    return "medium"
-
-
 def _recent_mode_counts(questions, limit=6):
     counts = {}
 
@@ -146,7 +124,8 @@ def choose_image_review_mode(
     due_questions,
     context_questions,
     require_click_prompt_min=False,
-    discouraged_modes=None
+    discouraged_modes=None,
+    rng=None
 ):
     due_questions = list(due_questions or [])
     context_questions = list(context_questions or [])
@@ -155,11 +134,11 @@ def choose_image_review_mode(
     if not due_questions:
         return DEFAULT_IMAGE_MODE
 
-    strengths = [_question_strength(question) for question in due_questions]
-    hard_count = strengths.count("hard")
-    strong_count = strengths.count("strong")
+    affinity_counts = question_mode_affinity_counts(due_questions)
+    support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
+    strong_count = affinity_counts[MODE_AFFINITY_STRONG]
 
-    if hard_count / len(strengths) >= 0.45:
+    if support_count / len(due_questions) >= 0.55:
         base_scores = {
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 4.0,
             IMAGE_MODE_MULTIPLE_CHOICE_IMAGE: 3.8,
@@ -167,7 +146,7 @@ def choose_image_review_mode(
             IMAGE_MODE_TYPE_PROMPT: 2.1,
             IMAGE_MODE_TYPE_ALL: 0.8
         }
-    elif strong_count / len(strengths) >= 0.55:
+    elif strong_count / len(due_questions) >= 0.55:
         base_scores = {
             IMAGE_MODE_TYPE_PROMPT: 3.6,
             IMAGE_MODE_TYPE_ALL: 3.1,
@@ -222,7 +201,9 @@ def choose_image_review_mode(
             if mode != IMAGE_MODE_CLICK_PROMPT
         ]
 
-    return max(
+    return weighted_mode_choice(
         eligible_modes,
-        key=lambda mode: (scores.get(mode, 0), -tie_order[mode])
+        scores,
+        tie_order,
+        rng=rng
     )

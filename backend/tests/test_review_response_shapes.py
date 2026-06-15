@@ -567,7 +567,128 @@ class ReviewResponseShapeTests(unittest.TestCase):
                 [item["question_id"] for item in group["items"]]
             )
 
-        self.assertNotEqual(image_groups[0]["mode"], image_groups[1]["mode"])
+        self.assertTrue(all(
+            group["mode"] in {
+                "type_all",
+                "click_prompt",
+                "type_prompt",
+                "multiple_choice_label",
+                "multiple_choice_image"
+            }
+            for group in image_groups
+        ))
+
+    def test_review_endpoint_splits_large_map_groups_into_balanced_chunks(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=52,
+            type_group="map",
+            name="Large map",
+            media="/static/large-map.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        map_items = [
+            self.add_question(
+                250 + index,
+                type_q="map",
+                answer=f"Zone {index}",
+                data={"code": f"z{index}"},
+                group=map_group,
+                next_review=today
+            )
+            for index in range(31)
+        ]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        map_groups = [
+            item
+            for item in response
+            if item["type_q"] == "map"
+        ]
+        chunk_sizes = [len(group["items"]) for group in map_groups]
+        returned_ids = [
+            item["question_id"]
+            for group in map_groups
+            for item in group["items"]
+        ]
+
+        self.assertEqual(chunk_sizes, [16, 15])
+        self.assertTrue(all(size <= 30 for size in chunk_sizes))
+        self.assertEqual(set(returned_ids), {item.id for item in map_items})
+        self.assertEqual(len(returned_ids), len(set(returned_ids)))
+
+        for group in map_groups:
+            self.assertEqual(
+                [item["question_id"] for item in group["context_items"]],
+                [item["question_id"] for item in group["items"]]
+            )
+
+    def test_review_endpoint_splits_large_mixed_groups_by_affinity(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=53,
+            type_group="image",
+            name="Mixed flags",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        image_items = []
+
+        for index in range(36):
+            item = self.add_question(
+                400 + index,
+                type_q="image",
+                answer=f"Flag {index}",
+                group=image_group,
+                next_review=today
+            )
+
+            if index < 12:
+                item.progress.reps = 1
+                item.progress.difficulty = 3.0
+            elif index < 24:
+                item.progress.reps = 3
+                item.progress.difficulty = 5.0
+            else:
+                item.progress.reps = 4
+                item.progress.difficulty = 3.0
+
+            image_items.append(item)
+
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        image_groups = [
+            item
+            for item in response
+            if item["type_q"] == "image"
+        ]
+        chunks = [
+            [item["question_id"] for item in group["items"]]
+            for group in image_groups
+        ]
+        returned_ids = [
+            question_id
+            for chunk in chunks
+            for question_id in chunk
+        ]
+
+        self.assertEqual(len(image_groups), 3)
+        self.assertEqual([len(chunk) for chunk in chunks], [12, 12, 12])
+        self.assertEqual(chunks[0], [item.id for item in image_items[:12]])
+        self.assertEqual(chunks[1], [item.id for item in image_items[12:24]])
+        self.assertEqual(chunks[2], [item.id for item in image_items[24:]])
+        self.assertEqual(set(returned_ids), {item.id for item in image_items})
+        self.assertEqual(len(returned_ids), len(set(returned_ids)))
+
+        for group in image_groups:
+            self.assertEqual(
+                [item["question_id"] for item in group["context_items"]],
+                [item["question_id"] for item in group["items"]]
+            )
 
     def test_review_endpoint_does_not_split_thirty_image_items(self):
         today = date.today()

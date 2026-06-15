@@ -26,11 +26,13 @@ from .timeline import (
 )
 from .image_modes import choose_image_review_mode, image_mode_difficulty
 from .map_modes import choose_map_review_mode, map_mode_difficulty
+from .mode_selection import MODE_AFFINITIES, question_mode_affinity
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
 
-REVIEW_IMAGE_MAX_CHUNK_SIZE = 30
+REVIEW_GROUP_MAX_CHUNK_SIZE = 30
+REVIEW_IMAGE_MAX_CHUNK_SIZE = REVIEW_GROUP_MAX_CHUNK_SIZE
 BONUS_REVIEW_FORECAST_DAYS = 14
 BONUS_REVIEW_LOW_RATIO = 0.5
 BONUS_REVIEW_FULL_RATIO = 0.9
@@ -55,6 +57,37 @@ def _balanced_chunks(items, max_size):
         start += size
 
     return chunks
+
+
+def _affinity_chunks(items, max_size):
+    items = list(items or [])
+
+    if len(items) <= max_size:
+        return [items]
+
+    buckets = {affinity: [] for affinity in MODE_AFFINITIES}
+
+    for item in items:
+        buckets[question_mode_affinity(item)].append(item)
+
+    chunks = []
+
+    for affinity in MODE_AFFINITIES:
+        bucket = buckets[affinity]
+
+        if bucket:
+            chunks.extend(_balanced_chunks(bucket, max_size))
+
+    return chunks
+
+
+def _group_review_chunks(items, scheduled_review):
+    items = list(items or [])
+
+    if not scheduled_review:
+        return [items]
+
+    return _affinity_chunks(items, REVIEW_GROUP_MAX_CHUNK_SIZE)
 
 
 def _question_query(db):
@@ -581,7 +614,7 @@ def _serialize_review_items(
     for group_data in map_grouped_items.values():
         group = group_data["group"]
         due_questions = sorted(group_data["questions"], key=lambda item: item.id)
-        context_questions = sorted(
+        all_group_questions = sorted(
             [
                 item
                 for item in (group.questions or [])
@@ -589,35 +622,43 @@ def _serialize_review_items(
             ],
             key=lambda item: item.id
         )
-        mode = choose_map_review_mode(due_questions, context_questions)
-        mode_difficulty = map_mode_difficulty(
-            mode,
-            context_count=len(context_questions),
-            tuning=scheduler_tuning
-        )
-        context_items = [
-            serialize_map_review_zone(
-                item,
-                mode_difficulty=mode_difficulty,
-                scheduler_tuning=scheduler_tuning
+        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+
+        for chunk_questions in question_chunks:
+            context_questions = (
+                chunk_questions
+                if scheduled_review
+                else all_group_questions
             )
-            for item in context_questions
-        ]
-        map_group = serialize_map_review_group(
-            group,
-            group_data["tags"],
-            mode=mode,
-            context_items=context_items
-        )
-        map_group["items"] = [
-            serialize_map_review_zone(
-                item,
-                mode_difficulty=mode_difficulty,
-                scheduler_tuning=scheduler_tuning
+            mode = choose_map_review_mode(chunk_questions, context_questions)
+            mode_difficulty = map_mode_difficulty(
+                mode,
+                context_count=len(context_questions),
+                tuning=scheduler_tuning
             )
-            for item in due_questions
-        ]
-        map_review_groups.append(map_group)
+            context_items = [
+                serialize_map_review_zone(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in context_questions
+            ]
+            map_group = serialize_map_review_group(
+                group,
+                group_data["tags"],
+                mode=mode,
+                context_items=context_items
+            )
+            map_group["items"] = [
+                serialize_map_review_zone(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in chunk_questions
+            ]
+            map_review_groups.append(map_group)
 
     image_review_groups = []
 
@@ -632,11 +673,7 @@ def _serialize_review_items(
             ],
             key=lambda item: item.id
         )
-        question_chunks = (
-            _balanced_chunks(due_questions, REVIEW_IMAGE_MAX_CHUNK_SIZE)
-            if scheduled_review
-            else [due_questions]
-        )
+        question_chunks = _group_review_chunks(due_questions, scheduled_review)
         previous_mode = None
 
         for chunk_questions in question_chunks:

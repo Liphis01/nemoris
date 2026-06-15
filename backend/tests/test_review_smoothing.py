@@ -1,4 +1,6 @@
+import random
 import unittest
+from collections import Counter
 from datetime import date, timedelta
 
 from fastapi import HTTPException
@@ -56,6 +58,14 @@ from app.schemas import (
     TimelineAnswerRequest,
     TimelineDateValue
 )
+
+
+class FixedRandom:
+    def __init__(self, value):
+        self.value = value
+
+    def random(self):
+        return self.value
 
 
 def scheduling(today, interval, type_q=None):
@@ -142,13 +152,62 @@ class SchedulerSmoothingTests(unittest.TestCase):
         context = [hard, strong]
 
         self.assertEqual(
-            choose_map_review_mode([hard], context),
+            choose_map_review_mode([hard], context, rng=FixedRandom(0)),
             "multiple_choice"
         )
         self.assertEqual(
-            choose_map_review_mode([strong], context),
+            choose_map_review_mode([strong], context, rng=FixedRandom(0)),
             "type_all"
         )
+
+    def test_map_random_selector_biases_support_and_strong_modes(self):
+        support_items = []
+        strong_items = []
+
+        for index in range(12):
+            support = Question(type_q="map", answer=f"Support {index}")
+            support.progress = Progress(reps=1, difficulty=3.0, history=[])
+            support_items.append(support)
+
+            strong = Question(type_q="map", answer=f"Strong {index}")
+            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            strong_items.append(strong)
+
+        support_rng = random.Random(1)
+        support_modes = Counter(
+            choose_map_review_mode(support_items, support_items, rng=support_rng)
+            for _ in range(300)
+        )
+        strong_rng = random.Random(2)
+        strong_modes = Counter(
+            choose_map_review_mode(strong_items, strong_items, rng=strong_rng)
+            for _ in range(300)
+        )
+
+        self.assertGreater(
+            support_modes["multiple_choice"] + support_modes["click_prompt"],
+            260
+        )
+        self.assertGreater(
+            strong_modes["type_prompt"] + strong_modes["type_all"],
+            240
+        )
+
+    def test_map_random_selector_keeps_mixed_chunks_varied(self):
+        support = Question(type_q="map", answer="Support")
+        support.progress = Progress(reps=1, difficulty=3.0, history=[])
+        strong = Question(type_q="map", answer="Strong")
+        strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+        items = [support, strong]
+        rng = random.Random(3)
+        modes = Counter(
+            choose_map_review_mode(items, items, rng=rng)
+            for _ in range(300)
+        )
+
+        self.assertGreaterEqual(len(modes), 3)
+        self.assertGreater(modes["click_prompt"], 0)
+        self.assertGreater(modes["type_prompt"], 0)
 
     def test_image_mode_difficulty_uses_type_all_as_reference(self):
         self.assertEqual(image_mode_difficulty("type_all", 2), 1.0)
@@ -178,12 +237,60 @@ class SchedulerSmoothingTests(unittest.TestCase):
         context = [hard, strong]
 
         self.assertEqual(
-            choose_image_review_mode([hard], context),
+            choose_image_review_mode([hard], context, rng=FixedRandom(0)),
             "multiple_choice_label"
         )
         self.assertEqual(
-            choose_image_review_mode([strong], context),
+            choose_image_review_mode([strong], context, rng=FixedRandom(0)),
             "type_all"
+        )
+
+    def test_image_random_selector_biases_support_and_strong_modes(self):
+        support_items = []
+        strong_items = []
+
+        for index in range(12):
+            support = Question(type_q="image", answer=f"Support {index}")
+            support.progress = Progress(reps=1, difficulty=3.0, history=[])
+            support_items.append(support)
+
+            strong = Question(type_q="image", answer=f"Strong {index}")
+            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            strong_items.append(strong)
+
+        support_rng = random.Random(4)
+        support_modes = Counter(
+            choose_image_review_mode(support_items, support_items, rng=support_rng)
+            for _ in range(300)
+        )
+        strong_rng = random.Random(5)
+        strong_modes = Counter(
+            choose_image_review_mode(strong_items, strong_items, rng=strong_rng)
+            for _ in range(300)
+        )
+
+        self.assertGreater(
+            support_modes["multiple_choice_label"] +
+            support_modes["multiple_choice_image"] +
+            support_modes["click_prompt"],
+            260
+        )
+        self.assertGreater(
+            strong_modes["type_prompt"] + strong_modes["type_all"],
+            240
+        )
+
+    def test_image_random_selector_can_pick_non_top_modes(self):
+        support = Question(type_q="image", answer="Support")
+        support.progress = Progress(reps=1, difficulty=3.0, history=[])
+
+        self.assertNotEqual(
+            choose_image_review_mode(
+                [support],
+                [support],
+                rng=FixedRandom(0.999999)
+            ),
+            "multiple_choice_label"
         )
 
     def test_image_click_prompt_requires_minimum_review_context(self):
@@ -194,7 +301,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
         for question in context:
             question.progress = Progress(
-                reps=1,
+                reps=3,
                 difficulty=5.0,
                 history=[]
             )
@@ -211,7 +318,8 @@ class SchedulerSmoothingTests(unittest.TestCase):
             choose_image_review_mode(
                 [context[0]],
                 context,
-                require_click_prompt_min=True
+                require_click_prompt_min=True,
+                rng=FixedRandom(0)
             ),
             "click_prompt"
         )
