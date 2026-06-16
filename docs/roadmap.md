@@ -4,7 +4,6 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- dans qcm d'images, quand une image à laquelle j'ai déjà répondu revient dans un autre qcm, elle est déjà visuellement sélectionnée (idealement ne pas redemander une image déjà répondue) (equivalent pour maps ?)
 - laisser la possibilité de s'entraîner sur un sous ensemble du groupe (éventuellement enregistrer le subset)
 - pour click_prompt d'image, passer direct à la question suivante si on a bon (pas d'animation)
 - afficher le nombre de questions bonus disponibles

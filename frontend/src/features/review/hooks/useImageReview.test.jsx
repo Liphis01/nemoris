@@ -773,6 +773,46 @@ describe("useImageReview", () => {
     });
   });
 
+  it("multiple_choice_image keeps previously answered distractors visually neutral", () => {
+    vi.useFakeTimers();
+
+    try {
+      const items = [
+        imageItem(1, "France"),
+        imageItem(2, "Germany"),
+        imageItem(3, "Spain"),
+        imageItem(4, "Italy")
+      ];
+      const { result } = renderHook(() =>
+        useImageReview(items, vi.fn(), undefined, {
+          mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+          contextItems: items
+        })
+      );
+      const firstPrompt = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.handleImageSelect(firstPrompt.question_id);
+      });
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
+
+      const previousAnswerAsDistractor = result.current.gridItems.find(row =>
+        row.item.question_id === firstPrompt.question_id
+      );
+
+      expect(previousAnswerAsDistractor).toMatchObject({
+        feedbackState: "",
+        isFound: false,
+        isMissed: false,
+        isRevealed: false
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("bulk-updates found image qualities while missed images stay locked at zero", () => {
     const items = [
       {

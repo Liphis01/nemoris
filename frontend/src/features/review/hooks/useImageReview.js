@@ -849,9 +849,14 @@ export function useImageReview(
   );
   const gridItems = useMemo(() => (
     displayItems.map(item => {
-      const isFound = foundQuestionIdSet.has(item.question_id);
+      const showsChoiceImages = mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode;
+      const isFound = (
+        !showsChoiceImages &&
+        foundQuestionIdSet.has(item.question_id)
+      );
       const isLockedMissed = lockedMissedQuestionIdSet.has(item.question_id);
       const isSessionMissed = (
+        !showsChoiceImages &&
         resolvedQuestionIdSet.has(item.question_id) &&
         !isFound
       );
@@ -864,12 +869,16 @@ export function useImageReview(
             : ""
         : "";
       const isPersistentlyRevealed = revealedQuestionIdSet.has(item.question_id);
-      const isMissed = isLockedMissed || isSessionMissed || feedbackState === "missed";
+      const isMissed = (
+        isLockedMissed ||
+        isSessionMissed ||
+        feedbackState === "missed"
+      );
       const shouldRevealWrongFeedback = mode !== IMAGE_MODE_CLICK_PROMPT;
       const isRevealed = (
         isFound ||
         isLockedMissed ||
-        isPersistentlyRevealed ||
+        (!showsChoiceImages && isPersistentlyRevealed) ||
         feedbackState === "correct" ||
         (feedbackState === "wrong" && shouldRevealWrongFeedback) ||
         feedbackState === "missed"
