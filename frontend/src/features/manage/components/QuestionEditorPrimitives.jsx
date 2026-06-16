@@ -150,14 +150,19 @@ export function ImageMediaField({
   media,
   onMediaChange,
   onUploadFile,
+  onImportMediaUrl,
   onRemoveMedia
 }) {
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isImportingUrl, setIsImportingUrl] = useState(false);
   const [error, setError] = useState("");
   const mediaValue = media || "";
   const hasMedia = Boolean(String(mediaValue).trim());
+  const canImportUrl = Boolean(onImportMediaUrl) &&
+    /^https?:\/\//i.test(String(mediaValue).trim());
+  const isBusy = isUploading || isImportingUrl;
 
   async function uploadFile(file) {
     if (!file || !onUploadFile) return;
@@ -224,6 +229,28 @@ export function ImageMediaField({
       )
     ) {
       onMediaChange?.(pastedText);
+    }
+  }
+
+  async function importCurrentUrl() {
+    const url = String(mediaValue).trim();
+
+    if (!url || !onImportMediaUrl) return;
+
+    setError("");
+    setIsImportingUrl(true);
+
+    try {
+      const result = await onImportMediaUrl(url);
+      const nextMedia = result?.media || result?.url;
+
+      if (nextMedia) {
+        onMediaChange?.(nextMedia);
+      }
+    } catch (importError) {
+      setError(importError.message || "Import URL impossible.");
+    } finally {
+      setIsImportingUrl(false);
     }
   }
 
@@ -312,10 +339,10 @@ export function ImageMediaField({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={!onUploadFile || isUploading}
+              disabled={!onUploadFile || isBusy}
               style={{
                 ...primaryButtonStyle,
-                opacity: !onUploadFile || isUploading ? 0.6 : 1,
+                opacity: !onUploadFile || isBusy ? 0.6 : 1,
                 padding: "10px 14px",
                 whiteSpace: "nowrap"
               }}
@@ -326,6 +353,21 @@ export function ImageMediaField({
                   ? "Remplacer l'image"
                   : "Importer une image"}
             </button>
+            {canImportUrl && (
+              <button
+                type="button"
+                onClick={importCurrentUrl}
+                disabled={isBusy}
+                style={{
+                  ...buttonStyle,
+                  opacity: isBusy ? 0.6 : 1,
+                  padding: "10px 14px",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {isImportingUrl ? "Import URL..." : "Importer l'URL"}
+              </button>
+            )}
             {hasMedia && (
               <button
                 type="button"

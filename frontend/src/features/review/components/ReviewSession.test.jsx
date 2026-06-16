@@ -150,8 +150,9 @@ describe("ReviewSession", () => {
     expect(renderer.style.flex).toBe("1 1 0%");
     expect(actions).toContainElement(screen.getByRole("button", { name: /Retour/ }));
     expect(status).toHaveTextContent("Révision");
-    expect(status).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("Question 1 / 1");
+    expect(status).not.toHaveTextContent("Flags");
+    expect(shell).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("#Geo");
     expect(bar).not.toHaveTextContent("Image");
     expect(screen.queryByRole("heading", { name: "Révision" }))

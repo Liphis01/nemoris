@@ -45,7 +45,7 @@ function scrollEditorTo(index) {
   fireEvent.scroll(scroller);
 }
 
-async function renderEditor(items = makeImageItems(300)) {
+async function renderEditor(items = makeImageItems(300), props = {}) {
   getImageGroupItems.mockResolvedValue(items);
   patchImageGroupItems.mockImplementation(async (groupId, payload) => ({
     group: {
@@ -73,10 +73,17 @@ async function renderEditor(items = makeImageItems(300)) {
     <ImageGroupEditor
       group={group}
       onUploadFile={vi.fn()}
+      {...props}
     />
   );
 
-  await screen.findByDisplayValue("Country 1");
+  if (items.length > 0) {
+    await screen.findByDisplayValue(items[0].answer);
+  } else {
+    await waitFor(() => {
+      expect(getImageGroupItems).toHaveBeenCalledWith(group.id);
+    });
+  }
 }
 
 describe("ImageGroupEditor", () => {
@@ -136,6 +143,52 @@ describe("ImageGroupEditor", () => {
         document.querySelector("[data-image-group-item-id^='new-image-']")
       ).toBeInTheDocument();
     });
+  });
+
+  it("imports a remote URL as a new compact image row", async () => {
+    const onImportMediaUrl = vi.fn().mockResolvedValue({
+      url: "/static/image-groups/7/France.png"
+    });
+    await renderEditor([], { onImportMediaUrl });
+
+    fireEvent.change(screen.getByPlaceholderText("URL image"), {
+      target: {
+        value: "https://example.com/France.png"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Importer l'URL" }));
+
+    await screen.findByDisplayValue("France");
+
+    const row = document.querySelector("[data-image-group-item-row]");
+
+    expect(onImportMediaUrl).toHaveBeenCalledWith("https://example.com/France.png");
+    expect(screen.getByDisplayValue("/static/image-groups/7/France.png")).toBeInTheDocument();
+    expect(row).toBeInTheDocument();
+    expect(row.style.height).toBe("292px");
+  });
+
+  it("pastes copied image bytes as a new compact image row", async () => {
+    const onUploadFile = vi.fn().mockResolvedValue({
+      url: "/static/image-groups/7/Brazil.png"
+    });
+    const imageFile = new File(["image"], "Brazil.png", { type: "image/png" });
+    await renderEditor([], { onUploadFile });
+
+    fireEvent.paste(screen.getByTestId("image-group-items-scroll"), {
+      clipboardData: {
+        files: [imageFile]
+      }
+    });
+
+    await screen.findByDisplayValue("Brazil");
+
+    const row = document.querySelector("[data-image-group-item-row]");
+
+    expect(onUploadFile).toHaveBeenCalledWith(imageFile);
+    expect(screen.getByDisplayValue("/static/image-groups/7/Brazil.png")).toBeInTheDocument();
+    expect(row).toBeInTheDocument();
+    expect(row.style.height).toBe("292px");
   });
 
   it("saves all items and deleted ids while only rendering the window", async () => {

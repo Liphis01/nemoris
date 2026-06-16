@@ -26,3 +26,14 @@ export function uploadImageGroupMedia(groupId, file) {
     body: formData
   });
 }
+
+
+export function importImageGroupMediaUrl(groupId, url) {
+  return requestJson(`/image-groups/${groupId}/upload/url`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ url })
+  });
+}

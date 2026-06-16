@@ -66,3 +66,14 @@ export function uploadMedia(file) {
     body: formData
   });
 }
+
+
+export function importMediaUrl(url) {
+  return requestJson("/upload/url", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ url })
+  });
+}

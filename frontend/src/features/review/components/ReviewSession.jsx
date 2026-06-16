@@ -6,10 +6,6 @@ function isVisualQuestion(question) {
   return ["image", "map", "timeline"].includes(question?.type_q);
 }
 
-function visualSessionName(question) {
-  return question?.name || question?.question || question?.media || "Session visuelle";
-}
-
 function reviewItemCount(question) {
   return Array.isArray(question?.items) ? question.items.length : 1;
 }
@@ -262,7 +258,8 @@ export default function ReviewSession({
               gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 520px) minmax(0, 1fr)",
               marginBottom: "10px",
               minHeight: "72px",
-              padding: "10px 14px"
+              padding: "10px 14px",
+              position: "relative"
             }}
           >
             <div
@@ -272,6 +269,7 @@ export default function ReviewSession({
                 display: "flex",
                 flexWrap: "wrap",
                 gap: "8px",
+                gridColumn: "1",
                 justifyContent: "flex-start",
                 minWidth: 0
               }}
@@ -321,12 +319,20 @@ export default function ReviewSession({
               data-visual-session-status
               style={{
                 alignItems: "center",
+                boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
                 gap: "4px",
                 justifyContent: "center",
+                left: "50%",
+                maxWidth: "min(520px, calc(100% - 320px))",
                 minWidth: 0,
-                textAlign: "center"
+                pointerEvents: "none",
+                position: "absolute",
+                textAlign: "center",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                width: "100%"
               }}
             >
               <div
@@ -339,54 +345,44 @@ export default function ReviewSession({
               >
                 Révision
               </div>
-              <strong
-                data-visual-session-title
-                style={{
-                  color: "#f3f3f3",
-                  display: "block",
-                  fontSize: "17px",
-                  fontWeight: 900,
-                  lineHeight: 1.1,
-                  maxWidth: "100%",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
-                }}
-              >
-                {visualSessionName(currentQuestion)}
-              </strong>
               <div
                 style={{
-                  alignItems: "center",
                   color: "#888",
-                  display: "flex",
-                  flexWrap: "wrap",
                   fontSize: "12px",
                   fontWeight: 800,
-                  gap: "6px 8px",
-                  justifyContent: "center",
                   lineHeight: 1.2
                 }}
               >
-                <span>
                 Question {currentIndex + 1} / {questions.length}
-                </span>
-                {(currentQuestion.tags || []).map(tag => (
-                  <span
-                    key={tag}
-                    style={{
-                      background: "#2b2047",
-                      borderRadius: "999px",
-                      color: "#b69cff",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      padding: "3px 8px"
-                    }}
-                  >
-                    #{tag}
-                  </span>
-                ))}
               </div>
+              {(currentQuestion.tags || []).length > 0 && (
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px 8px",
+                    justifyContent: "center",
+                    lineHeight: 1.2
+                  }}
+                >
+                  {(currentQuestion.tags || []).map(tag => (
+                    <span
+                      key={tag}
+                      style={{
+                        background: "#2b2047",
+                        borderRadius: "999px",
+                        color: "#b69cff",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        padding: "3px 8px"
+                      }}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div
@@ -394,6 +390,7 @@ export default function ReviewSession({
               style={{
                 alignItems: "center",
                 display: "flex",
+                gridColumn: "3",
                 justifyContent: "flex-end",
                 minWidth: 0
               }}

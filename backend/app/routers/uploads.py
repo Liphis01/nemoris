@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
 from ..models import Question
-from ..services.media import delete_unreferenced_media_file, store_uploaded_image
+from ..schemas import MediaUrlImport
+from ..services.media import (
+    delete_unreferenced_media_file,
+    store_remote_image,
+    store_uploaded_image
+)
 
 
 router = APIRouter()
@@ -35,3 +40,8 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
 @router.post("/upload")
 def upload_image(file: UploadFile = File(...)):
     return store_uploaded_image(file)
+
+
+@router.post("/upload/url")
+def upload_image_from_url(payload: MediaUrlImport):
+    return store_remote_image(payload.url)

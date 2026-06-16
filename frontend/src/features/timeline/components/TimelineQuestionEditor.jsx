@@ -45,6 +45,7 @@ export default function TimelineQuestionEditor({
   onCancel,
   onDelete,
   onUploadFile,
+  onImportMediaUrl,
   onRemoveMedia,
   saveStatus,
   hasUnsavedChanges,
@@ -146,6 +147,7 @@ export default function TimelineQuestionEditor({
         media={timelineDraft.media}
         onMediaChange={setMedia}
         onUploadFile={onUploadFile}
+        onImportMediaUrl={onImportMediaUrl}
         onRemoveMedia={onRemoveMedia}
       />
 

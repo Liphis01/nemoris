@@ -30,6 +30,7 @@ export default function TextQuestionEditor({
   onCancel,
   onDelete,
   onUploadFile,
+  onImportMediaUrl,
   onRemoveMedia,
   saveStatus,
   hasUnsavedChanges,
@@ -120,6 +121,7 @@ export default function TextQuestionEditor({
         media={textDraft.media}
         onMediaChange={(media) => setField("media", media)}
         onUploadFile={onUploadFile}
+        onImportMediaUrl={onImportMediaUrl}
         onRemoveMedia={onRemoveMedia}
       />
 

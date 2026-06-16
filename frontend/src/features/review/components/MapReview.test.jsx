@@ -120,12 +120,12 @@ describe("MapReview recap map focus", () => {
       minHeight: "0",
       overflow: "hidden"
     });
-    expect(header).toHaveTextContent("Progression");
+    expect(header).toHaveTextContent("Europe");
+    expect(header).not.toHaveTextContent("Progression");
     expect(header).not.toHaveTextContent("MAP");
     expect(header).not.toHaveTextContent("Cliquer");
-    expect(header).not.toHaveTextContent("Europe");
     expect(header).not.toHaveTextContent("Temps");
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toBeInTheDocument();
     expect(screen.getByText((content) => ["Alpha", "Beta"].includes(content)))
       .toBeInTheDocument();
@@ -149,7 +149,7 @@ describe("MapReview recap map focus", () => {
       .toHaveStyle({ width: "50%" });
     expect(container.querySelector("[data-map-progress-wrong]"))
       .toHaveStyle({ width: "0%" });
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toHaveAttribute("aria-valuenow", "1");
   });
 
@@ -211,7 +211,7 @@ describe("MapReview recap map focus", () => {
     });
     expect(container.querySelector("[data-map-progress-wrong]").style.background)
       .toContain("repeating-linear-gradient");
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toHaveAttribute("aria-valuenow", "1");
   });
 
@@ -259,7 +259,7 @@ describe("MapReview recap map focus", () => {
     });
     expect(container.querySelector("[data-map-progress-wrong]").style.background)
       .toContain("repeating-linear-gradient");
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toHaveAttribute("aria-valuenow", "1");
     expect(screen.getByTestId("active-map"))
       .toHaveAttribute("data-missed", targetCode);
@@ -286,7 +286,7 @@ describe("MapReview recap map focus", () => {
       expect(screen.getByTestId("active-map"))
         .toHaveAttribute("data-missed", targetCode);
     });
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toHaveAttribute("aria-valuenow", "1");
     expect(input).toHaveFocus();
   });
@@ -332,7 +332,7 @@ describe("MapReview recap map focus", () => {
       .toHaveProperty(targetCode);
     expect(container.querySelector("[data-map-progress-wrong]").style.background)
       .toContain("repeating-linear-gradient");
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toHaveAttribute("aria-valuenow", "1");
   });
 

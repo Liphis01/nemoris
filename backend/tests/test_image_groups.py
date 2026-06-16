@@ -4,6 +4,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -15,13 +16,17 @@ from app.services import media as media_service
 from app.services.image_groups import (
     list_image_group_items,
     save_image_group_items,
-    upload_image_group_media
+    upload_image_group_media,
+    upload_image_group_media_url
 )
 from app.services.questions import create_question
 from app.services.training import group_training_fingerprint
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\npng-data"
+GLOBAL_ADDRINFO = [
+    (None, None, None, None, ("93.184.216.34", 0))
+]
 
 
 def upload(filename, content_type, data):
@@ -30,6 +35,32 @@ def upload(filename, content_type, data):
         content_type=content_type,
         file=io.BytesIO(data)
     )
+
+
+class RemoteHeaders:
+    def __init__(self, values):
+        self.values = {
+            str(key).lower(): value
+            for key, value in values.items()
+        }
+
+    def get(self, key, default=None):
+        return self.values.get(str(key).lower(), default)
+
+
+class RemoteResponse:
+    def __init__(self, data, content_type="image/png"):
+        self.headers = RemoteHeaders({"Content-Type": content_type})
+        self.file = io.BytesIO(data)
+
+    def read(self, size=-1):
+        return self.file.read(size)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
 
 
 class ImageGroupTests(unittest.TestCase):
@@ -412,6 +443,47 @@ class ImageGroupTests(unittest.TestCase):
             )
 
         self.assertEqual(incompatible.exception.status_code, 400)
+
+    def test_image_group_url_import_uses_group_static_folder(self):
+        group = QuestionGroup(
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        self.db.commit()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            static_dir = Path(temp_dir)
+            previous_static_dir = media_service.STATIC_DIR
+            media_service.STATIC_DIR = static_dir
+
+            try:
+                with patch.object(
+                    media_service,
+                    "getaddrinfo",
+                    return_value=GLOBAL_ADDRINFO
+                ), patch.object(
+                    media_service,
+                    "urlopen",
+                    return_value=RemoteResponse(PNG_BYTES, content_type="image/png")
+                ):
+                    response = upload_image_group_media_url(
+                        self.db,
+                        group.id,
+                        "https://example.com/france.png"
+                    )
+
+                url = response["url"]
+
+                self.assertTrue(url.startswith(f"/static/image-groups/{group.id}/"))
+                self.assertTrue(url.endswith(".png"))
+                self.assertTrue(
+                    (static_dir / "image-groups" / str(group.id) / Path(url).name).exists()
+                )
+            finally:
+                media_service.STATIC_DIR = previous_static_dir
 
 
 if __name__ == "__main__":

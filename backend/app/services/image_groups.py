@@ -7,6 +7,7 @@ from .map_zones import merge_tags
 from .media import (
     delete_unreferenced_media_files,
     media_points_to_same_static_file,
+    store_remote_image,
     store_uploaded_image
 )
 from .questions import delete_question_dependents
@@ -78,6 +79,15 @@ def upload_image_group_media(db, group_id: int, upload_file):
 
     return store_uploaded_image(
         upload_file,
+        storage_subdir=f"image-groups/{group.id}"
+    )
+
+
+def upload_image_group_media_url(db, group_id: int, url: str):
+    group = get_image_group_or_404(db, group_id)
+
+    return store_remote_image(
+        url,
         storage_subdir=f"image-groups/{group.id}"
     )
 

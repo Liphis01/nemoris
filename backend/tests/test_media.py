@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -24,6 +25,12 @@ SVG_BYTES = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">'
     b'<rect width="1" height="1" fill="#fff"/></svg>'
 )
+GLOBAL_ADDRINFO = [
+    (None, None, None, None, ("93.184.216.34", 0))
+]
+LOCAL_ADDRINFO = [
+    (None, None, None, None, ("127.0.0.1", 0))
+]
 
 
 def upload(filename, content_type, data):
@@ -32,6 +39,40 @@ def upload(filename, content_type, data):
         content_type=content_type,
         file=io.BytesIO(data)
     )
+
+
+class RemoteHeaders:
+    def __init__(self, values):
+        self.values = {
+            str(key).lower(): value
+            for key, value in values.items()
+        }
+
+    def get(self, key, default=None):
+        return self.values.get(str(key).lower(), default)
+
+
+class RemoteResponse:
+    def __init__(self, data, content_type="image/png", content_length=None):
+        headers = {}
+
+        if content_type is not None:
+            headers["Content-Type"] = content_type
+
+        if content_length is not None:
+            headers["Content-Length"] = content_length
+
+        self.headers = RemoteHeaders(headers)
+        self.file = io.BytesIO(data)
+
+    def read(self, size=-1):
+        return self.file.read(size)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
 
 
 class MediaTests(unittest.TestCase):
@@ -150,6 +191,90 @@ class MediaTests(unittest.TestCase):
                     )
 
                 self.assertEqual(svg_error.exception.status_code, 400)
+
+    def test_remote_import_downloads_and_stores_supported_image(self):
+        with patch.object(
+            media_service,
+            "getaddrinfo",
+            return_value=GLOBAL_ADDRINFO
+        ), patch.object(
+            media_service,
+            "urlopen",
+            return_value=RemoteResponse(PNG_BYTES, content_type="image/png")
+        ) as urlopen_mock:
+            result = media_service.store_remote_image(
+                "https://example.com/photo.png"
+            )
+
+        url = result["url"]
+
+        self.assertTrue(url.startswith("/static/"))
+        self.assertTrue(url.endswith(".png"))
+        self.assertTrue((self.static_dir / Path(url).name).exists())
+        self.assertEqual(
+            urlopen_mock.call_args.args[0].full_url,
+            "https://example.com/photo.png"
+        )
+
+    def test_remote_import_rejects_invalid_url_and_non_image_response(self):
+        with self.assertRaises(HTTPException) as invalid_url_error:
+            media_service.store_remote_image("file:///tmp/photo.png")
+
+        self.assertEqual(invalid_url_error.exception.status_code, 400)
+
+        with patch.object(
+            media_service,
+            "getaddrinfo",
+            return_value=GLOBAL_ADDRINFO
+        ), patch.object(
+            media_service,
+            "urlopen",
+            return_value=RemoteResponse(b"<html></html>", content_type="text/html")
+        ):
+            with self.assertRaises(HTTPException) as non_image_error:
+                media_service.store_remote_image("https://example.com/page")
+
+        self.assertEqual(non_image_error.exception.status_code, 400)
+
+    def test_remote_import_rejects_local_hosts(self):
+        with self.assertRaises(HTTPException) as localhost_error:
+            media_service.store_remote_image(
+                "http://localhost:8000/static/photo.png"
+            )
+
+        self.assertEqual(localhost_error.exception.status_code, 400)
+
+        with patch.object(
+            media_service,
+            "getaddrinfo",
+            return_value=LOCAL_ADDRINFO
+        ):
+            with self.assertRaises(HTTPException) as private_host_error:
+                media_service.store_remote_image("https://example.com/photo.png")
+
+        self.assertEqual(private_host_error.exception.status_code, 400)
+
+    def test_remote_import_rejects_oversized_images(self):
+        with patch.object(
+            media_service,
+            "getaddrinfo",
+            return_value=GLOBAL_ADDRINFO
+        ), patch.object(
+            media_service,
+            "urlopen",
+            return_value=RemoteResponse(
+                PNG_BYTES,
+                content_type="image/png",
+                content_length=str(len(PNG_BYTES) + 1)
+            )
+        ):
+            with self.assertRaises(HTTPException) as oversized_error:
+                media_service.store_remote_image(
+                    "https://example.com/photo.png",
+                    max_bytes=len(PNG_BYTES)
+                )
+
+        self.assertEqual(oversized_error.exception.status_code, 413)
 
     def test_replacing_question_media_deletes_unreferenced_local_file(self):
         old_file = self.static_dir / "old.png"

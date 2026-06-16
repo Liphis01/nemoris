@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createQuestion as createQuestionRequest,
   deleteQuestion as deleteQuestionRequest,
+  importMediaUrl,
   listQuestions,
   removeQuestionMedia as removeQuestionMediaRequest,
   updateQuestion as updateQuestionRequest,
@@ -13,6 +14,7 @@ import {
   listGroups
 } from "../../../api/groups";
 import {
+  importImageGroupMediaUrl as importImageGroupMediaUrlRequest,
   uploadImageGroupMedia as uploadImageGroupMediaRequest
 } from "../../../api/imageGroups";
 import { filterAndSortGroups } from "../utils/groupFilters";
@@ -294,10 +296,28 @@ export function useManageLibrary(mode) {
     return data;
   }
 
+  async function importQuestionMediaUrl(url, question) {
+    if (!url) return;
+
+    const data = await importMediaUrl(url);
+
+    if (question?.id === "new") {
+      setQuestionDraft(prev => ({ ...prev, media: data.url }));
+    }
+
+    return data;
+  }
+
   async function uploadImageGroupMedia(groupId, file) {
     if (!file || !groupId) return;
 
     return uploadImageGroupMediaRequest(groupId, file);
+  }
+
+  async function importImageGroupMediaUrl(groupId, url) {
+    if (!url || !groupId) return;
+
+    return importImageGroupMediaUrlRequest(groupId, url);
   }
 
   function handleSort(field) {
@@ -419,6 +439,8 @@ export function useManageLibrary(mode) {
     groupTypeFilter,
     tagFilter,
     handleSort,
+    importQuestionMediaUrl,
+    importImageGroupMediaUrl,
     uploadQuestionMedia,
     uploadImageGroupMedia,
     isCreatingQuestion,

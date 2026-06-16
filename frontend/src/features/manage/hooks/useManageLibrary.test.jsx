@@ -4,6 +4,7 @@ import { useManageLibrary } from "./useManageLibrary";
 import {
   createQuestion,
   deleteQuestion,
+  importMediaUrl,
   listQuestions,
   removeQuestionMedia,
   updateQuestion,
@@ -15,12 +16,14 @@ import {
   listGroups
 } from "../../../api/groups";
 import {
+  importImageGroupMediaUrl,
   uploadImageGroupMedia
 } from "../../../api/imageGroups";
 
 vi.mock("../../../api/questions", () => ({
   createQuestion: vi.fn(),
   deleteQuestion: vi.fn(),
+  importMediaUrl: vi.fn(),
   listQuestions: vi.fn(),
   removeQuestionMedia: vi.fn(),
   updateQuestion: vi.fn(),
@@ -34,6 +37,7 @@ vi.mock("../../../api/groups", () => ({
 }));
 
 vi.mock("../../../api/imageGroups", () => ({
+  importImageGroupMediaUrl: vi.fn(),
   uploadImageGroupMedia: vi.fn()
 }));
 
@@ -85,6 +89,8 @@ describe("useManageLibrary", () => {
     updateQuestion.mockResolvedValue({});
     createQuestion.mockResolvedValue({});
     createGroup.mockResolvedValue({});
+    importMediaUrl.mockResolvedValue({});
+    importImageGroupMediaUrl.mockResolvedValue({});
     removeQuestionMedia.mockResolvedValue({});
     uploadMedia.mockResolvedValue({});
     uploadImageGroupMedia.mockResolvedValue({});
@@ -192,5 +198,37 @@ describe("useManageLibrary", () => {
       data: {}
     });
     expect(result.current.allGroups).toContain(createdGroup);
+  });
+
+  it("imports remote question media into the new question draft", async () => {
+    importMediaUrl.mockResolvedValue({ url: "/static/imported.png" });
+    const { result } = renderHook(() => useManageLibrary("manage"));
+
+    await act(async () => {
+      await result.current.importQuestionMediaUrl(
+        "https://example.com/photo.png",
+        { id: "new" }
+      );
+    });
+
+    expect(importMediaUrl).toHaveBeenCalledWith("https://example.com/photo.png");
+    expect(result.current.questionDraft.media).toBe("/static/imported.png");
+  });
+
+  it("imports remote image group media through the group upload endpoint", async () => {
+    importImageGroupMediaUrl.mockResolvedValue({ url: "/static/image-groups/7/france.png" });
+    const { result } = renderHook(() => useManageLibrary("manage"));
+
+    await act(async () => {
+      await result.current.importImageGroupMediaUrl(
+        7,
+        "https://example.com/france.png"
+      );
+    });
+
+    expect(importImageGroupMediaUrl).toHaveBeenCalledWith(
+      7,
+      "https://example.com/france.png"
+    );
   });
 });

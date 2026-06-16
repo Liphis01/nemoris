@@ -38,6 +38,29 @@ function answerFromFilename(filename) {
   return basename || "Image";
 }
 
+function filenameFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const filename = parsed.pathname.split("/").filter(Boolean).pop();
+
+    return filename ? decodeURIComponent(filename) : parsed.hostname;
+  } catch {
+    return url;
+  }
+}
+
+function imageFilesFromFileList(fileList) {
+  return Array.from(fileList || []).filter(file =>
+    !file.type || file.type.startsWith("image/")
+  );
+}
+
+function transferHasImageFiles(dataTransfer) {
+  return Array.from(dataTransfer?.items || []).some(item =>
+    item.kind === "file" && (!item.type || item.type.startsWith("image/"))
+  );
+}
+
 function normalizeItem(item) {
   const data = item?.data || {};
 
@@ -390,6 +413,7 @@ export default function ImageGroupEditor({
   availableTags = [],
   onSave,
   onUploadFile,
+  onImportMediaUrl,
   registerPendingSaveHandler,
   selectedItem,
   headerAction
@@ -402,6 +426,9 @@ export default function ImageGroupEditor({
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [importUrlInput, setImportUrlInput] = useState("");
+  const [importingUrl, setImportingUrl] = useState(false);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [initialSignature, setInitialSignature] = useState("");
   const [previewItem, setPreviewItem] = useState(null);
   const [aliasInputByTempId, setAliasInputByTempId] = useState({});
@@ -478,6 +505,9 @@ export default function ImageGroupEditor({
     setEditableGroup(nextGroup);
     setSharedTags(selectedGroup.tags || []);
     setTagInput("");
+    setImportUrlInput("");
+    setImportingUrl(false);
+    setIsDraggingImage(false);
     setDeletedItemIds([]);
     setAliasInputByTempId({});
     aliasInputRefs.current = {};
@@ -741,9 +771,7 @@ export default function ImageGroupEditor({
   }, []);
 
   const handleUploadFiles = useCallback(async (fileList) => {
-    const files = Array.from(fileList || []).filter(file =>
-      !file.type || file.type.startsWith("image/")
-    );
+    const files = imageFilesFromFileList(fileList);
 
     if (files.length === 0 || !onUploadFile) return;
 
@@ -781,6 +809,84 @@ export default function ImageGroupEditor({
       }
     }
   }, [editableGroup, onUploadFile]);
+
+  const handleImportUrl = useCallback(async () => {
+    const url = importUrlInput.trim();
+
+    if (!url || !onImportMediaUrl) return;
+
+    setImportingUrl(true);
+    setSaveStatus("");
+
+    try {
+      const result = await onImportMediaUrl(url);
+      const media = result?.media || result?.url || "";
+      const nextItem = normalizeItem({
+        answer: answerFromFilename(filenameFromUrl(url)),
+        media,
+        data: {
+          aliases: []
+        },
+        group: editableGroup,
+        group_id: editableGroup?.id
+      });
+
+      pendingScrollItemTempIdRef.current = nextItem.tempId;
+      setItems(prev => [...prev, nextItem]);
+      setImportUrlInput("");
+    } catch (error) {
+      console.error(error);
+      setSaveStatus("Import URL impossible");
+    } finally {
+      setImportingUrl(false);
+    }
+  }, [editableGroup, importUrlInput, onImportMediaUrl]);
+
+  const handleImportUrlKeyDown = useCallback((event) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    handleImportUrl();
+  }, [handleImportUrl]);
+
+  const handlePasteImages = useCallback((event) => {
+    const files = imageFilesFromFileList(event.clipboardData?.files);
+
+    if (files.length === 0) return;
+
+    event.preventDefault();
+    handleUploadFiles(files);
+  }, [handleUploadFiles]);
+
+  const handleDragEnter = useCallback((event) => {
+    if (!transferHasImageFiles(event.dataTransfer)) return;
+
+    event.preventDefault();
+    setIsDraggingImage(true);
+  }, []);
+
+  const handleDragOver = useCallback((event) => {
+    if (!transferHasImageFiles(event.dataTransfer)) return;
+
+    event.preventDefault();
+    setIsDraggingImage(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setIsDraggingImage(false);
+    }
+  }, []);
+
+  const handleDropImages = useCallback((event) => {
+    const files = imageFilesFromFileList(event.dataTransfer?.files);
+
+    if (files.length === 0) return;
+
+    event.preventDefault();
+    setIsDraggingImage(false);
+    handleUploadFiles(files);
+  }, [handleUploadFiles]);
 
   async function saveImageItems({ autosave = false } = {}) {
     if (!group?.id || !hasUnsavedChanges) {
@@ -870,8 +976,17 @@ export default function ImageGroupEditor({
 
   return (
     <div
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDropImages}
+      onPaste={handlePasteImages}
       style={{
         background: "#1e1e1e",
+        border: isDraggingImage
+          ? "1px solid rgba(126, 226, 168, 0.75)"
+          : "1px solid transparent",
+        boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
         height: "100%",
@@ -977,14 +1092,48 @@ export default function ImageGroupEditor({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!onUploadFile || uploading}
+            disabled={!onUploadFile || uploading || importingUrl}
             style={{
               ...primaryButtonStyle,
               ...compactHeaderButtonStyle,
-              opacity: !onUploadFile || uploading ? 0.6 : 1
+              opacity: !onUploadFile || uploading || importingUrl ? 0.6 : 1
             }}
           >
             {uploading ? "Import..." : "Importer des images"}
+          </button>
+          <input
+            value={importUrlInput}
+            onChange={(event) => setImportUrlInput(event.target.value)}
+            onKeyDown={handleImportUrlKeyDown}
+            placeholder="URL image"
+            style={{
+              ...compactHeaderInputStyle,
+              flex: "1 1 180px",
+              maxWidth: "280px",
+              minWidth: "150px"
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleImportUrl}
+            disabled={
+              !onImportMediaUrl ||
+              !importUrlInput.trim() ||
+              uploading ||
+              importingUrl
+            }
+            style={{
+              ...buttonStyle,
+              ...compactHeaderButtonStyle,
+              opacity: !onImportMediaUrl ||
+                !importUrlInput.trim() ||
+                uploading ||
+                importingUrl
+                ? 0.6
+                : 1
+            }}
+          >
+            {importingUrl ? "Import URL..." : "Importer l'URL"}
           </button>
           <button
             type="button"

@@ -20,6 +20,7 @@ export default function ManageInspector({
   setEditingZone,
   uploadQuestionMedia,
   uploadImageGroupMedia,
+  importImageGroupMediaUrl,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -34,6 +35,7 @@ export default function ManageInspector({
   setViewMode,
   startCreateGroup,
   setHighlightedQuestionIds,
+  importQuestionMediaUrl,
   onOpenInCalendar,
   registerPendingSaveHandler,
   requestManageTransition,
@@ -133,6 +135,9 @@ export default function ManageInspector({
       submitLabel: "Créer",
       onCancel: cancelCreateQuestion,
       onUploadFile: (file) => uploadQuestionMedia(file, { id: "new" }),
+      onImportMediaUrl: importQuestionMediaUrl
+        ? (url) => importQuestionMediaUrl(url, { id: "new" })
+        : undefined,
       onRemoveMedia: () => setQuestionDraft(prev => ({ ...prev, media: "" })),
       availableTags
     };
@@ -317,6 +322,9 @@ export default function ManageInspector({
           selectedItem={selectedIsImageItem ? selectedItem : null}
           availableTags={availableTags}
           onUploadFile={(file) => uploadImageGroupMedia(group.id, file)}
+          onImportMediaUrl={importImageGroupMediaUrl
+            ? (url) => importImageGroupMediaUrl(group.id, url)
+            : undefined}
           onSave={async (saveResult) => {
             const savedGroup = saveResult?.group;
             const savedItems = saveResult?.items || [];
@@ -385,6 +393,12 @@ export default function ManageInspector({
     return uploadQuestionMedia(file, selectedItem);
   }
 
+  async function handleImportMediaUrl(url) {
+    if (!importQuestionMediaUrl) return;
+
+    return importQuestionMediaUrl(url, selectedItem);
+  }
+
   const editorDraft = draft;
   const editType = editorDraft.type_q || "text";
   const { Editor: EditQuestionEditor } = getQuestionEditorAdapter(editType);
@@ -397,6 +411,7 @@ export default function ManageInspector({
     submitLabel: "Enregistrer",
     onCancel: resetDraft,
     onUploadFile: handleUploadFile,
+    onImportMediaUrl: importQuestionMediaUrl ? handleImportMediaUrl : undefined,
     onRemoveMedia: removeMedia,
     saveStatus,
     hasUnsavedChanges,

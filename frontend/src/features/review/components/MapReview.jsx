@@ -398,20 +398,33 @@ export default function MapReview({
               justifyContent: "space-between",
               alignItems: "flex-start",
               gap: "20px",
-              marginBottom: fillAvailableHeight ? "6px" : "16px"
+              marginBottom: fillAvailableHeight ? "6px" : "16px",
+              position: "relative"
             }}
           >
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               {fillAvailableHeight ? (
                 <div
                   style={{
-                    color: "#888",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    textTransform: "uppercase"
+                    boxSizing: "border-box",
+                    color: "#f3f3f3",
+                    fontSize: "16px",
+                    fontWeight: 900,
+                    left: "50%",
+                    lineHeight: 1.1,
+                    maxWidth: "min(460px, calc(100% - 180px))",
+                    overflow: "hidden",
+                    pointerEvents: "none",
+                    position: "absolute",
+                    textAlign: "center",
+                    textOverflow: "ellipsis",
+                    top: "50%",
+                    transform: "translate(-50%, -50%)",
+                    whiteSpace: "nowrap",
+                    width: "100%"
                   }}
                 >
-                  Progression
+                  {group.name || group.media}
                 </div>
               ) : (
                 <>
@@ -490,7 +503,7 @@ export default function MapReview({
           </div>
 
           <div
-            aria-label="Progression"
+            aria-label="Avancement"
             aria-valuemax={reviewZones.length}
             aria-valuemin={0}
             aria-valuenow={completedQuestionCount}

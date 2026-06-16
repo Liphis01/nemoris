@@ -1,5 +1,9 @@
+from ipaddress import ip_address
 from pathlib import Path, PurePosixPath
+from socket import gaierror, getaddrinfo, timeout as SocketTimeout
+from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -11,6 +15,12 @@ from ..models import Question, QuestionGroup
 
 IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
+REMOTE_IMAGE_TIMEOUT_SECONDS = 10
+REMOTE_IMAGE_USER_AGENT = "QuizApp image importer"
+FORBIDDEN_REMOTE_HOSTNAMES = {
+    "localhost",
+    "localhost.localdomain"
+}
 SAFE_IMAGE_EXTENSIONS = {
     ".gif": "gif",
     ".jfif": "jpeg",
@@ -147,6 +157,41 @@ def read_upload_bytes(upload_file, max_bytes=IMAGE_UPLOAD_MAX_BYTES):
     return b"".join(chunks)
 
 
+def read_remote_bytes(response, max_bytes=IMAGE_UPLOAD_MAX_BYTES):
+    content_length = response.headers.get("Content-Length")
+
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Image too large"
+                )
+        except ValueError:
+            pass
+
+    total = 0
+    chunks = []
+
+    while True:
+        chunk = response.read(CHUNK_SIZE)
+
+        if not chunk:
+            break
+
+        total += len(chunk)
+
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Image too large"
+            )
+
+        chunks.append(chunk)
+
+    return b"".join(chunks)
+
+
 def safe_static_relative_path(value):
     raw_value = unquote(str(value or "").strip()).replace("\\", "/").strip("/")
 
@@ -161,18 +206,12 @@ def safe_static_relative_path(value):
     return relative_path.as_posix()
 
 
-def store_uploaded_image(
-    upload_file,
+def store_image_bytes(
+    data: bytes,
+    filename: str = "",
     static_dir: Path | None = None,
-    storage_subdir: str | Path | None = None,
-    max_bytes=IMAGE_UPLOAD_MAX_BYTES
+    storage_subdir: str | Path | None = None
 ):
-    content_type = (getattr(upload_file, "content_type", "") or "").lower()
-
-    if content_type and not content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image uploads are supported")
-
-    data = read_upload_bytes(upload_file, max_bytes=max_bytes)
     image_kind = detect_image_kind(data)
 
     if not image_kind:
@@ -189,19 +228,123 @@ def store_uploaded_image(
 
     target_dir = root_dir / relative_subdir if relative_subdir else root_dir
     target_dir.mkdir(parents=True, exist_ok=True)
-    extension = safe_image_extension(upload_file.filename, image_kind)
+    extension = safe_image_extension(filename, image_kind)
 
     while True:
-        filename = f"{uuid4().hex}{extension}"
-        file_path = target_dir / filename
+        stored_filename = f"{uuid4().hex}{extension}"
+        file_path = target_dir / stored_filename
 
         if not file_path.exists():
             break
 
     file_path.write_bytes(data)
-    relative_url_path = f"{relative_subdir}/{filename}" if relative_subdir else filename
+    relative_url_path = (
+        f"{relative_subdir}/{stored_filename}"
+        if relative_subdir
+        else stored_filename
+    )
 
     return {"url": f"{STATIC_URL_PREFIX}{relative_url_path}"}
+
+
+def store_uploaded_image(
+    upload_file,
+    static_dir: Path | None = None,
+    storage_subdir: str | Path | None = None,
+    max_bytes=IMAGE_UPLOAD_MAX_BYTES
+):
+    content_type = (getattr(upload_file, "content_type", "") or "").lower()
+
+    if content_type and not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are supported")
+
+    data = read_upload_bytes(upload_file, max_bytes=max_bytes)
+
+    return store_image_bytes(
+        data,
+        filename=upload_file.filename,
+        static_dir=static_dir,
+        storage_subdir=storage_subdir
+    )
+
+
+def filename_from_url(url):
+    parsed = urlparse(str(url or "").strip())
+    filename = Path(unquote(parsed.path)).name
+
+    return filename or "image"
+
+
+def assert_remote_url_has_public_host(parsed):
+    hostname = str(parsed.hostname or "").strip().rstrip(".").lower()
+
+    if not hostname or hostname in FORBIDDEN_REMOTE_HOSTNAMES:
+        raise HTTPException(status_code=400, detail="Image URL host is not allowed")
+
+    try:
+        address_infos = getaddrinfo(hostname, None)
+    except gaierror as error:
+        raise HTTPException(
+            status_code=400,
+            detail="Image URL host could not be resolved"
+        ) from error
+
+    for address_info in address_infos:
+        address = address_info[4][0]
+
+        if not ip_address(address).is_global:
+            raise HTTPException(status_code=400, detail="Image URL host is not allowed")
+
+
+def store_remote_image(
+    url,
+    static_dir: Path | None = None,
+    storage_subdir: str | Path | None = None,
+    max_bytes=IMAGE_UPLOAD_MAX_BYTES
+):
+    src = str(url or "").strip()
+    parsed = urlparse(src)
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Enter a valid http(s) image URL")
+
+    assert_remote_url_has_public_host(parsed)
+
+    request = Request(
+        src,
+        headers={
+            "User-Agent": REMOTE_IMAGE_USER_AGENT,
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        }
+    )
+
+    try:
+        with urlopen(request, timeout=REMOTE_IMAGE_TIMEOUT_SECONDS) as response:
+            content_type = response.headers.get("Content-Type", "").lower()
+
+            if content_type and not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="URL did not return an image")
+
+            data = read_remote_bytes(response, max_bytes=max_bytes)
+    except HTTPException:
+        raise
+    except HTTPError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image URL returned HTTP {error.code}"
+        ) from error
+    except (URLError, SocketTimeout, TimeoutError, ValueError) as error:
+        raise HTTPException(
+            status_code=400,
+            detail="Image URL could not be downloaded"
+        ) from error
+
+    return store_image_bytes(
+        data,
+        filename=filename_from_url(src),
+        static_dir=static_dir,
+        storage_subdir=storage_subdir
+    )
 
 
 def static_relative_path_from_media(media):

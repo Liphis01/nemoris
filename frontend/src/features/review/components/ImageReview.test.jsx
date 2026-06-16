@@ -447,7 +447,7 @@ describe("ImageReview answer label preview", () => {
       .toHaveStyle({ width: "100%" });
     expect(container.querySelector("[data-image-progress-wrong]").style.background)
       .toContain("repeating-linear-gradient");
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toHaveAttribute("aria-valuenow", "1");
   });
 
@@ -522,12 +522,12 @@ describe("ImageReview answer label preview", () => {
       minHeight: "0",
       overflow: "hidden"
     });
-    expect(header).toHaveTextContent("Progression");
-    expect(header).not.toHaveTextContent("Flags");
+    expect(header).toHaveTextContent("Flags");
+    expect(header).not.toHaveTextContent("Progression");
     expect(header).not.toHaveTextContent("IMAGE");
     expect(header).not.toHaveTextContent("Tout taper");
     expect(header).not.toHaveTextContent("Temps");
-    expect(screen.getByRole("progressbar", { name: "Progression" }))
+    expect(screen.getByRole("progressbar", { name: "Avancement" }))
       .toBeInTheDocument();
     expect(scrollPane).toHaveClass("app-scrollbar");
     expect(scrollPane).toHaveStyle({

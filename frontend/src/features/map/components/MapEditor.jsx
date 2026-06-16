@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
 import {
   disabledSaveButtonStyle,
@@ -70,6 +70,20 @@ export default function MapEditor({
     : 0;
   const assignmentDegrees = Math.round(assignmentRatio * 360);
   const hasPendingMapChanges = hasDirtyChanges();
+  const zoneLabels = useMemo(() => {
+    const labels = {};
+
+    zones.forEach(zone => {
+      const code = getZoneCode(zone);
+      const answer = String(zone.answer || "").trim();
+
+      if (code && answer) {
+        labels[code] = answer;
+      }
+    });
+
+    return labels;
+  }, [zones]);
 
   function createTemporaryZone(code) {
     return {
@@ -750,6 +764,7 @@ export default function MapEditor({
               unsaved={dirtyZoneCodes}
               selected={getZoneCode(editingZone)}
               focusCode={mapFocusCode}
+              zoneLabels={zoneLabels}
               onSelect={handleSelect}
               onCodesLoaded={handleCodesLoaded}
             />
