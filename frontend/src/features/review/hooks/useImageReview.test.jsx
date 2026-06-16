@@ -23,13 +23,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function imageItem(questionId, answer, aliases = []) {
+function imageItem(questionId, answer, aliases = [], difficulty = 5) {
   return {
     question_id: questionId,
     answer,
     label: answer,
     aliases,
-    media: `/static/${answer}.png`
+    media: `/static/${answer}.png`,
+    progress: {
+      difficulty
+    }
   };
 }
 
@@ -543,47 +546,88 @@ describe("useImageReview", () => {
   });
 
   it("multiple_choice_label uses borrowed context and submits only active items", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
     const items = [
-      imageItem(1, "France")
+      imageItem(1, "France", [], 1)
     ];
     const contextItems = [
       ...items,
-      imageItem(2, "Germany"),
-      imageItem(3, "Spain"),
-      imageItem(4, "Italy"),
-      imageItem(5, "Portugal")
+      imageItem(2, "Germany", [], 10),
+      imageItem(3, "Spain", [], 4),
+      imageItem(4, "Italy", [], 8),
+      imageItem(5, "Portugal", [], 9)
     ];
-    const { result } = renderHook(() =>
-      useImageReview(items, onComplete, submitAnswer, {
-        mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-        contextItems
-      })
-    );
-    const prompt = result.current.currentPromptItem;
+    try {
+      const { result } = renderHook(() =>
+        useImageReview(items, onComplete, submitAnswer, {
+          mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+          contextItems
+        })
+      );
+      const prompt = result.current.currentPromptItem;
 
-    expect(result.current.choiceOptions).toHaveLength(4);
+      expect(result.current.choiceOptions).toHaveLength(4);
+      expect(
+        result.current.choiceOptions
+          .map(item => item.question_id)
+          .sort((a, b) => a - b)
+      ).toEqual([1, 2, 4, 5]);
 
-    act(() => {
-      result.current.handleChoiceSelect(prompt.question_id);
-    });
-    act(() => {
-      result.current.finishReview();
-    });
+      act(() => {
+        result.current.handleChoiceSelect(prompt.question_id);
+      });
+      act(() => {
+        result.current.finishReview();
+      });
 
-    await act(async () => {
-      await result.current.sendResult();
-    });
+      await act(async () => {
+        await result.current.sendResult();
+      });
 
-    expect(submitAnswer).toHaveBeenCalledWith(
-      {
-        [prompt.question_id]: 2
-      },
-      IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-      5
-    );
-    expect(onComplete).toHaveBeenCalledWith([]);
+      expect(submitAnswer).toHaveBeenCalledWith(
+        {
+          [prompt.question_id]: 2
+        },
+        IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        5
+      );
+      expect(onComplete).toHaveBeenCalledWith([]);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it("multiple_choice_label can sample easier distractors from a larger pool", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.999999);
+    const items = [
+      imageItem(1, "France", [], 1)
+    ];
+    const contextItems = [
+      ...items,
+      imageItem(2, "Germany", [], 10),
+      imageItem(3, "Spain", [], 4),
+      imageItem(4, "Italy", [], 8),
+      imageItem(5, "Portugal", [], 9)
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useImageReview(items, vi.fn(), undefined, {
+          mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+          contextItems
+        })
+      );
+
+      expect(
+        result.current.choiceOptions
+          .map(item => item.question_id)
+          .sort((a, b) => a - b)
+      ).toEqual([1, 3, 4, 5]);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 
   it("multiple_choice_label wrong answers reveal the target during feedback", () => {

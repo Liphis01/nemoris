@@ -419,43 +419,84 @@ describe("useMapReview recap sorting", () => {
   });
 
   it("multiple_choice uses borrowed context and submits only active zones", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
     const reviewZones = [
-      zone({ questionId: 1, code: "a", label: "Alpha" })
+      zone({ questionId: 1, code: "a", label: "Alpha", difficulty: 1 })
     ];
     const contextItems = [
       ...reviewZones,
-      zone({ questionId: 2, code: "b", label: "Beta" }),
-      zone({ questionId: 3, code: "c", label: "Gamma" }),
-      zone({ questionId: 4, code: "d", label: "Delta" }),
-      zone({ questionId: 5, code: "e", label: "Epsilon" })
+      zone({ questionId: 2, code: "b", label: "Beta", difficulty: 10 }),
+      zone({ questionId: 3, code: "c", label: "Gamma", difficulty: 4 }),
+      zone({ questionId: 4, code: "d", label: "Delta", difficulty: 8 }),
+      zone({ questionId: 5, code: "e", label: "Epsilon", difficulty: 9 })
     ];
-    const { result } = renderHook(() =>
-      useMapReview(reviewZones, onComplete, submitAnswer, {
-        mode: "multiple_choice",
-        contextItems
-      })
-    );
-    const target = result.current.currentPromptItem;
+    try {
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, onComplete, submitAnswer, {
+          mode: "multiple_choice",
+          contextItems
+        })
+      );
+      const target = result.current.currentPromptItem;
 
-    expect(result.current.choiceOptions).toHaveLength(4);
+      expect(result.current.choiceOptions).toHaveLength(4);
+      expect(
+        result.current.choiceOptions
+          .map(item => item.question_id)
+          .sort((a, b) => a - b)
+      ).toEqual([1, 2, 4, 5]);
 
-    act(() => {
-      result.current.handleChoiceSelect(target.question_id);
-    });
-    act(() => {
-      result.current.finishMap();
-    });
+      act(() => {
+        result.current.handleChoiceSelect(target.question_id);
+      });
+      act(() => {
+        result.current.finishMap();
+      });
 
-    await act(async () => {
-      await result.current.sendResult();
-    });
+      await act(async () => {
+        await result.current.sendResult();
+      });
 
-    expect(submitAnswer).toHaveBeenCalledWith({
-      [target.question_id]: 2
-    }, "multiple_choice", 5);
-    expect(onComplete).toHaveBeenCalledWith([]);
+      expect(submitAnswer).toHaveBeenCalledWith({
+        [target.question_id]: 2
+      }, "multiple_choice", 5);
+      expect(onComplete).toHaveBeenCalledWith([]);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it("multiple_choice can sample easier distractors from a larger pool", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.999999);
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha", difficulty: 1 })
+    ];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta", difficulty: 10 }),
+      zone({ questionId: 3, code: "c", label: "Gamma", difficulty: 4 }),
+      zone({ questionId: 4, code: "d", label: "Delta", difficulty: 8 }),
+      zone({ questionId: 5, code: "e", label: "Epsilon", difficulty: 9 })
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, vi.fn(), vi.fn(), {
+          mode: "multiple_choice",
+          contextItems
+        })
+      );
+
+      expect(
+        result.current.choiceOptions
+          .map(item => item.question_id)
+          .sort((a, b) => a - b)
+      ).toEqual([1, 3, 4, 5]);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 
   it("multiple_choice wrong answers keep target visible as missed feedback", () => {

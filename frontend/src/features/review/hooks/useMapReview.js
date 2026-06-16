@@ -104,6 +104,7 @@ const initialRecapSort = {
   key: null,
   direction: "asc"
 };
+const DISTRACTOR_DIFFICULTY_SCALE = 2.0;
 
 
 function getSelectedQuality(item, isFound, qualityByQuestionId) {
@@ -196,6 +197,65 @@ function shuffle(items) {
 }
 
 
+function compareDistractorDifficulty(a, b) {
+  const aScore = getDifficultyScore(a, getHistoryStats(a));
+  const bScore = getDifficultyScore(b, getHistoryStats(b));
+
+  if (bScore !== aScore) {
+    return bScore - aScore;
+  }
+
+  const labelSort = String(a.label || "").localeCompare(String(b.label || ""));
+
+  if (labelSort !== 0) {
+    return labelSort;
+  }
+
+  return (a.question_id || 0) - (b.question_id || 0);
+}
+
+
+function distractorWeight(item, maxDifficultyScore) {
+  const difficultyScore = getDifficultyScore(item, getHistoryStats(item));
+
+  return Math.exp(
+    (difficultyScore - maxDifficultyScore) / DISTRACTOR_DIFFICULTY_SCALE
+  );
+}
+
+
+function weightedSampleDistractors(items, count) {
+  const candidates = [...(items || [])].sort(compareDistractorDifficulty);
+  const selected = [];
+
+  while (selected.length < count && candidates.length > 0) {
+    const maxDifficultyScore = Math.max(
+      ...candidates.map(item => getDifficultyScore(item, getHistoryStats(item)))
+    );
+    const weights = candidates.map(item =>
+      distractorWeight(item, maxDifficultyScore)
+    );
+    const totalWeight = weights.reduce((total, weight) => total + weight, 0);
+    let threshold = Math.random() * totalWeight;
+    let selectedIndex = candidates.length - 1;
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      threshold -= weights[index];
+
+      if (threshold <= 0) {
+        selectedIndex = index;
+        break;
+      }
+    }
+
+    selected.push(candidates[selectedIndex]);
+    candidates.splice(selectedIndex, 1);
+  }
+
+  return selected;
+}
+
+
 function itemKey(items) {
   return (items || []).map(item => item.question_id).join("|");
 }
@@ -204,11 +264,12 @@ function itemKey(items) {
 function buildChoiceOptions(target, contextItems) {
   if (!target) return [];
 
-  const distractors = shuffle(
+  const distractors = weightedSampleDistractors(
     (contextItems || []).filter(item =>
       item.question_id !== target.question_id && item.label
-    )
-  ).slice(0, 3);
+    ),
+    3
+  );
 
   return shuffle([target, ...distractors]);
 }
