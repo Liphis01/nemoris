@@ -165,6 +165,8 @@ class Collection(Base):
 
     name = Column(String, unique=True)
 
+    data = Column(JSON, nullable=True)
+
     questions = relationship(
         "Question",
         secondary=question_collection,

@@ -3,6 +3,7 @@ import {
   getTrainingItems,
   gradeTrainingTimeline,
   listTrainingScopes,
+  recordCollectionTrainingAttempt,
   recordGroupTrainingAttempt
 } from "../../../api/training";
 
@@ -85,6 +86,10 @@ function labelForScope(scope) {
     return scope.name || `Groupe #${scope.id}`;
   }
 
+  if (scope.type === "collection") {
+    return scope.name || `Collection #${scope.id}`;
+  }
+
   return `#${scope.name}`;
 }
 
@@ -99,6 +104,13 @@ function scopeRequestOptions(scope) {
     };
   }
 
+  if (scope?.type === "collection") {
+    return {
+      scopeType: "collection",
+      collectionId: scope.id
+    };
+  }
+
   return {
     scopeType: "tag",
     tag: scope?.name || ""
@@ -107,7 +119,11 @@ function scopeRequestOptions(scope) {
 
 
 export function useTrainingSession(active = true) {
-  const [scopes, setScopes] = useState({ groups: [], tags: [] });
+  const [scopes, setScopes] = useState({
+    groups: [],
+    collections: [],
+    tags: []
+  });
   const [scopesLoading, setScopesLoading] = useState(false);
   const [scopesError, setScopesError] = useState("");
   const [activeScope, setActiveScope] = useState(null);
@@ -142,13 +158,13 @@ export function useTrainingSession(active = true) {
     [originalQuestions]
   );
   const trainingFingerprint = useMemo(
-    () => activeScope?.type === "group"
+    () => ["group", "collection"].includes(activeScope?.type)
       ? getTrainingFingerprint(originalQuestions)
       : null,
     [activeScope?.type, originalQuestions]
   );
   const recordEligible = Boolean(
-    activeScope?.type === "group" &&
+    ["group", "collection"].includes(activeScope?.type) &&
     runMode === "full" &&
     allQuestionIds.length > 0 &&
     trainingFingerprint
@@ -160,7 +176,7 @@ export function useTrainingSession(active = true) {
 
   const resetRecordAttempt = useCallback((items, nextRunMode, scope) => {
     const shouldStartTimer = Boolean(
-      scope?.type === "group" &&
+      ["group", "collection"].includes(scope?.type) &&
       nextRunMode === "full" &&
       (items || []).length > 0
     );
@@ -192,6 +208,7 @@ export function useTrainingSession(active = true) {
 
       setScopes({
         groups: data.groups || [],
+        collections: data.collections || [],
         tags: data.tags || []
       });
     } catch (error) {
@@ -263,9 +280,13 @@ export function useTrainingSession(active = true) {
     );
   }, [failedQuestionIds, originalQuestions, resetRun]);
 
-  const handleTextAnswer = useCallback(() => {
+  const handleTextAnswer = useCallback((options = {}) => {
     if (!current) return;
 
+    addFailedIds(
+      setFailedQuestionIds,
+      options?.failedQuestionIds || []
+    );
     setShowAnswer(false);
     setCurrentIndex(prev => prev + 1);
   }, [current]);
@@ -349,13 +370,17 @@ export function useTrainingSession(active = true) {
     }
 
     let cancelled = false;
-    const groupId = activeScope.id;
+    const scopeId = activeScope.id;
     const payload = {
       elapsed_ms: Math.max(1, Math.round(completedElapsedMs)),
       question_count: allQuestionIds.length,
       found_count: attemptFoundCount,
       content_fingerprint: trainingFingerprint,
-      ...(activeScope.groupMode || activeScope.mapMode || activeScope.imageMode
+      ...(activeScope.type === "group" && (
+        activeScope.groupMode ||
+        activeScope.mapMode ||
+        activeScope.imageMode
+      )
         ? {
           mode: (
             activeScope.groupMode ||
@@ -370,14 +395,18 @@ export function useTrainingSession(active = true) {
     setRecordSaveStatus("saving");
     setRecordSaveError("");
 
-    recordGroupTrainingAttempt(groupId, payload)
+    const saveAttempt = activeScope.type === "collection"
+      ? recordCollectionTrainingAttempt(scopeId, payload)
+      : recordGroupTrainingAttempt(scopeId, payload);
+
+    saveAttempt
       .then((response) => {
         if (cancelled) return;
 
         setRecordResult(response);
         setRecordSaveStatus("saved");
         setActiveScope(prev => (
-          prev?.type === "group" && prev.id === groupId
+          prev?.type === activeScope.type && prev.id === scopeId
             ? {
               ...prev,
               training_record: response.training_record,
@@ -388,13 +417,21 @@ export function useTrainingSession(active = true) {
         setScopes(prev => ({
           ...prev,
           groups: (prev.groups || []).map(group =>
-            group.id === groupId
+            group.id === scopeId && activeScope.type === "group"
               ? {
                 ...group,
                 training_record: response.training_record,
                 training_records: response.training_records || group.training_records
               }
               : group
+          ),
+          collections: (prev.collections || []).map(collection =>
+            collection.id === scopeId && activeScope.type === "collection"
+              ? {
+                ...collection,
+                training_record: response.training_record
+              }
+              : collection
           )
         }));
       })
@@ -426,6 +463,10 @@ export function useTrainingSession(active = true) {
     if (!active) return;
 
     function handleKeyDown(event) {
+      if (current?.type_q === "text") {
+        return;
+      }
+
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||

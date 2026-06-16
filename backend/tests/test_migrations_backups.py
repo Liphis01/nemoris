@@ -135,13 +135,14 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005", "0006"]
+                ["0001", "0002", "0003", "0004", "0005", "0006", "0007"]
             )
             self.assertIsNotNone(result["backup"])
 
             self.assertIn("schema_migrations", table_names(database_file))
             self.assertIn("app_settings", table_names(database_file))
             self.assertIn("collections", table_names(database_file))
+            self.assertIn("data", column_names(database_file, "collections"))
 
             progress_columns = column_names(database_file, "progress")
             self.assertIn("stability", progress_columns)
@@ -170,7 +171,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 6)
+            self.assertEqual(migration_count, 7)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -214,7 +215,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005", "0006"]
+                ["0001", "0002", "0003", "0004", "0005", "0006", "0007"]
             )
             self.assertIsNone(result["backup"])
             self.assertIn("questions", table_names(database_file))
@@ -312,7 +313,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0005", "0006"]
+                ["0005", "0006", "0007"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -384,7 +385,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0006"]
+                ["0006", "0007"]
             )
 
             with sqlite3.connect(database_file) as connection:

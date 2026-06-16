@@ -9,6 +9,7 @@ from ..services.training import (
     get_training_items,
     grade_training_timeline,
     list_training_scopes,
+    record_collection_training_attempt,
     record_training_attempt
 )
 
@@ -23,8 +24,9 @@ def get_scopes(db: Session = Depends(get_db)):
 
 @router.get("/training")
 def get_training(
-    scope_type: Literal["group", "tag"],
+    scope_type: Literal["group", "tag", "collection"],
     group_id: Optional[int] = None,
+    collection_id: Optional[int] = None,
     tag: Optional[str] = None,
     map_mode: Optional[str] = None,
     image_mode: Optional[str] = None,
@@ -34,6 +36,7 @@ def get_training(
         db,
         scope_type=scope_type,
         group_id=group_id,
+        collection_id=collection_id,
         tag=tag,
         map_mode=map_mode,
         image_mode=image_mode
@@ -55,3 +58,12 @@ def save_group_attempt_record(
     db: Session = Depends(get_db)
 ):
     return record_training_attempt(db, group_id, data)
+
+
+@router.post("/training/collections/{collection_id}/attempt_record")
+def save_collection_attempt_record(
+    collection_id: int,
+    data: TrainingAttemptRecordRequest,
+    db: Session = Depends(get_db)
+):
+    return record_collection_training_attempt(db, collection_id, data)

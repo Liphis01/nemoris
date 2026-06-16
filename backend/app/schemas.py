@@ -307,3 +307,16 @@ class CollectionCreate(BaseModel):
         min_length=1,
         max_length=100
     )
+
+    question_ids: List[int] = Field(default_factory=list)
+
+
+class CollectionUpdate(BaseModel):
+
+    name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100
+    )
+
+    question_ids: Optional[List[int]] = None

@@ -17,6 +17,10 @@ export function getTrainingItems(options = {}) {
     params.set("group_id", String(options.groupId));
   }
 
+  if (options.collectionId !== undefined && options.collectionId !== null) {
+    params.set("collection_id", String(options.collectionId));
+  }
+
   if (options.tag) {
     params.set("tag", options.tag);
   }
@@ -48,6 +52,17 @@ export function gradeTrainingTimeline(items) {
 
 export function recordGroupTrainingAttempt(groupId, payload) {
   return requestJson(`/training/groups/${groupId}/attempt_record`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+
+export function recordCollectionTrainingAttempt(collectionId, payload) {
+  return requestJson(`/training/collections/${collectionId}/attempt_record`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

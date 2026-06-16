@@ -300,6 +300,16 @@ def _migration_remove_daily_grove_setting(connection):
     )
 
 
+def _migration_collection_data_column(connection):
+    if not _table_exists(connection, "collections"):
+        return
+
+    if "data" not in _column_names(connection, "collections"):
+        connection.exec_driver_sql(
+            "ALTER TABLE collections ADD COLUMN data JSON"
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -333,6 +343,11 @@ MIGRATIONS = [
         version="0006",
         name="remove_daily_grove_setting",
         run=_migration_remove_daily_grove_setting
+    ),
+    Migration(
+        version="0007",
+        name="collection_data_column",
+        run=_migration_collection_data_column
     )
 ]
 

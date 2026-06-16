@@ -1,4 +1,5 @@
 import TextReviewCard from "./TextReviewCard";
+import TextTrainingCard from "./TextTrainingCard";
 import ImageReview from "./ImageReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
@@ -108,6 +109,17 @@ export default function ReviewQuestionRenderer({
     }
 
     // Text review question.
+    if (trainingMode) {
+        return (
+            <TextTrainingCard
+                key={renderKey}
+                q={q}
+                currentIndex={currentIndex}
+                onComplete={handleTextAnswer}
+            />
+        );
+    }
+
     return (
         <TextReviewCard
             key={renderKey}

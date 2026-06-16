@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
-from ..models import Question, QuestionGroup
+from ..models import Collection, Question, QuestionGroup, question_collection
 from ..serializers import serialize_progress
 from .image_modes import (
     DEFAULT_IMAGE_MODE,
@@ -53,6 +53,8 @@ def _training_question_query(db):
         .options(
             joinedload(Question.progress),
             joinedload(Question.group)
+            .joinedload(QuestionGroup.questions)
+            .joinedload(Question.progress)
         )
         .order_by(Question.id)
     )
@@ -85,6 +87,20 @@ def question_training_signature(type_q, answer=None, media=None, data=None):
             "answer": _clean_string(answer),
             "media": _clean_string(media),
             "aliases": _normalized_aliases(data)
+        }
+
+    if type_q == "text":
+        return {
+            "answer": _clean_string(answer),
+            "media": _clean_string(media),
+            "aliases": _normalized_aliases(data)
+        }
+
+    if type_q == "timeline":
+        return {
+            "answer": _clean_string(answer),
+            "media": _clean_string(media),
+            "timeline": (data or {}).get("timeline")
         }
 
     return None
@@ -186,6 +202,98 @@ def group_training_fingerprint(db, group):
         return None
 
     return training_fingerprints_for_groups(db, [group]).get(group.id)
+
+
+def _collection_question_training_signature(question):
+    signature = question_training_signature(
+        question.type_q,
+        question.answer,
+        question.media,
+        question.data or {}
+    ) or {}
+
+    payload = {
+        "id": question.id,
+        "type_q": question.type_q,
+        "question": _clean_string(question.question),
+        **signature
+    }
+
+    if question.group and question.type_q in {"map", "image"}:
+        payload["group"] = {
+            "id": question.group.id,
+            "type_group": question.group.type_group,
+            "media": _clean_string(question.group.media)
+        }
+
+    return payload
+
+
+def _collection_training_fingerprint_payload(collection, questions):
+    return {
+        "collection_id": collection.id,
+        "items": [
+            _collection_question_training_signature(question)
+            for question in sorted(questions or [], key=lambda item: item.id or 0)
+        ]
+    }
+
+
+def training_fingerprints_for_collections(db, collections):
+    collections = list(collections or [])
+    collection_ids = [
+        collection.id
+        for collection in collections
+        if collection.id is not None
+    ]
+    questions_by_collection_id = {
+        collection_id: []
+        for collection_id in collection_ids
+    }
+
+    if collection_ids:
+        rows = (
+            db.query(question_collection.c.collection_id, Question)
+            .join(
+                Question,
+                question_collection.c.question_id == Question.id
+            )
+            .options(joinedload(Question.group))
+            .filter(question_collection.c.collection_id.in_(collection_ids))
+            .order_by(question_collection.c.collection_id, Question.id)
+            .all()
+        )
+
+        for collection_id, question in rows:
+            questions_by_collection_id.setdefault(collection_id, []).append(
+                question
+            )
+
+    return {
+        collection.id: _hash_training_fingerprint_payload(
+            _collection_training_fingerprint_payload(
+                collection,
+                questions_by_collection_id.get(collection.id, [])
+            )
+        )
+        for collection in collections
+    }
+
+
+def collection_training_fingerprint(db, collection):
+    if isinstance(collection, int):
+        collection = (
+            db.query(Collection)
+            .filter(Collection.id == collection)
+            .first()
+        )
+
+    if not collection:
+        return None
+
+    return training_fingerprints_for_collections(db, [collection]).get(
+        collection.id
+    )
 
 
 def clear_training_record(group):
@@ -333,6 +441,25 @@ def list_training_scopes(db):
         db,
         [group for group, _ in groups]
     )
+    collections = (
+        db.query(
+            Collection,
+            func.count(question_collection.c.question_id).label(
+                "question_count"
+            )
+        )
+        .outerjoin(
+            question_collection,
+            Collection.id == question_collection.c.collection_id
+        )
+        .group_by(Collection.id)
+        .order_by(Collection.id)
+        .all()
+    )
+    fingerprints_by_collection_id = training_fingerprints_for_collections(
+        db,
+        [collection for collection, _ in collections]
+    )
     grouped_tag_rows = (
         db.query(Question.group_id, Question.tags)
         .filter(
@@ -392,6 +519,18 @@ def list_training_scopes(db):
             }
             for group, question_count in groups
         ],
+        "collections": [
+            {
+                "id": collection.id,
+                "name": collection.name,
+                "question_count": question_count,
+                "training_record": serialize_training_record(
+                    collection.data,
+                    fingerprints_by_collection_id.get(collection.id)
+                )
+            }
+            for collection, question_count in collections
+        ],
         "tags": [
             {
                 "name": tag_names_by_key[key],
@@ -425,6 +564,27 @@ def _should_update_best_found(record, percent, elapsed_ms):
     previous_elapsed = record.get("best_found_elapsed_ms")
 
     return previous_elapsed is None or elapsed_ms < previous_elapsed
+
+
+def _attach_text_training_aliases(items, questions):
+    aliases_by_question_id = {
+        question.id: (
+            question.data.get("aliases", [])
+            if isinstance(question.data, dict)
+            else []
+        )
+        for question in questions or []
+        if question.type_q == "text"
+    }
+
+    for item in items or []:
+        if item.get("type_q") == "text":
+            item["aliases"] = aliases_by_question_id.get(
+                item.get("question_id"),
+                []
+            )
+
+    return items
 
 
 def record_training_attempt(db, group_id, payload):
@@ -563,10 +723,111 @@ def record_training_attempt(db, group_id, payload):
     }
 
 
+def record_collection_training_attempt(db, collection_id, payload):
+    collection = (
+        db.query(Collection)
+        .filter(Collection.id == collection_id)
+        .first()
+    )
+
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    current_questions = (
+        db.query(Question)
+        .join(
+            question_collection,
+            question_collection.c.question_id == Question.id
+        )
+        .options(joinedload(Question.group))
+        .filter(question_collection.c.collection_id == collection.id)
+        .order_by(Question.id)
+        .all()
+    )
+    current_question_count = len(current_questions)
+    content_fingerprint = _hash_training_fingerprint_payload(
+        _collection_training_fingerprint_payload(
+            collection,
+            current_questions
+        )
+    )
+
+    if current_question_count <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Collection has no training items"
+        )
+
+    if payload.question_count != current_question_count:
+        raise HTTPException(
+            status_code=400,
+            detail="Training question count no longer matches the collection"
+        )
+
+    if payload.content_fingerprint != content_fingerprint:
+        raise HTTPException(
+            status_code=409,
+            detail="Training content changed; restart the session"
+        )
+
+    if payload.found_count > payload.question_count:
+        raise HTTPException(
+            status_code=400,
+            detail="found_count cannot exceed question_count"
+        )
+
+    collection_data = dict(collection.data or {})
+    record = dict(
+        serialize_training_record(collection_data, content_fingerprint) or {}
+    )
+    timestamp = _current_utc_timestamp()
+    percent = _found_percent(payload.found_count, payload.question_count)
+    is_new_best_percent = False
+    is_new_best_time = False
+    record["content_fingerprint"] = content_fingerprint
+
+    if _should_update_best_found(record, percent, payload.elapsed_ms):
+        record.update({
+            "best_found_percent": percent,
+            "best_found_count": payload.found_count,
+            "best_found_elapsed_ms": payload.elapsed_ms,
+            "best_found_at": timestamp,
+            "question_count": payload.question_count
+        })
+        is_new_best_percent = True
+
+    if payload.found_count == payload.question_count:
+        best_time_ms = record.get("best_time_ms")
+
+        if best_time_ms is None or payload.elapsed_ms < best_time_ms:
+            record.update({
+                "best_time_ms": payload.elapsed_ms,
+                "best_time_at": timestamp,
+                "question_count": payload.question_count
+            })
+            is_new_best_time = True
+
+    collection_data[TRAINING_RECORD_KEY] = record
+    collection.data = collection_data
+    db.commit()
+    db.refresh(collection)
+
+    return {
+        "training_record": serialize_training_record(
+            collection.data,
+            content_fingerprint
+        ),
+        "training_records": {},
+        "is_new_best_percent": is_new_best_percent,
+        "is_new_best_time": is_new_best_time
+    }
+
+
 def get_training_items(
     db,
     scope_type,
     group_id=None,
+    collection_id=None,
     tag=None,
     map_mode=None,
     image_mode=None
@@ -592,7 +853,10 @@ def get_training_items(
             .filter(Question.group_id == group_id)
             .all()
         )
-        items = serialize_review_items(questions)
+        items = _attach_text_training_aliases(
+            serialize_review_items(questions),
+            questions
+        )
         content_fingerprint = group_training_fingerprint(db, group_id)
         normalized_map_mode = normalize_map_mode(map_mode)
         normalized_image_mode = normalize_image_mode(image_mode)
@@ -604,6 +868,67 @@ def get_training_items(
                     item["mode"] = normalized_map_mode
                 elif item.get("type_q") == "image":
                     item["mode"] = normalized_image_mode
+
+        return items
+
+    if scope_type == "collection":
+        if collection_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="collection_id is required for collection training"
+            )
+
+        collection = (
+            db.query(Collection)
+            .filter(Collection.id == collection_id)
+            .first()
+        )
+
+        if not collection:
+            raise HTTPException(
+                status_code=404,
+                detail="Collection not found"
+            )
+
+        questions = (
+            _training_question_query(db)
+            .join(
+                question_collection,
+                question_collection.c.question_id == Question.id
+            )
+            .filter(question_collection.c.collection_id == collection_id)
+            .all()
+        )
+        selected_question_ids = {
+            question.id
+            for question in questions
+        }
+        items = _attach_text_training_aliases(
+            serialize_review_items(questions),
+            questions
+        )
+        content_fingerprint = collection_training_fingerprint(
+            db,
+            collection
+        )
+        normalized_map_mode = normalize_map_mode(DEFAULT_MAP_MODE)
+        normalized_image_mode = normalize_image_mode(DEFAULT_IMAGE_MODE)
+
+        for item in items:
+            item["training_fingerprint"] = content_fingerprint
+
+            if item.get("type_q") == "map":
+                item["mode"] = normalized_map_mode
+            elif item.get("type_q") == "image":
+                item["mode"] = normalized_image_mode
+
+            if isinstance(item.get("context_items"), list):
+                context_items = [
+                    context_item
+                    for context_item in item["context_items"]
+                    if context_item.get("question_id") in selected_question_ids
+                ]
+                item["context_items"] = context_items or item.get("items", [])
 
         return items
 
@@ -621,7 +946,10 @@ def get_training_items(
             for question in _training_question_query(db).all()
             if question_has_exact_tag(question, normalized_tag)
         ]
-        return serialize_review_items(questions)
+        return _attach_text_training_aliases(
+            serialize_review_items(questions),
+            questions
+        )
 
     raise HTTPException(status_code=400, detail="Invalid training scope")
 

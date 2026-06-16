@@ -4,7 +4,6 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- laisser la possibilité de s'entraîner sur un sous ensemble du groupe (éventuellement enregistrer le subset)
 
 ## quick fixes
 
@@ -15,7 +14,6 @@
 - tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
-- s'il n'y a que 1-5 zones à réviser, mettre un mode adéquate
 
 ## bugs
 

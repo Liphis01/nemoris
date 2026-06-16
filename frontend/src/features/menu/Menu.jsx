@@ -14,8 +14,8 @@ const destinations = [
     mode: "training",
     eyebrow: "Libre",
     title: "Entrainement",
-    description: "Pratiquer un groupe ou un tag sans modifier le planning.",
-    detail: "Sans score",
+    description: "Pratiquer un groupe, une collection ou un tag sans modifier le planning.",
+    detail: "Records",
     accent: "amber",
     icon: "◎"
   },

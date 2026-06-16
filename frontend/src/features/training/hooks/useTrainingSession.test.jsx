@@ -5,6 +5,7 @@ import {
   getTrainingItems,
   gradeTrainingTimeline,
   listTrainingScopes,
+  recordCollectionTrainingAttempt,
   recordGroupTrainingAttempt
 } from "../../../api/training";
 
@@ -12,6 +13,7 @@ vi.mock("../../../api/training", () => ({
   getTrainingItems: vi.fn(),
   gradeTrainingTimeline: vi.fn(),
   listTrainingScopes: vi.fn(),
+  recordCollectionTrainingAttempt: vi.fn(),
   recordGroupTrainingAttempt: vi.fn()
 }));
 
@@ -28,6 +30,12 @@ describe("useTrainingSession", () => {
         id: 5,
         name: "Europe",
         type_group: "map",
+        question_count: 2,
+        training_record: null
+      }],
+      collections: [{
+        id: 7,
+        name: "Custom",
         question_count: 2,
         training_record: null
       }],
@@ -52,6 +60,20 @@ describe("useTrainingSession", () => {
         best_time_at: "2026-06-02T10:00:00+00:00",
         question_count: 2
       },
+      is_new_best_percent: true,
+      is_new_best_time: true
+    });
+    recordCollectionTrainingAttempt.mockResolvedValue({
+      training_record: {
+        best_found_percent: 100,
+        best_found_count: 2,
+        best_found_elapsed_ms: 5500,
+        best_found_at: "2026-06-02T10:00:00+00:00",
+        best_time_ms: 5500,
+        best_time_at: "2026-06-02T10:00:00+00:00",
+        question_count: 2
+      },
+      training_records: {},
       is_new_best_percent: true,
       is_new_best_time: true
     });
@@ -87,6 +109,29 @@ describe("useTrainingSession", () => {
     });
     expect(result.current.questions).toHaveLength(1);
     expect(result.current.labelForActiveScope).toBe("Europe");
+  });
+
+  it("starts a collection training session", async () => {
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.collections).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "collection",
+        id: 7,
+        name: "Custom"
+      });
+    });
+
+    expect(getTrainingItems).toHaveBeenCalledWith({
+      scopeType: "collection",
+      collectionId: 7
+    });
+    expect(result.current.questions).toHaveLength(1);
+    expect(result.current.labelForActiveScope).toBe("Custom");
   });
 
   it("tracks objective failed ids locally and retries only failed items", async () => {
@@ -250,6 +295,60 @@ describe("useTrainingSession", () => {
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
   });
 
+  it("saves a clean full collection attempt as one record", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        question_id: 10,
+        type_q: "text",
+        question: "Capital",
+        answer: "Paris",
+        training_fingerprint: TRAINING_FINGERPRINT
+      },
+      {
+        question_id: 11,
+        type_q: "text",
+        question: "Capital",
+        answer: "Berlin",
+        training_fingerprint: TRAINING_FINGERPRINT
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.collections).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "collection",
+        id: 7,
+        name: "Custom",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      result.current.handleTextAnswer();
+    });
+    act(() => {
+      result.current.handleTextAnswer();
+    });
+
+    await waitFor(() => {
+      expect(recordCollectionTrainingAttempt).toHaveBeenCalledWith(7, {
+        elapsed_ms: 5500,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT
+      });
+    });
+    expect(recordGroupTrainingAttempt).not.toHaveBeenCalled();
+    expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
+    expect(result.current.scopes.collections[0].training_record.best_time_ms).toBe(5500);
+  });
+
   it("passes selected map mode through training fetch and record save", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {
@@ -407,9 +506,13 @@ describe("useTrainingSession", () => {
         mode: "multiple_choice_image"
       });
     });
-    expect(
-      result.current.activeScope.training_records.multiple_choice_image.best_time_ms
-    ).toBe(5500);
+    await waitFor(() => {
+      expect(
+        result.current.activeScope.training_records
+          ?.multiple_choice_image
+          ?.best_time_ms
+      ).toBe(5500);
+    });
   });
 
   it("surfaces stale record save errors", async () => {
