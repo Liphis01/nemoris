@@ -1065,8 +1065,22 @@ describe("ImageReview answer label preview", () => {
       .toBeInTheDocument();
     expect(tileFor(container, 1)).not.toHaveTextContent("Bon");
     expect(screen.getByText("Images trouvées")).toBeInTheDocument();
+    expect(screen.getByText("Trouvées")).toBeInTheDocument();
+    expect(screen.getAllByText("À revoir").length).toBeGreaterThan(0);
     expect(screen.getAllByText("12").length).toBeGreaterThan(0);
-    expect(screen.getByText("0 · Faux")).toBeInTheDocument();
+    expect(screen.queryByText("0 · Faux")).not.toBeInTheDocument();
+    expect(container.querySelector(
+      ".image-recap-bulk-row [data-image-recap-quality=\"0\"]"
+    )).toBeDisabled();
+    expect(container.querySelectorAll(
+      ".image-recap-row[data-image-recap-row=\"found\"] [data-image-recap-quality]"
+    )).toHaveLength(4);
+    expect(container.querySelectorAll(
+      ".image-recap-row[data-image-recap-row=\"missed\"] [data-image-recap-quality]"
+    )).toHaveLength(4);
+    expect(container.querySelector(
+      ".image-recap-row[data-image-recap-row=\"missed\"] [data-image-recap-quality=\"0\"]"
+    )).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(
       container.querySelector(
@@ -1081,6 +1095,13 @@ describe("ImageReview answer label preview", () => {
       )
     );
     expect(setQuality).toHaveBeenCalledWith(1, 1);
+
+    fireEvent.click(
+      container.querySelector(
+        ".image-recap-row[data-image-recap-row=\"missed\"] [data-image-recap-quality=\"2\"]"
+      )
+    );
+    expect(setQuality).toHaveBeenCalledWith(2, 2);
 
     fireEvent.click(screen.getByRole("button", { name: "Valider" }));
     expect(sendResult).toHaveBeenCalledTimes(1);

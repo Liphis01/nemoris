@@ -148,7 +148,7 @@ describe("useImageReview", () => {
     expect(result.current.gridItems.every(row => !row.isActive)).toBe(true);
   });
 
-  it("finishes on the same grid with found qualities editable and misses locked", async () => {
+  it("finishes on the same grid with recap qualities editable", async () => {
     sendImageAnswer.mockResolvedValue({});
     const onComplete = vi.fn();
     const items = [
@@ -179,7 +179,7 @@ describe("useImageReview", () => {
     act(() => {
       result.current.setQuality(found.question_id, 0);
     });
-    expect(result.current.qualityByQuestionId[found.question_id]).toBe(2);
+    expect(result.current.qualityByQuestionId[found.question_id]).toBe(0);
 
     act(() => {
       result.current.setQuality(found.question_id, 3);
@@ -189,7 +189,7 @@ describe("useImageReview", () => {
     act(() => {
       result.current.setQuality(missedIds[0], 2);
     });
-    expect(result.current.qualityByQuestionId[missedIds[0]]).toBe(0);
+    expect(result.current.qualityByQuestionId[missedIds[0]]).toBe(2);
 
     await act(async () => {
       await result.current.sendResult();
@@ -198,13 +198,13 @@ describe("useImageReview", () => {
     expect(sendImageAnswer).toHaveBeenCalledWith(
       {
         [found.question_id]: 3,
-        [missedIds[0]]: 0,
+        [missedIds[0]]: 2,
         [missedIds[1]]: 0
       },
       IMAGE_MODE_TYPE_PROMPT,
       3
     );
-    expect(onComplete).toHaveBeenCalledWith(expect.arrayContaining(missedIds));
+    expect(onComplete).toHaveBeenCalledWith([missedIds[1]]);
   });
 
   it("enters result mode automatically when all images are found", () => {
@@ -491,11 +491,10 @@ describe("useImageReview", () => {
         isRevealed: false
       });
 
-      act(() => {
-        vi.advanceTimersByTime(1300);
-      });
-
       const nextPrompt = result.current.currentPromptItem;
+
+      expect(nextPrompt.question_id).not.toBe(prompt.question_id);
+      expect(result.current.promptLabel).toBe(nextPrompt.label);
 
       act(() => {
         result.current.handleImageSelect(nextPrompt.question_id);

@@ -67,9 +67,9 @@ function completeQualities(items, qualityByQuestionId, foundQuestionIds) {
   const complete = {};
 
   items.forEach(item => {
-    complete[item.question_id] = foundSet.has(item.question_id)
-      ? qualityByQuestionId[item.question_id] ?? defaultImageSuccessQuality()
-      : 0;
+    complete[item.question_id] = qualityByQuestionId[item.question_id] ?? (
+      foundSet.has(item.question_id) ? defaultImageSuccessQuality() : 0
+    );
   });
 
   return complete;
@@ -483,7 +483,10 @@ export function useImageReview(
     ? interactionFeedback
     : null;
   const visibleChoiceOptions = activeInteractionFeedback?.options || choiceOptions;
-  const visualPromptItem = activeInteractionFeedback?.correctQuestionId
+  const visualPromptItem = (
+    activeInteractionFeedback?.correctQuestionId &&
+    mode !== IMAGE_MODE_CLICK_PROMPT
+  )
     ? itemByQuestionId.get(activeInteractionFeedback.correctQuestionId) || currentPromptItem
     : currentPromptItem;
   const completedQuestionIdSet = isPromptMode(mode)
@@ -706,7 +709,7 @@ export function useImageReview(
         mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
       ) ||
       !currentPromptItem ||
-      interactionFeedback
+      (mode !== IMAGE_MODE_CLICK_PROMPT && interactionFeedback)
     ) {
       return;
     }
@@ -770,10 +773,7 @@ export function useImageReview(
   function setQuality(questionId, quality) {
     const nextQuality = Number(quality);
 
-    if (
-      lockedMissedQuestionIdSet.has(questionId) ||
-      ![1, 2, 3].includes(nextQuality)
-    ) {
+    if (![0, 1, 2, 3].includes(nextQuality)) {
       return;
     }
 

@@ -5,9 +5,7 @@
 
 ## Urgent
 - laisser la possibilité de s'entraîner sur un sous ensemble du groupe (éventuellement enregistrer le subset)
-- pour click_prompt d'image, passer direct à la question suivante si on a bon (pas d'animation)
 - afficher le nombre de questions bonus disponibles
-- le recap d'images doit copier le recap de maps pour les boutons de qualité et pour la séparation entre trouvé et à revoir + l'alignement des rayures est bizarre
 
 ## quick fixes
 
