@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getBonusReviewStatus,
   getReview,
@@ -111,6 +111,36 @@ function reviewItemIsNew(item) {
 }
 
 
+function reviewGroupIdKey(items) {
+  const seen = new Set();
+  const groupIds = [];
+
+  (items || []).forEach(item => {
+    const groupId = Number(item?.group_id);
+
+    if (!Number.isInteger(groupId) || seen.has(groupId)) {
+      return;
+    }
+
+    seen.add(groupId);
+    groupIds.push(groupId);
+  });
+
+  return groupIds.join(",");
+}
+
+
+function bonusGroupScopeOptions(groupIdKey) {
+  if (!groupIdKey) {
+    return {};
+  }
+
+  return {
+    groupIds: groupIdKey.split(",").map(Number)
+  };
+}
+
+
 export function useReviewSession(active) {
   // Owns one review run: fetching due items, moving through the queue, and
   // re-queueing failures for another pass.
@@ -135,6 +165,14 @@ export function useReviewSession(active) {
   const reviewDateRef = useRef(null);
 
   const current = questions[currentIndex];
+  const sameGroupBonusGroupIdKey = useMemo(
+    () => reviewGroupIdKey(questions),
+    [questions]
+  );
+  const sameGroupBonusOptions = useMemo(
+    () => bonusGroupScopeOptions(sameGroupBonusGroupIdKey),
+    [sameGroupBonusGroupIdKey]
+  );
   const lastQuestionIndex = currentIndex - 1;
   const lastQuestion = questions[lastQuestionIndex];
   const currentIsTextLike = current?.type_q === "text" || (
@@ -564,7 +602,7 @@ export function useReviewSession(active) {
 
       try {
         await waitForTextAnswerRequests();
-        const status = await getBonusReviewStatus();
+        const status = await getBonusReviewStatus(sameGroupBonusOptions);
 
         if (!cancelled) {
           setBonusReviewStatus(status);
@@ -595,6 +633,7 @@ export function useReviewSession(active) {
     questions.length,
     reviewError,
     reviewLoading,
+    sameGroupBonusOptions,
     waitForTextAnswerRequests
   ]);
 
@@ -606,14 +645,17 @@ export function useReviewSession(active) {
 
     try {
       await waitForTextAnswerRequests();
-      const bonusStatus = await getBonusReviewStatus();
+      const bonusStatus = await getBonusReviewStatus(sameGroupBonusOptions);
       setBonusReviewStatus(bonusStatus);
 
       if (!bonusStatus.allowed) {
         return;
       }
 
-      const data = await getReview({ includeNew: true });
+      const data = await getReview({
+        includeNew: true,
+        ...sameGroupBonusOptions
+      });
 
       setQuestions(data);
       setCurrentIndex(0);
@@ -635,6 +677,7 @@ export function useReviewSession(active) {
     bonusReviewLoading,
     currentIndex,
     questions.length,
+    sameGroupBonusOptions,
     waitForTextAnswerRequests
   ]);
 

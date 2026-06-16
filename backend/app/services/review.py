@@ -205,9 +205,40 @@ def _started_progress_rows(db):
     )
 
 
-def _new_question_ids(db, limit=None):
+def _normalized_group_ids(group_ids):
+    if group_ids is None:
+        return None
+
+    if isinstance(group_ids, str):
+        group_ids = [
+            raw_id.strip()
+            for raw_id in group_ids.split(",")
+            if raw_id.strip()
+        ]
+
+    normalized = []
+    seen = set()
+
+    for group_id in group_ids:
+        group_id = int(group_id)
+
+        if group_id in seen:
+            continue
+
+        normalized.append(group_id)
+        seen.add(group_id)
+
+    return normalized
+
+
+def _new_question_ids(db, limit=None, group_ids=None):
+    group_ids = _normalized_group_ids(group_ids)
+
+    if group_ids is not None and not group_ids:
+        return []
+
     ids = []
-    rows = (
+    query = (
         db.query(
             Question.id,
             Progress.reps,
@@ -215,6 +246,13 @@ def _new_question_ids(db, limit=None):
             Progress.history
         )
         .outerjoin(Progress, Question.id == Progress.question_id)
+    )
+
+    if group_ids is not None:
+        query = query.filter(Question.group_id.in_(group_ids))
+
+    rows = (
+        query
         .order_by(Question.id)
         .all()
     )
@@ -249,8 +287,11 @@ def _questions_by_ids(db, question_ids):
     ]
 
 
-def _new_questions(db, limit=None):
-    return _questions_by_ids(db, _new_question_ids(db, limit=limit))
+def _new_questions(db, limit=None, group_ids=None):
+    return _questions_by_ids(
+        db,
+        _new_question_ids(db, limit=limit, group_ids=group_ids)
+    )
 
 
 def _due_question_count(db, today):
@@ -274,7 +315,12 @@ def _due_question_count(db, today):
     return sum(1 for row in rows if _progress_row_has_started(row))
 
 
-def _new_question_count(db, started_rows=None):
+def _new_question_count(db, started_rows=None, group_ids=None):
+    group_ids = _normalized_group_ids(group_ids)
+
+    if group_ids is not None:
+        return len(_new_question_ids(db, group_ids=group_ids))
+
     total_questions = db.query(func.count(Question.id)).scalar() or 0
     started_rows = started_rows if started_rows is not None else (
         _started_progress_rows(db)
@@ -500,13 +546,20 @@ def _estimated_bonus_card_cost(today, forecast_days, daily_target):
     return max(1, forecast["forecast_total"])
 
 
-def get_bonus_review_status(db, today=None):
+def get_bonus_review_status(db, today=None, group_ids=None):
     today = today or date.today()
+    scoped_group_ids = _normalized_group_ids(group_ids)
+    same_group_filter_applied = scoped_group_ids is not None
     settings = get_review_settings(db)
     daily_target = settings["catchup_daily_target"]
     due_count = _due_question_count(db, today)
     started_rows = _started_progress_rows(db)
     new_count = _new_question_count(db, started_rows=started_rows)
+    same_group_new_count = (
+        _new_question_count(db, group_ids=scoped_group_ids)
+        if same_group_filter_applied
+        else new_count
+    )
     started_progresses = [
         _forecast_progress_snapshot(row)
         for row in started_rows
@@ -533,13 +586,24 @@ def get_bonus_review_status(db, today=None):
     bonus_question_capacity = (
         remaining_forecast_event_capacity // estimated_bonus_card_cost
     )
+    available_bonus_question_count = min(
+        same_group_new_count,
+        bonus_question_capacity
+    )
+    schedule_is_low = load["forecast_total"] < low_threshold
     status = {
         **load,
         "daily_target": daily_target,
         "new_count": new_count,
+        "same_group_new_count": same_group_new_count,
+        "available_bonus_question_count": available_bonus_question_count,
+        "same_group_bonus_question_count": available_bonus_question_count,
+        "same_group_filter_applied": same_group_filter_applied,
+        "same_group_ids": scoped_group_ids or [],
         "due_count": due_count,
         "low_threshold": low_threshold,
         "full_threshold": full_threshold,
+        "schedule_is_low": schedule_is_low,
         "forecast_fill_ratio": round(load["forecast_total"] / window_capacity, 3),
         "estimated_bonus_card_cost": estimated_bonus_card_cost,
         "bonus_question_capacity": bonus_question_capacity
@@ -553,12 +617,42 @@ def get_bonus_review_status(db, today=None):
             "message": "Termine d'abord les questions dues avant d'ajouter des bonus."
         }
 
-    if new_count == 0:
+    if same_group_new_count == 0:
+        if schedule_is_low:
+            create_action = "Crée de nouvelles questions"
+
+            if same_group_filter_applied:
+                create_scope = (
+                    "dans le même groupe"
+                    if len(scoped_group_ids) == 1
+                    else "dans les mêmes groupes"
+                )
+                create_action = f"{create_action} {create_scope}"
+
+            return {
+                **status,
+                "state": "no_new",
+                "allowed": False,
+                "message": (
+                    "Le planning prévu est léger "
+                    f"({load['scheduled_average']}/jour sur "
+                    f"{BONUS_REVIEW_FORECAST_DAYS} jours, cible "
+                    f"{daily_target}/jour). {create_action} pour alimenter "
+                    "les prochaines révisions."
+                )
+            }
+
+        message = (
+            "Aucune question bonus du même groupe disponible."
+            if same_group_filter_applied
+            else "Aucune nouvelle question disponible."
+        )
+
         return {
             **status,
             "state": "no_new",
             "allowed": False,
-            "message": "Aucune nouvelle question disponible."
+            "message": message
         }
 
     if (
@@ -578,7 +672,7 @@ def get_bonus_review_status(db, today=None):
             )
         }
 
-    if load["forecast_total"] < low_threshold:
+    if schedule_is_low:
         return {
             **status,
             "state": "low",
@@ -808,7 +902,7 @@ def serialize_review_items(
     )
 
 
-def get_review_items(db, include_new=False, bonus_status=None):
+def get_review_items(db, include_new=False, bonus_status=None, group_ids=None):
     today = date.today()
     scheduler_tuning = load_scheduler_tuning_settings(db)
     due_questions = _due_questions(db, today)
@@ -820,11 +914,25 @@ def get_review_items(db, include_new=False, bonus_status=None):
             scheduled_review=True
         )
 
-    bonus_status = bonus_status or get_bonus_review_status(db, today=today)
-    remaining_bonus_slots = max(0, bonus_status["bonus_question_capacity"])
+    bonus_status = bonus_status or get_bonus_review_status(
+        db,
+        today=today,
+        group_ids=group_ids
+    )
+    remaining_bonus_slots = max(
+        0,
+        bonus_status.get(
+            "available_bonus_question_count",
+            bonus_status["bonus_question_capacity"]
+        )
+    )
 
     return serialize_review_items(
-        _new_questions(db, limit=remaining_bonus_slots),
+        _new_questions(
+            db,
+            limit=remaining_bonus_slots,
+            group_ids=group_ids
+        ),
         scheduler_tuning=scheduler_tuning,
         scheduled_review=True
     )

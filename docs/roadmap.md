@@ -5,7 +5,6 @@
 
 ## Urgent
 - laisser la possibilité de s'entraîner sur un sous ensemble du groupe (éventuellement enregistrer le subset)
-- afficher le nombre de questions bonus disponibles
 
 ## quick fixes
 

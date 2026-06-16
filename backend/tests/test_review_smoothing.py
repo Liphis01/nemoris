@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import AppSetting, Progress, Question
+from app.models import AppSetting, Progress, Question, QuestionGroup
 from app.routers.review import (
     answer_image,
     answer_map,
@@ -928,6 +928,17 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.db.add(question)
         return question
 
+    def add_group(self, group_id, type_group="image"):
+        group = QuestionGroup(
+            id=group_id,
+            type_group=type_group,
+            name=f"Group {group_id}",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        return group
+
     def add_progress(
         self,
         question_id,
@@ -1547,6 +1558,53 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(status["static_scheduled_total"], 0)
         self.assertEqual(status["estimated_bonus_card_cost"], 2)
         self.assertIn("planning prévu est léger", status["message"])
+
+    def test_bonus_status_counts_available_same_group_questions(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
+        first_group = self.add_group(1)
+        second_group = self.add_group(2)
+        same_group_bonus = self.add_question(1, type_q="image")
+        same_group_bonus.group = first_group
+        started_same_group = self.add_question(2, type_q="image")
+        started_same_group.group = first_group
+        other_group_bonus = self.add_question(3, type_q="image")
+        other_group_bonus.group = second_group
+        self.add_progress(2, today + timedelta(days=3), reps=1)
+        self.db.commit()
+
+        status = get_bonus_status(group_ids="1", db=self.db)
+
+        self.assertTrue(status["allowed"])
+        self.assertTrue(status["same_group_filter_applied"])
+        self.assertEqual(status["same_group_ids"], [1])
+        self.assertEqual(status["new_count"], 2)
+        self.assertEqual(status["same_group_new_count"], 1)
+        self.assertEqual(status["same_group_bonus_question_count"], 1)
+        self.assertEqual(status["available_bonus_question_count"], 1)
+
+    def test_low_bonus_status_advises_creating_questions_when_same_group_is_empty(self):
+        update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
+        first_group = self.add_group(1)
+        second_group = self.add_group(2)
+        same_group_started = self.add_question(1, type_q="image")
+        same_group_started.group = first_group
+        other_group_bonus = self.add_question(2, type_q="image")
+        other_group_bonus.group = second_group
+        self.add_progress(1, date.today() + timedelta(days=3), reps=1)
+        self.db.commit()
+
+        status = get_bonus_status(group_ids="1", db=self.db)
+
+        self.assertFalse(status["allowed"])
+        self.assertEqual(status["state"], "no_new")
+        self.assertTrue(status["schedule_is_low"])
+        self.assertEqual(status["new_count"], 1)
+        self.assertEqual(status["same_group_new_count"], 0)
+        self.assertEqual(status["same_group_bonus_question_count"], 0)
+        self.assertIn("Crée de nouvelles questions", status["message"])
+        self.assertIn("même groupe", status["message"])
+        self.assertNotIn("Ajoute quelques questions bonus", status["message"])
 
     def test_bonus_review_is_blocked_when_schedule_is_full_until_target_changes(self):
         today = date.today()

@@ -14,6 +14,19 @@ function reviewedQuestionsLabel(count) {
   return count === 1 ? "1 question revue" : `${count} questions revues`;
 }
 
+function bonusQuestionsLabel(count) {
+  return count === 1 ? "1 question bonus" : `${count} questions bonus`;
+}
+
+function availableBonusQuestionCount(status) {
+  const count = Number(
+    status?.same_group_bonus_question_count ??
+    status?.available_bonus_question_count
+  );
+
+  return Number.isFinite(count) ? Math.max(0, count) : null;
+}
+
 function ReviewOutcomePanel({
   variant,
   reviewedCount,
@@ -41,6 +54,12 @@ function ReviewOutcomePanel({
           ? "Aucun bonus"
           : "Repos";
   const showBonusMessage = bonusStatusLoading || Boolean(bonusReviewMessage);
+  const bonusQuestionCount = bonusStatusLoading
+    ? null
+    : availableBonusQuestionCount(bonusReviewStatus);
+  const bonusQuestionScopeLabel = bonusReviewStatus?.same_group_filter_applied
+    ? "Même groupe"
+    : "Bonus";
 
   return (
     <section
@@ -72,6 +91,12 @@ function ReviewOutcomePanel({
             <span>{bonusStatusLabel}</span>
             <strong>Suite</strong>
           </div>
+          {bonusQuestionCount !== null && (
+            <div className="review-outcome-metric">
+              <span>{bonusQuestionsLabel(bonusQuestionCount)}</span>
+              <strong>{bonusQuestionScopeLabel}</strong>
+            </div>
+          )}
         </div>
 
         {showBonusMessage && (

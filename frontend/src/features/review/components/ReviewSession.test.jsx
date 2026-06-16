@@ -99,6 +99,31 @@ describe("ReviewSession", () => {
       .not.toBeInTheDocument();
   });
 
+  it("shows the available same-group bonus count at the end", () => {
+    renderReviewSession({
+      questions: [
+        {
+          group_id: 12,
+          type_q: "image",
+          name: "Images",
+          items: [{ question_id: 1 }]
+        }
+      ],
+      currentIndex: 1,
+      bonusReviewMessage: "Tu peux ajouter quelques questions bonus au planning.",
+      bonusReviewStatus: {
+        allowed: true,
+        state: "available",
+        same_group_filter_applied: true,
+        same_group_bonus_question_count: 2
+      },
+      canStartBonusReview: true
+    });
+
+    expect(screen.getByText("2 questions bonus")).toBeInTheDocument();
+    expect(screen.getByText("Même groupe")).toBeInTheDocument();
+  });
+
   it("shows a polished finish panel without daily habit content", () => {
     renderFinishedReview();
 

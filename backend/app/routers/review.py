@@ -51,6 +51,29 @@ from ..services.timeline import grade_timeline_answer, validate_timeline_data
 router = APIRouter()
 
 
+def parse_group_ids(value):
+    if not value:
+        return None
+
+    group_ids = []
+
+    for raw_id in value.split(","):
+        raw_id = raw_id.strip()
+
+        if not raw_id:
+            continue
+
+        try:
+            group_ids.append(int(raw_id))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid group_ids query parameter."
+            ) from exc
+
+    return group_ids
+
+
 def answer_progress_payload(progress):
     if not progress:
         return {
@@ -146,12 +169,17 @@ def get_startup_notice(db: Session = Depends(get_db)):
 @router.get("/review")
 def get_review(
     include_new: bool = False,
+    group_ids: str | None = None,
     db: Session = Depends(get_db)
 ):
     bonus_status = None
+    parsed_group_ids = parse_group_ids(group_ids)
 
     if include_new:
-        bonus_status = get_bonus_review_status(db)
+        bonus_status = get_bonus_review_status(
+            db,
+            group_ids=parsed_group_ids
+        )
 
         if bonus_status["state"] == "full":
             raise HTTPException(status_code=409, detail=bonus_status["message"])
@@ -160,13 +188,17 @@ def get_review(
     return get_review_items(
         db,
         include_new=include_new,
-        bonus_status=bonus_status
+        bonus_status=bonus_status,
+        group_ids=parsed_group_ids
     )
 
 
 @router.get("/review/bonus_status")
-def get_bonus_status(db: Session = Depends(get_db)):
-    return get_bonus_review_status(db)
+def get_bonus_status(
+    group_ids: str | None = None,
+    db: Session = Depends(get_db)
+):
+    return get_bonus_review_status(db, group_ids=parse_group_ids(group_ids))
 
 
 @router.get("/review/summary")

@@ -34,8 +34,21 @@ export function getReviewSummary() {
 }
 
 
-export function getBonusReviewStatus() {
-  return requestJson("/review/bonus_status");
+function appendGroupIds(params, groupIds) {
+  if (!Array.isArray(groupIds) || groupIds.length === 0) {
+    return;
+  }
+
+  params.set("group_ids", groupIds.join(","));
+}
+
+
+export function getBonusReviewStatus(options = {}) {
+  const params = new URLSearchParams();
+  appendGroupIds(params, options.groupIds);
+  const query = params.toString();
+
+  return requestJson(`/review/bonus_status${query ? `?${query}` : ""}`);
 }
 
 
@@ -45,6 +58,8 @@ export function getReview(options = {}) {
   if (options.includeNew) {
     params.set("include_new", "true");
   }
+
+  appendGroupIds(params, options.groupIds);
 
   const query = params.toString();
 

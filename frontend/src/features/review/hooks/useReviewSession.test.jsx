@@ -267,6 +267,62 @@ describe("useReviewSession", () => {
     expect(result.current.canStartBonusReview).toBe(false);
   });
 
+  it("checks and loads bonus questions from the reviewed groups", async () => {
+    getReview.mockImplementation((options = {}) => Promise.resolve(
+      options.includeNew
+        ? [
+          {
+            group_id: 7,
+            type_q: "image",
+            name: "Bonus images",
+            items: [{ question_id: 12 }]
+          }
+        ]
+        : [
+          {
+            group_id: 7,
+            type_q: "map",
+            name: "Map",
+            media: "map.svg",
+            items: [{ question_id: 10 }],
+            context_items: [{ question_id: 10 }]
+          }
+        ]
+    ));
+    getBonusReviewStatus.mockResolvedValue({
+      allowed: true,
+      state: "low",
+      message: "Le planning est léger.",
+      same_group_filter_applied: true,
+      same_group_ids: [7],
+      same_group_bonus_question_count: 1
+    });
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(getBonusReviewStatus).toHaveBeenCalledWith({ groupIds: [7] });
+    });
+    expect(result.current.canStartBonusReview).toBe(true);
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    expect(getReview).toHaveBeenCalledWith({
+      includeNew: true,
+      groupIds: [7]
+    });
+  });
+
   it("requeues only failed image group items", async () => {
     getReview.mockResolvedValue([
       {
