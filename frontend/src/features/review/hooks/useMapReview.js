@@ -717,6 +717,7 @@ export function useMapReview(
     recapSort,
     recapSuccessCount,
     recapSuccessRate,
+    manualFocusCode: remainingFocusCode,
     remainingFocusCode: targetHighlightCode || remainingFocusCode,
     remainingZones,
     selectedCode,

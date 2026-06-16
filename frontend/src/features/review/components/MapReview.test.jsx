@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MapReview from "./MapReview";
 
+const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
+
 vi.mock("../../map/components/SvgMap", () => ({
   default: (props) => {
     const isRecap = props.zoneLabels === undefined;
@@ -55,11 +57,13 @@ function renderMapReview(showQualityControls, props = {}) {
 
 describe("MapReview recap map focus", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     HTMLElement.prototype.scrollTo = vi.fn();
   });
 
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -187,6 +191,118 @@ describe("MapReview recap map focus", () => {
     });
     expect(input).toHaveFocus();
   });
+
+  it.each([
+    ["type_all", "Tape une zone..."],
+    ["type_prompt", "Nom de la zone..."]
+  ])(
+    "keeps the answer input focused after clicking the active map in %s mode",
+    (mode, placeholder) => {
+      renderMapReview(false, {
+        mode,
+        trainingElapsedMs: 12345
+      });
+      const input = screen.getByPlaceholderText(placeholder);
+      const map = screen.getByTestId("active-map");
+
+      map.focus();
+      expect(map).toHaveFocus();
+
+      fireEvent.mouseDown(map);
+
+      expect(input).toHaveFocus();
+
+      map.focus();
+      fireEvent.click(map);
+
+      expect(input).toHaveFocus();
+    }
+  );
+
+  it.each(["type_prompt", "multiple_choice"])(
+    "uses automatic SVG focus by default in %s mode",
+    (mode) => {
+      renderMapReview(false, {
+        mode
+      });
+      const targetCode = screen.getByTestId("active-map")
+        .getAttribute("data-due-items");
+
+      expect(targetCode).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Désactiver le zoom automatique" }))
+        .toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", targetCode);
+    }
+  );
+
+  it("disables automatic SVG focus and stores the preference", () => {
+    renderMapReview(false, {
+      mode: "type_prompt"
+    });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: "Désactiver le zoom automatique" }));
+
+    expect(window.localStorage.getItem(mapAutoZoomStorageKey)).toBe("false");
+    expect(screen.getByRole("button", { name: "Activer le zoom automatique" }))
+      .toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", "");
+  });
+
+  it("loads a stored disabled auto-zoom preference", () => {
+    window.localStorage.setItem(mapAutoZoomStorageKey, "false");
+
+    renderMapReview(false, {
+      mode: "type_prompt"
+    });
+
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-due-items");
+    expect(screen.getByRole("button", { name: "Activer le zoom automatique" }))
+      .toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", "");
+  });
+
+  it("keeps manual Recentrer zoom when automatic zoom is disabled", async () => {
+    window.localStorage.setItem(mapAutoZoomStorageKey, "false");
+
+    renderMapReview(false, {
+      mode: "multiple_choice"
+    });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", "");
+
+    fireEvent.click(screen.getByRole("button", { name: "Recentrer" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", targetCode);
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "1");
+    });
+  });
+
+  it.each(["type_all", "click_prompt"])(
+    "does not show the auto-zoom toggle in %s mode",
+    (mode) => {
+      renderMapReview(false, {
+        mode
+      });
+
+      expect(screen.queryByRole("button", { name: /zoom automatique/i }))
+        .not.toBeInTheDocument();
+    }
+  );
 
   it("shows click prompt misses as a separate progress bar segment", async () => {
     const { container } = renderMapReview(false, {

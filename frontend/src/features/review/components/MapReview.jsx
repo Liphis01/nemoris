@@ -93,6 +93,24 @@ const recapHeaderColumns = [
   { key: "quality", label: "Qualité" }
 ];
 
+const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
+
+function readMapAutoZoomPreference() {
+  try {
+    return window.localStorage.getItem(mapAutoZoomStorageKey) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeMapAutoZoomPreference(enabled) {
+  try {
+    window.localStorage.setItem(mapAutoZoomStorageKey, enabled ? "true" : "false");
+  } catch {
+    // The in-memory toggle should still work if storage is unavailable.
+  }
+}
+
 function choiceFeedbackState(option, feedback) {
   if (!feedback) return "";
 
@@ -182,6 +200,7 @@ export default function MapReview({
     handleSubmit,
     handleZoneSelect,
     input,
+    manualFocusCode,
     mode,
     qualityByQuestionId,
     missedCodes,
@@ -210,6 +229,7 @@ export default function MapReview({
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
+  const [autoZoomEnabled, setAutoZoomEnabled] = useState(readMapAutoZoomPreference);
   const [recapFocusCode, setRecapFocusCode] = useState(null);
   const [recapFocusVersion, setRecapFocusVersion] = useState(0);
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
@@ -228,6 +248,13 @@ export default function MapReview({
     !showRecap
   );
   const canSkipPrompt = mode === MAP_MODE_TYPE_PROMPT;
+  const showAutoZoomToggle = !showRecap && (
+    mode === MAP_MODE_TYPE_PROMPT ||
+    mode === MAP_MODE_MULTIPLE_CHOICE
+  );
+  const activeMapFocusCode = showAutoZoomToggle && !autoZoomEnabled
+    ? manualFocusCode
+    : remainingFocusCode;
   const completedQuestionCount = Math.max(0, reviewZones.length - remainingZones.length);
   const wrongQuestionCount = mode !== MAP_MODE_TYPE_ALL
     ? Math.max(0, completedQuestionCount - foundQuestionIds.length)
@@ -324,6 +351,32 @@ export default function MapReview({
     focusNextRemainingZone();
     inputRef.current?.focus({ preventScroll: true });
   }, [focusNextRemainingZone]);
+
+  const focusAnswerInput = useCallback(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const handleActiveMapMouseDown = useCallback((event) => {
+    if (!inputRef.current) return;
+
+    event.preventDefault();
+    focusAnswerInput();
+  }, [focusAnswerInput]);
+
+  const handleActiveMapSelect = useCallback((code) => {
+    handleZoneSelect(code);
+    focusAnswerInput();
+  }, [focusAnswerInput, handleZoneSelect]);
+
+  const toggleAutoZoom = useCallback(() => {
+    setAutoZoomEnabled(enabled => {
+      const nextEnabled = !enabled;
+
+      writeMapAutoZoomPreference(nextEnabled);
+
+      return nextEnabled;
+    });
+  }, []);
 
   useEffect(() => {
     if (
@@ -573,6 +626,7 @@ export default function MapReview({
           }}
         >
           <div
+            onMouseDownCapture={handleActiveMapMouseDown}
             style={{
               ...activeMapPanelStyle,
               ...(fillAvailableHeight
@@ -590,12 +644,32 @@ export default function MapReview({
               missed={activeMissedCodes}
               dueItems={dueCodes}
               flashCodes={flashCodes}
-              focusCode={remainingFocusCode}
+              focusCode={activeMapFocusCode}
               focusVersion={focusVersion}
               selected={selectedCode || undefined}
               zoneLabels={foundZoneLabels}
-              onSelect={handleZoneSelect}
+              onSelect={handleActiveMapSelect}
             />
+            {showAutoZoomToggle && (
+              <button
+                type="button"
+                aria-label={autoZoomEnabled
+                  ? "Désactiver le zoom automatique"
+                  : "Activer le zoom automatique"}
+                aria-pressed={autoZoomEnabled}
+                onClick={toggleAutoZoom}
+                onMouseDown={(event) => event.preventDefault()}
+                style={{
+                  ...autoZoomToggleStyle,
+                  ...(autoZoomEnabled ? autoZoomToggleOnStyle : autoZoomToggleOffStyle)
+                }}
+                title={autoZoomEnabled
+                  ? "Désactiver le zoom automatique"
+                  : "Activer le zoom automatique"}
+              >
+                Zoom auto
+              </button>
+            )}
           </div>
         </div>
 
@@ -1102,7 +1176,39 @@ const activeMapPanelStyle = {
   borderRadius: "14px",
   overflow: "hidden",
   border: "1px solid #262626",
-  height: "clamp(300px, 55vh, 480px)"
+  height: "clamp(300px, 55vh, 480px)",
+  position: "relative"
+};
+
+const autoZoomToggleStyle = {
+  alignItems: "center",
+  borderRadius: "999px",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.34)",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontSize: "12px",
+  fontWeight: "800",
+  height: "34px",
+  justifyContent: "center",
+  lineHeight: "14px",
+  minWidth: "92px",
+  padding: "0 12px",
+  position: "absolute",
+  right: "10px",
+  top: "10px",
+  zIndex: 7
+};
+
+const autoZoomToggleOnStyle = {
+  background: "rgba(14, 60, 46, 0.92)",
+  border: "1px solid rgba(126, 226, 168, 0.64)",
+  color: "#d7f5df"
+};
+
+const autoZoomToggleOffStyle = {
+  background: "rgba(24, 24, 24, 0.92)",
+  border: "1px solid rgba(148, 163, 184, 0.42)",
+  color: "#cbd5e1"
 };
 
 const promptPanelStyle = {

@@ -220,6 +220,7 @@ describe("useMapReview recap sorting", () => {
     });
 
     expect(result.current.remainingFocusCode).toBe("b");
+    expect(result.current.manualFocusCode).toBe("b");
 
     act(() => {
       result.current.setInput("Beta");
@@ -233,6 +234,7 @@ describe("useMapReview recap sorting", () => {
 
     expect(result.current.foundQuestionIds).toEqual([2]);
     expect(result.current.remainingFocusCode).toBe("c");
+    expect(result.current.manualFocusCode).toBe("c");
   });
 
   it("keeps clicks from answering type_all mode", () => {
