@@ -263,6 +263,58 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(image_ids, {3})
         self.assertNotIn(2, returned_ids | image_ids)
 
+    def test_tag_training_uses_unicode_casefold_exact_matching(self):
+        self.add_question(1, tags=["Straße"])
+        self.add_question(2, tags=["strasseland"])
+        self.add_question(3, tags=["STRASSE"])
+        self.db.commit()
+
+        response = get_training_items(self.db, scope_type="tag", tag=" strasse ")
+        returned_ids = {
+            item["question_id"]
+            for item in response
+            if item["type_q"] == "text"
+        }
+
+        self.assertEqual(returned_ids, {1, 3})
+        self.assertNotIn(2, returned_ids)
+
+    def test_tag_training_keeps_full_visual_context_for_tagged_items(self):
+        group = QuestionGroup(
+            id=21,
+            type_group="image",
+            name="Flags",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+
+        for question_id in range(1, 8):
+            self.add_question(
+                question_id,
+                type_q="image",
+                answer=f"Flag {question_id}",
+                media=f"/static/flag-{question_id}.png",
+                tags=["target"] if question_id in {2, 5} else ["other"],
+                group=group
+            )
+
+        self.db.commit()
+
+        response = get_training_items(self.db, scope_type="tag", tag="target")
+
+        self.assertEqual(len(response), 1)
+        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["group_id"], group.id)
+        self.assertEqual(
+            {item["question_id"] for item in response[0]["items"]},
+            {2, 5}
+        )
+        self.assertEqual(
+            {item["question_id"] for item in response[0]["context_items"]},
+            {1, 2, 3, 4, 5, 6, 7}
+        )
+
     def test_scopes_return_groups_and_deduped_tag_counts(self):
         group = QuestionGroup(
             id=30,

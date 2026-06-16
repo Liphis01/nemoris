@@ -3,8 +3,8 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import joinedload
+from sqlalchemy import func, text
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..models import Collection, Question, QuestionGroup, question_collection
 from ..serializers import serialize_progress
@@ -52,12 +52,63 @@ def _training_question_query(db):
         db.query(Question)
         .options(
             joinedload(Question.progress),
-            joinedload(Question.group)
-            .joinedload(QuestionGroup.questions)
-            .joinedload(Question.progress)
+            selectinload(Question.group)
+            .selectinload(QuestionGroup.questions)
+            .selectinload(Question.progress)
         )
         .order_by(Question.id)
     )
+
+
+def _training_questions_by_ids(db, question_ids):
+    question_ids = list(question_ids or [])
+
+    if not question_ids:
+        return []
+
+    questions = (
+        _training_question_query(db)
+        .filter(Question.id.in_(question_ids))
+        .all()
+    )
+    questions_by_id = {
+        question.id: question
+        for question in questions
+    }
+
+    return [
+        questions_by_id[question_id]
+        for question_id in question_ids
+        if question_id in questions_by_id
+    ]
+
+
+def _question_ids_for_training_tag(db, normalized_tag):
+    rows = db.execute(
+        text(
+            """
+            SELECT questions.id, tag.value
+            FROM questions
+            JOIN json_each(questions.tags) AS tag
+            WHERE questions.tags IS NOT NULL
+            ORDER BY questions.id
+            """
+        )
+    ).all()
+    question_ids = []
+    seen_question_ids = set()
+
+    for question_id, tag_value in rows:
+        if question_id in seen_question_ids:
+            continue
+
+        if normalize_scope_tag(tag_value) != normalized_tag:
+            continue
+
+        seen_question_ids.add(question_id)
+        question_ids.append(question_id)
+
+    return question_ids
 
 
 def _clean_string(value):
@@ -943,7 +994,10 @@ def get_training_items(
 
         questions = [
             question
-            for question in _training_question_query(db).all()
+            for question in _training_questions_by_ids(
+                db,
+                _question_ids_for_training_tag(db, normalized_tag)
+            )
             if question_has_exact_tag(question, normalized_tag)
         ]
         return _attach_text_training_aliases(
