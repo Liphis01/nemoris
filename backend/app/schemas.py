@@ -186,12 +186,14 @@ class ReviewSettings(BaseModel):
 class MapAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[MapMode] = None
+    context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
 
 
 class ImageAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[ImageMode] = None
+    context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
 
 

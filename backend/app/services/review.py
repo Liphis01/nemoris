@@ -24,9 +24,21 @@ from .timeline import (
     serialize_timeline_review_group,
     serialize_timeline_review_item
 )
-from .image_modes import choose_image_review_mode, image_mode_difficulty
-from .map_modes import choose_map_review_mode, map_mode_difficulty
-from .mode_selection import MODE_AFFINITIES, question_mode_affinity
+from .image_modes import (
+    IMAGE_MULTIPLE_CHOICE_MODES,
+    choose_image_review_mode,
+    image_mode_difficulty
+)
+from .map_modes import (
+    MAP_MODE_MULTIPLE_CHOICE,
+    choose_map_review_mode,
+    map_mode_difficulty
+)
+from .mode_selection import (
+    MODE_AFFINITIES,
+    MULTIPLE_CHOICE_MIN_CONTEXT,
+    question_mode_affinity
+)
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
@@ -88,6 +100,46 @@ def _group_review_chunks(items, scheduled_review):
         return [items]
 
     return _affinity_chunks(items, REVIEW_GROUP_MAX_CHUNK_SIZE)
+
+
+def _unique_sorted_questions(*question_groups):
+    by_id = {}
+
+    for questions in question_groups:
+        for question in questions or []:
+            if question and question.id not in by_id:
+                by_id[question.id] = question
+
+    return sorted(by_id.values(), key=lambda item: item.id)
+
+
+def _visual_review_contexts(
+    chunk_questions,
+    all_group_questions,
+    scheduled_review
+):
+    active_context_questions = (
+        chunk_questions
+        if scheduled_review
+        else all_group_questions
+    )
+
+    if (
+        not scheduled_review or
+        len(chunk_questions) >= MULTIPLE_CHOICE_MIN_CONTEXT
+    ):
+        return active_context_questions, active_context_questions
+
+    started_group_questions = [
+        question
+        for question in all_group_questions
+        if progress_has_started(question.progress)
+    ]
+
+    return active_context_questions, _unique_sorted_questions(
+        chunk_questions,
+        started_group_questions
+    )
 
 
 def _question_query(db):
@@ -625,12 +677,23 @@ def _serialize_review_items(
         question_chunks = _group_review_chunks(due_questions, scheduled_review)
 
         for chunk_questions in question_chunks:
-            context_questions = (
-                chunk_questions
-                if scheduled_review
-                else all_group_questions
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
+                )
             )
-            mode = choose_map_review_mode(chunk_questions, context_questions)
+            mode = choose_map_review_mode(
+                chunk_questions,
+                active_context_questions,
+                multiple_choice_context_count=len(choice_context_questions)
+            )
+            context_questions = (
+                choice_context_questions
+                if mode == MAP_MODE_MULTIPLE_CHOICE
+                else active_context_questions
+            )
             mode_difficulty = map_mode_difficulty(
                 mode,
                 context_count=len(context_questions),
@@ -677,20 +740,28 @@ def _serialize_review_items(
         previous_mode = None
 
         for chunk_questions in question_chunks:
-            context_questions = (
-                chunk_questions
-                if scheduled_review
-                else all_group_questions
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
+                )
             )
             mode = choose_image_review_mode(
                 chunk_questions,
-                context_questions,
+                active_context_questions,
+                multiple_choice_context_count=len(choice_context_questions),
                 require_click_prompt_min=scheduled_review,
                 discouraged_modes=(
                     [previous_mode]
                     if scheduled_review and previous_mode
                     else None
                 )
+            )
+            context_questions = (
+                choice_context_questions
+                if mode in IMAGE_MULTIPLE_CHOICE_MODES
+                else active_context_questions
             )
             mode_difficulty = image_mode_difficulty(
                 mode,

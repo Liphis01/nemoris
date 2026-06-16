@@ -149,7 +149,15 @@ class SchedulerSmoothingTests(unittest.TestCase):
             difficulty=3.0,
             history=[{"map_mode": "type_prompt"} for _ in range(4)]
         )
-        context = [hard, strong]
+        extras = [
+            Question(type_q="map", answer=f"Extra {index}", data={"code": f"e{index}"})
+            for index in range(3)
+        ]
+
+        for extra in extras:
+            extra.progress = Progress(reps=1, difficulty=5.0, history=[])
+
+        context = [hard, strong, *extras]
 
         self.assertEqual(
             choose_map_review_mode([hard], context, rng=FixedRandom(0)),
@@ -158,6 +166,19 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(
             choose_map_review_mode([strong], context, rng=FixedRandom(0)),
             "type_all"
+        )
+        self.assertNotEqual(
+            choose_map_review_mode([hard], context[:4], rng=FixedRandom(0)),
+            "multiple_choice"
+        )
+        self.assertEqual(
+            choose_map_review_mode(
+                [hard],
+                [hard],
+                multiple_choice_context_count=5,
+                rng=FixedRandom(0)
+            ),
+            "multiple_choice"
         )
 
     def test_map_random_selector_biases_support_and_strong_modes(self):
@@ -234,7 +255,15 @@ class SchedulerSmoothingTests(unittest.TestCase):
             difficulty=3.0,
             history=[{"image_mode": "type_prompt"} for _ in range(4)]
         )
-        context = [hard, strong]
+        extras = [
+            Question(type_q="image", answer=f"Extra {index}")
+            for index in range(3)
+        ]
+
+        for extra in extras:
+            extra.progress = Progress(reps=1, difficulty=5.0, history=[])
+
+        context = [hard, strong, *extras]
 
         self.assertEqual(
             choose_image_review_mode([hard], context, rng=FixedRandom(0)),
@@ -243,6 +272,19 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(
             choose_image_review_mode([strong], context, rng=FixedRandom(0)),
             "type_all"
+        )
+        self.assertNotIn(
+            choose_image_review_mode([hard], context[:4], rng=FixedRandom(0)),
+            {"multiple_choice_label", "multiple_choice_image"}
+        )
+        self.assertEqual(
+            choose_image_review_mode(
+                [hard],
+                [hard],
+                multiple_choice_context_count=5,
+                rng=FixedRandom(0)
+            ),
+            "multiple_choice_label"
         )
 
     def test_image_random_selector_biases_support_and_strong_modes(self):

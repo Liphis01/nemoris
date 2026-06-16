@@ -1,10 +1,14 @@
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
 - question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
-- dans qcm d'images, il y avait une image déjà sélectionnée avant que je clique
+- si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
+- dans qcm d'images, quand une image à laquelle j'ai déjà répondu revient dans un autre qcm, elle est déjà visuellement sélectionnée (idealement ne pas redemander une image déjà répondue) (equivalent pour maps ?)
 - laisser la possibilité de s'entraîner sur un sous ensemble du groupe (éventuellement enregistrer le subset)
+- pour click_prompt d'image, passer direct à la question suivante si on a bon (pas d'animation)
+- afficher le nombre de questions bonus disponibles
+- le recap d'images doit copier le recap de maps pour les boutons de qualité et pour la séparation entre trouvé et à revoir + l'alignement des rayures est bizarre
 
 ## quick fixes
 

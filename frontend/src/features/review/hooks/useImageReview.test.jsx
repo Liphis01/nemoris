@@ -198,7 +198,8 @@ describe("useImageReview", () => {
         [missedIds[0]]: 0,
         [missedIds[1]]: 0
       },
-      IMAGE_MODE_TYPE_PROMPT
+      IMAGE_MODE_TYPE_PROMPT,
+      3
     );
     expect(onComplete).toHaveBeenCalledWith(expect.arrayContaining(missedIds));
   });
@@ -244,7 +245,8 @@ describe("useImageReview", () => {
         [found.question_id]: 2,
         [missed.question_id]: 0
       },
-      IMAGE_MODE_TYPE_PROMPT
+      IMAGE_MODE_TYPE_PROMPT,
+      2
     );
     expect(sendImageAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
@@ -538,6 +540,50 @@ describe("useImageReview", () => {
     });
 
     expect(result.current.foundQuestionIds).toContain(prompt.question_id);
+  });
+
+  it("multiple_choice_label uses borrowed context and submits only active items", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const items = [
+      imageItem(1, "France")
+    ];
+    const contextItems = [
+      ...items,
+      imageItem(2, "Germany"),
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy"),
+      imageItem(5, "Portugal")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, onComplete, submitAnswer, {
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        contextItems
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+
+    expect(result.current.choiceOptions).toHaveLength(4);
+
+    act(() => {
+      result.current.handleChoiceSelect(prompt.question_id);
+    });
+    act(() => {
+      result.current.finishReview();
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      {
+        [prompt.question_id]: 2
+      },
+      IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      5
+    );
+    expect(onComplete).toHaveBeenCalledWith([]);
   });
 
   it("multiple_choice_label wrong answers reveal the target during feedback", () => {

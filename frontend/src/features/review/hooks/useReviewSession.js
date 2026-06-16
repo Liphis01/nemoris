@@ -281,12 +281,18 @@ export function useReviewSession(active) {
     return Promise.allSettled(requests);
   }, []);
 
-  const submitMapAnswer = useCallback((items, mode = undefined) =>
-    sendMapAnswer(items, mode, reviewDateRef.current),
+  const submitMapAnswer = useCallback((
+    items,
+    mode = undefined,
+    contextCount = undefined
+  ) => sendMapAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
-  const submitImageAnswer = useCallback((items, mode = undefined) =>
-    sendImageAnswer(items, mode, reviewDateRef.current),
+  const submitImageAnswer = useCallback((
+    items,
+    mode = undefined,
+    contextCount = undefined
+  ) => sendImageAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
   const submitTimelineAnswer = useCallback((items) =>

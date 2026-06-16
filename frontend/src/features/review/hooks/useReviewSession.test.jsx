@@ -184,11 +184,13 @@ describe("useReviewSession", () => {
     expect(sendMapAnswer).toHaveBeenCalledWith(
       { 10: 0 },
       "type_all",
+      undefined,
       "2026-01-01"
     );
     expect(sendImageAnswer).toHaveBeenCalledWith(
       { 11: 2 },
       "click_prompt",
+      undefined,
       "2026-01-01"
     );
     expect(sendTimelineAnswer).toHaveBeenCalledWith(

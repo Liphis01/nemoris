@@ -82,7 +82,33 @@ export function reviseAnswer(questionId, quality, reviewDate = undefined) {
 }
 
 
-export function sendMapAnswer(items, mode = undefined, reviewDate = undefined) {
+function answerContextPayload(contextCount) {
+  return Number.isFinite(contextCount)
+    ? { context_count: contextCount }
+    : {};
+}
+
+
+function resolveGroupedAnswerArgs(contextCount, reviewDate) {
+  if (typeof contextCount === "string" && reviewDate === undefined) {
+    return {
+      contextCount: undefined,
+      reviewDate: contextCount
+    };
+  }
+
+  return { contextCount, reviewDate };
+}
+
+
+export function sendMapAnswer(
+  items,
+  mode = undefined,
+  contextCount = undefined,
+  reviewDate = undefined
+) {
+  const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+
   // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestOk("/answer_map", {
     method: "POST",
@@ -92,13 +118,21 @@ export function sendMapAnswer(items, mode = undefined, reviewDate = undefined) {
     body: JSON.stringify({
       items,
       ...(mode ? { mode } : {}),
-      ...(reviewDate ? { review_date: reviewDate } : {})
+      ...answerContextPayload(resolved.contextCount),
+      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
     })
   });
 }
 
 
-export function sendImageAnswer(items, mode = undefined, reviewDate = undefined) {
+export function sendImageAnswer(
+  items,
+  mode = undefined,
+  contextCount = undefined,
+  reviewDate = undefined
+) {
+  const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+
   // items is an object of question_id -> quality, one entry per atomic image.
   return requestOk("/answer_image", {
     method: "POST",
@@ -108,7 +142,8 @@ export function sendImageAnswer(items, mode = undefined, reviewDate = undefined)
     body: JSON.stringify({
       items,
       ...(mode ? { mode } : {}),
-      ...(reviewDate ? { review_date: reviewDate } : {})
+      ...answerContextPayload(resolved.contextCount),
+      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
     })
   });
 }

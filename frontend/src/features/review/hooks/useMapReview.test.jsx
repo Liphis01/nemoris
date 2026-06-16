@@ -198,7 +198,7 @@ describe("useMapReview recap sorting", () => {
     expect(submitAnswer).toHaveBeenCalledWith({
       1: 2,
       2: 0
-    }, "type_all");
+    }, "type_all", 2);
     expect(sendMapAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
@@ -416,6 +416,46 @@ describe("useMapReview recap sorting", () => {
     });
 
     expect(result.current.foundQuestionIds).toEqual([target.question_id]);
+  });
+
+  it("multiple_choice uses borrowed context and submits only active zones", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" })
+    ];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta" }),
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" }),
+      zone({ questionId: 5, code: "e", label: "Epsilon" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, onComplete, submitAnswer, {
+        mode: "multiple_choice",
+        contextItems
+      })
+    );
+    const target = result.current.currentPromptItem;
+
+    expect(result.current.choiceOptions).toHaveLength(4);
+
+    act(() => {
+      result.current.handleChoiceSelect(target.question_id);
+    });
+    act(() => {
+      result.current.finishMap();
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith({
+      [target.question_id]: 2
+    }, "multiple_choice", 5);
+    expect(onComplete).toHaveBeenCalledWith([]);
   });
 
   it("multiple_choice wrong answers keep target visible as missed feedback", () => {

@@ -570,7 +570,7 @@ export function useMapReview(
   async function sendResult() {
     // Send one quality per atomic map question, then tell the parent review
     // session which zones should be re-queued.
-    await submitAnswer(qualityByQuestionId, mode);
+    await submitAnswer(qualityByQuestionId, mode, contextItems.length);
 
     const failedQuestionIds = Object.entries(qualityByQuestionId)
       .filter(([, quality]) => quality === 0)

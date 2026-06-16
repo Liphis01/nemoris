@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -28,6 +29,7 @@ from app.services.timeline import (
 )
 from app.services.map_modes import map_mode_difficulty
 from app.services.image_modes import image_mode_difficulty
+from app.services.review import get_review_items
 from app.scheduler import preview_intervals
 
 
@@ -519,6 +521,185 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id for item in fixture["image_items"]}
         )
 
+    def test_small_scheduled_map_multiple_choice_borrows_started_context(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=30,
+            type_group="map",
+            name="Small map",
+            media="/static/small.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        due_zone = self.add_question(
+            100,
+            type_q="map",
+            answer="Due",
+            data={"code": "due"},
+            group=map_group,
+            next_review=today
+        )
+        future_zones = [
+            self.add_question(
+                101 + index,
+                type_q="map",
+                answer=f"Future {index}",
+                data={"code": f"f{index}"},
+                group=map_group,
+                next_review=today + timedelta(days=1)
+            )
+            for index in range(4)
+        ]
+        self.db.commit()
+
+        with patch("app.services.mode_selection.random.random", return_value=0):
+            response = get_review(db=self.db)
+
+        map_payload = next(item for item in response if item["type_q"] == "map")
+
+        self.assertEqual(map_payload["mode"], "multiple_choice")
+        self.assertEqual(
+            [item["question_id"] for item in map_payload["items"]],
+            [due_zone.id]
+        )
+        self.assertEqual(
+            [item["question_id"] for item in map_payload["context_items"]],
+            [due_zone.id, *[zone.id for zone in future_zones]]
+        )
+
+    def test_small_scheduled_map_falls_back_below_choice_context_minimum(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=31,
+            type_group="map",
+            name="Tiny map",
+            media="/static/tiny.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        due_zone = self.add_question(
+            110,
+            type_q="map",
+            answer="Due",
+            data={"code": "due"},
+            group=map_group,
+            next_review=today
+        )
+
+        for index in range(3):
+            self.add_question(
+                111 + index,
+                type_q="map",
+                answer=f"Future {index}",
+                data={"code": f"f{index}"},
+                group=map_group,
+                next_review=today + timedelta(days=1)
+            )
+
+        self.db.commit()
+
+        with patch("app.services.mode_selection.random.random", return_value=0):
+            response = get_review(db=self.db)
+
+        map_payload = next(item for item in response if item["type_q"] == "map")
+
+        self.assertNotEqual(map_payload["mode"], "multiple_choice")
+        self.assertEqual(
+            [item["question_id"] for item in map_payload["items"]],
+            [due_zone.id]
+        )
+        self.assertEqual(
+            [item["question_id"] for item in map_payload["context_items"]],
+            [due_zone.id]
+        )
+
+    def test_bonus_image_context_uses_selected_items_and_started_distractors(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=32,
+            type_group="image",
+            name="Bonus flags",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        selected_bonus = Question(
+            id=120,
+            type_q="image",
+            question="Flag due",
+            answer="Selected bonus",
+            media="/static/selected.png",
+            tags=[],
+            data={},
+            group=image_group
+        )
+        self.db.add(selected_bonus)
+
+        for index in range(3):
+            self.db.add(Question(
+                id=121 + index,
+                type_q="image",
+                question=f"Unselected {index}",
+                answer=f"Unselected {index}",
+                media=f"/static/unselected-{index}.png",
+                tags=[],
+                data={},
+                group=image_group
+            ))
+
+        started_distractors = [
+            self.add_question(
+                124 + index,
+                type_q="image",
+                question=f"Started {index}",
+                answer=f"Started {index}",
+                media=f"/static/started-{index}.png",
+                group=image_group,
+                next_review=today + timedelta(days=1)
+            )
+            for index in range(4)
+        ]
+        self.db.commit()
+
+        with patch("app.services.mode_selection.random.random", return_value=0):
+            response = get_review_items(
+                self.db,
+                include_new=True,
+                bonus_status={"bonus_question_capacity": 1}
+            )
+
+        image_payload = next(item for item in response if item["type_q"] == "image")
+
+        self.assertEqual(image_payload["mode"], "multiple_choice_label")
+        self.assertEqual(
+            [item["question_id"] for item in image_payload["items"]],
+            [selected_bonus.id]
+        )
+        self.assertEqual(
+            [item["question_id"] for item in image_payload["context_items"]],
+            [selected_bonus.id, *[item.id for item in started_distractors]]
+        )
+        self.assertNotIn(
+            121,
+            [item["question_id"] for item in image_payload["context_items"]]
+        )
+
+        answer_image(
+            ImageAnswerRequest(
+                items={selected_bonus.id: 2},
+                mode="multiple_choice_label",
+                context_count=len(image_payload["context_items"])
+            ),
+            db=self.db
+        )
+        progress_ids = {
+            progress.question_id
+            for progress in self.db.query(Progress).all()
+        }
+
+        self.assertIn(selected_bonus.id, progress_ids)
+        self.assertFalse({121, 122, 123} & progress_ids)
+
     def test_review_endpoint_splits_large_image_groups_into_balanced_chunks(self):
         today = date.today()
         image_group = QuestionGroup(
@@ -798,7 +979,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             ImageAnswerRequest(items={
                 item_a.id: 3,
                 item_b.id: 0
-            }, mode="multiple_choice_image"),
+            }, mode="multiple_choice_image", context_count=5),
             db=self.db
         )
 
@@ -820,12 +1001,12 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(item_a_history["image_mode"], "multiple_choice_image")
         self.assertEqual(item_a_history["raw_quality"], 3)
         self.assertEqual(item_a_history["effective_quality"], 3)
-        self.assertEqual(item_a_history["image_context_count"], 2)
-        self.assertEqual(item_a_history["image_choice_count"], 2)
+        self.assertEqual(item_a_history["image_context_count"], 5)
+        self.assertEqual(item_a_history["image_choice_count"], 4)
         self.assertTrue(item_a_history["mode_adjusted"])
         self.assertEqual(
             item_a_history["mode_difficulty"],
-            image_mode_difficulty("multiple_choice_image", 2)
+            image_mode_difficulty("multiple_choice_image", 5)
         )
         self.assertIn("mode_reward_factor", item_a_history)
 

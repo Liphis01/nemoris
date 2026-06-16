@@ -271,7 +271,8 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
         data.items,
         map_mode=data.mode or DEFAULT_MAP_MODE,
         require_type="map",
-        today=data.review_date
+        today=data.review_date,
+        context_count=data.context_count
     )
     return {"status": "ok"}
 
@@ -283,9 +284,20 @@ def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
         data.items,
         image_mode=data.mode or DEFAULT_IMAGE_MODE,
         require_type="image",
-        today=data.review_date
+        today=data.review_date,
+        context_count=data.context_count
     )
     return {"status": "ok"}
+
+
+def normalize_context_count(value):
+    if value is None:
+        return None
+
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def apply_answer_batch(
@@ -294,7 +306,8 @@ def apply_answer_batch(
     map_mode=None,
     image_mode=None,
     require_type=None,
-    today=None
+    today=None,
+    context_count=None
 ):
     question_ids = list(items.keys())
     questions = (
@@ -337,6 +350,7 @@ def apply_answer_batch(
 
     context_counts_by_group_id = {}
     scheduler_tuning = load_scheduler_tuning_settings(db)
+    submitted_context_count = normalize_context_count(context_count)
     normalized_map_mode = normalize_map_mode(map_mode) if map_mode else None
     normalized_image_mode = (
         normalize_image_mode(image_mode)
@@ -345,11 +359,14 @@ def apply_answer_batch(
     )
 
     if normalized_map_mode:
-        group_ids = {
-            question.group_id
-            for question in questions
-            if question.group_id is not None
-        }
+        group_ids = set()
+
+        if submitted_context_count is None:
+            group_ids = {
+                question.group_id
+                for question in questions
+                if question.group_id is not None
+            }
 
         if group_ids:
             for group_id in group_ids:
@@ -364,18 +381,19 @@ def apply_answer_batch(
     elif normalized_image_mode:
         submitted_image_count = 0
 
-        for question in questions:
-            if question.type_q != "image":
-                continue
+        if submitted_context_count is None:
+            for question in questions:
+                if question.type_q != "image":
+                    continue
 
-            submitted_image_count += 1
-            key = question.group_id
-            context_counts_by_group_id[key] = (
-                context_counts_by_group_id.get(key, 0) + 1
-            )
+                submitted_image_count += 1
+                key = question.group_id
+                context_counts_by_group_id[key] = (
+                    context_counts_by_group_id.get(key, 0) + 1
+                )
 
-        if submitted_image_count == 0:
-            submitted_image_count = len(question_ids)
+            if submitted_image_count == 0:
+                submitted_image_count = len(question_ids)
 
     progress_quality_pairs = []
 
@@ -394,13 +412,17 @@ def apply_answer_batch(
                 db.add(progress)
                 progress_map[question_id] = progress
 
-            context_count = context_counts_by_group_id.get(
-                question.group_id if question else None,
-                0
+            active_context_count = (
+                submitted_context_count
+                if submitted_context_count is not None
+                else context_counts_by_group_id.get(
+                    question.group_id if question else None,
+                    0
+                )
             )
             difficulty = map_mode_difficulty(
                 normalized_map_mode,
-                context_count=context_count,
+                context_count=active_context_count,
                 tuning=scheduler_tuning
             )
             progress_quality_pairs.append((
@@ -408,7 +430,7 @@ def apply_answer_batch(
                 raw_quality,
                 {
                     "map_mode": normalized_map_mode,
-                    "map_context_count": context_count,
+                    "map_context_count": active_context_count,
                     "raw_quality": raw_quality,
                     "effective_quality": raw_quality,
                     "mode_adjusted": difficulty != 1.0,
@@ -426,18 +448,22 @@ def apply_answer_batch(
                 db.add(progress)
                 progress_map[question_id] = progress
 
-            context_count = context_counts_by_group_id.get(
-                question.group_id if question else None,
-                submitted_image_count
+            active_context_count = (
+                submitted_context_count
+                if submitted_context_count is not None
+                else context_counts_by_group_id.get(
+                    question.group_id if question else None,
+                    submitted_image_count
+                )
             )
             difficulty = image_mode_difficulty(
                 normalized_image_mode,
-                context_count=context_count,
+                context_count=active_context_count,
                 tuning=scheduler_tuning
             )
             metadata = {
                 "image_mode": normalized_image_mode,
-                "image_context_count": context_count,
+                "image_context_count": active_context_count,
                 "raw_quality": raw_quality,
                 "effective_quality": raw_quality,
                 "mode_adjusted": difficulty != 1.0,
@@ -445,7 +471,7 @@ def apply_answer_batch(
             }
 
             if normalized_image_mode in IMAGE_MULTIPLE_CHOICE_MODES:
-                metadata["image_choice_count"] = min(4, context_count)
+                metadata["image_choice_count"] = min(4, active_context_count)
 
             progress_quality_pairs.append((
                 progress,

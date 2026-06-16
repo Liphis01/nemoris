@@ -1,6 +1,7 @@
 import math
 
 from .mode_selection import (
+    MULTIPLE_CHOICE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     question_mode_affinity_counts,
@@ -112,10 +113,20 @@ def _recent_mode_counts(questions, limit=6):
     return counts
 
 
-def choose_map_review_mode(due_questions, context_questions, rng=None):
+def choose_map_review_mode(
+    due_questions,
+    context_questions,
+    multiple_choice_context_count=None,
+    rng=None
+):
     due_questions = list(due_questions or [])
     context_questions = list(context_questions or [])
     context_count = len(context_questions)
+    choice_context_count = (
+        context_count
+        if multiple_choice_context_count is None
+        else multiple_choice_context_count
+    )
 
     if not due_questions:
         return DEFAULT_MAP_MODE
@@ -165,9 +176,17 @@ def choose_map_review_mode(due_questions, context_questions, rng=None):
         MAP_MODE_TYPE_PROMPT: 2,
         MAP_MODE_TYPE_ALL: 3
     }
+    eligible_modes = list(MAP_MODES)
+
+    if choice_context_count < MULTIPLE_CHOICE_MIN_CONTEXT:
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode != MAP_MODE_MULTIPLE_CHOICE
+        ]
 
     return weighted_mode_choice(
-        MAP_MODES,
+        eligible_modes,
         scores,
         tie_order,
         rng=rng

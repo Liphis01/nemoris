@@ -1,6 +1,7 @@
 import math
 
 from .mode_selection import (
+    MULTIPLE_CHOICE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     question_mode_affinity_counts,
@@ -123,6 +124,7 @@ def _recent_mode_counts(questions, limit=6):
 def choose_image_review_mode(
     due_questions,
     context_questions,
+    multiple_choice_context_count=None,
     require_click_prompt_min=False,
     discouraged_modes=None,
     rng=None
@@ -130,6 +132,11 @@ def choose_image_review_mode(
     due_questions = list(due_questions or [])
     context_questions = list(context_questions or [])
     context_count = len(context_questions)
+    choice_context_count = (
+        context_count
+        if multiple_choice_context_count is None
+        else multiple_choice_context_count
+    )
 
     if not due_questions:
         return DEFAULT_IMAGE_MODE
@@ -190,6 +197,13 @@ def choose_image_review_mode(
         IMAGE_MODE_TYPE_ALL: 4
     }
     eligible_modes = list(IMAGE_MODES)
+
+    if choice_context_count < MULTIPLE_CHOICE_MIN_CONTEXT:
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode not in IMAGE_MULTIPLE_CHOICE_MODES
+        ]
 
     if (
         require_click_prompt_min and

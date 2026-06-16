@@ -753,7 +753,7 @@ export function useImageReview(
       foundQuestionIds
     );
 
-    await submitAnswer(qualities, mode);
+    await submitAnswer(qualities, mode, contextItems.length);
 
     const failedQuestionIds = Object.entries(qualities)
       .filter(([, quality]) => quality === 0)

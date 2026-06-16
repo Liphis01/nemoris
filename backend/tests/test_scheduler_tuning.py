@@ -1,5 +1,6 @@
 import json
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -349,12 +350,36 @@ def test_projected_intervals_use_active_tuning():
     db.add(group)
     db.add(question)
     db.add(progress)
+
+    for index in range(2, 6):
+        db.add(Question(
+            id=index,
+            type_q="map",
+            question=f"Map zone {index}",
+            answer=f"Zone {index}",
+            tags=[],
+            data={"code": f"z{index}"},
+            group=group
+        ))
+        db.add(Progress(
+            question_id=index,
+            stability=1.0,
+            difficulty=5.0,
+            reps=1,
+            lapses=0,
+            interval=0,
+            next_review=date.today() + timedelta(days=1),
+            history=[]
+        ))
+
     save_scheduler_tuning_settings(
         db,
         {"multiple_choice_difficulty": 0.3}
     )
 
-    review = get_review_items(db)
+    with patch("app.services.mode_selection.random.random", return_value=0):
+        review = get_review_items(db)
+
     map_group = next(item for item in review if item["type_q"] == "map")
     projected = map_group["items"][0]["projected_intervals"]
     expected = preview_intervals(
