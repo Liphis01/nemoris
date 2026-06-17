@@ -720,6 +720,7 @@ describe("useImageReview", () => {
       selectedQuestionId: wrong.question_id
     });
     expect(result.current.activeQuestionId).toBe(prompt.question_id);
+    expect(result.current.gridItems).toHaveLength(1);
     expect(result.current.gridItems.find(row =>
       row.item.question_id === prompt.question_id
     )).toMatchObject({
@@ -729,7 +730,8 @@ describe("useImageReview", () => {
     });
   });
 
-  it("multiple_choice_label follows the visible image grid order", () => {
+  it("multiple_choice_label shows one prompt image at a time", () => {
+    vi.useFakeTimers();
     const randomSpy = vi.spyOn(Math, "random");
 
     randomSpy
@@ -751,17 +753,28 @@ describe("useImageReview", () => {
           contextItems: items
         })
       );
-      const gridOrder = result.current.gridItems.map(row => row.item.question_id);
+      const firstPromptId = result.current.currentPromptItem.question_id;
 
-      expect(result.current.currentPromptItem.question_id).toBe(gridOrder[0]);
+      expect(result.current.gridItems.map(row => row.item.question_id))
+        .toEqual([firstPromptId]);
 
       act(() => {
-        result.current.handleChoiceSelect(gridOrder[0]);
+        result.current.handleChoiceSelect(firstPromptId);
       });
 
-      expect(result.current.currentPromptItem.question_id).toBe(gridOrder[1]);
+      expect(result.current.gridItems.map(row => row.item.question_id))
+        .toEqual([firstPromptId]);
+
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
+
+      expect(result.current.currentPromptItem.question_id).not.toBe(firstPromptId);
+      expect(result.current.gridItems.map(row => row.item.question_id))
+        .toEqual([result.current.currentPromptItem.question_id]);
     } finally {
       randomSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 

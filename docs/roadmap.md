@@ -4,8 +4,6 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- resume
-- modifier multiple choice label pour qu'il fasse les questions unes à unes
 - pour les questions bonus, changer un peu les règles des modes qui forcent une réponse (multiple choice label) et autoriser le skip (et cliquer sur l'image qu'on veut)
 - expand les groupes quand je fais une recherche (manage et collections)
 

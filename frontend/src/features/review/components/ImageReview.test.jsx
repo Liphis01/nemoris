@@ -772,7 +772,7 @@ describe("ImageReview answer label preview", () => {
     expect(tileFor(container, 2)).not.toHaveTextContent("Image 2");
   });
 
-  it("shows correct and wrong labels immediately in multiple_choice_label and scrolls to the target", async () => {
+  it("shows one prompt image with bottom labels in multiple_choice_label", async () => {
     const handleChoiceSelect = vi.fn();
     const rows = [
       imageGridRow(1),
@@ -790,13 +790,34 @@ describe("ImageReview answer label preview", () => {
       }
     });
     const { container, setHookState } = renderImageReviewWithState(initialState);
+    const promptBoard = container.querySelector("[data-image-prompt-board]");
+    const controlBand = container.querySelector("[data-image-control-band]");
+    const promptTiles = promptBoard.querySelectorAll("[data-image-prompt-tile]");
+    const promptImage = promptTiles[0].querySelector("[data-image-prompt-img]");
 
     setTileLayout(container, {
-      1: { left: 0, top: 0 },
-      2: { left: 160, top: 0 },
-      3: { left: 0, top: 200 },
-      4: { left: 160, top: 200 }
+      1: { left: 0, top: 0 }
     });
+
+    expect(container.querySelector("[data-image-active-grid]"))
+      .not.toBeInTheDocument();
+    expect(container.querySelector("[data-image-choice-board]"))
+      .not.toBeInTheDocument();
+    expect(promptBoard).toBeInTheDocument();
+    expect(promptBoard).toHaveStyle({
+      display: "grid",
+      height: "100%",
+      maxWidth: "640px"
+    });
+    expect(promptTiles).toHaveLength(1);
+    expect(promptTiles[0]).toHaveAttribute("data-image-question-id", "1");
+    expect(promptImage).toHaveStyle({
+      objectFit: "contain",
+      objectPosition: "center"
+    });
+    expect(controlBand).toContainElement(
+      screen.getByRole("button", { name: "Image 2" })
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Image 2" }));
 
@@ -832,6 +853,8 @@ describe("ImageReview answer label preview", () => {
         .toHaveAttribute("data-image-choice-feedback", "correct");
       expect(screen.getByText("Faux").closest("button"))
         .toHaveAttribute("data-image-choice-feedback", "wrong");
+      expect(container.querySelectorAll("[data-image-prompt-tile]"))
+        .toHaveLength(1);
       expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalledWith({
         behavior: "smooth",
         block: "center",

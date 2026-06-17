@@ -642,6 +642,10 @@ export default function ImageReview({
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE &&
     !resultMode
   );
+  const showPromptImageBoard = (
+    normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
+    !resultMode
+  );
   const answersByClick = (
     normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
@@ -665,6 +669,14 @@ export default function ImageReview({
   const activeGridItems = shouldSeparateResolvedItems
     ? gridItems.filter(row => !resolvedQuestionIdOrder.has(row.item.question_id))
     : gridItems;
+  const promptImageRow = showPromptImageBoard
+    ? activeGridItems.find(row => row.item.question_id === activeQuestionId) ||
+      activeGridItems.find(row =>
+        row.item.question_id === currentPromptItem?.question_id
+      ) ||
+      activeGridItems[0] ||
+      null
+    : null;
   const resolvedGridItems = shouldSeparateResolvedItems
     ? gridItems
       .filter(row => resolvedQuestionIdOrder.has(row.item.question_id))
@@ -1137,7 +1149,7 @@ export default function ImageReview({
     );
   }
 
-  function renderImageChoiceTile(row) {
+  function renderImageChoiceTile(row, { prompt = false, selectable = true } = {}) {
     const mediaSrc = resolveMediaUrl(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
     const isWrongOrMissed = (
@@ -1147,11 +1159,18 @@ export default function ImageReview({
       row.isLockedMissed
     );
     const feedbackBadgeLabel = tileFeedbackLabel(row.feedbackState);
+    const previewByThumbnail = !selectable && mediaSrc;
+    const tileMarkerProps = prompt
+      ? { "data-image-prompt-tile": true }
+      : { "data-image-choice-tile": true };
+    const imageMarkerProps = prompt
+      ? { "data-image-prompt-img": true }
+      : { "data-image-choice-img": true };
 
     return (
       <div
         key={row.item.question_id}
-        data-image-choice-tile
+        {...tileMarkerProps}
         data-image-question-id={row.item.question_id}
         data-image-feedback={row.feedbackState || (row.isMissed ? "missed" : "")}
         data-image-revealed={revealed ? "true" : "false"}
@@ -1163,17 +1182,19 @@ export default function ImageReview({
             row.item.question_id === activeQuestionId
           );
         }}
-        onClick={() => selectTile(row.item.question_id)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") {
-            return;
-          }
+        onClick={selectable ? () => selectTile(row.item.question_id) : undefined}
+        onKeyDown={selectable
+          ? (event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+              return;
+            }
 
-          event.preventDefault();
-          selectTile(row.item.question_id);
-        }}
-        role="button"
-        tabIndex={0}
+            event.preventDefault();
+            selectTile(row.item.question_id);
+          }
+          : undefined}
+        role={selectable ? "button" : undefined}
+        tabIndex={selectable ? 0 : undefined}
         style={{
           background: tileBackground(row),
           border: tileBorder(row),
@@ -1181,7 +1202,7 @@ export default function ImageReview({
           boxShadow: tileBoxShadow(row),
           boxSizing: "border-box",
           color: "#eee",
-          cursor: "pointer",
+          cursor: selectable ? "pointer" : "default",
           display: "grid",
           gap: "10px",
           gridTemplateRows: "minmax(0, 1fr) minmax(22px, auto)",
@@ -1196,11 +1217,35 @@ export default function ImageReview({
         }}
       >
         <span
+          onClick={previewByThumbnail
+            ? (event) => {
+              event.stopPropagation();
+              openPreview(row);
+            }
+            : undefined}
+          onKeyDown={previewByThumbnail
+            ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
+
+              event.preventDefault();
+              event.stopPropagation();
+              openPreview(row);
+            }
+            : undefined}
+          role={previewByThumbnail ? "button" : undefined}
+          tabIndex={previewByThumbnail ? 0 : undefined}
           style={{
             alignItems: "center",
             background: "#101010",
             border: "1px solid #262626",
             borderRadius: "8px",
+            cursor: previewByThumbnail
+              ? "zoom-in"
+              : selectable
+                ? "pointer"
+                : "default",
             display: "flex",
             height: "100%",
             justifyContent: "center",
@@ -1214,7 +1259,7 @@ export default function ImageReview({
             <img
               src={mediaSrc}
               alt={revealed ? answerLabel(row.item) : "image"}
-              data-image-choice-img
+              {...imageMarkerProps}
               style={{
                 display: "block",
                 height: "100%",
@@ -1855,6 +1900,25 @@ export default function ImageReview({
           >
             {activeGridItems.map(row => renderImageChoiceTile(row))}
           </div>
+        ) : showPromptImageBoard ? (
+          <div
+            data-image-prompt-board
+            style={{
+              display: "grid",
+              height: "100%",
+              margin: "0 auto",
+              maxWidth: "640px",
+              minHeight: 0,
+              width: "min(100%, 640px)"
+            }}
+          >
+            {promptImageRow
+              ? renderImageChoiceTile(promptImageRow, {
+                prompt: true,
+                selectable: false
+              })
+              : null}
+          </div>
         ) : (
           <div
             data-image-active-grid
@@ -1868,7 +1932,7 @@ export default function ImageReview({
           </div>
         )}
 
-        {!showImageChoiceBoard && resolvedGridItems.length > 0 && (
+        {!showImageChoiceBoard && !showPromptImageBoard && resolvedGridItems.length > 0 && (
           <div
             data-image-resolved-section
             style={{

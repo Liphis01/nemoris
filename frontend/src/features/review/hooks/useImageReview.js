@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { sendImageAnswer } from "../../../api/review";
 import {
   IMAGE_MODE_CLICK_PROMPT,
@@ -188,19 +188,6 @@ function weightedSampleDistractors(items, count, usageCounts = new Map()) {
   }
 
   return selected;
-}
-
-
-function resetDistractorUsageForReviewKey(ref, reviewKey) {
-  if (ref.current.reviewKey !== reviewKey) {
-    ref.current = {
-      reviewKey,
-      counts: new Map(),
-      recordedChoiceKeys: new Set()
-    };
-  }
-
-  return ref.current;
 }
 
 
@@ -428,15 +415,11 @@ export function useImageReview(
     () => `${mode}:${idsFor(reviewItems).join("|")}`,
     [mode, reviewItems]
   );
-  const distractorUsageRef = useRef({
-    reviewKey: null,
+  const distractorUsage = useMemo(() => ({
+    reviewKey,
     counts: new Map(),
     recordedChoiceKeys: new Set()
-  });
-  const distractorUsage = resetDistractorUsageForReviewKey(
-    distractorUsageRef,
-    reviewKey
-  );
+  }), [reviewKey]);
   const sessionItems = useMemo(
     () => (
       mode === IMAGE_MODE_TYPE_PROMPT
@@ -482,11 +465,6 @@ export function useImageReview(
     setResultMode(false);
     setActivePromptQuestionId(null);
     setRecapSort(initialRecapSort);
-    distractorUsageRef.current = {
-      reviewKey,
-      counts: new Map(),
-      recordedChoiceKeys: new Set()
-    };
   }, [reviewKey]);
 
   const foundQuestionIdSet = useMemo(
@@ -552,8 +530,8 @@ export function useImageReview(
       contextItems,
       distractorUsage.counts
     ),
-    // Cooldown counts live in a mutable ref; they should affect the next
-    // prompt sample, not resample the current prompt after recording.
+    // Cooldown counts live in a mutable per-review object; they should affect
+    // the next prompt sample, not resample the current prompt after recording.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [contextItems, currentPromptItem]
   );
@@ -566,11 +544,11 @@ export function useImageReview(
     }
 
     recordDistractorUsage(
-      distractorUsageRef.current,
+      distractorUsage,
       currentPromptItem,
       choiceOptions
     );
-  }, [choiceOptions, currentPromptItem, mode]);
+  }, [choiceOptions, currentPromptItem, distractorUsage, mode]);
   const activeInteractionFeedback = (
     !resultMode &&
     (
@@ -936,11 +914,23 @@ export function useImageReview(
     onComplete(failedQuestionIds);
   }
 
-  const displayItems = (
-    mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode
-      ? visibleChoiceOptions
-      : sessionItems
-  );
+  const displayItems = useMemo(() => {
+    if (mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode) {
+      return visibleChoiceOptions;
+    }
+
+    if (mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL && !resultMode) {
+      return visualPromptItem ? [visualPromptItem] : [];
+    }
+
+    return sessionItems;
+  }, [
+    mode,
+    resultMode,
+    sessionItems,
+    visibleChoiceOptions,
+    visualPromptItem
+  ]);
   const activeQuestionIdForGrid = (
     activeInteractionFeedback?.correctQuestionId ||
     activeItem?.question_id ||
