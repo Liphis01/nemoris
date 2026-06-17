@@ -175,4 +175,34 @@ describe("SvgMap zone hover colors", () => {
 
     expect(onSelect).toHaveBeenCalledWith("neutral");
   });
+
+  it("limits selection to clickable zone codes without changing hover behavior", async () => {
+    mockSvgFetch();
+    const onSelect = vi.fn();
+    const { container } = renderTestMap({
+      clickableCodes: ["due"],
+      onSelect
+    });
+
+    await waitFor(() => {
+      expectFill(zone(container, "neutral"), "#444");
+    });
+
+    const neutralZone = zone(container, "neutral");
+    const dueZone = zone(container, "due");
+
+    expect(neutralZone).toHaveStyle({ cursor: "pointer" });
+    expect(dueZone).toHaveStyle({ cursor: "pointer" });
+
+    fireEvent.mouseEnter(neutralZone);
+    expectFill(neutralZone, "#888");
+    fireEvent.mouseLeave(neutralZone);
+    expectFill(neutralZone, "#444");
+
+    fireEvent.click(neutralZone);
+    expect(onSelect).not.toHaveBeenCalled();
+
+    fireEvent.click(dueZone);
+    expect(onSelect).toHaveBeenCalledWith("due");
+  });
 });

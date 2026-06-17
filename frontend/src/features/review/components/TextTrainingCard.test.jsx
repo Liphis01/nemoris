@@ -71,6 +71,21 @@ describe("TextTrainingCard", () => {
     expect(onComplete).toHaveBeenCalledWith({ failedQuestionIds: [1] });
   });
 
+  it("continues with Enter after a missed answer is revealed", () => {
+    const { onComplete } = renderCard();
+
+    fireEvent.change(screen.getByLabelText("Réponse"), {
+      target: { value: "Lyon" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(onComplete).toHaveBeenCalledWith({ failedQuestionIds: [1] });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
   it("submits an empty answer as skipped and continues as missed", () => {
     const { onComplete } = renderCard();
 

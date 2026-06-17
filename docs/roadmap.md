@@ -4,6 +4,7 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
+- un mode pour renforcer les points faibles
 
 ## quick fixes
 
@@ -26,14 +27,9 @@
 ## to do when i have more time
 
 - arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
-- mettre les différents modes de jetpunk pour les maps et alterner selon les jours (commencer par le mode facile, puis alterner les modes et identifier les mode compliqués pour chaque question pour les faire réapparaître plus souvent)
 - mettre en évidence les zones trop petites (c.f. jetpunk)
-- le nombre de questions par jour devrait dépendre du type parce que les questions map sont plus rapides et les timeline très longues
-- agrandir un peu le recap ?
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
-- bloquer les questions nouvelles tant qu'on décide pas de les mettre dans la review (genre brouillon)
-- un mode pour renforcer les points faibles
 - importer/exporter db
 - ajouter une recherche dans calendar
 - trouver un meilleur agencement pour les aliases dans map preview

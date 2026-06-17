@@ -255,6 +255,9 @@ export default function MapReview({
   const activeMapFocusCode = showAutoZoomToggle && !autoZoomEnabled
     ? manualFocusCode
     : remainingFocusCode;
+  const activeMapClickableCodes = mode === MAP_MODE_CLICK_PROMPT && !showRecap
+    ? dueCodes
+    : undefined;
   const completedQuestionCount = Math.max(0, reviewZones.length - remainingZones.length);
   const wrongQuestionCount = mode !== MAP_MODE_TYPE_ALL
     ? Math.max(0, completedQuestionCount - foundQuestionIds.length)
@@ -644,6 +647,7 @@ export default function MapReview({
               missed={activeMissedCodes}
               dueItems={dueCodes}
               flashCodes={flashCodes}
+              clickableCodes={activeMapClickableCodes}
               focusCode={activeMapFocusCode}
               focusVersion={focusVersion}
               selected={selectedCode || undefined}

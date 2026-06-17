@@ -549,7 +549,7 @@ export function useMapReview(
 
     const clickedItem = reviewZones.find(item => item.code === code);
 
-    if (clickedItem && resolvedQuestionIdSet.has(clickedItem.question_id)) {
+    if (!clickedItem || resolvedQuestionIdSet.has(clickedItem.question_id)) {
       return;
     }
 

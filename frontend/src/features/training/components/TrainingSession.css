@@ -205,6 +205,18 @@
   box-shadow: inset 3px 0 0 #ffcc7a;
 }
 
+.training-scope-tile-collection.is-generated {
+  background: #171d1f;
+  border-color: rgba(119, 220, 232, 0.3);
+  box-shadow: inset 3px 0 0 rgba(119, 220, 232, 0.48);
+}
+
+.training-scope-tile-collection.is-generated.is-selected {
+  background: #172226;
+  border-color: rgba(119, 220, 232, 0.62);
+  box-shadow: inset 3px 0 0 #77dce8;
+}
+
 .training-scope-tile-main {
   display: flex;
   flex-direction: column;
@@ -262,6 +274,19 @@
 .training-scope-badge-collection {
   background: #172f33;
   color: #77dce8;
+}
+
+.training-scope-badge-auto {
+  background: #2b2b2b;
+  color: #d8d8d8;
+}
+
+.training-collection-badge-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: fit-content;
 }
 
 .training-scope-score {
@@ -362,6 +387,12 @@
 }
 
 .training-detail-panel-collection {
+  border-left-color: #77dce8;
+}
+
+.training-detail-panel-collection.is-generated {
+  background: #121719;
+  border-color: rgba(119, 220, 232, 0.28);
   border-left-color: #77dce8;
 }
 

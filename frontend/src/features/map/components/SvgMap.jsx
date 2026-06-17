@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const emptyZoneLabels = {};
 
@@ -27,6 +27,7 @@ export default function SvgMap({
     focusCode,
     focusVersion = 0,
     flashCodes = [],
+    clickableCodes = null,
     zoneLabels = emptyZoneLabels,
     onSelect,
     onCodesLoaded
@@ -48,6 +49,11 @@ export default function SvgMap({
     const [svgVersion, setSvgVersion] = useState(0);
     const [tooltip, setTooltip] = useState(null);
     const [hoveredCode, setHoveredCode] = useState(null);
+    const clickableCodeSet = useMemo(() => {
+        if (!Array.isArray(clickableCodes)) return null;
+
+        return new Set(clickableCodes.filter(Boolean));
+    }, [clickableCodes]);
 
     useEffect(() => {
         // Keep the latest transform available to effects/event handlers that
@@ -221,12 +227,21 @@ export default function SvgMap({
             return "#888";
         };
 
+        const canSelectCode = (code) => (
+            !clickableCodeSet || clickableCodeSet.has(code)
+        );
+
         const getDisplayColor = (code) => (
-            hoveredCode === code ? getHoverColor(code) : getColor(code)
+            hoveredCode === code
+                ? getHoverColor(code)
+                : getColor(code)
         );
 
         const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
+            const isClickable = canSelectCode(code);
+
             el.style.fill = getDisplayColor(code);
+            el.style.cursor = "pointer";
             const tooltipLabel = String(zoneLabels[code] || "");
             const flashAnimation = flashSet.has(code) && typeof el.animate === "function"
                 ? el.animate(
@@ -247,6 +262,11 @@ export default function SvgMap({
                     event.preventDefault();
                     event.stopPropagation();
                     ignoreNextClickRef.current = false;
+                    return;
+                }
+
+                if (!isClickable) {
+                    event.preventDefault();
                     return;
                 }
 
@@ -299,6 +319,7 @@ export default function SvgMap({
         selected,
         dueItems,
         unsaved,
+        clickableCodeSet,
         hoveredCode,
         zoneLabels,
         onSelect,

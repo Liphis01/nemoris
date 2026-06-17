@@ -7,11 +7,14 @@ const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
 vi.mock("../../map/components/SvgMap", () => ({
   default: (props) => {
     const isRecap = props.zoneLabels === undefined;
+    const clickableCodes = props.clickableCodes;
+    const canSelectBeta = !Array.isArray(clickableCodes) || clickableCodes.includes("beta");
 
     return (
       <button
         type="button"
         data-testid={isRecap ? "recap-map" : "active-map"}
+        data-clickable-codes={(clickableCodes || []).join("|")}
         data-due-items={(props.dueItems || []).join("|")}
         data-flash-codes={(props.flashCodes || []).join("|")}
         data-focus-code={props.focusCode || ""}
@@ -19,7 +22,9 @@ vi.mock("../../map/components/SvgMap", () => ({
         data-missed={(props.missed || []).join("|")}
         data-selected={props.selected || ""}
         data-zone-labels={JSON.stringify(props.zoneLabels || {})}
-        onClick={() => props.onSelect?.("beta")}
+        onClick={() => {
+          if (canSelectBeta) props.onSelect?.("beta");
+        }}
       >
         {isRecap ? "Recap map" : "Active map"}
       </button>
@@ -305,30 +310,28 @@ describe("MapReview recap map focus", () => {
   );
 
   it("shows click prompt misses as a separate progress bar segment", async () => {
-    const { container } = renderMapReview(false, {
-      mode: "click_prompt",
-      reviewZones: [
-        {
-          question_id: 1,
-          code: "alpha",
-          label: "Alpha",
-          progress: {}
-        }
-      ]
-    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
 
-    fireEvent.click(screen.getByTestId("active-map"));
+    try {
+      const { container } = renderMapReview(false, {
+        mode: "click_prompt"
+      });
 
-    await waitFor(() => {
-      expect(container.querySelector("[data-map-progress-correct]"))
-        .toHaveStyle({ width: "0%" });
-      expect(container.querySelector("[data-map-progress-wrong]"))
-        .toHaveStyle({ width: "100%" });
-    });
-    expect(container.querySelector("[data-map-progress-wrong]").style.background)
-      .toContain("repeating-linear-gradient");
-    expect(screen.getByRole("progressbar", { name: "Avancement" }))
-      .toHaveAttribute("aria-valuenow", "1");
+      fireEvent.click(screen.getByTestId("active-map"));
+
+      await waitFor(() => {
+        expect(container.querySelector("[data-map-progress-correct]"))
+          .toHaveStyle({ width: "0%" });
+        expect(container.querySelector("[data-map-progress-wrong]"))
+          .toHaveStyle({ width: "50%" });
+      });
+      expect(container.querySelector("[data-map-progress-wrong]").style.background)
+        .toContain("repeating-linear-gradient");
+      expect(screen.getByRole("progressbar", { name: "Avancement" }))
+        .toHaveAttribute("aria-valuenow", "1");
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 
   it("flashes a wrong click and reveals the requested click_prompt zone", async () => {

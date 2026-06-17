@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fadeInStyle } from "../../../shared/styles";
 import { resolveMediaUrl } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
@@ -48,6 +48,7 @@ export default function TextTrainingCard({
 }) {
   const [draft, setDraft] = useState("");
   const [result, setResult] = useState("idle");
+  const missedCompletionSubmittedRef = useRef(false);
   const mediaSrc = resolveMediaUrl(q.media);
   const typeStyle = getQuestionTypeChipStyle(q.type_q);
   const expectedAnswer = textAnswerValues(q)[0] || "";
@@ -61,13 +62,36 @@ export default function TextTrainingCard({
   useEffect(() => {
     setDraft("");
     setResult("idle");
+    missedCompletionSubmittedRef.current = false;
   }, [currentIndex, q?.question_id, q?.id]);
 
-  function completeMissed() {
+  const completeMissed = useCallback(() => {
+    if (missedCompletionSubmittedRef.current) return;
+
+    missedCompletionSubmittedRef.current = true;
     onComplete({
       failedQuestionIds: [q.question_id ?? q.id]
     });
-  }
+  }, [onComplete, q.id, q.question_id]);
+
+  useEffect(() => {
+    if (!missed) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key !== "Enter" || event.defaultPrevented) {
+        return;
+      }
+
+      event.preventDefault();
+      completeMissed();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [completeMissed, missed]);
 
   function handleSubmit(event) {
     event.preventDefault();

@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useTrainingSession } from "./useTrainingSession";
+import {
+  shuffleTrainingItems,
+  useTrainingSession
+} from "./useTrainingSession";
 import {
   getTrainingItems,
   gradeTrainingTimeline,
@@ -23,6 +26,7 @@ const TRAINING_FINGERPRINT = "training-fingerprint";
 
 describe("useTrainingSession", () => {
   let performanceNowSpy;
+  let randomSpy;
 
   beforeEach(() => {
     listTrainingScopes.mockResolvedValue({
@@ -80,12 +84,52 @@ describe("useTrainingSession", () => {
     performanceNowSpy = vi
       .spyOn(performance, "now")
       .mockReturnValue(1000);
+    randomSpy = vi
+      .spyOn(Math, "random")
+      .mockReturnValue(0.999);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     performanceNowSpy?.mockRestore();
+    randomSpy?.mockRestore();
     vi.useRealTimers();
+  });
+
+  it("shuffles training queues and grouped child items without mutating input", () => {
+    const items = [
+      { question_id: 1, type_q: "text" },
+      {
+        group_id: 2,
+        type_q: "map",
+        items: [
+          { question_id: 2 },
+          { question_id: 3 },
+          { question_id: 4 }
+        ]
+      },
+      { question_id: 5, type_q: "text" }
+    ];
+    const random = vi.fn().mockReturnValue(0);
+
+    const shuffled = shuffleTrainingItems(items, random);
+
+    expect(shuffled.map(item => item.question_id ?? item.group_id)).toEqual([
+      2,
+      5,
+      1
+    ]);
+    expect(shuffled[0].items.map(item => item.question_id)).toEqual([
+      3,
+      4,
+      2
+    ]);
+    expect(items.map(item => item.question_id ?? item.group_id)).toEqual([
+      1,
+      2,
+      5
+    ]);
+    expect(items[1].items.map(item => item.question_id)).toEqual([2, 3, 4]);
   });
 
   it("loads scopes and starts a group training session", async () => {
@@ -290,7 +334,10 @@ describe("useTrainingSession", () => {
         content_fingerprint: TRAINING_FINGERPRINT
       });
     });
-    expect(result.current.recordSaveStatus).toBe("saved");
+
+    await waitFor(() => {
+      expect(result.current.recordSaveStatus).toBe("saved");
+    });
     expect(result.current.recordResult.is_new_best_time).toBe(true);
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
   });

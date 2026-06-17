@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session, aliased, joinedload
 from ..dependencies import get_db
 from ..models import Collection, Question, QuestionGroup, question_collection
 from ..schemas import CollectionCreate, CollectionUpdate
+from ..services.collections import (
+    generated_collection_response_fields,
+    is_generated_collection,
+    sync_generated_hard_collection
+)
 
 
 router = APIRouter()
@@ -22,7 +27,8 @@ def _collection_response(collection):
         "name": collection.name,
         "data": collection.data or {},
         "question_ids": question_ids,
-        "question_count": len(question_ids)
+        "question_count": len(question_ids),
+        **generated_collection_response_fields(collection)
     }
 
 
@@ -245,6 +251,8 @@ def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
 
 @router.get("/collections")
 def get_collections(db: Session = Depends(get_db)):
+    sync_generated_hard_collection(db)
+
     return [
         _collection_response(collection)
         for collection in (
@@ -258,6 +266,8 @@ def get_collections(db: Session = Depends(get_db)):
 
 @router.get("/collections/{collection_id}/questions")
 def get_collection_questions(collection_id: int, db: Session = Depends(get_db)):
+    sync_generated_hard_collection(db)
+
     collection = (
         db.query(Collection)
         .options(
@@ -283,6 +293,8 @@ def get_collection_questions(collection_id: int, db: Session = Depends(get_db)):
 
 @router.get("/collections/{collection_id}")
 def get_collection(collection_id: int, db: Session = Depends(get_db)):
+    sync_generated_hard_collection(db)
+
     collection = (
         db.query(Collection)
         .options(joinedload(Collection.questions))
@@ -302,6 +314,8 @@ def update_collection(
     payload: CollectionUpdate,
     db: Session = Depends(get_db)
 ):
+    sync_generated_hard_collection(db)
+
     collection = (
         db.query(Collection)
         .options(joinedload(Collection.questions))
@@ -311,6 +325,12 @@ def update_collection(
 
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    if is_generated_collection(collection):
+        raise HTTPException(
+            status_code=400,
+            detail="Generated collections cannot be modified"
+        )
 
     updates = payload.model_dump(exclude_unset=True)
 
@@ -330,6 +350,8 @@ def update_collection(
 
 @router.delete("/collections/{collection_id}")
 def delete_collection(collection_id: int, db: Session = Depends(get_db)):
+    sync_generated_hard_collection(db)
+
     collection = (
         db.query(Collection)
         .filter(Collection.id == collection_id)
@@ -338,6 +360,12 @@ def delete_collection(collection_id: int, db: Session = Depends(get_db)):
 
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    if is_generated_collection(collection):
+        raise HTTPException(
+            status_code=400,
+            detail="Generated collections cannot be deleted"
+        )
 
     db.execute(
         question_collection.delete().where(

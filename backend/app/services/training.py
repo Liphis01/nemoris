@@ -8,6 +8,10 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from ..models import Collection, Question, QuestionGroup, question_collection
 from ..serializers import serialize_progress
+from .collections import (
+    generated_collection_response_fields,
+    sync_generated_hard_collection
+)
 from .image_modes import (
     DEFAULT_IMAGE_MODE,
     normalize_image_mode
@@ -477,6 +481,8 @@ def serialize_training_records(data, content_fingerprint=None, group_type="map")
 
 
 def list_training_scopes(db):
+    sync_generated_hard_collection(db)
+
     groups = (
         db.query(
             QuestionGroup,
@@ -578,7 +584,8 @@ def list_training_scopes(db):
                 "training_record": serialize_training_record(
                     collection.data,
                     fingerprints_by_collection_id.get(collection.id)
-                )
+                ),
+                **generated_collection_response_fields(collection)
             }
             for collection, question_count in collections
         ],

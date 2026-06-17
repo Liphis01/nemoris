@@ -5,7 +5,14 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Collection, Question, QuestionGroup, question_collection
+from app.models import (
+    Collection,
+    Progress,
+    Question,
+    QuestionGroup,
+    question_collection
+)
+from app.routers.review import answer_question
 from app.routers.collections import (
     create_collection,
     delete_collection,
@@ -14,9 +21,18 @@ from app.routers.collections import (
     update_collection
 )
 from app.schemas import (
+    AnswerRequest,
     CollectionCreate,
     CollectionUpdate,
     TrainingAttemptRecordRequest
+)
+from app.services.collections import (
+    AUTO_HARD_COLLECTION_FALLBACK_NAME,
+    AUTO_HARD_COLLECTION_KEY,
+    AUTO_HARD_COLLECTION_NAME,
+    AUTO_HARD_COLLECTION_THRESHOLD,
+    find_generated_hard_collection,
+    sync_generated_hard_collection
 )
 from app.services.training import (
     collection_training_fingerprint,
@@ -72,6 +88,20 @@ class CollectionTests(unittest.TestCase):
         self.db.add(item)
         return item
 
+    def add_progress(self, question, difficulty=5.0, reps=1):
+        progress = Progress(
+            question_id=question.id,
+            stability=1.0,
+            difficulty=difficulty,
+            reps=reps,
+            lapses=0,
+            interval=1,
+            next_review=None,
+            history=[]
+        )
+        self.db.add(progress)
+        return progress
+
     def collection_link_count(self):
         return self.db.execute(
             select(func.count()).select_from(question_collection)
@@ -119,9 +149,103 @@ class CollectionTests(unittest.TestCase):
 
         delete_collection(created["id"], db=self.db)
 
-        self.assertEqual(self.db.query(Collection).count(), 0)
+        generated = find_generated_hard_collection(self.db)
+        self.assertIsNotNone(generated)
+        self.assertEqual(self.db.query(Collection).count(), 1)
         self.assertEqual(self.collection_link_count(), 0)
         self.assertEqual(self.db.query(Question).count(), 2)
+
+    def test_auto_hard_collection_sync_creates_and_updates_membership(self):
+        easy = self.add_question(1)
+        hard = self.add_question(2)
+        unreviewed = self.add_question(3)
+        self.db.flush()
+        self.add_progress(easy, difficulty=AUTO_HARD_COLLECTION_THRESHOLD - 0.1)
+        self.add_progress(hard, difficulty=AUTO_HARD_COLLECTION_THRESHOLD)
+        self.db.commit()
+
+        collection = sync_generated_hard_collection(self.db)
+
+        self.assertEqual(collection.name, AUTO_HARD_COLLECTION_NAME)
+        self.assertTrue(collection.data["generated"])
+        self.assertEqual(collection.data["auto_collection_key"], AUTO_HARD_COLLECTION_KEY)
+        self.assertEqual(collection.data["hard_threshold"], AUTO_HARD_COLLECTION_THRESHOLD)
+        self.assertEqual([question.id for question in collection.questions], [2])
+
+        easy.progress.difficulty = 8.2
+        hard.progress.difficulty = 6.5
+        unreviewed.progress = Progress(
+            question_id=unreviewed.id,
+            stability=1.0,
+            difficulty=AUTO_HARD_COLLECTION_THRESHOLD + 0.2,
+            reps=1,
+            lapses=0,
+            interval=1,
+            next_review=None,
+            history=[]
+        )
+        self.db.commit()
+
+        collection = sync_generated_hard_collection(self.db)
+
+        self.assertEqual(
+            [question.id for question in collection.questions],
+            [1, 3]
+        )
+
+    def test_auto_hard_collection_uses_fallback_name_for_manual_name_conflict(self):
+        self.db.add(Collection(name=AUTO_HARD_COLLECTION_NAME, data={}, questions=[]))
+        self.db.commit()
+
+        generated = sync_generated_hard_collection(self.db)
+
+        self.assertEqual(generated.name, AUTO_HARD_COLLECTION_FALLBACK_NAME)
+
+    def test_generated_collection_is_read_only(self):
+        generated = sync_generated_hard_collection(self.db)
+
+        with self.assertRaises(HTTPException) as update_error:
+            update_collection(
+                generated.id,
+                CollectionUpdate(name="Manual"),
+                db=self.db
+            )
+
+        self.assertEqual(update_error.exception.status_code, 400)
+
+        with self.assertRaises(HTTPException) as delete_error:
+            delete_collection(generated.id, db=self.db)
+
+        self.assertEqual(delete_error.exception.status_code, 400)
+        self.assertIsNotNone(find_generated_hard_collection(self.db))
+
+    def test_training_scopes_include_generated_collection_metadata(self):
+        response = list_training_scopes(self.db)
+        generated = next(
+            collection
+            for collection in response["collections"]
+            if collection["auto_collection_key"] == AUTO_HARD_COLLECTION_KEY
+        )
+
+        self.assertEqual(generated["name"], AUTO_HARD_COLLECTION_NAME)
+        self.assertTrue(generated["generated"])
+        self.assertEqual(generated["question_count"], 0)
+
+    def test_review_answer_syncs_auto_hard_collection(self):
+        self.add_question(1)
+        self.db.commit()
+
+        self.assertIsNone(find_generated_hard_collection(self.db))
+
+        answer_question(
+            AnswerRequest(question_id=1, quality=2),
+            db=self.db
+        )
+
+        generated = find_generated_hard_collection(self.db)
+
+        self.assertIsNotNone(generated)
+        self.assertTrue(generated.data["generated"])
 
     def test_question_candidates_paginate_search_and_filter(self):
         europe = QuestionGroup(

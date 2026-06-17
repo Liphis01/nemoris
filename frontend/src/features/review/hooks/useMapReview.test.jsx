@@ -352,6 +352,30 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.showRecap).toBe(false);
   });
 
+  it("click_prompt ignores clicks outside active review zones", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "click_prompt"
+      })
+    );
+    const initialPrompt = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleZoneSelect("grey");
+    });
+
+    expect(result.current.activeMissedCodes).toEqual([]);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.currentPromptItem.question_id).toBe(
+      initialPrompt.question_id
+    );
+    expect(result.current.showRecap).toBe(false);
+  });
+
   it("type_prompt accepts the highlighted zone name and supports skip", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),

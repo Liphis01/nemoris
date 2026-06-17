@@ -11,6 +11,7 @@ from ..schemas import (
     TimelineAnswerRequest
 )
 from ..serializers import serialize_progress
+from ..services.collections import sync_generated_hard_collection
 from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
@@ -237,6 +238,7 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         metadata=bonus_schedule_metadata(progress_was_new, created_progress)
     )
     db.commit()
+    sync_generated_hard_collection(db)
 
     return answer_progress_payload(progress)
 
@@ -257,10 +259,12 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         if history[-1].get("created_progress"):
             db.delete(progress)
             db.commit()
+            sync_generated_hard_collection(db)
             return answer_progress_payload(None)
 
         restore_progress_from_history(progress, history[:-1], today=data.review_date)
         db.commit()
+        sync_generated_hard_collection(db)
         return answer_progress_payload(progress)
 
     if not should_schedule_answer(progress, data.quality):
@@ -292,6 +296,7 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         )
     )
     db.commit()
+    sync_generated_hard_collection(db)
 
     return answer_progress_payload(progress)
 
@@ -530,6 +535,7 @@ def apply_answer_batch(
         )
 
     db.commit()
+    sync_generated_hard_collection(db)
 
 
 @router.post("/answer_timeline")
@@ -614,6 +620,7 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
         )
 
     db.commit()
+    sync_generated_hard_collection(db)
 
     return {
         "status": "ok",

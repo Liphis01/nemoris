@@ -121,9 +121,19 @@ describe("TrainingSession", () => {
       ],
       collections: [
         {
+          id: 8,
+          name: "Questions difficiles",
+          question_count: 1,
+          generated: true,
+          auto_collection_key: "hard_questions",
+          training_record: null
+        },
+        {
           id: 9,
           name: "Capitales",
           question_count: 2,
+          generated: false,
+          auto_collection_key: null,
           training_record: {
             best_found_percent: 50,
             best_found_count: 1,
@@ -390,6 +400,35 @@ describe("TrainingSession", () => {
       expect(getTrainingItems).toHaveBeenCalledWith({
         scopeType: "collection",
         collectionId: 9
+      });
+    });
+  });
+
+  it("marks generated collections as automatic and read-only", async () => {
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Collections" }));
+    fireEvent.click(screen.getByRole("button", {
+      name: "Sélectionner Questions difficiles"
+    }));
+
+    const detail = screen
+      .getByRole("heading", { name: "Questions difficiles" })
+      .closest("aside");
+
+    expect(detail).toHaveTextContent("Générée automatiquement");
+    expect(within(detail).getByText("auto")).toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Modifier" }))
+      .not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Supprimer" }))
+      .not.toBeInTheDocument();
+
+    fireEvent.click(within(detail).getByRole("button", { name: /Démarrer/ }));
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "collection",
+        collectionId: 8
       });
     });
   });

@@ -36,6 +36,35 @@ function getTrainingFingerprint(items) {
 }
 
 
+function shuffledTrainingList(items, random = Math.random) {
+  const shuffled = [...(items || [])];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index]
+    ];
+  }
+
+  return shuffled;
+}
+
+
+function shuffleTrainingItems(items, random = Math.random) {
+  return shuffledTrainingList(items, random).map(item => {
+    if (!Array.isArray(item?.items)) {
+      return item;
+    }
+
+    return {
+      ...item,
+      items: shuffledTrainingList(item.items, random)
+    };
+  });
+}
+
+
 function filterReviewItemsByQuestionIds(items, questionIds) {
   const idSet = questionIds instanceof Set
     ? questionIds
@@ -192,11 +221,13 @@ export function useTrainingSession(active = true) {
   }, []);
 
   const resetRun = useCallback((items, nextRunMode = "full") => {
-    setQuestions(items || []);
+    const runItems = items || [];
+
+    setQuestions(shuffleTrainingItems(runItems));
     setCurrentIndex(0);
     setShowAnswer(false);
     setFailedQuestionIds(new Set());
-    resetRecordAttempt(items, nextRunMode, activeScope);
+    resetRecordAttempt(runItems, nextRunMode, activeScope);
   }, [activeScope, resetRecordAttempt]);
 
   const loadScopes = useCallback(async () => {
@@ -242,12 +273,13 @@ export function useTrainingSession(active = true) {
 
     try {
       const data = await getTrainingItems(scopeRequestOptions(nextScope));
+      const trainingItems = data || [];
 
-      setOriginalQuestions(data || []);
-      setQuestions(data || []);
+      setOriginalQuestions(trainingItems);
+      setQuestions(shuffleTrainingItems(trainingItems));
       setCurrentIndex(0);
       setShowAnswer(false);
-      resetRecordAttempt(data || [], "full", nextScope);
+      resetRecordAttempt(trainingItems, "full", nextScope);
     } catch (error) {
       console.error(error);
       setTrainingError(error.message || "Impossible de preparer l'entrainement.");
@@ -541,5 +573,6 @@ export function useTrainingSession(active = true) {
 
 export {
   filterReviewItemsByQuestionIds,
-  getReviewItemQuestionIds
+  getReviewItemQuestionIds,
+  shuffleTrainingItems
 };

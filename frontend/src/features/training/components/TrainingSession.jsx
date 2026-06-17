@@ -371,21 +371,32 @@ function TagTile({ tag, startScope }) {
 
 function CollectionTile({ collection, onSelect, selected }) {
   const percent = collectionPercent(collection);
+  const generated = Boolean(collection.generated);
 
   return (
     <button
       type="button"
       aria-pressed={selected}
       aria-label={`Sélectionner ${collection.name}`}
-      className={`training-scope-tile training-scope-tile-collection${selected ? " is-selected" : ""}`}
+      className={`training-scope-tile training-scope-tile-collection${generated ? " is-generated" : ""}${selected ? " is-selected" : ""}`}
       onClick={onSelect}
     >
       <span className="training-scope-tile-main">
-        <span className="training-scope-badge training-scope-badge-collection">
-          collection
+        <span className="training-collection-badge-row">
+          <span className="training-scope-badge training-scope-badge-collection">
+            collection
+          </span>
+          {generated && (
+            <span className="training-scope-badge training-scope-badge-auto">
+              auto
+            </span>
+          )}
         </span>
         <strong>{collection.name}</strong>
-        <span>{questionCountLabel(collection.question_count)}</span>
+        <span>
+          {questionCountLabel(collection.question_count)}
+          {generated ? " · générée automatiquement" : ""}
+        </span>
       </span>
 
       <TrainingScoreMeter percent={percent} />
@@ -409,18 +420,29 @@ function CollectionDetailPanel({
   }
 
   const record = collection.training_record;
+  const generated = Boolean(collection.generated);
 
   return (
     <aside
-      className="training-detail-panel training-detail-panel-collection"
+      className={`training-detail-panel training-detail-panel-collection${generated ? " is-generated" : ""}`}
       aria-label="Détails de la collection"
     >
       <div className="training-detail-head">
-        <span className="training-scope-badge training-scope-badge-collection">
-          collection
+        <span className="training-collection-badge-row">
+          <span className="training-scope-badge training-scope-badge-collection">
+            collection
+          </span>
+          {generated && (
+            <span className="training-scope-badge training-scope-badge-auto">
+              auto
+            </span>
+          )}
         </span>
         <h2>{collection.name}</h2>
-        <p>{questionCountLabel(collection.question_count)}</p>
+        <p>
+          {questionCountLabel(collection.question_count)}
+          {generated ? " · Générée automatiquement" : ""}
+        </p>
       </div>
 
       <div className="training-detail-metrics">
@@ -448,21 +470,25 @@ function CollectionDetailPanel({
           <span>{questionCountLabel(collection.question_count)}</span>
         </button>
 
-        <button
-          type="button"
-          className="training-secondary-button"
-          onClick={() => onEdit(collection)}
-        >
-          Modifier
-        </button>
+        {!generated && (
+          <>
+            <button
+              type="button"
+              className="training-secondary-button"
+              onClick={() => onEdit(collection)}
+            >
+              Modifier
+            </button>
 
-        <button
-          type="button"
-          className="training-secondary-button training-danger-button"
-          onClick={() => onDelete(collection)}
-        >
-          Supprimer
-        </button>
+            <button
+              type="button"
+              className="training-secondary-button training-danger-button"
+              onClick={() => onDelete(collection)}
+            >
+              Supprimer
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );
@@ -1364,6 +1390,10 @@ function ScopeSelector({
   }
 
   function openEditCollection(collection) {
+    if (collection?.generated) {
+      return;
+    }
+
     setComposerCollection(collection);
     setComposerOpen(true);
   }
