@@ -353,9 +353,6 @@ function TagTile({ tag, startScope }) {
       })}
     >
       <span className="training-scope-tile-main">
-        <span className="training-scope-badge training-scope-badge-tag">
-          tag
-        </span>
         <strong>#{tag.name}</strong>
         <span>{questionCountLabel(tag.count)}</span>
       </span>

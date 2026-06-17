@@ -181,7 +181,7 @@
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
-  height: 92px;
+  min-height: 92px;
   overflow: hidden;
   padding: 12px;
   text-align: left;
@@ -194,7 +194,7 @@
 }
 
 .training-scope-tile-collection {
-  height: 92px;
+  min-height: 92px;
 }
 
 .training-scope-tile:hover {
@@ -368,10 +368,6 @@
   border-radius: inherit;
   display: block;
   height: 100%;
-}
-
-.training-tag-tile {
-  min-height: 74px;
 }
 
 .training-tag-tile .training-scope-score strong {
