@@ -221,6 +221,7 @@ export default function ReviewSession({
   skippedQuestionCount,
   canStartBonusReview,
   startBonusReview,
+  bonusReviewActive,
   bonusReviewMessage,
   bonusReviewStatus,
   bonusReviewLoading,
@@ -459,6 +460,7 @@ export default function ReviewSession({
               submitMapAnswer={submitMapAnswer}
               submitImageAnswer={submitImageAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
+              allowPartialSubmit={bonusReviewActive}
               compactVisualLayout
             />
           </div>
@@ -715,6 +717,7 @@ export default function ReviewSession({
               submitMapAnswer={submitMapAnswer}
               submitImageAnswer={submitImageAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
+              allowPartialSubmit={bonusReviewActive}
             />
 
           </>

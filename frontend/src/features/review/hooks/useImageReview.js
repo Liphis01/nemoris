@@ -9,6 +9,8 @@ import {
   normalizeImageMode
 } from "../imageModes";
 
+export const IMAGE_RECAP_UNANSWERED = "unanswered";
+
 
 export function normalizeImageAnswer(value = "") {
   return String(value)
@@ -62,17 +64,56 @@ function questionIdSet(ids) {
 }
 
 
-function completeQualities(items, qualityByQuestionId, foundQuestionIds) {
+function recapQualityForItem(
+  item,
+  qualityByQuestionId,
+  foundQuestionIdSet,
+  resolvedQuestionIdSet,
+  allowPartialSubmit
+) {
+  const selectedQuality = qualityByQuestionId[item.question_id];
+
+  if (selectedQuality !== undefined) return selectedQuality;
+  if (foundQuestionIdSet.has(item.question_id)) return defaultImageSuccessQuality();
+  if (allowPartialSubmit && !resolvedQuestionIdSet.has(item.question_id)) {
+    return IMAGE_RECAP_UNANSWERED;
+  }
+
+  return 0;
+}
+
+
+function buildRecapQualities(
+  items,
+  qualityByQuestionId,
+  foundQuestionIds,
+  resolvedQuestionIds,
+  allowPartialSubmit
+) {
   const foundSet = questionIdSet(foundQuestionIds);
+  const resolvedSet = questionIdSet(resolvedQuestionIds);
   const complete = {};
 
   items.forEach(item => {
-    complete[item.question_id] = qualityByQuestionId[item.question_id] ?? (
-      foundSet.has(item.question_id) ? defaultImageSuccessQuality() : 0
+    complete[item.question_id] = recapQualityForItem(
+      item,
+      qualityByQuestionId,
+      foundSet,
+      resolvedSet,
+      allowPartialSubmit
     );
   });
 
   return complete;
+}
+
+
+function submittedQualitiesFromRecap(qualityByQuestionId) {
+  return Object.fromEntries(
+    Object.entries(qualityByQuestionId).filter(([, quality]) =>
+      quality !== IMAGE_RECAP_UNANSWERED
+    )
+  );
 }
 
 
@@ -339,6 +380,8 @@ function getSelectedQuality(item, isFound, qualityByQuestionId) {
 
 
 function getProjectedInterval(item, selectedQuality) {
+  if (selectedQuality === IMAGE_RECAP_UNANSWERED) return null;
+
   const value =
     item.projected_intervals?.[selectedQuality] ??
     item.progress?.interval ??
@@ -346,6 +389,11 @@ function getProjectedInterval(item, selectedQuality) {
   const interval = Number(value);
 
   return Number.isFinite(interval) ? interval : 0;
+}
+
+
+function qualitySortValue(quality) {
+  return quality === IMAGE_RECAP_UNANSWERED ? -1 : Number(quality);
 }
 
 
@@ -379,15 +427,15 @@ function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
     const bQuality = getSelectedQuality(b.item, b.isFound, qualityByQuestionId);
 
     return (
-      getProjectedInterval(a.item, aQuality) -
-      getProjectedInterval(b.item, bQuality)
+      (getProjectedInterval(a.item, aQuality) ?? -1) -
+      (getProjectedInterval(b.item, bQuality) ?? -1)
     );
   }
 
   if (recapSort.key === "quality") {
     return (
-      getSelectedQuality(a.item, a.isFound, qualityByQuestionId) -
-      getSelectedQuality(b.item, b.isFound, qualityByQuestionId)
+      qualitySortValue(getSelectedQuality(a.item, a.isFound, qualityByQuestionId)) -
+      qualitySortValue(getSelectedQuality(b.item, b.isFound, qualityByQuestionId))
     );
   }
 
@@ -408,6 +456,7 @@ export function useImageReview(
   options = {}
 ) {
   const mode = normalizeImageMode(options.mode);
+  const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewItems;
@@ -495,7 +544,7 @@ export function useImageReview(
     () => {
       if (!isPromptMode(mode)) return null;
 
-      if (mode === IMAGE_MODE_TYPE_PROMPT && activePromptQuestionId !== null) {
+      if (activePromptQuestionId !== null) {
         const activeItem = promptQueue.find(item =>
           item.question_id === activePromptQuestionId &&
           !resolvedQuestionIdSet.has(item.question_id)
@@ -610,7 +659,7 @@ export function useImageReview(
   }
 
   function selectNextItem(direction = 1) {
-    if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode || !currentPromptItem) {
+    if (!isPromptMode(mode) || resultMode || !currentPromptItem) {
       return false;
     }
 
@@ -633,7 +682,7 @@ export function useImageReview(
   }
 
   function advanceTypePromptAfterResolved(item) {
-    if (mode !== IMAGE_MODE_TYPE_PROMPT || !item) return;
+    if (!isPromptMode(mode) || !item) return;
 
     const nextResolvedQuestionIds = questionIdSet([
       ...resolvedQuestionIds,
@@ -649,19 +698,21 @@ export function useImageReview(
     setActivePromptQuestionId(nextItem?.question_id || null);
   }
 
-  function enterResultMode(nextFoundIds, nextQualities) {
-    const foundSet = questionIdSet(nextFoundIds);
+  function enterResultMode(nextFoundIds, nextQualities, nextResolvedIds = resolvedQuestionIds) {
+    const recapQualities = buildRecapQualities(
+      sessionItems,
+      nextQualities,
+      nextFoundIds,
+      nextResolvedIds,
+      allowPartialSubmit
+    );
     const missedIds = sessionItems
-      .filter(item => !foundSet.has(item.question_id))
+      .filter(item => recapQualities[item.question_id] === 0)
       .map(item => item.question_id);
 
     setLockedMissedQuestionIds(missedIds);
     setRevealedQuestionIds([]);
-    setQualityByQuestionId(completeQualities(
-      sessionItems,
-      nextQualities,
-      nextFoundIds
-    ));
+    setQualityByQuestionId(recapQualities);
     setInput("");
     setFeedbackTone(null);
     setInteractionFeedback(null);
@@ -718,7 +769,7 @@ export function useImageReview(
       enterResultMode(nextFoundIds, {
         ...qualityByQuestionId,
         [item.question_id]: defaultImageSuccessQuality()
-      });
+      }, resolvedQuestionIds);
     }
   }
 
@@ -742,7 +793,7 @@ export function useImageReview(
 
     if (!allComplete) return;
 
-    enterResultMode(foundQuestionIds, qualityByQuestionId);
+    enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     completedQuestionIdSet,
@@ -750,6 +801,7 @@ export function useImageReview(
     interactionFeedback,
     mode,
     qualityByQuestionId,
+    allowPartialSubmit,
     resultMode,
     sessionItems
   ]);
@@ -844,10 +896,18 @@ export function useImageReview(
   }
 
   function finishReview() {
-    enterResultMode(foundQuestionIds, qualityByQuestionId);
+    enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
   }
 
   function setQuality(questionId, quality) {
+    if (quality === IMAGE_RECAP_UNANSWERED) {
+      setQualityByQuestionId(prev => ({
+        ...prev,
+        [questionId]: IMAGE_RECAP_UNANSWERED
+      }));
+      return;
+    }
+
     const nextQuality = Number(quality);
 
     if (![0, 1, 2, 3].includes(nextQuality)) {
@@ -887,13 +947,11 @@ export function useImageReview(
   }
 
   async function sendResult() {
-    const qualities = completeQualities(
-      sessionItems,
-      qualityByQuestionId,
-      foundQuestionIds
-    );
+    const qualities = submittedQualitiesFromRecap(qualityByQuestionId);
 
-    await submitAnswer(qualities, mode, contextItems.length);
+    if (Object.keys(qualities).length > 0) {
+      await submitAnswer(qualities, mode, contextItems.length);
+    }
 
     const failedQuestionIds = Object.entries(qualities)
       .filter(([, quality]) => quality === 0)
@@ -1017,18 +1075,31 @@ export function useImageReview(
       ? firstQuality
       : null;
   }, [foundQuestionIds, qualityByQuestionId]);
-  const recapSuccessCount = Object.values(qualityByQuestionId)
-    .filter(quality => quality > 0)
+  const recapSubmittedQualities = Object.values(qualityByQuestionId)
+    .filter(quality => quality !== IMAGE_RECAP_UNANSWERED);
+  const recapSuccessCount = recapSubmittedQualities
+    .filter(quality => Number(quality) > 0)
     .length;
-  const recapMissCount = Math.max(0, sessionItems.length - recapSuccessCount);
-  const recapSuccessRate = sessionItems.length
-    ? Math.round((recapSuccessCount / sessionItems.length) * 100)
+  const recapMissCount = recapSubmittedQualities
+    .filter(quality => Number(quality) === 0)
+    .length;
+  const recapUnansweredCount = Object.values(qualityByQuestionId)
+    .filter(quality => quality === IMAGE_RECAP_UNANSWERED)
+    .length;
+  const recapPlayedCount = recapSuccessCount + recapMissCount;
+  const recapSuccessRate = recapPlayedCount
+    ? Math.round((recapSuccessCount / recapPlayedCount) * 100)
     : 0;
   const recapRows = useMemo(() => (
     sessionItems
       .map(item => {
         const historyStats = getHistoryStats(item);
         const isFound = foundQuestionIdSet.has(item.question_id);
+        const canBeUnanswered = (
+          allowPartialSubmit &&
+          !isFound &&
+          !resolvedQuestionIdSet.has(item.question_id)
+        );
         const selectedQuality = getSelectedQuality(
           item,
           isFound,
@@ -1039,7 +1110,9 @@ export function useImageReview(
           item,
           historyStats,
           isFound,
+          canBeUnanswered,
           difficultyScore: getDifficultyScore(item, historyStats),
+          isUnanswered: selectedQuality === IMAGE_RECAP_UNANSWERED,
           selectedQuality,
           projectedInterval: getProjectedInterval(item, selectedQuality)
         };
@@ -1067,9 +1140,11 @@ export function useImageReview(
         return compareDefaultRecapRows(a, b);
       })
   ), [
+    allowPartialSubmit,
     foundQuestionIdSet,
     qualityByQuestionId,
     recapSort,
+    resolvedQuestionIdSet,
     sessionItems
   ]);
 
@@ -1099,6 +1174,7 @@ export function useImageReview(
     recapSort,
     recapSuccessCount,
     recapSuccessRate,
+    recapUnansweredCount,
     remainingCount: Math.max(0, sessionItems.length - completedCount),
     resolvedQuestionIds,
     resolvedQuestionIdsRecentFirst,

@@ -11,7 +11,10 @@ import {
   imageModeLabels,
   normalizeImageMode
 } from "../imageModes";
-import { useImageReview } from "../hooks/useImageReview";
+import {
+  IMAGE_RECAP_UNANSWERED,
+  useImageReview
+} from "../hooks/useImageReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const qualityOptions = [
@@ -20,6 +23,12 @@ const qualityOptions = [
   { value: 2, icon: "🙂", title: "Bon" },
   { value: 3, icon: "✅", title: "Facile" }
 ];
+
+const unansweredQualityOption = {
+  value: IMAGE_RECAP_UNANSWERED,
+  icon: "NR",
+  title: "Non répondu"
+};
 
 const qualityButtonStyles = {
   0: {
@@ -41,6 +50,11 @@ const qualityButtonStyles = {
     background: "#3a3420",
     border: "1px solid #2c5c3e",
     color: "#7ee2a8"
+  },
+  [IMAGE_RECAP_UNANSWERED]: {
+    background: "#202020",
+    border: "1px solid #575757",
+    color: "#cfcfcf"
   }
 };
 
@@ -83,6 +97,12 @@ function clamp(value, min, max) {
   if (max < min) return min;
 
   return Math.min(Math.max(value, min), max);
+}
+
+function isEditableTarget(target) {
+  if (!target || typeof target.closest !== "function") return false;
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable]"));
 }
 
 function hasTextOverflow(element) {
@@ -551,6 +571,8 @@ function imageHistoryStats(item) {
 }
 
 function projectedIntervalForImage(item, quality) {
+  if (quality === IMAGE_RECAP_UNANSWERED) return null;
+
   const value =
     item.projected_intervals?.[quality] ??
     item.progress?.interval ??
@@ -567,6 +589,7 @@ export default function ImageReview({
   mode: requestedMode,
   onComplete,
   submitAnswer,
+  allowPartialSubmit = false,
   separateFoundItems = false,
   separateResolvedItems = separateFoundItems,
   showQualityControls = true,
@@ -604,6 +627,7 @@ export default function ImageReview({
     recapSort = { key: null, direction: "asc" },
     recapSuccessCount,
     recapSuccessRate,
+    recapUnansweredCount,
     remainingCount,
     resolvedQuestionIds = [],
     resolvedQuestionIdsRecentFirst,
@@ -618,6 +642,7 @@ export default function ImageReview({
     toggleRecapSort = () => {},
     wrongAnsweredCount
   } = useImageReview(reviewItems, onComplete, submitAnswer, {
+    allowPartialSubmit,
     contextItems,
     mode: requestedMode
   });
@@ -698,12 +723,14 @@ export default function ImageReview({
     return gridItems.map(row => {
       const selectedQuality = row.isFound
         ? qualityByQuestionId[row.item.question_id] ?? row.quality ?? 2
-        : 0;
+        : qualityByQuestionId[row.item.question_id] ?? 0;
 
       return {
         item: row.item,
+        canBeUnanswered: selectedQuality === IMAGE_RECAP_UNANSWERED,
         historyStats: imageHistoryStats(row.item),
         isFound: row.isFound,
+        isUnanswered: selectedQuality === IMAGE_RECAP_UNANSWERED,
         selectedQuality,
         projectedInterval: projectedIntervalForImage(row.item, selectedQuality)
       };
@@ -717,14 +744,22 @@ export default function ImageReview({
     ) || effectiveRecapRows[0];
   }, [effectiveRecapRows, selectedRecapQuestionId]);
   const effectiveRecapSuccessCount = recapSuccessCount ??
-    effectiveRecapRows.filter(row => (
+    effectiveRecapRows.filter(row => Number(
       row.selectedQuality ?? (row.isFound ? 2 : 0)
     ) > 0).length;
   const effectiveRecapMissCount = recapMissCount ??
-    Math.max(0, reviewItems.length - effectiveRecapSuccessCount);
+    effectiveRecapRows.filter(row => Number(
+      row.selectedQuality ?? (row.isFound ? 2 : 0)
+    ) === 0).length;
+  const effectiveRecapUnansweredCount = recapUnansweredCount ??
+    effectiveRecapRows.filter(row =>
+      row.selectedQuality === IMAGE_RECAP_UNANSWERED
+    ).length;
+  const effectiveRecapPlayedCount = effectiveRecapSuccessCount +
+    effectiveRecapMissCount;
   const effectiveRecapSuccessRate = recapSuccessRate ??
-    (reviewItems.length
-      ? Math.round((effectiveRecapSuccessCount / reviewItems.length) * 100)
+    (effectiveRecapPlayedCount
+      ? Math.round((effectiveRecapSuccessCount / effectiveRecapPlayedCount) * 100)
       : 0);
   const effectiveFoundBulkQuality = foundBulkQuality !== undefined
     ? foundBulkQuality
@@ -900,6 +935,47 @@ export default function ImageReview({
       tile.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
     });
   }, [activeQuestionId, previewRow, resultMode, showTextInput]);
+
+  useEffect(() => {
+    if (
+      resultMode ||
+      previewRow ||
+      interactionFeedback ||
+      showTextInput ||
+      normalizedMode === IMAGE_MODE_TYPE_ALL
+    ) {
+      return undefined;
+    }
+
+    function handlePromptCycleKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.key !== "Tab" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      selectNextItem(event.shiftKey ? -1 : 1);
+    }
+
+    window.addEventListener("keydown", handlePromptCycleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handlePromptCycleKeyDown);
+    };
+  }, [
+    interactionFeedback,
+    normalizedMode,
+    previewRow,
+    resultMode,
+    selectNextItem,
+    showTextInput
+  ]);
 
   useEffect(() => {
     const previousFoundQuestionIds = previousFoundQuestionIdsRef.current;
@@ -1355,7 +1431,8 @@ export default function ImageReview({
     title = option.title,
     onClick
   }) {
-    const activeStyle = qualityButtonStyles[option.value];
+    const activeStyle = qualityButtonStyles[option.value] ||
+      qualityButtonStyles[IMAGE_RECAP_UNANSWERED];
 
     return (
       <button
@@ -1413,7 +1490,14 @@ export default function ImageReview({
             </button>
           </div>
 
-          <div style={imageRecapStatsGridStyle}>
+          <div
+            style={{
+              ...imageRecapStatsGridStyle,
+              gridTemplateColumns: effectiveRecapUnansweredCount > 0
+                ? "repeat(4, minmax(0, 1fr))"
+                : imageRecapStatsGridStyle.gridTemplateColumns
+            }}
+          >
             <div style={imageRecapStatStyle}>
               <div style={imageRecapStatValueStyle}>
                 {effectiveRecapSuccessRate}%
@@ -1437,6 +1521,15 @@ export default function ImageReview({
               </div>
               <div style={imageRecapStatLabelStyle}>à revoir</div>
             </div>
+
+            {effectiveRecapUnansweredCount > 0 && (
+              <div style={imageRecapStatStyle}>
+                <div style={imageRecapStatValueStyle}>
+                  {effectiveRecapUnansweredCount}
+                </div>
+                <div style={imageRecapStatLabelStyle}>non répondu</div>
+              </div>
+            )}
           </div>
 
           <div className="image-recap-content">
@@ -1477,29 +1570,48 @@ export default function ImageReview({
                     </button>
 
                     <div style={imageRecapSelectedMetaStyle}>
+                      {(() => {
+                        const selectedIsUnanswered =
+                          selectedRecapRow.selectedQuality === IMAGE_RECAP_UNANSWERED;
+
+                        return (
+                          <>
                       <span
                         style={{
                           ...imageRecapStatusChipStyle,
-                          ...(selectedRecapRow.isFound
-                            ? imageRecapStatusFoundStyle
-                            : imageRecapStatusMissedStyle)
+                          ...(selectedIsUnanswered
+                            ? imageRecapStatusUnansweredStyle
+                            : selectedRecapRow.isFound
+                              ? imageRecapStatusFoundStyle
+                              : imageRecapStatusMissedStyle)
                         }}
                       >
-                        {selectedRecapRow.isFound ? "Trouvée" : "À revoir"}
+                        {selectedIsUnanswered
+                          ? "Non répondu"
+                          : selectedRecapRow.isFound ? "Trouvée" : "À revoir"}
                       </span>
                       <span style={imageRecapSelectedTitleStyle}>
                         {answerLabel(selectedRecapRow.item)}
                       </span>
                       <span style={imageRecapSelectedIntervalStyle}>
-                        {(selectedRecapRow.projectedInterval ??
-                          projectedIntervalForImage(
-                            selectedRecapRow.item,
-                            selectedRecapRow.selectedQuality ?? (
-                              selectedRecapRow.isFound ? 2 : 0
-                            )
-                          ))}
-                        <span style={imageRecapIntervalUnitStyle}> j</span>
+                        {selectedIsUnanswered
+                          ? "—"
+                          : (
+                            <>
+                              {(selectedRecapRow.projectedInterval ??
+                                projectedIntervalForImage(
+                                  selectedRecapRow.item,
+                                  selectedRecapRow.selectedQuality ?? (
+                                    selectedRecapRow.isFound ? 2 : 0
+                                  )
+                                ))}
+                              <span style={imageRecapIntervalUnitStyle}> j</span>
+                            </>
+                          )}
                       </span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </>
                 ) : (
@@ -1588,7 +1700,10 @@ export default function ImageReview({
 
                 {effectiveRecapRows.map((row, index) => {
                   const mediaSrc = resolveMediaUrl(row.item.media);
-                  const statusLabel = row.isFound ? "Trouvée" : "À revoir";
+                  const isUnanswered = row.selectedQuality === IMAGE_RECAP_UNANSWERED;
+                  const statusLabel = isUnanswered
+                    ? "Non répondu"
+                    : row.isFound ? "Trouvée" : "À revoir";
                   const showSection =
                     showImageRecapSections &&
                     (index === 0 || effectiveRecapRows[index - 1].isFound !== row.isFound);
@@ -1597,6 +1712,9 @@ export default function ImageReview({
                   );
                   const projectedInterval = row.projectedInterval ??
                     projectedIntervalForImage(row.item, selectedQuality);
+                  const rowQualityOptions = row.canBeUnanswered
+                    ? [unansweredQualityOption, ...qualityOptions]
+                    : qualityOptions;
 
                   return (
                     <Fragment key={row.item.question_id}>
@@ -1615,7 +1733,11 @@ export default function ImageReview({
 
                       <div
                         className="image-recap-row"
-                        data-image-recap-row={row.isFound ? "found" : "missed"}
+                        data-image-recap-row={
+                          isUnanswered
+                            ? "unanswered"
+                            : row.isFound ? "found" : "missed"
+                        }
                         data-image-recap-selected={
                           selectedRecapRow?.item.question_id === row.item.question_id
                             ? "true"
@@ -1636,26 +1758,36 @@ export default function ImageReview({
                         }}
                         style={{
                           ...imageRecapRowStyle,
-                          ...(row.isFound
-                            ? imageRecapRowFoundStyle
-                            : imageRecapRowMissedStyle),
+                          ...(isUnanswered
+                            ? imageRecapRowUnansweredStyle
+                            : row.isFound
+                              ? imageRecapRowFoundStyle
+                              : imageRecapRowMissedStyle),
                           ...(selectedRecapRow?.item.question_id === row.item.question_id
                             ? imageRecapRowSelectedStyle
                             : {}),
                           borderLeft: row.isFound
                             ? "3px solid #38bdf8"
-                            : "3px solid #f59e0b"
+                            : isUnanswered
+                              ? "3px solid #737373"
+                              : "3px solid #f59e0b"
                         }}
                         title={answerLabel(row.item)}
                       >
                         <div style={imageRecapAnswerCellStyle}>
                           <span
-                            data-image-recap-status={row.isFound ? "found" : "missed"}
+                            data-image-recap-status={
+                              isUnanswered
+                                ? "unanswered"
+                                : row.isFound ? "found" : "missed"
+                            }
                             style={{
                               ...imageRecapStatusChipStyle,
-                              ...(row.isFound
-                                ? imageRecapStatusFoundStyle
-                                : imageRecapStatusMissedStyle)
+                              ...(isUnanswered
+                                ? imageRecapStatusUnansweredStyle
+                                : row.isFound
+                                  ? imageRecapStatusFoundStyle
+                                  : imageRecapStatusMissedStyle)
                             }}
                           >
                             {statusLabel}
@@ -1694,12 +1826,18 @@ export default function ImageReview({
                         </div>
 
                         <div style={imageRecapIntervalCellStyle}>
-                          {projectedInterval}
-                          <span style={imageRecapIntervalUnitStyle}> j</span>
+                          {selectedQuality === IMAGE_RECAP_UNANSWERED
+                            ? "—"
+                            : (
+                              <>
+                                {projectedInterval}
+                                <span style={imageRecapIntervalUnitStyle}> j</span>
+                              </>
+                            )}
                         </div>
 
                         <div style={imageRecapQualityCellStyle}>
-                          {qualityOptions.map(option =>
+                          {rowQualityOptions.map(option =>
                             renderImageRecapQualityButton({
                               option,
                               selected: selectedQuality === option.value,
@@ -2297,7 +2435,7 @@ export default function ImageReview({
   );
 }
 
-const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 158px";
+const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 194px";
 const imageRecapTableGap = "10px";
 const imageRecapTablePadding = "10px 14px";
 const imageRecapStatusStripeBorder = "3px solid transparent";
@@ -2681,6 +2819,10 @@ const imageRecapRowMissedStyle = {
   ].join(", ")
 };
 
+const imageRecapRowUnansweredStyle = {
+  background: "linear-gradient(90deg, rgba(115, 115, 115, 0.18), #181818 46%)"
+};
+
 const imageRecapRowSelectedStyle = {
   boxShadow: "inset 0 0 0 1px rgba(240, 195, 106, 0.78)"
 };
@@ -2720,6 +2862,12 @@ const imageRecapStatusMissedStyle = {
   ].join(", "),
   border: "1px solid rgba(251, 191, 36, 0.7)",
   color: "#fde68a"
+};
+
+const imageRecapStatusUnansweredStyle = {
+  background: "rgba(82, 82, 82, 0.24)",
+  border: "1px solid rgba(163, 163, 163, 0.58)",
+  color: "#d4d4d4"
 };
 
 const imageRecapThumbnailStyle = {

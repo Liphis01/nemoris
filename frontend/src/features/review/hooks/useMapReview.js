@@ -8,6 +8,8 @@ import {
   normalizeMapMode
 } from "../mapModes";
 
+export const MAP_RECAP_UNANSWERED = "unanswered";
+
 
 function normalize(str = "") {
   // Match user input without case, accent, or hyphen/space sensitivity.
@@ -114,6 +116,8 @@ function getSelectedQuality(item, isFound, qualityByQuestionId) {
 
 
 function getProjectedInterval(item, selectedQuality) {
+  if (selectedQuality === MAP_RECAP_UNANSWERED) return null;
+
   const value =
     item.projected_intervals?.[selectedQuality] ??
     item.progress?.interval ??
@@ -121,6 +125,62 @@ function getProjectedInterval(item, selectedQuality) {
   const interval = Number(value);
 
   return Number.isFinite(interval) ? interval : 0;
+}
+
+
+function qualityMapSortValue(quality) {
+  return quality === MAP_RECAP_UNANSWERED ? -1 : Number(quality);
+}
+
+
+function nextUnresolvedMapItem(items, startQuestionId, direction, resolvedSet) {
+  if (!items.length) return null;
+
+  const step = direction < 0 ? -1 : 1;
+  const startIndex = items.findIndex(item => item.question_id === startQuestionId);
+  const anchorIndex = startIndex >= 0 ? startIndex : step > 0 ? -1 : 0;
+
+  for (let offset = 1; offset <= items.length; offset += 1) {
+    const index = (anchorIndex + (offset * step) + items.length) % items.length;
+    const item = items[index];
+
+    if (!resolvedSet.has(item.question_id)) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+
+function buildMapRecapQualities(
+  reviewZones,
+  foundQuestionIdSet,
+  resolvedQuestionIdSet,
+  allowPartialSubmit
+) {
+  const qualities = {};
+
+  reviewZones.forEach(item => {
+    const qid = item.question_id;
+
+    if (foundQuestionIdSet.has(qid)) {
+      qualities[qid] = 2;
+    } else if (allowPartialSubmit && !resolvedQuestionIdSet.has(qid)) {
+      qualities[qid] = MAP_RECAP_UNANSWERED;
+    } else {
+      qualities[qid] = 0;
+    }
+  });
+
+  return qualities;
+}
+
+
+function submittedMapQualities(qualityByQuestionId) {
+  return Object.fromEntries(
+    Object.entries(qualityByQuestionId).filter(([, q]) => q !== MAP_RECAP_UNANSWERED)
+  );
 }
 
 
@@ -154,15 +214,15 @@ function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
     const bQuality = getSelectedQuality(b.item, b.isFound, qualityByQuestionId);
 
     return (
-      getProjectedInterval(a.item, aQuality) -
-      getProjectedInterval(b.item, bQuality)
+      (getProjectedInterval(a.item, aQuality) ?? -1) -
+      (getProjectedInterval(b.item, bQuality) ?? -1)
     );
   }
 
   if (recapSort.key === "quality") {
     return (
-      getSelectedQuality(a.item, a.isFound, qualityByQuestionId) -
-      getSelectedQuality(b.item, b.isFound, qualityByQuestionId)
+      qualityMapSortValue(getSelectedQuality(a.item, a.isFound, qualityByQuestionId)) -
+      qualityMapSortValue(getSelectedQuality(b.item, b.isFound, qualityByQuestionId))
     );
   }
 
@@ -349,6 +409,7 @@ export function useMapReview(
   // matching typed answers, prompt resolution, recap quality editing, and
   // per-zone grade submission.
   const mode = normalizeMapMode(options.mode);
+  const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
@@ -366,6 +427,7 @@ export function useMapReview(
   const [choiceFeedback, setChoiceFeedback] = useState(null);
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
+  const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
   const distractorUsageRef = useRef({
     reviewKey: null,
@@ -391,6 +453,7 @@ export function useMapReview(
     setChoiceFeedback(null);
     setZoneFeedback(null);
     setRecapSort(initialRecapSort);
+    setActivePromptQuestionId(null);
     distractorUsageRef.current = {
       reviewKey,
       counts: new Map(),
@@ -481,11 +544,21 @@ export function useMapReview(
     : foundQuestionIdSet;
 
   const currentPromptItem = useMemo(
-    () =>
-      isPromptMode
-        ? promptQueue.find(item => !resolvedQuestionIdSet.has(item.question_id))
-        : null,
-    [isPromptMode, promptQueue, resolvedQuestionIdSet]
+    () => {
+      if (!isPromptMode) return null;
+
+      if (activePromptQuestionId !== null) {
+        const activeItem = promptQueue.find(item =>
+          item.question_id === activePromptQuestionId &&
+          !resolvedQuestionIdSet.has(item.question_id)
+        );
+
+        if (activeItem) return activeItem;
+      }
+
+      return promptQueue.find(item => !resolvedQuestionIdSet.has(item.question_id)) || null;
+    },
+    [activePromptQuestionId, isPromptMode, promptQueue, resolvedQuestionIdSet]
   );
 
   const choiceOptions = useMemo(
@@ -562,14 +635,16 @@ export function useMapReview(
     if (!allZonesComplete) return;
 
     setQualityByQuestionId(
-      buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet)
+      buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
     );
     setShowRecap(true);
   }, [
+    allowPartialSubmit,
     completedQuestionIdSet,
     choiceFeedback,
     foundQuestionIdSet,
     mode,
+    resolvedQuestionIdSet,
     reviewZones,
     showRecap
   ]);
@@ -590,6 +665,36 @@ export function useMapReview(
     );
   }
 
+  function advanceAfterResolved(item) {
+    if (!isPromptMode || !item) return;
+
+    const nextResolvedSet = new Set([...resolvedQuestionIds, item.question_id]);
+    const nextItem = nextUnresolvedMapItem(
+      promptQueue,
+      item.question_id,
+      1,
+      nextResolvedSet
+    );
+
+    setActivePromptQuestionId(nextItem?.question_id || null);
+  }
+
+  function selectNextPrompt(direction = 1) {
+    if (!isPromptMode || !currentPromptItem) return;
+
+    const target = nextUnresolvedMapItem(
+      promptQueue,
+      currentPromptItem.question_id,
+      direction,
+      resolvedQuestionIdSet
+    );
+
+    if (!target || target.question_id === currentPromptItem.question_id) return;
+
+    setInput("");
+    setActivePromptQuestionId(target.question_id);
+  }
+
   function markFound(item) {
     // Do not count a zone twice if the user types an alias after finding it.
     if (!item || foundQuestionIdSet.has(item.question_id)) return;
@@ -599,6 +704,7 @@ export function useMapReview(
     setCorrectFlashId(Date.now());
     setIncorrectFlashId(0);
     setInput("");
+    advanceAfterResolved(item);
   }
 
   function markMissed(item) {
@@ -608,6 +714,7 @@ export function useMapReview(
     setIncorrectFlashId(Date.now());
     setCorrectFlashId(0);
     setInput("");
+    advanceAfterResolved(item);
   }
 
   function handleSubmit() {
@@ -690,9 +797,7 @@ export function useMapReview(
   }
 
   function skipCurrentPrompt() {
-    if (!currentPromptItem) return;
-
-    markMissed(currentPromptItem);
+    selectNextPrompt(1);
   }
 
   function focusNextRemainingZone() {
@@ -715,20 +820,22 @@ export function useMapReview(
   }
 
   function finishMap() {
-    // Initial recap grades are optimistic but not maximal: found zones are Good,
-    // missed zones are Again. The user can adjust before submitting.
     setQualityByQuestionId(
-      buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet)
+      buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
     );
     setShowRecap(true);
   }
 
   async function sendResult() {
     // Send one quality per atomic map question, then tell the parent review
-    // session which zones should be re-queued.
-    await submitAnswer(qualityByQuestionId, mode, contextItems.length);
+    // session which zones should be re-queued. Unanswered items are omitted.
+    const qualities = submittedMapQualities(qualityByQuestionId);
 
-    const failedQuestionIds = Object.entries(qualityByQuestionId)
+    if (Object.keys(qualities).length > 0) {
+      await submitAnswer(qualities, mode, contextItems.length);
+    }
+
+    const failedQuestionIds = Object.entries(qualities)
       .filter(([, quality]) => quality === 0)
       .map(([questionId]) => Number(questionId));
 
@@ -744,6 +851,11 @@ export function useMapReview(
   }
 
   function setQuality(id, quality) {
+    if (quality === MAP_RECAP_UNANSWERED) {
+      setQualityByQuestionId(prev => ({ ...prev, [id]: MAP_RECAP_UNANSWERED }));
+      return;
+    }
+
     setQualityByQuestionId(prev => ({
       ...prev,
       [id]: quality
@@ -779,12 +891,17 @@ export function useMapReview(
   const isIncorrectFlash = incorrectFlashId > 0;
   const isCorrectFlash = correctFlashId > 0;
   const feedbackTone = isIncorrectFlash ? "incorrect" : isCorrectFlash ? "correct" : null;
-  const recapSuccessCount = Object.values(qualityByQuestionId)
-    .filter(quality => quality > 0)
-    .length;
-  const recapMissCount = reviewZones.length - recapSuccessCount;
-  const recapSuccessRate = reviewZones.length
-    ? Math.round((recapSuccessCount / reviewZones.length) * 100)
+  const recapSubmittedQualities = Object.values(qualityByQuestionId)
+    .filter(q => q !== MAP_RECAP_UNANSWERED);
+  const recapSuccessCount = recapSubmittedQualities
+    .filter(q => Number(q) > 0).length;
+  const recapMissCount = recapSubmittedQualities
+    .filter(q => Number(q) === 0).length;
+  const recapUnansweredCount = Object.values(qualityByQuestionId)
+    .filter(q => q === MAP_RECAP_UNANSWERED).length;
+  const recapPlayedCount = recapSuccessCount + recapMissCount;
+  const recapSuccessRate = recapPlayedCount
+    ? Math.round((recapSuccessCount / recapPlayedCount) * 100)
     : 0;
   const recapRows = useMemo(() => {
     // Recap always keeps found zones above missed zones. Header sorting only
@@ -793,11 +910,19 @@ export function useMapReview(
       .map(item => {
         const historyStats = getHistoryStats(item);
         const isFound = foundQuestionIdSet.has(item.question_id);
+        const canBeUnanswered = (
+          allowPartialSubmit &&
+          !isFound &&
+          !resolvedQuestionIdSet.has(item.question_id)
+        );
+        const selectedQuality = getSelectedQuality(item, isFound, qualityByQuestionId);
 
         return {
           item,
           historyStats,
           isFound,
+          canBeUnanswered,
+          isUnanswered: selectedQuality === MAP_RECAP_UNANSWERED,
           difficultyScore: getDifficultyScore(item, historyStats)
         };
       })
@@ -823,7 +948,14 @@ export function useMapReview(
 
         return compareDefaultRecapRows(a, b);
       });
-  }, [reviewZones, foundQuestionIdSet, qualityByQuestionId, recapSort]);
+  }, [
+    allowPartialSubmit,
+    foundQuestionIdSet,
+    qualityByQuestionId,
+    recapSort,
+    resolvedQuestionIdSet,
+    reviewZones
+  ]);
   const hasCorrectRecapRows = recapRows.some(row => row.isFound);
   const hasWrongRecapRows = recapRows.some(row => !row.isFound);
   const activeChoiceFeedback = mode === MAP_MODE_MULTIPLE_CHOICE
@@ -873,10 +1005,12 @@ export function useMapReview(
     recapSort,
     recapSuccessCount,
     recapSuccessRate,
+    recapUnansweredCount,
     manualFocusCode: remainingFocusCode,
     remainingFocusCode: targetHighlightCode || remainingFocusCode,
     remainingZones,
     selectedCode,
+    selectNextPrompt,
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,

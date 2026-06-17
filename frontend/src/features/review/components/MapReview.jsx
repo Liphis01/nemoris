@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
-import { useMapReview } from "../hooks/useMapReview";
+import {
+  MAP_RECAP_UNANSWERED,
+  useMapReview
+} from "../hooks/useMapReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 import {
   MAP_MODE_CLICK_PROMPT,
@@ -76,6 +79,11 @@ const qualityButtonStyles = {
     background: "#3a3420",
     border: "1px solid #2c5c3e",
     color: "#7ee2a8"
+  },
+  [MAP_RECAP_UNANSWERED]: {
+    background: "#202020",
+    border: "1px solid #575757",
+    color: "#cfcfcf"
   }
 };
 
@@ -85,6 +93,12 @@ const qualityOptions = [
   { value: 2, icon: "🙂", title: "Bon" },
   { value: 3, icon: "✅", title: "Facile" }
 ];
+
+const unansweredQualityOption = {
+  value: MAP_RECAP_UNANSWERED,
+  icon: "NR",
+  title: "Non répondu"
+};
 
 const recapHeaderColumns = [
   { key: "answer", label: "Réponse" },
@@ -174,6 +188,7 @@ export default function MapReview({
   reviewZones,
   onComplete,
   submitAnswer,
+  allowPartialSubmit = false,
   showQualityControls = true,
   trainingElapsedMs = null,
   trainingBestTimeMs = null,
@@ -210,9 +225,11 @@ export default function MapReview({
     recapSort,
     recapSuccessCount,
     recapSuccessRate,
+    recapUnansweredCount,
     remainingFocusCode,
     remainingZones,
     selectedCode,
+    selectNextPrompt,
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,
@@ -223,6 +240,7 @@ export default function MapReview({
     skipCurrentPrompt,
     toggleRecapSort
   } = useMapReview(reviewZones, onComplete, submitAnswer, {
+    allowPartialSubmit,
     mode: normalizedMode,
     contextItems
   });
@@ -382,11 +400,7 @@ export default function MapReview({
   }, []);
 
   useEffect(() => {
-    if (
-      ![MAP_MODE_TYPE_ALL, MAP_MODE_MULTIPLE_CHOICE].includes(mode) ||
-      showRecap ||
-      remainingZones.length === 0
-    ) {
+    if (mode !== MAP_MODE_TYPE_ALL || showRecap || remainingZones.length === 0) {
       return undefined;
     }
 
@@ -412,6 +426,37 @@ export default function MapReview({
       window.removeEventListener("keydown", handleMapKeyDown);
     };
   }, [handleZoomRemaining, mode, remainingZones.length, showRecap]);
+
+  useEffect(() => {
+    if (
+      ![MAP_MODE_CLICK_PROMPT, MAP_MODE_MULTIPLE_CHOICE].includes(mode) ||
+      showRecap ||
+      remainingZones.length === 0
+    ) {
+      return undefined;
+    }
+
+    function handlePromptCycleKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.key !== "Tab" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      selectNextPrompt(event.shiftKey ? -1 : 1);
+    }
+
+    window.addEventListener("keydown", handlePromptCycleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handlePromptCycleKeyDown);
+    };
+  }, [mode, remainingZones.length, selectNextPrompt, showRecap]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
@@ -708,13 +753,9 @@ export default function MapReview({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (
-                  e.key === "Tab" &&
-                  mode === MAP_MODE_TYPE_PROMPT &&
-                  !e.shiftKey
-                ) {
+                if (e.key === "Tab" && mode === MAP_MODE_TYPE_PROMPT) {
                   e.preventDefault();
-                  skipCurrentPrompt();
+                  selectNextPrompt(e.shiftKey ? -1 : 1);
                   inputRef.current?.focus({ preventScroll: true });
                   return;
                 }
@@ -881,7 +922,9 @@ export default function MapReview({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gridTemplateColumns: recapUnansweredCount > 0
+                  ? "repeat(4, minmax(0, 1fr))"
+                  : "repeat(3, minmax(0, 1fr))",
                 gap: "10px",
                 marginBottom: "18px"
               }}
@@ -903,6 +946,13 @@ export default function MapReview({
                 <div style={recapStatValueStyle}>{recapMissCount}</div>
                 <div style={recapStatLabelStyle}>à revoir</div>
               </div>
+
+              {recapUnansweredCount > 0 && (
+                <div style={recapStatStyle}>
+                  <div style={recapStatValueStyle}>{recapUnansweredCount}</div>
+                  <div style={recapStatLabelStyle}>non répondu</div>
+                </div>
+              )}
             </div>
 
             <div className="map-recap-content">
@@ -1026,17 +1076,25 @@ export default function MapReview({
                   )}
 
                   {recapRows.map((row, index) => {
-                    const { item, historyStats, isFound } = row;
+                    const { item, historyStats, isFound, isUnanswered, canBeUnanswered } = row;
                     const showSection =
                       showRecapSections &&
                       (index === 0 || recapRows[index - 1].isFound !== isFound);
                     const isFocused = focusedCode === item.code;
                     const selectedQuality = qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
-                    const recapStatusLabel = isFound ? "Trouvée" : "À revoir";
-                    const projectedInterval =
-                      item.projected_intervals?.[selectedQuality] ??
-                      item.progress?.interval ??
-                      0;
+                    const recapStatusLabel = isUnanswered
+                      ? "Non répondu"
+                      : isFound ? "Trouvée" : "À revoir";
+                    const projectedInterval = isUnanswered
+                      ? null
+                      : (
+                        item.projected_intervals?.[selectedQuality] ??
+                        item.progress?.interval ??
+                        0
+                      );
+                    const rowQualityOptions = canBeUnanswered
+                      ? [unansweredQualityOption, ...qualityOptions]
+                      : qualityOptions;
 
                     return (
                       <Fragment key={item.question_id}>
@@ -1055,7 +1113,9 @@ export default function MapReview({
 
                         <div
                           className="map-recap-row"
-                          data-map-recap-row={isFound ? "found" : "missed"}
+                          data-map-recap-row={
+                            isUnanswered ? "unanswered" : isFound ? "found" : "missed"
+                          }
                           ref={setRecapRowRef(item.code)}
                           role="button"
                           tabIndex={0}
@@ -1073,22 +1133,30 @@ export default function MapReview({
                           style={{
                             ...recapRowStyle,
                             gridTemplateColumns: recapGridColumns,
-                            ...(isFound ? recapRowFoundStyle : recapRowMissedStyle),
+                            ...(isUnanswered
+                              ? recapRowUnansweredStyle
+                              : isFound ? recapRowFoundStyle : recapRowMissedStyle),
                             ...(isFocused ? recapRowFocusedStyle : {}),
                             borderLeft: isFound
                               ? "3px solid #38bdf8"
-                              : "3px solid #f59e0b"
+                              : isUnanswered
+                                ? "3px solid #737373"
+                                : "3px solid #f59e0b"
                           }}
                           title={item.code ? `Voir ${item.label} sur la carte` : item.label}
                         >
                           <div style={recapAnswerCellStyle}>
                             <span
-                              data-map-recap-status={isFound ? "found" : "missed"}
+                              data-map-recap-status={
+                                isUnanswered ? "unanswered" : isFound ? "found" : "missed"
+                              }
                               style={{
                                 ...recapStatusChipStyle,
-                                ...(isFound
-                                  ? recapStatusChipFoundStyle
-                                  : recapStatusChipMissedStyle)
+                                ...(isUnanswered
+                                  ? recapStatusChipUnansweredStyle
+                                  : isFound
+                                    ? recapStatusChipFoundStyle
+                                    : recapStatusChipMissedStyle)
                               }}
                             >
                               {recapStatusLabel}
@@ -1117,18 +1185,21 @@ export default function MapReview({
 
                           {showQualityControls && (
                           <div style={recapIntervalCellStyle}>
-                            {projectedInterval}
-                            <span style={recapIntervalUnitStyle}> j</span>
+                            {isUnanswered ? "—" : (
+                              <>
+                                {projectedInterval}
+                                <span style={recapIntervalUnitStyle}> j</span>
+                              </>
+                            )}
                           </div>
                           )}
 
                           {showQualityControls && (
                           <div style={recapQualityCellStyle}>
-                            {qualityOptions.map(({ value: qVal, icon, title }) => {
-
-                              const selected =
-                                qualityByQuestionId[item.question_id] === qVal;
-                              const activeStyle = qualityButtonStyles[qVal];
+                            {rowQualityOptions.map(({ value: qVal, icon, title }) => {
+                              const selected = qualityByQuestionId[item.question_id] === qVal;
+                              const activeStyle = qualityButtonStyles[qVal] ||
+                                qualityButtonStyles[MAP_RECAP_UNANSWERED];
 
                               return (
                                 <button
@@ -1336,7 +1407,7 @@ const recapTableStyle = {
   background: "#111"
 };
 
-const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 158px";
+const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 194px";
 const recapTableGap = "10px";
 const recapTablePadding = "10px 14px";
 const recapStatusStripeBorder = "3px solid transparent";
@@ -1498,6 +1569,10 @@ const recapRowMissedStyle = {
   ].join(", ")
 };
 
+const recapRowUnansweredStyle = {
+  background: "linear-gradient(90deg, rgba(115, 115, 115, 0.18), #181818 46%)"
+};
+
 const recapRowFocusedStyle = {
   boxShadow: "inset 0 0 0 1px rgba(243, 156, 18, 0.78)"
 };
@@ -1537,6 +1612,12 @@ const recapStatusChipMissedStyle = {
   ].join(", "),
   border: "1px solid rgba(251, 191, 36, 0.7)",
   color: "#fde68a"
+};
+
+const recapStatusChipUnansweredStyle = {
+  background: "rgba(82, 82, 82, 0.24)",
+  border: "1px solid rgba(163, 163, 163, 0.58)",
+  color: "#d4d4d4"
 };
 
 const recapAnswerTextStyle = {

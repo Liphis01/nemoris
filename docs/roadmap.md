@@ -4,8 +4,8 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- pour les questions bonus, changer un peu les règles des modes qui forcent une réponse (multiple choice label) et autoriser le skip (et cliquer sur l'image qu'on veut)
 - expand les groupes quand je fais une recherche (manage et collections)
+- gérer l'overflow des cards de training
 
 ## quick fixes
 
@@ -16,6 +16,7 @@
 - tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
+- le recap d'images est légèrement moins propre que maps
 
 ## bugs
 

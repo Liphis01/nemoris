@@ -735,6 +735,7 @@ export function useReviewSession(active) {
   }, [active, current?.items, current?.type_q, showAnswer, handleTextAnswer]);
 
   return {
+    bonusReviewActive,
     bonusReviewLoading,
     bonusReviewMessage,
     bonusReviewStatus,

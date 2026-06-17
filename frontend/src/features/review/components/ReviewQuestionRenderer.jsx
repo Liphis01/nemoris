@@ -38,6 +38,7 @@ export default function ReviewQuestionRenderer({
     submitMapAnswer,
     submitImageAnswer,
     submitTimelineAnswer,
+    allowPartialSubmit = false,
     trainingMode = false,
     trainingElapsedMs = null,
     trainingBestTimeMs = null,
@@ -62,6 +63,7 @@ export default function ReviewQuestionRenderer({
                 mode={q.mode}
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
+                allowPartialSubmit={allowPartialSubmit}
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
                 trainingBestTimeMs={trainingBestTimeMs}
@@ -86,6 +88,7 @@ export default function ReviewQuestionRenderer({
                 mode={q.mode}
                 onComplete={handleImageComplete}
                 submitAnswer={submitImageAnswer}
+                allowPartialSubmit={allowPartialSubmit}
                 separateResolvedItems={separatesResolvedItems}
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
