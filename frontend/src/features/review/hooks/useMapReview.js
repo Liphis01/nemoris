@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMapAnswer } from "../../../api/review";
 import {
   MAP_MODE_CLICK_PROMPT,
@@ -105,6 +105,7 @@ const initialRecapSort = {
   direction: "asc"
 };
 const DISTRACTOR_DIFFICULTY_SCALE = 2.0;
+const DISTRACTOR_COOLDOWN_DECAY = 1.6;
 
 
 function getSelectedQuality(item, isFound, qualityByQuestionId) {
@@ -215,16 +216,19 @@ function compareDistractorDifficulty(a, b) {
 }
 
 
-function distractorWeight(item, maxDifficultyScore) {
+function distractorWeight(item, maxDifficultyScore, usageCounts) {
   const difficultyScore = getDifficultyScore(item, getHistoryStats(item));
-
-  return Math.exp(
+  const useCount = usageCounts.get(item.question_id) || 0;
+  const difficultyWeight = Math.exp(
     (difficultyScore - maxDifficultyScore) / DISTRACTOR_DIFFICULTY_SCALE
   );
+  const cooldownWeight = Math.exp(-DISTRACTOR_COOLDOWN_DECAY * useCount);
+
+  return difficultyWeight * cooldownWeight;
 }
 
 
-function weightedSampleDistractors(items, count) {
+function weightedSampleDistractors(items, count, usageCounts = new Map()) {
   const candidates = [...(items || [])].sort(compareDistractorDifficulty);
   const selected = [];
 
@@ -232,18 +236,31 @@ function weightedSampleDistractors(items, count) {
     const maxDifficultyScore = Math.max(
       ...candidates.map(item => getDifficultyScore(item, getHistoryStats(item)))
     );
-    const weights = candidates.map(item =>
-      distractorWeight(item, maxDifficultyScore)
+    const weightedCandidates = candidates
+      .map((item, index) => ({
+        index,
+        item,
+        weight: distractorWeight(item, maxDifficultyScore, usageCounts)
+      }))
+      .sort((a, b) => {
+        if (b.weight !== a.weight) {
+          return b.weight - a.weight;
+        }
+
+        return compareDistractorDifficulty(a.item, b.item);
+      });
+    const totalWeight = weightedCandidates.reduce(
+      (total, candidate) => total + candidate.weight,
+      0
     );
-    const totalWeight = weights.reduce((total, weight) => total + weight, 0);
     let threshold = Math.random() * totalWeight;
     let selectedIndex = candidates.length - 1;
 
-    for (let index = 0; index < candidates.length; index += 1) {
-      threshold -= weights[index];
+    for (const candidate of weightedCandidates) {
+      threshold -= candidate.weight;
 
       if (threshold <= 0) {
-        selectedIndex = index;
+        selectedIndex = candidate.index;
         break;
       }
     }
@@ -256,19 +273,66 @@ function weightedSampleDistractors(items, count) {
 }
 
 
+function resetDistractorUsageForReviewKey(ref, reviewKey) {
+  if (ref.current.reviewKey !== reviewKey) {
+    ref.current = {
+      reviewKey,
+      counts: new Map(),
+      recordedChoiceKeys: new Set()
+    };
+  }
+
+  return ref.current;
+}
+
+
+function choiceOptionsRecordKey(target, choiceOptions) {
+  if (!target || !choiceOptions?.length) return null;
+
+  const optionIds = choiceOptions
+    .map(item => item.question_id)
+    .filter(id => id !== undefined && id !== null)
+    .sort((a, b) => a - b)
+    .join("|");
+
+  return `${target.question_id}:${optionIds}`;
+}
+
+
+function recordDistractorUsage(usageState, target, choiceOptions) {
+  const recordKey = choiceOptionsRecordKey(target, choiceOptions);
+
+  if (!recordKey || usageState.recordedChoiceKeys.has(recordKey)) {
+    return;
+  }
+
+  usageState.recordedChoiceKeys.add(recordKey);
+
+  choiceOptions.forEach(item => {
+    if (!item || item.question_id === target.question_id) return;
+
+    usageState.counts.set(
+      item.question_id,
+      (usageState.counts.get(item.question_id) || 0) + 1
+    );
+  });
+}
+
+
 function itemKey(items) {
   return (items || []).map(item => item.question_id).join("|");
 }
 
 
-function buildChoiceOptions(target, contextItems) {
+function buildChoiceOptions(target, contextItems, usageCounts) {
   if (!target) return [];
 
   const distractors = weightedSampleDistractors(
     (contextItems || []).filter(item =>
       item.question_id !== target.question_id && item.label
     ),
-    3
+    3,
+    usageCounts
   );
 
   return shuffle([target, ...distractors]);
@@ -303,6 +367,15 @@ export function useMapReview(
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
+  const distractorUsageRef = useRef({
+    reviewKey: null,
+    counts: new Map(),
+    recordedChoiceKeys: new Set()
+  });
+  const distractorUsage = resetDistractorUsageForReviewKey(
+    distractorUsageRef,
+    reviewKey
+  );
 
   useEffect(() => {
     setInput("");
@@ -318,6 +391,11 @@ export function useMapReview(
     setChoiceFeedback(null);
     setZoneFeedback(null);
     setRecapSort(initialRecapSort);
+    distractorUsageRef.current = {
+      reviewKey,
+      counts: new Map(),
+      recordedChoiceKeys: new Set()
+    };
   }, [reviewKey]);
 
   useEffect(() => {
@@ -411,9 +489,26 @@ export function useMapReview(
   );
 
   const choiceOptions = useMemo(
-    () => buildChoiceOptions(currentPromptItem, contextItems),
+    () => buildChoiceOptions(
+      currentPromptItem,
+      contextItems,
+      distractorUsage.counts
+    ),
+    // Cooldown counts live in a mutable ref; they should affect the next
+    // prompt sample, not resample the current prompt after recording.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [contextItems, currentPromptItem]
   );
+
+  useEffect(() => {
+    if (mode !== MAP_MODE_MULTIPLE_CHOICE) return;
+
+    recordDistractorUsage(
+      distractorUsageRef.current,
+      currentPromptItem,
+      choiceOptions
+    );
+  }, [choiceOptions, currentPromptItem, mode]);
 
   const foundCodes = useMemo(
     () =>

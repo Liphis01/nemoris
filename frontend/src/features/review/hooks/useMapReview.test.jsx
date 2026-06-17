@@ -15,6 +15,12 @@ function labels(rows) {
   return rows.map(row => row.item.label);
 }
 
+function optionIds(items) {
+  return items
+    .map(item => item.question_id)
+    .sort((a, b) => a - b);
+}
+
 function zone({
   questionId,
   code,
@@ -520,6 +526,55 @@ describe("useMapReview recap sorting", () => {
       ).toEqual([1, 3, 4, 5]);
     } finally {
       randomSpy.mockRestore();
+    }
+  });
+
+  it("multiple_choice cools used distractors without penalizing previous targets", () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha", difficulty: 1 }),
+      zone({ questionId: 6, code: "f", label: "Zeta", difficulty: 10 })
+    ];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta", difficulty: 10 }),
+      zone({ questionId: 3, code: "c", label: "Gamma", difficulty: 9.5 }),
+      zone({ questionId: 4, code: "d", label: "Delta", difficulty: 9 }),
+      zone({ questionId: 5, code: "e", label: "Epsilon", difficulty: 9.9 }),
+      zone({ questionId: 7, code: "g", label: "Eta", difficulty: 9.8 }),
+      zone({ questionId: 8, code: "h", label: "Theta", difficulty: 9.7 })
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, vi.fn(), vi.fn(), {
+          mode: "multiple_choice",
+          contextItems
+        })
+      );
+      const firstPrompt = result.current.currentPromptItem;
+
+      expect(firstPrompt.question_id).toBe(6);
+      expect(optionIds(result.current.choiceOptions)).toEqual([2, 5, 6, 7]);
+
+      act(() => {
+        result.current.handleChoiceSelect(firstPrompt.question_id);
+      });
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
+
+      const nextIds = optionIds(result.current.choiceOptions);
+
+      expect(result.current.currentPromptItem.question_id).toBe(1);
+      expect(nextIds).toEqual([1, 3, 6, 8]);
+      expect(new Set(nextIds).size).toBe(nextIds.length);
+      expect(nextIds).toContain(firstPrompt.question_id);
+      expect(nextIds).not.toContain(2);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 

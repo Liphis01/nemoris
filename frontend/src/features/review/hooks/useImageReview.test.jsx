@@ -23,6 +23,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function optionIds(items) {
+  return items
+    .map(item => item.question_id)
+    .sort((a, b) => a - b);
+}
+
 function imageItem(questionId, answer, aliases = [], difficulty = 5) {
   return {
     question_id: questionId,
@@ -629,6 +635,60 @@ describe("useImageReview", () => {
       ).toEqual([1, 3, 4, 5]);
     } finally {
       randomSpy.mockRestore();
+    }
+  });
+
+  it("multiple_choice_image cools used distractors without penalizing previous targets", () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    const items = [
+      imageItem(1, "France", [], 1),
+      imageItem(6, "Canada", [], 10)
+    ];
+    const contextItems = [
+      ...items,
+      imageItem(2, "Germany", [], 10),
+      imageItem(3, "Spain", [], 9.5),
+      imageItem(4, "Italy", [], 9),
+      imageItem(5, "Portugal", [], 9.9),
+      imageItem(7, "Belgium", [], 9.8),
+      imageItem(8, "Ireland", [], 9.7)
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useImageReview(items, vi.fn(), undefined, {
+          mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+          contextItems
+        })
+      );
+      const firstPrompt = result.current.currentPromptItem;
+
+      expect(firstPrompt.question_id).toBe(6);
+      expect(optionIds(result.current.gridItems.map(row => row.item))).toEqual([
+        2,
+        5,
+        6,
+        7
+      ]);
+
+      act(() => {
+        result.current.handleImageSelect(firstPrompt.question_id);
+      });
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
+
+      const nextIds = optionIds(result.current.gridItems.map(row => row.item));
+
+      expect(result.current.currentPromptItem.question_id).toBe(1);
+      expect(nextIds).toEqual([1, 3, 6, 8]);
+      expect(new Set(nextIds).size).toBe(nextIds.length);
+      expect(nextIds).toContain(firstPrompt.question_id);
+      expect(nextIds).not.toContain(2);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 

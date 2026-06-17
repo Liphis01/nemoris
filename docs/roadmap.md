@@ -4,7 +4,10 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- un mode pour renforcer les points faibles
+- resume
+- modifier multiple choice label pour qu'il fasse les questions unes à unes
+- pour les questions bonus, changer un peu les règles des modes qui forcent une réponse (multiple choice label) et autoriser le skip (et cliquer sur l'image qu'on veut)
+- expand les groupes quand je fais une recherche (manage et collections)
 
 ## quick fixes
 
@@ -23,6 +26,7 @@
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
+- après avoir fait une question bonus (le drapeau du listenbourg) il m'a remis sur le menu de fin de review pour faire d'autres questions bonus
 
 ## to do when i have more time
 
