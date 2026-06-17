@@ -417,7 +417,8 @@ describe("TrainingSession", () => {
       .closest("aside");
 
     expect(detail).toHaveTextContent("Générée automatiquement");
-    expect(within(detail).getByText("auto")).toBeInTheDocument();
+    expect(within(detail).queryByText("auto")).not.toBeInTheDocument();
+    expect(within(detail).queryByText("collection")).not.toBeInTheDocument();
     expect(within(detail).queryByRole("button", { name: "Modifier" }))
       .not.toBeInTheDocument();
     expect(within(detail).queryByRole("button", { name: "Supprimer" }))

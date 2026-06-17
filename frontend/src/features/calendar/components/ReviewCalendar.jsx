@@ -68,8 +68,73 @@ function isNewQuestion(question) {
   return (question.progress?.reps || 0) === 0 && history.length === 0;
 }
 
-function isSuccessfulHistoryEntry(entry) {
-  return Number(entry?.quality) > 0;
+function isFailedHistoryEntry(entry) {
+  return Number(entry?.quality) === 0;
+}
+
+function mergeCalendarHistoryEntry(currentHistory, entry, index) {
+  const hadFailedAttempt = Boolean(currentHistory?.had_failed_attempt) ||
+    isFailedHistoryEntry(entry);
+
+  return {
+    ...entry,
+    quality: hadFailedAttempt ? 0 : entry.quality,
+    latest_quality: entry.quality,
+    attempt_count: (currentHistory?.attempt_count || 0) + 1,
+    first_history_index: currentHistory?.first_history_index ?? index,
+    latest_history_index: index,
+    had_failed_attempt: hadFailedAttempt
+  };
+}
+
+function buildQuestionHistoryEvents(question) {
+  const entriesByDate = new Map();
+
+  (question.progress?.history || []).forEach((entry, index) => {
+    if (!entry.reviewed_on) return;
+
+    if (!entriesByDate.has(entry.reviewed_on)) {
+      entriesByDate.set(entry.reviewed_on, []);
+    }
+
+    entriesByDate.get(entry.reviewed_on).push({ entry, index });
+  });
+
+  return Array.from(entriesByDate.entries()).flatMap(([dateKey, entries]) => {
+    const hasFailedAttempt = entries.some(({ entry }) =>
+      isFailedHistoryEntry(entry)
+    );
+
+    if (!hasFailedAttempt) {
+      return entries.map(({ entry, index }) => ({
+        id: `history-${question.id}-${dateKey}-${index}`,
+        dateKey,
+        kind: "history",
+        question,
+        history: entry
+      }));
+    }
+
+    const history = entries.reduce(
+      (currentHistory, { entry, index }) =>
+        mergeCalendarHistoryEntry(currentHistory, entry, index),
+      null
+    );
+
+    return [{
+      id: `history-${question.id}-${dateKey}-${history.first_history_index}`,
+      dateKey,
+      kind: "history",
+      question,
+      history
+    }];
+  });
+}
+
+function hasFailedHistoryEvent(events) {
+  return events.some((event) =>
+    event.kind === "history" && isFailedHistoryEntry(event.history)
+  );
 }
 
 function buildCalendarDays(monthDate) {
@@ -652,6 +717,10 @@ function EventCard({
 
 function groupStatusLabel(row, todayKey) {
   if (row.kind === "history") {
+    if (hasFailedHistoryEvent(row.events)) {
+      return "Faux";
+    }
+
     const labels = new Set(
       row.events.map((event) => historyLabel(event.history?.quality))
     );
@@ -668,6 +737,10 @@ function groupStatusLabel(row, todayKey) {
 
 function groupStatusColor(row, todayKey) {
   if (row.kind === "history") {
+    if (hasFailedHistoryEvent(row.events)) {
+      return historyColor(0);
+    }
+
     const qualities = new Set(
       row.events.map((event) => event.history?.quality)
     );
@@ -872,18 +945,9 @@ export default function ReviewCalendar({
   );
 
   const historyEvents = useMemo(
-    () => questions.flatMap((question) =>
-      (question.progress?.history || [])
-        .filter((entry) => entry.reviewed_on)
-        .filter(isSuccessfulHistoryEntry)
-        .map((entry, index) => ({
-          id: `history-${question.id}-${entry.reviewed_on}-${index}`,
-          dateKey: entry.reviewed_on,
-          kind: "history",
-          question,
-          history: entry
-        }))
-    ).sort((a, b) => a.dateKey.localeCompare(b.dateKey)),
+    () => questions
+      .flatMap(buildQuestionHistoryEvents)
+      .sort((a, b) => a.dateKey.localeCompare(b.dateKey)),
     [questions]
   );
 
@@ -1335,6 +1399,7 @@ export default function ReviewCalendar({
                 const scheduledCount = scheduledEventsForDay.length;
                 const scheduledTypeSummaries = buildTypeSummaries(scheduledEventsForDay);
                 const historyTypeSummaries = buildTypeSummaries(historyEventsForDay);
+                const hasFailedHistory = hasFailedHistoryEvent(historyEventsForDay);
                 const displayedTypeSummaries = scheduledCount > 0
                   ? scheduledTypeSummaries
                   : historyTypeSummaries;
@@ -1457,12 +1522,16 @@ export default function ReviewCalendar({
                               ? isPast
                                 ? "#3a1d1d"
                                 : "#2b2047"
-                              : "#252525",
+                              : hasFailedHistory
+                                ? "#3a1d1d"
+                                : "#252525",
                             color: scheduledCount > 0
                               ? isPast
                                 ? "#ff9c9c"
                                 : "#b69cff"
-                              : "#8f9aa3",
+                              : hasFailedHistory
+                                ? "#ff9c9c"
+                                : "#8f9aa3",
                             display: "inline-flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -1565,8 +1634,10 @@ export default function ReviewCalendar({
                               width: "18px",
                               height: "4px",
                               borderRadius: "999px",
-                              background: "#8f9aa3",
-                              opacity: isCurrentMonth ? 0.36 : 0.18
+                              background: hasFailedHistory ? "#ff9c9c" : "#8f9aa3",
+                              opacity: hasFailedHistory
+                                ? isCurrentMonth ? 0.58 : 0.28
+                                : isCurrentMonth ? 0.36 : 0.18
                             }}
                           />
                           <span>

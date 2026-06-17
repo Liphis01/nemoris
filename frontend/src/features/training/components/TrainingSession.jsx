@@ -382,16 +382,6 @@ function CollectionTile({ collection, onSelect, selected }) {
       onClick={onSelect}
     >
       <span className="training-scope-tile-main">
-        <span className="training-collection-badge-row">
-          <span className="training-scope-badge training-scope-badge-collection">
-            collection
-          </span>
-          {generated && (
-            <span className="training-scope-badge training-scope-badge-auto">
-              auto
-            </span>
-          )}
-        </span>
         <strong>{collection.name}</strong>
         <span>
           {questionCountLabel(collection.question_count)}
@@ -428,16 +418,6 @@ function CollectionDetailPanel({
       aria-label="Détails de la collection"
     >
       <div className="training-detail-head">
-        <span className="training-collection-badge-row">
-          <span className="training-scope-badge training-scope-badge-collection">
-            collection
-          </span>
-          {generated && (
-            <span className="training-scope-badge training-scope-badge-auto">
-              auto
-            </span>
-          )}
-        </span>
         <h2>{collection.name}</h2>
         <p>
           {questionCountLabel(collection.question_count)}
