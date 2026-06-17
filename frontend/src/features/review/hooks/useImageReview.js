@@ -763,7 +763,7 @@ export function useImageReview(
   function skipCurrentPrompt() {
     if (mode !== IMAGE_MODE_TYPE_PROMPT || !currentPromptItem) return;
 
-    markMissed(currentPromptItem);
+    selectNextItem(1);
   }
 
   function finishReview() {

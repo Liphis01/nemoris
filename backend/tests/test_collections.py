@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine, func, select
@@ -172,7 +173,7 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(collection.data["hard_threshold"], AUTO_HARD_COLLECTION_THRESHOLD)
         self.assertEqual([question.id for question in collection.questions], [2])
 
-        easy.progress.difficulty = 8.2
+        easy.progress.difficulty = AUTO_HARD_COLLECTION_THRESHOLD + 0.1
         hard.progress.difficulty = 6.5
         unreviewed.progress = Progress(
             question_id=unreviewed.id,
@@ -521,6 +522,35 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(
             text_item["training_fingerprint"],
             collection_training_fingerprint(self.db, collection)
+        )
+
+    def test_collection_training_randomizes_top_level_question_order(self):
+        self.add_question(1, question="First", answer="One")
+        self.add_question(2, question="Second", answer="Two")
+        collection = Collection(
+            name="Two texts",
+            data={},
+            questions=[
+                self.db.get(Question, 1),
+                self.db.get(Question, 2)
+            ]
+        )
+        self.db.add(collection)
+        self.db.commit()
+
+        with patch(
+            "app.services.training._shuffled_training_items",
+            side_effect=lambda items: list(reversed(list(items or [])))
+        ):
+            response = get_training_items(
+                self.db,
+                scope_type="collection",
+                collection_id=collection.id
+            )
+
+        self.assertEqual(
+            [item["question_id"] for item in response],
+            [2, 1]
         )
 
     def test_collection_scopes_and_record_save_use_fingerprints(self):

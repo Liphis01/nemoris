@@ -577,7 +577,7 @@ describe("ImageReview answer label preview", () => {
     });
   });
 
-  it("uses Tab to skip and Shift+Tab to select previous type_prompt images without moving focus", async () => {
+  it("uses Tab and Shift+Tab to select type_prompt images without moving focus", async () => {
     const selectNextItem = vi.fn();
     const skipCurrentPrompt = vi.fn();
     const rows = [
@@ -599,8 +599,8 @@ describe("ImageReview answer label preview", () => {
     input.focus();
 
     expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
-    expect(skipCurrentPrompt).toHaveBeenCalledTimes(1);
-    expect(selectNextItem).not.toHaveBeenCalled();
+    expect(selectNextItem).toHaveBeenCalledWith(1);
+    expect(skipCurrentPrompt).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(document.activeElement).toBe(input);
@@ -716,26 +716,22 @@ describe("ImageReview answer label preview", () => {
     });
   });
 
-  it("reveals skipped type_prompt image answers on their tiles", () => {
+  it("keeps passed type_prompt image answers hidden on their tiles", () => {
     const rows = [
-      imageGridRow(1, {
-        isMissed: true,
-        isRevealed: true
-      }),
+      imageGridRow(1),
       imageGridRow(2)
     ];
     const { container } = renderImageReviewWithState(
       typePromptHookState({
         rows,
-        activeQuestionId: 2,
-        resolvedQuestionIds: [1]
+        activeQuestionId: 2
       })
     );
-    const skippedTile = tileFor(container, 1);
+    const passedTile = tileFor(container, 1);
 
-    expect(skippedTile).toHaveAttribute("data-image-feedback", "missed");
-    expect(skippedTile).toHaveAttribute("data-image-revealed", "true");
-    expect(skippedTile).toHaveTextContent("Image 1");
+    expect(passedTile).toHaveAttribute("data-image-feedback", "");
+    expect(passedTile).toHaveAttribute("data-image-revealed", "false");
+    expect(passedTile).not.toHaveTextContent("Image 1");
   });
 
   it("reveals only the target image during wrong click_prompt feedback", () => {

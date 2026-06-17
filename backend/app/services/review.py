@@ -1,5 +1,6 @@
 from copy import deepcopy
 from datetime import date, timedelta
+import random
 from types import SimpleNamespace
 
 from sqlalchemy import func, or_
@@ -71,6 +72,35 @@ def _balanced_chunks(items, max_size):
     return chunks
 
 
+def _shuffled(items):
+    shuffled = list(items or [])
+    random.shuffle(shuffled)
+    return shuffled
+
+
+def _question_ids(items):
+    return [
+        item.id
+        for item in items or []
+        if item is not None
+    ]
+
+
+def _shuffled_context_questions(context_questions, active_questions):
+    context_questions = list(context_questions or [])
+    active_questions = list(active_questions or [])
+    context_ids = _question_ids(context_questions)
+    active_ids = _question_ids(active_questions)
+
+    if (
+        len(context_ids) == len(active_ids) and
+        set(context_ids) == set(active_ids)
+    ):
+        return active_questions
+
+    return _shuffled(context_questions)
+
+
 def _affinity_chunks(items, max_size):
     items = list(items or [])
 
@@ -97,9 +127,12 @@ def _group_review_chunks(items, scheduled_review):
     items = list(items or [])
 
     if not scheduled_review:
-        return [items]
+        return [_shuffled(items)]
 
-    return _affinity_chunks(items, REVIEW_GROUP_MAX_CHUNK_SIZE)
+    return [
+        _shuffled(chunk)
+        for chunk in _affinity_chunks(items, REVIEW_GROUP_MAX_CHUNK_SIZE)
+    ]
 
 
 def _unique_sorted_questions(*question_groups):
@@ -799,7 +832,10 @@ def _serialize_review_items(
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
                 )
-                for item in context_questions
+                for item in _shuffled_context_questions(
+                    context_questions,
+                    chunk_questions
+                )
             ]
             map_group = serialize_map_review_group(
                 group,
@@ -868,7 +904,10 @@ def _serialize_review_items(
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
                 )
-                for item in context_questions
+                for item in _shuffled_context_questions(
+                    context_questions,
+                    chunk_questions
+                )
             ]
             image_group = serialize_image_review_group(
                 group,

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import random
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -85,6 +86,12 @@ def _training_questions_by_ids(db, question_ids):
         for question_id in question_ids
         if question_id in questions_by_id
     ]
+
+
+def _shuffled_training_items(items):
+    shuffled = list(items or [])
+    random.shuffle(shuffled)
+    return shuffled
 
 
 def _question_ids_for_training_tag(db, normalized_tag):
@@ -927,7 +934,7 @@ def get_training_items(
                 elif item.get("type_q") == "image":
                     item["mode"] = normalized_image_mode
 
-        return items
+        return _shuffled_training_items(items)
 
     if scope_type == "collection":
         if collection_id is None:
@@ -988,7 +995,7 @@ def get_training_items(
                 ]
                 item["context_items"] = context_items or item.get("items", [])
 
-        return items
+        return _shuffled_training_items(items)
 
     if scope_type == "tag":
         normalized_tag = normalize_scope_tag(tag)

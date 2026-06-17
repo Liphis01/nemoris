@@ -59,7 +59,10 @@ function shuffleTrainingItems(items, random = Math.random) {
 
     return {
       ...item,
-      items: shuffledTrainingList(item.items, random)
+      items: shuffledTrainingList(item.items, random),
+      ...(Array.isArray(item.context_items)
+        ? { context_items: shuffledTrainingList(item.context_items, random) }
+        : {})
     };
   });
 }

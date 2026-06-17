@@ -1979,18 +1979,6 @@ export default function ImageReview({
                 if (
                   event.key === "Tab" &&
                   normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
-                  !event.shiftKey &&
-                  !resultMode
-                ) {
-                  event.preventDefault();
-                  skipCurrentPrompt();
-                  focusAnswerInput();
-                  return;
-                }
-
-                if (
-                  event.key === "Tab" &&
-                  normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
                   !resultMode
                 ) {
                   event.preventDefault();

@@ -352,7 +352,10 @@ describe("useImageReview", () => {
       result.current.selectItem(2);
     });
     act(() => {
-      result.current.skipCurrentPrompt();
+      result.current.setInput("Germany");
+    });
+    act(() => {
+      result.current.handleSubmit();
     });
 
     expect(result.current.resolvedQuestionIds).toEqual([2]);
@@ -377,7 +380,7 @@ describe("useImageReview", () => {
     expect(result.current.currentPromptItem.question_id).toBe(1);
   });
 
-  it("type_prompt answers and skips advance from the current image position", () => {
+  it("type_prompt answers and passes advance from the current image position", () => {
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany"),
@@ -410,12 +413,12 @@ describe("useImageReview", () => {
     });
 
     expect(result.current.foundQuestionIds).toEqual([3]);
-    expect(result.current.resolvedQuestionIds).toEqual([3, 4]);
-    expect(result.current.resolvedQuestionIdsRecentFirst).toEqual([4, 3]);
+    expect(result.current.resolvedQuestionIds).toEqual([3]);
+    expect(result.current.resolvedQuestionIdsRecentFirst).toEqual([3]);
     expect(result.current.currentPromptItem.question_id).toBe(1);
   });
 
-  it("type_prompt skip marks the current image missed and advances", () => {
+  it("type_prompt pass selects the next image without revealing or grading", () => {
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany")
@@ -429,14 +432,14 @@ describe("useImageReview", () => {
       result.current.skipCurrentPrompt();
     });
 
-    expect(result.current.resolvedQuestionIds).toContain(skipped.question_id);
+    expect(result.current.resolvedQuestionIds).not.toContain(skipped.question_id);
     expect(result.current.foundQuestionIds).not.toContain(skipped.question_id);
-    expect(result.current.revealedQuestionIds).toContain(skipped.question_id);
+    expect(result.current.revealedQuestionIds).not.toContain(skipped.question_id);
     expect(result.current.gridItems.find(row =>
       row.item.question_id === skipped.question_id
     )).toMatchObject({
-      isMissed: true,
-      isRevealed: true
+      isMissed: false,
+      isRevealed: false
     });
     expect(result.current.currentPromptItem.question_id).not.toBe(
       skipped.question_id

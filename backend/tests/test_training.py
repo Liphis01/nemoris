@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -163,6 +164,46 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(
             response[0]["training_fingerprint"],
             group_training_fingerprint(self.db, group)
+        )
+
+    def test_group_training_randomizes_group_item_order(self):
+        group = QuestionGroup(
+            id=12,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+
+        for question_id in range(1, 4):
+            self.add_question(
+                question_id,
+                type_q="map",
+                answer=f"Zone {question_id}",
+                data={"code": f"z{question_id}"},
+                group=group
+            )
+
+        self.db.commit()
+
+        with patch(
+            "app.services.review._shuffled",
+            side_effect=lambda items: list(reversed(list(items or [])))
+        ):
+            response = get_training_items(
+                self.db,
+                scope_type="group",
+                group_id=group.id
+            )
+
+        self.assertEqual(
+            [item["question_id"] for item in response[0]["items"]],
+            [3, 2, 1]
+        )
+        self.assertEqual(
+            [item["question_id"] for item in response[0]["context_items"]],
+            [3, 2, 1]
         )
 
     def test_image_group_training_accepts_mode_and_context_items(self):

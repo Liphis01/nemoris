@@ -106,6 +106,11 @@ describe("useTrainingSession", () => {
           { question_id: 2 },
           { question_id: 3 },
           { question_id: 4 }
+        ],
+        context_items: [
+          { question_id: 6 },
+          { question_id: 7 },
+          { question_id: 8 }
         ]
       },
       { question_id: 5, type_q: "text" }
@@ -124,12 +129,22 @@ describe("useTrainingSession", () => {
       4,
       2
     ]);
+    expect(shuffled[0].context_items.map(item => item.question_id)).toEqual([
+      7,
+      8,
+      6
+    ]);
     expect(items.map(item => item.question_id ?? item.group_id)).toEqual([
       1,
       2,
       5
     ]);
     expect(items[1].items.map(item => item.question_id)).toEqual([2, 3, 4]);
+    expect(items[1].context_items.map(item => item.question_id)).toEqual([
+      6,
+      7,
+      8
+    ]);
   });
 
   it("loads scopes and starts a group training session", async () => {

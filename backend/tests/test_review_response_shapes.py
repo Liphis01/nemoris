@@ -441,10 +441,16 @@ class ReviewResponseShapeTests(unittest.TestCase):
             map_group["mode"],
             len(map_group["context_items"])
         )
+        first_map_zone = fixture["map_zones"][0]
+        returned_first_map_zone = next(
+            zone
+            for zone in map_group["items"]
+            if zone["question_id"] == first_map_zone.id
+        )
         self.assertEqual(
-            map_group["items"][0]["projected_intervals"],
+            returned_first_map_zone["projected_intervals"],
             preview_intervals(
-                fixture["map_zones"][0].progress,
+                first_map_zone.progress,
                 mode_difficulty=mode_difficulty
             )
         )
@@ -508,10 +514,16 @@ class ReviewResponseShapeTests(unittest.TestCase):
             image_group["mode"],
             len(image_group["context_items"])
         )
+        first_image_item = fixture["image_items"][0]
+        returned_first_image_item = next(
+            item
+            for item in image_group["items"]
+            if item["question_id"] == first_image_item.id
+        )
         self.assertEqual(
-            image_group["items"][0]["projected_intervals"],
+            returned_first_image_item["projected_intervals"],
             preview_intervals(
-                fixture["image_items"][0].progress,
+                first_image_item.progress,
                 mode_difficulty=mode_difficulty
             )
         )
@@ -519,6 +531,47 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(
             {item["question_id"] for item in image_group["items"]},
             {item.id for item in fixture["image_items"]}
+        )
+
+    def test_review_randomizes_question_order_inside_runtime_groups(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=25,
+            type_group="map",
+            name="Random map",
+            media="/static/random.svg",
+            data={}
+        )
+        self.db.add(map_group)
+
+        for index in range(3):
+            self.add_question(
+                20 + index,
+                type_q="map",
+                answer=f"Zone {index}",
+                data={"code": f"z{index}"},
+                group=map_group,
+                next_review=today
+            )
+
+        self.db.commit()
+
+        with patch(
+            "app.services.review._shuffled",
+            side_effect=lambda items: list(reversed(list(items or [])))
+        ):
+            response = get_review(db=self.db)
+
+        map_payload = next(item for item in response if item["type_q"] == "map")
+        item_ids = [
+            item["question_id"]
+            for item in map_payload["items"]
+        ]
+
+        self.assertEqual(item_ids, [22, 21, 20])
+        self.assertEqual(
+            [item["question_id"] for item in map_payload["context_items"]],
+            item_ids
         )
 
     def test_small_scheduled_map_multiple_choice_borrows_started_context(self):
@@ -563,8 +616,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
             [due_zone.id]
         )
         self.assertEqual(
-            [item["question_id"] for item in map_payload["context_items"]],
-            [due_zone.id, *[zone.id for zone in future_zones]]
+            {item["question_id"] for item in map_payload["context_items"]},
+            {due_zone.id, *[zone.id for zone in future_zones]}
         )
 
     def test_small_scheduled_map_falls_back_below_choice_context_minimum(self):
@@ -676,8 +729,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
             [selected_bonus.id]
         )
         self.assertEqual(
-            [item["question_id"] for item in image_payload["context_items"]],
-            [selected_bonus.id, *[item.id for item in started_distractors]]
+            {item["question_id"] for item in image_payload["context_items"]},
+            {selected_bonus.id, *[item.id for item in started_distractors]}
         )
         self.assertNotIn(
             121,
@@ -859,9 +912,18 @@ class ReviewResponseShapeTests(unittest.TestCase):
 
         self.assertEqual(len(image_groups), 3)
         self.assertEqual([len(chunk) for chunk in chunks], [12, 12, 12])
-        self.assertEqual(chunks[0], [item.id for item in image_items[:12]])
-        self.assertEqual(chunks[1], [item.id for item in image_items[12:24]])
-        self.assertEqual(chunks[2], [item.id for item in image_items[24:]])
+        self.assertEqual(
+            set(chunks[0]),
+            {item.id for item in image_items[:12]}
+        )
+        self.assertEqual(
+            set(chunks[1]),
+            {item.id for item in image_items[12:24]}
+        )
+        self.assertEqual(
+            set(chunks[2]),
+            {item.id for item in image_items[24:]}
+        )
         self.assertEqual(set(returned_ids), {item.id for item in image_items})
         self.assertEqual(len(returned_ids), len(set(returned_ids)))
 
