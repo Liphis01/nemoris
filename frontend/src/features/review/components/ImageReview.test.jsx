@@ -11,6 +11,7 @@ import {
 } from "../imageModes";
 
 vi.mock("../hooks/useImageReview", () => ({
+  IMAGE_RECAP_UNANSWERED: "unanswered",
   useImageReview: vi.fn()
 }));
 

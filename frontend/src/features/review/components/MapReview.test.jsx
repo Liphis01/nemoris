@@ -360,34 +360,29 @@ describe("MapReview recap map focus", () => {
     }
   });
 
-  it("shows type_prompt skips as a separate progress bar segment", async () => {
+  it("advances type_prompt without a wrong segment when skipping", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"
     });
     const targetCode = screen.getByTestId("active-map")
       .getAttribute("data-due-items");
-    const targetLabel = reviewZones.find(zone => zone.code === targetCode)?.label;
 
     fireEvent.click(screen.getByRole("button", { name: "Passer" }));
 
     await waitFor(() => {
-      expect(container.querySelector("[data-map-progress-correct]"))
-        .toHaveStyle({ width: "0%" });
-      expect(container.querySelector("[data-map-progress-wrong]"))
-        .toHaveStyle({ width: "50%" });
+      expect(screen.getByTestId("active-map"))
+        .not.toHaveAttribute("data-due-items", targetCode);
     });
-    expect(container.querySelector("[data-map-progress-wrong]").style.background)
-      .toContain("repeating-linear-gradient");
-    expect(screen.getByRole("progressbar", { name: "Avancement" }))
-      .toHaveAttribute("aria-valuenow", "1");
+    // Skipping no longer marks the zone missed, so there is no wrong segment.
+    expect(container.querySelector("[data-map-progress-correct]"))
+      .toHaveStyle({ width: "0%" });
+    expect(container.querySelector("[data-map-progress-wrong]"))
+      .toHaveStyle({ width: "0%" });
     expect(screen.getByTestId("active-map"))
-      .toHaveAttribute("data-missed", targetCode);
-    const labels = JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels);
-
-    expect(labels[targetCode]).toBe(targetLabel);
+      .not.toHaveAttribute("data-missed", targetCode);
   });
 
-  it("skips type_prompt map zones with Tab", async () => {
+  it("skips type_prompt map zones with Tab without marking them missed", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"
     });
@@ -400,13 +395,13 @@ describe("MapReview recap map focus", () => {
     expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
 
     await waitFor(() => {
-      expect(container.querySelector("[data-map-progress-wrong]"))
-        .toHaveStyle({ width: "50%" });
       expect(screen.getByTestId("active-map"))
-        .toHaveAttribute("data-missed", targetCode);
+        .not.toHaveAttribute("data-due-items", targetCode);
     });
-    expect(screen.getByRole("progressbar", { name: "Avancement" }))
-      .toHaveAttribute("aria-valuenow", "1");
+    expect(container.querySelector("[data-map-progress-wrong]"))
+      .toHaveStyle({ width: "0%" });
+    expect(screen.getByTestId("active-map"))
+      .not.toHaveAttribute("data-missed", targetCode);
     expect(input).toHaveFocus();
   });
 

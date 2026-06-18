@@ -506,8 +506,8 @@ describe("TrainingSession", () => {
         expect.any(Object)
       );
     });
-    const editResults = screen.getByLabelText("Questions disponibles");
-    fireEvent.click(within(editResults).getByRole("button", { name: "Déplier Europe" }));
+    // The active search filter auto-expands the "Europe" section, so the
+    // "Sélectionner France" control is already revealed without a manual expand.
     fireEvent.click(await screen.findByLabelText("Sélectionner France"));
     fireEvent.click(screen.getByRole("button", { name: /Enregistrer/ }));
 

@@ -219,6 +219,7 @@ export default function MapReview({
     mode,
     qualityByQuestionId,
     missedCodes,
+    promptCode,
     promptLabel,
     recapMissCount,
     recapRows,
@@ -457,6 +458,25 @@ export default function MapReview({
       window.removeEventListener("keydown", handlePromptCycleKeyDown);
     };
   }, [mode, remainingZones.length, selectNextPrompt, showRecap]);
+
+  const previousPromptCodeRef = useRef(promptCode);
+
+  useEffect(() => {
+    if (![MAP_MODE_TYPE_PROMPT, MAP_MODE_MULTIPLE_CHOICE].includes(mode)) return;
+
+    if (
+      autoZoomEnabled &&
+      !showRecap &&
+      promptCode &&
+      promptCode !== previousPromptCodeRef.current
+    ) {
+      // Auto-zoom follows the prompt: when it advances (e.g. via Tab/skip),
+      // re-center the map onto the new target zone.
+      focusNextRemainingZone();
+    }
+
+    previousPromptCodeRef.current = promptCode;
+  }, [autoZoomEnabled, focusNextRemainingZone, mode, promptCode, showRecap]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;

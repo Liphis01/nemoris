@@ -4,6 +4,7 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
+- 
 
 ## quick fixes
 
@@ -49,6 +50,7 @@
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
 - I should be able to see from the menu if I still have to do the review or not
 - make the network of tags lively by moving them around very slightly
+- faire les modes en fonctions des gaps dans le calendrier ?
 
 ## refactors
 

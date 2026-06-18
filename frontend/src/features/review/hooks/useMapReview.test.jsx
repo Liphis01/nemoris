@@ -341,13 +341,17 @@ describe("useMapReview recap sorting", () => {
       })
     );
     const missedTarget = result.current.currentPromptItem;
+    const otherZone = reviewZones.find(zone => zone.code !== missedTarget.code);
 
+    // Clicking a wrong zone marks the current target as missed and advances.
     act(() => {
-      result.current.skipCurrentPrompt();
+      result.current.handleZoneSelect(otherZone.code);
     });
 
+    expect(result.current.activeMissedCodes).toEqual([missedTarget.code]);
     const nextTarget = result.current.currentPromptItem;
 
+    // Clicking the now-missed zone is ignored.
     act(() => {
       result.current.handleZoneSelect(missedTarget.code);
     });
@@ -382,7 +386,7 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.showRecap).toBe(false);
   });
 
-  it("type_prompt accepts the highlighted zone name and supports skip", () => {
+  it("type_prompt accepts the highlighted zone name and skipping does not complete the session", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),
       zone({ questionId: 2, code: "b", label: "Beta" })
@@ -393,6 +397,7 @@ describe("useMapReview recap sorting", () => {
       })
     );
     const firstLabel = result.current.promptLabel;
+    const answeredId = result.current.currentPromptItem.question_id;
 
     act(() => {
       result.current.setInput(firstLabel);
@@ -404,11 +409,14 @@ describe("useMapReview recap sorting", () => {
       result.current.skipCurrentPrompt();
     });
 
-    expect(result.current.showRecap).toBe(true);
-    expect(Object.values(result.current.qualityByQuestionId).sort()).toEqual([0, 2]);
+    // Skipping the remaining zone no longer marks it missed, so the session is
+    // not complete and only the answered zone counts as found.
+    expect(result.current.showRecap).toBe(false);
+    expect(result.current.foundQuestionIds).toEqual([answeredId]);
+    expect(result.current.activeMissedCodes).toEqual([]);
   });
 
-  it("type_prompt skip makes the skipped zone active missed", () => {
+  it("type_prompt skip advances to the next zone without marking it missed", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),
       zone({ questionId: 2, code: "b", label: "Beta" })
@@ -418,14 +426,17 @@ describe("useMapReview recap sorting", () => {
         mode: "type_prompt"
       })
     );
-    const skippedCode = result.current.promptCode;
+    const skippedItem = result.current.currentPromptItem;
 
     act(() => {
       result.current.skipCurrentPrompt();
     });
 
-    expect(result.current.activeMissedCodes).toEqual([skippedCode]);
+    expect(result.current.activeMissedCodes).toEqual([]);
     expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.currentPromptItem.question_id).not.toBe(
+      skippedItem.question_id
+    );
   });
 
   it("multiple_choice resolves a target from answer buttons", () => {
