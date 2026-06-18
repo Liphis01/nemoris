@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
 from .routers import (
+    backup,
     collections,
     groups,
     image_groups,
@@ -53,6 +54,7 @@ def create_app():
     app.include_router(maps.router)
     app.include_router(image_groups.router)
     app.include_router(uploads.router)
+    app.include_router(backup.router)
 
     if FRONTEND_DIST_DIR.exists():
         assets_dir = FRONTEND_DIST_DIR / "assets"

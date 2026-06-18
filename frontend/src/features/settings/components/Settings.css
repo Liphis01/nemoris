@@ -65,7 +65,8 @@
 }
 
 .settings-back,
-.settings-save {
+.settings-save,
+.settings-secondary {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   border-radius: 8px;
@@ -99,9 +100,42 @@
 
 .settings-back:focus-visible,
 .settings-save:focus-visible,
+.settings-secondary:focus-visible,
 .settings-input:focus-visible {
   outline: 2px solid #ffcc7a;
   outline-offset: 3px;
+}
+
+.settings-secondary {
+  background: #1d1d1d;
+  border: 1px solid #303030;
+  color: #cfcfcf;
+  padding: 11px 15px;
+}
+
+.settings-secondary:hover:not(:disabled) {
+  background: #222222;
+  border-color: #444444;
+  color: #f0f0f0;
+  transform: translateY(-1px);
+}
+
+.settings-secondary:disabled {
+  background: #202020;
+  border-color: #303030;
+  color: #888888;
+  cursor: default;
+}
+
+.settings-help {
+  color: #a3a3a3;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.settings-file-input {
+  display: none;
 }
 
 .settings-grid {
@@ -337,6 +371,7 @@
   }
 
   .settings-save,
+  .settings-secondary,
   .settings-status {
     width: 100%;
   }

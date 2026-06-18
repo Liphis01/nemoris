@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
   getReviewSettings,
   rebalanceReviewCalendar,
@@ -24,6 +25,12 @@ export default function Settings({ setMode }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+
+  const fileInputRef = useRef(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [dataStatus, setDataStatus] = useState("");
+  const [dataError, setDataError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +92,63 @@ export default function Settings({ setMode }) {
       setError(saveError.message || "Paramètres impossibles à enregistrer.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    setDataStatus("");
+    setDataError("");
+
+    try {
+      const filename = await exportDatabase();
+      setDataStatus(`Base exportée : ${filename}`);
+    } catch (exportError) {
+      console.error(exportError);
+      setDataError(exportError.message || "Export impossible.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function openImportPicker() {
+    setDataStatus("");
+    setDataError("");
+    fileInputRef.current?.click();
+  }
+
+  async function handleImportFile(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    // Reset so re-selecting the same file still fires onChange.
+    input.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Importer cette sauvegarde remplacera TOUTE la base de données et les " +
+        "médias actuels. Cette action est irréversible. Continuer ?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setImporting(true);
+    setDataStatus("");
+    setDataError("");
+
+    try {
+      await importDatabase(file);
+      // The whole database changed under us; reload so every view refetches.
+      setDataStatus("Base importée. Rechargement...");
+      window.location.reload();
+    } catch (importError) {
+      console.error(importError);
+      setDataError(importError.message || "Import impossible.");
+      setImporting(false);
     }
   }
 
@@ -179,6 +243,66 @@ export default function Settings({ setMode }) {
               <span>questions / jour</span>
             </div>
           </aside>
+
+          <section className="settings-panel">
+            <div className="settings-section-head">
+              <span className="settings-section-icon" aria-hidden="true">
+                ⤓
+              </span>
+
+              <div>
+                <div className="settings-overline">Données</div>
+                <h2>Sauvegarde</h2>
+              </div>
+            </div>
+
+            <p className="settings-help">
+              Exportez l'intégralité de la base (questions, progression et
+              médias) dans un fichier .zip, ou restaurez une sauvegarde
+              existante. L'import remplace toutes les données actuelles.
+            </p>
+
+            <div className="settings-actions">
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exporting || importing}
+                className="settings-save"
+              >
+                {exporting ? "Export..." : "Exporter la base"}
+              </button>
+
+              <button
+                type="button"
+                onClick={openImportPicker}
+                disabled={exporting || importing}
+                className="settings-secondary"
+              >
+                {importing ? "Import..." : "Importer la base"}
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".zip"
+                aria-label="Importer la base"
+                className="settings-file-input"
+                onChange={handleImportFile}
+              />
+
+              {dataStatus && (
+                <div className="settings-status" role="status">
+                  {dataStatus}
+                </div>
+              )}
+            </div>
+
+            {dataError && (
+              <div role="alert" className="settings-alert">
+                {dataError}
+              </div>
+            )}
+          </section>
         </main>
       </div>
     </div>

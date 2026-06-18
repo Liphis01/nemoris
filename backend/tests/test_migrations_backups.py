@@ -8,7 +8,7 @@ from zipfile import ZipFile
 from sqlalchemy import create_engine
 
 from app.migrations import run_migrations
-from app.services.backups import create_backup
+from app.services.backups import create_backup, restore_backup
 
 
 def sqlite_url(path):
@@ -66,6 +66,119 @@ class BackupTests(unittest.TestCase):
             self.assertEqual(manifest["reason"], "test")
             self.assertIn("questions.db", manifest["included"])
             self.assertIn("static/image.txt", manifest["included"])
+
+
+class RestoreTests(unittest.TestCase):
+    def _make_backup(self, temp_dir, *, rows, media):
+        database_file = temp_dir / "source.db"
+        static_dir = temp_dir / "source-static"
+        backup_dir = temp_dir / "source-backups"
+
+        with sqlite3.connect(database_file) as connection:
+            connection.execute("CREATE TABLE sample (value TEXT)")
+            connection.executemany(
+                "INSERT INTO sample (value) VALUES (?)",
+                [(row,) for row in rows]
+            )
+
+        static_dir.mkdir()
+        for name, content in media.items():
+            (static_dir / name).write_text(content, encoding="utf-8")
+
+        result = create_backup(
+            database_file=database_file,
+            static_dir=static_dir,
+            backup_dir=backup_dir,
+            reason="test"
+        )
+
+        return result.path
+
+    def test_restore_backup_replaces_database_and_static(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            backup_path = self._make_backup(
+                temp_dir,
+                rows=["from-backup"],
+                media={"keep.txt": "restored"}
+            )
+
+            target_db = temp_dir / "questions.db"
+            target_static = temp_dir / "static"
+            target_static.mkdir()
+            (target_static / "stale.txt").write_text("old", encoding="utf-8")
+
+            with sqlite3.connect(target_db) as connection:
+                connection.execute("CREATE TABLE sample (value TEXT)")
+                connection.execute(
+                    "INSERT INTO sample (value) VALUES ('to-be-replaced')"
+                )
+
+            result = restore_backup(
+                backup_path,
+                database_file=target_db,
+                static_dir=target_static
+            )
+
+            self.assertIn("questions.db", result["included"])
+            self.assertIn("static/keep.txt", result["included"])
+
+            with sqlite3.connect(target_db) as connection:
+                values = [
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT value FROM sample"
+                    ).fetchall()
+                ]
+
+            self.assertEqual(values, ["from-backup"])
+            self.assertTrue((target_static / "keep.txt").exists())
+            self.assertFalse((target_static / "stale.txt").exists())
+
+    def test_restore_backup_rejects_non_zip_archive(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            bogus = temp_dir / "not-a-backup.zip"
+            bogus.write_text("definitely not a zip", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                restore_backup(bogus)
+
+    def test_restore_backup_rejects_archive_without_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            archive = temp_dir / "incomplete.zip"
+
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("questions.db", b"")
+
+            with self.assertRaises(ValueError):
+                restore_backup(archive)
+
+    def test_restore_backup_rejects_media_path_traversal(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            archive = temp_dir / "evil.zip"
+            target_db = temp_dir / "questions.db"
+            target_static = temp_dir / "static"
+
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "backup-manifest.json",
+                    json.dumps({"format": 1})
+                )
+                zip_file.writestr("questions.db", b"")
+                zip_file.writestr("static/../escape.txt", b"nope")
+
+            with self.assertRaises(ValueError):
+                restore_backup(
+                    archive,
+                    database_file=target_db,
+                    static_dir=target_static
+                )
+
+            # Destructive work must not run when validation fails.
+            self.assertFalse(target_db.exists())
 
 
 class MigrationTests(unittest.TestCase):
