@@ -27,7 +27,6 @@
 
 ## to do when i have more time
 
-- arborescence des thèmes pour pouvoir grouper les questions par tags (usa toujours inclus dans amérique et monde par exemple)
 - mettre en évidence les zones trop petites (c.f. jetpunk)
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
