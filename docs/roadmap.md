@@ -4,7 +4,6 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- 
 
 ## quick fixes
 
@@ -35,7 +34,6 @@
 - ajouter une recherche dans calendar
 - trouver un meilleur agencement pour les aliases dans map preview
 - mettre des groupes en favoris pour les faire réapparaître plus souvent (qui se met sur toutes les questions du groupe)
-- pouvoir choisir quels questions bonus faire (et sélectionner une sous partie d'un groupe notamment)
 - supprimer une question appelle le rebalancing ?
 - permettre d'accepter une réponse fausse si faute de frappe
 - aller chercher dans les questions à tags similaires pour proposer un qcm ?
