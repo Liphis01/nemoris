@@ -72,18 +72,6 @@ function getDifficultyScore(item, historyStats) {
 }
 
 
-function buildInitialQualityByQuestionId(reviewZones, foundQuestionIdSet) {
-  const initial = {};
-
-  reviewZones.forEach(item => {
-    // Found zones default to FSRS Good. Missed zones default to Again.
-    initial[item.question_id] = foundQuestionIdSet.has(item.question_id) ? 2 : 0;
-  });
-
-  return initial;
-}
-
-
 function getNextRemainingZone(reviewZones, completedQuestionIdSet, currentCode) {
   if (reviewZones.length === 0) return null;
 
@@ -445,10 +433,12 @@ export function useMapReview(
     counts: new Map(),
     recordedChoiceKeys: new Set()
   });
-  const distractorUsage = resetDistractorUsageForReviewKey(
-    distractorUsageRef,
-    reviewKey
-  );
+  // distractorUsageRef holds per-review distractor cooldown counts that must
+  // survive re-renders without triggering them, and be read during render to
+  // seed choiceOptions below. The reviewKey-based reset is mirrored in the
+  // effect below; reading the ref here is intentional.
+  // eslint-disable-next-line react-hooks/refs
+  const distractorUsage = resetDistractorUsageForReviewKey(distractorUsageRef, reviewKey);
 
   useEffect(() => {
     setInput("");

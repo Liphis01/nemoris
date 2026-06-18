@@ -52,9 +52,6 @@
 
 ## refactors
 
-- refactor général des styles redondants, des noms, des fichiers inutiles, mal placés, etc...
-- stocker uniquement l'id des groupes dans les questions pour alléger
-
 ## ideas
 
 - daily habit mechanics: streaks, reminders, rewards, but keep them separate from core review so they do not distort scheduling.
