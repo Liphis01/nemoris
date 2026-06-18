@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createCollection,
   deleteCollection,
@@ -554,6 +554,7 @@ function CollectionComposer({
   const [candidateTotal, setCandidateTotal] = useState(0);
   const [expandedResultSections, setExpandedResultSections] = useState(() => new Set());
   const [expandedTraySections, setExpandedTraySections] = useState(() => new Set());
+  const prevHasActiveCollectionFilterRef = useRef(false);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedLoading, setSelectedLoading] = useState(false);
@@ -634,8 +635,6 @@ function CollectionComposer({
   }, [collection?.id, editing]);
 
   useEffect(() => {
-    setExpandedResultSections(new Set());
-
     if (selectedOnly) {
       setCandidatesLoading(false);
       return undefined;
@@ -696,6 +695,30 @@ function CollectionComposer({
     [selectedItems]
   );
   const hasMoreCandidates = !selectedOnly && candidateItems.length < candidateTotal;
+
+  useEffect(() => {
+    const hasFilter = Boolean(debouncedSearch || typeFilter || groupFilter || tagFilter);
+    const wasActive = prevHasActiveCollectionFilterRef.current;
+    prevHasActiveCollectionFilterRef.current = hasFilter;
+
+    if (wasActive && !hasFilter) {
+      setExpandedResultSections(new Set());
+      return;
+    }
+
+    if (!hasFilter) return;
+
+    const keys = resultSections.map((s) => s.key);
+    if (keys.length === 0) return;
+
+    setExpandedResultSections((prev) => {
+      const toAdd = keys.filter((k) => !prev.has(k));
+      if (toAdd.length === 0) return prev;
+      const next = new Set(prev);
+      toAdd.forEach((k) => next.add(k));
+      return next;
+    });
+  }, [resultSections, debouncedSearch, typeFilter, groupFilter, tagFilter]);
 
   function toggleQuestion(question) {
     setSelectedItemsById(prev => {

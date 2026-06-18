@@ -320,3 +320,19 @@ class CollectionUpdate(BaseModel):
     )
 
     question_ids: Optional[List[int]] = None
+
+
+class TagPosition(BaseModel):
+
+    x: float
+
+    y: float
+
+
+class TagHierarchyUpdate(BaseModel):
+
+    parents: Dict[str, List[str]] = Field(default_factory=dict)
+
+    labels: Dict[str, str] = Field(default_factory=dict)
+
+    positions: Dict[str, TagPosition] = Field(default_factory=dict)

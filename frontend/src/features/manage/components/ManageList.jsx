@@ -24,13 +24,19 @@ export default function ManageList({
   resetQuestionDraft,
   setIsCreatingQuestion,
   requestManageTransition,
-  updateQuestion
+  updateQuestion,
+  search = "",
+  tagFilter = "",
+  questionTypeFilter = "",
+  dueOnly = false
 }) {
   // This list renders either flat groups or grouped question rows, while also
   // owning local UI state for delete popovers, expansion, and scroll targets.
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [expandedGroupIds, setExpandedGroupIds] = useState(() => new Set());
+  const hasActiveFilter = Boolean(search || tagFilter || questionTypeFilter || dueOnly);
+  const prevHasActiveFilterRef = useRef(false);
   const listRef = useRef(null);
   const rowRefs = useRef(new Map());
   const pendingScrollRef = useRef(null);
@@ -185,6 +191,37 @@ export default function ManageList({
       return next;
     });
   }, [filteredQuestions, highlightedQuestionIds, selectedItem?.id, selectedItem?.type_q, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "questions") return;
+
+    const wasActive = prevHasActiveFilterRef.current;
+    prevHasActiveFilterRef.current = hasActiveFilter;
+
+    if (wasActive && !hasActiveFilter) {
+      const selectedGroupId = selectedItem ? getQuestionGroupId(selectedItem) : null;
+      setExpandedGroupIds(selectedGroupId ? new Set([selectedGroupId]) : new Set());
+      return;
+    }
+
+    if (!hasActiveFilter) return;
+
+    const groupIds = new Set();
+    for (const question of filteredQuestions) {
+      const groupId = getQuestionGroupId(question);
+      if (groupId) groupIds.add(groupId);
+    }
+
+    if (groupIds.size === 0) return;
+
+    setExpandedGroupIds((current) => {
+      const toAdd = [...groupIds].filter((id) => !current.has(id));
+      if (toAdd.length === 0) return current;
+      const next = new Set(current);
+      toAdd.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [filteredQuestions, hasActiveFilter, viewMode, selectedItem]);
 
   useLayoutEffect(() => {
     const previous = lastGroupScrollSignalRef.current;

@@ -23,6 +23,12 @@ from .map_modes import (
 )
 from .map_zones import merge_tags
 from .review import serialize_review_items
+from .tag_hierarchy import (
+    ancestors,
+    descendants,
+    load_tag_hierarchy,
+    parent_map
+)
 from .timeline import grade_timeline_answer, validate_timeline_data
 
 
@@ -50,6 +56,20 @@ def question_has_exact_tag(question, normalized_tag):
         normalize_scope_tag(tag) == normalized_tag
         for tag in (question.tags or [])
     )
+
+
+def question_in_tag_subtree(question, tag_keys):
+    return any(
+        normalize_scope_tag(tag) in tag_keys
+        for tag in (question.tags or [])
+    )
+
+
+def _training_tag_subtree(db, normalized_tag):
+    """All tag keys covered when training on ``normalized_tag`` — the tag itself
+    plus every descendant in the hierarchy."""
+    pmap = parent_map(load_tag_hierarchy(db))
+    return descendants(normalized_tag, pmap)
 
 
 def _training_question_query(db):
@@ -94,7 +114,7 @@ def _shuffled_training_items(items):
     return shuffled
 
 
-def _question_ids_for_training_tag(db, normalized_tag):
+def _question_ids_for_training_tag(db, tag_keys):
     rows = db.execute(
         text(
             """
@@ -113,7 +133,7 @@ def _question_ids_for_training_tag(db, normalized_tag):
         if question_id in seen_question_ids:
             continue
 
-        if normalize_scope_tag(tag_value) != normalized_tag:
+        if normalize_scope_tag(tag_value) not in tag_keys:
             continue
 
         seen_question_ids.add(question_id)
@@ -541,8 +561,25 @@ def list_training_scopes(db):
             tags or []
         )
 
+    hierarchy = load_tag_hierarchy(db)
+    pmap = parent_map(hierarchy)
+    hierarchy_labels = hierarchy.get("labels", {})
+
     tag_names_by_key = {}
     tag_counts_by_key = {}
+
+    # Surface every hierarchy node as a theme — including pure-parent nodes that
+    # no question is directly tagged with (e.g. "geography").
+    all_parent_keys = {
+        parent
+        for parent_list in pmap.values()
+        for parent in parent_list
+    }
+
+    for key in set(hierarchy_labels) | set(pmap) | all_parent_keys:
+        if key:
+            tag_names_by_key.setdefault(key, hierarchy_labels.get(key, key))
+            tag_counts_by_key.setdefault(key, 0)
 
     for (tags,) in db.query(Question.tags).all():
         seen_for_question = set()
@@ -551,12 +588,24 @@ def list_training_scopes(db):
             display_name = str(tag or "").strip()
             key = normalize_scope_tag(display_name)
 
-            if not key or key in seen_for_question:
+            if not key:
                 continue
 
-            seen_for_question.add(key)
-            tag_names_by_key.setdefault(key, display_name)
-            tag_counts_by_key[key] = tag_counts_by_key.get(key, 0) + 1
+            # A question counts toward its own tags and all of their ancestors,
+            # so parent themes show rolled-up totals.
+            for effective_key in ancestors(key, pmap):
+                tag_names_by_key.setdefault(
+                    effective_key,
+                    hierarchy_labels.get(effective_key, display_name)
+                )
+
+                if effective_key in seen_for_question:
+                    continue
+
+                seen_for_question.add(effective_key)
+                tag_counts_by_key[effective_key] = (
+                    tag_counts_by_key.get(effective_key, 0) + 1
+                )
 
     return {
         "groups": [
@@ -602,6 +651,7 @@ def list_training_scopes(db):
                 "count": tag_counts_by_key[key]
             }
             for key in sorted(tag_names_by_key)
+            if tag_counts_by_key.get(key, 0) > 0
         ]
     }
 
@@ -1006,13 +1056,14 @@ def get_training_items(
                 detail="tag is required for tag training"
             )
 
+        tag_keys = _training_tag_subtree(db, normalized_tag)
         questions = [
             question
             for question in _training_questions_by_ids(
                 db,
-                _question_ids_for_training_tag(db, normalized_tag)
+                _question_ids_for_training_tag(db, tag_keys)
             )
-            if question_has_exact_tag(question, normalized_tag)
+            if question_in_tag_subtree(question, tag_keys)
         ]
         return _attach_text_training_aliases(
             serialize_review_items(questions),

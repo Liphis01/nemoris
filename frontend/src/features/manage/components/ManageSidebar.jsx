@@ -64,7 +64,8 @@ export default function ManageSidebar({
   viewMode,
   setViewMode,
   requestManageTransition,
-  availableTags = []
+  availableTags = [],
+  onOpenTagTree
 }) {
 
   const inputStyle = {
@@ -517,6 +518,31 @@ export default function ManageSidebar({
               onSelect: selectSortField,
               onToggle: toggleSortOrder
             })}
+
+            <button
+              type="button"
+              onClick={() => onOpenTagTree?.()}
+              title="Organiser les tags en réseau"
+              style={{
+                width: "100%",
+                marginTop: "4px",
+                padding: "10px 12px",
+                borderRadius: "10px",
+                border: "1px solid #2d2d2d",
+                background: "#181818",
+                color: "#9a9a9a",
+                cursor: "pointer",
+                fontWeight: "600",
+                fontSize: "13px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px"
+              }}
+            >
+              <span aria-hidden="true">🌐</span>
+              <span>Réseau de tags</span>
+            </button>
 
           </>
         )}

@@ -13,6 +13,7 @@ from .routers import (
     questions,
     review,
     stats,
+    tags,
     training,
     uploads
 )
@@ -47,6 +48,7 @@ def create_app():
     app.include_router(collections.router)
     app.include_router(review.router)
     app.include_router(stats.router)
+    app.include_router(tags.router)
     app.include_router(training.router)
     app.include_router(maps.router)
     app.include_router(image_groups.router)

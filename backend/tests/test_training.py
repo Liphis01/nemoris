@@ -17,6 +17,7 @@ from app.schemas import (
     TrainingAttemptRecordRequest
 )
 from app.services.questions import delete_question, update_question
+from app.services.tag_hierarchy import save_tag_hierarchy
 from app.services.training import (
     get_training_items,
     group_training_fingerprint,
@@ -303,6 +304,74 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(returned_ids, {1})
         self.assertEqual(image_ids, {3})
         self.assertNotIn(2, returned_ids | image_ids)
+
+    def test_tag_training_includes_descendant_tags(self):
+        today = date.today()
+        self.add_question(1, tags=["paris"], reps=1, next_review=today)
+        self.add_question(2, tags=["lyon"], reps=1, next_review=today)
+        self.add_question(3, tags=["berlin"], reps=1, next_review=today)
+        self.db.commit()
+
+        save_tag_hierarchy(self.db, {
+            "parents": {
+                "paris": ["france", "capitals"],
+                "lyon": ["france"],
+                "france": ["europe"],
+                "berlin": ["germany", "capitals"],
+                "germany": ["europe"]
+            }
+        })
+        self.db.commit()
+
+        france = get_training_items(self.db, scope_type="tag", tag="france")
+        france_ids = {
+            item["question_id"]
+            for item in france
+            if item["type_q"] == "text"
+        }
+        self.assertEqual(france_ids, {1, 2})
+
+        europe = get_training_items(self.db, scope_type="tag", tag="europe")
+        europe_ids = {
+            item["question_id"]
+            for item in europe
+            if item["type_q"] == "text"
+        }
+        self.assertEqual(europe_ids, {1, 2, 3})
+
+        # "capitals" is a second parent of both paris and berlin.
+        capitals = get_training_items(self.db, scope_type="tag", tag="capitals")
+        capital_ids = {
+            item["question_id"]
+            for item in capitals
+            if item["type_q"] == "text"
+        }
+        self.assertEqual(capital_ids, {1, 3})
+
+    def test_scopes_roll_up_counts_through_hierarchy(self):
+        self.add_question(1, tags=["paris"])
+        self.add_question(2, tags=["lyon"])
+        self.add_question(3, tags=["berlin"])
+        self.db.commit()
+
+        save_tag_hierarchy(self.db, {
+            "parents": {
+                "paris": ["france", "capitals"],
+                "lyon": ["france"],
+                "france": ["europe"],
+                "berlin": ["europe", "capitals"]
+            },
+            "labels": {"europe": "Europe", "france": "France", "capitals": "Capitals"}
+        })
+        self.db.commit()
+
+        response = list_training_scopes(self.db)
+        counts = {tag["name"]: tag["count"] for tag in response["tags"]}
+
+        self.assertEqual(counts.get("France"), 2)
+        self.assertEqual(counts.get("Europe"), 3)
+        self.assertEqual(counts.get("Capitals"), 2)
+        self.assertEqual(counts.get("paris"), 1)
 
     def test_tag_training_uses_unicode_casefold_exact_matching(self):
         self.add_question(1, tags=["Straße"])

@@ -1,6 +1,7 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManageInspector from "./ManageInspector";
+import TagNetworkModal from "./TagNetworkModal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function collectAvailableTags(questions = []) {
@@ -29,6 +30,7 @@ export default function Manage(props) {
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState(null);
+  const [tagTreeOpen, setTagTreeOpen] = useState(false);
   const pendingSaveHandlerRef = useRef(null);
   const transitionInProgressRef = useRef(false);
   const autosaveTimeoutRef = useRef(null);
@@ -232,6 +234,7 @@ export default function Manage(props) {
         {...props}
         availableTags={availableTags}
         requestManageTransition={requestManageTransition}
+        onOpenTagTree={() => setTagTreeOpen(true)}
       />
 
       <ManageList
@@ -253,6 +256,12 @@ export default function Manage(props) {
         setHighlightedQuestionIds={setHighlightedQuestionIds}
         registerPendingSaveHandler={registerPendingSaveHandler}
         requestManageTransition={requestManageTransition}
+      />
+
+      <TagNetworkModal
+        open={tagTreeOpen}
+        onClose={() => setTagTreeOpen(false)}
+        availableTags={availableTags}
       />
     </div>
   );
