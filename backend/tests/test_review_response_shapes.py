@@ -620,6 +620,58 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {due_zone.id, *[zone.id for zone in future_zones]}
         )
 
+    def test_large_scheduled_map_multiple_choice_uses_whole_group_context(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=32,
+            type_group="map",
+            name="Whole group map",
+            media="/static/whole.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        due_zones = [
+            self.add_question(
+                120 + index,
+                type_q="map",
+                answer=f"Due {index}",
+                data={"code": f"d{index}"},
+                group=map_group,
+                next_review=today
+            )
+            for index in range(5)
+        ]
+        # Started (reps=1 via add_question) but not due today.
+        future_zones = [
+            self.add_question(
+                130 + index,
+                type_q="map",
+                answer=f"Future {index}",
+                data={"code": f"f{index}"},
+                group=map_group,
+                next_review=today + timedelta(days=1)
+            )
+            for index in range(3)
+        ]
+        self.db.commit()
+
+        with patch("app.services.mode_selection.random.random", return_value=0):
+            response = get_review(db=self.db)
+
+        map_payload = next(item for item in response if item["type_q"] == "map")
+
+        self.assertEqual(map_payload["mode"], "multiple_choice")
+        self.assertEqual(
+            {item["question_id"] for item in map_payload["items"]},
+            {zone.id for zone in due_zones}
+        )
+        # Even though the chunk already has >= 5 due questions, the distractor
+        # pool spans the whole group's started questions, not just the session.
+        self.assertEqual(
+            {item["question_id"] for item in map_payload["context_items"]},
+            {zone.id for zone in (*due_zones, *future_zones)}
+        )
+
     def test_small_scheduled_map_falls_back_below_choice_context_minimum(self):
         today = date.today()
         map_group = QuestionGroup(
@@ -795,11 +847,22 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id for item in image_items}
         )
 
+        image_mc_modes = {"multiple_choice_label", "multiple_choice_image"}
+        all_started_ids = {item.id for item in image_items}
+
         for group in image_groups:
-            self.assertEqual(
-                [item["question_id"] for item in group["context_items"]],
-                [item["question_id"] for item in group["items"]]
-            )
+            if group["mode"] in image_mc_modes:
+                # Multiple choice draws distractors from the whole group's
+                # started questions, not just the current chunk.
+                self.assertEqual(
+                    {item["question_id"] for item in group["context_items"]},
+                    all_started_ids
+                )
+            else:
+                self.assertEqual(
+                    [item["question_id"] for item in group["context_items"]],
+                    [item["question_id"] for item in group["items"]]
+                )
 
         self.assertTrue(all(
             group["mode"] in {
@@ -853,11 +916,21 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(set(returned_ids), {item.id for item in map_items})
         self.assertEqual(len(returned_ids), len(set(returned_ids)))
 
+        all_started_ids = {item.id for item in map_items}
+
         for group in map_groups:
-            self.assertEqual(
-                [item["question_id"] for item in group["context_items"]],
-                [item["question_id"] for item in group["items"]]
-            )
+            if group["mode"] == "multiple_choice":
+                # Multiple choice draws distractors from the whole group's
+                # started questions, not just the current chunk.
+                self.assertEqual(
+                    {item["question_id"] for item in group["context_items"]},
+                    all_started_ids
+                )
+            else:
+                self.assertEqual(
+                    [item["question_id"] for item in group["context_items"]],
+                    [item["question_id"] for item in group["items"]]
+                )
 
     def test_review_endpoint_splits_large_mixed_groups_by_affinity(self):
         today = date.today()
@@ -927,11 +1000,22 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(set(returned_ids), {item.id for item in image_items})
         self.assertEqual(len(returned_ids), len(set(returned_ids)))
 
+        image_mc_modes = {"multiple_choice_label", "multiple_choice_image"}
+        all_started_ids = {item.id for item in image_items}
+
         for group in image_groups:
-            self.assertEqual(
-                [item["question_id"] for item in group["context_items"]],
-                [item["question_id"] for item in group["items"]]
-            )
+            if group["mode"] in image_mc_modes:
+                # Multiple choice draws distractors from the whole group's
+                # started questions, not just the current chunk.
+                self.assertEqual(
+                    {item["question_id"] for item in group["context_items"]},
+                    all_started_ids
+                )
+            else:
+                self.assertEqual(
+                    [item["question_id"] for item in group["context_items"]],
+                    [item["question_id"] for item in group["items"]]
+                )
 
     def test_review_endpoint_does_not_split_thirty_image_items(self):
         today = date.today()

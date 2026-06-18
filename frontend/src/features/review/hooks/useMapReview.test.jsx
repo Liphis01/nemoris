@@ -529,7 +529,7 @@ describe("useMapReview recap sorting", () => {
     }
   });
 
-  it("multiple_choice cools used distractors without penalizing previous targets", () => {
+  it("multiple_choice cools used distractors and excludes answered targets", () => {
     vi.useFakeTimers();
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     const reviewZones = [
@@ -568,9 +568,11 @@ describe("useMapReview recap sorting", () => {
       const nextIds = optionIds(result.current.choiceOptions);
 
       expect(result.current.currentPromptItem.question_id).toBe(1);
-      expect(nextIds).toEqual([1, 3, 6, 8]);
+      expect(nextIds).toEqual([1, 3, 4, 8]);
       expect(new Set(nextIds).size).toBe(nextIds.length);
-      expect(nextIds).toContain(firstPrompt.question_id);
+      // Previously answered target is excluded from distractors.
+      expect(nextIds).not.toContain(firstPrompt.question_id);
+      // Previously used distractor stays cooled down.
       expect(nextIds).not.toContain(2);
     } finally {
       randomSpy.mockRestore();

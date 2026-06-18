@@ -384,16 +384,27 @@ function itemKey(items) {
 }
 
 
-function buildChoiceOptions(target, contextItems, usageCounts) {
+function buildChoiceOptions(target, contextItems, usageCounts, excludeQuestionIds) {
   if (!target) return [];
 
-  const distractors = weightedSampleDistractors(
-    (contextItems || []).filter(item =>
-      item.question_id !== target.question_id && item.label
-    ),
-    3,
-    usageCounts
+  const candidates = (contextItems || []).filter(item =>
+    item.question_id !== target.question_id && item.label
   );
+  const preferred = excludeQuestionIds
+    ? candidates.filter(item => !excludeQuestionIds.has(item.question_id))
+    : candidates;
+
+  let distractors = weightedSampleDistractors(preferred, 3, usageCounts);
+
+  // "If possible": only fall back to already-answered questions to reach 3.
+  if (distractors.length < 3) {
+    const chosen = new Set(distractors.map(item => item.question_id));
+    const fallback = candidates.filter(item => !chosen.has(item.question_id));
+
+    distractors = distractors.concat(
+      weightedSampleDistractors(fallback, 3 - distractors.length, usageCounts)
+    );
+  }
 
   return shuffle([target, ...distractors]);
 }
@@ -565,10 +576,14 @@ export function useMapReview(
     () => buildChoiceOptions(
       currentPromptItem,
       contextItems,
-      distractorUsage.counts
+      distractorUsage.counts,
+      resolvedQuestionIdSet
     ),
-    // Cooldown counts live in a mutable ref; they should affect the next
-    // prompt sample, not resample the current prompt after recording.
+    // Cooldown counts and the answered-question exclusion set live in mutable
+    // per-review state; they should affect the next prompt sample, not resample
+    // the current prompt when they update mid-prompt. The memo already recomputes
+    // when currentPromptItem advances, at which point resolvedQuestionIdSet
+    // reflects the just-answered question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [contextItems, currentPromptItem]
   );

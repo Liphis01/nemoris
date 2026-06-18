@@ -37,7 +37,6 @@ from .map_modes import (
 )
 from .mode_selection import (
     MODE_AFFINITIES,
-    MULTIPLE_CHOICE_MIN_CONTEXT,
     question_mode_affinity
 )
 from .progress import progress_has_started, progress_is_new
@@ -157,10 +156,7 @@ def _visual_review_contexts(
         else all_group_questions
     )
 
-    if (
-        not scheduled_review or
-        len(chunk_questions) >= MULTIPLE_CHOICE_MIN_CONTEXT
-    ):
+    if not scheduled_review:
         return active_context_questions, active_context_questions
 
     started_group_questions = [
