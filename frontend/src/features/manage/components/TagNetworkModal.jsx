@@ -749,6 +749,7 @@ function NetworkEditor({ onClose, availableTags }) {
             nodeTypes={nodeTypes}
             defaultEdgeOptions={ARROW}
             deleteKeyCode={["Delete", "Backspace"]}
+            minZoom={0.01}
             fitView
             colorMode="dark"
             proOptions={{ hideAttribution: true }}
