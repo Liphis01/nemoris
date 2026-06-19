@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendTimelineAnswer } from "../../../api/review";
 import { fadeInStyle } from "../../../shared/styles";
-import { describeValue, getEraBands } from "../../timeline/anchors";
+import {
+  anchorBounds,
+  anchorCenterValue,
+  describeValue,
+  getCuratedAnchors,
+  getEraBands,
+  selectVisibleAnchors
+} from "../../timeline/anchors";
 import {
   buildRangeFromItems,
   centerOrdinal,
@@ -22,6 +29,12 @@ import {
 } from "../../timeline/timelineUtils";
 
 const eraBands = getEraBands();
+const curatedAnchorList = getCuratedAnchors();
+
+// Days within which a landmark anchor is considered to "sit on" a session
+// answer; such anchors are dropped so the reference layer never reveals an
+// expected date.
+const anchorLeakToleranceDays = 200;
 
 const markerColors = [
   "#7dd3fc",
@@ -709,6 +722,27 @@ function TimelineCanvas({
       .filter(Boolean),
     [activeAnswer, activeId, committedAnswers, items, orderById]
   );
+  const anchorList = useMemo(() => {
+    const sessionCenters = items.map(item => {
+      const timeline = normalizeTimeline(item.timeline);
+
+      if (timeline.kind === "interval" && timeline.end) {
+        return Math.round(
+          (centerOrdinal(timeline.start) + centerOrdinal(timeline.end)) / 2
+        );
+      }
+
+      return centerOrdinal(timeline.start);
+    });
+
+    return curatedAnchorList.filter(anchor => {
+      const center = anchorCenterValue(anchor);
+
+      return !sessionCenters.some(value =>
+        Math.abs(value - center) < anchorLeakToleranceDays
+      );
+    });
+  }, [items]);
   const pendingIntervalAnswer =
     pendingInterval && activeTimeline.kind === "interval" && !activeAnswer
       ? normalizeIntervalAnswer(
@@ -1194,6 +1228,190 @@ function TimelineCanvas({
                 </div>
               );
             })}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderAnchors() {
+    const rulerHeight = Math.max(rulerRowHeight, scale.rulers.length * rulerRowHeight);
+    const lineTop = rulerHeight + 20;
+    const laneTop = rulerHeight + 16;
+    const laneHeight = 23;
+    const selection = selectVisibleAnchors(anchorList, viewport, surfaceWidth, {
+      minGapPx: 46
+    });
+    const labelGapPercent = (118 / Math.max(1, surfaceWidth)) * 100;
+    const hasLeftEdges = selection.offLeft.length > 0;
+    const hasRightEdges = selection.offRight.length > 0;
+    const laneLastPercent = [];
+
+    function laneFor(center) {
+      const free = laneLastPercent.findIndex(last => center - last > labelGapPercent);
+
+      if (free !== -1) {
+        laneLastPercent[free] = center;
+        return free;
+      }
+
+      if (laneLastPercent.length < 3) {
+        laneLastPercent.push(center);
+        return laneLastPercent.length - 1;
+      }
+
+      let lane = 0;
+      for (let index = 1; index < laneLastPercent.length; index += 1) {
+        if (laneLastPercent[index] < laneLastPercent[lane]) lane = index;
+      }
+      laneLastPercent[lane] = center;
+      return lane;
+    }
+
+    function edgePill(entry, side) {
+      const accent = entry.anchor.id === "today" ? "#7ee2a8" : "#c9bd9f";
+      const year = formatTimelineYear(ordinalToDate(entry.value).year);
+
+      return (
+        <>
+          {side === "right" && (
+            <span style={{ flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {entry.anchor.label}
+            </span>
+          )}
+          {side === "left" && <span style={{ flexShrink: 0 }}>‹</span>}
+          <span style={{ color: accent, flexShrink: 0 }}>{year}</span>
+          {side === "left" && (
+            <span style={{ flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {entry.anchor.label}
+            </span>
+          )}
+          {side === "right" && <span style={{ flexShrink: 0 }}>›</span>}
+        </>
+      );
+    }
+
+    const edgePillStyle = {
+      position: "absolute",
+      display: "flex",
+      alignItems: "center",
+      gap: "4px",
+      maxWidth: "170px",
+      padding: "2px 8px",
+      borderRadius: "999px",
+      border: "1px solid rgba(201,189,159,0.28)",
+      background: "rgba(16,16,16,0.86)",
+      color: "#a99e86",
+      fontSize: "10px",
+      fontWeight: "800",
+      overflow: "hidden",
+      whiteSpace: "nowrap"
+    };
+
+    return (
+      <div
+        aria-hidden="true"
+        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 3 }}
+      >
+        {selection.visible.map(entry => {
+          const { anchor, value } = entry;
+          const center = percentFromValue(value, viewport);
+          const isToday = anchor.id === "today";
+          const accent = isToday ? "#7ee2a8" : "#c9bd9f";
+          const span = anchor.end ? anchorBounds(anchor) : null;
+          // Hide the in-view label when it would land in an edge-arrow stack;
+          // the drop-line still marks the exact spot.
+          const showLabel =
+            !(hasLeftEdges && center < 13) && !(hasRightEdges && center > 87);
+          const labelTop = showLabel ? laneTop + laneFor(center) * laneHeight : 0;
+          const labelLeft = clampNumber(center, 6, 94);
+
+          return (
+            <div key={`anchor-${anchor.id}`}>
+              {span ? (
+                (() => {
+                  const startPercent = percentFromValue(span.startValue, viewport);
+                  const endPercent = percentFromValue(span.endValue, viewport);
+                  const left = Math.min(startPercent, endPercent);
+                  const width = Math.max(0.3, Math.abs(endPercent - startPercent));
+
+                  return (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: `${left}%`,
+                        width: `${width}%`,
+                        top: `${lineTop}px`,
+                        bottom: 0,
+                        background: `${accent}0c`,
+                        borderLeft: `1px dashed ${accent}55`,
+                        borderRight: `1px dashed ${accent}55`
+                      }}
+                    />
+                  );
+                })()
+              ) : (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${center}%`,
+                    top: `${lineTop}px`,
+                    bottom: 0,
+                    width: 0,
+                    transform: "translateX(-50%)",
+                    borderLeft: `1px dashed ${accent}4d`
+                  }}
+                />
+              )}
+              {showLabel && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${labelLeft}%`,
+                    top: `${labelTop}px`,
+                    transform: "translateX(-50%)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    maxWidth: "158px",
+                    padding: "2px 8px",
+                    borderRadius: "999px",
+                    border: `1px solid ${accent}40`,
+                    background: "rgba(16,16,16,0.84)",
+                    color: "#cdc2a8",
+                    fontSize: "10px",
+                    fontWeight: "800",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  <span style={{ color: accent, flexShrink: 0 }}>
+                    {formatTimelineYear(ordinalToDate(value).year)}
+                  </span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {anchor.label}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {selection.offLeft.map((entry, index) => (
+          <div
+            key={`edge-left-${entry.anchor.id}`}
+            style={{ ...edgePillStyle, left: "6px", top: `${laneTop + index * laneHeight}px` }}
+          >
+            {edgePill(entry, "left")}
+          </div>
+        ))}
+
+        {selection.offRight.map((entry, index) => (
+          <div
+            key={`edge-right-${entry.anchor.id}`}
+            style={{ ...edgePillStyle, right: "6px", top: `${laneTop + index * laneHeight}px` }}
+          >
+            {edgePill(entry, "right")}
           </div>
         ))}
       </div>
@@ -2317,6 +2535,7 @@ function TimelineCanvas({
         })}
 
         {renderRulers()}
+        {renderAnchors()}
         {renderHoverGuide()}
 
         {markers.map(renderPassiveMarker)}
