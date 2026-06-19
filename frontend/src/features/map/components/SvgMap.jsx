@@ -355,8 +355,20 @@ export default function SvgMap({
 
         if (!isFinite(minLeft) || !isFinite(minTop)) return;
 
-        const currentScale = transformRef.current.scale || 1;
-        const currentOffset = transformRef.current.offset || { x: 0, y: 0 };
+        // Read the transform actually rendered right now rather than the React
+        // state target in transformRef. When the focus advances, this effect runs
+        // twice (focusCode prop change, then focusVersion bump) while the
+        // container is still mid CSS transition toward the previous target, so the
+        // state target no longer matches the measured getBoundingClientRect. The
+        // live computed matrix stays consistent with the measured rect, keeping
+        // the back-projection (and therefore the new scale/offset) correct.
+        const liveMatrix = containerRef.current
+            ? new DOMMatrixReadOnly(getComputedStyle(containerRef.current).transform)
+            : null;
+        const currentScale = (liveMatrix?.a) || transformRef.current.scale || 1;
+        const currentOffset = liveMatrix
+            ? { x: liveMatrix.e, y: liveMatrix.f }
+            : (transformRef.current.offset || { x: 0, y: 0 });
         const box = {
             x: (minLeft - wrapperRect.left - currentOffset.x) / currentScale,
             y: (minTop - wrapperRect.top - currentOffset.y) / currentScale,
