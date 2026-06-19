@@ -785,6 +785,21 @@ function TimelineCanvas({
   const where = describeValue(viewCenterValue);
   const viewStartYear = formatTimelineYear(ordinalToDate(viewport.start_value).year);
   const viewEndYear = formatTimelineYear(ordinalToDate(viewport.end_value).year);
+  const miniAnchors = anchorList
+    .map(anchor => ({
+      anchor,
+      pct: percentWithinRange(anchorCenterValue(anchor), bounds)
+    }))
+    .filter(entry => entry.pct >= 0 && entry.pct <= 100)
+    .sort((a, b) => a.pct - b.pct);
+  const miniLabeledAnchorIds = new Set();
+  let lastMiniLabelPct = -Infinity;
+  miniAnchors.forEach(entry => {
+    if ((entry.anchor.tier ?? 1) === 0 && entry.pct - lastMiniLabelPct > 7) {
+      miniLabeledAnchorIds.add(entry.anchor.id);
+      lastMiniLabelPct = entry.pct;
+    }
+  });
 
   const updateViewport = useCallback((nextViewport) => {
     viewportRef.current = nextViewport;
@@ -2249,7 +2264,7 @@ function TimelineCanvas({
         onPointerCancel={handleMinimapPointerUp}
         style={{
           position: "relative",
-          height: "76px",
+          height: "92px",
           border: "1px solid #2a2a2a",
           borderRadius: "13px",
           background: "linear-gradient(180deg, #161616, #101010)",
@@ -2260,13 +2275,61 @@ function TimelineCanvas({
           touchAction: "none"
         }}
       >
+        {eraBands.map(band => {
+          const rawLeft = percentWithinRange(band.startValue, bounds);
+          const rawRight = percentWithinRange(band.endValue, bounds);
+          const left = clampNumber(rawLeft, 0, 100);
+          const right = clampNumber(rawRight, 0, 100);
+          const width = Math.max(0, right - left);
+
+          if (width <= 0) return null;
+
+          return (
+            <div key={`mini-era-${band.id}`} style={{ pointerEvents: "none" }}>
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  top: 0,
+                  bottom: 0,
+                  background: `${band.labelColor}1c`,
+                  borderRight: rawRight <= 100 ? `1px solid ${band.labelColor}33` : "none"
+                }}
+              />
+              {width >= 11 && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${(left + right) / 2}%`,
+                    bottom: "4px",
+                    transform: "translateX(-50%)",
+                    maxWidth: `${width}%`,
+                    color: band.labelColor,
+                    fontSize: "8px",
+                    fontWeight: "900",
+                    letterSpacing: "0.6px",
+                    opacity: 0.55,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {band.label}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
         <div
           style={{
             position: "absolute",
             left: "14px",
-            top: "10px",
-            color: "#777",
-            fontSize: "11px",
+            top: "7px",
+            color: "#8a8a8a",
+            fontSize: "10px",
             fontWeight: "800",
             zIndex: 2
           }}
@@ -2277,9 +2340,9 @@ function TimelineCanvas({
           style={{
             position: "absolute",
             right: "14px",
-            top: "10px",
-            color: "#777",
-            fontSize: "11px",
+            top: "7px",
+            color: "#8a8a8a",
+            fontSize: "10px",
             fontWeight: "800",
             zIndex: 2
           }}
@@ -2292,12 +2355,54 @@ function TimelineCanvas({
             position: "absolute",
             left: "14px",
             right: "14px",
-            top: "40px",
-            height: "4px",
+            top: "52px",
+            height: "3px",
             borderRadius: "999px",
-            background: "#3c3326"
+            background: "#3c3326",
+            zIndex: 1
           }}
         />
+
+        {miniAnchors.map(entry => {
+          const { anchor, pct } = entry;
+          const isToday = anchor.id === "today";
+          const isMajor = (anchor.tier ?? 1) === 0;
+          const accent = isToday ? "#7ee2a8" : "#c9bd9f";
+
+          return (
+            <div key={`mini-anchor-${anchor.id}`} style={{ pointerEvents: "none" }}>
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${pct}%`,
+                  top: isMajor ? "46px" : "49px",
+                  height: isMajor ? "13px" : "7px",
+                  width: 0,
+                  transform: "translateX(-50%)",
+                  borderLeft: `1px solid ${accent}${isMajor ? "aa" : "5e"}`,
+                  zIndex: 2
+                }}
+              />
+              {miniLabeledAnchorIds.has(anchor.id) && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${clampNumber(pct, 4, 96)}%`,
+                    top: "26px",
+                    transform: "translateX(-50%)",
+                    color: accent,
+                    fontSize: "8px",
+                    fontWeight: "900",
+                    whiteSpace: "nowrap",
+                    zIndex: 2
+                  }}
+                >
+                  {formatTimelineYear(ordinalToDate(anchorCenterValue(anchor)).year)}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {placedAnswers.map(entry => {
           const isActive = entry.item.question_id === activeId;
@@ -2315,7 +2420,7 @@ function TimelineCanvas({
                 style={{
                   position: "absolute",
                   left: `${left}%`,
-                  top: isActive ? "34px" : "36px",
+                  top: "53px",
                   width: `${width}%`,
                   minWidth: isActive ? "12px" : "8px",
                   height: isActive ? "12px" : "8px",
@@ -2338,7 +2443,7 @@ function TimelineCanvas({
               style={{
                 position: "absolute",
                 left: `${left}%`,
-                top: isActive ? "40px" : "42px",
+                top: "53px",
                 width: isActive ? "12px" : "8px",
                 height: isActive ? "12px" : "8px",
                 borderRadius: "999px",
@@ -2356,10 +2461,10 @@ function TimelineCanvas({
           style={{
             position: "absolute",
             left: `${viewportStartPercent}%`,
-            top: "8px",
+            top: "6px",
             width: `${viewportWidthPercent}%`,
             minWidth: "28px",
-            bottom: "8px",
+            bottom: "6px",
             border: "2px solid #f4d48c",
             borderRadius: "10px",
             background: "rgba(244, 212, 140, 0.08)",
