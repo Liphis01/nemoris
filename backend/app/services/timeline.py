@@ -2,6 +2,7 @@ import random
 
 from fastapi import HTTPException
 
+from ..models import Progress, Question
 from ..scheduler import preview_intervals
 from ..serializers import serialize_progress
 
@@ -10,6 +11,13 @@ VALID_PRECISIONS = {"year", "month", "day"}
 VALID_KINDS = {"point", "interval"}
 MIN_YEAR = -9999
 MAX_YEAR = 9999
+
+# A timeline card becomes a landmark anchor once it is well retained: a long
+# interval and several successful reviews. Anchors are capped so a large mastered
+# library does not bloat the review payload.
+MASTERED_ANCHOR_MIN_INTERVAL_DAYS = 60
+MASTERED_ANCHOR_MIN_REPS = 3
+MAX_TIMELINE_ANCHORS = 40
 
 
 def _timeline_error(message: str):
@@ -279,13 +287,78 @@ def serialize_timeline_review_item(question):
     return item
 
 
-def serialize_timeline_review_group(items):
+def serialize_timeline_review_group(items, anchors=None):
     return {
         "type_q": "timeline",
         "name": "Timeline",
         "items": items,
-        "range": build_timeline_range(items)
+        "range": build_timeline_range(items),
+        "anchors": anchors or []
     }
+
+
+def _anchor_center_value(timeline):
+    center = date_center_value(timeline["start"])
+
+    if timeline["kind"] == "interval":
+        return round((center + date_center_value(timeline["end"])) / 2)
+
+    return center
+
+
+def _mastered_anchor_payload(question, timeline):
+    payload = {
+        "id": f"mastered-{question.id}",
+        "source": "mastered",
+        "question_id": question.id,
+        "label": question.question,
+        "tier": 1,
+        "start": timeline["start"]
+    }
+
+    if timeline.get("end"):
+        payload["end"] = timeline["end"]
+
+    return payload
+
+
+def build_mastered_timeline_anchors(db, exclude_ids=None, reference_value=None):
+    """Landmark anchors drawn from the user's own well-retained timeline cards.
+
+    `exclude_ids` keeps the current session's questions out of the anchor layer
+    so it never reveals an answer. When `reference_value` is given, anchors
+    closest to it are preferred before the count is capped.
+    """
+    excluded = set(exclude_ids or [])
+    query = (
+        db.query(Question)
+        .join(Progress, Question.id == Progress.question_id)
+        .filter(Question.type_q == "timeline")
+        .filter(Progress.interval >= MASTERED_ANCHOR_MIN_INTERVAL_DAYS)
+        .filter(Progress.reps >= MASTERED_ANCHOR_MIN_REPS)
+    )
+    anchors = []
+
+    for question in query.all():
+        if question.id in excluded:
+            continue
+
+        try:
+            timeline = validate_timeline_data(question.data or {})
+        except HTTPException:
+            continue
+
+        anchors.append((
+            _anchor_center_value(timeline),
+            _mastered_anchor_payload(question, timeline)
+        ))
+
+    if reference_value is not None:
+        anchors.sort(key=lambda entry: abs(entry[0] - reference_value))
+    else:
+        anchors.sort(key=lambda entry: entry[1]["question_id"])
+
+    return [payload for _, payload in anchors[:MAX_TIMELINE_ANCHORS]]
 
 
 def _month_index(value):

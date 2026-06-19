@@ -99,7 +99,8 @@ TIMELINE_GROUP_KEYS = {
     "type_q",
     "name",
     "items",
-    "range"
+    "range",
+    "anchors"
 }
 TIMELINE_ITEM_KEYS = {
     "question_id",

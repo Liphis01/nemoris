@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import random
 from types import SimpleNamespace
 
+from fastapi import HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
@@ -22,8 +23,11 @@ from ..serializers import (
     serialize_review_question_item
 )
 from .timeline import (
+    build_mastered_timeline_anchors,
+    date_center_value,
     serialize_timeline_review_group,
-    serialize_timeline_review_item
+    serialize_timeline_review_item,
+    validate_timeline_data
 )
 from .image_modes import (
     IMAGE_MULTIPLE_CHOICE_MODES,
@@ -736,7 +740,8 @@ def get_review_summary(db, today=None):
 def _serialize_review_items(
     questions,
     scheduler_tuning=None,
-    scheduled_review=False
+    scheduled_review=False,
+    timeline_anchors=None
 ):
     review_items = []
     map_grouped_items = {}
@@ -782,7 +787,9 @@ def _serialize_review_items(
 
     # Mixed sessions can contain normal questions and runtime map groups.
     if timeline_items:
-        review_items.append(serialize_timeline_review_group(timeline_items))
+        review_items.append(
+            serialize_timeline_review_group(timeline_items, anchors=timeline_anchors)
+        )
 
     map_review_groups = []
 
@@ -928,12 +935,41 @@ def _serialize_review_items(
 def serialize_review_items(
     questions,
     scheduler_tuning=None,
-    scheduled_review=False
+    scheduled_review=False,
+    timeline_anchors=None
 ):
     return _serialize_review_items(
         questions,
         scheduler_tuning=scheduler_tuning,
-        scheduled_review=scheduled_review
+        scheduled_review=scheduled_review,
+        timeline_anchors=timeline_anchors
+    )
+
+
+def _timeline_anchors_for(db, questions):
+    timeline_questions = [
+        question for question in questions if question.type_q == "timeline"
+    ]
+
+    if not timeline_questions:
+        return None
+
+    centers = []
+
+    for question in timeline_questions:
+        try:
+            timeline = validate_timeline_data(question.data or {})
+        except HTTPException:
+            continue
+
+        centers.append(date_center_value(timeline["start"]))
+
+    reference_value = (min(centers) + max(centers)) // 2 if centers else None
+
+    return build_mastered_timeline_anchors(
+        db,
+        exclude_ids=[question.id for question in timeline_questions],
+        reference_value=reference_value
     )
 
 
@@ -943,31 +979,29 @@ def get_review_items(db, include_new=False, bonus_status=None, group_ids=None):
     due_questions = _due_questions(db, today)
 
     if due_questions or not include_new:
-        return serialize_review_items(
-            due_questions,
-            scheduler_tuning=scheduler_tuning,
-            scheduled_review=True
+        questions = due_questions
+    else:
+        bonus_status = bonus_status or get_bonus_review_status(
+            db,
+            today=today,
+            group_ids=group_ids
         )
-
-    bonus_status = bonus_status or get_bonus_review_status(
-        db,
-        today=today,
-        group_ids=group_ids
-    )
-    remaining_bonus_slots = max(
-        0,
-        bonus_status.get(
-            "available_bonus_question_count",
-            bonus_status["bonus_question_capacity"]
+        remaining_bonus_slots = max(
+            0,
+            bonus_status.get(
+                "available_bonus_question_count",
+                bonus_status["bonus_question_capacity"]
+            )
         )
-    )
-
-    return serialize_review_items(
-        _new_questions(
+        questions = _new_questions(
             db,
             limit=remaining_bonus_slots,
             group_ids=group_ids
-        ),
+        )
+
+    return serialize_review_items(
+        questions,
         scheduler_tuning=scheduler_tuning,
-        scheduled_review=True
+        scheduled_review=True,
+        timeline_anchors=_timeline_anchors_for(db, questions)
     )
