@@ -565,6 +565,7 @@ function anchorAccent(anchor) {
 function TimelineQueue({
   activeId,
   committedAnswers,
+  compact = false,
   draftAnswers,
   items,
   onSelect,
@@ -576,7 +577,7 @@ function TimelineQueue({
         display: "flex",
         gap: "8px",
         overflowX: "auto",
-        padding: "2px 0 8px"
+        padding: compact ? "0 0 4px" : "2px 0 8px"
       }}
     >
       {items.map((item, index) => {
@@ -593,8 +594,8 @@ function TimelineQueue({
             onClick={() => onSelect(item.question_id)}
             title={item.question}
             style={{
-              minWidth: "42px",
-              height: "36px",
+              minWidth: compact ? "34px" : "42px",
+              height: compact ? "30px" : "36px",
               borderRadius: "999px",
               border: active
                 ? "2px solid #fff"
@@ -2243,13 +2244,14 @@ function TimelineCanvas({
         border: "1px solid #282828",
         borderRadius: "18px",
         background: "#121212",
+        boxSizing: "border-box",
         display: "flex",
         flex: compactLayout ? "1 1 auto" : undefined,
         flexDirection: "column",
         height: compactLayout ? "100%" : undefined,
         minHeight: compactLayout ? 0 : "650px",
         overflow: "hidden",
-        padding: "18px",
+        padding: compactLayout ? "10px 12px" : "18px",
         position: "relative"
       }}
     >
@@ -2259,7 +2261,7 @@ function TimelineCanvas({
           display: "flex",
           gap: "14px",
           justifyContent: "space-between",
-          marginBottom: "14px",
+          marginBottom: compactLayout ? "8px" : "14px",
           position: "relative",
           zIndex: 10
         }}
@@ -2268,26 +2270,29 @@ function TimelineCanvas({
           <div
             style={{
               color: "#f4f0df",
-              fontSize: "23px",
+              fontSize: compactLayout ? "16px" : "23px",
               fontWeight: "900",
               overflow: "hidden",
+              textAlign: "left",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap"
             }}
           >
             {canvasDateLabel}
           </div>
-          <div style={{ color: "#777", fontSize: "11px", marginTop: "3px" }}>
-            {canvasDateContext}
-            {!compactLayout && " · Wheel zooms, drag canvas or minimap to move"}
-          </div>
+          {!compactLayout && (
+            <div style={{ color: "#777", fontSize: "11px", marginTop: "3px" }}>
+              {canvasDateContext}
+              {" · Wheel zooms, drag canvas or minimap to move"}
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", flexShrink: 0, gap: "8px" }}>
           <button
             type="button"
             onClick={() => zoomFromButton(0.72)}
-            style={{ ...buttonStyle, height: "36px", padding: 0, width: "40px" }}
+            style={{ ...buttonStyle, height: compactLayout ? "30px" : "36px", padding: 0, width: "40px" }}
             title="Zoom in"
           >
             +
@@ -2295,7 +2300,7 @@ function TimelineCanvas({
           <button
             type="button"
             onClick={() => zoomFromButton(1.32)}
-            style={{ ...buttonStyle, height: "36px", padding: 0, width: "40px" }}
+            style={{ ...buttonStyle, height: compactLayout ? "30px" : "36px", padding: 0, width: "40px" }}
             title="Zoom out"
           >
             -
@@ -2303,7 +2308,7 @@ function TimelineCanvas({
           <button
             type="button"
             onClick={resetViewport}
-            style={{ ...buttonStyle, height: "36px", padding: "0 12px" }}
+            style={{ ...buttonStyle, height: compactLayout ? "30px" : "36px", padding: "0 12px" }}
             title="Reset view"
           >
             Reset
@@ -2324,7 +2329,7 @@ function TimelineCanvas({
           borderRadius: "13px",
           background: "linear-gradient(180deg, #161616, #101010)",
           cursor: dragMode === "minimap" ? "grabbing" : "pointer",
-          marginBottom: "14px",
+          marginBottom: compactLayout ? "10px" : "14px",
           overflow: "hidden",
           overscrollBehavior: "contain",
           touchAction: "none"
@@ -2535,7 +2540,7 @@ function TimelineCanvas({
           display: "flex",
           gap: "12px",
           justifyContent: "space-between",
-          marginBottom: "10px",
+          marginBottom: compactLayout ? "6px" : "10px",
           minHeight: "16px"
         }}
       >
@@ -2602,7 +2607,7 @@ function TimelineCanvas({
           position: "relative",
           flex: compactLayout ? "1 1 auto" : undefined,
           height: compactLayout ? "auto" : "470px",
-          minHeight: compactLayout ? "260px" : undefined,
+          minHeight: compactLayout ? "150px" : undefined,
           background: "linear-gradient(180deg, #181818 0%, #101010 100%)",
           border: "1px solid #292929",
           borderRadius: "14px",
@@ -2962,6 +2967,7 @@ export default function TimelineReview({
           background: "#181818",
           border: "1px solid #262626",
           borderRadius: "18px",
+          boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
           height: fillAvailableHeight ? "100%" : undefined,
@@ -2974,9 +2980,13 @@ export default function TimelineReview({
         <div
           style={{
             flexShrink: 0,
-            padding: fillAvailableHeight ? "12px 16px 10px" : "16px 18px 14px",
-            borderBottom: "1px solid #262626",
-            background: "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
+            order: fillAvailableHeight ? 2 : 1,
+            padding: fillAvailableHeight ? "8px 28px 10px" : "16px 18px 14px",
+            borderBottom: fillAvailableHeight ? "none" : "1px solid #262626",
+            borderTop: fillAvailableHeight ? "1px solid #262626" : "none",
+            background: fillAvailableHeight
+              ? "linear-gradient(to top, rgba(255,255,255,0.03), transparent)"
+              : "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
           }}
         >
           <div
@@ -2985,72 +2995,96 @@ export default function TimelineReview({
               justifyContent: "space-between",
               alignItems: "center",
               gap: "20px",
-              marginBottom: fillAvailableHeight ? "10px" : "14px"
+              marginBottom: fillAvailableHeight ? "6px" : "14px"
             }}
           >
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                {!fillAvailableHeight && (
-                  <div style={typeBadgeStyle}>TIMELINE</div>
-                )}
+              {!fillAvailableHeight && (
                 <div
                   style={{
-                    color: "#777",
-                    fontSize: "12px",
-                    fontWeight: "800"
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginBottom: "8px"
                   }}
                 >
-                  Question {(orderById.get(activeItem.question_id) || 0) + 1} / {sortedItems.length}
+                  <div style={typeBadgeStyle}>TIMELINE</div>
+                  <div style={{ color: "#777", fontSize: "12px", fontWeight: "800" }}>
+                    Question {(orderById.get(activeItem.question_id) || 0) + 1} / {sortedItems.length}
+                  </div>
                 </div>
-              </div>
+              )}
               <div
                 style={{
                   color: "#f3f3f3",
                   display: "-webkit-box",
-                  fontSize: fillAvailableHeight ? "22px" : "30px",
+                  fontSize: fillAvailableHeight ? "17px" : "30px",
                   fontWeight: "950",
                   lineHeight: 1.1,
                   overflow: "hidden",
+                  textAlign: "left",
                   WebkitBoxOrient: "vertical",
-                  WebkitLineClamp: 2
+                  WebkitLineClamp: fillAvailableHeight ? 1 : 2
                 }}
               >
                 {activeItem.question}
               </div>
-              <div
-                style={{
-                  color: "#858585",
-                  fontSize: "12px",
-                  fontWeight: "650",
-                  marginTop: "8px"
-                }}
-              >
-                {activeAnswer
-                  ? `Placed ${activeTimeline.kind === "interval" ? "period" : "date"}: ${formatAnswer(activeAnswer, activeTimeline)}`
-                  : "No answer placed"}
-              </div>
+              {!fillAvailableHeight && (
+                <div
+                  style={{
+                    color: "#858585",
+                    fontSize: "12px",
+                    fontWeight: "650",
+                    marginTop: "8px"
+                  }}
+                >
+                  {activeAnswer
+                    ? `Placed ${activeTimeline.kind === "interval" ? "period" : "date"}: ${formatAnswer(activeAnswer, activeTimeline)}`
+                    : "No answer placed"}
+                </div>
+              )}
             </div>
 
             <div
               style={{
-                alignItems: "flex-end",
+                alignItems: fillAvailableHeight ? "center" : "flex-end",
                 display: "flex",
-                flexDirection: "column",
+                flexDirection: fillAvailableHeight ? "row" : "column",
                 gap: "10px",
                 flexShrink: 0
               }}
             >
-              <div style={{ color: "#fff", fontSize: "24px", fontWeight: "850" }}>
+              <div
+                style={{
+                  color: "#fff",
+                  fontSize: fillAvailableHeight ? "16px" : "24px",
+                  fontWeight: "850"
+                }}
+              >
                 {placedCount}
-                <span style={{ color: "#666", fontSize: "16px", marginLeft: "4px" }}>
+                <span
+                  style={{
+                    color: "#666",
+                    fontSize: fillAvailableHeight ? "13px" : "16px",
+                    marginLeft: "4px"
+                  }}
+                >
                   / {sortedItems.length}
                 </span>
               </div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <button type="button" onClick={skipActiveItem} style={{ ...buttonStyle, padding: "10px 12px" }}>
+                <button
+                  type="button"
+                  onClick={skipActiveItem}
+                  style={{ ...buttonStyle, padding: fillAvailableHeight ? "7px 11px" : "10px 12px" }}
+                >
                   Skip
                 </button>
-                <button type="button" onClick={goNext} style={{ ...successButtonStyle, padding: "10px 12px" }}>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  style={{ ...successButtonStyle, padding: fillAvailableHeight ? "7px 11px" : "10px 12px" }}
+                >
                   Next
                 </button>
                 <button
@@ -3061,7 +3095,7 @@ export default function TimelineReview({
                     ...successButtonStyle,
                     cursor: isSubmitting || !canSubmit ? "not-allowed" : "pointer",
                     opacity: isSubmitting || !canSubmit ? 0.55 : 1,
-                    padding: "10px 12px"
+                    padding: fillAvailableHeight ? "7px 11px" : "10px 12px"
                   }}
                 >
                   {isSubmitting ? "Validation..." : "Validate"}
@@ -3073,6 +3107,7 @@ export default function TimelineReview({
           <TimelineQueue
             activeId={activeItem.question_id}
             committedAnswers={committedAnswers}
+            compact={fillAvailableHeight}
             draftAnswers={draftAnswers}
             items={orderedItems}
             onSelect={selectItem}
@@ -3082,9 +3117,11 @@ export default function TimelineReview({
 
         <div
           style={{
+            boxSizing: "border-box",
             display: fillAvailableHeight ? "flex" : undefined,
             flex: fillAvailableHeight ? "1 1 auto" : undefined,
             minHeight: fillAvailableHeight ? 0 : undefined,
+            order: fillAvailableHeight ? 1 : 2,
             padding: fillAvailableHeight ? "12px 16px" : "18px"
           }}
         >
@@ -3111,6 +3148,7 @@ export default function TimelineReview({
             style={{
               borderTop: "1px solid #262626",
               flexShrink: 0,
+              order: 3,
               padding: "12px 18px"
             }}
           >
