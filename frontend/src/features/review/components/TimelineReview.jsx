@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendTimelineAnswer } from "../../../api/review";
 import { fadeInStyle } from "../../../shared/styles";
+import { describeValue, getEraBands } from "../../timeline/anchors";
 import {
   buildRangeFromItems,
   centerOrdinal,
@@ -19,6 +20,8 @@ import {
   timelineIndexToYear,
   yearToTimelineIndex
 } from "../../timeline/timelineUtils";
+
+const eraBands = getEraBands();
 
 const markerColors = [
   "#7dd3fc",
@@ -734,6 +737,11 @@ function TimelineCanvas({
   const viewportStartPercent = percentWithinRange(viewport.start_value, bounds);
   const viewportEndPercent = percentWithinRange(viewport.end_value, bounds);
   const viewportWidthPercent = Math.max(2, viewportEndPercent - viewportStartPercent);
+  const viewCenterValue = (viewport.start_value + viewport.end_value) / 2;
+  const viewSpanYears = (viewport.end_value - viewport.start_value) / 365.25;
+  const where = describeValue(viewCenterValue);
+  const viewStartYear = formatTimelineYear(ordinalToDate(viewport.start_value).year);
+  const viewEndYear = formatTimelineYear(ordinalToDate(viewport.end_value).year);
 
   const updateViewport = useCallback((nextViewport) => {
     viewportRef.current = nextViewport;
@@ -2136,6 +2144,68 @@ function TimelineCanvas({
       </div>
 
       <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "12px",
+          justifyContent: "space-between",
+          marginBottom: "10px",
+          minHeight: "16px"
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "7px",
+            fontSize: "12px",
+            fontWeight: "800",
+            minWidth: 0,
+            overflow: "hidden"
+          }}
+        >
+          <span
+            style={{
+              color: where.eraColor,
+              letterSpacing: "0.6px",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {where.eraLabel}
+          </span>
+          {viewSpanYears <= 800 && (
+            <>
+              <span style={{ color: "#555" }}>›</span>
+              <span style={{ color: "#9a9384", whiteSpace: "nowrap" }}>
+                {where.centuryLabel}
+              </span>
+            </>
+          )}
+          {viewSpanYears <= 80 && (
+            <>
+              <span style={{ color: "#555" }}>›</span>
+              <span style={{ color: "#9a9384", whiteSpace: "nowrap" }}>
+                {where.decadeLabel}
+              </span>
+            </>
+          )}
+        </div>
+        <div
+          style={{
+            color: "#6f6f6f",
+            flexShrink: 0,
+            fontSize: "11px",
+            fontWeight: "800",
+            whiteSpace: "nowrap"
+          }}
+        >
+          Vue {viewStartYear} – {viewEndYear}
+        </div>
+      </div>
+
+      <div
         ref={surfaceRef}
         onPointerDown={beginSurfaceDrag}
         onPointerMove={handleSurfacePointerMove}
@@ -2160,26 +2230,57 @@ function TimelineCanvas({
           touchAction: "none"
         }}
       >
-        {scale.bands.map((band, index) => {
-          const left = clampNumber(percentFromValue(band.start, viewport), -20, 120);
-          const right = clampNumber(percentFromValue(band.end, viewport), -20, 120);
+        {eraBands.map(band => {
+          const rawLeft = percentFromValue(band.startValue, viewport);
+          const rawRight = percentFromValue(band.endValue, viewport);
+
+          if (rawRight < -5 || rawLeft > 105) return null;
+
+          const left = clampNumber(rawLeft, -20, 120);
+          const right = clampNumber(rawRight, -20, 120);
           const width = Math.max(0, right - left);
+          const visibleLeft = clampNumber(rawLeft, 0, 100);
+          const visibleRight = clampNumber(rawRight, 0, 100);
+          const visibleWidth = visibleRight - visibleLeft;
 
           return (
-            <div
-              key={`${band.start}-${index}`}
-              style={{
-                position: "absolute",
-                left: `${left}%`,
-                width: `${width}%`,
-                top: 0,
-                bottom: 0,
-                background: band.muted
-                  ? "rgba(255, 255, 255, 0.032)"
-                  : "rgba(255, 255, 255, 0.018)",
-                pointerEvents: "none"
-              }}
-            />
+            <div key={band.id} style={{ pointerEvents: "none" }}>
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  top: 0,
+                  bottom: 0,
+                  background: band.tint,
+                  borderRight: rawRight <= 105
+                    ? `1px solid ${band.labelColor}1f`
+                    : "none"
+                }}
+              />
+              {visibleWidth >= 14 && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${(visibleLeft + visibleRight) / 2}%`,
+                    bottom: "10px",
+                    maxWidth: `${visibleWidth}%`,
+                    transform: "translateX(-50%)",
+                    color: band.labelColor,
+                    fontSize: "13px",
+                    fontWeight: "900",
+                    letterSpacing: "1.4px",
+                    opacity: 0.4,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {band.label}
+                </div>
+              )}
+            </div>
           );
         })}
 
