@@ -314,7 +314,6 @@ function buildTimelineScale(viewport, width = 900, activePrecision = "day") {
   const yearTicks = [];
   const monthTicks = [];
   const dayTicks = [];
-  const bands = [];
   const startYearIndex = yearToTimelineIndex(startDate.year);
   const endYearIndex = yearToTimelineIndex(endDate.year);
   const yearCount = Math.max(1, endYearIndex - startYearIndex + 1);
@@ -370,26 +369,6 @@ function buildTimelineScale(viewport, width = 900, activePrecision = "day") {
       level: "major",
       unit: "year"
     });
-  }
-
-  const bandStep = Math.max(yearStep, niceStep(yearCount / 5));
-  let bandIndex = 0;
-
-  for (
-    let yearIndex = Math.floor(startYearIndex / bandStep) * bandStep;
-    yearIndex <= endYearIndex + bandStep;
-    yearIndex += bandStep
-  ) {
-    const year = timelineIndexToYear(yearIndex);
-    const nextYearIndex = yearIndex + bandStep;
-    const nextYear = timelineIndexToYear(nextYearIndex);
-
-    bands.push({
-      start: clampNumber(dateToOrdinal(year, 1, 1), minTimelineValue, maxTimelineValue),
-      end: clampNumber(dateToOrdinal(nextYear, 1, 1), minTimelineValue, maxTimelineValue),
-      muted: bandIndex % 2 === 1
-    });
-    bandIndex += 1;
   }
 
   const startMonthIndex = monthIndexFromDate(startDate);
@@ -464,7 +443,6 @@ function buildTimelineScale(viewport, width = 900, activePrecision = "day") {
   ];
 
   return {
-    bands,
     gridTicks: buildGridTicks(rulers),
     rulers,
     unit: showDays ? "day" : showMonths ? "month" : "year"
@@ -572,6 +550,16 @@ function markerTop(stack) {
   const lanes = [78, 88, 54, 44, 96, 34, 70, 60];
 
   return lanes[stack % lanes.length];
+}
+
+// Reference-layer accent: green for "today", a cool blue for the user's own
+// mastered cards, warm parchment for curated landmarks. Quiet enough not to
+// compete with the colourful answer chips.
+function anchorAccent(anchor) {
+  if (anchor.id === "today") return "#7ee2a8";
+  if (anchor.source === "mastered") return "#9fb6d6";
+
+  return "#c9bd9f";
 }
 
 function TimelineQueue({
@@ -704,6 +692,7 @@ function TimelineCanvas({
     clampViewport(range, bounds, framePrecision)
   );
   const viewportRef = useRef(viewport);
+  const tweenRef = useRef(null);
   const [dragMode, setDragMode] = useState("");
   const [hoveredValue, setHoveredValue] = useState(null);
   const [markerDateLabel, setMarkerDateLabel] = useState("");
@@ -818,12 +807,62 @@ function TimelineCanvas({
     setViewport(nextViewport);
   }, []);
 
+  const cancelTween = useCallback(() => {
+    if (tweenRef.current !== null && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(tweenRef.current);
+    }
+
+    tweenRef.current = null;
+  }, []);
+
+  // Glide the viewport to a target frame so question switches and Reset feel
+  // continuous instead of snapping — reinforcing where things sit in time.
+  const animateViewportTo = useCallback((target) => {
+    cancelTween();
+
+    const start = viewportRef.current;
+    const centerDelta = Math.abs(
+      (start.start_value + start.end_value) - (target.start_value + target.end_value)
+    ) / 2;
+    const spanDelta = Math.abs(
+      (start.end_value - start.start_value) - (target.end_value - target.start_value)
+    );
+
+    if (
+      typeof requestAnimationFrame === "undefined" ||
+      typeof performance === "undefined" ||
+      (centerDelta < 1 && spanDelta < 1)
+    ) {
+      updateViewport(target);
+      return;
+    }
+
+    const startTime = performance.now();
+    const duration = 240;
+
+    const frame = (now) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - (1 - progress) ** 3;
+
+      updateViewport({
+        start_value: start.start_value + (target.start_value - start.start_value) * eased,
+        end_value: start.end_value + (target.end_value - start.end_value) * eased
+      });
+
+      tweenRef.current = progress < 1 ? requestAnimationFrame(frame) : null;
+    };
+
+    tweenRef.current = requestAnimationFrame(frame);
+  }, [cancelTween, updateViewport]);
+
+  useEffect(() => cancelTween, [cancelTween]);
+
   useEffect(() => {
-    updateViewport(clampViewport(range, bounds, framePrecision));
+    animateViewportTo(clampViewport(range, bounds, framePrecision));
     setHoveredValue(null);
     setMarkerDateLabel("");
     setPendingInterval(null);
-  }, [activeId, bounds, framePrecision, range, updateViewport]);
+  }, [activeId, animateViewportTo, bounds, framePrecision, range]);
 
   useEffect(() => {
     setHoveredValue(null);
@@ -869,6 +908,7 @@ function TimelineCanvas({
     function handleWheel(event) {
       event.preventDefault();
       event.stopPropagation();
+      cancelTween();
 
       const rect = event.currentTarget.getBoundingClientRect();
       const zoomFactor = event.deltaY < 0 ? 0.78 : 1.28;
@@ -891,7 +931,7 @@ function TimelineCanvas({
     return () => {
       nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
     };
-  }, [activeAnswer, framePrecision, activeTimeline.kind, bounds, updateViewport]);
+  }, [activeAnswer, cancelTween, framePrecision, activeTimeline.kind, bounds, updateViewport]);
 
   function valueFromClientX(clientX, targetViewport = viewport) {
     const rect = surfaceRef.current?.getBoundingClientRect();
@@ -996,6 +1036,7 @@ function TimelineCanvas({
     if (event.button !== 0) return;
 
     event.preventDefault();
+    cancelTween();
     setTooltip(null);
     capturePointer(event);
     const startValue = valueFromClientX(event.clientX);
@@ -1115,6 +1156,8 @@ function TimelineCanvas({
   }
 
   function zoomFromButton(zoomFactor) {
+    cancelTween();
+
     const centerValue = activeAnswer
       ? getAnswerCenterValue(activeAnswer, activeTimeline)
       : (viewport.start_value + viewport.end_value) / 2;
@@ -1129,7 +1172,7 @@ function TimelineCanvas({
   }
 
   function resetViewport() {
-    updateViewport(clampViewport(range, bounds, framePrecision));
+    animateViewportTo(clampViewport(range, bounds, framePrecision));
   }
 
   function beginMinimapDrag(event) {
@@ -1137,6 +1180,7 @@ function TimelineCanvas({
 
     event.preventDefault();
     event.stopPropagation();
+    cancelTween();
     setTooltip(null);
 
     try {
@@ -1305,7 +1349,7 @@ function TimelineCanvas({
     }
 
     function edgePill(entry, side) {
-      const accent = entry.anchor.id === "today" ? "#7ee2a8" : "#c9bd9f";
+      const accent = anchorAccent(entry.anchor);
       const year = formatTimelineYear(ordinalToDate(entry.value).year);
 
       return (
@@ -1352,8 +1396,7 @@ function TimelineCanvas({
         {selection.visible.map(entry => {
           const { anchor, value } = entry;
           const center = percentFromValue(value, viewport);
-          const isToday = anchor.id === "today";
-          const accent = isToday ? "#7ee2a8" : "#c9bd9f";
+          const accent = anchorAccent(anchor);
           const span = anchor.end ? anchorBounds(anchor) : null;
           // Hide the in-view label when it would land in an edge-arrow stack;
           // the drop-line still marks the exact spot.
@@ -2377,9 +2420,8 @@ function TimelineCanvas({
 
         {miniAnchors.map(entry => {
           const { anchor, pct } = entry;
-          const isToday = anchor.id === "today";
           const isMajor = (anchor.tier ?? 1) === 0;
-          const accent = isToday ? "#7ee2a8" : "#c9bd9f";
+          const accent = anchorAccent(anchor);
 
           return (
             <div key={`mini-anchor-${anchor.id}`} style={{ pointerEvents: "none" }}>
