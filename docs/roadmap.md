@@ -30,23 +30,16 @@
 - mettre en évidence les zones trop petites (c.f. jetpunk)
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
-- importer/exporter db
-- ajouter une recherche dans calendar
 - trouver un meilleur agencement pour les aliases dans map preview
 - mettre des groupes en favoris pour les faire réapparaître plus souvent (qui se met sur toutes les questions du groupe)
 - supprimer une question appelle le rebalancing ?
 - permettre d'accepter une réponse fausse si faute de frappe
-- aller chercher dans les questions à tags similaires pour proposer un qcm ?
 - ajouter une barre de progression qui montre la maîtrise d'une question dans manage (et éventuellement un historique de la progression en fonction du temps)
 - fine tune les difficultés des modes en fonction des prédictions des reviews en prenant type_all en ref
 - qcm de maps : choisir des zones proches pour les réponses
-- créer un groupe avec les formes de maps à partir de world.svg
-- faire en sorte que les reviews n'aient pas besoin de scroll la page pour répondre
-- setup github pour tout automatiser
 - uniformiser le style partout
 - augmenter la difficulté des qcm en proposant des réponses plus proches
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
-- I should be able to see from the menu if I still have to do the review or not
 - make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
 
@@ -55,15 +48,11 @@
 ## ideas
 
 - daily habit mechanics: streaks, reminders, rewards, but keep them separate from core review so they do not distort scheduling.
-- permettre de convertir un svg en groupe d'images (pour les shapes de pays)
-- mettre une option de favoris et de difficile sur les questions (pour les voir plus souvent et aider le scheduler)
 - faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
-- pouvoir manuellement modifier les dates des questions
 - ia pour proposer des qcm si on a pas la réponse (à la TLMVPSP)
 - faire un executable
 - faire une extension pour chrome pour facilement créer des questions à partir de n'importe quelle page web (ex : pour faire une question sur une ville, aller sur la page wikipedia de la ville et créer la question à partir de là en sélectionnant la zone de la carte) (avec de l'ia éventuellement pour suggérer la question et les réponses à partir du contenu de la page)
-- faire un mode "berserk" où on peut choisir dans la review d'ajouter un chrono pour essayer de battre son record de temps
 - quand on vient d'ajouter une question, ajouter un indicateur et on doit passer la souris sur la card dans la liste pour enlever l'indicateur (à la LoL)
 - systeme de mmr
 - différentes langues disponibles
