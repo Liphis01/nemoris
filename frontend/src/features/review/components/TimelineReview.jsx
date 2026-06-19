@@ -30,6 +30,9 @@ import {
 
 const eraBands = getEraBands();
 const curatedAnchorList = getCuratedAnchors();
+// Stable reference so the canvas anchor memo doesn't recompute every render when
+// a group has no mastered anchors.
+const emptyAnchors = [];
 
 // Days within which a landmark anchor is considered to "sit on" a session
 // answer; such anchors are dropped so the reference layer never reveals an
@@ -675,6 +678,7 @@ function TimelineCanvas({
   compactLayout = false,
   committedAnswers,
   items,
+  masteredAnchors,
   onDraftChange,
   onSelect,
   orderById,
@@ -743,15 +747,23 @@ function TimelineCanvas({
 
       return centerOrdinal(timeline.start);
     });
-
-    return curatedAnchorList.filter(anchor => {
+    const curatedCenters = curatedAnchorList.map(anchorCenterValue);
+    // The user's mastered cards become anchors too, except where they would
+    // duplicate a curated landmark (curated wins, to avoid two flags on one date).
+    const dedupedMastered = masteredAnchors.filter(anchor => {
       const center = anchorCenterValue(anchor);
 
-      return !sessionCenters.some(value =>
+      return !curatedCenters.some(value =>
         Math.abs(value - center) < anchorLeakToleranceDays
       );
     });
-  }, [items]);
+
+    return [...curatedAnchorList, ...dedupedMastered].filter(anchor =>
+      !sessionCenters.some(value =>
+        Math.abs(value - anchorCenterValue(anchor)) < anchorLeakToleranceDays
+      )
+    );
+  }, [items, masteredAnchors]);
   const pendingIntervalAnswer =
     pendingInterval && activeTimeline.kind === "interval" && !activeAnswer
       ? normalizeIntervalAnswer(
@@ -2722,6 +2734,7 @@ export default function TimelineReview({
     [group.range, sortedItems]
   );
   const bounds = useMemo(() => buildTimelineBounds(range), [range]);
+  const masteredAnchors = group.anchors || emptyAnchors;
   const activeItem = itemById.get(activeId) || sortedItems[0] || null;
   const activeTimeline = activeItem ? normalizeTimeline(activeItem.timeline) : null;
   const activeAnswer = activeItem
@@ -3042,6 +3055,7 @@ export default function TimelineReview({
             compactLayout={fillAvailableHeight}
             committedAnswers={committedAnswers}
             items={orderedItems}
+            masteredAnchors={masteredAnchors}
             onDraftChange={setActiveDraft}
             onSelect={selectItem}
             orderById={orderById}

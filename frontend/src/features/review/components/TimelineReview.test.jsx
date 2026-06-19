@@ -89,4 +89,67 @@ describe("TimelineReview", () => {
     // coinciding 1789 anchor is filtered out so the answer is never revealed.
     expect(screen.getAllByText("Révolution française")).toHaveLength(1);
   });
+
+  function renderWithMasteredAnchor(anchor, sessionYear = 1500) {
+    render(
+      <TimelineReview
+        fillAvailableHeight
+        group={{ anchors: [anchor] }}
+        reviewItems={[
+          {
+            question_id: 9,
+            question: "Question de session",
+            timeline: {
+              kind: "point",
+              start: { year: sessionYear, month: null, day: null, precision: "year" }
+            },
+            progress: {}
+          }
+        ]}
+        onComplete={vi.fn()}
+        submitAnswer={vi.fn()}
+      />
+    );
+  }
+
+  it("renders mastered-card anchors from the group payload", () => {
+    renderWithMasteredAnchor({
+      id: "mastered-50",
+      source: "mastered",
+      label: "Mon évènement maîtrisé",
+      tier: 1,
+      start: { year: 1850, month: null, day: null, precision: "year" }
+    });
+
+    expect(screen.getByText("Mon évènement maîtrisé")).toBeInTheDocument();
+  });
+
+  it("dedupes a mastered anchor that coincides with a curated landmark", () => {
+    renderWithMasteredAnchor({
+      id: "mastered-51",
+      source: "mastered",
+      label: "Ma carte de 1789",
+      tier: 1,
+      start: { year: 1789, month: null, day: null, precision: "year" }
+    });
+
+    // 1789 already has the curated "Révolution française" landmark.
+    expect(screen.queryByText("Ma carte de 1789")).not.toBeInTheDocument();
+    expect(screen.getByText("Révolution française")).toBeInTheDocument();
+  });
+
+  it("suppresses a mastered anchor that coincides with a session answer", () => {
+    renderWithMasteredAnchor(
+      {
+        id: "mastered-52",
+        source: "mastered",
+        label: "Carte sur la réponse",
+        tier: 1,
+        start: { year: 1500, month: null, day: null, precision: "year" }
+      },
+      1500
+    );
+
+    expect(screen.queryByText("Carte sur la réponse")).not.toBeInTheDocument();
+  });
 });
