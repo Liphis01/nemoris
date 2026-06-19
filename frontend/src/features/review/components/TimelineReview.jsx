@@ -683,12 +683,21 @@ function TimelineCanvas({
 }) {
   const activeTimeline = normalizeTimeline(activeItem.timeline);
   const activePrecision = getTimelinePrecision(activeTimeline);
+  // The resting frame is shared by every question in the session: it spans the
+  // whole group range at the group's finest precision, so the landscape looks
+  // identical on each question and a spatial memory can form. Zoom/pan are a
+  // transient magnifier that resets back to this frame on question switch.
+  const framePrecision = items.reduce((finest, item) => {
+    const precision = getTimelinePrecision(normalizeTimeline(item.timeline));
+
+    return precisionRank[precision] > precisionRank[finest] ? precision : finest;
+  }, "year");
   const minimapRef = useRef(null);
   const minimapDragRef = useRef(null);
   const surfaceRef = useRef(null);
   const dragRef = useRef(null);
   const [viewport, setViewport] = useState(() =>
-    clampViewport(range, bounds, activePrecision)
+    clampViewport(range, bounds, framePrecision)
   );
   const viewportRef = useRef(viewport);
   const [dragMode, setDragMode] = useState("");
@@ -698,7 +707,7 @@ function TimelineCanvas({
   const [surfaceWidth, setSurfaceWidth] = useState(900);
   const [tooltip, setTooltip] = useState(null);
   const activeColor = markerColors[(orderById.get(activeId) || 0) % markerColors.length];
-  const scale = buildTimelineScale(viewport, surfaceWidth, activePrecision);
+  const scale = buildTimelineScale(viewport, surfaceWidth, framePrecision);
   const markers = useMemo(
     () => buildMarkers(items, committedAnswers, activeId, viewport, orderById),
     [activeId, committedAnswers, items, orderById, viewport]
@@ -783,11 +792,11 @@ function TimelineCanvas({
   }, []);
 
   useEffect(() => {
-    updateViewport(clampViewport(range, bounds, activePrecision));
+    updateViewport(clampViewport(range, bounds, framePrecision));
     setHoveredValue(null);
     setMarkerDateLabel("");
     setPendingInterval(null);
-  }, [activePrecision, bounds, range, updateViewport]);
+  }, [activeId, bounds, framePrecision, range, updateViewport]);
 
   useEffect(() => {
     setHoveredValue(null);
@@ -847,7 +856,7 @@ function TimelineCanvas({
           ? { ...prev, floatingValue: centerValue }
           : prev
       ));
-      updateViewport(zoomViewport(current, bounds, centerValue, zoomFactor, activePrecision));
+      updateViewport(zoomViewport(current, bounds, centerValue, zoomFactor, framePrecision));
     }
 
     nodes.forEach(node => node.addEventListener("wheel", handleWheel, { passive: false }));
@@ -855,7 +864,7 @@ function TimelineCanvas({
     return () => {
       nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
     };
-  }, [activeAnswer, activePrecision, activeTimeline.kind, bounds, updateViewport]);
+  }, [activeAnswer, framePrecision, activeTimeline.kind, bounds, updateViewport]);
 
   function valueFromClientX(clientX, targetViewport = viewport) {
     const rect = surfaceRef.current?.getBoundingClientRect();
@@ -1021,7 +1030,7 @@ function TimelineCanvas({
         dragState.initialViewport,
         bounds,
         deltaValue,
-        activePrecision
+        framePrecision
       );
       const nextValue = valueFromClientX(event.clientX, nextViewport);
 
@@ -1088,12 +1097,12 @@ function TimelineCanvas({
       bounds,
       centerValue,
       zoomFactor,
-      activePrecision
+      framePrecision
     ));
   }
 
   function resetViewport() {
-    updateViewport(clampViewport(range, bounds, activePrecision));
+    updateViewport(clampViewport(range, bounds, framePrecision));
   }
 
   function beginMinimapDrag(event) {
@@ -1117,7 +1126,7 @@ function TimelineCanvas({
       valueFromMinimapClientX(event.clientX),
       viewportRef.current,
       bounds,
-      activePrecision
+      framePrecision
     ));
   }
 
@@ -1129,7 +1138,7 @@ function TimelineCanvas({
       valueFromMinimapClientX(event.clientX),
       viewportRef.current,
       bounds,
-      activePrecision
+      framePrecision
     ));
   }
 
