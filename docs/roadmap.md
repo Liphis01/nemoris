@@ -4,6 +4,11 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
+- interdire le mode click prompt quand il n'y a qu'un seul élément à cliquer
+- prendre en compte que plus on trouve d'éléments, moins il y a de possibilités et plus c'est facile
+- revoir les difficultés des modes car qcm devrait pas envoyer les questions trouvées à l'année prochaine
+- traitement des questions bonus bizarre (surtout quand je fais une erreur)
+- ne pas nécessairement reset les records après un edit
 
 ## quick fixes
 

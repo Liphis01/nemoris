@@ -43,8 +43,8 @@ jobs:
       - name: Seed a fresh database
         working-directory: backend
         run: |
-          python -c "from app.database import engine, Base; import app.models; Base.metadata.create_all(engine)"
-          python import_csv.py        # populate from the tracked questions.csv
+          python -c "from app.bootstrap import init_database; init_database()"  # build + stamp schema via migrations
+          python import_csv.py                                                  # populate from the tracked questions.csv
 
       - name: Build executable (PyInstaller)
         working-directory: backend
