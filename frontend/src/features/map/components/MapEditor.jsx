@@ -33,6 +33,7 @@ export default function MapEditor({
   const aliasInputRef = useRef(null);
   const focusLabelAfterZoneChangeRef = useRef(false);
   const saveMapEditsRef = useRef(null);
+  const suppressFocusForCodeRef = useRef(null);
   const {
     clearDirty,
     dirtyZoneCodes,
@@ -61,6 +62,16 @@ export default function MapEditor({
     // unsaved blank temporary row from a previous click.
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
     setEditingZone(normalizeZone(selectedZone, group));
+
+    // A save re-selects the zone it just persisted so the list scrolls to it.
+    // That re-selection must not re-zoom the map onto the saved zone, so skip the
+    // focus for this one code while keeping every other auto-zoom intact.
+    if (suppressFocusForCodeRef.current === selectedCode) {
+      suppressFocusForCodeRef.current = null;
+      return;
+    }
+
+    suppressFocusForCodeRef.current = null;
     setMapFocusCode(selectedCode);
   }, [group, selectedZone, setZones]);
 
@@ -366,6 +377,12 @@ export default function MapEditor({
 
     const { delta, savedZones, saveResult } = saved;
     setEditingZone(null);
+
+    if (savedEditingCode) {
+      // The parent re-selects this saved zone to scroll the list to it; flag the
+      // code so the resulting re-selection does not auto-zoom the map.
+      suppressFocusForCodeRef.current = savedEditingCode;
+    }
 
     if (onSave) {
       // Bubble enough detail to ManageInspector to patch local lists and

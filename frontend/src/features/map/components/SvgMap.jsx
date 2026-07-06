@@ -17,6 +17,14 @@ const zoneStrokeStyle = {
 
 const dragThresholdPx = 4;
 
+// Maximum wheel-zoom factor. Kept high so the tiny island hit-areas can be
+// zoomed in far enough to see and click comfortably.
+const maxZoom = 40;
+
+// Island hit-area shapes always render at this opacity so they stay see-through
+// (the map shows through them) while behaving like any other zone.
+const hitAreaRevealOpacity = "0.35";
+
 export default function SvgMap({
     svgPath,
     found,
@@ -239,9 +247,15 @@ export default function SvgMap({
 
         const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
             const isClickable = canSelectCode(code);
+            // Hit-area shapes cover islands too small to draw. They behave like any
+            // other zone (same neutral/state colors, always visible and clickable)
+            // but stay permanently translucent, reading as a see-through overlay so
+            // the underlying map still shows through.
+            const isHitArea = el.getAttribute("data-hit-area") === "1";
 
             el.style.fill = getDisplayColor(code);
             el.style.cursor = "pointer";
+            if (isHitArea) el.style.opacity = hitAreaRevealOpacity;
             const tooltipLabel = String(zoneLabels[code] || "");
             const flashAnimation = flashSet.has(code) && typeof el.animate === "function"
                 ? el.animate(
@@ -410,7 +424,7 @@ export default function SvgMap({
             const zoomIntensity = 0.0015;
             const newScale = Math.min(
                 Math.max(1, scale * (1 - e.deltaY * zoomIntensity)),
-                15
+                maxZoom
             );
 
             const newOffset = {
