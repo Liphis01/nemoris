@@ -1,7 +1,7 @@
 import math
 
 from .mode_selection import (
-    MULTIPLE_CHOICE_MIN_CONTEXT,
+    CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     question_mode_affinity_counts,
@@ -26,7 +26,6 @@ DEFAULT_IMAGE_MODE = IMAGE_MODE_TYPE_PROMPT
 IMAGE_TYPE_ALL_DIFFICULTY = 1.0
 IMAGE_TYPE_PROMPT_DIFFICULTY = 1.15
 IMAGE_MULTIPLE_CHOICE_DIFFICULTY = 0.5
-IMAGE_CLICK_PROMPT_MIN_CONTEXT = 10
 
 IMAGE_MULTIPLE_CHOICE_MODES = {
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -125,7 +124,6 @@ def choose_image_review_mode(
     due_questions,
     context_questions,
     multiple_choice_context_count=None,
-    require_click_prompt_min=False,
     discouraged_modes=None,
     rng=None
 ):
@@ -173,7 +171,6 @@ def choose_image_review_mode(
     scores = dict(base_scores)
 
     if context_count <= 4:
-        scores[IMAGE_MODE_CLICK_PROMPT] -= 1.1
         scores[IMAGE_MODE_MULTIPLE_CHOICE_LABEL] -= 0.4
         scores[IMAGE_MODE_MULTIPLE_CHOICE_IMAGE] -= 0.4
     elif context_count >= 12:
@@ -198,17 +195,14 @@ def choose_image_review_mode(
     }
     eligible_modes = list(IMAGE_MODES)
 
-    if choice_context_count < MULTIPLE_CHOICE_MIN_CONTEXT:
+    if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
         eligible_modes = [
             mode
             for mode in eligible_modes
             if mode not in IMAGE_MULTIPLE_CHOICE_MODES
         ]
 
-    if (
-        require_click_prompt_min and
-        context_count < IMAGE_CLICK_PROMPT_MIN_CONTEXT
-    ):
+    if context_count < CHOICE_MODE_MIN_CONTEXT:
         eligible_modes = [
             mode
             for mode in eligible_modes

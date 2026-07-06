@@ -215,11 +215,24 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
 
     def test_map_random_selector_keeps_mixed_chunks_varied(self):
-        support = Question(type_q="map", answer="Support")
-        support.progress = Progress(reps=1, difficulty=3.0, history=[])
-        strong = Question(type_q="map", answer="Strong")
-        strong.progress = Progress(reps=4, difficulty=3.0, history=[])
-        items = [support, strong]
+        # click_prompt requires at least CHOICE_MODE_MIN_CONTEXT (5) elements, so
+        # exercise the variety guarantee with a valid-size mixed chunk.
+        items = []
+
+        for _ in range(2):
+            support = Question(type_q="map", answer="Support")
+            support.progress = Progress(reps=1, difficulty=3.0, history=[])
+            items.append(support)
+
+        for _ in range(2):
+            strong = Question(type_q="map", answer="Strong")
+            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            items.append(strong)
+
+        medium = Question(type_q="map", answer="Medium")
+        medium.progress = Progress(reps=4, difficulty=5.0, history=[])
+        items.append(medium)
+
         rng = random.Random(3)
         modes = Counter(
             choose_map_review_mode(items, items, rng=rng)
@@ -229,6 +242,35 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreaterEqual(len(modes), 3)
         self.assertGreater(modes["click_prompt"], 0)
         self.assertGreater(modes["type_prompt"], 0)
+
+    def test_map_click_prompt_requires_minimum_review_context(self):
+        context = [
+            Question(id=index, type_q="map", answer=f"Zone {index}")
+            for index in range(1, 6)
+        ]
+
+        for question in context:
+            question.progress = Progress(reps=3, difficulty=5.0, history=[])
+
+        for size in range(1, 5):
+            modes = {
+                choose_map_review_mode(
+                    [context[0]],
+                    context[:size],
+                    rng=random.Random(seed)
+                )
+                for seed in range(50)
+            }
+            self.assertNotIn("click_prompt", modes)
+
+        self.assertEqual(
+            choose_map_review_mode(
+                [context[0]],
+                context,
+                rng=FixedRandom(0)
+            ),
+            "click_prompt"
+        )
 
     def test_image_mode_difficulty_uses_type_all_as_reference(self):
         self.assertEqual(image_mode_difficulty("type_all", 2), 1.0)
@@ -338,7 +380,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
     def test_image_click_prompt_requires_minimum_review_context(self):
         context = [
             Question(id=index, type_q="image", answer=f"Image {index}")
-            for index in range(1, 11)
+            for index in range(1, 6)
         ]
 
         for question in context:
@@ -348,19 +390,21 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 history=[]
             )
 
-        self.assertNotEqual(
-            choose_image_review_mode(
-                [context[0]],
-                context[:9],
-                require_click_prompt_min=True
-            ),
-            "click_prompt"
-        )
+        for size in range(1, 5):
+            modes = {
+                choose_image_review_mode(
+                    [context[0]],
+                    context[:size],
+                    rng=random.Random(seed)
+                )
+                for seed in range(50)
+            }
+            self.assertNotIn("click_prompt", modes)
+
         self.assertEqual(
             choose_image_review_mode(
                 [context[0]],
                 context,
-                require_click_prompt_min=True,
                 rng=FixedRandom(0)
             ),
             "click_prompt"

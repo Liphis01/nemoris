@@ -11,7 +11,10 @@ MODE_AFFINITIES = (
     MODE_AFFINITY_STRONG
 )
 WEIGHT_TEMPERATURE = 1.15
-MULTIPLE_CHOICE_MIN_CONTEXT = 5
+# Shared minimum element count for every "choose-among-elements" mode
+# (click_prompt and the multiple-choice modes). Below this, such modes are
+# degenerate (picking blindly among 1-3 options), so they are never offered.
+CHOICE_MODE_MIN_CONTEXT = 5
 
 
 def _progress_started(progress):

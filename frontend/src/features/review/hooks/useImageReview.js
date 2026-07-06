@@ -489,6 +489,18 @@ export function useImageReview(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reviewKey]
   );
+  const clickPromptPool = useMemo(
+    () => (
+      mode === IMAGE_MODE_CLICK_PROMPT
+        ? shuffled([...uniqueItemsByQuestionId(contextItems, reviewItems).values()])
+        : null
+    ),
+    // Locked per session like sessionItems. contextItems is preserved across
+    // retries, so the clickable pool never shrinks to the few prompted (failed)
+    // tiles — the pick stays as hard as the original review.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reviewKey]
+  );
   const promptQueue = useMemo(
     () => {
       if (!isPromptMode(mode)) return sessionItems;
@@ -996,8 +1008,13 @@ export function useImageReview(
       return visualPromptItem ? [visualPromptItem] : [];
     }
 
+    if (mode === IMAGE_MODE_CLICK_PROMPT && !resultMode) {
+      return clickPromptPool;
+    }
+
     return sessionItems;
   }, [
+    clickPromptPool,
     mode,
     resultMode,
     sessionItems,

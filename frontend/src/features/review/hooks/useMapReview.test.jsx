@@ -386,6 +386,48 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.showRecap).toBe(false);
   });
 
+  it("click_prompt keeps the whole context clickable when only a subset is prompted", () => {
+    // Failed-retry pass: only 2 of the original 5 zones are re-prompted, but the
+    // full context stays clickable/highlighted so the pick never degenerates to
+    // a couple of zones.
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" }),
+      zone({ questionId: 5, code: "e", label: "Epsilon" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "click_prompt",
+        contextItems
+      })
+    );
+
+    // The whole context is clickable, not just the 2 prompted zones.
+    expect([...result.current.dueCodes].sort()).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+    ]);
+
+    const prompt = result.current.currentPromptItem;
+
+    // Clicking a context-only distractor (never prompted) misses the prompt.
+    act(() => {
+      result.current.handleZoneSelect("d");
+    });
+
+    expect(result.current.flashCodes).toEqual(["d"]);
+    expect(result.current.activeMissedCodes).toEqual([prompt.code]);
+    expect(result.current.foundQuestionIds).toEqual([]);
+  });
+
   it("type_prompt accepts the highlighted zone name and skipping does not complete the session", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),

@@ -884,7 +884,6 @@ def _serialize_review_items(
                 chunk_questions,
                 active_context_questions,
                 multiple_choice_context_count=len(choice_context_questions),
-                require_click_prompt_min=scheduled_review,
                 discouraged_modes=(
                     [previous_mode]
                     if scheduled_review and previous_mode

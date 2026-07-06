@@ -1,7 +1,7 @@
 import math
 
 from .mode_selection import (
-    MULTIPLE_CHOICE_MIN_CONTEXT,
+    CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     question_mode_affinity_counts,
@@ -160,7 +160,6 @@ def choose_map_review_mode(
     scores = dict(base_scores)
 
     if context_count <= 4:
-        scores[MAP_MODE_CLICK_PROMPT] -= 1.1
         scores[MAP_MODE_MULTIPLE_CHOICE] -= 0.4
     elif context_count >= 12:
         scores[MAP_MODE_CLICK_PROMPT] += 0.5
@@ -178,11 +177,18 @@ def choose_map_review_mode(
     }
     eligible_modes = list(MAP_MODES)
 
-    if choice_context_count < MULTIPLE_CHOICE_MIN_CONTEXT:
+    if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
         eligible_modes = [
             mode
             for mode in eligible_modes
             if mode != MAP_MODE_MULTIPLE_CHOICE
+        ]
+
+    if context_count < CHOICE_MODE_MIN_CONTEXT:
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode != MAP_MODE_CLICK_PROMPT
         ]
 
     return weighted_mode_choice(

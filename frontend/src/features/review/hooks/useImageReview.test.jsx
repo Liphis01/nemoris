@@ -526,6 +526,52 @@ describe("useImageReview", () => {
     }
   });
 
+  it("click_prompt keeps the full context grid when only a subset is prompted", () => {
+    // Mirrors a failed-retry pass: only 2 of the original 6 items are prompted,
+    // but the clickable grid must stay the full context so the pick never
+    // degenerates to a handful of tiles.
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const contextItems = [
+      ...items,
+      imageItem(3, "Spain"),
+      imageItem(4, "Italy"),
+      imageItem(5, "Portugal"),
+      imageItem(6, "Belgium")
+    ];
+    const { result } = renderHook(() =>
+      useImageReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_CLICK_PROMPT,
+        contextItems
+      })
+    );
+
+    // The grid shows the full 6-item pool...
+    expect(optionIds(result.current.gridItems.map(row => row.item))).toEqual([
+      1, 2, 3, 4, 5, 6
+    ]);
+    // ...but only the 2 re-queued items are actually in play.
+    expect([1, 2]).toContain(result.current.currentPromptItem.question_id);
+
+    // Clicking a context-only distractor (never prompted) counts as a miss for
+    // the current prompt.
+    const prompt = result.current.currentPromptItem;
+
+    act(() => {
+      result.current.handleImageSelect(4);
+    });
+
+    expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
+    expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
+    expect(result.current.interactionFeedback).toMatchObject({
+      correctQuestionId: prompt.question_id,
+      isCorrect: false,
+      selectedQuestionId: 4
+    });
+  });
+
   it("multiple_choice_label chooses from labels for the target image", () => {
     const items = [
       imageItem(1, "France"),

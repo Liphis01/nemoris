@@ -621,13 +621,34 @@ export function useMapReview(
     [completedQuestionIdSet, reviewZones]
   );
 
+  const contextByCode = useMemo(() => {
+    const lookup = new Map();
+
+    contextItems.forEach(item => {
+      if (item?.code && !lookup.has(item.code)) {
+        lookup.set(item.code, item);
+      }
+    });
+
+    return lookup;
+  }, [contextItems]);
+
   const dueCodes = useMemo(() => {
     if (mode === MAP_MODE_TYPE_PROMPT || mode === MAP_MODE_MULTIPLE_CHOICE) {
       return currentPromptItem?.code ? [currentPromptItem.code] : [];
     }
 
+    if (mode === MAP_MODE_CLICK_PROMPT) {
+      // Keep the whole review context clickable even when only a subset of
+      // zones is prompted (e.g. failed-retry passes), so the pick never
+      // degenerates to a handful of highlighted zones.
+      return contextItems
+        .filter(item => item?.code && !resolvedQuestionIdSet.has(item.question_id))
+        .map(item => item.code);
+    }
+
     return remainingZones.map(item => item.code);
-  }, [currentPromptItem, mode, remainingZones]);
+  }, [contextItems, currentPromptItem, mode, remainingZones, resolvedQuestionIdSet]);
 
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
@@ -754,24 +775,25 @@ export function useMapReview(
       return;
     }
 
-    const clickedItem = reviewZones.find(item => item.code === code);
+    if (currentPromptItem.code === code) {
+      markFound(currentPromptItem);
+      return;
+    }
+
+    // Any other zone in the clickable pool — including context-only distractors
+    // that are not themselves being prompted — counts as a wrong answer for the
+    // current prompt.
+    const clickedItem = contextByCode.get(code);
 
     if (!clickedItem || resolvedQuestionIdSet.has(clickedItem.question_id)) {
       return;
     }
 
-    if (currentPromptItem.code === code) {
-      markFound(currentPromptItem);
-    } else {
-      if (clickedItem?.code) {
-        setZoneFeedback({
-          id: Date.now(),
-          flashCodes: [clickedItem.code]
-        });
-      }
-
-      markMissed(currentPromptItem);
-    }
+    setZoneFeedback({
+      id: Date.now(),
+      flashCodes: [code]
+    });
+    markMissed(currentPromptItem);
   }
 
   function handleChoiceSelect(questionId) {
