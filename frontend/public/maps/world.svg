@@ -1029,7 +1029,7 @@ THE SOFTWARE.
   <path data-code="BQSE" data-hit-area="1" class="St. Eustatius (Netherlands)" d="M 633.1 389.5 633.2 389.1 633.5 388.7 633.6 388.6 634.0 388.4 634.4 388.4 634.8 388.6 635.1 389.0 635.2 389.2 635.3 389.6 635.2 390.0 634.9 390.4 634.7 390.5 634.3 390.7 633.9 390.7 633.5 390.5 633.2 390.1 633.1 389.7 Z" opacity="0.35"/>
   <path data-code="BQSA" data-hit-area="1" class="Saba (Netherlands)" d="M 631.7 388.7 631.8 388.3 631.9 388.1 632.2 387.7 632.6 387.5 633.0 387.5 633.4 387.7 633.5 387.8 633.8 388.2 633.9 388.6 633.8 389.0 633.5 389.4 633.4 389.5 633.0 389.7 632.5 389.7 632.1 389.5 631.8 389.1 Z" opacity="0.35"/>
   <circle data-code="AD" class="Andorra" cx="991.8" cy="229.8" r="5"/>
-  <circle data-code="KI" class="Kiribati" cx="1945.6" cy="493.6" r="5"/>
+  <circle data-code="KI" data-hit-area="1" class="Kiribati" cx="1945.6" cy="493.6" r="5" opacity="0.35"/>
   <circle data-code="LI" class="Liechtenstein" cx="1036.3" cy="200.1" r="5"/>
   <circle data-code="MC" class="Monaco" cx="1024.6" cy="221.9" r="5"/>
   <circle data-code="SG" class="Singapore" cx="1561.0" cy="493.9" r="5"/>
