@@ -183,6 +183,10 @@ export function useManageLibrary(mode) {
 
     setAllQuestions(prev => prev.filter(question => question.id !== id));
 
+    setSelectedItem(prev =>
+      prev && !prev.type_group && prev.id === id ? null : prev
+    );
+
     if (deletedQuestion?.group?.id) {
       // Group counts are denormalized in the frontend list response, so adjust
       // them locally after deleting a grouped question.
