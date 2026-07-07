@@ -153,50 +153,82 @@ function ReviewOutcomePanel({
   );
 }
 
-function BonusReviewQueueControls({
-  canSkipCurrentQuestion,
-  skipCurrentQuestion,
-  canReturnToLastSkippedQuestion,
-  returnToLastSkippedQuestion,
-  skippedQuestionCount = 0
-}) {
-  if (!canSkipCurrentQuestion && !canReturnToLastSkippedQuestion) {
-    return null;
-  }
+function BonusReviewMenu({ entries, selectBonusItem, setMode }) {
+  const allDone = entries.length === 0;
 
   return (
-    <div className="bonus-review-controls" aria-label="Navigation des bonus">
-      {canSkipCurrentQuestion && (
-        <button
-          type="button"
-          className="bonus-review-control bonus-review-control-set-aside"
-          onClick={skipCurrentQuestion}
-          title="Mettre cette question de côté sans la noter"
-          aria-label="Mettre cette question de côté sans la noter"
-        >
-          <span className="bonus-review-control-icon" aria-hidden="true">↷</span>
-          <span>Mettre de côté</span>
-        </button>
-      )}
+    <section className="bonus-menu" aria-label="Questions bonus">
+      <div className="bonus-menu-head">
+        <div>
+          <div className="bonus-menu-kicker">Questions bonus</div>
+          <h2 className="bonus-menu-title">
+            {allDone ? "Bonus terminés" : "Choisis une question à réviser"}
+          </h2>
+          <p className="bonus-menu-copy">
+            {allDone
+              ? "Tu as fait toutes les questions bonus disponibles."
+              : "Sélectionne la question ou le groupe que tu veux faire. Tu reviens ici après chaque item."}
+          </p>
+        </div>
 
-      {canReturnToLastSkippedQuestion && (
+        <ReturnToMenuButton
+          onClick={() => setMode("menu")}
+          style={{
+            background: "#1a1a1a",
+            border: "1px solid #2a2a2a",
+            borderRadius: "10px",
+            color: "#bbb",
+            cursor: "pointer",
+            flexShrink: 0,
+            fontSize: "14px",
+            padding: "10px 14px"
+          }}
+        />
+      </div>
+
+      {allDone ? (
         <button
           type="button"
-          className="bonus-review-control bonus-review-control-return"
-          onClick={returnToLastSkippedQuestion}
-          title="Reprendre la dernière question mise de côté"
-          aria-label="Reprendre la dernière question mise de côté"
+          className="review-outcome-button review-outcome-button-primary"
+          onClick={() => setMode("menu")}
         >
-          <span className="bonus-review-control-icon" aria-hidden="true">↩</span>
-          <span>Reprendre</span>
-          {skippedQuestionCount > 0 && (
-            <span className="bonus-review-control-count" aria-label={`${skippedQuestionCount} en attente`}>
-              {skippedQuestionCount}
-            </span>
-          )}
+          Retour au menu
         </button>
+      ) : (
+        <ul className="bonus-menu-list app-scrollbar">
+          {entries.map(entry => (
+            <li key={entry.key}>
+              <button
+                type="button"
+                className="bonus-menu-row"
+                onClick={() => selectBonusItem(entry)}
+              >
+                <span className="bonus-menu-row-main">
+                  <span className="bonus-menu-row-type">
+                    {entry.typeLabel}
+                    {entry.isContainer && (
+                      <span className="bonus-menu-row-count">
+                        {entry.itemCount}
+                      </span>
+                    )}
+                  </span>
+                  <span className="bonus-menu-row-label">
+                    {entry.label}
+                  </span>
+                </span>
+
+                <span className="bonus-menu-row-meta">
+                  {(entry.tags || []).slice(0, 3).map(tag => (
+                    <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
+                  ))}
+                  <span className="bonus-menu-row-arrow" aria-hidden="true">→</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -214,11 +246,6 @@ export default function ReviewSession({
   handleTimelineComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
-  canSkipCurrentQuestion,
-  skipCurrentQuestion,
-  canReturnToLastSkippedQuestion,
-  returnToLastSkippedQuestion,
-  skippedQuestionCount,
   canStartBonusReview,
   startBonusReview,
   bonusReviewActive,
@@ -226,6 +253,10 @@ export default function ReviewSession({
   bonusReviewStatus,
   bonusReviewLoading,
   bonusStatusLoading,
+  bonusMenuOpen,
+  bonusMenuEntries,
+  selectBonusItem,
+  returnToBonusMenu,
   reviewLoading,
   reviewError,
   submitMapAnswer,
@@ -240,10 +271,13 @@ export default function ReviewSession({
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
     !reviewError &&
+    !bonusMenuOpen &&
     currentQuestion &&
     currentIndex < questions.length
   );
   const useCompactVisualLayout = hasActiveQuestion && isVisualQuestion(currentQuestion);
+  const showReturnToBonusMenu = bonusReviewActive && !bonusMenuOpen;
+  const headerSubtitle = `${questions.length} questions disponibles`;
 
   if (useCompactVisualLayout) {
     return (
@@ -300,13 +334,25 @@ export default function ReviewSession({
                 minWidth: 0
               }}
             >
-              <BonusReviewQueueControls
-                canSkipCurrentQuestion={canSkipCurrentQuestion}
-                skipCurrentQuestion={skipCurrentQuestion}
-                canReturnToLastSkippedQuestion={canReturnToLastSkippedQuestion}
-                returnToLastSkippedQuestion={returnToLastSkippedQuestion}
-                skippedQuestionCount={skippedQuestionCount}
-              />
+              {showReturnToBonusMenu && (
+                <button
+                  type="button"
+                  onClick={returnToBonusMenu}
+                  title="Revenir au menu des questions bonus"
+                  style={{
+                    background: "#1f1f1f",
+                    border: "1px solid #333",
+                    borderRadius: "9px",
+                    color: "#ccc",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    padding: "7px 10px"
+                  }}
+                >
+                  ← Menu bonus
+                </button>
+              )}
 
               {canReturnToLastQuestion && (
                 <button
@@ -369,7 +415,7 @@ export default function ReviewSession({
                   textTransform: "uppercase"
                 }}
               >
-                Révision
+                {bonusReviewActive ? "Bonus" : "Révision"}
               </div>
               <div
                 style={{
@@ -486,66 +532,68 @@ export default function ReviewSession({
         }}
       >
 
-        {/* HEADER */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "28px",
-            gap: "20px"
-          }}
-        >
+        {/* HEADER — hidden while the bonus menu owns the screen */}
+        {!bonusMenuOpen && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: "28px",
+              gap: "20px"
+            }}
+          >
 
-          <div>
+            <div>
 
-            <div
-              style={{
-                color: "#666",
-                fontSize: "12px",
-                letterSpacing: "0.08em",
-                marginBottom: "8px"
-              }}
-            >
-              REVIEW SESSION
+              <div
+                style={{
+                  color: "#666",
+                  fontSize: "12px",
+                  letterSpacing: "0.08em",
+                  marginBottom: "8px"
+                }}
+              >
+                REVIEW SESSION
+              </div>
+
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "38px",
+                  lineHeight: 1,
+                  marginBottom: "12px"
+                }}
+              >
+                Révision
+              </h1>
+
+              <div
+                style={{
+                  color: "#777",
+                  fontSize: "14px"
+                }}
+              >
+                {headerSubtitle}
+              </div>
+
             </div>
 
-            <h1
+            <ReturnToMenuButton
+              onClick={() => setMode("menu")}
               style={{
-                margin: 0,
-                fontSize: "38px",
-                lineHeight: 1,
-                marginBottom: "12px"
-              }}
-            >
-              Révision
-            </h1>
-
-            <div
-              style={{
-                color: "#777",
+                background: "#1a1a1a",
+                border: "1px solid #2a2a2a",
+                color: "#bbb",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                cursor: "pointer",
                 fontSize: "14px"
               }}
-            >
-              {questions.length} questions disponibles
-            </div>
+            />
 
           </div>
-
-          <ReturnToMenuButton
-            onClick={() => setMode("menu")}
-            style={{
-              background: "#1a1a1a",
-              border: "1px solid #2a2a2a",
-              color: "#bbb",
-              padding: "10px 14px",
-              borderRadius: "10px",
-              cursor: "pointer",
-              fontSize: "14px"
-            }}
-          />
-
-        </div>
+        )}
 
         {/* LOADING */}
         {reviewLoading && (
@@ -579,8 +627,17 @@ export default function ReviewSession({
           </div>
         )}
 
+        {/* BONUS MENU */}
+        {!reviewLoading && !reviewError && bonusMenuOpen && (
+          <BonusReviewMenu
+            entries={bonusMenuEntries}
+            selectBonusItem={selectBonusItem}
+            setMode={setMode}
+          />
+        )}
+
         {/* EMPTY */}
-        {!reviewLoading && !reviewError && questions.length === 0 && (
+        {!reviewLoading && !reviewError && !bonusMenuOpen && questions.length === 0 && (
           <ReviewOutcomePanel
             variant="empty"
             reviewedCount={0}
@@ -598,6 +655,7 @@ export default function ReviewSession({
         {/* FINISHED */}
         {!reviewLoading &&
           !reviewError &&
+          !bonusMenuOpen &&
           currentIndex >= questions.length &&
           questions.length > 0 && (
           <ReviewOutcomePanel
@@ -617,6 +675,7 @@ export default function ReviewSession({
         {/* QUESTION */}
         {!reviewLoading &&
           !reviewError &&
+          !bonusMenuOpen &&
           currentQuestion &&
           currentIndex < questions.length && (
           <>
@@ -648,13 +707,25 @@ export default function ReviewSession({
                   Question {currentIndex + 1} / {questions.length}
                 </div>
 
-                <BonusReviewQueueControls
-                  canSkipCurrentQuestion={canSkipCurrentQuestion}
-                  skipCurrentQuestion={skipCurrentQuestion}
-                  canReturnToLastSkippedQuestion={canReturnToLastSkippedQuestion}
-                  returnToLastSkippedQuestion={returnToLastSkippedQuestion}
-                  skippedQuestionCount={skippedQuestionCount}
-                />
+                {showReturnToBonusMenu && (
+                  <button
+                    type="button"
+                    onClick={returnToBonusMenu}
+                    title="Revenir au menu des questions bonus"
+                    style={{
+                      background: "#1f1f1f",
+                      border: "1px solid #333",
+                      color: "#ccc",
+                      padding: "7px 10px",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "650"
+                    }}
+                  >
+                    ← Menu bonus
+                  </button>
+                )}
 
                 {canReturnToLastQuestion && (
                   <button

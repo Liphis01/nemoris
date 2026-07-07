@@ -11,7 +11,6 @@
 - ajouter mode liste
 - ne pas nécessairement reset les records après un edit
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
-- autoriser des médias dans les réponses
 
 ## quick fixes
 
@@ -25,6 +24,7 @@
 - mettre une petite loupe plutôt que le + pour la preview des images
 - le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de groupe
+- ajouter un filtre à favoris dans manage
 
 ## bugs
 

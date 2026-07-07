@@ -14,17 +14,17 @@ const baseProps = {
   handleTimelineComplete: vi.fn(),
   canReturnToLastQuestion: false,
   returnToLastQuestion: vi.fn(),
-  canSkipCurrentQuestion: false,
-  skipCurrentQuestion: vi.fn(),
-  canReturnToLastSkippedQuestion: false,
-  returnToLastSkippedQuestion: vi.fn(),
-  skippedQuestionCount: 0,
   canStartBonusReview: false,
   startBonusReview: vi.fn(),
+  bonusReviewActive: false,
   bonusReviewMessage: "",
   bonusReviewStatus: null,
   bonusReviewLoading: false,
   bonusStatusLoading: false,
+  bonusMenuOpen: false,
+  bonusMenuEntries: [],
+  selectBonusItem: vi.fn(),
+  returnToBonusMenu: vi.fn(),
   reviewLoading: false,
   reviewError: "",
   submitMapAnswer: vi.fn(),
@@ -204,9 +204,62 @@ describe("ReviewSession", () => {
     expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
   });
 
-  it("shows bonus skip controls in text review", () => {
-    const skipCurrentQuestion = vi.fn();
-    const returnToLastSkippedQuestion = vi.fn();
+  it("lists remaining bonus items in the menu and selects one", () => {
+    const selectBonusItem = vi.fn();
+    const textEntry = {
+      key: "q:11",
+      label: "Bonus text",
+      typeLabel: "Question",
+      isContainer: false,
+      itemCount: 1,
+      tags: ["Geo"],
+      chunks: [{ question_id: 11, type_q: "text" }]
+    };
+    const imagesEntry = {
+      key: "group:5",
+      label: "Bonus images",
+      typeLabel: "Images",
+      isContainer: true,
+      itemCount: 2,
+      tags: [],
+      chunks: [{ group_id: 5, type_q: "image", items: [] }]
+    };
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      bonusReviewActive: true,
+      bonusMenuOpen: true,
+      bonusMenuEntries: [textEntry, imagesEntry],
+      selectBonusItem
+    });
+
+    expect(screen.getByRole("heading", { name: "Choisis une question à réviser" }))
+      .toBeInTheDocument();
+    expect(screen.getByText("Bonus text")).toBeInTheDocument();
+    expect(screen.getByText("Bonus images")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Bonus images/ }));
+
+    expect(selectBonusItem).toHaveBeenCalledWith(imagesEntry);
+  });
+
+  it("shows a completion state when no bonus items remain", () => {
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      bonusReviewActive: true,
+      bonusMenuOpen: true,
+      bonusMenuEntries: []
+    });
+
+    expect(screen.getByRole("heading", { name: "Bonus terminés" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retour au menu" }))
+      .toBeInTheDocument();
+  });
+
+  it("shows a return-to-bonus-menu button during an active bonus item", () => {
+    const returnToBonusMenu = vi.fn();
     renderReviewSession({
       questions: [
         {
@@ -214,31 +267,20 @@ describe("ReviewSession", () => {
           type_q: "text",
           question: "Capital?",
           answer: "Paris"
-        },
-        {
-          id: 2,
-          type_q: "text",
-          question: "Country?",
-          answer: "France"
         }
       ],
       currentIndex: 0,
-      canSkipCurrentQuestion: true,
-      skipCurrentQuestion,
-      canReturnToLastSkippedQuestion: true,
-      returnToLastSkippedQuestion,
-      skippedQuestionCount: 2
+      bonusReviewActive: true,
+      returnToBonusMenu
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Mettre cette question de côté sans la noter" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reprendre la dernière question mise de côté" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Menu bonus" }));
 
-    expect(skipCurrentQuestion).toHaveBeenCalledTimes(1);
-    expect(returnToLastSkippedQuestion).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
   });
 
-  it("shows bonus skip controls in compact visual review", () => {
+  it("shows a return-to-bonus-menu button in compact visual review", () => {
+    const returnToBonusMenu = vi.fn();
     renderReviewSession({
       questions: [
         {
@@ -255,22 +297,15 @@ describe("ReviewSession", () => {
               }
             }
           ]
-        },
-        {
-          type_q: "text",
-          question: "Capital?",
-          answer: "Paris"
         }
       ],
       currentIndex: 0,
-      canSkipCurrentQuestion: true,
-      canReturnToLastSkippedQuestion: true,
-      skippedQuestionCount: 1
+      bonusReviewActive: true,
+      returnToBonusMenu
     });
 
-    expect(screen.getByRole("button", { name: "Mettre cette question de côté sans la noter" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reprendre la dernière question mise de côté" }))
-      .toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "← Menu bonus" }));
+
+    expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
   });
 });
