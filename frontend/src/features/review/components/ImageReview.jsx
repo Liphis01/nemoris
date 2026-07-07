@@ -225,6 +225,7 @@ function ImageAnswerLabel({ color, label, revealed }) {
       <div
         id={tooltipId}
         role="tooltip"
+        className="app-scrollbar"
         style={{
           animation: "fadeIn 0.12s ease",
           background: "rgba(22, 22, 22, 0.98)",

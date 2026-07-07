@@ -72,6 +72,11 @@ class Question(Base):
     # Replaces the old "fichier" field. Can point to image, SVG, audio, video.
     media = Column(String, nullable=True)
 
+    # Optional media attached to the answer side of the card. Unlike the
+    # question's media (image-only in the UI), this may point to an image,
+    # audio, or video asset served from /static.
+    answer_media = Column(String, nullable=True)
+
     # tags
     tags = Column(JSON, nullable=True)
 

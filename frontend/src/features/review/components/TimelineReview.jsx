@@ -573,6 +573,7 @@ function TimelineQueue({
 }) {
   return (
     <div
+      className="app-scrollbar"
       style={{
         display: "flex",
         gap: "8px",
@@ -3179,6 +3180,7 @@ export default function TimelineReview({
           }}
         >
           <div
+            className="app-scrollbar"
             style={{
               width: "min(920px, 100%)",
               maxHeight: "82vh",

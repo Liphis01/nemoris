@@ -68,6 +68,7 @@ export default function ManageInspector({
     draft,
     hasUnsavedChanges,
     removeMedia,
+    removeAnswerMedia,
     resetDraft,
     saveDraft,
     saveStatus,
@@ -139,6 +140,13 @@ export default function ManageInspector({
         ? (url) => importQuestionMediaUrl(url, { id: "new" })
         : undefined,
       onRemoveMedia: () => setQuestionDraft(prev => ({ ...prev, media: "" })),
+      onUploadAnswerFile: (file) =>
+        uploadQuestionMedia(file, { id: "new" }, "answer_media"),
+      onImportAnswerMediaUrl: importQuestionMediaUrl
+        ? (url) => importQuestionMediaUrl(url, { id: "new" }, "answer_media")
+        : undefined,
+      onRemoveAnswerMedia: () =>
+        setQuestionDraft(prev => ({ ...prev, answer_media: "" })),
       availableTags
     };
 
@@ -399,6 +407,18 @@ export default function ManageInspector({
     return importQuestionMediaUrl(url, selectedItem);
   }
 
+  async function handleUploadAnswerFile(file) {
+    if (!uploadQuestionMedia) return;
+
+    return uploadQuestionMedia(file, selectedItem, "answer_media");
+  }
+
+  async function handleImportAnswerMediaUrl(url) {
+    if (!importQuestionMediaUrl) return;
+
+    return importQuestionMediaUrl(url, selectedItem, "answer_media");
+  }
+
   const editorDraft = draft;
   const editType = editorDraft.type_q || "text";
   const { Editor: EditQuestionEditor } = getQuestionEditorAdapter(editType);
@@ -413,6 +433,9 @@ export default function ManageInspector({
     onUploadFile: handleUploadFile,
     onImportMediaUrl: importQuestionMediaUrl ? handleImportMediaUrl : undefined,
     onRemoveMedia: removeMedia,
+    onUploadAnswerFile: handleUploadAnswerFile,
+    onImportAnswerMediaUrl: importQuestionMediaUrl ? handleImportAnswerMediaUrl : undefined,
+    onRemoveAnswerMedia: removeAnswerMedia,
     saveStatus,
     hasUnsavedChanges,
     isSubmitDisabled: !hasUnsavedChanges,

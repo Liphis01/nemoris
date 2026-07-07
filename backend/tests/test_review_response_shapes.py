@@ -53,6 +53,7 @@ TEXT_REVIEW_KEYS = {
     "question",
     "answer",
     "media",
+    "answer_media",
     "tags",
     "progress"
 }

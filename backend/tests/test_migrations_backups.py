@@ -248,7 +248,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005", "0006", "0007"]
+                ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008"]
             )
             self.assertIsNotNone(result["backup"])
 
@@ -284,7 +284,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 7)
+            self.assertEqual(migration_count, 8)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -328,7 +328,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005", "0006", "0007"]
+                ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008"]
             )
             self.assertIsNone(result["backup"])
             self.assertIn("questions", table_names(database_file))
@@ -426,7 +426,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0005", "0006", "0007"]
+                ["0005", "0006", "0007", "0008"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -498,7 +498,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0006", "0007"]
+                ["0006", "0007", "0008"]
             )
 
             with sqlite3.connect(database_file) as connection:

@@ -138,10 +138,15 @@ export default function useInspectorAutosave({
     setDraft((prev) => ({ ...prev, media: "" }));
   }, []);
 
+  const removeAnswerMedia = useCallback(() => {
+    setDraft((prev) => ({ ...prev, answer_media: "" }));
+  }, []);
+
   return {
     draft: editorDraft,
     hasUnsavedChanges,
     removeMedia,
+    removeAnswerMedia,
     resetDraft,
     saveDraft,
     saveStatus,

@@ -3,7 +3,7 @@ import {
   getQuestionTypeChipStyle,
   questionTypeChipStyles
 } from "../../../shared/questionTypes";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import CalendarGroupRecap from "./CalendarGroupRecap";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
@@ -483,6 +483,7 @@ function EventCard({
   const question = event.question;
   const isHistory = event.kind === "history";
   const mediaSrc = resolveMediaUrl(question.media);
+  const mediaKind = getMediaKind(question.media);
   const tags = question.tags || [];
   const visibleTags = isSelected ? tags : tags.slice(0, 3);
   const reviewStats = getQuestionReviewStats(question);
@@ -609,22 +610,41 @@ function EventCard({
         </div>
 
         {mediaSrc && (
-          <img
-            src={mediaSrc}
-            alt=""
-            style={{
-              width: isSelected ? "58px" : "48px",
-              height: isSelected ? "46px" : "38px",
-              borderRadius: "7px",
-              border: "1px solid #2d2d2d",
-              objectFit: "cover",
-              background: "#101010"
-            }}
-          />
+          mediaKind === "image" ? (
+            <img
+              src={mediaSrc}
+              alt=""
+              style={{
+                width: isSelected ? "58px" : "48px",
+                height: isSelected ? "46px" : "38px",
+                borderRadius: "7px",
+                border: "1px solid #2d2d2d",
+                objectFit: "cover",
+                background: "#101010"
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              style={{
+                alignItems: "center",
+                background: "#101010",
+                border: "1px solid #2d2d2d",
+                borderRadius: "7px",
+                display: "flex",
+                fontSize: isSelected ? "22px" : "18px",
+                height: isSelected ? "46px" : "38px",
+                justifyContent: "center",
+                width: isSelected ? "58px" : "48px"
+              }}
+            >
+              {mediaKind === "audio" ? "🎧" : "🎬"}
+            </div>
+          )
         )}
       </div>
 
-      {mediaSrc && isSelected && (
+      {mediaSrc && isSelected && mediaKind === "image" && (
         <img
           src={mediaSrc}
           alt=""
@@ -632,6 +652,25 @@ function EventCard({
             width: "100%",
             maxHeight: "260px",
             objectFit: "contain",
+            borderRadius: "10px",
+            border: "1px solid #2d2d2d",
+            background: "#101010",
+            marginTop: "10px"
+          }}
+        />
+      )}
+
+      {mediaSrc && isSelected && mediaKind === "audio" && (
+        <audio src={mediaSrc} controls style={{ width: "100%", marginTop: "10px" }} />
+      )}
+
+      {mediaSrc && isSelected && mediaKind === "video" && (
+        <video
+          src={mediaSrc}
+          controls
+          style={{
+            width: "100%",
+            maxHeight: "260px",
             borderRadius: "10px",
             border: "1px solid #2d2d2d",
             background: "#101010",

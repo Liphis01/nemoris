@@ -117,6 +117,7 @@ export default function TimelineQuestionEditor({
     <QuestionEditorShell heading={heading} meta={meta} headerAction={headerAction}>
       <QuestionEditorField label="Question">
         <textarea
+          className="app-scrollbar"
           rows={3}
           value={timelineDraft.question || ""}
           onChange={(event) => setQuestion(event.target.value)}

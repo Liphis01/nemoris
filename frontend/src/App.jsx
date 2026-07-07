@@ -134,7 +134,7 @@ function App() {
   }
 
   return (
-    <div style={appStyle}>
+    <div className="app-scrollbar" style={appStyle}>
       {mode === "menu" && (
         <Menu
           setMode={setMode}

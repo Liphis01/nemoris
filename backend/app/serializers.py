@@ -71,6 +71,7 @@ def serialize_manage_question(question):
         "question": question.question,
         "answer": question.answer,
         "media": question.media,
+        "answer_media": question.answer_media,
         "tags": question.tags or [],
         "data": question.data or {},
         "group_id": question.group_id,
@@ -111,6 +112,8 @@ def serialize_review_question_item(question):
         "answer": question.answer,
 
         "media": question.media,
+
+        "answer_media": question.answer_media,
 
         "tags": question.tags or [],
 

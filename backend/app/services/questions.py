@@ -68,6 +68,7 @@ def create_question(db, payload):
         question=payload.question,
         answer=payload.answer,
         media=payload.media,
+        answer_media=payload.answer_media,
         tags=payload.tags or [],
         data=payload.data or {},
         group_id=payload.group_id
@@ -141,6 +142,7 @@ def update_question(db, question_id: int, payload):
     question = get_question_for_update(db, question_id)
     updates = payload.model_dump(exclude_unset=True)
     old_media = question.media
+    old_answer_media = question.answer_media
     old_group_id = question.group_id
     old_type = question.type_q
 
@@ -164,7 +166,7 @@ def update_question(db, question_id: int, payload):
     validate_question_timeline(future_type, future_group_id, future_data)
     validate_group_compatibility(db, future_type, future_group_id)
 
-    for field in ["type_q", "question", "answer", "media", "tags", "data", "group_id"]:
+    for field in ["type_q", "question", "answer", "media", "answer_media", "tags", "data", "group_id"]:
         if field in updates:
             setattr(question, field, updates[field])
 
@@ -207,6 +209,12 @@ def update_question(db, question_id: int, payload):
         not media_points_to_same_static_file(old_media, question.media)
     ):
         delete_unreferenced_media_file(db, old_media)
+
+    if (
+        "answer_media" in updates and
+        not media_points_to_same_static_file(old_answer_media, question.answer_media)
+    ):
+        delete_unreferenced_media_file(db, old_answer_media)
 
     return question
 
@@ -255,6 +263,7 @@ def delete_question(db, question_id: int):
 
     group = question.group
     question_media = question.media
+    question_answer_media = question.answer_media
     group_media = group.media if group else None
     if group and question.type_q in {"map", "image"}:
         from .training import clear_training_record
@@ -267,6 +276,7 @@ def delete_question(db, question_id: int):
     db.delete(question)
     db.commit()
     delete_unreferenced_media_file(db, question_media)
+    delete_unreferenced_media_file(db, question_answer_media)
 
     if group:
         # Empty groups are removed automatically after their last question is

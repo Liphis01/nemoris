@@ -16,6 +16,7 @@
 ## quick fixes
 
 - ajouter le timer final dans la recap d'entrainement de maps
+- le timer continue quand on regarde les réponses
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - faire un bouton toggle pour l'era dans la preview
 - ajouter bouton annuler dans les autres types

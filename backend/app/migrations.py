@@ -310,6 +310,16 @@ def _migration_collection_data_column(connection):
         )
 
 
+def _migration_questions_answer_media_column(connection):
+    if not _table_exists(connection, "questions"):
+        return
+
+    if "answer_media" not in _column_names(connection, "questions"):
+        connection.exec_driver_sql(
+            "ALTER TABLE questions ADD COLUMN answer_media VARCHAR"
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -348,6 +358,12 @@ MIGRATIONS = [
         version="0007",
         name="collection_data_column",
         run=_migration_collection_data_column
+    ),
+    Migration(
+        version="0008",
+        name="questions_answer_media_column",
+        run=_migration_questions_answer_media_column,
+        requires_backup=True
     )
 ]
 

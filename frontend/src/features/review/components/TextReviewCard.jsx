@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fadeInStyle } from "../../../shared/styles";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 const answerButtonStyle = {
@@ -185,6 +185,96 @@ function TextMediaPreview({ src, alt, onClose }) {
     );
 }
 
+// Renders a review item's media by kind: image as a clickable thumbnail with a
+// full-screen lightbox, audio/video as native players. Used for both the
+// question prompt media and the answer media.
+function ReviewMedia({ media, label = "média", style }) {
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const src = resolveMediaUrl(media);
+
+    useEffect(() => {
+        setPreviewOpen(false);
+    }, [src]);
+
+    if (!src) return null;
+
+    const kind = getMediaKind(media);
+    const wrapperStyle = { marginBottom: "34px", ...style };
+
+    if (kind === "audio") {
+        return (
+            <div style={wrapperStyle}>
+                <audio
+                    src={src}
+                    controls
+                    style={{ maxWidth: "100%", width: "420px" }}
+                />
+            </div>
+        );
+    }
+
+    if (kind === "video") {
+        return (
+            <div style={wrapperStyle}>
+                <video
+                    src={src}
+                    controls
+                    style={{
+                        borderRadius: "12px",
+                        maxHeight: "360px",
+                        maxWidth: "100%"
+                    }}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div style={wrapperStyle}>
+            <button
+                type="button"
+                aria-label={`Agrandir l'image de la ${label}`}
+                onClick={() => setPreviewOpen(true)}
+                onKeyDown={(event) => event.stopPropagation()}
+                style={{
+                    alignItems: "center",
+                    background: "#101010",
+                    border: "1px solid #262626",
+                    borderRadius: "12px",
+                    cursor: "zoom-in",
+                    display: "inline-flex",
+                    height: "154px",
+                    justifyContent: "center",
+                    maxWidth: "260px",
+                    overflow: "hidden",
+                    padding: "10px",
+                    width: "100%"
+                }}
+            >
+                <img
+                    src={src}
+                    alt={label}
+                    style={{
+                        borderRadius: "8px",
+                        display: "block",
+                        maxHeight: "132px",
+                        maxWidth: "100%",
+                        objectFit: "contain"
+                    }}
+                />
+            </button>
+
+            {previewOpen && (
+                <TextMediaPreview
+                    src={src}
+                    alt={label}
+                    onClose={() => setPreviewOpen(false)}
+                />
+            )}
+        </div>
+    );
+}
+
 export default function TextReviewCard({
     q,
     currentIndex,
@@ -196,15 +286,10 @@ export default function TextReviewCard({
     showQualityButtons = true
 }) {
     const answerActionsRef = useRef(null);
-    const [mediaPreviewOpen, setMediaPreviewOpen] = useState(false);
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
-    const mediaSrc = resolveMediaUrl(q.media);
+    const hasQuestionMedia = Boolean(q.media);
     const typeStyle = getQuestionTypeChipStyle(q.type_q);
-
-    useEffect(() => {
-        setMediaPreviewOpen(false);
-    }, [currentIndex, mediaSrc]);
 
     useEffect(() => {
         if (!showAnswer) return undefined;
@@ -295,48 +380,18 @@ export default function TextReviewCard({
                         lineHeight: 1.35,
                         fontWeight: "700",
                         color: "#f3f3f3",
-                        marginBottom: mediaSrc ? "24px" : "0"
+                        marginBottom: hasQuestionMedia ? "24px" : "0"
                     }}
                 >
                     {q.question}
                 </div>
 
-                {/* IMAGE */}
-                {mediaSrc && (
-                    <button
-                        type="button"
-                        aria-label="Agrandir l'image de la question"
-                        onClick={() => setMediaPreviewOpen(true)}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        style={{
-                            alignItems: "center",
-                            background: "#101010",
-                            border: "1px solid #262626",
-                            borderRadius: "12px",
-                            cursor: "zoom-in",
-                            display: "inline-flex",
-                            height: "154px",
-                            justifyContent: "center",
-                            marginTop: "18px",
-                            maxWidth: "260px",
-                            overflow: "hidden",
-                            padding: "10px",
-                            width: "100%"
-                        }}
-                    >
-                        <img
-                            src={mediaSrc}
-                            alt="question"
-                            style={{
-                                borderRadius: "8px",
-                                display: "block",
-                                maxHeight: "132px",
-                                maxWidth: "100%",
-                                objectFit: "contain"
-                            }}
-                        />
-                    </button>
-                )}
+                {/* QUESTION MEDIA */}
+                <ReviewMedia
+                    media={q.media}
+                    label="question"
+                    style={{ marginTop: "18px", marginBottom: 0 }}
+                />
 
                 {/* SHOW ANSWER */}
                 {!showAnswer && (
@@ -390,11 +445,13 @@ export default function TextReviewCard({
                                 color: "#ddd",
                                 fontSize: "26px",
                                 lineHeight: 1.5,
-                                marginBottom: "34px"
+                                marginBottom: q.answer_media ? "20px" : "34px"
                             }}
                         >
                             {q.answer}
                         </div>
+
+                        <ReviewMedia media={q.answer_media} label="réponse" />
 
                         {showQualityButtons ? (
                             <div
@@ -449,14 +506,6 @@ export default function TextReviewCard({
             </div>
 
             </div>
-
-            {mediaSrc && mediaPreviewOpen && (
-                <TextMediaPreview
-                    src={mediaSrc}
-                    alt="question"
-                    onClose={() => setMediaPreviewOpen(false)}
-                />
-            )}
         </>
     );
 }

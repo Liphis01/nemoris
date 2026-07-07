@@ -8,12 +8,16 @@ from uuid import uuid4
 from xml.etree import ElementTree
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 
 from ..config import STATIC_DIR
 from ..models import Question, QuestionGroup
 
 
 IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+# Audio/video files are much larger than images, so answer media (the only place
+# audio/video is accepted today) gets a bigger cap.
+MEDIA_UPLOAD_MAX_BYTES = 50 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
 REMOTE_IMAGE_TIMEOUT_SECONDS = 10
 REMOTE_IMAGE_USER_AGENT = "QuizApp image importer"
@@ -30,13 +34,41 @@ SAFE_IMAGE_EXTENSIONS = {
     ".svg": "svg",
     ".webp": "webp"
 }
+SAFE_AUDIO_EXTENSIONS = {
+    ".mp3": "mp3",
+    ".wav": "wav",
+    ".ogg": "ogg",
+    ".oga": "ogg",
+    ".m4a": "m4a",
+    ".m4b": "m4a",
+    ".aac": "m4a"
+}
+SAFE_VIDEO_EXTENSIONS = {
+    ".mp4": "mp4",
+    ".m4v": "mp4",
+    ".webm": "webm"
+}
+SAFE_MEDIA_EXTENSIONS = {
+    **SAFE_IMAGE_EXTENSIONS,
+    **SAFE_AUDIO_EXTENSIONS,
+    **SAFE_VIDEO_EXTENSIONS
+}
 DEFAULT_EXTENSION_BY_KIND = {
     "gif": ".gif",
     "jpeg": ".jpg",
     "png": ".png",
     "svg": ".svg",
-    "webp": ".webp"
+    "webp": ".webp",
+    "mp3": ".mp3",
+    "wav": ".wav",
+    "ogg": ".ogg",
+    "m4a": ".m4a",
+    "mp4": ".mp4",
+    "webm": ".webm"
 }
+IMAGE_KINDS = {"gif", "jpeg", "png", "svg", "webp"}
+AUDIO_KINDS = {"mp3", "wav", "ogg", "m4a"}
+VIDEO_KINDS = {"mp4", "webm"}
 LOCAL_STATIC_HOSTS = {
     "127.0.0.1:8000",
     "localhost:8000"
@@ -125,13 +157,59 @@ def detect_image_kind(data: bytes):
     return detect_raster_image_kind(data) or detect_svg_image_kind(data)
 
 
-def safe_image_extension(filename: str, image_kind: str):
+def detect_audio_kind(data: bytes):
+    # MP3: an ID3v2 tag or a raw MPEG audio frame sync (0xFF Ex/Fx).
+    if data.startswith(b"ID3"):
+        return "mp3"
+
+    if len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:
+        return "mp3"
+
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "wav"
+
+    if data.startswith(b"OggS"):
+        return "ogg"
+
+    # ISO base media (M4A/AAC audio) shares the "ftyp" box with MP4 video and is
+    # told apart by its major brand.
+    if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in {b"M4A ", b"M4B "}:
+        return "m4a"
+
+    return None
+
+
+def detect_video_kind(data: bytes):
+    # WebM/Matroska starts with the EBML header.
+    if data.startswith(b"\x1a\x45\xdf\xa3"):
+        return "webm"
+
+    # Any other ISO base media "ftyp" box is treated as MP4 video.
+    if len(data) >= 8 and data[4:8] == b"ftyp":
+        return "mp4"
+
+    return None
+
+
+def detect_media_kind(data: bytes, allow_audio_video: bool = False):
+    kind = detect_image_kind(data)
+
+    if kind:
+        return kind
+
+    if allow_audio_video:
+        return detect_audio_kind(data) or detect_video_kind(data)
+
+    return None
+
+
+def safe_media_extension(filename: str, media_kind: str):
     extension = Path(filename or "").suffix.lower()
 
-    if SAFE_IMAGE_EXTENSIONS.get(extension) == image_kind:
+    if SAFE_MEDIA_EXTENSIONS.get(extension) == media_kind:
         return extension
 
-    return DEFAULT_EXTENSION_BY_KIND[image_kind]
+    return DEFAULT_EXTENSION_BY_KIND[media_kind]
 
 
 def read_upload_bytes(upload_file, max_bytes=IMAGE_UPLOAD_MAX_BYTES):
@@ -206,19 +284,23 @@ def safe_static_relative_path(value):
     return relative_path.as_posix()
 
 
-def store_image_bytes(
+def store_media_bytes(
     data: bytes,
     filename: str = "",
     static_dir: Path | None = None,
-    storage_subdir: str | Path | None = None
+    storage_subdir: str | Path | None = None,
+    allow_audio_video: bool = False
 ):
-    image_kind = detect_image_kind(data)
+    media_kind = detect_media_kind(data, allow_audio_video=allow_audio_video)
 
-    if not image_kind:
-        raise HTTPException(
-            status_code=400,
-            detail="Only JPEG, PNG, GIF, WebP, and SVG images are supported"
+    if not media_kind:
+        detail = (
+            "Only JPEG, PNG, GIF, WebP, SVG images, MP3/WAV/OGG/M4A audio, "
+            "and MP4/WebM video are supported"
+            if allow_audio_video
+            else "Only JPEG, PNG, GIF, WebP, and SVG images are supported"
         )
+        raise HTTPException(status_code=400, detail=detail)
 
     root_dir = static_dir or STATIC_DIR
     relative_subdir = safe_static_relative_path(storage_subdir) if storage_subdir else None
@@ -228,7 +310,7 @@ def store_image_bytes(
 
     target_dir = root_dir / relative_subdir if relative_subdir else root_dir
     target_dir.mkdir(parents=True, exist_ok=True)
-    extension = safe_image_extension(filename, image_kind)
+    extension = safe_media_extension(filename, media_kind)
 
     while True:
         stored_filename = f"{uuid4().hex}{extension}"
@@ -251,20 +333,30 @@ def store_uploaded_image(
     upload_file,
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
-    max_bytes=IMAGE_UPLOAD_MAX_BYTES
+    max_bytes=IMAGE_UPLOAD_MAX_BYTES,
+    allow_audio_video: bool = False
 ):
     content_type = (getattr(upload_file, "content_type", "") or "").lower()
+    allowed_prefixes = (
+        ("image/", "audio/", "video/") if allow_audio_video else ("image/",)
+    )
 
-    if content_type and not content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image uploads are supported")
+    if content_type and not content_type.startswith(allowed_prefixes):
+        detail = (
+            "Only image, audio, or video uploads are supported"
+            if allow_audio_video
+            else "Only image uploads are supported"
+        )
+        raise HTTPException(status_code=400, detail=detail)
 
     data = read_upload_bytes(upload_file, max_bytes=max_bytes)
 
-    return store_image_bytes(
+    return store_media_bytes(
         data,
         filename=upload_file.filename,
         static_dir=static_dir,
-        storage_subdir=storage_subdir
+        storage_subdir=storage_subdir,
+        allow_audio_video=allow_audio_video
     )
 
 
@@ -300,21 +392,31 @@ def store_remote_image(
     url,
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
-    max_bytes=IMAGE_UPLOAD_MAX_BYTES
+    max_bytes=IMAGE_UPLOAD_MAX_BYTES,
+    allow_audio_video: bool = False
 ):
     src = str(url or "").strip()
     parsed = urlparse(src)
 
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="Enter a valid http(s) image URL")
+        raise HTTPException(status_code=400, detail="Enter a valid http(s) media URL")
 
     assert_remote_url_has_public_host(parsed)
+
+    accept_header = (
+        "image/*,audio/*,video/*,*/*;q=0.8"
+        if allow_audio_video
+        else "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+    )
+    allowed_prefixes = (
+        ("image/", "audio/", "video/") if allow_audio_video else ("image/",)
+    )
 
     request = Request(
         src,
         headers={
             "User-Agent": REMOTE_IMAGE_USER_AGENT,
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            "Accept": accept_header
         }
     )
 
@@ -322,8 +424,13 @@ def store_remote_image(
         with urlopen(request, timeout=REMOTE_IMAGE_TIMEOUT_SECONDS) as response:
             content_type = response.headers.get("Content-Type", "").lower()
 
-            if content_type and not content_type.startswith("image/"):
-                raise HTTPException(status_code=400, detail="URL did not return an image")
+            if content_type and not content_type.startswith(allowed_prefixes):
+                detail = (
+                    "URL did not return an image, audio, or video file"
+                    if allow_audio_video
+                    else "URL did not return an image"
+                )
+                raise HTTPException(status_code=400, detail=detail)
 
             data = read_remote_bytes(response, max_bytes=max_bytes)
     except HTTPException:
@@ -331,19 +438,20 @@ def store_remote_image(
     except HTTPError as error:
         raise HTTPException(
             status_code=400,
-            detail=f"Image URL returned HTTP {error.code}"
+            detail=f"Media URL returned HTTP {error.code}"
         ) from error
     except (URLError, SocketTimeout, TimeoutError, ValueError) as error:
         raise HTTPException(
             status_code=400,
-            detail="Image URL could not be downloaded"
+            detail="Media URL could not be downloaded"
         ) from error
 
-    return store_image_bytes(
+    return store_media_bytes(
         data,
         filename=filename_from_url(src),
         static_dir=static_dir,
-        storage_subdir=storage_subdir
+        storage_subdir=storage_subdir,
+        allow_audio_video=allow_audio_video
     )
 
 
@@ -386,14 +494,15 @@ def is_static_media_referenced(db, relative_path):
         return False
 
     question_media_rows = (
-        db.query(Question.media)
-        .filter(Question.media.isnot(None))
+        db.query(Question.media, Question.answer_media)
+        .filter(or_(Question.media.isnot(None), Question.answer_media.isnot(None)))
         .all()
     )
 
     if any(
-        static_relative_path_from_media(media) == relative_path
-        for (media,) in question_media_rows
+        static_relative_path_from_media(media) == relative_path or
+        static_relative_path_from_media(answer_media) == relative_path
+        for (media, answer_media) in question_media_rows
     ):
         return True
 

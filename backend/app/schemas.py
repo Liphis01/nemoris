@@ -107,6 +107,8 @@ class QuestionCreate(BaseModel):
 
     media: Optional[str] = None
 
+    answer_media: Optional[str] = None
+
     tags: List[str] = Field(default_factory=list)
 
     group_id: Optional[int] = None
@@ -125,6 +127,8 @@ class QuestionUpdate(BaseModel):
     type_q: Optional[QuestionType] = None
 
     media: Optional[str] = None
+
+    answer_media: Optional[str] = None
 
     tags: Optional[List[str]] = None
 
@@ -146,6 +150,8 @@ class QuestionOut(BaseModel):
     answer: Optional[str]
 
     media: Optional[str]
+
+    answer_media: Optional[str] = None
 
     tags: List[str]
 

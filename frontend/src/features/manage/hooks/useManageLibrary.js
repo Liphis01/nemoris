@@ -282,27 +282,28 @@ export function useManageLibrary(mode) {
     return createdGroup;
   }
 
-  async function uploadQuestionMedia(file, question) {
+  async function uploadQuestionMedia(file, question, field = "media") {
     if (!file) return;
 
     // Uploads only create the static asset. The question.media value is saved
     // through the normal editor save flow so dirty-state/autosave stays intact.
+    // `field` targets either the question media or the answer media draft slot.
     const data = await uploadMedia(file);
 
     if (question?.id === "new") {
-      setQuestionDraft(prev => ({ ...prev, media: data.url }));
+      setQuestionDraft(prev => ({ ...prev, [field]: data.url }));
     }
 
     return data;
   }
 
-  async function importQuestionMediaUrl(url, question) {
+  async function importQuestionMediaUrl(url, question, field = "media") {
     if (!url) return;
 
     const data = await importMediaUrl(url);
 
     if (question?.id === "new") {
-      setQuestionDraft(prev => ({ ...prev, media: data.url }));
+      setQuestionDraft(prev => ({ ...prev, [field]: data.url }));
     }
 
     return data;
