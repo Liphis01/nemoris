@@ -189,8 +189,6 @@ export function useManageTextPreview(items, options = {}) {
         id={previewId}
         role="tooltip"
         className="app-scrollbar"
-        onPointerEnter={clearCloseTimer}
-        onPointerLeave={scheduleClose}
         style={{
           position: "fixed",
           left: `${position.left}px`,

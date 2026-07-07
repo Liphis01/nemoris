@@ -11,6 +11,7 @@
 - ajouter mode liste
 - ne pas nécessairement reset les records après un edit
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
+- intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 
 ## quick fixes
 
@@ -25,6 +26,7 @@
 - le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de groupe
 - ajouter un filtre à favoris dans manage
+- quand on suprrime une question, on voit encore sa preview à droite
 
 ## bugs
 
@@ -34,6 +36,7 @@
 - chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - après avoir fait une question bonus (le drapeau du listenbourg) il m'a remis sur le menu de fin de review pour faire d'autres questions bonus
+- les tags marchent pas bien
 
 ## to do when i have more time
 
@@ -70,6 +73,7 @@
 - indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
 - type liste ? (= juste énumérer)
 - les questions ratées réapparaissent avec un mode différent (si disponible pour le type de question)
+- un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
 
 ## Conseils/idées issus de la littérature scientifique
 
