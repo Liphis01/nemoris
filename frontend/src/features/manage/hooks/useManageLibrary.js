@@ -92,6 +92,7 @@ export function useManageLibrary(mode) {
   const [tagFilter, setTagFilter] = useState("");
   const [questionTypeFilter, setQuestionTypeFilter] = useState("");
   const [dueOnly, setDueOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc");
   const [groupSearch, setGroupSearch] = useState("");
@@ -155,6 +156,7 @@ export function useManageLibrary(mode) {
     setTagFilter("");
     setQuestionTypeFilter("");
     setDueOnly(false);
+    setFavoritesOnly(false);
     setSortField("id");
     setSortOrder("asc");
     setGroupSearch("");
@@ -392,12 +394,14 @@ export function useManageLibrary(mode) {
         tagFilter,
         questionTypeFilter,
         dueOnly,
+        favoritesOnly,
         sortField,
         sortOrder
       }),
     [
       allQuestions,
       dueOnly,
+      favoritesOnly,
       questionTypeFilter,
       tagFilter,
       search,
@@ -435,6 +439,7 @@ export function useManageLibrary(mode) {
     removeQuestionMedia,
     deleteQuestion,
     dueOnly,
+    favoritesOnly,
     filteredGroups,
     filteredQuestions,
     groupHasMediaOnly,
@@ -467,6 +472,7 @@ export function useManageLibrary(mode) {
     setAllGroups,
     setAllQuestions,
     setDueOnly,
+    setFavoritesOnly,
     setGroupHasMediaOnly,
     setGroupSearch,
     setGroupTypeFilter,

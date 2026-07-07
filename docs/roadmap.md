@@ -26,7 +26,6 @@
 - le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de groupe
 - ajouter un filtre à favoris dans manage
-- quand on suprrime une question, on voit encore sa preview à droite
 
 ## bugs
 
@@ -35,7 +34,6 @@
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
-- après avoir fait une question bonus (le drapeau du listenbourg) il m'a remis sur le menu de fin de review pour faire d'autres questions bonus
 - les tags marchent pas bien
 
 ## to do when i have more time

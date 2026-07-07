@@ -142,6 +142,13 @@ function matchesTag(question, tagFilter) {
 }
 
 
+function matchesFavorite(question, favoritesOnly) {
+  if (!favoritesOnly) return true;
+
+  return Boolean(question?.data?.favorite);
+}
+
+
 function matchesDue(question, dueOnly) {
   if (!dueOnly) return true;
 
@@ -161,6 +168,7 @@ export function filterAndSortQuestions({
   tagFilter,
   questionTypeFilter,
   dueOnly,
+  favoritesOnly,
   sortField,
   sortOrder
 }) {
@@ -171,7 +179,8 @@ export function filterAndSortQuestions({
       matchesSearch(question, search) &&
       matchesTag(question, tagFilter) &&
       matchesType(question, questionTypeFilter) &&
-      matchesDue(question, dueOnly)
+      matchesDue(question, dueOnly) &&
+      matchesFavorite(question, favoritesOnly)
     )
     .slice()
     .sort((a, b) => compareQuestions(a, b, sortField, sortOrder));

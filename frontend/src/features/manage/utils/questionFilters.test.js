@@ -9,6 +9,7 @@ describe("questionFilters", () => {
       question: "Capital of France",
       answer: "Paris",
       tags: ["Geo"],
+      data: { favorite: true },
       progress: { next_review: "2099-01-01", reps: 4 }
     },
     {
@@ -61,6 +62,19 @@ describe("questionFilters", () => {
       sortField: "id",
       sortOrder: "asc"
     }).map(question => question.id)).toEqual([3]);
+  });
+
+  it("keeps only favorites when favoritesOnly is set", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "",
+      tagFilter: "",
+      questionTypeFilter: "",
+      dueOnly: false,
+      favoritesOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([1]);
   });
 
   it("sorts by review count and next review for review-focused browsing", () => {
