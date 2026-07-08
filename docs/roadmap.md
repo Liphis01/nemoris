@@ -12,9 +12,7 @@
 - ne pas nécessairement reset les records après un edit
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
-- proposer 100% des questions bonus
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- enlever le petit espace vide des aliases dans les groupes
 
 ## quick fixes
 

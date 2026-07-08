@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getBonusReviewStatus,
+  getBonusGroups,
+  getBonusGroupItems,
   getReview,
   sendMediaAnswer,
   sendMapAnswer,
@@ -30,22 +32,6 @@ function localReviewDateString(now = new Date()) {
 }
 
 
-function progressIsNew(progress) {
-  const history = progress?.history || [];
-
-  return !progress || ((progress.reps || 0) === 0 && history.length === 0);
-}
-
-
-function reviewItemIsNew(item) {
-  if (Array.isArray(item?.items)) {
-    return item.items.every(child => progressIsNew(child.progress));
-  }
-
-  return progressIsNew(item?.progress);
-}
-
-
 function bonusEntryTypeLabel(typeQ, isContainer) {
   if (!isContainer) {
     return "Question";
@@ -59,69 +45,18 @@ function bonusEntryTypeLabel(typeQ, isContainer) {
 }
 
 
-function buildBonusMenuEntries(items) {
-  // Collapse every review item that shares a group into a single menu entry so
-  // a group is never split across multiple rows/picks. Large groups arrive from
-  // the backend as several chunks (same group_id); they run back-to-back when
-  // the entry is picked.
-  const entries = [];
-  const indexByKey = new Map();
-
-  (items || []).forEach(item => {
-    const groupId = Number(item?.group_id);
-    const hasItems = Array.isArray(item?.items);
-
-    if (Number.isInteger(groupId)) {
-      const key = `group:${groupId}`;
-      const existingIndex = indexByKey.get(key);
-
-      if (existingIndex === undefined) {
-        indexByKey.set(key, entries.length);
-        entries.push({
-          key,
-          label: item.name || "Groupe",
-          typeLabel: bonusEntryTypeLabel(item.type_q, true),
-          isContainer: true,
-          itemCount: hasItems ? item.items.length : 0,
-          tags: item.tags || [],
-          chunks: [item]
-        });
-      } else {
-        const entry = entries[existingIndex];
-        entry.chunks.push(item);
-        entry.itemCount += hasItems ? item.items.length : 0;
-      }
-
-      return;
-    }
-
-    if (hasItems) {
-      // Combined timeline screen: no group_id, always a single entry.
-      entries.push({
-        key: `type:${item.type_q}`,
-        label: item.name || "Groupe",
-        typeLabel: bonusEntryTypeLabel(item.type_q, true),
-        isContainer: true,
-        itemCount: item.items.length,
-        tags: item.tags || [],
-        chunks: [item]
-      });
-
-      return;
-    }
-
-    entries.push({
-      key: `q:${item.question_id}`,
-      label: item.question || "Question",
-      typeLabel: "Question",
-      isContainer: false,
-      itemCount: 1,
-      tags: item.tags || [],
-      chunks: [item]
-    });
-  });
-
-  return entries;
+function buildBonusMenuEntries(entries) {
+  // The backend already collapses new questions into one menu entry per group /
+  // loose question (name, type, count, tags). The full per-item payload is
+  // fetched lazily when the entry is picked, so entries here carry no chunks.
+  return (entries || []).map(entry => ({
+    key: entry.key,
+    label: entry.name || (entry.is_container ? "Groupe" : "Question"),
+    typeLabel: bonusEntryTypeLabel(entry.type_q, Boolean(entry.is_container)),
+    isContainer: Boolean(entry.is_container),
+    itemCount: entry.item_count || 0,
+    tags: entry.tags || []
+  }));
 }
 
 
@@ -136,6 +71,7 @@ export function useReviewSession(active) {
   const [bonusReviewStatus, setBonusReviewStatus] = useState(null);
   const [bonusStatusLoading, setBonusStatusLoading] = useState(false);
   const [bonusReviewLoading, setBonusReviewLoading] = useState(false);
+  const [bonusItemLoading, setBonusItemLoading] = useState(false);
   const [bonusReviewActive, setBonusReviewActive] = useState(false);
   const [bonusReviewStarted, setBonusReviewStarted] = useState(false);
   const [bonusMenuItems, setBonusMenuItems] = useState([]);
@@ -204,22 +140,42 @@ export function useReviewSession(active) {
     setCurrentIndex(prev => Math.max(0, prev - 1));
   }, [canReturnToLastQuestion, clearTextAnswerTimeout]);
 
-  const selectBonusItem = useCallback((entry) => {
-    if (!entry) return;
-
-    const chunks = Array.isArray(entry.chunks) ? entry.chunks : [entry];
+  const selectBonusItem = useCallback(async (entry) => {
+    if (!entry || bonusItemLoading) return;
 
     clearTextAnswerTimeout();
-    setActiveBonusKey(entry.key);
-    setQuestions(chunks);
-    setCurrentIndex(0);
-    setShowAnswer(false);
-    setSelectedTextQuality(null);
-    setAnsweredTextByIndex({});
-    setReturnToLastQuestionArmed(false);
-    setBonusMenuOpen(false);
-    textAnswerRequestsRef.current = {};
-  }, [clearTextAnswerTimeout]);
+    setBonusItemLoading(true);
+    setReviewError("");
+
+    try {
+      // The menu only carries names/counts; fetch the picked entry's full
+      // payload (questions, media, projected intervals) on demand.
+      const chunks = await getBonusGroupItems(entry.key);
+
+      if (!Array.isArray(chunks) || chunks.length === 0) {
+        // Nothing left to review for this entry: drop it and stay in the menu.
+        setCompletedBonusKeys(prev =>
+          prev.includes(entry.key) ? prev : [...prev, entry.key]
+        );
+        return;
+      }
+
+      setActiveBonusKey(entry.key);
+      setQuestions(chunks);
+      setCurrentIndex(0);
+      setShowAnswer(false);
+      setSelectedTextQuality(null);
+      setAnsweredTextByIndex({});
+      setReturnToLastQuestionArmed(false);
+      setBonusMenuOpen(false);
+      textAnswerRequestsRef.current = {};
+    } catch (error) {
+      console.error(error);
+      setReviewError(error.message || "Impossible de charger la question bonus.");
+    } finally {
+      setBonusItemLoading(false);
+    }
+  }, [bonusItemLoading, clearTextAnswerTimeout]);
 
   const returnToBonusMenu = useCallback(() => {
     clearTextAnswerTimeout();
@@ -420,6 +376,7 @@ export function useReviewSession(active) {
       setBonusReviewStatus(null);
       setBonusStatusLoading(false);
       setBonusReviewLoading(false);
+      setBonusItemLoading(false);
       setBonusReviewActive(false);
       setBonusReviewStarted(false);
       setBonusMenuItems([]);
@@ -441,6 +398,7 @@ export function useReviewSession(active) {
       setBonusReviewStatus(null);
       setBonusStatusLoading(false);
       setBonusReviewLoading(false);
+      setBonusItemLoading(false);
       setBonusReviewActive(false);
       setBonusReviewStarted(false);
       setBonusMenuItems([]);
@@ -596,9 +554,11 @@ export function useReviewSession(active) {
         return;
       }
 
-      const data = await getReview({ includeNew: true });
+      // Load only the selection list (names/counts) — every available group,
+      // no cap. Each entry's full payload is fetched lazily on pick.
+      const entries = await getBonusGroups();
 
-      setBonusMenuItems(data);
+      setBonusMenuItems(entries);
       setCompletedBonusKeys([]);
       setActiveBonusKey(null);
       setQuestions([]);
@@ -609,7 +569,7 @@ export function useReviewSession(active) {
       setReturnToLastQuestionArmed(false);
       setBonusReviewActive(true);
       setBonusMenuOpen(true);
-      setBonusReviewStarted(data.length === 0 || data.every(reviewItemIsNew));
+      setBonusReviewStarted(true);
       textAnswerRequestsRef.current = {};
     } catch (error) {
       console.error(error);
@@ -680,6 +640,7 @@ export function useReviewSession(active) {
   return {
     bonusReviewActive,
     bonusReviewLoading,
+    bonusItemLoading,
     bonusReviewMessage,
     bonusReviewStatus,
     bonusStatusLoading,

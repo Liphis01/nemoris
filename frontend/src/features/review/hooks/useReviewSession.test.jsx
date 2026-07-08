@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useReviewSession } from "./useReviewSession";
 import {
   getBonusReviewStatus,
+  getBonusGroups,
+  getBonusGroupItems,
   getReview,
   sendMediaAnswer,
   sendMapAnswer,
@@ -13,6 +15,8 @@ import {
 
 vi.mock("../../../api/review", () => ({
   getBonusReviewStatus: vi.fn(),
+  getBonusGroups: vi.fn(),
+  getBonusGroupItems: vi.fn(),
   getReview: vi.fn(),
   sendMediaAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
@@ -36,6 +40,8 @@ describe("useReviewSession", () => {
       state: "low",
       message: "Le planning est léger."
     });
+    getBonusGroups.mockResolvedValue([]);
+    getBonusGroupItems.mockResolvedValue([]);
     sendAnswer.mockResolvedValue({});
     sendMapAnswer.mockResolvedValue({});
     sendMediaAnswer.mockResolvedValue({});
@@ -224,18 +230,17 @@ describe("useReviewSession", () => {
   });
 
   it("offers bonus review when scheduled review is empty", async () => {
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            question_id: 11,
-            type_q: "text",
-            question: "Bonus",
-            answer: "Answer"
-          }
-        ]
-        : []
-    ));
+    getReview.mockResolvedValue([]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      }
+    ]);
 
     const { result } = renderHook(() => useReviewSession(true));
 
@@ -255,39 +260,47 @@ describe("useReviewSession", () => {
     });
 
     expect(getBonusReviewStatus).toHaveBeenCalled();
-    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
+    // Only the lightweight selection list is loaded up front.
+    expect(getBonusGroups).toHaveBeenCalledWith();
     expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.questions).toEqual([]);
     expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
     expect(result.current.canStartBonusReview).toBe(false);
   });
 
-  it("loads bonus questions across all groups regardless of the review scope", async () => {
+  it("lists every group in the bonus menu and loads a group's items only on pick", async () => {
     const bonusImages = {
       group_id: 7,
       type_q: "media",
       name: "Bonus images",
       items: [{ question_id: 12 }]
     };
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [bonusImages]
-        : [
-          {
-            group_id: 7,
-            type_q: "map",
-            name: "Map",
-            media: "map.svg",
-            items: [{ question_id: 10 }],
-            context_items: [{ question_id: 10 }]
-          }
-        ]
-    ));
+    getReview.mockResolvedValue([
+      {
+        group_id: 7,
+        type_q: "map",
+        name: "Map",
+        media: "map.svg",
+        items: [{ question_id: 10 }],
+        context_items: [{ question_id: 10 }]
+      }
+    ]);
     getBonusReviewStatus.mockResolvedValue({
       allowed: true,
       state: "low",
       message: "Le planning est léger."
     });
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "group:7",
+        type_q: "media",
+        name: "Bonus images",
+        tags: [],
+        item_count: 1,
+        is_container: true
+      }
+    ]);
+    getBonusGroupItems.mockResolvedValue([bonusImages]);
 
     const { result } = renderHook(() => useReviewSession(true));
 
@@ -309,10 +322,20 @@ describe("useReviewSession", () => {
       await result.current.startBonusReview();
     });
 
-    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
+    // The menu is populated from the cheap list; no per-item payload yet.
+    expect(getBonusGroups).toHaveBeenCalledWith();
+    expect(getBonusGroupItems).not.toHaveBeenCalled();
     expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.bonusMenuEntries.map(entry => entry.key)).toEqual(["group:7"]);
-    expect(result.current.bonusMenuEntries[0].chunks).toEqual([bonusImages]);
+
+    // Picking a group fetches its full payload lazily.
+    await act(async () => {
+      await result.current.selectBonusItem(result.current.bonusMenuEntries[0]);
+    });
+
+    expect(getBonusGroupItems).toHaveBeenCalledWith("group:7");
+    expect(result.current.bonusMenuOpen).toBe(false);
+    expect(result.current.questions).toEqual([bonusImages]);
   });
 
   it("requeues only failed image group items", async () => {
@@ -417,25 +440,24 @@ describe("useReviewSession", () => {
     const answerPromise = new Promise(resolve => {
       resolveAnswer = resolve;
     });
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            question_id: 11,
-            type_q: "text",
-            question: "Bonus",
-            answer: "Answer"
-          }
-        ]
-        : [
-          {
-            question_id: 10,
-            type_q: "text",
-            question: "Question",
-            answer: "Answer"
-          }
-        ]
-    ));
+    getReview.mockResolvedValue([
+      {
+        question_id: 10,
+        type_q: "text",
+        question: "Question",
+        answer: "Answer"
+      }
+    ]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      }
+    ]);
     sendAnswer.mockReturnValue(answerPromise);
 
     const { result } = renderHook(() => useReviewSession(true));
@@ -462,14 +484,15 @@ describe("useReviewSession", () => {
       bonusPromise = result.current.startBonusReview();
     });
 
-    expect(getReview).toHaveBeenCalledTimes(1);
+    // Bonus loading is blocked until the pending text answer resolves.
+    expect(getBonusGroups).not.toHaveBeenCalled();
 
     await act(async () => {
       resolveAnswer({});
       await bonusPromise;
     });
 
-    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
+    expect(getBonusGroups).toHaveBeenCalledWith();
     expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
     expect(result.current.currentIndex).toBe(0);

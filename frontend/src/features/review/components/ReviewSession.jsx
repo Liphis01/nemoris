@@ -19,7 +19,11 @@ function bonusQuestionsLabel(count) {
 }
 
 function availableBonusQuestionCount(status) {
+  // Every available bonus question is selectable now (capacity is informational
+  // only), so surface the full new-question count rather than the capped slot count.
   const count = Number(
+    status?.same_group_new_count ??
+    status?.new_count ??
     status?.same_group_bonus_question_count ??
     status?.available_bonus_question_count
   );
@@ -153,7 +157,7 @@ function ReviewOutcomePanel({
   );
 }
 
-function BonusReviewMenu({ entries, selectBonusItem, setMode }) {
+function BonusReviewMenu({ entries, selectBonusItem, itemLoading, setMode }) {
   const allDone = entries.length === 0;
 
   return (
@@ -202,6 +206,8 @@ function BonusReviewMenu({ entries, selectBonusItem, setMode }) {
                 type="button"
                 className="bonus-menu-row"
                 onClick={() => selectBonusItem(entry)}
+                disabled={itemLoading}
+                aria-busy={itemLoading}
               >
                 <span className="bonus-menu-row-main">
                   <span className="bonus-menu-row-type">
@@ -221,7 +227,9 @@ function BonusReviewMenu({ entries, selectBonusItem, setMode }) {
                   {(entry.tags || []).slice(0, 3).map(tag => (
                     <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
                   ))}
-                  <span className="bonus-menu-row-arrow" aria-hidden="true">→</span>
+                  <span className="bonus-menu-row-arrow" aria-hidden="true">
+                    {itemLoading ? "…" : "→"}
+                  </span>
                 </span>
               </button>
             </li>
@@ -252,6 +260,7 @@ export default function ReviewSession({
   bonusReviewMessage,
   bonusReviewStatus,
   bonusReviewLoading,
+  bonusItemLoading,
   bonusStatusLoading,
   bonusMenuOpen,
   bonusMenuEntries,
@@ -632,6 +641,7 @@ export default function ReviewSession({
           <BonusReviewMenu
             entries={bonusMenuEntries}
             selectBonusItem={selectBonusItem}
+            itemLoading={bonusItemLoading}
             setMode={setMode}
           />
         )}

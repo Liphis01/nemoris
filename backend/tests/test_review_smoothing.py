@@ -3,7 +3,6 @@ import unittest
 from collections import Counter
 from datetime import date, timedelta
 
-from fastapi import HTTPException
 from fsrs import Rating
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -16,6 +15,8 @@ from app.routers.review import (
     answer_map,
     answer_question,
     answer_timeline,
+    get_bonus_groups,
+    get_bonus_items,
     get_bonus_status,
     get_review,
     get_summary,
@@ -1650,7 +1651,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertIn("même groupe", status["message"])
         self.assertNotIn("Ajoute quelques questions bonus", status["message"])
 
-    def test_bonus_review_is_blocked_when_schedule_is_full_until_target_changes(self):
+    def test_full_schedule_flags_bonus_as_full_but_still_allows_it(self):
+        # Capacity is informational only: a full 14-day forecast surfaces a
+        # warning but never blocks bonus review or the include_new payload.
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
         self.add_question(1)
@@ -1668,24 +1671,75 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         status = get_bonus_status(db=self.db)
 
-        self.assertFalse(status["allowed"])
+        self.assertTrue(status["allowed"])
         self.assertEqual(status["state"], "full")
         self.assertEqual(status["static_scheduled_total"], 13)
         self.assertEqual(status["scheduled_total"], 27)
         self.assertEqual(status["forecast_total"], 27)
         self.assertGreaterEqual(status["forecast_total"], status["full_threshold"])
-        self.assertIn("Augmente la cible quotidienne", status["message"])
+        self.assertIn("bien rempli", status["message"])
 
-        with self.assertRaises(HTTPException) as error:
-            get_review(include_new=True, db=self.db)
-
-        self.assertEqual(error.exception.status_code, 409)
+        # No 409 anymore: the endpoint returns items instead of blocking.
+        response = get_review(include_new=True, db=self.db)
+        self.assertIsInstance(response, list)
 
         update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
         unlocked_status = get_bonus_status(db=self.db)
 
         self.assertTrue(unlocked_status["allowed"])
         self.assertNotEqual(unlocked_status["state"], "full")
+
+    def test_bonus_groups_lists_every_available_group_without_capacity_cap(self):
+        # A tiny daily target keeps bonus capacity small, but the selection list
+        # must still surface every group / loose question that has new questions.
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+        media_group = self.add_group(1, type_group="media")
+
+        for question_id in range(10, 20):
+            media_question = self.add_question(question_id, type_q="media")
+            media_question.group = media_group
+
+        started = self.add_question(20, type_q="media")
+        started.group = media_group
+        self.add_progress(20, today + timedelta(days=3), reps=1)
+
+        self.add_question(30, type_q="text")
+        self.add_question(31, type_q="text")
+        self.db.commit()
+
+        entries = get_bonus_groups(db=self.db)
+        by_key = {entry["key"]: entry for entry in entries}
+
+        # The group appears once, counts only its new questions, and is uncapped.
+        self.assertIn("group:1", by_key)
+        self.assertEqual(by_key["group:1"]["item_count"], 10)
+        self.assertEqual(by_key["group:1"]["type_q"], "media")
+        self.assertTrue(by_key["group:1"]["is_container"])
+
+        # Loose questions each get their own selectable entry.
+        self.assertIn("q:30", by_key)
+        self.assertIn("q:31", by_key)
+        self.assertFalse(by_key["q:30"]["is_container"])
+
+    def test_bonus_items_returns_full_payload_for_one_picked_group(self):
+        media_group = self.add_group(1, type_group="media")
+
+        for question_id in range(10, 13):
+            media_question = self.add_question(question_id, type_q="media")
+            media_question.group = media_group
+
+        self.db.commit()
+
+        payload = get_bonus_items(key="group:1", db=self.db)
+
+        media_groups = [item for item in payload if item.get("type_q") == "media"]
+        self.assertTrue(media_groups)
+        total_items = sum(len(item["items"]) for item in media_groups)
+        self.assertEqual(total_items, 3)
+
+        # Unknown / malformed keys are ignored rather than raising.
+        self.assertEqual(get_bonus_items(key="nope", db=self.db), [])
 
     def test_bonus_status_uses_forecast_refill_before_calling_schedule_low(self):
         today = date.today()

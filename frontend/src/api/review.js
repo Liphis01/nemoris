@@ -67,6 +67,24 @@ export function getReview(options = {}) {
 }
 
 
+export function getBonusGroups(options = {}) {
+  // Cheap bonus selection list: names/types/counts only, no per-item payload.
+  const params = new URLSearchParams();
+  appendGroupIds(params, options.groupIds);
+  const query = params.toString();
+
+  return requestJson(`/review/bonus_groups${query ? `?${query}` : ""}`);
+}
+
+
+export function getBonusGroupItems(key) {
+  // Full review payload for one picked bonus entry (group / question / timeline).
+  const params = new URLSearchParams({ key });
+
+  return requestJson(`/review/bonus_items?${params.toString()}`);
+}
+
+
 export function sendAnswer(questionId, quality, reviewDate = undefined) {
   return requestOk("/answer", {
     method: "POST",

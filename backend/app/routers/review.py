@@ -36,6 +36,8 @@ from ..services.image_modes import (
     normalize_image_mode
 )
 from ..services.review import (
+    get_bonus_group_entries,
+    get_bonus_group_items,
     get_bonus_review_status,
     get_review_items,
     get_review_summary
@@ -177,13 +179,11 @@ def get_review(
     parsed_group_ids = parse_group_ids(group_ids)
 
     if include_new:
+        # Capacity is informational only: it no longer blocks bonus review.
         bonus_status = get_bonus_review_status(
             db,
             group_ids=parsed_group_ids
         )
-
-        if bonus_status["state"] == "full":
-            raise HTTPException(status_code=409, detail=bonus_status["message"])
 
     # The service handles due filtering and runtime map grouping.
     return get_review_items(
@@ -192,6 +192,23 @@ def get_review(
         bonus_status=bonus_status,
         group_ids=parsed_group_ids
     )
+
+
+@router.get("/review/bonus_groups")
+def get_bonus_groups(
+    group_ids: str | None = None,
+    db: Session = Depends(get_db)
+):
+    # Cheap list of every group / question with new questions available. The
+    # frontend renders this as the bonus selection menu, then fetches one
+    # entry's full payload from /review/bonus_items on pick.
+    return get_bonus_group_entries(db, group_ids=parse_group_ids(group_ids))
+
+
+@router.get("/review/bonus_items")
+def get_bonus_items(key: str, db: Session = Depends(get_db)):
+    # Full serialized review payload for a single picked bonus entry.
+    return get_bonus_group_items(db, key)
 
 
 @router.get("/review/bonus_status")

@@ -696,13 +696,13 @@ def get_bonus_review_status(db, today=None, group_ids=None):
         return {
             **status,
             "state": "full",
-            "allowed": False,
+            "allowed": True,
             "message": (
-                "Le planning prévu est déjà rempli "
+                "Le planning prévu est déjà bien rempli "
                 f"({load['scheduled_average']}/jour sur "
                 f"{BONUS_REVIEW_FORECAST_DAYS} jours, cible "
-                f"{daily_target}/jour). Augmente la cible quotidienne dans "
-                "les réglages pour débloquer les bonus."
+                f"{daily_target}/jour). Tu peux quand même ajouter des bonus, "
+                "ou augmenter la cible quotidienne dans les réglages."
             )
         }
 
@@ -1007,6 +1007,117 @@ def get_review_items(db, include_new=False, bonus_status=None, group_ids=None):
             limit=remaining_bonus_slots,
             group_ids=group_ids
         )
+
+    return serialize_review_items(
+        questions,
+        scheduler_tuning=scheduler_tuning,
+        scheduled_review=True,
+        timeline_anchors=_timeline_anchors_for(db, questions)
+    )
+
+
+def get_bonus_group_entries(db, group_ids=None):
+    # Lightweight bonus menu: one entry per group / loose question that still has
+    # new (unstarted) questions. Reads only the columns the menu needs (no ORM
+    # objects, no scheduling math), so listing every available bonus stays cheap;
+    # the heavy work (modes, contexts, projected intervals) is deferred to
+    # get_bonus_group_items when a single entry is picked.
+    new_ids = _new_question_ids(db, group_ids=group_ids)
+
+    if not new_ids:
+        return []
+
+    rows = (
+        db.query(
+            Question.id,
+            Question.question,
+            Question.type_q,
+            Question.tags,
+            QuestionGroup.id.label("group_id"),
+            QuestionGroup.name.label("group_name"),
+            QuestionGroup.type_group.label("group_type")
+        )
+        .outerjoin(QuestionGroup, QuestionGroup.id == Question.group_id)
+        .filter(Question.id.in_(new_ids))
+        .order_by(Question.id)
+        .all()
+    )
+
+    entries = []
+    entry_by_key = {}
+
+    def container_entry(key, type_q, name, tags):
+        entry = entry_by_key.get(key)
+
+        if entry is None:
+            entry = {
+                "key": key,
+                "type_q": type_q,
+                "name": name,
+                "tags": list(tags or []),
+                "item_count": 0,
+                "is_container": True
+            }
+            entry_by_key[key] = entry
+            entries.append(entry)
+
+        return entry
+
+    for row in rows:
+        # Mirror the bucketing used by _serialize_review_items so the menu
+        # entries line up with what a picked entry will actually render.
+        if row.group_id is not None and row.group_type in ("map", "media"):
+            entry = container_entry(
+                f"group:{row.group_id}",
+                row.group_type,
+                row.group_name,
+                row.tags
+            )
+            entry["item_count"] += 1
+            continue
+
+        if row.type_q == "timeline":
+            # Every due timeline item shares one combined review screen.
+            entry = container_entry("type:timeline", "timeline", "Timeline", [])
+            entry["item_count"] += 1
+            continue
+
+        entries.append({
+            "key": f"q:{row.id}",
+            "type_q": row.type_q,
+            "name": row.question,
+            "tags": row.tags or [],
+            "item_count": 1,
+            "is_container": False
+        })
+
+    return entries
+
+
+def get_bonus_group_items(db, key):
+    # Full serialization for a single picked bonus entry. Reuses the shared
+    # review serializer so modes/contexts/projected intervals stay identical to
+    # a scheduled session, just scoped to one group / question.
+    if not key:
+        return []
+
+    try:
+        if key == "type:timeline":
+            questions = [
+                question
+                for question in _new_questions(db)
+                if question.type_q == "timeline"
+            ]
+        elif key.startswith("group:"):
+            questions = _new_questions(db, group_ids=[int(key[len("group:"):])])
+        elif key.startswith("q:"):
+            questions = _questions_by_ids(db, [int(key[len("q:"):])])
+        else:
+            return []
+    except ValueError:
+        return []
+
+    scheduler_tuning = load_scheduler_tuning_settings(db)
 
     return serialize_review_items(
         questions,
