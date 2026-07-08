@@ -140,7 +140,7 @@ class MediaTests(unittest.TestCase):
         )
 
         question = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - France",
             answer="France",
             media=url,

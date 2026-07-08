@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import AppSetting, Progress, Question, QuestionGroup
 from app.routers.review import (
-    answer_image,
+    answer_media,
     answer_map,
     answer_question,
     answer_timeline,
@@ -51,7 +51,7 @@ from app.services.image_modes import (
 )
 from app.schemas import (
     AnswerRequest,
-    ImageAnswerRequest,
+    MediaAnswerRequest,
     MapAnswerRequest,
     ReviewSettings,
     TimelineAnswerItem,
@@ -289,16 +289,16 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertLess(image_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_image_review_mode_selector_uses_difficulty_size_and_variety(self):
-        hard = Question(type_q="image", answer="Hard")
+        hard = Question(type_q="media", answer="Hard")
         hard.progress = Progress(reps=0, difficulty=5.0, history=[])
-        strong = Question(type_q="image", answer="Strong")
+        strong = Question(type_q="media", answer="Strong")
         strong.progress = Progress(
             reps=4,
             difficulty=3.0,
             history=[{"image_mode": "type_prompt"} for _ in range(4)]
         )
         extras = [
-            Question(type_q="image", answer=f"Extra {index}")
+            Question(type_q="media", answer=f"Extra {index}")
             for index in range(3)
         ]
 
@@ -334,11 +334,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
         strong_items = []
 
         for index in range(12):
-            support = Question(type_q="image", answer=f"Support {index}")
+            support = Question(type_q="media", answer=f"Support {index}")
             support.progress = Progress(reps=1, difficulty=3.0, history=[])
             support_items.append(support)
 
-            strong = Question(type_q="image", answer=f"Strong {index}")
+            strong = Question(type_q="media", answer=f"Strong {index}")
             strong.progress = Progress(reps=4, difficulty=3.0, history=[])
             strong_items.append(strong)
 
@@ -365,7 +365,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
 
     def test_image_random_selector_can_pick_non_top_modes(self):
-        support = Question(type_q="image", answer="Support")
+        support = Question(type_q="media", answer="Support")
         support.progress = Progress(reps=1, difficulty=3.0, history=[])
 
         self.assertNotEqual(
@@ -379,7 +379,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
     def test_image_click_prompt_requires_minimum_review_context(self):
         context = [
-            Question(id=index, type_q="image", answer=f"Image {index}")
+            Question(id=index, type_q="media", answer=f"Image {index}")
             for index in range(1, 6)
         ]
 
@@ -873,7 +873,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 today - timedelta(days=9),
                 difficulty=8.0,
                 last_review=today - timedelta(days=8),
-                type_q="image",
+                type_q="media",
                 ideal_next_review=today - timedelta(days=5),
                 ideal_interval=0
             ),
@@ -882,7 +882,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 today - timedelta(days=7),
                 difficulty=9.0,
                 last_review=today - timedelta(days=13),
-                type_q="image"
+                type_q="media"
             )
         ]
         entries[1]["interval"] = 6
@@ -972,7 +972,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.db.add(question)
         return question
 
-    def add_group(self, group_id, type_group="image"):
+    def add_group(self, group_id, type_group="media"):
         group = QuestionGroup(
             id=group_id,
             type_group=type_group,
@@ -1310,8 +1310,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         for question_id, type_q in [
             (1, "map"),
             (2, "map"),
-            (3, "image"),
-            (4, "image")
+            (3, "media"),
+            (4, "media")
         ]:
             self.add_question(question_id, type_q=type_q)
 
@@ -1336,8 +1336,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             ),
             db=self.db
         )
-        answer_image(
-            ImageAnswerRequest(
+        answer_media(
+            MediaAnswerRequest(
                 items={3: 0, 4: 2},
                 review_date=review_day
             ),
@@ -1608,11 +1608,11 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         first_group = self.add_group(1)
         second_group = self.add_group(2)
-        same_group_bonus = self.add_question(1, type_q="image")
+        same_group_bonus = self.add_question(1, type_q="media")
         same_group_bonus.group = first_group
-        started_same_group = self.add_question(2, type_q="image")
+        started_same_group = self.add_question(2, type_q="media")
         started_same_group.group = first_group
-        other_group_bonus = self.add_question(3, type_q="image")
+        other_group_bonus = self.add_question(3, type_q="media")
         other_group_bonus.group = second_group
         self.add_progress(2, today + timedelta(days=3), reps=1)
         self.db.commit()
@@ -1631,9 +1631,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         first_group = self.add_group(1)
         second_group = self.add_group(2)
-        same_group_started = self.add_question(1, type_q="image")
+        same_group_started = self.add_question(1, type_q="media")
         same_group_started.group = first_group
-        other_group_bonus = self.add_question(2, type_q="image")
+        other_group_bonus = self.add_question(2, type_q="media")
         other_group_bonus.group = second_group
         self.add_progress(1, date.today() + timedelta(days=3), reps=1)
         self.db.commit()
@@ -1779,8 +1779,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         for question_id, type_q in [
             (1, "map"),
             (2, "map"),
-            (3, "image"),
-            (4, "image")
+            (3, "media"),
+            (4, "media")
         ]:
             self.add_question(question_id, type_q=type_q)
 
@@ -1790,8 +1790,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             MapAnswerRequest(items={1: 0, 2: 2}),
             db=self.db
         )
-        answer_image(
-            ImageAnswerRequest(items={3: 0, 4: 3}),
+        answer_media(
+            MediaAnswerRequest(items={3: 0, 4: 3}),
             db=self.db
         )
 
@@ -1949,7 +1949,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
 
-        self.add_question(1, type_q="image")
+        self.add_question(1, type_q="media")
         first_progress = self.add_progress(
             1,
             today - timedelta(days=9),
@@ -1960,7 +1960,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         )
         first_progress.last_review = today - timedelta(days=8)
 
-        self.add_question(2, type_q="image")
+        self.add_question(2, type_q="media")
         missing_anchor = self.add_progress(
             2,
             today - timedelta(days=7),

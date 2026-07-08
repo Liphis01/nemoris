@@ -7,17 +7,17 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Progress, Question, QuestionGroup
-from app.routers.review import answer_image, answer_map, answer_timeline, get_review
+from app.routers.review import answer_media, answer_map, answer_timeline, get_review
 from app.schemas import (
-    ImageAnswerRequest,
+    MediaAnswerRequest,
     MapAnswerRequest,
     TimelineAnswerItem,
     TimelineAnswerRequest,
     TimelineDateValue
 )
 from app.serializers import (
-    serialize_image_review_group,
-    serialize_image_review_item,
+    serialize_media_review_group,
+    serialize_media_review_item,
     serialize_map_review_group,
     serialize_map_review_zone,
     serialize_progress,
@@ -270,7 +270,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         image_group = QuestionGroup(
             id=20,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media="/static/flags.png",
             data={}
@@ -278,7 +278,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.db.add(image_group)
         image_item_a = self.add_question(
             7,
-            type_q="image",
+            type_q="media",
             question="Flags - France",
             answer="France",
             media="/static/france.png",
@@ -289,7 +289,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         image_item_b = self.add_question(
             8,
-            type_q="image",
+            type_q="media",
             question="Flags - Germany",
             answer="Germany",
             media="/static/germany.png",
@@ -401,7 +401,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_groups = [
             item
             for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
 
         self.assertEqual(len(text_items), 1)
@@ -724,7 +724,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         today = date.today()
         image_group = QuestionGroup(
             id=32,
-            type_group="image",
+            type_group="media",
             name="Bonus flags",
             media=None,
             data={}
@@ -732,7 +732,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.db.add(image_group)
         selected_bonus = Question(
             id=120,
-            type_q="image",
+            type_q="media",
             question="Flag due",
             answer="Selected bonus",
             media="/static/selected.png",
@@ -745,7 +745,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         for index in range(3):
             self.db.add(Question(
                 id=121 + index,
-                type_q="image",
+                type_q="media",
                 question=f"Unselected {index}",
                 answer=f"Unselected {index}",
                 media=f"/static/unselected-{index}.png",
@@ -757,7 +757,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         started_distractors = [
             self.add_question(
                 124 + index,
-                type_q="image",
+                type_q="media",
                 question=f"Started {index}",
                 answer=f"Started {index}",
                 media=f"/static/started-{index}.png",
@@ -775,7 +775,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
                 bonus_status={"bonus_question_capacity": 1}
             )
 
-        image_payload = next(item for item in response if item["type_q"] == "image")
+        image_payload = next(item for item in response if item["type_q"] == "media")
 
         self.assertEqual(image_payload["mode"], "multiple_choice_label")
         self.assertEqual(
@@ -791,8 +791,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
             [item["question_id"] for item in image_payload["context_items"]]
         )
 
-        answer_image(
-            ImageAnswerRequest(
+        answer_media(
+            MediaAnswerRequest(
                 items={selected_bonus.id: 2},
                 mode="multiple_choice_label",
                 context_count=len(image_payload["context_items"])
@@ -807,11 +807,48 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertIn(selected_bonus.id, progress_ids)
         self.assertFalse({121, 122, 123} & progress_ids)
 
+    def test_audio_only_media_group_uses_serial_review_modes(self):
+        # Audio can't be scanned in a grid, so an audio-only media group must
+        # only ever use the prompt->name modes, never the spatial/QCM-media ones.
+        today = date.today()
+        audio_group = QuestionGroup(
+            id=60,
+            type_group="media",
+            name="Sons de l'alphabet",
+            media=None,
+            data={}
+        )
+        self.db.add(audio_group)
+        for index in range(8):
+            self.add_question(
+                200 + index,
+                type_q="media",
+                answer=f"Lettre {index}",
+                media=f"/static/media-groups/60/letter{index}.mp3",
+                group=audio_group,
+                next_review=today
+            )
+        self.db.commit()
+
+        serial_modes = {"type_prompt", "multiple_choice_label"}
+
+        # Mode selection is randomised, so sample repeatedly.
+        for _ in range(40):
+            response = get_review(db=self.db)
+            media_groups = [
+                item for item in response if item["type_q"] == "media"
+            ]
+
+            self.assertTrue(media_groups)
+
+            for group in media_groups:
+                self.assertIn(group["mode"], serial_modes)
+
     def test_review_endpoint_splits_large_image_groups_into_balanced_chunks(self):
         today = date.today()
         image_group = QuestionGroup(
             id=50,
-            type_group="image",
+            type_group="media",
             name="Large flags",
             media=None,
             data={}
@@ -820,7 +857,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_items = [
             self.add_question(
                 100 + index,
-                type_q="image",
+                type_q="media",
                 answer=f"Flag {index}",
                 group=image_group,
                 next_review=today
@@ -833,7 +870,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_groups = [
             item
             for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
         chunk_sizes = [len(group["items"]) for group in image_groups]
         returned_ids = {
@@ -938,7 +975,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         today = date.today()
         image_group = QuestionGroup(
             id=53,
-            type_group="image",
+            type_group="media",
             name="Mixed flags",
             media=None,
             data={}
@@ -949,7 +986,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         for index in range(36):
             item = self.add_question(
                 400 + index,
-                type_q="image",
+                type_q="media",
                 answer=f"Flag {index}",
                 group=image_group,
                 next_review=today
@@ -973,7 +1010,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_groups = [
             item
             for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
         chunks = [
             [item["question_id"] for item in group["items"]]
@@ -1023,7 +1060,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         today = date.today()
         image_group = QuestionGroup(
             id=51,
-            type_group="image",
+            type_group="media",
             name="Compact flags",
             media=None,
             data={}
@@ -1032,7 +1069,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_items = [
             self.add_question(
                 200 + index,
-                type_q="image",
+                type_q="media",
                 answer=f"Flag {index}",
                 group=image_group,
                 next_review=today
@@ -1045,7 +1082,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_groups = [
             item
             for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
 
         self.assertEqual(len(image_groups), 1)
@@ -1119,12 +1156,12 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertEqual(zone_b.progress.next_review, date.today())
 
-    def test_answer_image_endpoint_returns_ack_shape_for_item_grades(self):
+    def test_answer_media_endpoint_returns_ack_shape_for_item_grades(self):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]
 
-        response = answer_image(
-            ImageAnswerRequest(items={
+        response = answer_media(
+            MediaAnswerRequest(items={
                 item_a.id: 3,
                 item_b.id: 0
             }, mode="multiple_choice_image", context_count=5),
@@ -1162,8 +1199,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]
 
-        answer_image(
-            ImageAnswerRequest(items={
+        answer_media(
+            MediaAnswerRequest(items={
                 item_a.id: 2,
                 item_b.id: 0
             }, mode="click_prompt"),
@@ -1174,7 +1211,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_groups = [
             item
             for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
 
         self.assertEqual(len(image_groups), 1)
@@ -1189,11 +1226,11 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertNotEqual(image_groups[0]["mode"], "click_prompt")
         self.assertEqual(item_b.progress.next_review, date.today())
 
-    def test_answer_image_uses_submitted_chunk_size_for_mode_metadata(self):
+    def test_answer_media_uses_submitted_chunk_size_for_mode_metadata(self):
         today = date.today()
         image_group = QuestionGroup(
             id=60,
-            type_group="image",
+            type_group="media",
             name="Many flags",
             media=None,
             data={}
@@ -1202,7 +1239,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         image_items = [
             self.add_question(
                 300 + index,
-                type_q="image",
+                type_q="media",
                 answer=f"Flag {index}",
                 group=image_group,
                 next_review=today
@@ -1212,8 +1249,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.db.commit()
         submitted_items = image_items[:5]
 
-        response = answer_image(
-            ImageAnswerRequest(
+        response = answer_media(
+            MediaAnswerRequest(
                 items={
                     item.id: 2
                     for item in submitted_items
@@ -1319,18 +1356,18 @@ class ReviewResponseShapeTests(unittest.TestCase):
             map_zone_payload["projected_intervals"]
         )
 
-        image_group_payload = serialize_image_review_group(
+        image_group_payload = serialize_media_review_group(
             image_group,
             tags=["flags"]
         )
         self.assertEqual(set(image_group_payload), IMAGE_GROUP_KEYS)
-        self.assertEqual(image_group_payload["type_q"], "image")
+        self.assertEqual(image_group_payload["type_q"], "media")
         self.assertEqual(image_group_payload["mode"], "type_prompt")
         self.assertEqual(image_group_payload["context_items"], [])
         self.assertEqual(image_group_payload["items"], [])
         self.assertNotIn("progress", image_group_payload)
 
-        image_item_payload = serialize_image_review_item(image_item)
+        image_item_payload = serialize_media_review_item(image_item)
         self.assertEqual(set(image_item_payload), IMAGE_ITEM_KEYS)
         self.assertEqual(image_item_payload["question_id"], image_item.id)
         self.assertEqual(image_item_payload["label"], "France")

@@ -28,7 +28,7 @@ const noop = vi.fn();
 
 function imageQuestion(mode) {
   return {
-    type_q: "image",
+    type_q: "media",
     mode,
     items: [
       {

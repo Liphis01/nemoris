@@ -258,7 +258,7 @@ class CollectionTests(unittest.TestCase):
         )
         flags = QuestionGroup(
             id=11,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -289,7 +289,7 @@ class CollectionTests(unittest.TestCase):
         )
         self.add_question(
             4,
-            type_q="image",
+            type_q="media",
             question="Drapeau",
             answer="France",
             media="/static/france.png",
@@ -423,7 +423,7 @@ class CollectionTests(unittest.TestCase):
         )
         image_group = QuestionGroup(
             id=11,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -452,14 +452,14 @@ class CollectionTests(unittest.TestCase):
         )
         self.add_question(
             4,
-            type_q="image",
+            type_q="media",
             answer="France",
             media="/static/france.png",
             group=image_group
         )
         self.add_question(
             5,
-            type_q="image",
+            type_q="media",
             answer="Germany",
             media="/static/germany.png",
             group=image_group
@@ -491,7 +491,7 @@ class CollectionTests(unittest.TestCase):
         )
         text_item = next(item for item in response if item["type_q"] == "text")
         map_item = next(item for item in response if item["type_q"] == "map")
-        image_item = next(item for item in response if item["type_q"] == "image")
+        image_item = next(item for item in response if item["type_q"] == "media")
         timeline_item = next(
             item for item in response if item["type_q"] == "timeline"
         )

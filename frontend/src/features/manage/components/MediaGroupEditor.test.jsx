@@ -10,7 +10,7 @@ vi.mock("../../../api/mediaGroups", () => ({
 
 const group = {
   id: 7,
-  type_group: "image",
+  type_group: "media",
   name: "Drapeaux",
   media: "",
   tags: ["flags"],
@@ -23,7 +23,7 @@ function makeImageItems(count) {
 
     return {
       id,
-      type_q: "image",
+      type_q: "media",
       question: `Drapeaux - Country ${id}`,
       answer: `Country ${id}`,
       label: `Country ${id}`,
@@ -55,7 +55,7 @@ async function renderEditor(items = makeImageItems(300), props = {}) {
     },
     items: payload.items.map((item) => ({
       id: item.id,
-      type_q: "image",
+      type_q: "media",
       question: `Drapeaux - ${item.answer}`,
       answer: item.answer,
       label: item.answer,

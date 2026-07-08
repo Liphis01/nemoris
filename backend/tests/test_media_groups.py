@@ -11,13 +11,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Base, Progress, Question, QuestionGroup
-from app.schemas import ImageGroupItemsBulkUpdate, QuestionCreate
+from app.schemas import MediaGroupItemsBulkUpdate, QuestionCreate
 from app.services import media as media_service
-from app.services.image_groups import (
-    list_image_group_items,
-    save_image_group_items,
-    upload_image_group_media,
-    upload_image_group_media_url
+from app.services.media_groups import (
+    list_media_group_items,
+    save_media_group_items,
+    upload_media_group_media,
+    upload_media_group_media_url
 )
 from app.services.questions import create_question
 from app.services.training import group_training_fingerprint
@@ -63,7 +63,7 @@ class RemoteResponse:
         return False
 
 
-class ImageGroupTests(unittest.TestCase):
+class MediaGroupTests(unittest.TestCase):
     def setUp(self):
         engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
@@ -92,7 +92,7 @@ class ImageGroupTests(unittest.TestCase):
 
     def test_image_schema_and_group_compatibility(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -103,7 +103,7 @@ class ImageGroupTests(unittest.TestCase):
         image = create_question(
             self.db,
             QuestionCreate(
-                type_q="image",
+                type_q="media",
                 question="Flags - France",
                 answer="France",
                 media="/static/france.png",
@@ -112,7 +112,7 @@ class ImageGroupTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(image.type_q, "image")
+        self.assertEqual(image.type_q, "media")
         self.assertEqual(image.group_id, group.id)
         self.assertIsNone(
             self.db.query(Progress)
@@ -135,13 +135,13 @@ class ImageGroupTests(unittest.TestCase):
 
     def test_bulk_save_creates_updates_deletes_and_preserves_progress(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media="cover.png",
             data={}
         )
         existing = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - France",
             answer="France",
             media="/static/france.png",
@@ -150,7 +150,7 @@ class ImageGroupTests(unittest.TestCase):
             group=group
         )
         deleted = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - Germany",
             answer="Germany",
             media="/static/germany.png",
@@ -167,10 +167,10 @@ class ImageGroupTests(unittest.TestCase):
         ])
         self.db.commit()
 
-        response = save_image_group_items(
+        response = save_media_group_items(
             self.db,
             group.id,
-            ImageGroupItemsBulkUpdate(
+            MediaGroupItemsBulkUpdate(
                 group={
                     "name": "European flags",
                     "media": "cover-new.png",
@@ -217,13 +217,13 @@ class ImageGroupTests(unittest.TestCase):
 
     def test_bulk_save_reports_only_changed_existing_items_as_updated(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         unchanged = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - France",
             answer="France",
             media="/static/france.png",
@@ -232,7 +232,7 @@ class ImageGroupTests(unittest.TestCase):
             group=group
         )
         changed = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - Germany",
             answer="Germany",
             media="/static/germany.png",
@@ -249,10 +249,10 @@ class ImageGroupTests(unittest.TestCase):
         ])
         self.db.commit()
 
-        response = save_image_group_items(
+        response = save_media_group_items(
             self.db,
             group.id,
-            ImageGroupItemsBulkUpdate(
+            MediaGroupItemsBulkUpdate(
                 group={
                     "name": "Flags",
                     "media": None,
@@ -282,13 +282,13 @@ class ImageGroupTests(unittest.TestCase):
 
     def test_bulk_save_invalidates_record_only_on_image_training_content(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media="cover.png",
             data={"theme": "blue"}
         )
         first = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - France",
             answer="France",
             media="/static/france.png",
@@ -297,7 +297,7 @@ class ImageGroupTests(unittest.TestCase):
             group=group
         )
         second = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - Germany",
             answer="Germany",
             media="/static/germany.png",
@@ -310,10 +310,10 @@ class ImageGroupTests(unittest.TestCase):
         self.db.commit()
         self.seed_training_record(group)
 
-        save_image_group_items(
+        save_media_group_items(
             self.db,
             group.id,
-            ImageGroupItemsBulkUpdate(
+            MediaGroupItemsBulkUpdate(
                 group={
                     "name": "European flags",
                     "media": "cover-new.png",
@@ -339,10 +339,10 @@ class ImageGroupTests(unittest.TestCase):
         )
         self.assertIn("training_record", group.data)
 
-        save_image_group_items(
+        save_media_group_items(
             self.db,
             group.id,
-            ImageGroupItemsBulkUpdate(
+            MediaGroupItemsBulkUpdate(
                 group={
                     "name": "European flags",
                     "media": "cover-new.png",
@@ -369,15 +369,15 @@ class ImageGroupTests(unittest.TestCase):
         self.assertNotIn("training_record", group.data)
         self.assertEqual(group.data["theme"], "blue")
 
-    def test_list_image_group_items_returns_editor_shape(self):
+    def test_list_media_group_items_returns_editor_shape(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         item = Question(
-            type_q="image",
+            type_q="media",
             question="Flags - France",
             answer="France",
             media="/static/france.png",
@@ -391,17 +391,17 @@ class ImageGroupTests(unittest.TestCase):
         self.db.add(Progress(question_id=item.id, next_review=date.today()))
         self.db.commit()
 
-        response = list_image_group_items(self.db, group.id)
+        response = list_media_group_items(self.db, group.id)
 
         self.assertEqual(len(response), 1)
-        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["type_q"], "media")
         self.assertEqual(response[0]["answer"], "France")
         self.assertEqual(response[0]["aliases"], ["FR"])
         self.assertIn("progress", response[0])
 
     def test_image_group_upload_uses_group_static_folder(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -421,22 +421,22 @@ class ImageGroupTests(unittest.TestCase):
             media_service.STATIC_DIR = static_dir
 
             try:
-                response = upload_image_group_media(
+                response = upload_media_group_media(
                     self.db,
                     group.id,
                     upload("france.png", "image/png", PNG_BYTES)
                 )
                 url = response["url"]
 
-                self.assertTrue(url.startswith(f"/static/image-groups/{group.id}/"))
+                self.assertTrue(url.startswith(f"/static/media-groups/{group.id}/"))
                 self.assertTrue(
-                    (static_dir / "image-groups" / str(group.id) / Path(url).name).exists()
+                    (static_dir / "media-groups" / str(group.id) / Path(url).name).exists()
                 )
             finally:
                 media_service.STATIC_DIR = previous_static_dir
 
         with self.assertRaises(HTTPException) as incompatible:
-            upload_image_group_media(
+            upload_media_group_media(
                 self.db,
                 other_group.id,
                 upload("europe.png", "image/png", PNG_BYTES)
@@ -446,7 +446,7 @@ class ImageGroupTests(unittest.TestCase):
 
     def test_image_group_url_import_uses_group_static_folder(self):
         group = QuestionGroup(
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -469,7 +469,7 @@ class ImageGroupTests(unittest.TestCase):
                     "urlopen",
                     return_value=RemoteResponse(PNG_BYTES, content_type="image/png")
                 ):
-                    response = upload_image_group_media_url(
+                    response = upload_media_group_media_url(
                         self.db,
                         group.id,
                         "https://example.com/france.png"
@@ -477,10 +477,10 @@ class ImageGroupTests(unittest.TestCase):
 
                 url = response["url"]
 
-                self.assertTrue(url.startswith(f"/static/image-groups/{group.id}/"))
+                self.assertTrue(url.startswith(f"/static/media-groups/{group.id}/"))
                 self.assertTrue(url.endswith(".png"))
                 self.assertTrue(
-                    (static_dir / "image-groups" / str(group.id) / Path(url).name).exists()
+                    (static_dir / "media-groups" / str(group.id) / Path(url).name).exists()
                 )
             finally:
                 media_service.STATIC_DIR = previous_static_dir

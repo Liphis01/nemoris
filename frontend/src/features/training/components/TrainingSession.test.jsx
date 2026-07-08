@@ -85,7 +85,7 @@ describe("TrainingSession", () => {
         },
         {
           id: 6,
-          type_group: "image",
+          type_group: "media",
           name: "Flags",
           media: null,
           tags: ["Geo"],
@@ -255,8 +255,8 @@ describe("TrainingSession", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Sélectionner Flags" }));
 
-    expect(screen.getByText("Tape toutes les images dans l'ordre que tu veux.")).toBeInTheDocument();
-    expect(screen.getByText("Lis le nom, puis choisis la bonne image.")).toBeInTheDocument();
+    expect(screen.getByText("Tape tous les médias dans l'ordre que tu veux.")).toBeInTheDocument();
+    expect(screen.getByText("Lis le nom, puis choisis le bon média.")).toBeInTheDocument();
   });
 
   it("starts a selected group mode from the detail panel", async () => {
@@ -301,7 +301,7 @@ describe("TrainingSession", () => {
   it("uses the compact visual shell for active image training", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         mode: "type_prompt",
         tags: ["Geo"],

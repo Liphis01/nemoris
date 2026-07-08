@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
 import {
   IMAGE_MODE_CLICK_PROMPT,
@@ -59,7 +59,7 @@ const qualityButtonStyles = {
 };
 
 const imageRecapHeaderColumns = [
-  { key: "answer", label: "Image" },
+  { key: "answer", label: "Média" },
   { key: "success", label: "Réussite" },
   { key: "interval", label: "Intervalle" },
   { key: "quality", label: "Qualité" }
@@ -1041,6 +1041,7 @@ export default function MediaReview({
     { allowSelection = true, registerForScroll = true } = {}
   ) {
     const mediaSrc = resolveMediaUrl(row.item.media);
+    const mediaKind = getMediaKind(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
     const isWrongOrMissed = (
       row.feedbackState === "wrong" ||
@@ -1139,18 +1140,39 @@ export default function MediaReview({
           }}
         >
           {mediaSrc ? (
-            <img
-              src={mediaSrc}
-              alt={revealed ? answerLabel(row.item) : "image"}
-              style={{
-                maxHeight: `${tileImageMaxHeight}px`,
-                maxWidth: "100%",
-                objectFit: "contain"
-              }}
-            />
+            mediaKind === "audio" ? (
+              <audio
+                src={mediaSrc}
+                controls
+                onClick={(event) => event.stopPropagation()}
+                style={{ width: "94%" }}
+              />
+            ) : mediaKind === "video" ? (
+              <video
+                src={mediaSrc}
+                controls
+                playsInline
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  maxHeight: `${tileImageMaxHeight}px`,
+                  maxWidth: "100%",
+                  objectFit: "contain"
+                }}
+              />
+            ) : (
+              <img
+                src={mediaSrc}
+                alt={revealed ? answerLabel(row.item) : "image"}
+                style={{
+                  maxHeight: `${tileImageMaxHeight}px`,
+                  maxWidth: "100%",
+                  objectFit: "contain"
+                }}
+              />
+            )
           ) : (
             <span style={{ color: "#666", fontSize: "12px" }}>
-              Image manquante
+              Média manquant
             </span>
           )}
           {feedbackBadgeLabel && (
@@ -1228,6 +1250,7 @@ export default function MediaReview({
 
   function renderImageChoiceTile(row, { prompt = false, selectable = true } = {}) {
     const mediaSrc = resolveMediaUrl(row.item.media);
+    const mediaKind = getMediaKind(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
     const isWrongOrMissed = (
       row.feedbackState === "wrong" ||
@@ -1333,23 +1356,50 @@ export default function MediaReview({
           }}
         >
           {mediaSrc ? (
-            <img
-              src={mediaSrc}
-              alt={revealed ? answerLabel(row.item) : "image"}
-              {...imageMarkerProps}
-              style={{
-                display: "block",
-                height: "100%",
-                maxHeight: "100%",
-                maxWidth: "100%",
-                objectFit: "contain",
-                objectPosition: "center",
-                width: "100%"
-              }}
-            />
+            mediaKind === "audio" ? (
+              <audio
+                src={mediaSrc}
+                controls
+                onClick={(event) => event.stopPropagation()}
+                {...imageMarkerProps}
+                style={{ width: "94%" }}
+              />
+            ) : mediaKind === "video" ? (
+              <video
+                src={mediaSrc}
+                controls
+                playsInline
+                onClick={(event) => event.stopPropagation()}
+                {...imageMarkerProps}
+                style={{
+                  display: "block",
+                  height: "100%",
+                  maxHeight: "100%",
+                  maxWidth: "100%",
+                  objectFit: "contain",
+                  objectPosition: "center",
+                  width: "100%"
+                }}
+              />
+            ) : (
+              <img
+                src={mediaSrc}
+                alt={revealed ? answerLabel(row.item) : "image"}
+                {...imageMarkerProps}
+                style={{
+                  display: "block",
+                  height: "100%",
+                  maxHeight: "100%",
+                  maxWidth: "100%",
+                  objectFit: "contain",
+                  objectPosition: "center",
+                  width: "100%"
+                }}
+              />
+            )
           ) : (
             <span style={{ color: "#666", fontSize: "12px" }}>
-              Image manquante
+              Média manquant
             </span>
           )}
           {feedbackBadgeLabel && (
@@ -1478,7 +1528,7 @@ export default function MediaReview({
         <div className="app-scrollbar" style={imageRecapCardStyle}>
           <div style={imageRecapHeaderStyle}>
             <div>
-              <div style={imageRecapTypeBadgeStyle}>IMAGE RESULT</div>
+              <div style={imageRecapTypeBadgeStyle}>MÉDIA</div>
               <div style={imageRecapTitleStyle}>Résultat</div>
             </div>
 
@@ -1558,14 +1608,31 @@ export default function MediaReview({
                       title={answerLabel(selectedRecapRow.item)}
                     >
                       {resolveMediaUrl(selectedRecapRow.item.media) ? (
-                        <img
-                          src={resolveMediaUrl(selectedRecapRow.item.media)}
-                          alt={answerLabel(selectedRecapRow.item)}
-                          style={imageRecapSelectedPreviewImageStyle}
-                        />
+                        getMediaKind(selectedRecapRow.item.media) === "audio" ? (
+                          <audio
+                            src={resolveMediaUrl(selectedRecapRow.item.media)}
+                            controls
+                            onClick={(event) => event.stopPropagation()}
+                            style={{ width: "94%" }}
+                          />
+                        ) : getMediaKind(selectedRecapRow.item.media) === "video" ? (
+                          <video
+                            src={resolveMediaUrl(selectedRecapRow.item.media)}
+                            controls
+                            playsInline
+                            onClick={(event) => event.stopPropagation()}
+                            style={imageRecapSelectedPreviewImageStyle}
+                          />
+                        ) : (
+                          <img
+                            src={resolveMediaUrl(selectedRecapRow.item.media)}
+                            alt={answerLabel(selectedRecapRow.item)}
+                            style={imageRecapSelectedPreviewImageStyle}
+                          />
+                        )
                       ) : (
                         <span style={imageRecapSelectedMissingImageStyle}>
-                          Image manquante
+                          Média manquant
                         </span>
                       )}
                     </button>
@@ -1796,11 +1863,17 @@ export default function MediaReview({
 
                           <span style={imageRecapThumbnailStyle}>
                             {mediaSrc ? (
-                              <img
-                                src={mediaSrc}
-                                alt={answerLabel(row.item)}
-                                style={imageRecapThumbnailImageStyle}
-                              />
+                              getMediaKind(row.item.media) === "audio" ? (
+                                <span aria-hidden="true" style={{ fontSize: "18px" }}>🎧</span>
+                              ) : getMediaKind(row.item.media) === "video" ? (
+                                <span aria-hidden="true" style={{ fontSize: "18px" }}>🎬</span>
+                              ) : (
+                                <img
+                                  src={mediaSrc}
+                                  alt={answerLabel(row.item)}
+                                  style={imageRecapThumbnailImageStyle}
+                                />
+                              )
                             ) : (
                               <span style={imageRecapThumbnailMissingStyle} />
                             )}
@@ -1921,16 +1994,16 @@ export default function MediaReview({
                   width: "100%"
                 }}
               >
-                {group.name || "Images"}
+                {group.name || "Média"}
               </div>
             ) : (
               <>
                 <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
-                  {resultMode ? "IMAGE RESULT" : `IMAGE · ${imageModeLabels[normalizedMode]}`}
+                  {resultMode ? "MÉDIA" : `MÉDIA · ${imageModeLabels[normalizedMode]}`}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
                   <div style={{ color: "#f3f3f3", fontSize: "20px", fontWeight: 800, lineHeight: 1.1 }}>
-                    {group.name || "Images"}
+                    {group.name || "Média"}
                   </div>
                   {trainingElapsedMs !== null && !resultMode && (
                     <TrainingTimerPanel
@@ -2379,24 +2452,54 @@ export default function MediaReview({
             </button>
 
             {resolveMediaUrl(previewRow.item.media) ? (
-              <img
-                src={resolveMediaUrl(previewRow.item.media)}
-                alt={
-                  isImageAnswerRevealed(previewRow, resultMode)
-                    ? answerLabel(previewRow.item)
-                    : "image"
-                }
-                style={{
-                  background: "#0d0d0d",
-                  borderRadius: "8px",
-                  display: "block",
-                  height: isImageAnswerRevealed(previewRow, resultMode)
-                    ? "min(62vh, 560px)"
-                    : "min(68vh, 620px)",
-                  objectFit: "contain",
-                  width: "100%"
-                }}
-              />
+              getMediaKind(previewRow.item.media) === "audio" ? (
+                <audio
+                  src={resolveMediaUrl(previewRow.item.media)}
+                  controls
+                  autoPlay
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    width: "100%"
+                  }}
+                />
+              ) : getMediaKind(previewRow.item.media) === "video" ? (
+                <video
+                  src={resolveMediaUrl(previewRow.item.media)}
+                  controls
+                  playsInline
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    height: isImageAnswerRevealed(previewRow, resultMode)
+                      ? "min(62vh, 560px)"
+                      : "min(68vh, 620px)",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              ) : (
+                <img
+                  src={resolveMediaUrl(previewRow.item.media)}
+                  alt={
+                    isImageAnswerRevealed(previewRow, resultMode)
+                      ? answerLabel(previewRow.item)
+                      : "image"
+                  }
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    height: isImageAnswerRevealed(previewRow, resultMode)
+                      ? "min(62vh, 560px)"
+                      : "min(68vh, 620px)",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              )
             ) : (
               <div
                 style={{
@@ -2412,7 +2515,7 @@ export default function MediaReview({
                   width: "100%"
                 }}
               >
-                Image manquante
+                Média manquant
               </div>
             )}
 

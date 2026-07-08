@@ -166,7 +166,7 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["counts"]["due_today"], 1)
         self.assertEqual(stats["counts"]["by_type"]["text"]["total"], 3)
         self.assertEqual(stats["counts"]["by_type"]["timeline"]["due"], 1)
-        self.assertEqual(stats["counts"]["by_type"]["image"]["total"], 0)
+        self.assertEqual(stats["counts"]["by_type"]["media"]["total"], 0)
 
         today_load = stats["load_by_type"][0]
         self.assertEqual(today_load["date"], today.isoformat())
@@ -187,7 +187,7 @@ class StatsServiceTests(unittest.TestCase):
             }
         )
         self.assertEqual(stats["retention_by_type"]["map"]["retention"], 50)
-        self.assertEqual(stats["retention_by_type"]["image"]["reviews"], 0)
+        self.assertEqual(stats["retention_by_type"]["media"]["reviews"], 0)
         self.assertEqual(stats["retention_by_type"]["timeline"]["reviews"], 4)
         self.assertEqual(stats["retention_by_type"]["timeline"]["failed"], 2)
         self.assertEqual(stats["retention_by_type"]["timeline"]["retention"], 50)
@@ -197,7 +197,7 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["favorite_questions"][0]["data"]["code"], "FR")
         self.assertEqual(stats["weak_spots"]["map"][0]["id"], 3)
         self.assertEqual(stats["weak_spots"]["timeline"][0]["id"], 5)
-        self.assertEqual(stats["weak_spots"]["image"], [])
+        self.assertEqual(stats["weak_spots"]["media"], [])
 
     def test_legacy_progress_without_history_can_rank_as_hard(self):
         today = date(2026, 1, 15)

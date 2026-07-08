@@ -265,7 +265,7 @@ describe("useReviewSession", () => {
   it("loads bonus questions across all groups regardless of the review scope", async () => {
     const bonusImages = {
       group_id: 7,
-      type_q: "image",
+      type_q: "media",
       name: "Bonus images",
       items: [{ question_id: 12 }]
     };
@@ -319,7 +319,7 @@ describe("useReviewSession", () => {
     getReview.mockResolvedValue([
       {
         group_id: 5,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         items: [
           { question_id: 10, answer: "France" },
@@ -340,7 +340,7 @@ describe("useReviewSession", () => {
     expect(result.current.currentIndex).toBe(1);
     expect(result.current.questions).toHaveLength(2);
     expect(result.current.questions[1]).toMatchObject({
-      type_q: "image",
+      type_q: "media",
       _reviewRetryOfIndex: 0,
       items: [
         { question_id: 11, answer: "Germany" }
@@ -356,7 +356,7 @@ describe("useReviewSession", () => {
     getReview.mockResolvedValue([
       {
         group_id: 5,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         mode: "click_prompt",
         items
@@ -388,7 +388,7 @@ describe("useReviewSession", () => {
     getReview.mockResolvedValue([
       {
         group_id: 5,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         mode: "click_prompt",
         items
@@ -485,7 +485,7 @@ describe("useReviewSession", () => {
     };
     const bonusImages = {
       group_id: 5,
-      type_q: "image",
+      type_q: "media",
       name: "Bonus images",
       items: [{ question_id: 13, answer: "France" }]
     };
@@ -546,7 +546,7 @@ describe("useReviewSession", () => {
     };
     const bonusImages = {
       group_id: 5,
-      type_q: "image",
+      type_q: "media",
       name: "Bonus images",
       items: [{ question_id: 13, answer: "France" }]
     };

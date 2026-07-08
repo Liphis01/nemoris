@@ -493,7 +493,7 @@ describe("useTrainingSession", () => {
     getTrainingItems.mockResolvedValueOnce([
       {
         group_id: 6,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         mode: "multiple_choice_image",
         training_fingerprint: TRAINING_FINGERPRINT,
@@ -540,7 +540,7 @@ describe("useTrainingSession", () => {
     await act(async () => {
       await result.current.startScope({
         type: "group",
-        type_group: "image",
+        type_group: "media",
         id: 6,
         name: "Flags",
         question_count: 2

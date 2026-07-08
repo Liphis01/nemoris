@@ -260,7 +260,7 @@ export function useTrainingSession(active = true) {
         ...scope,
         groupMode,
         ...(groupTypeForMode === "map" ? { mapMode: groupMode } : {}),
-        ...(groupTypeForMode === "image" ? { imageMode: groupMode } : {})
+        ...(groupTypeForMode === "media" ? { imageMode: groupMode } : {})
       }
       : scope;
 

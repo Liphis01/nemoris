@@ -171,17 +171,17 @@ describe("useManageLibrary", () => {
     const createdGroup = {
       id: 9,
       name: "Drapeaux",
-      type_group: "image",
+      type_group: "media",
       media: null
     };
     createGroup.mockResolvedValue(createdGroup);
     const { result } = renderHook(() => useManageLibrary("manage"));
 
     act(() => {
-      result.current.startCreateGroup("image");
+      result.current.startCreateGroup("media");
       result.current.setGroupDraft({
         name: "Drapeaux",
-        type_group: "image",
+        type_group: "media",
         media: "",
         data: {}
       });
@@ -192,7 +192,7 @@ describe("useManageLibrary", () => {
     });
 
     expect(createGroup).toHaveBeenCalledWith({
-      type_group: "image",
+      type_group: "media",
       name: "Drapeaux",
       media: null,
       data: {}

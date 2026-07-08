@@ -14,6 +14,8 @@
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - changer le image/audio/video en juste media
 - enlever le pre menu de création de groupes
+- proposer 100% des questions bonus
+- do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
 
 ## quick fixes
 
@@ -36,6 +38,7 @@
 - chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - les tags marchent pas bien
+- parfois on peut scroll la page alors qu'il n'y a rien en dessous
 
 ## to do when i have more time
 

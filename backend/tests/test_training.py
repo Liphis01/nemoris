@@ -210,7 +210,7 @@ class TrainingTests(unittest.TestCase):
     def test_image_group_training_accepts_mode_and_context_items(self):
         group = QuestionGroup(
             id=11,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -218,7 +218,7 @@ class TrainingTests(unittest.TestCase):
         self.db.add(group)
         self.add_question(
             1,
-            type_q="image",
+            type_q="media",
             answer="France",
             media="/static/france.png",
             tags=["Geo"],
@@ -226,7 +226,7 @@ class TrainingTests(unittest.TestCase):
         )
         self.add_question(
             2,
-            type_q="image",
+            type_q="media",
             answer="Germany",
             media="/static/germany.png",
             tags=["Geo"],
@@ -242,7 +242,7 @@ class TrainingTests(unittest.TestCase):
         )
 
         self.assertEqual(len(response), 1)
-        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["type_q"], "media")
         self.assertEqual(response[0]["group_id"], group.id)
         self.assertEqual(response[0]["mode"], "multiple_choice_image")
         self.assertEqual(len(response[0]["items"]), 2)
@@ -256,7 +256,7 @@ class TrainingTests(unittest.TestCase):
         today = date.today()
         group = QuestionGroup(
             id=20,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -266,7 +266,7 @@ class TrainingTests(unittest.TestCase):
         self.add_question(2, tags=["geology"], reps=1, next_review=today)
         self.add_question(
             3,
-            type_q="image",
+            type_q="media",
             answer="France",
             tags=["geo"],
             group=group
@@ -289,7 +289,7 @@ class TrainingTests(unittest.TestCase):
         ]
         image_groups = [
             item for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
         returned_ids = {
             item["question_id"]
@@ -392,7 +392,7 @@ class TrainingTests(unittest.TestCase):
     def test_tag_training_keeps_full_visual_context_for_tagged_items(self):
         group = QuestionGroup(
             id=21,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -402,7 +402,7 @@ class TrainingTests(unittest.TestCase):
         for question_id in range(1, 8):
             self.add_question(
                 question_id,
-                type_q="image",
+                type_q="media",
                 answer=f"Flag {question_id}",
                 media=f"/static/flag-{question_id}.png",
                 tags=["target"] if question_id in {2, 5} else ["other"],
@@ -414,7 +414,7 @@ class TrainingTests(unittest.TestCase):
         response = get_training_items(self.db, scope_type="tag", tag="target")
 
         self.assertEqual(len(response), 1)
-        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["type_q"], "media")
         self.assertEqual(response[0]["group_id"], group.id)
         self.assertEqual(
             {item["question_id"] for item in response[0]["items"]},
@@ -579,14 +579,14 @@ class TrainingTests(unittest.TestCase):
     def test_image_training_records_are_saved_per_mode(self):
         group = QuestionGroup(
             id=402,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         self.db.add(group)
-        self.add_question(1, type_q="image", group=group)
-        self.add_question(2, type_q="image", group=group)
+        self.add_question(1, type_q="media", group=group)
+        self.add_question(2, type_q="media", group=group)
         self.db.commit()
 
         choices = record_training_attempt(
@@ -632,14 +632,14 @@ class TrainingTests(unittest.TestCase):
     def test_partial_attempt_updates_best_percent_but_not_clean_time(self):
         group = QuestionGroup(
             id=41,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         self.db.add(group)
-        self.add_question(1, type_q="image", group=group)
-        self.add_question(2, type_q="image", group=group)
+        self.add_question(1, type_q="media", group=group)
+        self.add_question(2, type_q="media", group=group)
         self.db.commit()
 
         response = record_training_attempt(
@@ -706,14 +706,14 @@ class TrainingTests(unittest.TestCase):
     def test_faster_clean_time_preserves_better_percent_elapsed(self):
         group = QuestionGroup(
             id=43,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         self.db.add(group)
-        self.add_question(1, type_q="image", group=group)
-        self.add_question(2, type_q="image", group=group)
+        self.add_question(1, type_q="media", group=group)
+        self.add_question(2, type_q="media", group=group)
         self.db.commit()
         self.seed_training_record(group, {
             "best_found_percent": 100,
@@ -826,7 +826,7 @@ class TrainingTests(unittest.TestCase):
     def test_generic_grouped_question_edits_invalidate_records(self):
         group = QuestionGroup(
             id=46,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={"theme": "blue"}
@@ -834,7 +834,7 @@ class TrainingTests(unittest.TestCase):
         self.db.add(group)
         self.add_question(
             1,
-            type_q="image",
+            type_q="media",
             answer="France",
             media="/static/france.png",
             data={"aliases": ["FR"], "favorite": True},
@@ -842,7 +842,7 @@ class TrainingTests(unittest.TestCase):
         )
         self.add_question(
             2,
-            type_q="image",
+            type_q="media",
             answer="Germany",
             media="/static/germany.png",
             data={"aliases": []},

@@ -31,7 +31,7 @@ describe("questionFilters", () => {
     },
     {
       id: 4,
-      type_q: "image",
+      type_q: "media",
       question: "Flags - Cote d Ivoire",
       answer: "Cote-d Ivoire",
       tags: ["flags"],
@@ -94,7 +94,7 @@ describe("questionFilters", () => {
       questions,
       search: "cote d ivoire",
       tagFilter: "",
-      questionTypeFilter: "image",
+      questionTypeFilter: "media",
       dueOnly: true,
       sortField: "id",
       sortOrder: "asc"

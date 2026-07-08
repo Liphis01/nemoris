@@ -104,7 +104,7 @@ describe("ReviewSession", () => {
       questions: [
         {
           group_id: 12,
-          type_q: "image",
+          type_q: "media",
           name: "Images",
           items: [{ question_id: 1 }]
         }
@@ -137,7 +137,7 @@ describe("ReviewSession", () => {
     const { container } = renderReviewSession({
       questions: [
         {
-          type_q: "image",
+          type_q: "media",
           name: "Flags",
           mode: "type_prompt",
           tags: ["Geo"],
@@ -222,7 +222,7 @@ describe("ReviewSession", () => {
       isContainer: true,
       itemCount: 2,
       tags: [],
-      chunks: [{ group_id: 5, type_q: "image", items: [] }]
+      chunks: [{ group_id: 5, type_q: "media", items: [] }]
     };
     renderReviewSession({
       questions: [],
