@@ -30,6 +30,12 @@ import {
   imageModeDetails,
   imageModeLabels
 } from "../../review/imageModes";
+import {
+  defaultTextMode,
+  TEXT_MODES,
+  textModeDetails,
+  textModeLabels
+} from "../../review/textModes";
 import { getMediaKind } from "../../../shared/media";
 import "./TrainingSession.css";
 
@@ -140,6 +146,15 @@ function modeConfigForGroup(group) {
     };
   }
 
+  if (group?.type_group === "text") {
+    return {
+      defaultMode: defaultTextMode,
+      details: textModeDetails,
+      labels: textModeLabels,
+      modes: TEXT_MODES
+    };
+  }
+
   return null;
 }
 
@@ -154,7 +169,10 @@ function recordForMode(group, mode) {
 
 
 function isVisualQuestion(question) {
-  return ["media", "map", "timeline"].includes(question?.type_q);
+  return (
+    ["media", "map", "timeline"].includes(question?.type_q) ||
+    (question?.type_q === "text" && Array.isArray(question?.items))
+  );
 }
 
 
@@ -223,6 +241,7 @@ function percentBarWidth(percent) {
 function groupAccent(group) {
   if (group?.type_group === "map") return "map";
   if (group?.type_group === "media") return "media";
+  if (group?.type_group === "text") return "text";
 
   return "neutral";
 }
@@ -958,6 +977,7 @@ function CollectionComposer({
                   <option value="text">Texte</option>
                   <option value="map">Map</option>
                   <option value="media">Média</option>
+                  <option value="text">Texte</option>
                   <option value="timeline">Timeline</option>
                 </select>
               </label>
@@ -1834,6 +1854,7 @@ export default function TrainingSession({ setMode }) {
               handleTimelineComplete={session.handleTimelineComplete}
               submitMapAnswer={session.submitMapTrainingAnswer}
               submitMediaAnswer={session.submitMediaTrainingAnswer}
+              submitTextAnswer={session.submitTextTrainingAnswer}
               submitTimelineAnswer={session.submitTimelineTrainingAnswer}
               trainingMode
               trainingElapsedMs={null}
@@ -2110,6 +2131,7 @@ export default function TrainingSession({ setMode }) {
                   handleTimelineComplete={session.handleTimelineComplete}
                   submitMapAnswer={session.submitMapTrainingAnswer}
                   submitMediaAnswer={session.submitMediaTrainingAnswer}
+                  submitTextAnswer={session.submitTextTrainingAnswer}
                   submitTimelineAnswer={session.submitTimelineTrainingAnswer}
                   trainingMode
                   trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}

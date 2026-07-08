@@ -3,7 +3,10 @@ import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
-  return ["media", "map", "timeline"].includes(question?.type_q);
+  return (
+    ["media", "map", "timeline"].includes(question?.type_q) ||
+    (question?.type_q === "text" && Array.isArray(question?.items))
+  );
 }
 
 function reviewItemCount(question) {
@@ -270,6 +273,7 @@ export default function ReviewSession({
   reviewError,
   submitMapAnswer,
   submitMediaAnswer,
+  submitTextAnswer,
   submitTimelineAnswer
 }) {
   const currentQuestion = questions[currentIndex];
@@ -514,6 +518,7 @@ export default function ReviewSession({
               handleTimelineComplete={handleTimelineComplete}
               submitMapAnswer={submitMapAnswer}
               submitMediaAnswer={submitMediaAnswer}
+              submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               allowPartialSubmit={bonusReviewActive}
               compactVisualLayout
@@ -797,6 +802,7 @@ export default function ReviewSession({
               handleTimelineComplete={handleTimelineComplete}
               submitMapAnswer={submitMapAnswer}
               submitMediaAnswer={submitMediaAnswer}
+              submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               allowPartialSubmit={bonusReviewActive}
             />

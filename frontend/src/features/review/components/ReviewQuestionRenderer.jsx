@@ -1,6 +1,7 @@
 import TextReviewCard from "./TextReviewCard";
 import TextTrainingCard from "./TextTrainingCard";
 import MediaReview from "./MediaReview";
+import TextGroupReview from "./TextGroupReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
 import {
@@ -37,6 +38,7 @@ export default function ReviewQuestionRenderer({
     handleTimelineComplete,
     submitMapAnswer,
     submitMediaAnswer,
+    submitTextAnswer,
     submitTimelineAnswer,
     allowPartialSubmit = false,
     trainingMode = false,
@@ -106,6 +108,22 @@ export default function ReviewQuestionRenderer({
                 reviewItems={q.items || []}
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
+                fillAvailableHeight={compactVisualLayout}
+            />
+        );
+    }
+
+    if (q.type_q === "text" && q.items) {
+        return (
+            <TextGroupReview
+                key={renderKey}
+                group={q}
+                reviewItems={q.items || []}
+                contextItems={q.context_items || q.items || []}
+                mode={q.mode}
+                onComplete={handleImageComplete}
+                submitAnswer={submitTextAnswer}
+                showQualityControls={!trainingMode}
                 fillAvailableHeight={compactVisualLayout}
             />
         );

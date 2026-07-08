@@ -8,7 +8,7 @@
 - revoir les difficultés des modes car qcm devrait pas envoyer les questions trouvées à l'année prochaine
 - faire une sélection de questions bonus
 - revoir le mode timeline (mettre une timeline globale pour l'année et deux pour mois et jour)
-- ajouter type liste
+- ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
 - ne pas nécessairement reset les records après un edit
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
@@ -25,7 +25,8 @@
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
 - le recap d'images est légèrement moins propre que maps
-- scroll automatique à enlever quand on quitte la preview d'une image de groupe
+- scroll automatique à enlever quand on quitte la preview d'une image de 
+- recap plus grand et flèche du haut et bas pour naviguer entre les questions
 
 ## bugs
 

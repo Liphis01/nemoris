@@ -182,6 +182,30 @@ export function sendMediaAnswer(
 }
 
 
+export function sendTextAnswer(
+  items,
+  mode = undefined,
+  contextCount = undefined,
+  reviewDate = undefined
+) {
+  const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+
+  // items is an object of question_id -> quality, one entry per text pair.
+  return requestOk("/answer_text", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      items,
+      ...(mode ? { mode } : {}),
+      ...answerContextPayload(resolved.contextCount),
+      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
+    })
+  });
+}
+
+
 export function sendTimelineAnswer(items, reviewDate = undefined) {
   // items is an object of question_id -> normalized timeline guesses.
   return requestJson("/answer_timeline", {

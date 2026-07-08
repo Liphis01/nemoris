@@ -21,7 +21,8 @@ const questionTypeOptions = [
 const groupTypeOptions = [
   { value: "", label: "Tous les types" },
   { value: "map", label: "Map" },
-  { value: "media", label: "Média" }
+  { value: "media", label: "Média" },
+  { value: "text", label: "Texte" }
 ];
 
 const groupSortOptions = [

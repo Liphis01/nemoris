@@ -20,7 +20,9 @@ from ..serializers import (
     serialize_map_review_zone,
     serialize_media_review_group,
     serialize_media_review_item,
-    serialize_review_question_item
+    serialize_review_question_item,
+    serialize_text_review_group,
+    serialize_text_review_item
 )
 from .timeline import (
     build_mastered_timeline_anchors,
@@ -38,6 +40,11 @@ from .map_modes import (
     MAP_MODE_MULTIPLE_CHOICE,
     choose_map_review_mode,
     map_mode_difficulty
+)
+from .text_modes import (
+    TEXT_MODE_MATCH,
+    choose_text_review_mode,
+    text_mode_difficulty
 )
 from .mode_selection import (
     MODE_AFFINITIES,
@@ -747,6 +754,7 @@ def _serialize_review_items(
     review_items = []
     map_grouped_items = {}
     media_grouped_items = {}
+    text_grouped_items = {}
     timeline_items = []
 
     for question in questions:
@@ -776,6 +784,19 @@ def _serialize_review_items(
                 }
 
             media_grouped_items[group_id]["questions"].append(question)
+            continue
+
+        if question.group and question.group.type_group == "text":
+            group_id = question.group.id
+
+            if group_id not in text_grouped_items:
+                text_grouped_items[group_id] = {
+                    "group": question.group,
+                    "tags": question.tags or [],
+                    "questions": []
+                }
+
+            text_grouped_items[group_id]["questions"].append(question)
             continue
 
         if question.type_q == "timeline":
@@ -938,7 +959,77 @@ def _serialize_review_items(
             media_review_groups.append(media_group)
             previous_mode = mode
 
-    return review_items + map_review_groups + media_review_groups
+    text_review_groups = []
+
+    for group_data in text_grouped_items.values():
+        group = group_data["group"]
+        due_questions = sorted(group_data["questions"], key=lambda item: item.id)
+        all_group_questions = sorted(
+            [
+                item
+                for item in (group.questions or [])
+                if item.type_q == "text"
+            ],
+            key=lambda item: item.id
+        )
+        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+
+        for chunk_questions in question_chunks:
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
+                )
+            )
+            mode = choose_text_review_mode(
+                chunk_questions,
+                active_context_questions,
+                multiple_choice_context_count=len(choice_context_questions)
+            )
+            context_questions = (
+                choice_context_questions
+                if mode == TEXT_MODE_MATCH
+                else active_context_questions
+            )
+            mode_difficulty = text_mode_difficulty(
+                mode,
+                context_count=len(context_questions),
+                tuning=scheduler_tuning
+            )
+            context_items = [
+                serialize_text_review_item(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in _shuffled_context_questions(
+                    context_questions,
+                    chunk_questions
+                )
+            ]
+            text_group = serialize_text_review_group(
+                group,
+                group_data["tags"],
+                mode=mode,
+                context_items=context_items
+            )
+            text_group["items"] = [
+                serialize_text_review_item(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in chunk_questions
+            ]
+            text_review_groups.append(text_group)
+
+    return (
+        review_items
+        + map_review_groups
+        + media_review_groups
+        + text_review_groups
+    )
 
 
 def serialize_review_items(

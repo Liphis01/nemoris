@@ -21,6 +21,10 @@ from .map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
 )
+from .text_modes import (
+    DEFAULT_TEXT_MODE,
+    normalize_text_mode
+)
 from .map_zones import merge_tags
 from .review import serialize_review_items
 from .tag_hierarchy import (
@@ -44,7 +48,7 @@ TRAINING_RECORD_FIELDS = {
     "question_count",
     "content_fingerprint"
 }
-MODE_GROUP_TYPES = {"map", "media"}
+MODE_GROUP_TYPES = {"map", "media", "text"}
 
 
 def normalize_scope_tag(value):
@@ -250,7 +254,7 @@ def training_fingerprints_for_groups(db, groups):
             db.query(Question)
             .filter(
                 Question.group_id.in_(group_ids),
-                Question.type_q.in_(["map", "media"])
+                Question.type_q.in_(["map", "media", "text"])
             )
             .order_by(Question.id)
             .all()
@@ -301,7 +305,7 @@ def _collection_question_training_signature(question):
         **signature
     }
 
-    if question.group and question.type_q in {"map", "media"}:
+    if question.group and question.type_q in {"map", "media", "text"}:
         payload["group"] = {
             "id": question.group.id,
             "type_group": question.group.type_group,
@@ -448,6 +452,9 @@ def default_training_mode_for_group_type(group_type):
     if group_type == "media":
         return DEFAULT_IMAGE_MODE
 
+    if group_type == "text":
+        return DEFAULT_TEXT_MODE
+
     return None
 
 
@@ -457,6 +464,9 @@ def normalize_training_mode_for_group_type(group_type, mode):
 
     if group_type == "media":
         return normalize_image_mode(mode)
+
+    if group_type == "text":
+        return normalize_text_mode(mode)
 
     return None
 
@@ -945,7 +955,8 @@ def get_training_items(
     collection_id=None,
     tag=None,
     map_mode=None,
-    image_mode=None
+    image_mode=None,
+    text_mode=None
 ):
     if scope_type == "group":
         if group_id is None:
@@ -975,6 +986,7 @@ def get_training_items(
         content_fingerprint = group_training_fingerprint(db, group_id)
         normalized_map_mode = normalize_map_mode(map_mode)
         normalized_image_mode = normalize_image_mode(image_mode)
+        normalized_text_mode = normalize_text_mode(text_mode)
 
         for item in items:
             if item.get("group_id") == group_id:
@@ -983,6 +995,8 @@ def get_training_items(
                     item["mode"] = normalized_map_mode
                 elif item.get("type_q") == "media":
                     item["mode"] = normalized_image_mode
+                elif item.get("type_q") == "text":
+                    item["mode"] = normalized_text_mode
 
         return _shuffled_training_items(items)
 
@@ -1028,6 +1042,7 @@ def get_training_items(
         )
         normalized_map_mode = normalize_map_mode(DEFAULT_MAP_MODE)
         normalized_image_mode = normalize_image_mode(DEFAULT_IMAGE_MODE)
+        normalized_text_mode = normalize_text_mode(DEFAULT_TEXT_MODE)
 
         for item in items:
             item["training_fingerprint"] = content_fingerprint
@@ -1036,6 +1051,8 @@ def get_training_items(
                 item["mode"] = normalized_map_mode
             elif item.get("type_q") == "media":
                 item["mode"] = normalized_image_mode
+            elif item.get("type_q") == "text":
+                item["mode"] = normalized_text_mode
 
             if isinstance(item.get("context_items"), list):
                 context_items = [

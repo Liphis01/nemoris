@@ -21,6 +21,11 @@ const questionCreationTypes = [
     value: "media",
     label: "Groupe média",
     detail: "Créer un groupe d'images, audio ou vidéo"
+  },
+  {
+    value: "text",
+    label: "Groupe texte",
+    detail: "Créer un groupe d'associations texte↔texte"
   }
 ];
 

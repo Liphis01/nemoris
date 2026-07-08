@@ -8,6 +8,7 @@ from ..schemas import (
     MapAnswerRequest,
     MediaAnswerRequest,
     ReviewSettings,
+    TextAnswerRequest,
     TimelineAnswerRequest
 )
 from ..serializers import serialize_progress
@@ -34,6 +35,12 @@ from ..services.image_modes import (
     calibrate_image_quality,
     image_mode_difficulty,
     normalize_image_mode
+)
+from ..services.text_modes import (
+    DEFAULT_TEXT_MODE,
+    calibrate_text_quality,
+    text_mode_difficulty,
+    normalize_text_mode
 )
 from ..services.review import (
     get_bonus_group_entries,
@@ -344,6 +351,19 @@ def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
+@router.post("/answer_text")
+def answer_text(data: TextAnswerRequest, db: Session = Depends(get_db)):
+    apply_answer_batch(
+        db,
+        data.items,
+        text_mode=data.mode or DEFAULT_TEXT_MODE,
+        require_type="text",
+        today=data.review_date,
+        context_count=data.context_count
+    )
+    return {"status": "ok"}
+
+
 def normalize_context_count(value):
     if value is None:
         return None
@@ -359,6 +379,7 @@ def apply_answer_batch(
     items,
     map_mode=None,
     image_mode=None,
+    text_mode=None,
     require_type=None,
     today=None,
     context_count=None
@@ -411,6 +432,11 @@ def apply_answer_batch(
         if image_mode
         else None
     )
+    normalized_text_mode = (
+        normalize_text_mode(text_mode)
+        if text_mode
+        else None
+    )
 
     if normalized_map_mode:
         group_ids = set()
@@ -448,6 +474,23 @@ def apply_answer_batch(
 
             if submitted_image_count == 0:
                 submitted_image_count = len(question_ids)
+
+    elif normalized_text_mode:
+        submitted_text_count = 0
+
+        if submitted_context_count is None:
+            for question in questions:
+                if question.type_q != "text":
+                    continue
+
+                submitted_text_count += 1
+                key = question.group_id
+                context_counts_by_group_id[key] = (
+                    context_counts_by_group_id.get(key, 0) + 1
+                )
+
+            if submitted_text_count == 0:
+                submitted_text_count = len(question_ids)
 
     progress_quality_pairs = []
 
@@ -531,6 +574,42 @@ def apply_answer_batch(
                 progress,
                 raw_quality,
                 metadata
+            ))
+        elif normalized_text_mode:
+            raw_quality = calibrate_text_quality(quality)
+
+            if not should_schedule_answer(progress, raw_quality):
+                continue
+
+            if not progress:
+                progress = create_initial_progress(question_id, today=today)
+                db.add(progress)
+                progress_map[question_id] = progress
+
+            active_context_count = (
+                submitted_context_count
+                if submitted_context_count is not None
+                else context_counts_by_group_id.get(
+                    question.group_id if question else None,
+                    submitted_text_count
+                )
+            )
+            difficulty = text_mode_difficulty(
+                normalized_text_mode,
+                context_count=active_context_count,
+                tuning=scheduler_tuning
+            )
+            progress_quality_pairs.append((
+                progress,
+                raw_quality,
+                {
+                    "text_mode": normalized_text_mode,
+                    "text_context_count": active_context_count,
+                    "raw_quality": raw_quality,
+                    "effective_quality": raw_quality,
+                    "mode_adjusted": difficulty != 1.0,
+                    "mode_difficulty": difficulty
+                }
             ))
         else:
             if not should_schedule_answer(progress, quality):

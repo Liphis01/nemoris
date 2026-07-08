@@ -12,7 +12,8 @@ QuestionType = Literal[
 
 GroupType = Literal[
     "map",
-    "media"
+    "media",
+    "text"
 ]
 
 MapMode = Literal[
@@ -30,13 +31,19 @@ ImageMode = Literal[
     "multiple_choice_image"
 ]
 
+TextMode = Literal[
+    "type_all",
+    "match"
+]
+
 TrainingGroupMode = Literal[
     "type_all",
     "click_prompt",
     "type_prompt",
     "multiple_choice",
     "multiple_choice_label",
-    "multiple_choice_image"
+    "multiple_choice_image",
+    "match"
 ]
 
 
@@ -203,6 +210,13 @@ class MediaAnswerRequest(BaseModel):
     review_date: Optional[date] = None
 
 
+class TextAnswerRequest(BaseModel):
+    items: Dict[int, AnswerQuality]
+    mode: Optional[TextMode] = None
+    context_count: Optional[int] = Field(default=None, ge=0)
+    review_date: Optional[date] = None
+
+
 TimelinePrecision = Literal[
     "year",
     "month",
@@ -299,6 +313,43 @@ class MediaGroupItemsBulkUpdate(BaseModel):
     group: Optional[MediaGroupItemsGroupUpdate] = None
 
     items: List[MediaGroupItemBulkItem] = Field(
+        default_factory=list
+    )
+
+    deleted_item_ids: List[int] = Field(
+        default_factory=list
+    )
+
+
+class TextGroupItemBulkItem(BaseModel):
+
+    id: Optional[int] = None
+
+    question: Optional[str] = ""
+
+    answer: Optional[str] = ""
+
+    aliases: List[str] = Field(
+        default_factory=list
+    )
+
+    data: dict[str, Any] = Field(
+        default_factory=dict
+    )
+
+
+class TextGroupItemsGroupUpdate(BaseModel):
+
+    name: Optional[str] = None
+
+    tags: Optional[List[str]] = None
+
+
+class TextGroupItemsBulkUpdate(BaseModel):
+
+    group: Optional[TextGroupItemsGroupUpdate] = None
+
+    items: List[TextGroupItemBulkItem] = Field(
         default_factory=list
     )
 

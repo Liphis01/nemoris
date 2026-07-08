@@ -7,6 +7,10 @@ from .services.map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
 )
+from .services.text_modes import (
+    DEFAULT_TEXT_MODE,
+    normalize_text_mode
+)
 
 
 def serialize_progress(progress):
@@ -84,7 +88,7 @@ def serialize_manage_question(question):
                 "media": question.group.media,
                 "tags": (
                     question.tags or []
-                    if question.group.type_group in {"map", "media"}
+                    if question.group.type_group in {"map", "media", "text"}
                     else []
                 )
             }
@@ -212,6 +216,59 @@ def serialize_media_review_item(
         "label": question.answer,
 
         "media": question.media,
+
+        "tags": question.tags or [],
+
+        "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "progress": serialize_progress(
+            question.progress
+        ),
+
+        "projected_intervals": preview_intervals(
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite")),
+            mode_difficulty=mode_difficulty,
+            scheduler_tuning=scheduler_tuning
+        )
+    }
+
+
+def serialize_text_review_group(group, tags=None, mode=None, context_items=None):
+    # Runtime aggregation object for a text-to-text association group. Items stay
+    # independently scheduled; review presents the whole set on one screen.
+    return {
+        "group_id": group.id,
+
+        "type_q": "text",
+
+        "name": group.name,
+
+        "media": group.media,
+
+        "tags": tags or [],
+
+        "mode": normalize_text_mode(mode or DEFAULT_TEXT_MODE),
+
+        "context_items": context_items or [],
+
+        "items": []
+    }
+
+
+def serialize_text_review_item(
+    question,
+    mode_difficulty=None,
+    scheduler_tuning=None
+):
+    return {
+        "question_id": question.id,
+
+        "question": question.question,
+
+        "answer": question.answer,
+
+        "label": question.answer,
 
         "tags": question.tags or [],
 

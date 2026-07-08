@@ -11,6 +11,11 @@ const groupCreationTypes = [
     value: "media",
     label: "Groupe média",
     detail: "Images, audio et vidéo à réviser"
+  },
+  {
+    value: "text",
+    label: "Groupe texte",
+    detail: "Associations texte↔texte (ex : pays → capitale)"
   }
 ];
 

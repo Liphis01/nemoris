@@ -15,6 +15,7 @@ from .routers import (
     review,
     stats,
     tags,
+    text_groups,
     training,
     uploads
 )
@@ -53,6 +54,7 @@ def create_app():
     app.include_router(training.router)
     app.include_router(maps.router)
     app.include_router(media_groups.router)
+    app.include_router(text_groups.router)
     app.include_router(uploads.router)
     app.include_router(backup.router)
 

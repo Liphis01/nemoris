@@ -33,6 +33,10 @@ export function getTrainingItems(options = {}) {
     params.set("image_mode", options.imageMode);
   }
 
+  if (options.textMode) {
+    params.set("text_mode", options.textMode);
+  }
+
   const query = params.toString();
 
   return requestJson(`/training${query ? `?${query}` : ""}`);

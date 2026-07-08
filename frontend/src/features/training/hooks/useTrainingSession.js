@@ -132,7 +132,8 @@ function scopeRequestOptions(scope) {
       scopeType: "group",
       groupId: scope.id,
       ...(scope.mapMode ? { mapMode: scope.mapMode } : {}),
-      ...(scope.imageMode ? { imageMode: scope.imageMode } : {})
+      ...(scope.imageMode ? { imageMode: scope.imageMode } : {}),
+      ...(scope.textMode ? { textMode: scope.textMode } : {})
     };
   }
 
@@ -260,7 +261,8 @@ export function useTrainingSession(active = true) {
         ...scope,
         groupMode,
         ...(groupTypeForMode === "map" ? { mapMode: groupMode } : {}),
-        ...(groupTypeForMode === "media" ? { imageMode: groupMode } : {})
+        ...(groupTypeForMode === "media" ? { imageMode: groupMode } : {}),
+        ...(groupTypeForMode === "text" ? { textMode: groupMode } : {})
       }
       : scope;
 
@@ -343,6 +345,7 @@ export function useTrainingSession(active = true) {
 
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitMediaTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
+  const submitTextTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitTimelineTrainingAnswer = useCallback(
     (items) => gradeTrainingTimeline(items),
     []
@@ -566,6 +569,7 @@ export function useTrainingSession(active = true) {
     showAnswer,
     startScope,
     submitMediaTrainingAnswer,
+    submitTextTrainingAnswer,
     submitMapTrainingAnswer,
     submitTimelineTrainingAnswer,
     trainingError,

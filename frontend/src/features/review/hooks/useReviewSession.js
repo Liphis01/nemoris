@@ -6,6 +6,7 @@ import {
   getReview,
   sendMediaAnswer,
   sendMapAnswer,
+  sendTextAnswer,
   sendTimelineAnswer,
   reviseAnswer,
   sendAnswer
@@ -212,6 +213,13 @@ export function useReviewSession(active) {
     mode = undefined,
     contextCount = undefined
   ) => sendMediaAnswer(items, mode, contextCount, reviewDateRef.current),
+  []);
+
+  const submitTextAnswer = useCallback((
+    items,
+    mode = undefined,
+    contextCount = undefined
+  ) => sendTextAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
   const submitTimelineAnswer = useCallback((items) =>
@@ -591,7 +599,8 @@ export function useReviewSession(active) {
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||
-        (current?.type_q === "media" && current?.items)
+        (current?.type_q === "media" && current?.items) ||
+        (current?.type_q === "text" && current?.items)
       ) {
         return;
       }
@@ -661,6 +670,7 @@ export function useReviewSession(active) {
     selectedTextQuality,
     submitMediaAnswer,
     submitMapAnswer,
+    submitTextAnswer,
     submitTimelineAnswer,
     questions,
     reviewError,

@@ -30,6 +30,7 @@ def get_training(
     tag: Optional[str] = None,
     map_mode: Optional[str] = None,
     image_mode: Optional[str] = None,
+    text_mode: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     return get_training_items(
@@ -39,7 +40,8 @@ def get_training(
         collection_id=collection_id,
         tag=tag,
         map_mode=map_mode,
-        image_mode=image_mode
+        image_mode=image_mode,
+        text_mode=text_mode
     )
 
 

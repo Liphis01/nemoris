@@ -845,6 +845,57 @@ class ReviewResponseShapeTests(unittest.TestCase):
             for group in media_groups:
                 self.assertIn(group["mode"], serial_modes)
 
+    def test_text_group_review_uses_text_modes(self):
+        # A text association group is reviewed as one grouped screen using only
+        # the text modes (type_all / match), with question+answer per item.
+        today = date.today()
+        text_group = QuestionGroup(
+            id=70,
+            type_group="text",
+            name="Capitales",
+            media=None,
+            data={}
+        )
+        self.db.add(text_group)
+        pairs = [
+            ("France", "Paris"),
+            ("Allemagne", "Berlin"),
+            ("Espagne", "Madrid"),
+            ("Italie", "Rome"),
+            ("Portugal", "Lisbonne"),
+            ("Belgique", "Bruxelles")
+        ]
+        text_items = [
+            self.add_question(
+                300 + index,
+                type_q="text",
+                question=country,
+                answer=capital,
+                group=text_group,
+                next_review=today
+            )
+            for index, (country, capital) in enumerate(pairs)
+        ]
+        self.db.commit()
+
+        for _ in range(30):
+            response = get_review(db=self.db)
+            text_groups = [
+                item for item in response if item.get("group_id") == 70
+            ]
+
+            self.assertEqual(len(text_groups), 1)
+            group_payload = text_groups[0]
+            self.assertEqual(group_payload["type_q"], "text")
+            self.assertIn(group_payload["mode"], {"type_all", "match"})
+            self.assertEqual(
+                {item["question_id"] for item in group_payload["items"]},
+                {item.id for item in text_items}
+            )
+            for item in group_payload["items"]:
+                self.assertIn("question", item)
+                self.assertEqual(item["label"], item["answer"])
+
     def test_review_endpoint_splits_large_image_groups_into_balanced_chunks(self):
         today = date.today()
         image_group = QuestionGroup(

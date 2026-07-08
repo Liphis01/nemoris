@@ -24,10 +24,14 @@ function emptyGroupDraft(type_group = "") {
   };
 }
 
-function mediaGroupOverrides() {
+function directGroupOverrides(type_group) {
+  const name = type_group === "text"
+    ? "Nouveau groupe texte"
+    : "Nouveau groupe média";
+
   return {
-    type_group: "media",
-    name: "Nouveau groupe média",
+    type_group,
+    name,
     media: null,
     data: {}
   };
@@ -57,12 +61,12 @@ export default function useInspectorEditorMode({
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
   const selectQuestionCreationType = useCallback((type_q) => {
-    if (type_q === "media") {
-      // Media groups skip the intermediate creation form: create the group
+    if (type_q === "media" || type_q === "text") {
+      // Media/text groups skip the intermediate creation form: create the group
       // directly (with a default name) and open its editor.
       setViewMode?.("groups");
       setIsCreatingQuestion(false);
-      createGroup?.(mediaGroupOverrides());
+      createGroup?.(directGroupOverrides(type_q));
       return;
     }
 
@@ -101,10 +105,10 @@ export default function useInspectorEditorMode({
   }, [setIsCreatingQuestion, setQuestionDraft]);
 
   const selectGroupCreationType = useCallback((type_group) => {
-    if (type_group === "media") {
+    if (type_group === "media" || type_group === "text") {
       // Skip the intermediate creation form and open the editor directly.
       setIsCreatingGroup(false);
-      createGroup?.(mediaGroupOverrides());
+      createGroup?.(directGroupOverrides(type_group));
       return;
     }
 

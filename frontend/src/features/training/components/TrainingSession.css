@@ -298,6 +298,11 @@
   color: #7ee2a8;
 }
 
+.training-scope-badge-text {
+  background: #163b63;
+  color: #5eb6ff;
+}
+
 .training-scope-badge-tag {
   background: #2b2047;
   color: #b69cff;
@@ -395,6 +400,10 @@
 
 .training-detail-panel-media {
   border-left-color: #7ee2a8;
+}
+
+.training-detail-panel-text {
+  border-left-color: #5eb6ff;
 }
 
 .training-detail-panel-neutral {
