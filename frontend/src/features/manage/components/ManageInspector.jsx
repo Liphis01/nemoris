@@ -50,6 +50,7 @@ export default function ManageInspector({
     selectGroupCreationType,
     selectQuestionCreationType
   } = useInspectorEditorMode({
+    createGroup,
     createQuestion,
     isCreatingGroup,
     isCreatingQuestion,

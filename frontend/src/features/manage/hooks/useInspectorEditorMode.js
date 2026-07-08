@@ -24,7 +24,23 @@ function emptyGroupDraft(type_group = "", mediaKind = null) {
   };
 }
 
+function defaultMediaGroupName(mediaKind) {
+  if (mediaKind === "audio") return "Nouveau groupe audio";
+  if (mediaKind === "video") return "Nouveau groupe vidéo";
+  return "Nouveau groupe d'images";
+}
+
+function mediaGroupOverrides(mediaKind) {
+  return {
+    type_group: "media",
+    name: defaultMediaGroupName(mediaKind),
+    media: null,
+    data: mediaKind ? { mediaKind } : {}
+  };
+}
+
 export default function useInspectorEditorMode({
+  createGroup,
   createQuestion,
   isCreatingGroup,
   isCreatingQuestion,
@@ -47,7 +63,16 @@ export default function useInspectorEditorMode({
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
   const selectQuestionCreationType = useCallback((type_q, mediaKind = null) => {
-    if (type_q === "map" || type_q === "media") {
+    if (type_q === "media") {
+      // Media groups skip the intermediate creation form: create the group
+      // directly (with a default name) and open its editor.
+      setViewMode?.("groups");
+      setIsCreatingQuestion(false);
+      createGroup?.(mediaGroupOverrides(mediaKind));
+      return;
+    }
+
+    if (type_q === "map") {
       setViewMode?.("groups");
 
       if (startCreateGroup) {
@@ -66,6 +91,7 @@ export default function useInspectorEditorMode({
       prepareQuestionDraftForType(prev, type_q)
     ));
   }, [
+    createGroup,
     setIsCreatingGroup,
     setIsCreatingQuestion,
     setGroupDraft,
@@ -81,8 +107,15 @@ export default function useInspectorEditorMode({
   }, [setIsCreatingQuestion, setQuestionDraft]);
 
   const selectGroupCreationType = useCallback((type_group, mediaKind = null) => {
+    if (type_group === "media") {
+      // Skip the intermediate creation form and open the editor directly.
+      setIsCreatingGroup(false);
+      createGroup?.(mediaGroupOverrides(mediaKind));
+      return;
+    }
+
     setGroupDraft(emptyGroupDraft(type_group, mediaKind));
-  }, [setGroupDraft]);
+  }, [createGroup, setGroupDraft, setIsCreatingGroup]);
 
   const createCurrentQuestion = useCallback(async (submittedDraft) => {
     await createQuestion(submittedDraft || questionDraft);

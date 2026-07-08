@@ -162,8 +162,8 @@ export default function Manage(props) {
     return created;
   }
 
-  async function createGroupWithHighlight() {
-    const created = await props.createGroup?.();
+  async function createGroupWithHighlight(overrides = null) {
+    const created = await props.createGroup?.(overrides);
 
     if (created?.id) {
       props.setViewMode?.("groups");

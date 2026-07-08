@@ -258,27 +258,32 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
-  async function createGroup() {
-    if (!groupDraft.type_group) {
+  async function createGroup(overrides = null) {
+    // Media groups skip the intermediate creation form and are created directly
+    // with a default name; the map form still passes its draft (and its onClick
+    // event, which has no type_group, harmlessly falls back to the draft).
+    const source = overrides && overrides.type_group ? overrides : groupDraft;
+
+    if (!source.type_group) {
       alert("Le type de groupe est requis.");
       return;
     }
 
-    if (!groupDraft.name) {
+    if (!source.name) {
       alert("Le nom du groupe est requis.");
       return;
     }
 
-    if (groupDraft.type_group === "map" && !groupDraft.media) {
+    if (source.type_group === "map" && !source.media) {
       alert("Le fichier SVG de la carte est requis.");
       return;
     }
 
     const createdGroup = await createGroupRequest({
-      type_group: groupDraft.type_group,
-      name: groupDraft.name,
-      media: groupDraft.media || null,
-      data: groupDraft.data
+      type_group: source.type_group,
+      name: source.name,
+      media: source.media || null,
+      data: source.data || {}
     });
 
     setAllGroups(prev => [...prev, createdGroup]);

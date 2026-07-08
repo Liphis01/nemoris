@@ -166,6 +166,7 @@ const imageGroupHeaderTagChipStyle = {
 
 const MediaGroupItemRow = memo(function MediaGroupItemRow({
   aliasInputValue,
+  canUpload,
   item,
   onAddAlias,
   onHorizontalChipWheel,
@@ -173,10 +174,12 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
   onRegisterAliasInput,
   onRemoveAlias,
   onRemoveItem,
+  onReplaceMedia,
   onToggleFavorite,
   onUpdateAliasInput,
   onUpdateItem,
-  selected
+  selected,
+  uploading
 }) {
   const mediaSrc = useMemo(() => resolveMediaUrl(item.media), [item.media]);
   const mediaKind = useMemo(() => getMediaKind(item.media), [item.media]);
@@ -192,6 +195,52 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
       media: event.target.value
     });
   }, [item.tempId, onUpdateItem]);
+
+  const fileInputRef = useRef(null);
+  const [isRowDragging, setIsRowDragging] = useState(false);
+
+  const handlePickFile = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((event) => {
+    const file = event.target.files?.[0];
+
+    if (file) {
+      onReplaceMedia?.(item.tempId, file);
+    }
+
+    event.target.value = "";
+  }, [item.tempId, onReplaceMedia]);
+
+  const handleRowDragOver = useCallback((event) => {
+    if (!canUpload) return;
+
+    if (!Array.from(event.dataTransfer?.items || []).some(i => i.kind === "file")) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsRowDragging(true);
+  }, [canUpload]);
+
+  const handleRowDragLeave = useCallback((event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setIsRowDragging(false);
+    }
+  }, []);
+
+  const handleRowDrop = useCallback((event) => {
+    const file = Array.from(event.dataTransfer?.files || []).find(isMediaFile);
+
+    if (!file) return;
+
+    // Stop the drop from bubbling to the editor's "add new items" handler.
+    event.preventDefault();
+    event.stopPropagation();
+    setIsRowDragging(false);
+    onReplaceMedia?.(item.tempId, file);
+  }, [item.tempId, onReplaceMedia]);
 
   const handleAliasInputChange = useCallback((event) => {
     onUpdateAliasInput(item.tempId, event.target.value);
@@ -216,12 +265,19 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
     <div
       data-image-group-item-row
       data-image-group-item-id={item.id || item.tempId}
+      onDragOver={handleRowDragOver}
+      onDragLeave={handleRowDragLeave}
+      onDrop={handleRowDrop}
       style={{
-        border: selected
-          ? "1px solid #f0c36a"
-          : "1px solid #2a2a2a",
+        border: isRowDragging
+          ? "1px solid rgba(126, 226, 168, 0.85)"
+          : selected
+            ? "1px solid #f0c36a"
+            : "1px solid #2a2a2a",
         borderRadius: "10px",
-        background: selected ? "#241f15" : "#171717",
+        background: isRowDragging
+          ? "#1b241b"
+          : selected ? "#241f15" : "#171717",
         boxSizing: "border-box",
         height: `${MEDIA_GROUP_ROW_HEIGHT}px`,
         padding: "12px",
@@ -269,18 +325,26 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
           )}
         </button>
       ) : (
-        <div
+        <button
+          type="button"
+          onClick={handlePickFile}
+          disabled={!canUpload || uploading}
+          title="Importer un fichier"
           style={{
             ...imagePreviewStyle(false),
             alignItems: "center",
-            color: "#666",
+            color: "#888",
+            cursor: canUpload && !uploading ? "pointer" : "default",
             display: "flex",
+            flexDirection: "column",
             fontSize: "11px",
+            gap: "3px",
             justifyContent: "center"
           }}
         >
-          média
-        </div>
+          <span aria-hidden="true" style={{ fontSize: "18px" }}>＋</span>
+          {uploading ? "Import…" : "média"}
+        </button>
       )}
 
       <div
@@ -299,14 +363,39 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
           />
         </label>
 
-        <label style={{ display: "grid", gap: "6px" }}>
-          <span style={labelStyle}>Média / URL</span>
-          <input
-            value={item.media || ""}
-            onChange={handleMediaChange}
-            style={inputStyle}
-          />
-        </label>
+        <div style={{ display: "grid", gap: "6px", minWidth: 0 }}>
+          <span style={labelStyle}>Média</span>
+          <div style={{ alignItems: "center", display: "flex", gap: "8px", minWidth: 0 }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,audio/*,video/*"
+              onChange={handleFileChange}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              onClick={handlePickFile}
+              disabled={!canUpload || uploading}
+              style={{
+                ...buttonStyle,
+                cursor: canUpload && !uploading ? "pointer" : "not-allowed",
+                flexShrink: 0,
+                fontSize: "13px",
+                opacity: canUpload && !uploading ? 1 : 0.6,
+                padding: "9px 12px"
+              }}
+            >
+              {uploading ? "Import…" : "📁 Importer"}
+            </button>
+            <input
+              value={item.media || ""}
+              onChange={handleMediaChange}
+              placeholder="ou colle une URL"
+              style={{ ...inputStyle, minWidth: 0 }}
+            />
+          </div>
+        </div>
 
         <div style={{ minWidth: 0 }}>
           <div style={{ ...labelStyle, marginBottom: "6px" }}>
@@ -452,6 +541,7 @@ export default function MediaGroupEditor({
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadingItemTempId, setUploadingItemTempId] = useState(null);
   const [importUrlInput, setImportUrlInput] = useState("");
   const [importingUrl, setImportingUrl] = useState(false);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
@@ -665,6 +755,29 @@ export default function MediaGroupEditor({
       )
     );
   }, []);
+
+  const handleReplaceItemMedia = useCallback(async (tempId, file) => {
+    // Upload a file for one existing item and swap its media in place, so a
+    // question's media can be changed without hand-editing the URL.
+    if (!file || !onUploadFile) return;
+
+    setUploadingItemTempId(tempId);
+    setSaveStatus("");
+
+    try {
+      const result = await onUploadFile(file);
+      const media = result?.media || result?.url || "";
+
+      if (media) {
+        updateItem(tempId, { media });
+      }
+    } catch (error) {
+      console.error(error);
+      setSaveStatus("Import impossible");
+    } finally {
+      setUploadingItemTempId(null);
+    }
+  }, [onUploadFile, updateItem]);
 
   const updateAliasInput = useCallback((tempId, value) => {
     setAliasInputByTempId(prev => ({
@@ -1062,29 +1175,13 @@ export default function MediaGroupEditor({
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: "8px"
-          }}
-        >
-          <QuestionEditorField label="Nom du groupe" compact>
-            <input
-              value={editableGroup?.name || ""}
-              onChange={(event) => updateGroupField("name", event.target.value)}
-              style={compactHeaderInputStyle}
-            />
-          </QuestionEditorField>
-
-          <QuestionEditorField label="Média de couverture / URL" compact>
-            <input
-              value={editableGroup?.media || ""}
-              onChange={(event) => updateGroupField("media", event.target.value)}
-              style={compactHeaderInputStyle}
-            />
-          </QuestionEditorField>
-        </div>
+        <QuestionEditorField label="Nom du groupe" compact>
+          <input
+            value={editableGroup?.name || ""}
+            onChange={(event) => updateGroupField("name", event.target.value)}
+            style={compactHeaderInputStyle}
+          />
+        </QuestionEditorField>
 
         <TagEditor
           compact
@@ -1236,6 +1333,7 @@ export default function MediaGroupEditor({
                 >
                   <MediaGroupItemRow
                     aliasInputValue={aliasInputByTempId[item.tempId] || ""}
+                    canUpload={Boolean(onUploadFile)}
                     item={item}
                     onAddAlias={addAlias}
                     onHorizontalChipWheel={handleHorizontalChipWheel}
@@ -1243,10 +1341,12 @@ export default function MediaGroupEditor({
                     onRegisterAliasInput={registerAliasInput}
                     onRemoveAlias={removeAlias}
                     onRemoveItem={removeItem}
+                    onReplaceMedia={handleReplaceItemMedia}
                     onToggleFavorite={toggleFavorite}
                     onUpdateAliasInput={updateAliasInput}
                     onUpdateItem={updateItem}
                     selected={Boolean(selectedItemId && selectedItemId === item.id)}
+                    uploading={uploadingItemTempId === item.tempId}
                   />
                 </div>
               );
