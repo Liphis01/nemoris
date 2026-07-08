@@ -13,8 +13,8 @@ import {
 } from "../imageModes";
 import {
   IMAGE_RECAP_UNANSWERED,
-  useImageReview
-} from "../hooks/useImageReview";
+  useMediaReview
+} from "../hooks/useMediaReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const qualityOptions = [
@@ -583,7 +583,7 @@ function projectedIntervalForImage(item, quality) {
   return Number.isFinite(interval) ? interval : 0;
 }
 
-export default function ImageReview({
+export default function MediaReview({
   group,
   reviewItems,
   contextItems = reviewItems,
@@ -642,7 +642,7 @@ export default function ImageReview({
     skipCurrentPrompt,
     toggleRecapSort = () => {},
     wrongAnsweredCount
-  } = useImageReview(reviewItems, onComplete, submitAnswer, {
+  } = useMediaReview(reviewItems, onComplete, submitAnswer, {
     allowPartialSubmit,
     contextItems,
     mode: requestedMode

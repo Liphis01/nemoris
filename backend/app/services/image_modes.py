@@ -32,6 +32,13 @@ IMAGE_MULTIPLE_CHOICE_MODES = {
     IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
 }
 
+# Audio is heard one clip at a time rather than scanned in a grid, so only the
+# prompt->name modes make sense for an audio-only media group.
+IMAGE_AUDIO_MODES = (
+    IMAGE_MODE_TYPE_PROMPT,
+    IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+)
+
 
 def normalize_image_mode(mode):
     value = str(mode or "").strip()
@@ -125,6 +132,7 @@ def choose_image_review_mode(
     context_questions,
     multiple_choice_context_count=None,
     discouraged_modes=None,
+    audio_only=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -208,6 +216,13 @@ def choose_image_review_mode(
             for mode in eligible_modes
             if mode != IMAGE_MODE_CLICK_PROMPT
         ]
+
+    if audio_only:
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode in IMAGE_AUDIO_MODES
+        ] or [IMAGE_MODE_TYPE_PROMPT]
 
     return weighted_mode_choice(
         eligible_modes,

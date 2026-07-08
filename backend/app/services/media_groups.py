@@ -5,6 +5,7 @@ from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
 from .map_zones import merge_tags
 from .media import (
+    MEDIA_UPLOAD_MAX_BYTES,
     delete_unreferenced_media_files,
     media_points_to_same_static_file,
     store_remote_image,
@@ -13,15 +14,15 @@ from .media import (
 from .questions import delete_question_dependents
 
 
-def derive_image_group_tags(questions):
+def derive_media_group_tags(questions):
     return merge_tags(*[
         question.tags or []
         for question in questions or []
-        if question.type_q == "image"
+        if question.type_q == "media"
     ])
 
 
-def get_image_group_or_404(db, group_id: int):
+def get_media_group_or_404(db, group_id: int):
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)
@@ -31,13 +32,13 @@ def get_image_group_or_404(db, group_id: int):
     if not group:
         raise HTTPException(404, "Group not found")
 
-    if group.type_group != "image":
-        raise HTTPException(400, "Group is not an image group")
+    if group.type_group != "media":
+        raise HTTPException(400, "Group is not a media group")
 
     return group
 
 
-def serialize_image_item_for_editor(question):
+def serialize_media_item_for_editor(question):
     return {
         "id": question.id,
         "type_q": question.type_q,
@@ -53,7 +54,7 @@ def serialize_image_item_for_editor(question):
     }
 
 
-def list_image_group_items(db, group_id: int):
+def list_media_group_items(db, group_id: int):
     group = (
         db.query(QuestionGroup)
         .options(joinedload(QuestionGroup.questions).joinedload(Question.progress))
@@ -64,40 +65,44 @@ def list_image_group_items(db, group_id: int):
     if not group:
         raise HTTPException(404, "Group not found")
 
-    if group.type_group != "image":
-        raise HTTPException(400, "Group is not an image group")
+    if group.type_group != "media":
+        raise HTTPException(400, "Group is not a media group")
 
     return [
-        serialize_image_item_for_editor(question)
+        serialize_media_item_for_editor(question)
         for question in group.questions
-        if question.type_q == "image"
+        if question.type_q == "media"
     ]
 
 
-def upload_image_group_media(db, group_id: int, upload_file):
-    group = get_image_group_or_404(db, group_id)
+def upload_media_group_media(db, group_id: int, upload_file):
+    group = get_media_group_or_404(db, group_id)
 
     return store_uploaded_image(
         upload_file,
-        storage_subdir=f"image-groups/{group.id}"
+        storage_subdir=f"media-groups/{group.id}",
+        max_bytes=MEDIA_UPLOAD_MAX_BYTES,
+        allow_audio_video=True
     )
 
 
-def upload_image_group_media_url(db, group_id: int, url: str):
-    group = get_image_group_or_404(db, group_id)
+def upload_media_group_media_url(db, group_id: int, url: str):
+    group = get_media_group_or_404(db, group_id)
 
     return store_remote_image(
         url,
-        storage_subdir=f"image-groups/{group.id}"
+        storage_subdir=f"media-groups/{group.id}",
+        max_bytes=MEDIA_UPLOAD_MAX_BYTES,
+        allow_audio_video=True
     )
 
 
-def build_image_question_text(group, answer):
-    label = str(answer or "").strip() or "Image"
+def build_media_question_text(group, answer):
+    label = str(answer or "").strip() or "Média"
     return f"{group.name} - {label}"
 
 
-def build_image_item_data(existing_data, payload_data, aliases):
+def build_media_item_data(existing_data, payload_data, aliases):
     data = {
         **(existing_data or {}),
         **(payload_data or {})
@@ -114,7 +119,7 @@ def media_values_equal(left, right):
     return (left or "") == (right or "") or media_points_to_same_static_file(left, right)
 
 
-def image_item_payload_changed(item, desired_answer, desired_media, desired_data):
+def media_item_payload_changed(item, desired_answer, desired_media, desired_data):
     return (
         (item.answer or "") != desired_answer or
         not media_values_equal(item.media, desired_media) or
@@ -122,8 +127,8 @@ def image_item_payload_changed(item, desired_answer, desired_media, desired_data
     )
 
 
-def save_image_group_items(db, group_id: int, payload):
-    group = get_image_group_or_404(db, group_id)
+def save_media_group_items(db, group_id: int, payload):
+    group = get_media_group_or_404(db, group_id)
     group_updates = {}
     shared_tags_provided = False
     shared_tags = None
@@ -154,7 +159,7 @@ def save_image_group_items(db, group_id: int, payload):
         db.query(Question)
         .filter(
             Question.group_id == group_id,
-            Question.type_q == "image"
+            Question.type_q == "media"
         )
         .all()
     )
@@ -173,7 +178,7 @@ def save_image_group_items(db, group_id: int, payload):
     if missing_deleted_ids:
         raise HTTPException(
             404,
-            f"Image items not found: {missing_deleted_ids}"
+            f"Media items not found: {missing_deleted_ids}"
         )
 
     created_ids = []
@@ -201,7 +206,7 @@ def save_image_group_items(db, group_id: int, payload):
         if "name" in group_updates:
             for item in existing_items:
                 if item.id not in deleted_item_ids:
-                    item.question = build_image_question_text(group, item.answer)
+                    item.question = build_media_question_text(group, item.answer)
 
         for item_payload in payload.items:
             aliases = [
@@ -217,17 +222,17 @@ def save_image_group_items(db, group_id: int, payload):
                 if not item or item.id in deleted_item_ids:
                     raise HTTPException(
                         404,
-                        f"Image item {item_payload.id} not found"
+                        f"Media item {item_payload.id} not found"
                     )
 
             if not item:
                 item = Question(
-                    type_q="image",
-                    question=build_image_question_text(group, item_payload.answer),
+                    type_q="media",
+                    question=build_media_question_text(group, item_payload.answer),
                     answer=item_payload.answer or "",
                     media=item_payload.media or "",
                     tags=shared_tags if shared_tags_provided else [],
-                    data=build_image_item_data(
+                    data=build_media_item_data(
                         {},
                         item_payload.data or {},
                         aliases
@@ -243,7 +248,7 @@ def save_image_group_items(db, group_id: int, payload):
             else:
                 desired_answer = item_payload.answer or ""
                 desired_media = item_payload.media or ""
-                desired_data = build_image_item_data(
+                desired_data = build_media_item_data(
                     item.data or {},
                     item_payload.data or {},
                     aliases
@@ -260,7 +265,7 @@ def save_image_group_items(db, group_id: int, payload):
                     desired_media,
                     desired_data
                 )
-                payload_changed = image_item_payload_changed(
+                payload_changed = media_item_payload_changed(
                     item,
                     desired_answer,
                     desired_media,
@@ -268,7 +273,7 @@ def save_image_group_items(db, group_id: int, payload):
                 )
                 old_media = item.media
                 item.answer = desired_answer
-                item.question = build_image_question_text(group, item.answer)
+                item.question = build_media_question_text(group, item.answer)
                 item.media = desired_media
                 item.data = desired_data
 
@@ -301,12 +306,12 @@ def save_image_group_items(db, group_id: int, payload):
         )
         .filter(
             Question.group_id == group_id,
-            Question.type_q == "image"
+            Question.type_q == "media"
         )
         .all()
     )
     question_count = len(saved_items)
-    response_tags = shared_tags if shared_tags_provided else derive_image_group_tags(
+    response_tags = shared_tags if shared_tags_provided else derive_media_group_tags(
         saved_items
     )
 

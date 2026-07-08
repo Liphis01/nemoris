@@ -5,10 +5,10 @@ import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_TYPE_PROMPT
 } from "../imageModes";
-import ImageReview from "./ImageReview";
+import MediaReview from "./MediaReview";
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 
-vi.mock("./ImageReview", () => ({
+vi.mock("./MediaReview", () => ({
   default: vi.fn(() => null)
 }));
 
@@ -55,15 +55,15 @@ function renderRenderer(props = {}) {
       handleImageComplete={noop}
       handleTimelineComplete={noop}
       submitMapAnswer={noop}
-      submitImageAnswer={noop}
+      submitMediaAnswer={noop}
       submitTimelineAnswer={noop}
       {...props}
     />
   );
 }
 
-function lastImageReviewProps() {
-  return ImageReview.mock.calls.at(-1)[0];
+function lastMediaReviewProps() {
+  return MediaReview.mock.calls.at(-1)[0];
 }
 
 describe("ReviewQuestionRenderer image review props", () => {
@@ -81,21 +81,21 @@ describe("ReviewQuestionRenderer image review props", () => {
       trainingMode: false
     });
 
-    expect(lastImageReviewProps()).toMatchObject({
+    expect(lastMediaReviewProps()).toMatchObject({
       mode,
       separateResolvedItems: true,
       showQualityControls: true
     });
 
     cleanup();
-    ImageReview.mockClear();
+    MediaReview.mockClear();
 
     renderRenderer({
       q: imageQuestion(mode),
       trainingMode: true
     });
 
-    expect(lastImageReviewProps()).toMatchObject({
+    expect(lastMediaReviewProps()).toMatchObject({
       mode,
       separateResolvedItems: true,
       showQualityControls: false
@@ -108,7 +108,7 @@ describe("ReviewQuestionRenderer image review props", () => {
       trainingMode: true
     });
 
-    expect(lastImageReviewProps()).toMatchObject({
+    expect(lastMediaReviewProps()).toMatchObject({
       mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
       separateResolvedItems: false
     });

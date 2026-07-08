@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getBonusReviewStatus,
   getReview,
-  sendImageAnswer,
+  sendMediaAnswer,
   sendMapAnswer,
   sendTimelineAnswer,
   reviseAnswer,
@@ -52,7 +52,7 @@ function bonusEntryTypeLabel(typeQ, isContainer) {
   }
 
   if (typeQ === "map") return "Carte";
-  if (typeQ === "image") return "Images";
+  if (typeQ === "media") return "Médias";
   if (typeQ === "timeline") return "Frise";
 
   return "Groupe";
@@ -160,11 +160,11 @@ export function useReviewSession(active) {
   const lastQuestionIndex = currentIndex - 1;
   const lastQuestion = questions[lastQuestionIndex];
   const currentIsTextLike = current?.type_q === "text" || (
-    current?.type_q === "image" &&
+    current?.type_q === "media" &&
     !current?.items
   );
   const lastQuestionIsTextLike = lastQuestion?.type_q === "text" || (
-    lastQuestion?.type_q === "image" &&
+    lastQuestion?.type_q === "media" &&
     !lastQuestion?.items
   );
   const currentTextAnswer = currentIsTextLike
@@ -251,11 +251,11 @@ export function useReviewSession(active) {
   ) => sendMapAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
-  const submitImageAnswer = useCallback((
+  const submitMediaAnswer = useCallback((
     items,
     mode = undefined,
     contextCount = undefined
-  ) => sendImageAnswer(items, mode, contextCount, reviewDateRef.current),
+  ) => sendMediaAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
   const submitTimelineAnswer = useCallback((items) =>
@@ -631,7 +631,7 @@ export function useReviewSession(active) {
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||
-        (current?.type_q === "image" && current?.items)
+        (current?.type_q === "media" && current?.items)
       ) {
         return;
       }
@@ -698,7 +698,7 @@ export function useReviewSession(active) {
     returnToLastQuestion,
     startBonusReview,
     selectedTextQuality,
-    submitImageAnswer,
+    submitMediaAnswer,
     submitMapAnswer,
     submitTimelineAnswer,
     questions,

@@ -6,7 +6,7 @@ import {
 } from "../utils/questionDrafts";
 
 function canAutosaveSelectedQuestion(selectedItem) {
-  const groupedImage = selectedItem?.type_q === "image" && (
+  const groupedImage = selectedItem?.type_q === "media" && (
     selectedItem.group_id ||
     selectedItem.group?.id
   );

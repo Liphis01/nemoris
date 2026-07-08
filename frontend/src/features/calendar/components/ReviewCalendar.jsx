@@ -34,7 +34,7 @@ const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric"
 });
 
-const calendarTypeOrder = ["text", "map", "timeline", "image"];
+const calendarTypeOrder = ["text", "map", "timeline", "media"];
 const maxCalendarCellTypeBars = 4;
 
 function toDateKey(date) {
@@ -154,7 +154,7 @@ function buildCalendarDays(monthDate) {
 function dueLabel(question) {
   if (question.group?.name) return question.group.name;
   if (question.type_q === "map") return "Map zone";
-  if (question.type_q === "image") return question.answer || "Image";
+  if (question.type_q === "media") return question.answer || "Média";
   if (question.type_q === "timeline") return question.answer || "Timeline";
   return question.answer || "Question";
 }
@@ -164,8 +164,8 @@ function dueTitle(question) {
     return question.answer || question.question || "Zone sans titre";
   }
 
-  if (question.type_q === "image") {
-    return question.answer || question.question || "Image sans titre";
+  if (question.type_q === "media") {
+    return question.answer || question.question || "Média sans titre";
   }
 
   return question.question || "Question sans titre";
@@ -204,7 +204,7 @@ function getEventGroup(event, groupId) {
     name: `Groupe #${groupId}`,
     type_group: event.question.type_q || "groupe",
     media: null,
-    tags: ["map", "image"].includes(event.question.type_q)
+    tags: ["map", "media"].includes(event.question.type_q)
       ? event.question.tags || []
       : []
   };
@@ -425,7 +425,7 @@ function buildDisplayRows(events) {
     row.tags = mergeTags(
       row.tags,
       row.group?.tags,
-      ["map", "image"].includes(event.question.type_q)
+      ["map", "media"].includes(event.question.type_q)
         ? event.question.tags
         : []
     );

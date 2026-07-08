@@ -4,7 +4,7 @@ import { useReviewSession } from "./useReviewSession";
 import {
   getBonusReviewStatus,
   getReview,
-  sendImageAnswer,
+  sendMediaAnswer,
   sendMapAnswer,
   sendTimelineAnswer,
   reviseAnswer,
@@ -14,7 +14,7 @@ import {
 vi.mock("../../../api/review", () => ({
   getBonusReviewStatus: vi.fn(),
   getReview: vi.fn(),
-  sendImageAnswer: vi.fn(),
+  sendMediaAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
   sendTimelineAnswer: vi.fn(),
   reviseAnswer: vi.fn(),
@@ -38,7 +38,7 @@ describe("useReviewSession", () => {
     });
     sendAnswer.mockResolvedValue({});
     sendMapAnswer.mockResolvedValue({});
-    sendImageAnswer.mockResolvedValue({});
+    sendMediaAnswer.mockResolvedValue({});
     sendTimelineAnswer.mockResolvedValue({});
     reviseAnswer.mockResolvedValue({});
   });
@@ -177,7 +177,7 @@ describe("useReviewSession", () => {
 
     await act(async () => {
       await result.current.submitMapAnswer({ 10: 0 }, "type_all");
-      await result.current.submitImageAnswer({ 11: 2 }, "click_prompt");
+      await result.current.submitMediaAnswer({ 11: 2 }, "click_prompt");
       await result.current.submitTimelineAnswer({ 12: { start: { year: 2000 } } });
     });
 
@@ -187,7 +187,7 @@ describe("useReviewSession", () => {
       undefined,
       "2026-01-01"
     );
-    expect(sendImageAnswer).toHaveBeenCalledWith(
+    expect(sendMediaAnswer).toHaveBeenCalledWith(
       { 11: 2 },
       "click_prompt",
       undefined,

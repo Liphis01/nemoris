@@ -7,7 +7,7 @@ import {
 } from "../../../shared/questionTypes";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
-const typeOrder = ["text", "map", "timeline", "image"];
+const typeOrder = ["text", "map", "timeline", "media"];
 
 const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -99,8 +99,8 @@ function questionTitle(question) {
     return question.answer || question.question || "Zone sans titre";
   }
 
-  if (question.type_q === "image") {
-    return question.answer || question.question || "Image sans titre";
+  if (question.type_q === "media") {
+    return question.answer || question.question || "Média sans titre";
   }
 
   return question.question || "Question sans titre";
@@ -108,7 +108,7 @@ function questionTitle(question) {
 
 function questionSubtitle(question) {
   if (question.group?.name) {
-    return question.type_q === "map" || question.type_q === "image"
+    return question.type_q === "map" || question.type_q === "media"
       ? question.group.name
       : `${question.group.name} · ${question.answer || "Réponse vide"}`;
   }

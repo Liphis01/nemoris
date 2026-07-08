@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ImageReview from "./ImageReview";
-import { useImageReview } from "../hooks/useImageReview";
+import MediaReview from "./MediaReview";
+import { useMediaReview } from "../hooks/useMediaReview";
 import {
   IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -10,9 +10,9 @@ import {
   IMAGE_MODE_TYPE_PROMPT
 } from "../imageModes";
 
-vi.mock("../hooks/useImageReview", () => ({
+vi.mock("../hooks/useMediaReview", () => ({
   IMAGE_RECAP_UNANSWERED: "unanswered",
-  useImageReview: vi.fn()
+  useMediaReview: vi.fn()
 }));
 
 const noop = vi.fn();
@@ -82,7 +82,7 @@ function tileFor(container, questionId) {
   return container.querySelector(`[data-image-question-id="${questionId}"]`);
 }
 
-function mockImageReviewState({
+function mockMediaReviewState({
   mode = IMAGE_MODE_TYPE_PROMPT,
   resultMode = false,
   rowOverrides = {},
@@ -103,7 +103,7 @@ function mockImageReviewState({
     ...rowOverrides
   };
 
-  useImageReview.mockReturnValue({
+  useMediaReview.mockReturnValue({
     activeQuestionId: row.isActive ? row.item.question_id : null,
     answeredCount: row.isFound ? 1 : 0,
     choiceOptions: [],
@@ -141,9 +141,9 @@ function mockImageReviewState({
   return row;
 }
 
-function renderImageReview(props = {}) {
+function renderMediaReview(props = {}) {
   return render(
-    <ImageReview
+    <MediaReview
       group={{ name: "Images" }}
       reviewItems={[{ question_id: 1 }]}
       onComplete={noop}
@@ -153,22 +153,22 @@ function renderImageReview(props = {}) {
   );
 }
 
-function renderImageReviewWithState(initialState) {
+function renderMediaReviewWithState(initialState) {
   let hookState = initialState;
   const props = {
     reviewItems: hookState.gridItems.map(row => row.item)
   };
 
-  useImageReview.mockImplementation(() => hookState);
+  useMediaReview.mockImplementation(() => hookState);
 
-  const rendered = renderImageReview(props);
+  const rendered = renderMediaReview(props);
 
   return {
     ...rendered,
     setHookState(nextState) {
       hookState = nextState;
       rendered.rerender(
-        <ImageReview
+        <MediaReview
           group={{ name: "Images" }}
           reviewItems={props.reviewItems}
           onComplete={noop}
@@ -362,15 +362,15 @@ function imageClickHookState({
   };
 }
 
-describe("ImageReview answer label preview", () => {
+describe("MediaReview answer label preview", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
   it("shows the full answer on hover when the revealed label overflows", async () => {
-    const row = mockImageReviewState();
-    renderImageReview();
+    const row = mockMediaReviewState();
+    renderMediaReview();
     const label = screen.getByText(row.item.label);
 
     setElementWidth(label, { clientWidth: 80, scrollWidth: 240 });
@@ -382,8 +382,8 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not show a tooltip when the revealed label fits", async () => {
-    const row = mockImageReviewState();
-    renderImageReview();
+    const row = mockMediaReviewState();
+    renderMediaReview();
     const label = screen.getByText(row.item.label);
 
     setElementWidth(label, { clientWidth: 240, scrollWidth: 240 });
@@ -395,12 +395,12 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not reveal hidden answers even when the label would overflow", async () => {
-    const row = mockImageReviewState({
+    const row = mockMediaReviewState({
       rowOverrides: {
         isFound: false
       }
     });
-    const { container } = renderImageReview();
+    const { container } = renderMediaReview();
     const hiddenLabel = container.querySelector("[data-image-answer-label]");
 
     setElementWidth(hiddenLabel, { clientWidth: 80, scrollWidth: 240 });
@@ -413,8 +413,8 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("shows the training timer while answering image groups", () => {
-    mockImageReviewState();
-    renderImageReview({
+    mockMediaReviewState();
+    renderMediaReview({
       trainingElapsedMs: 12345,
       trainingBestTimeMs: 90000
     });
@@ -426,7 +426,7 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("shows image misses as a striped progress bar segment", () => {
-    mockImageReviewState({
+    mockMediaReviewState({
       resultMode: true,
       rowOverrides: {
         isActive: false,
@@ -440,7 +440,7 @@ describe("ImageReview answer label preview", () => {
         wrongAnsweredCount: 1
       }
     });
-    const { container } = renderImageReview();
+    const { container } = renderMediaReview();
 
     expect(container.querySelector("[data-image-progress-correct]"))
       .toHaveStyle({ width: "0%" });
@@ -453,14 +453,14 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not show a next-image control in type_all mode", () => {
-    mockImageReviewState({
+    mockMediaReviewState({
       mode: IMAGE_MODE_TYPE_ALL,
       rowOverrides: {
         isActive: false,
         isFound: false
       }
     });
-    renderImageReview();
+    renderMediaReview();
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
     expect(screen.getByText("Terminer")).toBeInTheDocument();
@@ -472,7 +472,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(2),
       imageGridRow(3)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typeAllHookState({ rows })
     );
     const shell = container.querySelector("[data-image-review-shell]");
@@ -504,8 +504,8 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(2)
     ];
 
-    useImageReview.mockReturnValue(typeAllHookState({ rows }));
-    const { container } = renderImageReview({
+    useMediaReview.mockReturnValue(typeAllHookState({ rows }));
+    const { container } = renderMediaReview({
       fillAvailableHeight: true,
       group: { name: "Flags" },
       reviewItems: rows.map(row => row.item),
@@ -544,7 +544,7 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not show the type_prompt prompt card", () => {
-    renderImageReviewWithState(typePromptHookState({
+    renderMediaReviewWithState(typePromptHookState({
       rows: [imageGridRow(1)]
     }));
 
@@ -559,7 +559,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(1),
       imageGridRow(2)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typePromptHookState({
         rows,
         hookOverrides: {
@@ -586,7 +586,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(2),
       imageGridRow(3)
     ];
-    renderImageReviewWithState(
+    renderMediaReviewWithState(
       typePromptHookState({
         rows,
         hookOverrides: {
@@ -621,7 +621,7 @@ describe("ImageReview answer label preview", () => {
     const rows = [
       imageGridRow(1)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typePromptHookState({
         rows,
         hookOverrides: {
@@ -647,7 +647,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(1),
       imageGridRow(2)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         mode,
@@ -676,7 +676,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
@@ -722,7 +722,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(1),
       imageGridRow(2)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typePromptHookState({
         rows,
         activeQuestionId: 2
@@ -746,7 +746,7 @@ describe("ImageReview answer label preview", () => {
         feedbackState: "wrong"
       })
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         activeQuestionId: 1,
@@ -790,7 +790,7 @@ describe("ImageReview answer label preview", () => {
         handleChoiceSelect
       }
     });
-    const { container, setHookState } = renderImageReviewWithState(initialState);
+    const { container, setHookState } = renderMediaReviewWithState(initialState);
     const promptBoard = container.querySelector("[data-image-prompt-board]");
     const controlBand = container.querySelector("[data-image-control-band]");
     const promptTiles = promptBoard.querySelectorAll("[data-image-prompt-tile]");
@@ -885,7 +885,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -922,7 +922,7 @@ describe("ImageReview answer label preview", () => {
         isRevealed: true
       })
     ];
-    useImageReview.mockReturnValue(
+    useMediaReview.mockReturnValue(
       typePromptHookState({
         rows,
         activeQuestionId: 2,
@@ -931,7 +931,7 @@ describe("ImageReview answer label preview", () => {
         hookOverrides: { selectItem }
       })
     );
-    const { container } = renderImageReview({
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item),
       separateResolvedItems: true
     });
@@ -972,7 +972,7 @@ describe("ImageReview answer label preview", () => {
       }),
       imageGridRow(3)
     ];
-    useImageReview.mockReturnValue(
+    useMediaReview.mockReturnValue(
       imageClickHookState({
         rows,
         activeQuestionId: 1,
@@ -994,7 +994,7 @@ describe("ImageReview answer label preview", () => {
     });
 
     try {
-      const { container } = renderImageReview({
+      const { container } = renderMediaReview({
         reviewItems: rows.map(row => row.item),
         separateResolvedItems: true
       });
@@ -1025,12 +1025,12 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(1, { isFound: true, quality: 2 }),
       imageGridRow(2, { isLockedMissed: true, quality: 0 })
     ];
-    useImageReview.mockReturnValue({
+    useMediaReview.mockReturnValue({
       ...typeAllHookState({ rows, foundQuestionIds: [1] }),
       resultMode: true,
       wrongAnsweredCount: 1
     });
-    const { container } = renderImageReview({
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item),
       separateResolvedItems: true
     });
@@ -1067,7 +1067,7 @@ describe("ImageReview answer label preview", () => {
         quality: 0
       })
     ];
-    useImageReview.mockReturnValue(
+    useMediaReview.mockReturnValue(
       imageResultHookState({
         rows,
         hookOverrides: {
@@ -1077,7 +1077,7 @@ describe("ImageReview answer label preview", () => {
         }
       })
     );
-    const { container } = renderImageReview({
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item)
     });
 
@@ -1146,8 +1146,8 @@ describe("ImageReview answer label preview", () => {
         quality: 0
       })
     ];
-    useImageReview.mockReturnValue(imageResultHookState({ rows }));
-    const { container } = renderImageReview({
+    useMediaReview.mockReturnValue(imageResultHookState({ rows }));
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item)
     });
     const preview = container.querySelector("[data-image-recap-selected-preview]");
@@ -1180,7 +1180,7 @@ describe("ImageReview answer label preview", () => {
       })
     ];
     const initialState = imageResultHookState({ rows });
-    const { setHookState } = renderImageReviewWithState(initialState);
+    const { setHookState } = renderMediaReviewWithState(initialState);
 
     expect(screen.getAllByText("15").length).toBeGreaterThan(0);
 
@@ -1213,7 +1213,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows: initialRows, foundQuestionIds: [1] })
     );
 
@@ -1253,7 +1253,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows: initialRows })
     );
 
@@ -1296,7 +1296,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(5),
       imageGridRow(6)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows: initialRows, foundQuestionIds: [1, 3, 4] })
     );
 
@@ -1333,7 +1333,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(5),
       imageGridRow(6)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typeAllHookState({ rows })
     );
     const scrollArea = container.querySelector("[data-image-grid-scroll]");
@@ -1374,7 +1374,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows, foundQuestionIds: [1] })
     );
     const input = screen.getByPlaceholderText("Tape une image...");

@@ -342,7 +342,7 @@ export function useTrainingSession(active = true) {
   }, []);
 
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
-  const submitImageTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
+  const submitMediaTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitTimelineTrainingAnswer = useCallback(
     (items) => gradeTrainingTimeline(items),
     []
@@ -505,7 +505,7 @@ export function useTrainingSession(active = true) {
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||
-        (current?.type_q === "image" && current?.items)
+        (current?.type_q === "media" && current?.items)
       ) {
         return;
       }
@@ -565,7 +565,7 @@ export function useTrainingSession(active = true) {
     setShowAnswer,
     showAnswer,
     startScope,
-    submitImageTrainingAnswer,
+    submitMediaTrainingAnswer,
     submitMapTrainingAnswer,
     submitTimelineTrainingAnswer,
     trainingError,

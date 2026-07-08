@@ -14,9 +14,9 @@ import {
   listGroups
 } from "../../../api/groups";
 import {
-  importImageGroupMediaUrl as importImageGroupMediaUrlRequest,
-  uploadImageGroupMedia as uploadImageGroupMediaRequest
-} from "../../../api/imageGroups";
+  importMediaGroupMediaUrl as importMediaGroupMediaUrlRequest,
+  uploadMediaGroupMedia as uploadMediaGroupMediaRequest
+} from "../../../api/mediaGroups";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
@@ -54,12 +54,12 @@ function questionMutationPayload(draft) {
   };
 }
 
-function createInitialGroupDraft(type_group = "") {
+function createInitialGroupDraft(type_group = "", mediaKind = null) {
   return {
     name: "",
     type_group,
     media: "",
-    data: {}
+    data: mediaKind ? { mediaKind } : {}
   };
 }
 
@@ -251,8 +251,8 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
-  function startCreateGroup(type_group = "") {
-    setGroupDraft(createInitialGroupDraft(type_group));
+  function startCreateGroup(type_group = "", mediaKind = null) {
+    setGroupDraft(createInitialGroupDraft(type_group, mediaKind));
     setIsCreatingGroup(true);
     setIsCreatingQuestion(false);
     setSelectedItem(null);
@@ -315,16 +315,16 @@ export function useManageLibrary(mode) {
     return data;
   }
 
-  async function uploadImageGroupMedia(groupId, file) {
+  async function uploadMediaGroupMedia(groupId, file) {
     if (!file || !groupId) return;
 
-    return uploadImageGroupMediaRequest(groupId, file);
+    return uploadMediaGroupMediaRequest(groupId, file);
   }
 
-  async function importImageGroupMediaUrl(groupId, url) {
+  async function importMediaGroupMediaUrl(groupId, url) {
     if (!url || !groupId) return;
 
-    return importImageGroupMediaUrlRequest(groupId, url);
+    return importMediaGroupMediaUrlRequest(groupId, url);
   }
 
   function handleSort(field) {
@@ -450,9 +450,9 @@ export function useManageLibrary(mode) {
     tagFilter,
     handleSort,
     importQuestionMediaUrl,
-    importImageGroupMediaUrl,
+    importMediaGroupMediaUrl,
     uploadQuestionMedia,
-    uploadImageGroupMedia,
+    uploadMediaGroupMedia,
     isCreatingQuestion,
     isCreatingGroup,
     loadAllGroups,

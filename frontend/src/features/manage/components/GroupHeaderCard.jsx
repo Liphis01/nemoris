@@ -14,7 +14,7 @@ export default function GroupHeaderCard({
   const { groupInfo } = row;
   const tags = groupInfo.tags || [];
   const mapTypeStyle = questionTypeChipStyles.map;
-  const imageTypeStyle = questionTypeChipStyles.image;
+  const imageTypeStyle = questionTypeChipStyles.media;
   const textTypeStyle = questionTypeChipStyles.text;
   const background = isOpen
     ? "#1a1a1a"
@@ -210,7 +210,7 @@ export default function GroupHeaderCard({
                 whiteSpace: "nowrap"
               }}
             >
-              {groupInfo.imageCount} IMAGE
+              {groupInfo.imageCount} MÉDIA
             </span>
           )}
           {groupInfo.textCount > 0 && (

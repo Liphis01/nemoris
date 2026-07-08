@@ -44,7 +44,7 @@ function getGroupInfo(groupId, question, groupById) {
     tags: mergeTags(
       group?.tags,
       question?.group?.tags,
-      ["map", "image"].includes(question?.type_q) ? question?.tags : []
+      ["map", "media"].includes(question?.type_q) ? question?.tags : []
     ),
     questions: [],
     mapCount: 0,
@@ -68,7 +68,7 @@ function orderGroupQuestionsForDisplay(questions, sortField) {
   questions.forEach((question) => {
     if (question.type_q === "map") {
       mapQuestions.push(question);
-    } else if (question.type_q === "image") {
+    } else if (question.type_q === "media") {
       imageQuestions.push(question);
     } else {
       otherQuestions.push(question);
@@ -119,7 +119,7 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortFie
     if (question.type_q === "map") {
       groupInfo.mapCount += 1;
       groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
-    } else if (question.type_q === "image") {
+    } else if (question.type_q === "media") {
       groupInfo.imageCount += 1;
       groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
     } else {

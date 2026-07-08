@@ -14,10 +14,10 @@ function prepareTextDraft(draft) {
   };
 }
 
-function prepareImageDraft(draft) {
+function prepareMediaDraft(draft) {
   return {
     ...draft,
-    type_q: "image",
+    type_q: "media",
     media: draft?.media || "",
     data: draft?.data || {}
   };
@@ -47,9 +47,9 @@ const questionEditorAdapters = {
     Editor: TimelineQuestionEditor,
     prepareDraft: prepareTimelineDraft
   },
-  image: {
+  media: {
     Editor: TextQuestionEditor,
-    prepareDraft: prepareImageDraft
+    prepareDraft: prepareMediaDraft
   }
 };
 

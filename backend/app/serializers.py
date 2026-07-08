@@ -84,7 +84,7 @@ def serialize_manage_question(question):
                 "media": question.group.media,
                 "tags": (
                     question.tags or []
-                    if question.group.type_group in {"map", "image"}
+                    if question.group.type_group in {"map", "media"}
                     else []
                 )
             }
@@ -175,13 +175,13 @@ def serialize_map_review_zone(
     }
 
 
-def serialize_image_review_group(group, tags=None, mode=None, context_items=None):
-    # Runtime aggregation object: image rows stay independently scheduled, but
-    # review can keep related due images in one focused screen.
+def serialize_media_review_group(group, tags=None, mode=None, context_items=None):
+    # Runtime aggregation object: media rows stay independently scheduled, but
+    # review can keep related due media items in one focused screen.
     return {
         "group_id": group.id,
 
-        "type_q": "image",
+        "type_q": "media",
 
         "name": group.name,
 
@@ -197,7 +197,7 @@ def serialize_image_review_group(group, tags=None, mode=None, context_items=None
     }
 
 
-def serialize_image_review_item(
+def serialize_media_review_item(
     question,
     mode_difficulty=None,
     scheduler_tuning=None

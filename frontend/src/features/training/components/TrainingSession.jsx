@@ -25,9 +25,12 @@ import {
 import {
   defaultImageMode,
   IMAGE_MODES,
+  IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_TYPE_PROMPT,
   imageModeDetails,
   imageModeLabels
 } from "../../review/imageModes";
+import { getMediaKind } from "../../../shared/media";
 import "./TrainingSession.css";
 
 
@@ -98,6 +101,22 @@ function normalizeText(value) {
 }
 
 
+function groupIsAudioOnly(group) {
+  // Audio can't be scanned in parallel, so audio-only groups drop the grid modes.
+  // Kind is inferred from the items when loaded, else from the creation hint.
+  const items = group?.questions || group?.items || [];
+  const kinds = items
+    .map((item) => getMediaKind(item?.media))
+    .filter(Boolean);
+
+  if (kinds.length > 0) {
+    return kinds.every((kind) => kind === "audio");
+  }
+
+  return group?.data?.mediaKind === "audio";
+}
+
+
 function modeConfigForGroup(group) {
   if (group?.type_group === "map") {
     return {
@@ -108,12 +127,20 @@ function modeConfigForGroup(group) {
     };
   }
 
-  if (group?.type_group === "image") {
+  if (group?.type_group === "media") {
+    const audioOnly = groupIsAudioOnly(group);
+    const modes = audioOnly
+      ? IMAGE_MODES.filter((mode) => (
+        mode === IMAGE_MODE_TYPE_PROMPT ||
+        mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+      ))
+      : IMAGE_MODES;
+
     return {
-      defaultMode: defaultImageMode,
+      defaultMode: audioOnly ? IMAGE_MODE_TYPE_PROMPT : defaultImageMode,
       details: imageModeDetails,
       labels: imageModeLabels,
-      modes: IMAGE_MODES
+      modes
     };
   }
 
@@ -131,7 +158,7 @@ function recordForMode(group, mode) {
 
 
 function isVisualQuestion(question) {
-  return ["image", "map", "timeline"].includes(question?.type_q);
+  return ["media", "map", "timeline"].includes(question?.type_q);
 }
 
 
@@ -199,7 +226,7 @@ function percentBarWidth(percent) {
 
 function groupAccent(group) {
   if (group?.type_group === "map") return "map";
-  if (group?.type_group === "image") return "image";
+  if (group?.type_group === "media") return "media";
 
   return "neutral";
 }
@@ -212,7 +239,7 @@ function collectionPercent(collection) {
 
 function questionTypeLabel(type) {
   if (type === "map") return "Map";
-  if (type === "image") return "Image";
+  if (type === "media") return "Média";
   if (type === "timeline") return "Timeline";
   return "Texte";
 }
@@ -223,7 +250,7 @@ function questionTitle(question) {
     return question.title;
   }
 
-  if (question?.type_q === "map" || question?.type_q === "image") {
+  if (question?.type_q === "map" || question?.type_q === "media") {
     return question.answer || question.question || `Question #${question.id}`;
   }
 
@@ -934,7 +961,7 @@ function CollectionComposer({
                   <option value="">Tous les types</option>
                   <option value="text">Texte</option>
                   <option value="map">Map</option>
-                  <option value="image">Image</option>
+                  <option value="media">Média</option>
                   <option value="timeline">Timeline</option>
                 </select>
               </label>
@@ -1810,7 +1837,7 @@ export default function TrainingSession({ setMode }) {
               handleImageComplete={session.handleImageComplete}
               handleTimelineComplete={session.handleTimelineComplete}
               submitMapAnswer={session.submitMapTrainingAnswer}
-              submitImageAnswer={session.submitImageTrainingAnswer}
+              submitMediaAnswer={session.submitMediaTrainingAnswer}
               submitTimelineAnswer={session.submitTimelineTrainingAnswer}
               trainingMode
               trainingElapsedMs={null}
@@ -2086,7 +2113,7 @@ export default function TrainingSession({ setMode }) {
                   handleImageComplete={session.handleImageComplete}
                   handleTimelineComplete={session.handleTimelineComplete}
                   submitMapAnswer={session.submitMapTrainingAnswer}
-                  submitImageAnswer={session.submitImageTrainingAnswer}
+                  submitMediaAnswer={session.submitMediaTrainingAnswer}
                   submitTimelineAnswer={session.submitTimelineTrainingAnswer}
                   trainingMode
                   trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}

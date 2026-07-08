@@ -140,7 +140,7 @@ export function sendMapAnswer(
 }
 
 
-export function sendImageAnswer(
+export function sendMediaAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
@@ -149,7 +149,7 @@ export function sendImageAnswer(
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
 
   // items is an object of question_id -> quality, one entry per atomic image.
-  return requestOk("/answer_image", {
+  return requestOk("/answer_media", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

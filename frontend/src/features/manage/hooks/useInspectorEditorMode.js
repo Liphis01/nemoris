@@ -15,12 +15,12 @@ function emptyQuestionDraft() {
   };
 }
 
-function emptyGroupDraft(type_group = "") {
+function emptyGroupDraft(type_group = "", mediaKind = null) {
   return {
     name: "",
     type_group,
     media: "",
-    data: {}
+    data: mediaKind ? { mediaKind } : {}
   };
 }
 
@@ -46,18 +46,18 @@ export default function useInspectorEditorMode({
     return "empty";
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
-  const selectQuestionCreationType = useCallback((type_q) => {
-    if (type_q === "map" || type_q === "image") {
+  const selectQuestionCreationType = useCallback((type_q, mediaKind = null) => {
+    if (type_q === "map" || type_q === "media") {
       setViewMode?.("groups");
 
       if (startCreateGroup) {
-        startCreateGroup(type_q);
+        startCreateGroup(type_q, mediaKind);
         return;
       }
 
       setIsCreatingQuestion(false);
       setIsCreatingGroup(true);
-      setGroupDraft(emptyGroupDraft(type_q));
+      setGroupDraft(emptyGroupDraft(type_q, mediaKind));
       setSelectedItem(null);
       return;
     }
@@ -80,8 +80,8 @@ export default function useInspectorEditorMode({
     setQuestionDraft(emptyQuestionDraft());
   }, [setIsCreatingQuestion, setQuestionDraft]);
 
-  const selectGroupCreationType = useCallback((type_group) => {
-    setGroupDraft(emptyGroupDraft(type_group));
+  const selectGroupCreationType = useCallback((type_group, mediaKind = null) => {
+    setGroupDraft(emptyGroupDraft(type_group, mediaKind));
   }, [setGroupDraft]);
 
   const createCurrentQuestion = useCallback(async (submittedDraft) => {

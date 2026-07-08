@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { sendImageAnswer } from "../../../api/review";
+import { sendMediaAnswer } from "../../../api/review";
 import {
   IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -460,10 +460,10 @@ const initialRecapSort = {
 };
 
 
-export function useImageReview(
+export function useMediaReview(
   reviewItems,
   onComplete,
-  submitAnswer = sendImageAnswer,
+  submitAnswer = sendMediaAnswer,
   options = {}
 ) {
   const mode = normalizeImageMode(options.mode);

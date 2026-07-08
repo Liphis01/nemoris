@@ -8,9 +8,22 @@ const groupCreationTypes = [
     detail: "Carte SVG et zones associées"
   },
   {
-    value: "image",
+    value: "media",
+    mediaKind: "image",
     label: "Groupe d'images",
     detail: "Images avec réponses indépendantes"
+  },
+  {
+    value: "media",
+    mediaKind: "audio",
+    label: "Groupe audio",
+    detail: "Sons à reconnaître (ex : alphabet)"
+  },
+  {
+    value: "media",
+    mediaKind: "video",
+    label: "Groupe vidéo",
+    detail: "Clips vidéo à reconnaître"
   }
 ];
 
@@ -34,9 +47,9 @@ export default function GroupCreationTypeChooser({ onSelect, onCancel }) {
 
           return (
             <button
-              key={type.value}
+              key={type.mediaKind ? `${type.value}-${type.mediaKind}` : type.value}
               type="button"
-              onClick={() => onSelect?.(type.value)}
+              onClick={() => onSelect?.(type.value, type.mediaKind)}
               style={{
                 alignItems: "center",
                 background: typeStyle.background,

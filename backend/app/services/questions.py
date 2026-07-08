@@ -17,7 +17,7 @@ GROUP_COMPATIBILITY = {
     # Group type -> allowed Question.type_q values. Add here before allowing a
     # new grouped review type through create/update.
     "map": ["map"],
-    "image": ["image"]
+    "media": ["media"]
 }
 
 
@@ -77,7 +77,7 @@ def create_question(db, payload):
     db.add(question)
     db.flush()
 
-    if payload.group_id and payload.type_q in {"map", "image"}:
+    if payload.group_id and payload.type_q in {"map", "media"}:
         from .training import clear_training_record_for_group_id
 
         clear_training_record_for_group_id(db, payload.group_id)
@@ -179,10 +179,10 @@ def update_question(db, question_id: int, payload):
         question.media,
         question.data or {}
     )
-    old_was_grouped_training_item = old_group_id and old_type in {"map", "image"}
+    old_was_grouped_training_item = old_group_id and old_type in {"map", "media"}
     new_is_grouped_training_item = (
         question.group_id and
-        question.type_q in {"map", "image"}
+        question.type_q in {"map", "media"}
     )
     training_content_changed = (
         old_group_id != question.group_id or
@@ -265,7 +265,7 @@ def delete_question(db, question_id: int):
     question_media = question.media
     question_answer_media = question.answer_media
     group_media = group.media if group else None
-    if group and question.type_q in {"map", "image"}:
+    if group and question.type_q in {"map", "media"}:
         from .training import clear_training_record
 
         clear_training_record(group)

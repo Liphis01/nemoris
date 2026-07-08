@@ -16,10 +16,10 @@ from ..scheduler import (
 )
 from ..models import Progress, Question, QuestionGroup
 from ..serializers import (
-    serialize_image_review_group,
-    serialize_image_review_item,
     serialize_map_review_group,
     serialize_map_review_zone,
+    serialize_media_review_group,
+    serialize_media_review_item,
     serialize_review_question_item
 )
 from .timeline import (
@@ -43,6 +43,7 @@ from .mode_selection import (
     MODE_AFFINITIES,
     question_mode_affinity
 )
+from .media import media_kind_from_name
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
@@ -745,7 +746,7 @@ def _serialize_review_items(
 ):
     review_items = []
     map_grouped_items = {}
-    image_grouped_items = {}
+    media_grouped_items = {}
     timeline_items = []
 
     for question in questions:
@@ -764,17 +765,17 @@ def _serialize_review_items(
             map_grouped_items[group_id]["questions"].append(question)
             continue
 
-        if question.group and question.group.type_group == "image":
+        if question.group and question.group.type_group == "media":
             group_id = question.group.id
 
-            if group_id not in image_grouped_items:
-                image_grouped_items[group_id] = {
+            if group_id not in media_grouped_items:
+                media_grouped_items[group_id] = {
                     "group": question.group,
                     "tags": question.tags or [],
                     "questions": []
                 }
 
-            image_grouped_items[group_id]["questions"].append(question)
+            media_grouped_items[group_id]["questions"].append(question)
             continue
 
         if question.type_q == "timeline":
@@ -856,19 +857,27 @@ def _serialize_review_items(
             ]
             map_review_groups.append(map_group)
 
-    image_review_groups = []
+    media_review_groups = []
 
-    for group_data in image_grouped_items.values():
+    for group_data in media_grouped_items.values():
         group = group_data["group"]
         due_questions = sorted(group_data["questions"], key=lambda item: item.id)
         all_group_questions = sorted(
             [
                 item
                 for item in (group.questions or [])
-                if item.type_q == "image"
+                if item.type_q == "media"
             ],
             key=lambda item: item.id
         )
+        # Audio can't be scanned in parallel, so an audio-only group is limited to
+        # the prompt->name modes. Kind is inferred per item from its extension.
+        media_kinds = {
+            media_kind_from_name(item.media)
+            for item in all_group_questions
+            if item.media
+        }
+        audio_only = bool(media_kinds) and media_kinds == {"audio"}
         question_chunks = _group_review_chunks(due_questions, scheduled_review)
         previous_mode = None
 
@@ -888,7 +897,8 @@ def _serialize_review_items(
                     [previous_mode]
                     if scheduled_review and previous_mode
                     else None
-                )
+                ),
+                audio_only=audio_only
             )
             context_questions = (
                 choice_context_questions
@@ -901,7 +911,7 @@ def _serialize_review_items(
                 tuning=scheduler_tuning
             )
             context_items = [
-                serialize_image_review_item(
+                serialize_media_review_item(
                     item,
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
@@ -911,24 +921,24 @@ def _serialize_review_items(
                     chunk_questions
                 )
             ]
-            image_group = serialize_image_review_group(
+            media_group = serialize_media_review_group(
                 group,
                 group_data["tags"],
                 mode=mode,
                 context_items=context_items
             )
-            image_group["items"] = [
-                serialize_image_review_item(
+            media_group["items"] = [
+                serialize_media_review_item(
                     item,
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
                 )
                 for item in chunk_questions
             ]
-            image_review_groups.append(image_group)
+            media_review_groups.append(media_group)
             previous_mode = mode
 
-    return review_items + map_review_groups + image_review_groups
+    return review_items + map_review_groups + media_review_groups
 
 
 def serialize_review_items(

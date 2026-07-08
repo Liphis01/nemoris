@@ -1,6 +1,6 @@
 import TextReviewCard from "./TextReviewCard";
 import TextTrainingCard from "./TextTrainingCard";
-import ImageReview from "./ImageReview";
+import MediaReview from "./MediaReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
 import {
@@ -36,7 +36,7 @@ export default function ReviewQuestionRenderer({
     handleImageComplete,
     handleTimelineComplete,
     submitMapAnswer,
-    submitImageAnswer,
+    submitMediaAnswer,
     submitTimelineAnswer,
     allowPartialSubmit = false,
     trainingMode = false,
@@ -72,7 +72,7 @@ export default function ReviewQuestionRenderer({
         );
     }
 
-    if (q.type_q === "image" && q.items) {
+    if (q.type_q === "media" && q.items) {
         const imageMode = normalizeImageMode(q.mode);
         const separatesResolvedItems = (
             imageMode === IMAGE_MODE_CLICK_PROMPT ||
@@ -80,14 +80,14 @@ export default function ReviewQuestionRenderer({
         );
 
         return (
-            <ImageReview
+            <MediaReview
                 key={renderKey}
                 group={q}
                 reviewItems={q.items || []}
                 contextItems={q.context_items || q.items || []}
                 mode={q.mode}
                 onComplete={handleImageComplete}
-                submitAnswer={submitImageAnswer}
+                submitAnswer={submitMediaAnswer}
                 allowPartialSubmit={allowPartialSubmit}
                 separateResolvedItems={separatesResolvedItems}
                 showQualityControls={!trainingMode}

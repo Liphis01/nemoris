@@ -9,8 +9,8 @@ export const questionTypeChipStyles = {
     background: "#2b2047",
     color: "#c4b5fd"
   },
-  image: {
-    label: "IMAGE",
+  media: {
+    label: "MÉDIA",
     background: "#3d2f1f",
     color: "#f0c36a"
   },

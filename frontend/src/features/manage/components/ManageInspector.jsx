@@ -1,7 +1,7 @@
 import MapEditor from "../../map/components/MapEditor";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
 import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
-import ImageGroupEditor from "./ImageGroupEditor";
+import MediaGroupEditor from "./MediaGroupEditor";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
 import { getQuestionEditorAdapter } from "./questionEditorAdapters";
@@ -19,8 +19,8 @@ export default function ManageInspector({
   setSelectedItem,
   setEditingZone,
   uploadQuestionMedia,
-  uploadImageGroupMedia,
-  importImageGroupMediaUrl,
+  uploadMediaGroupMedia,
+  importMediaGroupMediaUrl,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -173,11 +173,11 @@ export default function ManageInspector({
 
   const selectedIsMapZone = selectedItem.type_q === "map";
   const isMapGroup = selectedItem.type_group === "map";
-  const selectedIsImageItem = selectedItem.type_q === "image" && (
+  const selectedIsImageItem = selectedItem.type_q === "media" && (
     selectedItem.group_id ||
     selectedItem.group?.id
   );
-  const isImageGroup = selectedItem.type_group === "image";
+  const isImageGroup = selectedItem.type_group === "media";
 
   if (selectedIsMapZone || isMapGroup) {
     // Selecting either a map group or one of its zones opens the full map editor
@@ -325,13 +325,13 @@ export default function ManageInspector({
           flexDirection: "column"
         }}
       >
-        <ImageGroupEditor
+        <MediaGroupEditor
           group={group}
           selectedItem={selectedIsImageItem ? selectedItem : null}
           availableTags={availableTags}
-          onUploadFile={(file) => uploadImageGroupMedia(group.id, file)}
-          onImportMediaUrl={importImageGroupMediaUrl
-            ? (url) => importImageGroupMediaUrl(group.id, url)
+          onUploadFile={(file) => uploadMediaGroupMedia(group.id, file)}
+          onImportMediaUrl={importMediaGroupMediaUrl
+            ? (url) => importMediaGroupMediaUrl(group.id, url)
             : undefined}
           onSave={async (saveResult) => {
             const savedGroup = saveResult?.group;

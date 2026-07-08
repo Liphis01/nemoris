@@ -3,7 +3,7 @@ import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
-  return ["image", "map", "timeline"].includes(question?.type_q);
+  return ["media", "map", "timeline"].includes(question?.type_q);
 }
 
 function reviewItemCount(question) {
@@ -260,7 +260,7 @@ export default function ReviewSession({
   reviewLoading,
   reviewError,
   submitMapAnswer,
-  submitImageAnswer,
+  submitMediaAnswer,
   submitTimelineAnswer
 }) {
   const currentQuestion = questions[currentIndex];
@@ -504,7 +504,7 @@ export default function ReviewSession({
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
               submitMapAnswer={submitMapAnswer}
-              submitImageAnswer={submitImageAnswer}
+              submitMediaAnswer={submitMediaAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               allowPartialSubmit={bonusReviewActive}
               compactVisualLayout
@@ -786,7 +786,7 @@ export default function ReviewSession({
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
               submitMapAnswer={submitMapAnswer}
-              submitImageAnswer={submitImageAnswer}
+              submitMediaAnswer={submitMediaAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               allowPartialSubmit={bonusReviewActive}
             />

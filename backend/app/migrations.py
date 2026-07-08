@@ -320,6 +320,29 @@ def _migration_questions_answer_media_column(connection):
         )
 
 
+def _migration_rename_image_type_to_media(connection):
+    # The image-group feature was generalised into a media group that also holds
+    # audio and video. Rename the persisted type value; the review-mode vocabulary
+    # (progress.history "image_mode") is unrelated and intentionally left alone.
+    if (
+        _table_exists(connection, "questions") and
+        "type_q" in _column_names(connection, "questions")
+    ):
+        connection.exec_driver_sql(
+            "UPDATE questions SET type_q = ? WHERE type_q = ?",
+            ("media", "image")
+        )
+
+    if (
+        _table_exists(connection, "question_groups") and
+        "type_group" in _column_names(connection, "question_groups")
+    ):
+        connection.exec_driver_sql(
+            "UPDATE question_groups SET type_group = ? WHERE type_group = ?",
+            ("media", "image")
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -363,6 +386,12 @@ MIGRATIONS = [
         version="0008",
         name="questions_answer_media_column",
         run=_migration_questions_answer_media_column,
+        requires_backup=True
+    ),
+    Migration(
+        version="0009",
+        name="rename_image_type_to_media",
+        run=_migration_rename_image_type_to_media,
         requires_backup=True
     )
 ]

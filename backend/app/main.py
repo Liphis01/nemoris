@@ -9,8 +9,8 @@ from .routers import (
     backup,
     collections,
     groups,
-    image_groups,
     maps,
+    media_groups,
     questions,
     review,
     stats,
@@ -52,7 +52,7 @@ def create_app():
     app.include_router(tags.router)
     app.include_router(training.router)
     app.include_router(maps.router)
-    app.include_router(image_groups.router)
+    app.include_router(media_groups.router)
     app.include_router(uploads.router)
     app.include_router(backup.router)
 

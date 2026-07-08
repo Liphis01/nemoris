@@ -434,8 +434,8 @@ export default function ManageList({
               borderRadius: "999px",
               background: q.type_q === "map"
                 ? questionTypeChipStyles.map.background
-                : q.type_q === "image"
-                  ? questionTypeChipStyles.image.background
+                : q.type_q === "media"
+                  ? questionTypeChipStyles.media.background
                   : questionTypeChipStyles.text.background,
               opacity: sharedProps.selected || sharedProps.isHighlighted ? 1 : 0.55,
               margin: "6px 0",

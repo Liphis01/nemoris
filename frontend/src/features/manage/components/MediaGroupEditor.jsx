@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getImageGroupItems, patchImageGroupItems } from "../../../api/imageGroups";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaGroupItems, patchMediaGroupItems } from "../../../api/mediaGroups";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
   buttonStyle,
@@ -18,11 +18,11 @@ import {
 } from "./QuestionEditorPrimitives";
 
 let tempItemCounter = 0;
-const IMAGE_GROUP_ROW_HEIGHT = 292;
-const IMAGE_GROUP_ROW_GAP = 10;
-const IMAGE_GROUP_ROW_SLOT_HEIGHT = IMAGE_GROUP_ROW_HEIGHT + IMAGE_GROUP_ROW_GAP;
-const IMAGE_GROUP_OVERSCAN_ROWS = 8;
-const IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT = 720;
+const MEDIA_GROUP_ROW_HEIGHT = 292;
+const MEDIA_GROUP_ROW_GAP = 10;
+const MEDIA_GROUP_ROW_SLOT_HEIGHT = MEDIA_GROUP_ROW_HEIGHT + MEDIA_GROUP_ROW_GAP;
+const MEDIA_GROUP_OVERSCAN_ROWS = 8;
+const MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT = 720;
 
 function nextTempId() {
   tempItemCounter += 1;
@@ -49,15 +49,24 @@ function filenameFromUrl(url) {
   }
 }
 
-function imageFilesFromFileList(fileList) {
-  return Array.from(fileList || []).filter(file =>
-    !file.type || file.type.startsWith("image/")
+function isMediaFile(file) {
+  const type = file?.type || "";
+
+  return (
+    !type ||
+    type.startsWith("image/") ||
+    type.startsWith("audio/") ||
+    type.startsWith("video/")
   );
+}
+
+function imageFilesFromFileList(fileList) {
+  return Array.from(fileList || []).filter(isMediaFile);
 }
 
 function transferHasImageFiles(dataTransfer) {
   return Array.from(dataTransfer?.items || []).some(item =>
-    item.kind === "file" && (!item.type || item.type.startsWith("image/"))
+    item.kind === "file" && isMediaFile(item)
   );
 }
 
@@ -67,7 +76,7 @@ function normalizeItem(item) {
   return {
     tempId: item?.id ? `image-${item.id}` : item?.tempId || nextTempId(),
     id: item?.id || null,
-    type_q: "image",
+    type_q: "media",
     question: item?.question || "",
     answer: item?.answer || item?.label || "",
     media: item?.media || "",
@@ -155,7 +164,7 @@ const imageGroupHeaderTagChipStyle = {
   fontWeight: 700
 };
 
-const ImageGroupItemRow = memo(function ImageGroupItemRow({
+const MediaGroupItemRow = memo(function MediaGroupItemRow({
   aliasInputValue,
   item,
   onAddAlias,
@@ -170,6 +179,7 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
   selected
 }) {
   const mediaSrc = useMemo(() => resolveMediaUrl(item.media), [item.media]);
+  const mediaKind = useMemo(() => getMediaKind(item.media), [item.media]);
 
   const handleAnswerChange = useCallback((event) => {
     onUpdateItem(item.tempId, {
@@ -213,7 +223,7 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
         borderRadius: "10px",
         background: selected ? "#241f15" : "#171717",
         boxSizing: "border-box",
-        height: `${IMAGE_GROUP_ROW_HEIGHT}px`,
+        height: `${MEDIA_GROUP_ROW_HEIGHT}px`,
         padding: "12px",
         display: "grid",
         gridTemplateColumns: "96px minmax(0, 1fr) auto",
@@ -225,22 +235,38 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
         <button
           type="button"
           onClick={() => onPreviewItem(item)}
-          aria-label={`Agrandir ${item.answer || "l'image"}`}
-          title="Agrandir l'image"
+          aria-label={`Agrandir ${item.answer || "le média"}`}
+          title="Agrandir le média"
           style={imagePreviewButtonStyle(true)}
         >
-          <img
-            src={mediaSrc}
-            alt={item.answer || "image"}
-            loading="lazy"
-            decoding="async"
-            fetchpriority="low"
-            style={{
-              maxHeight: "100%",
-              maxWidth: "100%",
-              objectFit: "contain"
-            }}
-          />
+          {mediaKind === "audio" ? (
+            <span aria-hidden="true" style={{ fontSize: "24px" }}>🎧</span>
+          ) : mediaKind === "video" ? (
+            <video
+              src={mediaSrc}
+              muted
+              playsInline
+              preload="metadata"
+              style={{
+                maxHeight: "100%",
+                maxWidth: "100%",
+                objectFit: "contain"
+              }}
+            />
+          ) : (
+            <img
+              src={mediaSrc}
+              alt={item.answer || "média"}
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              style={{
+                maxHeight: "100%",
+                maxWidth: "100%",
+                objectFit: "contain"
+              }}
+            />
+          )}
         </button>
       ) : (
         <div
@@ -253,7 +279,7 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
             justifyContent: "center"
           }}
         >
-          image
+          média
         </div>
       )}
 
@@ -274,7 +300,7 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
         </label>
 
         <label style={{ display: "grid", gap: "6px" }}>
-          <span style={labelStyle}>Image / URL</span>
+          <span style={labelStyle}>Média / URL</span>
           <input
             value={item.media || ""}
             onChange={handleMediaChange}
@@ -408,7 +434,7 @@ const ImageGroupItemRow = memo(function ImageGroupItemRow({
   );
 });
 
-export default function ImageGroupEditor({
+export default function MediaGroupEditor({
   group,
   availableTags = [],
   onSave,
@@ -434,7 +460,7 @@ export default function ImageGroupEditor({
   const [aliasInputByTempId, setAliasInputByTempId] = useState({});
   const [itemsScrollTop, setItemsScrollTop] = useState(0);
   const [itemsViewportHeight, setItemsViewportHeight] = useState(
-    IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT
+    MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT
   );
   const fileInputRef = useRef(null);
   const aliasInputRefs = useRef({});
@@ -467,15 +493,15 @@ export default function ImageGroupEditor({
 
     const viewportHeight = Math.max(
       itemsViewportHeight || 0,
-      IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT
+      MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT
     );
     const startIndex = Math.max(
       0,
-      Math.floor(itemsScrollTop / IMAGE_GROUP_ROW_SLOT_HEIGHT) -
-        IMAGE_GROUP_OVERSCAN_ROWS
+      Math.floor(itemsScrollTop / MEDIA_GROUP_ROW_SLOT_HEIGHT) -
+        MEDIA_GROUP_OVERSCAN_ROWS
     );
-    const visibleCount = Math.ceil(viewportHeight / IMAGE_GROUP_ROW_SLOT_HEIGHT) +
-      (IMAGE_GROUP_OVERSCAN_ROWS * 2) +
+    const visibleCount = Math.ceil(viewportHeight / MEDIA_GROUP_ROW_SLOT_HEIGHT) +
+      (MEDIA_GROUP_OVERSCAN_ROWS * 2) +
       1;
     const endIndex = Math.min(items.length, startIndex + visibleCount);
 
@@ -483,8 +509,8 @@ export default function ImageGroupEditor({
       startIndex,
       endIndex,
       items: items.slice(startIndex, endIndex),
-      topSpacerHeight: startIndex * IMAGE_GROUP_ROW_SLOT_HEIGHT,
-      bottomSpacerHeight: Math.max(0, (items.length - endIndex) * IMAGE_GROUP_ROW_SLOT_HEIGHT)
+      topSpacerHeight: startIndex * MEDIA_GROUP_ROW_SLOT_HEIGHT,
+      bottomSpacerHeight: Math.max(0, (items.length - endIndex) * MEDIA_GROUP_ROW_SLOT_HEIGHT)
     };
   }, [items, itemsScrollTop, itemsViewportHeight]);
 
@@ -519,7 +545,7 @@ export default function ImageGroupEditor({
     setLoading(true);
     setSaveStatus("");
 
-    getImageGroupItems(groupId)
+    getMediaGroupItems(groupId)
       .then((data) => {
         if (cancelled) return;
 
@@ -559,7 +585,7 @@ export default function ImageGroupEditor({
 
     const updateViewportHeight = () => {
       setItemsViewportHeight(
-        scrollElement.clientHeight || IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT
+        scrollElement.clientHeight || MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT
       );
     };
 
@@ -597,14 +623,14 @@ export default function ImageGroupEditor({
 
     const viewportHeight = scrollElement.clientHeight ||
       itemsViewportHeight ||
-      IMAGE_GROUP_DEFAULT_VIEWPORT_HEIGHT;
+      MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT;
     const maxScrollTop = Math.max(
       0,
-      (items.length * IMAGE_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
+      (items.length * MEDIA_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
     );
     const nextScrollTop = Math.min(
       maxScrollTop,
-      Math.max(0, itemIndex * IMAGE_GROUP_ROW_SLOT_HEIGHT)
+      Math.max(0, itemIndex * MEDIA_GROUP_ROW_SLOT_HEIGHT)
     );
 
     scrollElement.scrollTop = nextScrollTop;
@@ -896,7 +922,7 @@ export default function ImageGroupEditor({
     setSaveStatus("Enregistrement...");
 
     try {
-      const saveResult = await patchImageGroupItems(group.id, {
+      const saveResult = await patchMediaGroupItems(group.id, {
         group: {
           name: editableGroup.name || "",
           media: editableGroup.media || "",
@@ -1011,7 +1037,7 @@ export default function ImageGroupEditor({
         >
           <div>
             <div style={{ color: "#777", fontSize: "11px", marginBottom: "3px" }}>
-              Groupe d'images
+              Groupe média
             </div>
             <div style={{ color: "#eee", fontSize: "17px", fontWeight: 800 }}>
               {editableGroup?.name || "Sans titre"}
@@ -1051,7 +1077,7 @@ export default function ImageGroupEditor({
             />
           </QuestionEditorField>
 
-          <QuestionEditorField label="Image de couverture / URL" compact>
+          <QuestionEditorField label="Média de couverture / URL" compact>
             <input
               value={editableGroup?.media || ""}
               onChange={(event) => updateGroupField("media", event.target.value)}
@@ -1084,7 +1110,7 @@ export default function ImageGroupEditor({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,audio/*,video/*"
             multiple
             onChange={(event) => handleUploadFiles(event.target.files)}
             style={{ display: "none" }}
@@ -1099,7 +1125,7 @@ export default function ImageGroupEditor({
               opacity: !onUploadFile || uploading || importingUrl ? 0.6 : 1
             }}
           >
-            {uploading ? "Import..." : "Importer des images"}
+            {uploading ? "Import..." : "Importer des médias"}
           </button>
           <input
             value={importUrlInput}
@@ -1181,7 +1207,7 @@ export default function ImageGroupEditor({
               minHeight: "180px"
             }}
           >
-            Aucun item image
+            Aucun item média
           </div>
         )}
 
@@ -1202,13 +1228,13 @@ export default function ImageGroupEditor({
                 <div
                   key={item.tempId}
                   style={{
-                    height: `${IMAGE_GROUP_ROW_HEIGHT}px`,
+                    height: `${MEDIA_GROUP_ROW_HEIGHT}px`,
                     marginBottom: hasFollowingRows
-                      ? `${IMAGE_GROUP_ROW_GAP}px`
+                      ? `${MEDIA_GROUP_ROW_GAP}px`
                       : 0
                   }}
                 >
-                  <ImageGroupItemRow
+                  <MediaGroupItemRow
                     aliasInputValue={aliasInputByTempId[item.tempId] || ""}
                     item={item}
                     onAddAlias={addAlias}
@@ -1294,18 +1320,45 @@ export default function ImageGroupEditor({
               ×
             </button>
 
-            <img
-              src={resolveMediaUrl(previewItem.media)}
-              alt={previewItem.answer || "image"}
-              style={{
-                background: "#0d0d0d",
-                borderRadius: "8px",
-                display: "block",
-                height: "min(62vh, 560px)",
-                objectFit: "contain",
-                width: "100%"
-              }}
-            />
+            {getMediaKind(previewItem.media) === "audio" ? (
+              <audio
+                src={resolveMediaUrl(previewItem.media)}
+                controls
+                autoPlay
+                style={{
+                  background: "#0d0d0d",
+                  borderRadius: "8px",
+                  display: "block",
+                  width: "100%"
+                }}
+              />
+            ) : getMediaKind(previewItem.media) === "video" ? (
+              <video
+                src={resolveMediaUrl(previewItem.media)}
+                controls
+                style={{
+                  background: "#0d0d0d",
+                  borderRadius: "8px",
+                  display: "block",
+                  height: "min(62vh, 560px)",
+                  objectFit: "contain",
+                  width: "100%"
+                }}
+              />
+            ) : (
+              <img
+                src={resolveMediaUrl(previewItem.media)}
+                alt={previewItem.answer || "média"}
+                style={{
+                  background: "#0d0d0d",
+                  borderRadius: "8px",
+                  display: "block",
+                  height: "min(62vh, 560px)",
+                  objectFit: "contain",
+                  width: "100%"
+                }}
+              />
+            )}
 
             <div
               style={{
@@ -1316,7 +1369,7 @@ export default function ImageGroupEditor({
                 textAlign: "center"
               }}
             >
-              {previewItem.answer || "Image"}
+              {previewItem.answer || "Média"}
             </div>
           </div>
         </div>

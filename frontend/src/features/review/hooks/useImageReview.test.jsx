@@ -4,9 +4,9 @@ import {
   defaultImageSuccessQuality,
   matchesImageAnswer,
   normalizeImageAnswer,
-  useImageReview
-} from "./useImageReview";
-import { sendImageAnswer } from "../../../api/review";
+  useMediaReview
+} from "./useMediaReview";
+import { sendMediaAnswer } from "../../../api/review";
 import {
   IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -16,7 +16,7 @@ import {
 } from "../imageModes";
 
 vi.mock("../../../api/review", () => ({
-  sendImageAnswer: vi.fn()
+  sendMediaAnswer: vi.fn()
 }));
 
 afterEach(() => {
@@ -70,7 +70,7 @@ describe("image review helpers", () => {
   });
 });
 
-describe("useImageReview", () => {
+describe("useMediaReview", () => {
   it("keeps one stable shuffled grid order during the review screen", () => {
     const items = [
       imageItem(1, "France"),
@@ -78,7 +78,7 @@ describe("useImageReview", () => {
       imageItem(3, "Spain")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+      useMediaReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
     const initialOrder = result.current.gridItems.map(row => row.item.question_id);
 
@@ -98,7 +98,7 @@ describe("useImageReview", () => {
       imageItem(3, "Spain")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+      useMediaReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
 
     expect(result.current.activeItem).toBeNull();
@@ -133,7 +133,7 @@ describe("useImageReview", () => {
       imageItem(3, "Spain")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+      useMediaReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
     const target = result.current.gridItems[0];
 
@@ -155,14 +155,14 @@ describe("useImageReview", () => {
   });
 
   it("finishes on the same grid with recap qualities editable", async () => {
-    sendImageAnswer.mockResolvedValue({});
+    sendMediaAnswer.mockResolvedValue({});
     const onComplete = vi.fn();
     const items = [
       imageItem(1, "France"),
       imageItem(2, "Germany"),
       imageItem(3, "Spain")
     ];
-    const { result } = renderHook(() => useImageReview(items, onComplete));
+    const { result } = renderHook(() => useMediaReview(items, onComplete));
     const found = answerActive(result);
 
     act(() => {
@@ -201,7 +201,7 @@ describe("useImageReview", () => {
       await result.current.sendResult();
     });
 
-    expect(sendImageAnswer).toHaveBeenCalledWith(
+    expect(sendMediaAnswer).toHaveBeenCalledWith(
       {
         [found.question_id]: 3,
         [missedIds[0]]: 2,
@@ -218,7 +218,7 @@ describe("useImageReview", () => {
       imageItem(1, "France"),
       imageItem(2, "Germany")
     ];
-    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const { result } = renderHook(() => useMediaReview(items, vi.fn()));
 
     answerActive(result);
     answerActive(result);
@@ -236,7 +236,7 @@ describe("useImageReview", () => {
       imageItem(2, "Germany")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, onComplete, submitAnswer)
+      useMediaReview(items, onComplete, submitAnswer)
     );
     const found = answerActive(result);
     const missed = items.find(item => item.question_id !== found.question_id);
@@ -257,7 +257,7 @@ describe("useImageReview", () => {
       IMAGE_MODE_TYPE_PROMPT,
       2
     );
-    expect(sendImageAnswer).not.toHaveBeenCalled();
+    expect(sendMediaAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
   });
 
@@ -268,7 +268,7 @@ describe("useImageReview", () => {
       imageItem(3, "Spain")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+      useMediaReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
 
     act(() => {
@@ -299,7 +299,7 @@ describe("useImageReview", () => {
         imageItem(4, "Italy")
       ];
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_TYPE_PROMPT
         })
       );
@@ -323,7 +323,7 @@ describe("useImageReview", () => {
       imageItem(3, "Spain")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_TYPE_PROMPT
       })
     );
@@ -349,7 +349,7 @@ describe("useImageReview", () => {
       imageItem(3, "Spain")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_TYPE_PROMPT
       })
     );
@@ -394,7 +394,7 @@ describe("useImageReview", () => {
       imageItem(4, "Italy")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_TYPE_PROMPT
       })
     );
@@ -430,7 +430,7 @@ describe("useImageReview", () => {
       imageItem(2, "Germany")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_PROMPT })
+      useMediaReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_PROMPT })
     );
     const skipped = result.current.currentPromptItem;
 
@@ -461,7 +461,7 @@ describe("useImageReview", () => {
 
     try {
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_CLICK_PROMPT
         })
       );
@@ -542,7 +542,7 @@ describe("useImageReview", () => {
       imageItem(6, "Belgium")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_CLICK_PROMPT,
         contextItems
       })
@@ -580,7 +580,7 @@ describe("useImageReview", () => {
       imageItem(4, "Italy")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         contextItems: items
       })
@@ -615,7 +615,7 @@ describe("useImageReview", () => {
     ];
     try {
       const { result } = renderHook(() =>
-        useImageReview(items, onComplete, submitAnswer, {
+        useMediaReview(items, onComplete, submitAnswer, {
           mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
           contextItems
         })
@@ -668,7 +668,7 @@ describe("useImageReview", () => {
 
     try {
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
           contextItems
         })
@@ -703,7 +703,7 @@ describe("useImageReview", () => {
 
     try {
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
           contextItems
         })
@@ -759,7 +759,7 @@ describe("useImageReview", () => {
 
     try {
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
           contextItems
         })
@@ -800,7 +800,7 @@ describe("useImageReview", () => {
       imageItem(4, "Italy")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         contextItems: items
       })
@@ -848,7 +848,7 @@ describe("useImageReview", () => {
         imageItem(4, "Italy")
       ];
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
           contextItems: items
         })
@@ -886,7 +886,7 @@ describe("useImageReview", () => {
       imageItem(4, "Italy")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
         contextItems: items
       })
@@ -913,7 +913,7 @@ describe("useImageReview", () => {
       imageItem(4, "Italy")
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, {
+      useMediaReview(items, vi.fn(), undefined, {
         mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
         contextItems: items
       })
@@ -959,7 +959,7 @@ describe("useImageReview", () => {
         imageItem(4, "Italy")
       ];
       const { result } = renderHook(() =>
-        useImageReview(items, vi.fn(), undefined, {
+        useMediaReview(items, vi.fn(), undefined, {
           mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
           contextItems: items
         })
@@ -1003,7 +1003,7 @@ describe("useImageReview", () => {
         projected_intervals: { 0: 0, 1: 3, 2: 9, 3: 24 }
       }
     ];
-    const { result } = renderHook(() => useImageReview(items, vi.fn()));
+    const { result } = renderHook(() => useMediaReview(items, vi.fn()));
     const found = answerActive(result);
 
     act(() => {
@@ -1044,7 +1044,7 @@ describe("useImageReview", () => {
       }
     ];
     const { result } = renderHook(() =>
-      useImageReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
+      useMediaReview(items, vi.fn(), undefined, { mode: IMAGE_MODE_TYPE_ALL })
     );
 
     act(() => {

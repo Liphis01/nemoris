@@ -18,9 +18,22 @@ const questionCreationTypes = [
     detail: "Créer un groupe map et ses zones"
   },
   {
-    value: "image",
+    value: "media",
+    mediaKind: "image",
     label: "Groupe d'images",
     detail: "Créer un groupe d'images à réviser"
+  },
+  {
+    value: "media",
+    mediaKind: "audio",
+    label: "Groupe audio",
+    detail: "Créer un groupe de sons à reconnaître"
+  },
+  {
+    value: "media",
+    mediaKind: "video",
+    label: "Groupe vidéo",
+    detail: "Créer un groupe de clips vidéo"
   }
 ];
 
@@ -44,9 +57,9 @@ export default function QuestionCreationTypeChooser({ onSelect, onCancel }) {
 
           return (
             <button
-              key={type.value}
+              key={type.mediaKind ? `${type.value}-${type.mediaKind}` : type.value}
               type="button"
-              onClick={() => onSelect?.(type.value)}
+              onClick={() => onSelect?.(type.value, type.mediaKind)}
               style={{
                 display: "flex",
                 alignItems: "center",

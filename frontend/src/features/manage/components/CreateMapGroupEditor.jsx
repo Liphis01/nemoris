@@ -1,5 +1,5 @@
 import MapFileInput from "../../map/components/MapFileInput";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import {
   buttonStyle,
@@ -26,13 +26,29 @@ export default function CreateMapGroupEditor({
   setGroupDraft
 }) {
   const isMapGroup = groupDraft.type_group === "map";
+  const mediaKind = groupDraft.data?.mediaKind || "image";
+  const groupTypeLabel = isMapGroup
+    ? "Groupe carte"
+    : mediaKind === "audio"
+      ? "Groupe audio"
+      : mediaKind === "video"
+        ? "Groupe vidéo"
+        : "Groupe d'images";
+  const namePlaceholder = isMapGroup
+    ? "Ex : Carte Europe"
+    : mediaKind === "audio"
+      ? "Ex : Alphabet"
+      : mediaKind === "video"
+        ? "Ex : Gestes techniques"
+        : "Ex : Drapeaux";
   const typeStyle = questionTypeChipStyles[groupDraft.type_group] || questionTypeChipStyles.map;
   const mapPreviewSrc = isMapGroup && groupDraft.media
     ? `/maps/${groupDraft.media}`
     : "";
-  const imagePreviewSrc = !isMapGroup && groupDraft.media
+  const coverPreviewSrc = !isMapGroup && groupDraft.media
     ? resolveMediaUrl(groupDraft.media)
     : "";
+  const coverKind = getMediaKind(groupDraft.media);
   const canCreate = Boolean(groupDraft.name) && (
     !isMapGroup || Boolean(groupDraft.media)
   );
@@ -58,7 +74,7 @@ export default function CreateMapGroupEditor({
           textTransform: "uppercase"
         }}
       >
-        {isMapGroup ? "Groupe carte" : "Groupe d'images"}
+        {groupTypeLabel}
       </div>
 
       <label style={stackedLabelStyle}>Nom du groupe</label>
@@ -66,11 +82,11 @@ export default function CreateMapGroupEditor({
         style={stackedInputStyle}
         value={groupDraft.name}
         onChange={(e) => setGroupDraft({ ...groupDraft, name: e.target.value })}
-        placeholder={isMapGroup ? "Ex : Carte Europe" : "Ex : Drapeaux"}
+        placeholder={namePlaceholder}
       />
 
       <label style={stackedLabelStyle}>
-        {isMapGroup ? "Fichier SVG de la carte" : "Image de couverture / URL (optionnel)"}
+        {isMapGroup ? "Fichier SVG de la carte" : "Média de couverture / URL (optionnel)"}
       </label>
       {isMapGroup ? (
         <MapFileInput
@@ -83,7 +99,7 @@ export default function CreateMapGroupEditor({
           style={stackedInputStyle}
           value={groupDraft.media || ""}
           onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
-          placeholder="https://... ou /static/image.jpg"
+          placeholder="https://... ou /static/media.jpg"
         />
       )}
 
@@ -111,19 +127,29 @@ export default function CreateMapGroupEditor({
               width: "100%"
             }}
           />
-        ) : imagePreviewSrc ? (
-          <img
-            src={imagePreviewSrc}
-            alt="Aperçu groupe"
-            style={{
-              height: "100%",
-              objectFit: "contain",
-              width: "100%"
-            }}
-          />
+        ) : coverPreviewSrc ? (
+          coverKind === "audio" ? (
+            <audio src={coverPreviewSrc} controls style={{ width: "100%" }} />
+          ) : coverKind === "video" ? (
+            <video
+              src={coverPreviewSrc}
+              controls
+              style={{ height: "100%", maxWidth: "100%" }}
+            />
+          ) : (
+            <img
+              src={coverPreviewSrc}
+              alt="Aperçu groupe"
+              style={{
+                height: "100%",
+                objectFit: "contain",
+                width: "100%"
+              }}
+            />
+          )
         ) : (
           <span style={{ color: "#666", fontSize: "13px" }}>
-            {isMapGroup ? "Aucun SVG sélectionné" : "Aucune image de couverture"}
+            {isMapGroup ? "Aucun SVG sélectionné" : "Aucune couverture"}
           </span>
         )}
       </div>

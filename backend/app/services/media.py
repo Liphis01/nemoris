@@ -212,6 +212,26 @@ def safe_media_extension(filename: str, media_kind: str):
     return DEFAULT_EXTENSION_BY_KIND[media_kind]
 
 
+def media_kind_from_name(value):
+    # Coarse image/audio/video classification from a filename or URL extension,
+    # mirroring the frontend getMediaKind so audio-only groups can be detected
+    # server-side. Empty stays empty; unknown/extensionless falls back to image.
+    src = str(value or "").strip()
+
+    if not src:
+        return ""
+
+    extension = Path(src.split("?", 1)[0].split("#", 1)[0]).suffix.lower()
+
+    if extension in SAFE_AUDIO_EXTENSIONS:
+        return "audio"
+
+    if extension in SAFE_VIDEO_EXTENSIONS:
+        return "video"
+
+    return "image"
+
+
 def read_upload_bytes(upload_file, max_bytes=IMAGE_UPLOAD_MAX_BYTES):
     total = 0
     chunks = []

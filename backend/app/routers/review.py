@@ -5,8 +5,8 @@ from ..dependencies import get_db
 from ..models import Progress, Question
 from ..schemas import (
     AnswerRequest,
-    ImageAnswerRequest,
     MapAnswerRequest,
+    MediaAnswerRequest,
     ReviewSettings,
     TimelineAnswerRequest
 )
@@ -314,13 +314,13 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
-@router.post("/answer_image")
-def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
+@router.post("/answer_media")
+def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
     apply_answer_batch(
         db,
         data.items,
         image_mode=data.mode or DEFAULT_IMAGE_MODE,
-        require_type="image",
+        require_type="media",
         today=data.review_date,
         context_count=data.context_count
     )
@@ -420,7 +420,7 @@ def apply_answer_batch(
 
         if submitted_context_count is None:
             for question in questions:
-                if question.type_q != "image":
+                if question.type_q != "media":
                     continue
 
                 submitted_image_count += 1

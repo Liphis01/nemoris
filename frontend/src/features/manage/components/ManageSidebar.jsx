@@ -15,13 +15,13 @@ const questionTypeOptions = [
   { value: "text", label: "Text" },
   { value: "map", label: "Map" },
   { value: "timeline", label: "Timeline" },
-  { value: "image", label: "Image" }
+  { value: "media", label: "Média" }
 ];
 
 const groupTypeOptions = [
   { value: "", label: "Tous les types" },
   { value: "map", label: "Map" },
-  { value: "image", label: "Image" }
+  { value: "media", label: "Média" }
 ];
 
 const groupSortOptions = [

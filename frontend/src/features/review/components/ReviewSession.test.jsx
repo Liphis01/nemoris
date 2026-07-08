@@ -28,7 +28,7 @@ const baseProps = {
   reviewLoading: false,
   reviewError: "",
   submitMapAnswer: vi.fn(),
-  submitImageAnswer: vi.fn(),
+  submitMediaAnswer: vi.fn(),
   submitTimelineAnswer: vi.fn()
 };
 
