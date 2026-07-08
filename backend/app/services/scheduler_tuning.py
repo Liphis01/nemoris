@@ -17,6 +17,7 @@ from ..scheduler import (
     review_datetime_for_date,
     update_progress
 )
+from .mode_difficulty import click_prompt_base_difficulty
 from .settings import (
     SCHEDULER_TUNING_SETTINGS_KEY,
     load_scheduler_tuning_settings,
@@ -38,8 +39,8 @@ PARAMETER_STEPS = {
 
 @dataclass
 class TuningParams:
-    type_prompt_difficulty: float = 1.15
-    multiple_choice_difficulty: float = 0.50
+    type_prompt_difficulty: float = 1.05
+    multiple_choice_difficulty: float = 0.55
     click_prompt_bias: float = 0.0
     easy_reward_floor: float = 0.50
     failure_penalty_power: float = 1.0
@@ -167,8 +168,7 @@ def mode_difficulty_for_event(event, params):
         return params.multiple_choice_difficulty
 
     if event.mode == "click_prompt":
-        count = max(1, event.context_count or 1)
-        difficulty = 0.95 - (0.55 / (count ** 0.5))
+        difficulty = click_prompt_base_difficulty(event.context_count)
         return clamp(difficulty + params.click_prompt_bias, 0.35, 0.98)
 
     return 1.0

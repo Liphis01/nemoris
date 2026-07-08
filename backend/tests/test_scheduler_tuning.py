@@ -15,9 +15,13 @@ from app.scheduler import (
     success_reward_factor,
     update_progress
 )
+from app.services.image_modes import image_mode_difficulty
+from app.services.map_modes import map_mode_difficulty
+from app.services.mode_difficulty import click_prompt_base_difficulty
 from app.services.review import get_review_items
 from app.services.scheduler_tuning import (
     CalibrationSample,
+    HistoryEvent,
     TuningParams,
     brier_score,
     choose_candidate,
@@ -27,6 +31,7 @@ from app.services.scheduler_tuning import (
     tune_scheduler
 )
 from app.services.settings import (
+    DEFAULT_SCHEDULER_TUNING_SETTINGS,
     SCHEDULER_TUNING_SETTINGS_KEY,
     save_scheduler_tuning_settings
 )
@@ -336,6 +341,70 @@ def test_easy_mode_scales_whole_interval_on_correct_answer():
     assert hard >= base
 
 
+def test_click_prompt_difficulty_models_shrinking_pool():
+    # Re-anchored curve tracks the AVERAGE (shrinking) pool, so it is lower than
+    # the old 0.95 - 0.55/sqrt(N) at every pool size, and all three formula sites
+    # (map serve, image serve, scheduler replay) agree for a given pool size.
+    expected = {5: 0.5509, 9: 0.65, 16: 0.7225, 30: 0.7812}
+    tuning = DEFAULT_SCHEDULER_TUNING_SETTINGS
+
+    for n, value in expected.items():
+        assert abs(click_prompt_base_difficulty(n) - value) < 0.001
+        assert click_prompt_base_difficulty(n) < 0.95 - (0.55 / (n ** 0.5))
+
+        served_map = map_mode_difficulty("click_prompt", context_count=n, tuning=tuning)
+        served_image = image_mode_difficulty("click_prompt", context_count=n, tuning=tuning)
+        replayed = mode_difficulty_for_event(
+            HistoryEvent(
+                question_id=1,
+                index=0,
+                reviewed_on=date.today(),
+                mode="click_prompt",
+                quality=2,
+                context_count=n
+            ),
+            TuningParams()
+        )
+        assert abs(served_map - served_image) < 1e-9
+        assert abs(served_map - replayed) < 1e-9
+
+
+def test_mode_difficulty_defaults_match_retune():
+    tuning = DEFAULT_SCHEDULER_TUNING_SETTINGS
+
+    assert map_mode_difficulty("multiple_choice", 20, tuning=tuning) == 0.55
+    assert image_mode_difficulty("multiple_choice_label", 20, tuning=tuning) == 0.55
+    assert map_mode_difficulty("type_prompt", 20, tuning=tuning) == 1.05
+    assert image_mode_difficulty("type_prompt", 20, tuning=tuning) == 1.05
+
+
+def test_click_prompt_correct_answer_schedules_sooner_than_old_curve():
+    n = 9
+    new_difficulty = map_mode_difficulty(
+        "click_prompt", context_count=n, tuning=DEFAULT_SCHEDULER_TUNING_SETTINGS
+    )
+    old_difficulty = 0.95 - (0.55 / (n ** 0.5))
+
+    def interval_for(difficulty):
+        progress = Progress(
+            question_id=1,
+            stability=20.0,
+            difficulty=5.0,
+            reps=5,
+            lapses=0,
+            interval=10,
+            last_review=date.today() - timedelta(days=10),
+            next_review=date.today(),
+            history=[]
+        )
+        return update_progress(
+            progress, 2, mode_difficulty=difficulty, enable_fuzzing=False
+        )["interval"]
+
+    assert new_difficulty < old_difficulty
+    assert interval_for(new_difficulty) < interval_for(old_difficulty)
+
+
 def test_answer_scheduling_uses_active_tuning():
     db = memory_session()
     db.add(Question(
@@ -542,5 +611,5 @@ def test_cli_apply_writes_scheduler_tuning_when_gates_pass(tmp_path):
 
     assert result == 0
     assert setting is not None
-    assert setting.value["type_prompt_difficulty"] > 1.15
+    assert setting.value["type_prompt_difficulty"] > 1.05
     db.close()

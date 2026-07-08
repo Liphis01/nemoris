@@ -28,6 +28,7 @@ from app.services.timeline import (
     serialize_timeline_review_item
 )
 from app.services.map_modes import map_mode_difficulty
+from app.services.settings import load_scheduler_tuning_settings
 from app.services.image_modes import image_mode_difficulty
 from app.services.review import get_review_items
 from app.scheduler import preview_intervals
@@ -1126,7 +1127,9 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertTrue(zone_a_history["mode_adjusted"])
         self.assertAlmostEqual(
             zone_a_history["mode_difficulty"],
-            map_mode_difficulty("click_prompt", 2)
+            map_mode_difficulty(
+                "click_prompt", 2, tuning=load_scheduler_tuning_settings(self.db)
+            )
         )
         self.assertIn("mode_reward_factor", zone_a_history)
 

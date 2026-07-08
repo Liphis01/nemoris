@@ -134,11 +134,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
     def test_map_mode_difficulty_uses_type_all_as_reference(self):
         self.assertEqual(map_mode_difficulty("type_all", 2), 1.0)
-        self.assertEqual(map_mode_difficulty("type_prompt", 20), 1.15)
-        self.assertEqual(map_mode_difficulty("multiple_choice", 20), 0.5)
+        self.assertEqual(map_mode_difficulty("type_prompt", 20), 1.05)
+        self.assertEqual(map_mode_difficulty("multiple_choice", 20), 0.55)
         self.assertAlmostEqual(map_mode_difficulty("click_prompt", 1), 0.4)
-        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 4), 0.675)
-        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 16), 0.8125)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 4), 0.505)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 16), 0.7225)
         self.assertLess(map_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_map_review_mode_selector_uses_difficulty_size_and_variety(self):
@@ -275,18 +275,18 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
     def test_image_mode_difficulty_uses_type_all_as_reference(self):
         self.assertEqual(image_mode_difficulty("type_all", 2), 1.0)
-        self.assertEqual(image_mode_difficulty("type_prompt", 20), 1.15)
+        self.assertEqual(image_mode_difficulty("type_prompt", 20), 1.05)
         self.assertEqual(
             image_mode_difficulty("multiple_choice_label", 20),
-            0.5
+            0.55
         )
         self.assertEqual(
             image_mode_difficulty("multiple_choice_image", 20),
-            0.5
+            0.55
         )
         self.assertAlmostEqual(image_mode_difficulty("click_prompt", 1), 0.4)
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 4), 0.675)
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 16), 0.8125)
+        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 4), 0.505)
+        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 16), 0.7225)
         self.assertLess(image_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_image_review_mode_selector_uses_difficulty_size_and_variety(self):

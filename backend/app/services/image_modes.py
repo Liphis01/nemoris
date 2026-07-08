@@ -1,5 +1,4 @@
-import math
-
+from .mode_difficulty import click_prompt_base_difficulty
 from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
@@ -24,8 +23,8 @@ IMAGE_MODES = (
 )
 DEFAULT_IMAGE_MODE = IMAGE_MODE_TYPE_PROMPT
 IMAGE_TYPE_ALL_DIFFICULTY = 1.0
-IMAGE_TYPE_PROMPT_DIFFICULTY = 1.15
-IMAGE_MULTIPLE_CHOICE_DIFFICULTY = 0.5
+IMAGE_TYPE_PROMPT_DIFFICULTY = 1.05
+IMAGE_MULTIPLE_CHOICE_DIFFICULTY = 0.55
 
 IMAGE_MULTIPLE_CHOICE_MODES = {
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -57,12 +56,7 @@ def _tuned_number(tuning, key, default):
 
 
 def image_click_prompt_difficulty(context_count=0, tuning=None):
-    try:
-        count = max(1, int(context_count))
-    except (TypeError, ValueError):
-        count = 1
-
-    difficulty = 0.95 - (0.55 / math.sqrt(count))
+    difficulty = click_prompt_base_difficulty(context_count)
 
     if tuning is None:
         return max(0.4, min(0.95, difficulty))
