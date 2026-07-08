@@ -403,7 +403,7 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
           </div>
           <div
             style={{
-              marginBottom: "8px",
+              marginBottom: (item.aliases || []).length > 0 ? "8px" : 0,
               minWidth: 0,
               position: "relative"
             }}
@@ -415,7 +415,7 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
                 display: "flex",
                 flexWrap: "nowrap",
                 gap: "6px",
-                minHeight: "27px",
+                minHeight: (item.aliases || []).length > 0 ? "27px" : 0,
                 minWidth: 0,
                 overflowX: "auto",
                 overflowY: "hidden",

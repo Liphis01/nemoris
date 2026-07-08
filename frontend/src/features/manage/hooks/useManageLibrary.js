@@ -54,12 +54,12 @@ function questionMutationPayload(draft) {
   };
 }
 
-function createInitialGroupDraft(type_group = "", mediaKind = null) {
+function createInitialGroupDraft(type_group = "") {
   return {
     name: "",
     type_group,
     media: "",
-    data: mediaKind ? { mediaKind } : {}
+    data: {}
   };
 }
 
@@ -251,8 +251,8 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
-  function startCreateGroup(type_group = "", mediaKind = null) {
-    setGroupDraft(createInitialGroupDraft(type_group, mediaKind));
+  function startCreateGroup(type_group = "") {
+    setGroupDraft(createInitialGroupDraft(type_group));
     setIsCreatingGroup(true);
     setIsCreatingQuestion(false);
     setSelectedItem(null);

@@ -103,17 +103,13 @@ function normalizeText(value) {
 
 function groupIsAudioOnly(group) {
   // Audio can't be scanned in parallel, so audio-only groups drop the grid modes.
-  // Kind is inferred from the items when loaded, else from the creation hint.
+  // Kind is inferred per item from the file extension.
   const items = group?.questions || group?.items || [];
   const kinds = items
     .map((item) => getMediaKind(item?.media))
     .filter(Boolean);
 
-  if (kinds.length > 0) {
-    return kinds.every((kind) => kind === "audio");
-  }
-
-  return group?.data?.mediaKind === "audio";
+  return kinds.length > 0 && kinds.every((kind) => kind === "audio");
 }
 
 

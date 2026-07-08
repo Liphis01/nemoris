@@ -19,21 +19,8 @@ const questionCreationTypes = [
   },
   {
     value: "media",
-    mediaKind: "image",
-    label: "Groupe d'images",
-    detail: "Créer un groupe d'images à réviser"
-  },
-  {
-    value: "media",
-    mediaKind: "audio",
-    label: "Groupe audio",
-    detail: "Créer un groupe de sons à reconnaître"
-  },
-  {
-    value: "media",
-    mediaKind: "video",
-    label: "Groupe vidéo",
-    detail: "Créer un groupe de clips vidéo"
+    label: "Groupe média",
+    detail: "Créer un groupe d'images, audio ou vidéo"
   }
 ];
 
@@ -57,9 +44,9 @@ export default function QuestionCreationTypeChooser({ onSelect, onCancel }) {
 
           return (
             <button
-              key={type.mediaKind ? `${type.value}-${type.mediaKind}` : type.value}
+              key={type.value}
               type="button"
-              onClick={() => onSelect?.(type.value, type.mediaKind)}
+              onClick={() => onSelect?.(type.value)}
               style={{
                 display: "flex",
                 alignItems: "center",

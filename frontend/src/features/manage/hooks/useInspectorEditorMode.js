@@ -15,27 +15,21 @@ function emptyQuestionDraft() {
   };
 }
 
-function emptyGroupDraft(type_group = "", mediaKind = null) {
+function emptyGroupDraft(type_group = "") {
   return {
     name: "",
     type_group,
     media: "",
-    data: mediaKind ? { mediaKind } : {}
+    data: {}
   };
 }
 
-function defaultMediaGroupName(mediaKind) {
-  if (mediaKind === "audio") return "Nouveau groupe audio";
-  if (mediaKind === "video") return "Nouveau groupe vidéo";
-  return "Nouveau groupe d'images";
-}
-
-function mediaGroupOverrides(mediaKind) {
+function mediaGroupOverrides() {
   return {
     type_group: "media",
-    name: defaultMediaGroupName(mediaKind),
+    name: "Nouveau groupe média",
     media: null,
-    data: mediaKind ? { mediaKind } : {}
+    data: {}
   };
 }
 
@@ -62,13 +56,13 @@ export default function useInspectorEditorMode({
     return "empty";
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
-  const selectQuestionCreationType = useCallback((type_q, mediaKind = null) => {
+  const selectQuestionCreationType = useCallback((type_q) => {
     if (type_q === "media") {
       // Media groups skip the intermediate creation form: create the group
       // directly (with a default name) and open its editor.
       setViewMode?.("groups");
       setIsCreatingQuestion(false);
-      createGroup?.(mediaGroupOverrides(mediaKind));
+      createGroup?.(mediaGroupOverrides());
       return;
     }
 
@@ -76,13 +70,13 @@ export default function useInspectorEditorMode({
       setViewMode?.("groups");
 
       if (startCreateGroup) {
-        startCreateGroup(type_q, mediaKind);
+        startCreateGroup(type_q);
         return;
       }
 
       setIsCreatingQuestion(false);
       setIsCreatingGroup(true);
-      setGroupDraft(emptyGroupDraft(type_q, mediaKind));
+      setGroupDraft(emptyGroupDraft(type_q));
       setSelectedItem(null);
       return;
     }
@@ -106,15 +100,15 @@ export default function useInspectorEditorMode({
     setQuestionDraft(emptyQuestionDraft());
   }, [setIsCreatingQuestion, setQuestionDraft]);
 
-  const selectGroupCreationType = useCallback((type_group, mediaKind = null) => {
+  const selectGroupCreationType = useCallback((type_group) => {
     if (type_group === "media") {
       // Skip the intermediate creation form and open the editor directly.
       setIsCreatingGroup(false);
-      createGroup?.(mediaGroupOverrides(mediaKind));
+      createGroup?.(mediaGroupOverrides());
       return;
     }
 
-    setGroupDraft(emptyGroupDraft(type_group, mediaKind));
+    setGroupDraft(emptyGroupDraft(type_group));
   }, [createGroup, setGroupDraft, setIsCreatingGroup]);
 
   const createCurrentQuestion = useCallback(async (submittedDraft) => {

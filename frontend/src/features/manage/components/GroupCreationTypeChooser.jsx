@@ -9,21 +9,8 @@ const groupCreationTypes = [
   },
   {
     value: "media",
-    mediaKind: "image",
-    label: "Groupe d'images",
-    detail: "Images avec réponses indépendantes"
-  },
-  {
-    value: "media",
-    mediaKind: "audio",
-    label: "Groupe audio",
-    detail: "Sons à reconnaître (ex : alphabet)"
-  },
-  {
-    value: "media",
-    mediaKind: "video",
-    label: "Groupe vidéo",
-    detail: "Clips vidéo à reconnaître"
+    label: "Groupe média",
+    detail: "Images, audio et vidéo à réviser"
   }
 ];
 
@@ -47,9 +34,9 @@ export default function GroupCreationTypeChooser({ onSelect, onCancel }) {
 
           return (
             <button
-              key={type.mediaKind ? `${type.value}-${type.mediaKind}` : type.value}
+              key={type.value}
               type="button"
-              onClick={() => onSelect?.(type.value, type.mediaKind)}
+              onClick={() => onSelect?.(type.value)}
               style={{
                 alignItems: "center",
                 background: typeStyle.background,
