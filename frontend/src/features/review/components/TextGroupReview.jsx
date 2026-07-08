@@ -91,9 +91,11 @@ export default function TextGroupReview({
   // recap
   const [qualities, setQualities] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [selectedRecapIndex, setSelectedRecapIndex] = useState(0);
 
   const answerOrder = useMemo(() => shuffled(items), [items]);
   const inputRefs = useRef({});
+  const recapRowRefs = useRef({});
 
   const allResolved = isMatch
     ? matchedIds.size >= items.length
@@ -113,6 +115,7 @@ export default function TextGroupReview({
     setQualities(nextQualities);
 
     if (showQualityControls) {
+      setSelectedRecapIndex(0);
       setPhase("recap");
     } else {
       submitResult(nextQualities);
@@ -202,6 +205,48 @@ export default function TextGroupReview({
     setQualities(prev => ({ ...prev, [questionId]: quality }));
   }, []);
 
+  // Keyboard: up/down to move through the rows, 0-3 to grade the selected one.
+  useEffect(() => {
+    if (phase !== "recap") return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        setSelectedRecapIndex(prev =>
+          Math.min(items.length - 1, Math.max(0, prev + delta))
+        );
+        return;
+      }
+
+      // Accept the character (0-3) or the physical key, so the shortcut works
+      // on AZERTY layouts where the top-row digits need Shift.
+      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
+      const quality = ["0", "1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality !== null) {
+        const item = items[selectedRecapIndex];
+        if (!item) return;
+
+        event.preventDefault();
+        setItemQuality(item.question_id, quality);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, items, selectedRecapIndex, setItemQuality]);
+
+  // Keep the selected row visible as the selection moves.
+  useEffect(() => {
+    if (phase !== "recap") return;
+    recapRowRefs.current[selectedRecapIndex]?.scrollIntoView({ block: "nearest" });
+  }, [phase, selectedRecapIndex]);
+
   const containerStyle = {
     display: "flex",
     flexDirection: "column",
@@ -216,42 +261,51 @@ export default function TextGroupReview({
 
   if (phase === "recap") {
     return (
-      <div style={containerStyle}>
-        <div style={{ color: "#8fc7ff", fontSize: "12px", fontWeight: 800, letterSpacing: 1 }}>
-          RÉSULTAT
+      <div style={{ ...containerStyle, maxWidth: "880px" }}>
+        <div style={{ alignItems: "center", color: "#8fc7ff", display: "flex", fontSize: "13px", fontWeight: 800, gap: "10px", justifyContent: "space-between", letterSpacing: 1 }}>
+          <span>RÉSULTAT</span>
+          <span style={{ color: "#666", fontSize: "11px", fontWeight: 600, letterSpacing: 0, textTransform: "none" }}>
+            ↑/↓ pour naviguer · 0-3 pour noter
+          </span>
         </div>
         <div
           className="app-scrollbar"
-          style={{ display: "grid", gap: "8px", overflowY: "auto", paddingRight: "4px" }}
+          style={{ display: "grid", gap: "10px", overflowY: "auto", paddingRight: "4px" }}
         >
-          {items.map(item => {
+          {items.map((item, index) => {
             const quality = qualities[item.question_id] ?? 0;
+            const isSelected = index === selectedRecapIndex;
 
             return (
               <div
                 key={item.question_id}
+                ref={(element) => { recapRowRefs.current[index] = element; }}
                 data-text-recap-row
+                data-selected={isSelected ? "true" : undefined}
+                onClick={() => setSelectedRecapIndex(index)}
                 style={{
                   alignItems: "center",
-                  background: "#161616",
+                  background: isSelected ? "#1c1c1c" : "#161616",
                   border: "1px solid #2a2a2a",
-                  borderLeft: `3px solid ${quality > 0 ? "#38bdf8" : "#f59e0b"}`,
-                  borderRadius: "10px",
+                  borderLeft: `4px solid ${quality > 0 ? "#38bdf8" : "#f59e0b"}`,
+                  borderRadius: "12px",
+                  boxShadow: isSelected ? "0 0 0 2px rgba(143, 199, 255, 0.55)" : "none",
+                  cursor: "pointer",
                   display: "grid",
-                  gap: "10px",
+                  gap: "12px",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
-                  padding: "10px 12px"
+                  padding: "13px 15px"
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#eee", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: "#eee", fontSize: "15px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {item.question}
                   </div>
-                  <div style={{ color: "#8fc7ff", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: "#8fc7ff", fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {item.answer}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "5px" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
                   {qualityOptions.map(option => {
                     const active = quality === option.value;
                     const colors = qualityButtonColors[option.value];
@@ -263,15 +317,18 @@ export default function TextGroupReview({
                         aria-pressed={active}
                         data-text-recap-quality={option.value}
                         title={option.title}
-                        onClick={() => setItemQuality(item.question_id, option.value)}
+                        onClick={() => {
+                          setSelectedRecapIndex(index);
+                          setItemQuality(item.question_id, option.value);
+                        }}
                         style={{
                           background: active ? colors.background : "#222",
                           border: active ? colors.border : "1px solid #333",
                           borderRadius: "8px",
                           color: active ? colors.color : "#999",
                           cursor: "pointer",
-                          fontSize: "15px",
-                          padding: "6px 9px"
+                          fontSize: "18px",
+                          padding: "9px 12px"
                         }}
                       >
                         {option.icon}
@@ -293,7 +350,9 @@ export default function TextGroupReview({
               background: "#1e3a5f",
               border: "1px solid #345b7a",
               color: "#dbeafe",
-              opacity: submitting ? 0.6 : 1
+              fontSize: "15px",
+              opacity: submitting ? 0.6 : 1,
+              padding: "12px 20px"
             }}
           >
             Valider

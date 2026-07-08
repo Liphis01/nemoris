@@ -26,7 +26,6 @@
 - mettre une petite loupe plutôt que le + pour la preview des images
 - le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de 
-- recap plus grand et flèche du haut et bas pour naviguer entre les questions
 
 ## bugs
 
