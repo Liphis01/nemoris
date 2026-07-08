@@ -9,7 +9,12 @@ from app.database import Base
 from app.models import AppSetting, Progress, Question, QuestionGroup
 from app.routers.review import answer_map
 from app.schemas import MapAnswerRequest
-from app.scheduler import preview_intervals
+from app.scheduler import (
+    easy_mode_interval,
+    preview_intervals,
+    success_reward_factor,
+    update_progress
+)
 from app.services.review import get_review_items
 from app.services.scheduler_tuning import (
     CalibrationSample,
@@ -290,6 +295,47 @@ def test_worse_validation_score_does_not_apply(tmp_path):
     db.close()
 
 
+def test_easy_mode_scales_whole_interval_on_correct_answer():
+    # An established card that FSRS would push well past its current interval.
+    progress = Progress(
+        question_id=1,
+        stability=20.0,
+        difficulty=5.0,
+        reps=5,
+        lapses=0,
+        interval=10,
+        last_review=date.today() - timedelta(days=10),
+        next_review=date.today(),
+        history=[]
+    )
+
+    base = update_progress(
+        progress, 2, mode_difficulty=1.0, enable_fuzzing=False
+    )["interval"]
+    easy = update_progress(
+        progress, 2, mode_difficulty=0.5, enable_fuzzing=False
+    )["interval"]
+    hard = update_progress(
+        progress, 2, mode_difficulty=1.15, enable_fuzzing=False
+    )["interval"]
+
+    # Sanity: the correct answer really does push the card further out.
+    assert base > progress.interval
+
+    # Easy mode scales the WHOLE interval (not just its growth), so it lands
+    # strictly sooner than the neutral FSRS interval.
+    assert easy == easy_mode_interval(base, success_reward_factor(0.5))
+    assert easy < base
+
+    # It is also sooner than the old growth-only dampening would have given.
+    previous = progress.interval
+    old_growth_dampened = previous + round((base - previous) * 0.75)
+    assert easy < old_growth_dampened
+
+    # Hard mode still only extends the growth and never lands sooner than base.
+    assert hard >= base
+
+
 def test_answer_scheduling_uses_active_tuning():
     db = memory_session()
     db.add(Question(
@@ -389,7 +435,7 @@ def test_projected_intervals_use_active_tuning():
             "type_prompt_difficulty": 1.15,
             "multiple_choice_difficulty": 0.3,
             "click_prompt_bias": 0.0,
-            "easy_reward_floor": 0.5,
+            "easy_reward_floor": 0.3,
             "failure_penalty_power": 1.0
         }
     )

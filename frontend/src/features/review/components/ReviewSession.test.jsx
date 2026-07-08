@@ -212,8 +212,7 @@ describe("ReviewSession", () => {
       typeLabel: "Question",
       isContainer: false,
       itemCount: 1,
-      tags: ["Geo"],
-      chunks: [{ question_id: 11, type_q: "text" }]
+      tags: ["Geo"]
     };
     const imagesEntry = {
       key: "group:5",
@@ -221,8 +220,7 @@ describe("ReviewSession", () => {
       typeLabel: "Images",
       isContainer: true,
       itemCount: 2,
-      tags: [],
-      chunks: [{ group_id: 5, type_q: "media", items: [] }]
+      tags: []
     };
     renderReviewSession({
       questions: [],

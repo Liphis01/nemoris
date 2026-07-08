@@ -8,7 +8,7 @@
 - revoir les difficultés des modes car qcm devrait pas envoyer les questions trouvées à l'année prochaine
 - faire une sélection de questions bonus
 - revoir le mode timeline (mettre une timeline globale pour l'année et deux pour mois et jour)
-- ajouter mode liste
+- ajouter type liste
 - ne pas nécessairement reset les records après un edit
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
@@ -32,7 +32,6 @@
 - recentrer les svg
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
-- chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - les tags marchent pas bien
 - parfois on peut scroll la page alors qu'il n'y a rien en dessous

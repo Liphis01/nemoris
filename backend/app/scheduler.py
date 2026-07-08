@@ -20,8 +20,8 @@ MAX_DIFFICULTY = 10.0
 MIN_FAILURE_PENALTY_FACTOR = 0.5
 MAX_FAILURE_PENALTY_FACTOR = 2.5
 MAX_SUCCESS_REWARD_FACTOR = 1.5
-DEFAULT_EASY_REWARD_FLOOR = 0.5
-MIN_EASY_REWARD_FLOOR = 0.35
+DEFAULT_EASY_REWARD_FLOOR = 0.3
+MIN_EASY_REWARD_FLOOR = 0.2
 MAX_EASY_REWARD_FLOOR = 0.70
 DEFAULT_FAILURE_PENALTY_POWER = 1.0
 MIN_FAILURE_PENALTY_POWER = 0.70
@@ -734,6 +734,15 @@ def _adjust_interval_for_success(
     return clamp(max(1, interval), 0, FSRS_MAXIMUM_INTERVAL)
 
 
+def easy_mode_interval(base_interval, reward_factor):
+    if base_interval <= 1:
+        return base_interval
+
+    scaled = max(1, round(base_interval * reward_factor))
+
+    return min(base_interval, scaled)
+
+
 def apply_mode_difficulty_to_review(
     progress,
     rating,
@@ -822,11 +831,17 @@ def apply_mode_difficulty_to_review(
                 (difficulty - previous_difficulty) * reward_factor
             )
 
-        interval = _adjust_interval_for_success(
-            previous_interval,
-            base_interval,
-            reward_factor
-        )
+        if mode_difficulty < MODE_REFERENCE_DIFFICULTY:
+            # Easy modes scale the whole interval down (mirrors favorites) so
+            # correct answers are not scheduled so far away.
+            interval = easy_mode_interval(base_interval, reward_factor)
+        else:
+            # Hard modes only extend the interval growth beyond the previous.
+            interval = _adjust_interval_for_success(
+                previous_interval,
+                base_interval,
+                reward_factor
+            )
 
         if interval != base_interval:
             next_review = last_review + timedelta(days=interval)
