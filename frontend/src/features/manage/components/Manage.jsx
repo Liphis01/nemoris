@@ -27,6 +27,7 @@ export default function Manage(props) {
   // Manage coordinates the three panels. The heavy data/state logic lives in
   // useManageLibrary; this component handles panel-specific selection effects.
   const [editingZone, setEditingZone] = useState(null);
+  const [questionScrollRequest, setQuestionScrollRequest] = useState(null);
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState(null);
@@ -60,6 +61,14 @@ export default function Manage(props) {
         autosaveTimeoutRef.current = null;
       }, 2500);
     }
+  }, []);
+
+  const requestQuestionScroll = useCallback((questionId) => {
+    // A fresh object on every call so repeated requests for the same question
+    // still reach the list.
+    if (!questionId) return;
+
+    setQuestionScrollRequest({ questionId });
   }, []);
 
   const registerPendingSaveHandler = useCallback((handler) => {
@@ -243,6 +252,7 @@ export default function Manage(props) {
         setEditingZone={setEditingZone}
         highlightedQuestionIds={highlightedQuestionIds}
         highlightedGroupIds={highlightedGroupIds}
+        questionScrollRequest={questionScrollRequest}
         requestManageTransition={requestManageTransition}
       />
 
@@ -256,6 +266,7 @@ export default function Manage(props) {
         setHighlightedQuestionIds={setHighlightedQuestionIds}
         registerPendingSaveHandler={registerPendingSaveHandler}
         requestManageTransition={requestManageTransition}
+        requestQuestionScroll={requestQuestionScroll}
       />
 
       <TagNetworkModal

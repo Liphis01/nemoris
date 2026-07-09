@@ -18,6 +18,7 @@ export default function MapEditor({
   group,
   onClose,
   onSave,
+  onZoneSelect,
   selectedZone,
   headerAction,
   registerPendingSaveHandler,
@@ -170,6 +171,8 @@ export default function MapEditor({
     const zone = sourceZones.find(z => getZoneCode(z) === code)
       || createTemporaryZone(code);
     setEditingZone(zone);
+
+    return zone;
   }
 
   function handleSelect(code) {
@@ -181,7 +184,13 @@ export default function MapEditor({
       setZones(nextZones);
     }
 
-    selectZoneCode(code, nextZones);
+    const zone = selectZoneCode(code, nextZones);
+
+    // Only saved zones own a question row, so temporary ids have nothing to
+    // reveal in the Manage list.
+    if (!String(zone.id || "").startsWith("tmp-")) {
+      onZoneSelect?.(zone);
+    }
   }
 
   function handleZoneTab(e) {

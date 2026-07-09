@@ -40,6 +40,7 @@ export default function ManageInspector({
   onOpenInCalendar,
   registerPendingSaveHandler,
   requestManageTransition,
+  requestQuestionScroll,
   availableTags = []
 }) {
   const {
@@ -220,6 +221,7 @@ export default function ManageInspector({
         <MapEditor
           group={group}
           availableTags={availableTags}
+          onZoneSelect={(zone) => requestQuestionScroll?.(zone.id)}
           onSave={async (delta, saveContext) => {
             // Map saves can change group metadata, create zones, and update
             // existing zone labels/aliases. Patch each affected local cache.

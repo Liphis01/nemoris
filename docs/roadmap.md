@@ -9,9 +9,7 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- bug groupe de texte dans la sélection de bonus: les questions d'un même groupe sont séparées
-- singapour mal placé
-- quand je clique sur une zone de la map, il faut auto scroll dans la liste de manage
+- séparer les trouvés des non trouvés dans le recap d'entrainement 
 
 ## quick fixes
 
