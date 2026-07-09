@@ -4,15 +4,14 @@
 - si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
-- prendre en compte que plus on trouve d'éléments, moins il y a de possibilités et plus c'est facile
-- revoir les difficultés des modes car qcm devrait pas envoyer les questions trouvées à l'année prochaine
-- faire une sélection de questions bonus
 - revoir le mode timeline (mettre une timeline globale pour l'année et deux pour mois et jour)
 - ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
 - ne pas nécessairement reset les records après un edit
-- faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
+- bug groupe de texte dans la sélection de bonus: les questions d'un même groupe sont séparées
+- singapour mal placé
+- quand je clique sur une zone de la map, il faut auto scroll dans la liste de manage
 
 ## quick fixes
 
@@ -38,7 +37,6 @@
 
 ## to do when i have more time
 
-- mettre en évidence les zones trop petites (c.f. jetpunk)
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
 - trouver un meilleur agencement pour les aliases dans map preview
@@ -53,6 +51,7 @@
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
 - make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
+- faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 
 ## refactors
 

@@ -605,6 +605,7 @@ export default function MediaReview({
   const previousFoundQuestionIdsRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const [selectedRecapQuestionId, setSelectedRecapQuestionId] = useState(null);
+  const imageRecapRowRefs = useRef(new Map());
   const {
     activeQuestionId,
     answeredCount,
@@ -901,6 +902,72 @@ export default function MediaReview({
       setSelectedRecapQuestionId(effectiveRecapRows[0].item.question_id);
     }
   }, [effectiveRecapRows, selectedRecapQuestionId, showResultRecap]);
+
+  // Keep the selected recap row visible and DOM-focused as the selection moves,
+  // so a click never leaves a stale focus outline on a now-unselected row.
+  useEffect(() => {
+    if (!showResultRecap || selectedRecapQuestionId == null) return;
+
+    const row = imageRecapRowRefs.current.get(selectedRecapQuestionId);
+    row?.scrollIntoView({ block: "nearest" });
+    row?.focus({ preventScroll: true });
+  }, [showResultRecap, selectedRecapQuestionId]);
+
+  // Recap keyboard: up/down to move the selected row, 0-3 to grade it.
+  useEffect(() => {
+    if (!showResultRecap || effectiveRecapRows.length === 0) return undefined;
+
+    function handleRecapKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        previewRow
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        const currentIndex = effectiveRecapRows.findIndex(
+          row => row.item.question_id === selectedRecapQuestionId
+        );
+        const baseIndex = currentIndex === -1 ? (delta === 1 ? -1 : 0) : currentIndex;
+        const nextIndex = Math.min(
+          effectiveRecapRows.length - 1,
+          Math.max(0, baseIndex + delta)
+        );
+        const nextRow = effectiveRecapRows[nextIndex];
+
+        if (nextRow) setSelectedRecapQuestionId(nextRow.item.question_id);
+        return;
+      }
+
+      // Accept the character (0-3) or the physical key, so the shortcut works
+      // on AZERTY layouts where the top-row digits need Shift.
+      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
+      const quality = ["0", "1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality === null) return;
+
+      const selectedRow = effectiveRecapRows.find(
+        row => row.item.question_id === selectedRecapQuestionId
+      ) || effectiveRecapRows[0];
+      if (!selectedRow) return;
+
+      event.preventDefault();
+      setQuality(selectedRow.item.question_id, quality);
+    }
+
+    window.addEventListener("keydown", handleRecapKeyDown);
+    return () => window.removeEventListener("keydown", handleRecapKeyDown);
+  }, [showResultRecap, effectiveRecapRows, selectedRecapQuestionId, setQuality, previewRow]);
 
   useEffect(() => {
     if (!previewRow) return undefined;
@@ -1530,6 +1597,9 @@ export default function MediaReview({
             <div>
               <div style={imageRecapTypeBadgeStyle}>MÉDIA</div>
               <div style={imageRecapTitleStyle}>Résultat</div>
+              <div style={imageRecapKeyboardHintStyle}>
+                ↑/↓ pour naviguer · 0-3 pour noter
+              </div>
             </div>
 
             <button
@@ -1801,6 +1871,13 @@ export default function MediaReview({
 
                       <div
                         className="image-recap-row"
+                        ref={(element) => {
+                          if (element) {
+                            imageRecapRowRefs.current.set(row.item.question_id, element);
+                          } else {
+                            imageRecapRowRefs.current.delete(row.item.question_id);
+                          }
+                        }}
                         data-image-recap-row={
                           isUnanswered
                             ? "unanswered"
@@ -2539,9 +2616,9 @@ export default function MediaReview({
   );
 }
 
-const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 194px";
+const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 214px";
 const imageRecapTableGap = "10px";
-const imageRecapTablePadding = "10px 14px";
+const imageRecapTablePadding = "12px 16px";
 const imageRecapStatusStripeBorder = "3px solid transparent";
 
 const imageRecapOverlayStyle = {
@@ -2562,11 +2639,18 @@ const imageRecapCardStyle = {
   borderRadius: "18px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
   maxHeight: "100%",
-  maxWidth: "1100px",
+  maxWidth: "1180px",
   overflow: "auto",
-  padding: "24px",
+  padding: "26px",
   scrollbarGutter: "stable",
   width: "100%"
+};
+
+const imageRecapKeyboardHintStyle = {
+  color: "#666",
+  fontSize: "12px",
+  fontWeight: 600,
+  marginTop: "6px"
 };
 
 const imageRecapHeaderStyle = {
@@ -2905,7 +2989,7 @@ const imageRecapRowStyle = {
   font: "inherit",
   gap: imageRecapTableGap,
   gridTemplateColumns: imageRecapTableGridColumns,
-  minHeight: "62px",
+  minHeight: "64px",
   padding: imageRecapTablePadding,
   textAlign: "left",
   transition: "background 0.14s ease, box-shadow 0.14s ease",
@@ -3005,6 +3089,7 @@ const imageRecapThumbnailMissingStyle = {
 
 const imageRecapAnswerTextStyle = {
   color: "#f3f3f3",
+  fontSize: "15px",
   fontWeight: 650,
   minWidth: 0,
   overflow: "hidden",
@@ -3056,10 +3141,11 @@ const imageRecapQualityCellStyle = {
 };
 
 const imageRecapQualityButtonStyle = {
-  borderRadius: "9px",
+  borderRadius: "10px",
+  fontSize: "17px",
   fontWeight: 600,
-  height: "34px",
-  lineHeight: "34px",
+  height: "40px",
+  lineHeight: "40px",
   padding: 0,
-  width: "32px"
+  width: "38px"
 };

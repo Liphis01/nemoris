@@ -3182,14 +3182,14 @@ export default function TimelineReview({
           <div
             className="app-scrollbar"
             style={{
-              width: "min(920px, 100%)",
-              maxHeight: "82vh",
+              width: "min(1000px, 100%)",
+              maxHeight: "86vh",
               overflow: "auto",
               borderRadius: "18px",
               border: "1px solid #303030",
               background: "#181818",
               boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
-              padding: "22px"
+              padding: "26px"
             }}
           >
             <div
@@ -3236,20 +3236,20 @@ export default function TimelineReview({
                     key={result.question_id}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "minmax(0, 1fr) 180px 180px 100px",
-                      gap: "12px",
+                      gridTemplateColumns: "minmax(0, 1fr) 180px 180px 110px",
+                      gap: "14px",
                       alignItems: "center",
                       border: "1px solid #282828",
                       borderRadius: "12px",
                       background: "#141414",
-                      padding: "12px"
+                      padding: "15px 16px"
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
                       <div
                         style={{
                           color: "#eee",
-                          fontSize: "14px",
+                          fontSize: "15px",
                           fontWeight: "800",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
@@ -3270,7 +3270,7 @@ export default function TimelineReview({
                       <div style={{ color: "#666", fontSize: "10px", fontWeight: "800", marginBottom: "4px" }}>
                         ANSWER
                       </div>
-                      <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "700" }}>
+                      <div style={{ color: "#ddd", fontSize: "14px", fontWeight: "700" }}>
                         {formatTimelineAnswer(timeline)}
                       </div>
                     </div>
@@ -3279,7 +3279,7 @@ export default function TimelineReview({
                       <div style={{ color: "#666", fontSize: "10px", fontWeight: "800", marginBottom: "4px" }}>
                         YOUR ANSWER
                       </div>
-                      <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "700" }}>
+                      <div style={{ color: "#ddd", fontSize: "14px", fontWeight: "700" }}>
                         {formatTimelineDate(result.start.guess)}
                         {result.end
                           ? ` - ${formatTimelineDate(result.end.guess)}`
@@ -3294,8 +3294,8 @@ export default function TimelineReview({
                         border: `1px solid ${qualityColor(result.quality)}55`,
                         background: `${qualityColor(result.quality)}16`,
                         borderRadius: "999px",
-                        padding: "5px 10px",
-                        fontSize: "12px",
+                        padding: "6px 12px",
+                        fontSize: "13px",
                         fontWeight: "900"
                       }}
                     >

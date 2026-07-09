@@ -395,7 +395,10 @@ export default function SvgMap({
             wrapperRect.width / box.width,
             wrapperRect.height / box.height
         ) * padding;
-        const newScale = Math.min(Math.max(fitScale, 1), 8);
+        // Cap at maxZoom (not a fixed 8) so the auto-zoom adapts to the zone
+        // size: tiny zones (small islands) zoom in far enough to see and click,
+        // while large zones naturally settle at a low fitScale.
+        const newScale = Math.min(Math.max(fitScale, 1), maxZoom);
 
         setScale(newScale);
         setOffset({

@@ -95,6 +95,15 @@ body {
   align-items: stretch;
 }
 
+.map-recap-row:focus,
+.map-recap-row:focus-visible,
+.image-recap-row:focus,
+.image-recap-row:focus-visible {
+  /* Selection is shown by the inline box-shadow ring; the native focus
+     outline would otherwise linger on a clicked row after arrow navigation. */
+  outline: none;
+}
+
 .map-recap-row[data-map-recap-row="found"]:hover {
   background: linear-gradient(90deg, rgba(37, 99, 235, 0.24), #20232a 52%) !important;
   box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.32) !important;

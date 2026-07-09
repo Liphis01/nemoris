@@ -482,7 +482,60 @@ export default function MapReview({
     if (!showRecap || !focusedCode) return;
 
     scrollRecapRowIntoView(focusedCode);
+    // Keep DOM focus on the selected row so a click never leaves a stale focus
+    // outline on a row that is no longer selected.
+    recapRowRefs.current.get(focusedCode)?.focus({ preventScroll: true });
   }, [focusedCode, recapRowKey, scrollRecapRowIntoView, showRecap]);
+
+  // Recap keyboard: up/down to move the selected zone, 0-3 to grade it.
+  useEffect(() => {
+    if (!showRecap || recapRows.length === 0) return undefined;
+
+    function handleRecapKeyDown(event) {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        const currentIndex = recapRows.findIndex(row => row.item.code === focusedCode);
+        const baseIndex = currentIndex === -1 ? (delta === 1 ? -1 : 0) : currentIndex;
+        const nextIndex = Math.min(
+          recapRows.length - 1,
+          Math.max(0, baseIndex + delta)
+        );
+        const nextCode = recapRows[nextIndex]?.item.code;
+
+        // focusRecapCode (not selectRecapCode) so the left map preview zooms
+        // onto the newly selected zone as you arrow through the list.
+        if (nextCode) focusRecapCode(nextCode);
+        return;
+      }
+
+      if (!showQualityControls) return;
+
+      // Accept the character (0-3) or the physical key, so the shortcut works
+      // on AZERTY layouts where the top-row digits need Shift.
+      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
+      const quality = ["0", "1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality === null) return;
+
+      const focusedRow = recapRows.find(row => row.item.code === focusedCode);
+      if (!focusedRow) return;
+
+      event.preventDefault();
+      setQuality(focusedRow.item.question_id, quality);
+    }
+
+    window.addEventListener("keydown", handleRecapKeyDown);
+    return () => window.removeEventListener("keydown", handleRecapKeyDown);
+  }, [showRecap, recapRows, focusedCode, focusRecapCode, setQuality, showQualityControls]);
 
   return (
     <>
@@ -929,6 +982,11 @@ export default function MapReview({
                 >
                   Résultat
                 </div>
+
+                <div style={recapKeyboardHintStyle}>
+                  ↑/↓ pour naviguer
+                  {showQualityControls ? " · 0-3 pour noter" : ""}
+                </div>
               </div>
 
               <button
@@ -1373,15 +1431,22 @@ const overlayStyle = {
 
 const recapCardStyle = {
   width: "100%",
-  maxWidth: "1100px",
+  maxWidth: "1180px",
   maxHeight: "100%",
   overflow: "auto",
   scrollbarGutter: "stable",
   background: "#1a1a1a",
   border: "1px solid #2a2a2a",
   borderRadius: "18px",
-  padding: "24px",
+  padding: "26px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)"
+};
+
+const recapKeyboardHintStyle = {
+  color: "#666",
+  fontSize: "12px",
+  fontWeight: "600",
+  marginTop: "6px"
 };
 
 const recapStatStyle = {
@@ -1427,9 +1492,9 @@ const recapTableStyle = {
   background: "#111"
 };
 
-const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 194px";
+const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 214px";
 const recapTableGap = "10px";
-const recapTablePadding = "10px 14px";
+const recapTablePadding = "12px 16px";
 const recapStatusStripeBorder = "3px solid transparent";
 
 const recapTableHeaderStyle = {
@@ -1564,7 +1629,7 @@ const recapRowStyle = {
   gap: recapTableGap,
   alignItems: "center",
   width: "100%",
-  minHeight: "58px",
+  minHeight: "64px",
   padding: recapTablePadding,
   background: "#181818",
   border: "0",
@@ -1645,6 +1710,7 @@ const recapAnswerTextStyle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  fontSize: "15px",
   fontWeight: "650",
   color: "#f3f3f3"
 };
@@ -1680,12 +1746,13 @@ const recapQualityCellStyle = {
 };
 
 const recapQualityButtonStyle = {
-  width: "32px",
-  height: "34px",
+  width: "38px",
+  height: "40px",
   padding: 0,
-  borderRadius: "9px",
+  borderRadius: "10px",
+  fontSize: "17px",
   fontWeight: "600",
-  lineHeight: "34px"
+  lineHeight: "40px"
 };
 
 const zoneHistoryRateStyle = {
