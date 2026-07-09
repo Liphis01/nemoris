@@ -1157,7 +1157,7 @@ def get_bonus_group_entries(db, group_ids=None):
     for row in rows:
         # Mirror the bucketing used by _serialize_review_items so the menu
         # entries line up with what a picked entry will actually render.
-        if row.group_id is not None and row.group_type in ("map", "media"):
+        if row.group_id is not None and row.group_type in ("map", "media", "text"):
             entry = container_entry(
                 f"group:{row.group_id}",
                 row.group_type,

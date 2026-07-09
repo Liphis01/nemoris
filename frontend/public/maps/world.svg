@@ -27,7 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 -->
-<svg baseprofile="tiny" fill="#ececec" height="857" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width=".2" version="1.2" viewBox="0 0 2000 857" width="2000" xmlns="http://www.w3.org/2000/svg">
+<svg baseprofile="tiny" fill="#ececec" height="857" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width=".2" version="1.2" viewBox="-10 0 2010 857" width="2010" xmlns="http://www.w3.org/2000/svg">
  <path data-code="AF" d="M1383 261.6l1.5 1.8-2.9 0.8-2.4 1.1-5.9 0.8-5.3 1.3-2.4 2.8 1.9 2.7 1.4 3.2-2 2.7 0.8 2.5-0.9 2.3-5.2-0.2 3.1 4.2-3.1 1.7-1.4 3.8 1.1 3.9-1.8 1.8-2.1-0.6-4 0.9-0.2 1.7-4.1 0-2.3 3.7 0.8 5.4-6.6 2.7-3.9-0.6-0.9 1.4-3.4-0.8-5.3 1-9.6-3.3 3.9-5.8-1.1-4.1-4.3-1.1-1.2-4.1-2.7-5.1 1.6-3.5-2.5-1 0.5-4.7 0.6-8 5.9 2.5 3.9-0.9 0.4-2.9 4-0.9 2.6-2-0.2-5.1 4.2-1.3 0.3-2.2 2.9 1.7 1.6 0.2 3 0 4.3 1.4 1.8 0.7 3.4-2 2.1 1.2 0.9-2.9 3.2 0.1 0.6-0.9-0.2-2.6 1.7-2.2 3.3 1.4-0.1 2 1.7 0.3 0.9 5.4 2.7 2.1 1.5-1.4 2.2-0.6 2.5-2.9 3.8 0.5 5.4 0z" id="AF" name="Afghanistan">
  </path>
  <path data-code="AO" class="Angola" d="M 1121.2 572 1121.8 574 1121.1 577.1 1122 580.1 1121.1 582.5 1121.5 584.7 1109.8 584.6 1109 605.1 1112.6 610.3 1116.2 614.3 1105.8 616.9 1092.3 616 1088.5 613 1065.8 613.2 1065 613.7 1061.7 610.8 1058.1 610.6 1054.7 611.7 1052 612.9 1051.5 608.9 1052.4 603.2 1054.4 597.3 1054.7 594.6 1056.6 588.8 1058 586.2 1061.3 582 1063.2 579.1 1063.8 574.4 1063.5 570.7 1061.9 568.4 1060.4 564.5 1059.1 560.7 1059.4 559.3 1061.1 556.8 1059.5 550.6 1058.3 546.3 1055.5 542.2 1056.1 541 1058.4 540.1 1060.1 540.2 1062.1 539.5 1078.8 539.6 1080.1 544.3 1081.7 548.2 1083 550.3 1085.1 553.6 1088.9 553.1 1090.7 552.2 1093.8 553.1 1094.7 551.5 1096.2 547.8 1099.7 547.5 1100 546.4 1102.9 546.4 1102.4 548.7 1109.2 548.6 1109.3 552.7 1110.4 555.1 1109.5 559 1109.9 563 1111.7 565.4 1111.3 573 1112.7 572.4 1115.1 572.6 1118.6 571.6 1121.2 572 Z">
@@ -969,7 +969,14 @@ THE SOFTWARE.
  <path data-code="FJ" class="Fiji" d="M 1994.4 606 1994 606.4 1993.2 607.5 1992.9 607.6 1992.2 608 1992 608.6 1991.6 608.8 1991.4 609.1 1991.3 609.3 1991.6 609.4 1992.2 609.1 1992.3 609 1992.6 608.7 1992.8 608.4 1993.4 608.1 1993.7 607.8 1994.3 607.5 1994.3 607.8 1993.8 608.5 1993.6 608.6 1993.7 609.2 1993.4 609.5 1993.1 609.2 1992.7 609.2 1992.2 609.3 1991.8 609.6 1991.1 609.7 1990.1 609.7 1990.6 609.2 1990.2 609 1989.6 609.2 1989.2 609.4 1989.2 609.6 1988.9 609.7 1988.7 609.8 1988.6 610.2 1988.4 610.5 1988.1 610.4 1988.1 610.2 1987.7 610.1 1987.3 610.3 1987.1 610.8 1986.8 611 1986.5 611 1986.5 610.7 1986.5 610.3 1986.3 609.9 1986.4 609.7 1986.3 609.6 1985.7 609.8 1985.7 609.4 1986.1 609.1 1986.2 609.1 1986.1 608.6 1986.4 608.5 1986.9 608.8 1987.5 608.4 1987.7 608.4 1988 608.1 1988.2 608.1 1988.5 607.8 1988.5 607.6 1989.3 607.5 1990.2 607.2 1990.5 607.1 1990.9 607.2 1991.4 607 1991.6 606.6 1991.8 606.6 1992 606.2 1992.4 606.3 1992.5 606.1 1992.7 606.2 1993.7 605.7 1993.8 606 1994 605.9 1994.2 606 1994.5 605.7 1995 605.5 1995.1 605.6 1994.6 606 1994.4 606 Z">
  </path>
 <!-- Clickable hit-areas for island nations too small to click as drawn paths.
-     Same data-code as the country, so they behave like any other zone. -->
+     Same data-code as the country, so they behave like any other zone.
+
+     The base map is a Robinson projection, NOT equirectangular. Any marker added
+     here must be placed with
+         x = 986.367 + 5.66988 * X(lat) * lon
+         y = 501.813 - 517.759 * Y(lat)
+     where X/Y are the Robinson interpolation tables. Using lon/lat linearly puts
+     markers up to ~20px off, and the error grows with |lon|. -->
  <g id="microstate-zones">
   <path data-code="PF" data-hit-area="1" class="French Polynesia" d="M 132.7 608.4 133.2 606.2 134.6 604.5 190.9 554.3 192.9 553.3 195.3 553.3 196.2 553.4 199.0 553.9 199.3 554.0 201.3 555.0 201.4 555.1 202.8 556.8 206.9 562.2 208.7 566.7 208.8 567.1 209.3 569.3 210.6 641.2 210.1 643.4 199.8 681.5 198.4 683.2 196.4 684.2 194.2 684.2 192.2 683.2 192.1 683.1 135.3 614.2 133.9 612.5 133.3 610.9 133.2 610.6 Z" opacity="0.35"/>
   <path data-code="FM" data-hit-area="1" class="Federated States of Micronesia" d="M 1760.9 441.2 1761.4 439.0 1761.7 438.2 1763.1 436.5 1765.1 435.5 1765.5 435.4 1767.7 435.4 1882.7 452.2 1910.3 462.4 1912.3 463.4 1913.7 465.1 1913.9 465.5 1914.4 467.7 1913.9 469.9 1913.7 470.2 1912.3 471.9 1910.3 472.9 1908.1 472.9 1764.9 446.2 1762.9 445.2 1762.8 445.1 1761.4 443.4 Z" opacity="0.35"/>
@@ -1028,11 +1035,36 @@ THE SOFTWARE.
   <path data-code="BL" data-hit-area="1" class="Saint-Barthélemy" d="M 634.1 386.7 634.2 386.3 634.5 385.9 634.9 385.7 635.3 385.7 635.6 385.8 636.0 386.0 636.3 386.4 636.4 386.8 636.3 387.2 636.0 387.6 635.8 387.8 635.4 388.0 635.0 388.0 634.6 387.8 634.3 387.4 634.2 387.1 Z" opacity="0.35"/>
   <path data-code="BQSE" data-hit-area="1" class="St. Eustatius (Netherlands)" d="M 633.1 389.5 633.2 389.1 633.5 388.7 633.6 388.6 634.0 388.4 634.4 388.4 634.8 388.6 635.1 389.0 635.2 389.2 635.3 389.6 635.2 390.0 634.9 390.4 634.7 390.5 634.3 390.7 633.9 390.7 633.5 390.5 633.2 390.1 633.1 389.7 Z" opacity="0.35"/>
   <path data-code="BQSA" data-hit-area="1" class="Saba (Netherlands)" d="M 631.7 388.7 631.8 388.3 631.9 388.1 632.2 387.7 632.6 387.5 633.0 387.5 633.4 387.7 633.5 387.8 633.8 388.2 633.9 388.6 633.8 389.0 633.5 389.4 633.4 389.5 633.0 389.7 632.5 389.7 632.1 389.5 631.8 389.1 Z" opacity="0.35"/>
-  <circle data-code="AD" class="Andorra" cx="991.8" cy="229.8" r="5"/>
-  <circle data-code="KI" data-hit-area="1" class="Kiribati" cx="1945.6" cy="493.6" r="5" opacity="0.35"/>
-  <circle data-code="LI" class="Liechtenstein" cx="1036.3" cy="200.1" r="5"/>
-  <circle data-code="MC" class="Monaco" cx="1024.6" cy="221.9" r="5"/>
-  <circle data-code="SG" class="Singapore" cx="1561.0" cy="493.9" r="5"/>
-  <circle data-code="SM" class="San Marino" cx="1052.6" cy="220.6" r="5"/>
+  <circle data-code="AD" class="Andorra" cx="994.2" cy="229.1" r="5"/>
+  <circle data-code="KI" data-hit-area="1" class="Kiribati" cx="1967.2" cy="493.2" r="5" opacity="0.35"/>
+  <circle data-code="LI" class="Liechtenstein" cx="1034.1" cy="199.9" r="5"/>
+  <circle data-code="MC" class="Monaco" cx="1024.3" cy="221.3" r="5"/>
+  <circle data-code="SG" class="Singapore" cx="1575.1" cy="493.5" r="5"/>
+  <circle data-code="SM" class="San Marino" cx="1050.0" cy="220.1" r="5"/>
+  <circle data-code="VA" class="Vatican City" cx="1050.8" cy="233.0" r="5"/>
+  <circle data-code="AX" class="Åland Islands" cx="1076.4" cy="120.4" r="5"/>
+  <circle data-code="BV" class="Bouvet Island" cx="1002.3" cy="848.8" r="5"/>
+  <circle data-code="CC" class="Cocos (Keeling) Islands" cx="1532.0" cy="579.9" r="5"/>
+  <circle data-code="CK" class="Cook Islands" cx="98.5" cy="638.2" r="5"/>
+  <circle data-code="CX" class="Christmas Island" cx="1582.6" cy="568.9" r="5"/>
+  <circle data-code="GG" class="Guernsey" cx="973.6" cy="185.5" r="1.2"/>
+  <circle data-code="GI" class="Gibraltar" cx="957.9" cy="269.8" r="5"/>
+  <circle data-code="GS" class="South Georgia and the South Sandwich Islands" cx="812.1" cy="847.9" r="5"/>
+  <circle data-code="HK" class="Hong Kong" cx="1619.6" cy="358.5" r="1.6"/>
+  <circle data-code="HM" class="Heard Island and McDonald Islands" cx="1339.8" cy="840.6" r="5"/>
+  <circle data-code="IM" class="Isle of Man" cx="964.7" cy="156.0" r="5"/>
+  <circle data-code="IO" class="British Indian Ocean Territory" cx="1395.9" cy="548.8" r="5"/>
+  <circle data-code="JE" class="Jersey" cx="975.8" cy="186.9" r="1.2"/>
+  <circle data-code="MO" class="Macao" cx="1616.3" cy="359.3" r="1.6"/>
+  <circle data-code="NF" class="Norfolk Island" cx="1903.2" cy="688.3" r="5"/>
+  <circle data-code="NU" class="Niue" cx="38.8" cy="624.1" r="5"/>
+  <circle data-code="PM" class="Saint Pierre and Miquelon" cx="703.9" cy="202.2" r="5"/>
+  <circle data-code="PN" class="Pitcairn Islands" cx="277.5" cy="658.3" r="5"/>
+  <circle data-code="SH" class="Saint Helena" cx="954.4" cy="604.3" r="5"/>
+  <circle data-code="SJ" class="Svalbard and Jan Mayen" cx="1043.1" cy="23.4" r="5"/>
+  <circle data-code="TF" class="French Southern and Antarctic Lands" cx="1328.4" cy="817.1" r="5"/>
+  <circle data-code="TK" class="Tokelau" cx="15.8" cy="560.9" r="5"/>
+  <circle data-code="UM" class="United States Minor Outlying Islands" cx="15.7" cy="320.8" r="5"/>
+  <circle data-code="WF" class="Wallis and Futuna" cx="-4.6" cy="587.1" r="5"/>
  </g>
 </svg>

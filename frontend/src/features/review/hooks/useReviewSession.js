@@ -40,6 +40,7 @@ function bonusEntryTypeLabel(typeQ, isContainer) {
 
   if (typeQ === "map") return "Carte";
   if (typeQ === "media") return "Médias";
+  if (typeQ === "text") return "Texte";
   if (typeQ === "timeline") return "Frise";
 
   return "Groupe";

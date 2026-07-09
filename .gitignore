@@ -26,3 +26,8 @@ backend/static/
 
 # Temp
 *.csv.tmp
+
+# graphify
+graphify-out/
+/CLAUDE.md
+.claude/settings.json

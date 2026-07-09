@@ -1722,6 +1722,30 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertIn("q:31", by_key)
         self.assertFalse(by_key["q:30"]["is_container"])
 
+    def test_bonus_groups_collapses_text_groups_into_one_entry(self):
+        # Text groups are reviewed on a single screen like maps and media, so the
+        # bonus menu must offer them as one container instead of one entry per item.
+        text_group = self.add_group(1, type_group="text")
+
+        for question_id in range(10, 14):
+            text_question = self.add_question(question_id, type_q="text")
+            text_question.group = text_group
+
+        self.db.commit()
+
+        by_key = {entry["key"]: entry for entry in get_bonus_groups(db=self.db)}
+
+        self.assertEqual(list(by_key), ["group:1"])
+        self.assertEqual(by_key["group:1"]["item_count"], 4)
+        self.assertEqual(by_key["group:1"]["type_q"], "text")
+        self.assertTrue(by_key["group:1"]["is_container"])
+
+        payload = get_bonus_items(key="group:1", db=self.db)
+        text_groups = [item for item in payload if item.get("type_q") == "text"]
+
+        self.assertTrue(text_groups)
+        self.assertEqual(sum(len(item["items"]) for item in text_groups), 4)
+
     def test_bonus_items_returns_full_payload_for_one_picked_group(self):
         media_group = self.add_group(1, type_group="media")
 

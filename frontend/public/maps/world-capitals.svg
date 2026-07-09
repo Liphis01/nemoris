@@ -27,7 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 -->
-<svg baseprofile="tiny" fill="#ececec" height="857" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width=".2" version="1.2" viewBox="0 0 2000 857" width="2000" xmlns="http://www.w3.org/2000/svg">
+<svg baseprofile="tiny" fill="#ececec" height="857" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width=".2" version="1.2" viewBox="-10 0 2010 857" width="2010" xmlns="http://www.w3.org/2000/svg">
  <path data-code="AF" d="M1383 261.6l1.5 1.8-2.9 0.8-2.4 1.1-5.9 0.8-5.3 1.3-2.4 2.8 1.9 2.7 1.4 3.2-2 2.7 0.8 2.5-0.9 2.3-5.2-0.2 3.1 4.2-3.1 1.7-1.4 3.8 1.1 3.9-1.8 1.8-2.1-0.6-4 0.9-0.2 1.7-4.1 0-2.3 3.7 0.8 5.4-6.6 2.7-3.9-0.6-0.9 1.4-3.4-0.8-5.3 1-9.6-3.3 3.9-5.8-1.1-4.1-4.3-1.1-1.2-4.1-2.7-5.1 1.6-3.5-2.5-1 0.5-4.7 0.6-8 5.9 2.5 3.9-0.9 0.4-2.9 4-0.9 2.6-2-0.2-5.1 4.2-1.3 0.3-2.2 2.9 1.7 1.6 0.2 3 0 4.3 1.4 1.8 0.7 3.4-2 2.1 1.2 0.9-2.9 3.2 0.1 0.6-0.9-0.2-2.6 1.7-2.2 3.3 1.4-0.1 2 1.7 0.3 0.9 5.4 2.7 2.1 1.5-1.4 2.2-0.6 2.5-2.9 3.8 0.5 5.4 0z" id="AF" name="Afghanistan">
  </path>
  <path data-code="AO" class="Angola" d="M 1121.2 572 1121.8 574 1121.1 577.1 1122 580.1 1121.1 582.5 1121.5 584.7 1109.8 584.6 1109 605.1 1112.6 610.3 1116.2 614.3 1105.8 616.9 1092.3 616 1088.5 613 1065.8 613.2 1065 613.7 1061.7 610.8 1058.1 610.6 1054.7 611.7 1052 612.9 1051.5 608.9 1052.4 603.2 1054.4 597.3 1054.7 594.6 1056.6 588.8 1058 586.2 1061.3 582 1063.2 579.1 1063.8 574.4 1063.5 570.7 1061.9 568.4 1060.4 564.5 1059.1 560.7 1059.4 559.3 1061.1 556.8 1059.5 550.6 1058.3 546.3 1055.5 542.2 1056.1 541 1058.4 540.1 1060.1 540.2 1062.1 539.5 1078.8 539.6 1080.1 544.3 1081.7 548.2 1083 550.3 1085.1 553.6 1088.9 553.1 1090.7 552.2 1093.8 553.1 1094.7 551.5 1096.2 547.8 1099.7 547.5 1100 546.4 1102.9 546.4 1102.4 548.7 1109.2 548.6 1109.3 552.7 1110.4 555.1 1109.5 559 1109.9 563 1111.7 565.4 1111.3 573 1112.7 572.4 1115.1 572.6 1118.6 571.6 1121.2 572 Z">
@@ -1028,206 +1028,235 @@ THE SOFTWARE.
   <path data-code="BL" data-hit-area="1" class="Saint-Barthélemy" d="M 634.1 386.7 634.2 386.3 634.5 385.9 634.9 385.7 635.3 385.7 635.6 385.8 636.0 386.0 636.3 386.4 636.4 386.8 636.3 387.2 636.0 387.6 635.8 387.8 635.4 388.0 635.0 388.0 634.6 387.8 634.3 387.4 634.2 387.1 Z" opacity="0.35"/>
   <path data-code="BQSE" data-hit-area="1" class="St. Eustatius (Netherlands)" d="M 633.1 389.5 633.2 389.1 633.5 388.7 633.6 388.6 634.0 388.4 634.4 388.4 634.8 388.6 635.1 389.0 635.2 389.2 635.3 389.6 635.2 390.0 634.9 390.4 634.7 390.5 634.3 390.7 633.9 390.7 633.5 390.5 633.2 390.1 633.1 389.7 Z" opacity="0.35"/>
   <path data-code="BQSA" data-hit-area="1" class="Saba (Netherlands)" d="M 631.7 388.7 631.8 388.3 631.9 388.1 632.2 387.7 632.6 387.5 633.0 387.5 633.4 387.7 633.5 387.8 633.8 388.2 633.9 388.6 633.8 389.0 633.5 389.4 633.4 389.5 633.0 389.7 632.5 389.7 632.1 389.5 631.8 389.1 Z" opacity="0.35"/>
-  <circle data-code="AD" cx="991.8" cy="229.8" r="5"/>
-  <circle data-code="KI" data-hit-area="1" cx="1945.6" cy="493.6" r="5" opacity="0.35"/>
-  <circle data-code="LI" cx="1036.3" cy="200.1" r="5"/>
-  <circle data-code="MC" cx="1024.6" cy="221.9" r="5"/>
-  <circle data-code="SM" cx="1052.6" cy="220.6" r="5"/>
-  <circle data-code="SG" cx="1561.0" cy="493.9" r="5"/>
+  <circle data-code="AD" cx="994.2" cy="229.1" r="5"/>
+  <circle data-code="KI" data-hit-area="1" cx="1967.2" cy="493.2" r="5" opacity="0.35"/>
+  <circle data-code="LI" cx="1034.1" cy="199.9" r="5"/>
+  <circle data-code="MC" cx="1024.3" cy="221.3" r="5"/>
+  <circle data-code="SM" cx="1050.0" cy="220.1" r="5"/>
+  <circle data-code="SG" cx="1575.1" cy="493.5" r="5"/>
+  <circle data-code="VA" cx="1050.8" cy="233.0" r="5"/>
+  <circle data-code="AX" cx="1076.4" cy="120.4" r="5"/>
+  <circle data-code="BV" cx="1002.3" cy="848.8" r="5"/>
+  <circle data-code="CC" cx="1532.0" cy="579.9" r="5"/>
+  <circle data-code="CK" cx="98.5" cy="638.2" r="5"/>
+  <circle data-code="CX" cx="1582.6" cy="568.9" r="5"/>
+  <circle data-code="GG" cx="973.6" cy="185.5" r="1.2"/>
+  <circle data-code="GI" cx="957.9" cy="269.8" r="5"/>
+  <circle data-code="GS" cx="812.1" cy="847.9" r="5"/>
+  <circle data-code="HK" cx="1619.6" cy="358.5" r="1.6"/>
+  <circle data-code="HM" cx="1339.8" cy="840.6" r="5"/>
+  <circle data-code="IM" cx="964.7" cy="156.0" r="5"/>
+  <circle data-code="IO" cx="1395.9" cy="548.8" r="5"/>
+  <circle data-code="JE" cx="975.8" cy="186.9" r="1.2"/>
+  <circle data-code="MO" cx="1616.3" cy="359.3" r="1.6"/>
+  <circle data-code="NF" cx="1903.2" cy="688.3" r="5"/>
+  <circle data-code="NU" cx="38.8" cy="624.1" r="5"/>
+  <circle data-code="PM" cx="703.9" cy="202.2" r="5"/>
+  <circle data-code="PN" cx="277.5" cy="658.3" r="5"/>
+  <circle data-code="SH" cx="954.4" cy="604.3" r="5"/>
+  <circle data-code="SJ" cx="1043.1" cy="23.4" r="5"/>
+  <circle data-code="TF" cx="1328.4" cy="817.1" r="5"/>
+  <circle data-code="TK" cx="15.8" cy="560.9" r="5"/>
+  <circle data-code="UM" cx="15.7" cy="320.8" r="5"/>
+  <circle data-code="WF" cx="-4.6" cy="587.1" r="5"/>
  </g>
  <g id="capital-dots" pointer-events="none" fill="#ffcf2e" stroke="#241a05" stroke-width="0.7">
-  <circle cx="1340.9" cy="284.6" r="2.3"/>
-  <circle cx="1090.4" cy="237.9" r="2.3"/>
-  <circle cx="1000.2" cy="266.6" r="2.3"/>
-  <circle cx="991.8" cy="229.8" r="2.3"/>
-  <circle cx="1121.2" cy="572.0" r="2.3"/>
-  <circle cx="640.7" cy="391.9" r="2.3"/>
-  <circle cx="669.1" cy="851.7" r="2.3"/>
-  <circle cx="1221.3" cy="243.8" r="2.3"/>
-  <circle cx="1743.0" cy="763.6" r="2.3"/>
-  <circle cx="1056.7" cy="197.0" r="2.3"/>
-  <circle cx="1229.0" cy="253.2" r="2.3"/>
-  <circle cx="580.4" cy="366.0" r="2.3"/>
-  <circle cx="1264.7" cy="334.2" r="2.3"/>
-  <circle cx="1486.2" cy="350.2" r="2.3"/>
-  <circle cx="651.3" cy="417.2" r="2.3"/>
-  <circle cx="1120.4" cy="160.6" r="2.3"/>
-  <circle cx="1007.5" cy="176.3" r="2.3"/>
-  <circle cx="489.5" cy="391.6" r="2.3"/>
-  <circle cx="996.8" cy="461.3" r="2.3"/>
-  <circle cx="1482.0" cy="326.1" r="2.3"/>
-  <circle cx="604.2" cy="607.8" r="2.3"/>
-  <circle cx="1085.4" cy="221.2" r="2.3"/>
-  <circle cx="1127.4" cy="660.1" r="2.3"/>
-  <circle cx="716.7" cy="603.2" r="2.3"/>
-  <circle cx="1637.1" cy="471.7" r="2.3"/>
-  <circle cx="1113.1" cy="228.6" r="2.3"/>
-  <circle cx="974.7" cy="422.9" r="2.3"/>
-  <circle cx="1156.1" cy="523.1" r="2.3"/>
-  <circle cx="847.8" cy="406.5" r="2.3"/>
-  <circle cx="1566.9" cy="428.0" r="2.3"/>
-  <circle cx="1047.4" cy="477.3" r="2.3"/>
-  <circle cx="665.9" cy="203.6" r="2.3"/>
-  <circle cx="1086.5" cy="474.2" r="2.3"/>
-  <circle cx="1090.5" cy="403.5" r="2.3"/>
-  <circle cx="655.1" cy="837.9" r="2.3"/>
-  <circle cx="1602.2" cy="381.9" r="2.3"/>
-  <circle cx="571.2" cy="472.6" r="2.3"/>
-  <circle cx="1233.2" cy="581.3" r="2.3"/>
-  <circle cx="1119.7" cy="520.0" r="2.3"/>
-  <circle cx="1068.3" cy="529.4" r="2.3"/>
-  <circle cx="515.6" cy="438.5" r="2.3"/>
-  <circle cx="1072.2" cy="208.6" r="2.3"/>
-  <circle cx="547.9" cy="362.9" r="2.3"/>
-  <circle cx="1168.2" cy="276.7" r="2.3"/>
-  <circle cx="1063.5" cy="181.2" r="2.3"/>
-  <circle cx="1046.1" cy="147.7" r="2.3"/>
-  <circle cx="1223.3" cy="427.9" r="2.3"/>
-  <circle cx="642.2" cy="402.7" r="2.3"/>
-  <circle cx="594.4" cy="383.7" r="2.3"/>
-  <circle cx="546.5" cy="503.6" r="2.3"/>
-  <circle cx="1157.1" cy="309.7" r="2.3"/>
-  <circle cx="487.2" cy="414.4" r="2.3"/>
-  <circle cx="1045.1" cy="491.3" r="2.3"/>
-  <circle cx="1199.9" cy="403.9" r="2.3"/>
-  <circle cx="1104.8" cy="129.5" r="2.3"/>
-  <circle cx="1156.5" cy="670.7" r="2.3"/>
-  <circle cx="1198.8" cy="444.3" r="2.3"/>
-  <circle cx="1989.1" cy="624.9" r="2.3"/>
-  <circle cx="1099.8" cy="96.4" r="2.3"/>
-  <circle cx="1035.7" cy="231.4" r="2.3"/>
-  <circle cx="1052.6" cy="506.0" r="2.3"/>
-  <circle cx="899.6" cy="415.3" r="2.3"/>
-  <circle cx="1211.0" cy="231.4" r="2.3"/>
-  <circle cx="1036.5" cy="175.3" r="2.3"/>
-  <circle cx="982.2" cy="466.5" r="2.3"/>
-  <circle cx="1112.7" cy="272.6" r="2.3"/>
-  <circle cx="639.0" cy="424.0" r="2.3"/>
-  <circle cx="479.7" cy="408.5" r="2.3"/>
-  <circle cx="923.9" cy="434.7" r="2.3"/>
-  <circle cx="896.5" cy="426.1" r="2.3"/>
-  <circle cx="652.5" cy="471.1" r="2.3"/>
-  <circle cx="580.9" cy="383.3" r="2.3"/>
-  <circle cx="498.2" cy="411.9" r="2.3"/>
-  <circle cx="1089.2" cy="197.8" r="2.3"/>
-  <circle cx="905.6" cy="92.3" r="2.3"/>
-  <circle cx="1412.9" cy="318.5" r="2.3"/>
-  <circle cx="1667.5" cy="567.6" r="2.3"/>
-  <circle cx="1269.4" cy="273.4" r="2.3"/>
-  <circle cx="1230.3" cy="288.5" r="2.3"/>
-  <circle cx="948.5" cy="160.4" r="2.3"/>
-  <circle cx="1175.9" cy="299.8" r="2.3"/>
-  <circle cx="1068.2" cy="256.4" r="2.3"/>
-  <circle cx="556.1" cy="386.8" r="2.3"/>
-  <circle cx="1708.5" cy="282.6" r="2.3"/>
-  <circle cx="1183.3" cy="297.4" r="2.3"/>
-  <circle cx="1321.3" cy="194.0" r="2.3"/>
-  <circle cx="1188.1" cy="510.3" r="2.3"/>
-  <circle cx="1945.6" cy="493.6" r="2.3"/>
-  <circle cx="1650.2" cy="244.3" r="2.3"/>
-  <circle cx="1665.5" cy="268.0" r="2.3"/>
-  <circle cx="1246.0" cy="313.7" r="2.3"/>
-  <circle cx="1373.1" cy="235.5" r="2.3"/>
-  <circle cx="1554.1" cy="387.0" r="2.3"/>
-  <circle cx="1102.1" cy="140.5" r="2.3"/>
-  <circle cx="1178.9" cy="284.1" r="2.3"/>
-  <circle cx="1139.9" cy="692.0" r="2.3"/>
-  <circle cx="933.1" cy="460.5" r="2.3"/>
-  <circle cx="1056.7" cy="291.5" r="2.3"/>
-  <circle cx="1036.3" cy="200.1" r="2.3"/>
-  <circle cx="1099.2" cy="149.7" r="2.3"/>
-  <circle cx="1015.8" cy="183.5" r="2.3"/>
-  <circle cx="1247.7" cy="623.3" r="2.3"/>
-  <circle cx="1178.5" cy="586.9" r="2.3"/>
-  <circle cx="1564.3" cy="461.9" r="2.3"/>
-  <circle cx="1402.8" cy="474.9" r="2.3"/>
-  <circle cx="938.8" cy="421.1" r="2.3"/>
-  <circle cx="1063.9" cy="271.7" r="2.3"/>
-  <circle cx="1954.4" cy="456.3" r="2.3"/>
-  <circle cx="928.8" cy="372.2" r="2.3"/>
-  <circle cx="1307.7" cy="630.8" r="2.3"/>
-  <circle cx="431.8" cy="377.6" r="2.3"/>
-  <circle cx="1909.4" cy="467.7" r="2.3"/>
-  <circle cx="1128.8" cy="199.5" r="2.3"/>
-  <circle cx="1024.6" cy="221.9" r="2.3"/>
-  <circle cx="1503.8" cy="202.2" r="2.3"/>
-  <circle cx="1085.6" cy="227.4" r="2.3"/>
-  <circle cx="940.1" cy="310.3" r="2.3"/>
-  <circle cx="1164.6" cy="668.5" r="2.3"/>
-  <circle cx="1518.1" cy="375.6" r="2.3"/>
-  <circle cx="1078.3" cy="646.7" r="2.3"/>
-  <circle cx="1932.9" cy="505.1" r="2.3"/>
-  <circle cx="1457.9" cy="324.6" r="2.3"/>
-  <circle cx="1010.5" cy="166.6" r="2.3"/>
-  <circle cx="1886.2" cy="764.4" r="2.3"/>
-  <circle cx="503.5" cy="424.4" r="2.3"/>
-  <circle cx="995.0" cy="415.5" r="2.3"/>
-  <circle cx="1025.0" cy="444.1" r="2.3"/>
-  <circle cx="1102.5" cy="233.0" r="2.3"/>
-  <circle cx="1113.7" cy="67.5" r="2.3"/>
-  <circle cx="1283.8" cy="394.9" r="2.3"/>
-  <circle cx="1363.6" cy="309.6" r="2.3"/>
-  <circle cx="1747.2" cy="453.7" r="2.3"/>
-  <circle cx="540.9" cy="444.5" r="2.3"/>
-  <circle cx="1868.1" cy="545.6" r="2.3"/>
-  <circle cx="663.1" cy="651.0" r="2.3"/>
-  <circle cx="554.8" cy="579.3" r="2.3"/>
-  <circle cx="1700.5" cy="447.8" r="2.3"/>
-  <circle cx="1079.9" cy="168.9" r="2.3"/>
-  <circle cx="944.2" cy="247.5" r="2.3"/>
-  <circle cx="1269.9" cy="340.2" r="2.3"/>
-  <circle cx="1128.5" cy="217.4" r="2.3"/>
-  <circle cx="1689.5" cy="177.4" r="2.3"/>
-  <circle cx="1155.9" cy="514.8" r="2.3"/>
-  <circle cx="636.3" cy="392.0" r="2.3"/>
-  <circle cx="644.0" cy="412.4" r="2.3"/>
-  <circle cx="642.1" cy="416.7" r="2.3"/>
-  <circle cx="21.9" cy="591.3" r="2.3"/>
-  <circle cx="1052.6" cy="220.6" r="2.3"/>
-  <circle cx="1023.9" cy="501.3" r="2.3"/>
-  <circle cx="1243.1" cy="343.9" r="2.3"/>
-  <circle cx="904.8" cy="409.7" r="2.3"/>
-  <circle cx="1092.7" cy="218.3" r="2.3"/>
-  <circle cx="1249.0" cy="562.1" r="2.3"/>
-  <circle cx="919.7" cy="447.1" r="2.3"/>
-  <circle cx="1561.0" cy="493.9" r="2.3"/>
-  <circle cx="1078.5" cy="193.6" r="2.3"/>
-  <circle cx="1064.0" cy="207.1" r="2.3"/>
-  <circle cx="1926.8" cy="576.2" r="2.3"/>
-  <circle cx="1235.5" cy="489.0" r="2.3"/>
-  <circle cx="1085.8" cy="719.5" r="2.3"/>
-  <circle cx="1159.0" cy="471.0" r="2.3"/>
-  <circle cx="962.7" cy="243.2" r="2.3"/>
-  <circle cx="1442.4" cy="452.4" r="2.3"/>
-  <circle cx="1164.3" cy="402.5" r="2.3"/>
-  <circle cx="676.4" cy="464.5" r="2.3"/>
-  <circle cx="1058.7" cy="106.7" r="2.3"/>
-  <circle cx="1024.7" cy="201.3" r="2.3"/>
-  <circle cx="1185.3" cy="287.4" r="2.3"/>
-  <circle cx="1655.5" cy="349.4" r="2.3"/>
-  <circle cx="1365.9" cy="255.2" r="2.3"/>
-  <circle cx="1182.1" cy="541.7" r="2.3"/>
-  <circle cx="1553.0" cy="405.5" r="2.3"/>
-  <circle cx="1698.0" cy="558.1" r="2.3"/>
-  <circle cx="992.0" cy="447.7" r="2.3"/>
-  <circle cx="14.7" cy="639.5" r="2.3"/>
-  <circle cx="642.8" cy="432.2" r="2.3"/>
-  <circle cx="1039.9" cy="266.2" r="2.3"/>
-  <circle cx="1201.7" cy="235.3" r="2.3"/>
-  <circle cx="1308.1" cy="259.0" r="2.3"/>
-  <circle cx="1998.9" cy="556.5" r="2.3"/>
-  <circle cx="1164.6" cy="500.1" r="2.3"/>
-  <circle cx="1153.1" cy="178.9" r="2.3"/>
-  <circle cx="1286.1" cy="348.6" r="2.3"/>
-  <circle cx="956.7" cy="158.2" r="2.3"/>
-  <circle cx="118.8" cy="379.3" r="2.3"/>
-  <circle cx="684.4" cy="712.3" r="2.3"/>
-  <circle cx="1313.9" cy="234.1" r="2.3"/>
-  <circle cx="1931.8" cy="631.8" r="2.3"/>
-  <circle cx="611.3" cy="434.9" r="2.3"/>
-  <circle cx="1572.1" cy="367.4" r="2.3"/>
-  <circle cx="1229.2" cy="403.8" r="2.3"/>
-  <circle cx="1140.6" cy="600.9" r="2.3"/>
-  <circle cx="1156.1" cy="616.4" r="2.3"/>
+<!-- One dot per UN member state + Vatican City. Generated from Natural Earth
+     Admin-0 capitals, projected with the Robinson formula documented in world.svg.
+     Decorative only (pointer-events="none"); sorted by ISO 3166-1 alpha-2. -->
+  <circle class="capital-AD" cx="994.2" cy="229.1" r="2.3"/>
+  <circle class="capital-AE" cx="1286.7" cy="344.7" r="2.3"/>
+  <circle class="capital-AF" cx="1356.9" cy="280.2" r="2.3"/>
+  <circle class="capital-AG" cx="640.3" cy="391.9" r="2.3"/>
+  <circle class="capital-AL" cx="1089.2" cy="236.7" r="2.3"/>
+  <circle class="capital-AM" cx="1218.7" cy="243.9" r="2.3"/>
+  <circle class="capital-AO" cx="1061.1" cy="558.5" r="2.3"/>
+  <circle class="capital-AR" cx="673.6" cy="724.0" r="2.3"/>
+  <circle class="capital-AT" cx="1067.9" cy="193.2" r="2.3"/>
+  <circle class="capital-AU" cx="1782.5" cy="728.3" r="2.3"/>
+  <circle class="capital-AZ" cx="1246.4" cy="242.6" r="2.3"/>
+  <circle class="capital-BA" cx="1080.4" cy="220.6" r="2.3"/>
+  <circle class="capital-BB" cx="650.9" cy="417.7" r="2.3"/>
+  <circle class="capital-BD" cx="1486.5" cy="349.5" r="2.3"/>
+  <circle class="capital-BE" cx="1007.6" cy="176.9" r="2.3"/>
+  <circle class="capital-BF" cx="977.8" cy="422.4" r="2.3"/>
+  <circle class="capital-BG" cx="1106.4" cy="228.0" r="2.3"/>
+  <circle class="capital-BH" cx="1264.6" cy="333.4" r="2.3"/>
+  <circle class="capital-BI" cx="1155.5" cy="523.8" r="2.3"/>
+  <circle class="capital-BJ" cx="1001.2" cy="460.2" r="2.3"/>
+  <circle class="capital-BN" cx="1637.1" cy="470.5" r="2.3"/>
+  <circle class="capital-BO" cx="622.3" cy="624.1" r="2.3"/>
+  <circle class="capital-BR" cx="717.7" cy="603.1" r="2.3"/>
+  <circle class="capital-BS" cx="559.7" cy="340.8" r="2.3"/>
+  <circle class="capital-BT" cx="1477.9" cy="325.4" r="2.3"/>
+  <circle class="capital-BW" cx="1129.4" cy="660.0" r="2.3"/>
+  <circle class="capital-BY" cx="1118.0" cy="158.0" r="2.3"/>
+  <circle class="capital-BZ" cx="489.7" cy="391.1" r="2.3"/>
+  <circle class="capital-CA" cx="602.7" cy="210.7" r="2.3"/>
+  <circle class="capital-CD" cx="1073.1" cy="529.6" r="2.3"/>
+  <circle class="capital-CF" cx="1091.5" cy="473.8" r="2.3"/>
+  <circle class="capital-CG" cx="1072.9" cy="529.1" r="2.3"/>
+  <circle class="capital-CH" cx="1023.9" cy="201.3" r="2.3"/>
+  <circle class="capital-CI" cx="956.5" cy="458.0" r="2.3"/>
+  <circle class="capital-CL" cx="606.4" cy="716.5" r="2.3"/>
+  <circle class="capital-CM" cx="1051.6" cy="477.0" r="2.3"/>
+  <circle class="capital-CN" cx="1594.9" cy="245.7" r="2.3"/>
+  <circle class="capital-CO" cx="566.8" cy="472.3" r="2.3"/>
+  <circle class="capital-CR" cx="511.8" cy="438.1" r="2.3"/>
+  <circle class="capital-CU" cx="530.2" cy="353.3" r="2.3"/>
+  <circle class="capital-CV" cx="854.3" cy="406.0" r="2.3"/>
+  <circle class="capital-CY" cx="1164.6" cy="276.0" r="2.3"/>
+  <circle class="capital-CZ" cx="1057.3" cy="181.5" r="2.3"/>
+  <circle class="capital-DE" cx="1051.1" cy="166.5" r="2.3"/>
+  <circle class="capital-DJ" cx="1229.5" cy="427.4" r="2.3"/>
+  <circle class="capital-DK" cx="1045.5" cy="147.2" r="2.3"/>
+  <circle class="capital-DM" cx="641.9" cy="403.6" r="2.3"/>
+  <circle class="capital-DO" cx="595.9" cy="383.2" r="2.3"/>
+  <circle class="capital-DZ" cx="1002.5" cy="265.8" r="2.3"/>
+  <circle class="capital-EC" cx="541.3" cy="503.2" r="2.3"/>
+  <circle class="capital-EE" cx="1098.9" cy="124.8" r="2.3"/>
+  <circle class="capital-EG" cx="1156.4" cy="308.9" r="2.3"/>
+  <circle class="capital-ER" cx="1204.8" cy="403.4" r="2.3"/>
+  <circle class="capital-ES" cx="967.1" cy="242.5" r="2.3"/>
+  <circle class="capital-ET" cx="1204.9" cy="443.8" r="2.3"/>
+  <circle class="capital-FI" cx="1099.1" cy="120.5" r="2.3"/>
+  <circle class="capital-FJ" cx="1983.3" cy="618.2" r="2.3"/>
+  <circle class="capital-FM" cx="1880.9" cy="457.4" r="2.3"/>
+  <circle class="capital-FR" cx="998.0" cy="189.1" r="2.3"/>
+  <circle class="capital-GA" cx="1040.0" cy="499.3" r="2.3"/>
+  <circle class="capital-UK" cx="985.8" cy="172.8" r="2.3"/>
+  <circle class="capital-GD" cx="638.6" cy="424.4" r="2.3"/>
+  <circle class="capital-GE" cx="1218.3" cy="234.1" r="2.3"/>
+  <circle class="capital-GH" cx="985.1" cy="466.2" r="2.3"/>
+  <circle class="capital-GM" cx="893.1" cy="415.4" r="2.3"/>
+  <circle class="capital-GN" cx="909.1" cy="440.6" r="2.3"/>
+  <circle class="capital-GQ" cx="1036.1" cy="477.7" r="2.3"/>
+  <circle class="capital-GR" cx="1111.6" cy="258.0" r="2.3"/>
+  <circle class="capital-GT" cx="478.0" cy="407.9" r="2.3"/>
+  <circle class="capital-GW" cx="898.5" cy="425.6" r="2.3"/>
+  <circle class="capital-GY" cx="657.3" cy="458.1" r="2.3"/>
+  <circle class="capital-HN" cx="496.2" cy="411.3" r="2.3"/>
+  <circle class="capital-HR" cx="1067.3" cy="208.3" r="2.3"/>
+  <circle class="capital-HT" cx="582.5" cy="382.8" r="2.3"/>
+  <circle class="capital-HU" cx="1081.8" cy="197.6" r="2.3"/>
+  <circle class="capital-ID" cx="1590.9" cy="541.4" r="2.3"/>
+  <circle class="capital-IE" cx="956.3" cy="161.4" r="2.3"/>
+  <circle class="capital-IL" cx="1176.9" cy="297.8" r="2.3"/>
+  <circle class="capital-IN" cx="1408.4" cy="318.2" r="2.3"/>
+  <circle class="capital-IQ" cx="1225.2" cy="287.8" r="2.3"/>
+  <circle class="capital-IR" cx="1260.5" cy="272.8" r="2.3"/>
+  <circle class="capital-IS" cx="891.0" cy="97.5" r="2.3"/>
+  <circle class="capital-IT" cx="1050.9" cy="233.0" r="2.3"/>
+  <circle class="capital-JM" cx="557.4" cy="386.4" r="2.3"/>
+  <circle class="capital-JO" cx="1180.7" cy="296.7" r="2.3"/>
+  <circle class="capital-JP" cx="1731.2" cy="272.7" r="2.3"/>
+  <circle class="capital-KE" cx="1195.1" cy="510.0" r="2.3"/>
+  <circle class="capital-KG" cx="1370.1" cy="226.8" r="2.3"/>
+  <circle class="capital-KH" cx="1577.6" cy="427.6" r="2.3"/>
+  <circle class="capital-KI" cx="1967.2" cy="493.2" r="2.3"/>
+  <circle class="capital-KM" cx="1230.0" cy="577.0" r="2.3"/>
+  <circle class="capital-KN" cx="635.5" cy="390.7" r="2.3"/>
+  <circle class="capital-KP" cx="1646.7" cy="251.4" r="2.3"/>
+  <circle class="capital-KR" cx="1657.7" cy="260.6" r="2.3"/>
+  <circle class="capital-KW" cx="1248.0" cy="313.2" r="2.3"/>
+  <circle class="capital-KZ" cx="1334.9" cy="174.7" r="2.3"/>
+  <circle class="capital-LA" cx="1559.7" cy="386.5" r="2.3"/>
+  <circle class="capital-LB" cx="1177.0" cy="284.3" r="2.3"/>
+  <circle class="capital-LC" cx="643.6" cy="411.9" r="2.3"/>
+  <circle class="capital-LI" cx="1034.1" cy="199.9" r="2.3"/>
+  <circle class="capital-LK" cx="1438.1" cy="457.3" r="2.3"/>
+  <circle class="capital-LR" cx="925.3" cy="461.3" r="2.3"/>
+  <circle class="capital-LS" cx="1136.3" cy="690.0" r="2.3"/>
+  <circle class="capital-LT" cx="1106.5" cy="153.3" r="2.3"/>
+  <circle class="capital-LU" cx="1016.6" cy="184.5" r="2.3"/>
+  <circle class="capital-LV" cx="1098.6" cy="139.6" r="2.3"/>
+  <circle class="capital-LY" cx="1057.4" cy="290.6" r="2.3"/>
+  <circle class="capital-MA" cx="949.7" cy="283.4" r="2.3"/>
+  <circle class="capital-MC" cx="1024.3" cy="221.3" r="2.3"/>
+  <circle class="capital-MD" cx="1131.2" cy="200.7" r="2.3"/>
+  <circle class="capital-ME" cx="1085.7" cy="229.4" r="2.3"/>
+  <circle class="capital-MG" cx="1251.5" cy="623.2" r="2.3"/>
+  <circle class="capital-MH" cx="1955.6" cy="456.2" r="2.3"/>
+  <circle class="capital-MK" cx="1097.2" cy="232.4" r="2.3"/>
+  <circle class="capital-ML" cx="941.3" cy="420.6" r="2.3"/>
+  <circle class="capital-MM" cx="1521.9" cy="374.9" r="2.3"/>
+  <circle class="capital-MN" cx="1519.9" cy="195.0" r="2.3"/>
+  <circle class="capital-MR" cx="897.1" cy="385.7" r="2.3"/>
+  <circle class="capital-MT" cx="1063.7" cy="271.3" r="2.3"/>
+  <circle class="capital-MU" cx="1306.5" cy="631.3" r="2.3"/>
+  <circle class="capital-MV" cx="1402.7" cy="475.0" r="2.3"/>
+  <circle class="capital-MW" cx="1176.2" cy="591.6" r="2.3"/>
+  <circle class="capital-MX" cx="433.8" cy="377.0" r="2.3"/>
+  <circle class="capital-MY" cx="1562.6" cy="481.7" r="2.3"/>
+  <circle class="capital-MZ" cx="1165.7" cy="668.4" r="2.3"/>
+  <circle class="capital-NA" cx="1081.1" cy="646.7" r="2.3"/>
+  <circle class="capital-NE" cx="998.3" cy="415.0" r="2.3"/>
+  <circle class="capital-NG" cx="1028.7" cy="443.7" r="2.3"/>
+  <circle class="capital-NI" cx="500.5" cy="423.8" r="2.3"/>
+  <circle class="capital-NL" cx="1010.1" cy="167.5" r="2.3"/>
+  <circle class="capital-NO" cx="1035.1" cy="121.9" r="2.3"/>
+  <circle class="capital-NP" cx="1453.9" cy="323.9" r="2.3"/>
+  <circle class="capital-NR" cx="1932.8" cy="505.3" r="2.3"/>
+  <circle class="capital-NZ" cx="1893.5" cy="766.7" r="2.3"/>
+  <circle class="capital-OM" cx="1309.4" cy="350.4" r="2.3"/>
+  <circle class="capital-PA" cx="537.1" cy="444.2" r="2.3"/>
+  <circle class="capital-PE" cx="552.3" cy="579.2" r="2.3"/>
+  <circle class="capital-PG" cx="1817.5" cy="562.6" r="2.3"/>
+  <circle class="capital-PH" cx="1665.8" cy="408.0" r="2.3"/>
+  <circle class="capital-PK" cx="1379.0" cy="285.5" r="2.3"/>
+  <circle class="capital-PL" cx="1088.0" cy="168.3" r="2.3"/>
+  <circle class="capital-PT" cx="938.3" cy="253.2" r="2.3"/>
+  <circle class="capital-PW" cx="1747.6" cy="453.7" r="2.3"/>
+  <circle class="capital-PY" cx="668.7" cy="664.2" r="2.3"/>
+  <circle class="capital-QA" cx="1270.5" cy="339.5" r="2.3"/>
+  <circle class="capital-RO" cx="1119.4" cy="216.9" r="2.3"/>
+  <circle class="capital-RS" cx="1090.5" cy="214.5" r="2.3"/>
+  <circle class="capital-RU" cx="1163.3" cy="146.8" r="2.3"/>
+  <circle class="capital-RW" cx="1156.8" cy="514.3" r="2.3"/>
+  <circle class="capital-SA" cx="1244.3" cy="343.7" r="2.3"/>
+  <circle class="capital-SB" cx="1889.5" cy="562.4" r="2.3"/>
+  <circle class="capital-SC" cx="1300.4" cy="531.5" r="2.3"/>
+  <circle class="capital-SD" cx="1168.8" cy="401.7" r="2.3"/>
+  <circle class="capital-SE" cx="1068.7" cy="125.4" r="2.3"/>
+  <circle class="capital-SG" cx="1575.1" cy="493.5" r="2.3"/>
+  <circle class="capital-SI" cx="1059.7" cy="206.7" r="2.3"/>
+  <circle class="capital-SK" cx="1071.7" cy="193.6" r="2.3"/>
+  <circle class="capital-SL" cx="911.6" cy="447.4" r="2.3"/>
+  <circle class="capital-SM" cx="1050.0" cy="220.1" r="2.3"/>
+  <circle class="capital-SN" cx="888.2" cy="407.3" r="2.3"/>
+  <circle class="capital-SO" cx="1243.5" cy="488.5" r="2.3"/>
+  <circle class="capital-SR" cx="674.1" cy="464.4" r="2.3"/>
+  <circle class="capital-SS" cx="1165.2" cy="470.8" r="2.3"/>
+  <circle class="capital-ST" cx="1024.5" cy="499.6" r="2.3"/>
+  <circle class="capital-SV" cx="484.8" cy="413.8" r="2.3"/>
+  <circle class="capital-SY" cx="1181.5" cy="286.7" r="2.3"/>
+  <circle class="capital-SZ" cx="1157.6" cy="670.8" r="2.3"/>
+  <circle class="capital-TD" cx="1071.1" cy="424.0" r="2.3"/>
+  <circle class="capital-TG" cx="993.3" cy="462.4" r="2.3"/>
+  <circle class="capital-TH" cx="1551.5" cy="413.5" r="2.3"/>
+  <circle class="capital-TJ" cx="1348.3" cy="254.3" r="2.3"/>
+  <circle class="capital-TL" cx="1695.9" cy="556.8" r="2.3"/>
+  <circle class="capital-TM" cx="1294.5" cy="258.2" r="2.3"/>
+  <circle class="capital-TN" cx="1040.4" cy="265.6" r="2.3"/>
+  <circle class="capital-TO" cx="12.5" cy="637.5" r="2.3"/>
+  <circle class="capital-TR" cx="1158.1" cy="245.6" r="2.3"/>
+  <circle class="capital-TT" cx="639.4" cy="433.4" r="2.3"/>
+  <circle class="capital-TV" cx="1999.0" cy="556.5" r="2.3"/>
+  <circle class="capital-TZ" cx="1188.7" cy="541.5" r="2.3"/>
+  <circle class="capital-UA" cx="1136.1" cy="179.3" r="2.3"/>
+  <circle class="capital-UG" cx="1171.1" cy="499.8" r="2.3"/>
+  <circle class="capital-US" cx="581.8" cy="252.1" r="2.3"/>
+  <circle class="capital-UY" cx="685.9" cy="725.9" r="2.3"/>
+  <circle class="capital-UZ" cx="1345.9" cy="236.8" r="2.3"/>
+  <circle class="capital-VA" cx="1050.8" cy="233.0" r="2.3"/>
+  <circle class="capital-VC" cx="641.9" cy="417.4" r="2.3"/>
+  <circle class="capital-VE" cx="608.9" cy="434.4" r="2.3"/>
+  <circle class="capital-VN" cx="1574.8" cy="366.8" r="2.3"/>
+  <circle class="capital-VU" cx="1927.3" cy="615.7" r="2.3"/>
+  <circle class="capital-WS" cx="20.8" cy="590.6" r="2.3"/>
+  <circle class="capital-YE" cx="1234.4" cy="403.2" r="2.3"/>
+  <circle class="capital-ZA" cx="1141.8" cy="666.8" r="2.3"/>
+  <circle class="capital-ZM" cx="1145.0" cy="600.8" r="2.3"/>
+  <circle class="capital-ZW" cx="1159.9" cy="616.2" r="2.3"/>
  </g>
 </svg>
