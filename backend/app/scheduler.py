@@ -110,30 +110,55 @@ def success_reward_factor(mode_difficulty=None, easy_reward_floor=None):
     )
 
 
+def _scale_failure_delta(previous, current, bound, penalty_factor):
+    """
+    Re-scale an FSRS lapse by penalty_factor, measured against `bound`.
+
+    Both stability and difficulty move away from a fixed bound on a lapse
+    (toward MIN_STABILITY / MAX_DIFFICULTY), so each is rewritten as the
+    headroom that remains to that bound and the headroom is scaled
+    geometrically: penalty_factor == 0 reproduces `previous`, == 1 reproduces
+    `current`, and > 1 deepens the lapse past `current`.
+
+    Scaling the headroom's *ratio* rather than its difference is what keeps the
+    result inside the bound for every penalty_factor, so easy modes can be
+    punished arbitrarily hard without a clamp truncating the gradient. A
+    difference-based version overshoots the bound on the deep lapses FSRS
+    already produces, and clamping it there is what makes the penalty
+    non-monotonic in mode difficulty.
+    """
+    previous_headroom = previous - bound
+    current_headroom = current - bound
+
+    if previous_headroom == 0:
+        return current
+
+    ratio = current_headroom / previous_headroom
+
+    # FSRS may land on or past the bound on a deep lapse, leaving nothing to
+    # scale. A negative ratio would also make the power below complex.
+    if ratio <= 0:
+        return current
+
+    return bound + (previous_headroom * (ratio ** penalty_factor))
+
+
 def _apply_failure_stability_penalty(previous, current, penalty_factor):
-    adjusted = previous + ((current - previous) * penalty_factor)
-
-    if adjusted >= MIN_STABILITY:
-        return adjusted
-
-    if penalty_factor <= MODE_REFERENCE_DIFFICULTY:
-        return adjusted
-
-    extra_penalty = 1 - (1 / penalty_factor)
-    return current - ((current - MIN_STABILITY) * extra_penalty)
+    return _scale_failure_delta(
+        previous,
+        current,
+        MIN_STABILITY,
+        penalty_factor
+    )
 
 
 def _apply_failure_difficulty_penalty(previous, current, penalty_factor):
-    adjusted = previous + ((current - previous) * penalty_factor)
-
-    if adjusted <= MAX_DIFFICULTY:
-        return adjusted
-
-    if penalty_factor <= MODE_REFERENCE_DIFFICULTY:
-        return adjusted
-
-    extra_penalty = 1 - (1 / penalty_factor)
-    return current + ((MAX_DIFFICULTY - current) * extra_penalty)
+    return _scale_failure_delta(
+        previous,
+        current,
+        MAX_DIFFICULTY,
+        penalty_factor
+    )
 
 
 def review_datetime_for_date(day):

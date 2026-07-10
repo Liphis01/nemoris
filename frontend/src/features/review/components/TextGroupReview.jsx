@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { normalizeTextMode, TEXT_MODE_MATCH } from "../textModes";
 
 const qualityOptions = [
@@ -14,6 +14,20 @@ const qualityButtonColors = {
   2: { background: "#20303a", border: "1px solid #345b7a", color: "#8fc7ff" },
   3: { background: "#203a2a", border: "1px solid #2c5c3e", color: "#7ee2a8" }
 };
+
+// One colour per matched pair, so crossing connector lines stay tellable apart.
+const pairPalette = [
+  "#f87171",
+  "#60a5fa",
+  "#4ade80",
+  "#fbbf24",
+  "#c084fc",
+  "#22d3ee",
+  "#fb923c",
+  "#f472b6",
+  "#a3e635",
+  "#94a3b8"
+];
 
 const inputStyle = {
   background: "#101010",
@@ -89,6 +103,7 @@ export default function TextGroupReview({
   const [matchedIds, setMatchedIds] = useState(() => new Set());
   const [failedIds, setFailedIds] = useState(() => new Set());
   const [wrongFlash, setWrongFlash] = useState(null);
+  const [hoveredPairId, setHoveredPairId] = useState(null);
   // recap
   const [qualities, setQualities] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -97,6 +112,20 @@ export default function TextGroupReview({
   const answerOrder = useMemo(() => shuffled(items), [items]);
   const inputRefs = useRef({});
   const recapRowRefs = useRef({});
+  const matchGridRef = useRef(null);
+  const promptRefs = useRef({});
+  const answerRefs = useRef({});
+  const [matchLinks, setMatchLinks] = useState([]);
+
+  const pairColors = useMemo(() => {
+    const colors = {};
+
+    items.forEach((item, index) => {
+      colors[item.question_id] = pairPalette[index % pairPalette.length];
+    });
+
+    return colors;
+  }, [items]);
 
   const allResolved = isMatch
     ? matchedIds.size >= items.length
@@ -198,6 +227,51 @@ export default function TextGroupReview({
       window.setTimeout(() => setWrongFlash(null), 450);
     }
   }, [items, matchedIds, selectedPromptId]);
+
+  // Trace a curve from each matched prompt to its answer. Offsets are relative
+  // to the positioned grid, so the overlay scrolls with the columns.
+  const measureMatchLinks = useCallback(() => {
+    if (!matchGridRef.current) return;
+
+    const links = [];
+
+    items.forEach(item => {
+      if (!matchedIds.has(item.question_id)) return;
+
+      const prompt = promptRefs.current[item.question_id];
+      const answer = answerRefs.current[item.question_id];
+      if (!prompt || !answer) return;
+
+      const startX = prompt.offsetLeft + prompt.offsetWidth;
+      const startY = prompt.offsetTop + prompt.offsetHeight / 2;
+      const endX = answer.offsetLeft;
+      const endY = answer.offsetTop + answer.offsetHeight / 2;
+      const bend = (startX + endX) / 2;
+
+      links.push({
+        color: pairColors[item.question_id],
+        d: `M ${startX} ${startY} C ${bend} ${startY}, ${bend} ${endY}, ${endX} ${endY}`,
+        endX,
+        endY,
+        id: item.question_id,
+        startX,
+        startY
+      });
+    });
+
+    setMatchLinks(links);
+  }, [items, matchedIds, pairColors]);
+
+  useLayoutEffect(() => {
+    if (!isMatch || phase !== "answer") return undefined;
+
+    measureMatchLinks();
+
+    const observer = new ResizeObserver(measureMatchLinks);
+    if (matchGridRef.current) observer.observe(matchGridRef.current);
+
+    return () => observer.disconnect();
+  }, [isMatch, measureMatchLinks, phase]);
 
   useEffect(() => {
     if (items.length > 0 && allResolved && phase === "answer") {
@@ -369,86 +443,158 @@ export default function TextGroupReview({
   if (isMatch) {
     const activePrompts = items;
     const activeAnswers = answerOrder;
+    // The hovered pair's line goes last so it paints over the ones it crosses.
+    const orderedLinks = hoveredPairId == null
+      ? matchLinks
+      : [...matchLinks].sort((a, b) =>
+        Number(a.id === hoveredPairId) - Number(b.id === hoveredPairId)
+      );
+
+    // Hovering one half of a matched pair lights up both halves and its line.
+    const pairHoverProps = (item, matched) => (matched
+      ? {
+        onBlur: () => setHoveredPairId(null),
+        onFocus: () => setHoveredPairId(item.question_id),
+        onMouseEnter: () => setHoveredPairId(item.question_id),
+        onMouseLeave: () => setHoveredPairId(null)
+      }
+      : {});
+
+    const pairEmphasis = (item, matched, pairColor) => {
+      if (!matched) return { boxShadow: "none", opacity: 1 };
+
+      const active = hoveredPairId === item.question_id;
+
+      return {
+        boxShadow: active ? `0 0 0 2px ${pairColor}59` : "none",
+        opacity: active ? 1 : hoveredPairId == null ? 0.85 : 0.3
+      };
+    };
 
     return (
-      <div style={containerStyle}>
+      <div style={{ ...containerStyle, maxWidth: "900px" }}>
         <div style={{ color: "#8fc7ff", fontSize: "12px", fontWeight: 800, letterSpacing: 1 }}>
           {headerLabel}
         </div>
         <div
           className="app-scrollbar"
-          style={{
-            display: "grid",
-            gap: "18px",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            overflowY: "auto",
-            paddingRight: "4px"
-          }}
+          style={{ overflowY: "auto", paddingRight: "4px" }}
         >
-          <div style={{ display: "grid", gap: "8px", alignContent: "start" }}>
-            {activePrompts.map(item => {
-              const matched = matchedIds.has(item.question_id);
-              const selected = selectedPromptId === item.question_id;
-              const flashing = wrongFlash?.prompt === item.question_id;
+          <div
+            ref={matchGridRef}
+            style={{
+              columnGap: "92px",
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+              position: "relative"
+            }}
+          >
+            <svg
+              aria-hidden="true"
+              style={{
+                height: "100%",
+                inset: 0,
+                overflow: "visible",
+                pointerEvents: "none",
+                position: "absolute",
+                width: "100%"
+              }}
+            >
+              {orderedLinks.map(link => {
+                const active = hoveredPairId === link.id;
 
-              return (
-                <button
-                  key={item.question_id}
-                  type="button"
-                  data-text-match-prompt
-                  disabled={matched}
-                  onClick={() => handlePromptClick(item)}
-                  style={{
-                    ...buttonStyle,
-                    background: matched ? "#17253d" : selected ? "#2a2410" : "#1a1a1a",
-                    border: flashing
-                      ? "1px solid #f59e0b"
-                      : matched
-                        ? "1px solid #345b7a"
-                        : selected
-                          ? "1px solid #d6a91c"
+                return (
+                  <g
+                    key={link.id}
+                    opacity={active ? 1 : hoveredPairId == null ? 0.9 : 0.15}
+                    style={{ transition: "opacity 120ms ease" }}
+                  >
+                    <path
+                      d={link.d}
+                      fill="none"
+                      stroke={link.color}
+                      strokeLinecap="round"
+                      strokeWidth={active ? 3 : 2}
+                    />
+                    <circle cx={link.startX} cy={link.startY} fill={link.color} r={active ? 4.5 : 3.5} />
+                    <circle cx={link.endX} cy={link.endY} fill={link.color} r={active ? 4.5 : 3.5} />
+                  </g>
+                );
+              })}
+            </svg>
+            <div style={{ display: "grid", gap: "8px", alignContent: "start" }}>
+              {activePrompts.map(item => {
+                const matched = matchedIds.has(item.question_id);
+                const selected = selectedPromptId === item.question_id;
+                const flashing = wrongFlash?.prompt === item.question_id;
+                const pairColor = pairColors[item.question_id];
+
+                return (
+                  <button
+                    key={item.question_id}
+                    ref={(element) => { promptRefs.current[item.question_id] = element; }}
+                    type="button"
+                    data-text-match-prompt
+                    aria-disabled={matched || undefined}
+                    onClick={() => handlePromptClick(item)}
+                    {...pairHoverProps(item, matched)}
+                    style={{
+                      ...buttonStyle,
+                      ...pairEmphasis(item, matched, pairColor),
+                      background: matched ? "#17253d" : selected ? "#2a2410" : "#1a1a1a",
+                      border: flashing
+                        ? "1px solid #f59e0b"
+                        : matched
+                          ? `1px solid ${pairColor}`
+                          : selected
+                            ? "1px solid #d6a91c"
+                            : "1px solid #2c2c2c",
+                      color: matched ? pairColor : "#eee",
+                      cursor: matched ? "default" : "pointer",
+                      textAlign: "left",
+                      transition: "opacity 120ms ease, box-shadow 120ms ease"
+                    }}
+                  >
+                    {item.question}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "grid", gap: "8px", alignContent: "start" }}>
+              {activeAnswers.map(item => {
+                const matched = matchedIds.has(item.question_id);
+                const flashing = wrongFlash?.answer === item.question_id;
+                const pairColor = pairColors[item.question_id];
+
+                return (
+                  <button
+                    key={item.question_id}
+                    ref={(element) => { answerRefs.current[item.question_id] = element; }}
+                    type="button"
+                    data-text-match-answer
+                    aria-disabled={matched || undefined}
+                    onClick={() => handleAnswerClick(item)}
+                    {...pairHoverProps(item, matched)}
+                    style={{
+                      ...buttonStyle,
+                      ...pairEmphasis(item, matched, pairColor),
+                      background: matched ? "#17253d" : "#1a1a1a",
+                      border: flashing
+                        ? "1px solid #f59e0b"
+                        : matched
+                          ? `1px solid ${pairColor}`
                           : "1px solid #2c2c2c",
-                    color: matched ? "#7fb2e6" : "#eee",
-                    cursor: matched ? "default" : "pointer",
-                    opacity: matched ? 0.65 : 1,
-                    textAlign: "left"
-                  }}
-                >
-                  {item.question}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ display: "grid", gap: "8px", alignContent: "start" }}>
-            {activeAnswers.map(item => {
-              const matched = matchedIds.has(item.question_id);
-              const flashing = wrongFlash?.answer === item.question_id;
-
-              return (
-                <button
-                  key={item.question_id}
-                  type="button"
-                  data-text-match-answer
-                  disabled={matched}
-                  onClick={() => handleAnswerClick(item)}
-                  style={{
-                    ...buttonStyle,
-                    background: matched ? "#17253d" : "#1a1a1a",
-                    border: flashing
-                      ? "1px solid #f59e0b"
-                      : matched
-                        ? "1px solid #345b7a"
-                        : "1px solid #2c2c2c",
-                    color: matched ? "#7fb2e6" : "#eee",
-                    cursor: matched ? "default" : "pointer",
-                    opacity: matched ? 0.4 : 1,
-                    textAlign: "left"
-                  }}
-                >
-                  {item.answer}
-                </button>
-              );
-            })}
+                      color: matched ? pairColor : "#eee",
+                      cursor: matched ? "default" : "pointer",
+                      textAlign: "left",
+                      transition: "opacity 120ms ease, box-shadow 120ms ease"
+                    }}
+                  >
+                    {item.answer}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         <div style={{ color: "#777", fontSize: "13px" }}>

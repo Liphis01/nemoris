@@ -473,6 +473,44 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreater(easier["difficulty"], reference["difficulty"])
         self.assertLess(easier["difficulty"], MAX_DIFFICULTY)
 
+    def test_miss_penalty_is_monotonic_in_mode_difficulty(self):
+        # click_prompt difficulty slides continuously with the zone count, so
+        # neighbouring session sizes must not swap the penalty ordering.
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+        misses = [
+            (
+                mode_difficulty,
+                update_progress(
+                    progress,
+                    0,
+                    today=today,
+                    mode_difficulty=mode_difficulty,
+                    enable_fuzzing=False
+                )
+            )
+            for mode_difficulty in (
+                0.40, 0.50, 0.55, 0.60, 0.65, 0.70,
+                0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05
+            )
+        ]
+
+        for (_, easier), (mode_difficulty, harder) in zip(misses, misses[1:]):
+            self.assertLessEqual(
+                harder["difficulty"],
+                easier["difficulty"],
+                f"difficulty penalty grew at mode_difficulty={mode_difficulty}"
+            )
+            self.assertGreaterEqual(
+                harder["stability"],
+                easier["stability"],
+                f"stability penalty grew at mode_difficulty={mode_difficulty}"
+            )
+
+        for mode_difficulty, miss in misses:
+            self.assertGreater(miss["stability"], MIN_STABILITY)
+            self.assertLess(miss["difficulty"], MAX_DIFFICULTY)
+
     def test_easier_mode_rewards_correct_answers_less_than_type_all(self):
         today = date(2026, 1, 10)
         progress = self.review_progress()
