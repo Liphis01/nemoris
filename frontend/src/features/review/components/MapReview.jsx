@@ -108,21 +108,32 @@ const recapHeaderColumns = [
 ];
 
 const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
+// The recap keeps its own preference: wanting the map to follow the prompt while
+// answering is independent from wanting it to follow the selected row afterwards.
+const recapAutoZoomStorageKey = "quizApp.mapReview.recapAutoZoomEnabled";
 
-function readMapAutoZoomPreference() {
+function readAutoZoomPreference(storageKey) {
   try {
-    return window.localStorage.getItem(mapAutoZoomStorageKey) !== "false";
+    return window.localStorage.getItem(storageKey) !== "false";
   } catch {
     return true;
   }
 }
 
-function writeMapAutoZoomPreference(enabled) {
+function writeAutoZoomPreference(storageKey, enabled) {
   try {
-    window.localStorage.setItem(mapAutoZoomStorageKey, enabled ? "true" : "false");
+    window.localStorage.setItem(storageKey, enabled ? "true" : "false");
   } catch {
     // The in-memory toggle should still work if storage is unavailable.
   }
+}
+
+function readMapAutoZoomPreference() {
+  return readAutoZoomPreference(mapAutoZoomStorageKey);
+}
+
+function readRecapAutoZoomPreference() {
+  return readAutoZoomPreference(recapAutoZoomStorageKey);
 }
 
 function choiceFeedbackState(option, feedback) {
@@ -251,6 +262,7 @@ export default function MapReview({
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
   const [autoZoomEnabled, setAutoZoomEnabled] = useState(readMapAutoZoomPreference);
+  const [recapAutoZoomEnabled, setRecapAutoZoomEnabled] = useState(readRecapAutoZoomPreference);
   const [recapFocusCode, setRecapFocusCode] = useState(null);
   const [recapFocusVersion, setRecapFocusVersion] = useState(0);
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
@@ -371,6 +383,28 @@ export default function MapReview({
     setRecapFocusVersion(version => version + 1);
   }, [selectRecapCode]);
 
+  // Selecting a recap row (click, Enter/Space or arrow keys) always highlights it
+  // and scrolls it into view; only the map zoom is gated by the recap toggle.
+  const selectRecapZone = useCallback((code) => {
+    if (recapAutoZoomEnabled) {
+      focusRecapCode(code);
+    } else {
+      selectRecapCode(code);
+    }
+  }, [focusRecapCode, recapAutoZoomEnabled, selectRecapCode]);
+
+  const toggleRecapAutoZoom = useCallback(() => {
+    const nextEnabled = !recapAutoZoomEnabled;
+
+    setRecapAutoZoomEnabled(nextEnabled);
+    writeAutoZoomPreference(recapAutoZoomStorageKey, nextEnabled);
+
+    // Turning it back on catches the map up with the row already selected.
+    if (nextEnabled && focusedCode) {
+      focusRecapCode(focusedCode);
+    }
+  }, [focusRecapCode, focusedCode, recapAutoZoomEnabled]);
+
   const handleZoomRemaining = useCallback(() => {
     focusNextRemainingZone();
     inputRef.current?.focus({ preventScroll: true });
@@ -396,7 +430,7 @@ export default function MapReview({
     setAutoZoomEnabled(enabled => {
       const nextEnabled = !enabled;
 
-      writeMapAutoZoomPreference(nextEnabled);
+      writeAutoZoomPreference(mapAutoZoomStorageKey, nextEnabled);
 
       return nextEnabled;
     });
@@ -509,9 +543,9 @@ export default function MapReview({
         );
         const nextCode = recapRows[nextIndex]?.item.code;
 
-        // focusRecapCode (not selectRecapCode) so the left map preview zooms
-        // onto the newly selected zone as you arrow through the list.
-        if (nextCode) focusRecapCode(nextCode);
+        // selectRecapZone zooms the left map preview onto the newly selected
+        // zone, unless the recap "Zoom auto" toggle is off.
+        if (nextCode) selectRecapZone(nextCode);
         return;
       }
 
@@ -537,7 +571,7 @@ export default function MapReview({
 
     window.addEventListener("keydown", handleRecapKeyDown);
     return () => window.removeEventListener("keydown", handleRecapKeyDown);
-  }, [showRecap, recapRows, focusedCode, focusRecapCode, setQuality, showQualityControls]);
+  }, [showRecap, recapRows, focusedCode, selectRecapZone, setQuality, showQualityControls]);
 
   return (
     <>
@@ -1047,6 +1081,27 @@ export default function MapReview({
                   focusVersion={recapFocusVersion}
                   onSelect={selectRecapCode}
                 />
+                <button
+                  type="button"
+                  data-map-recap-auto-zoom={recapAutoZoomEnabled ? "on" : "off"}
+                  aria-label={recapAutoZoomEnabled
+                    ? "Désactiver le zoom automatique"
+                    : "Activer le zoom automatique"}
+                  aria-pressed={recapAutoZoomEnabled}
+                  onClick={toggleRecapAutoZoom}
+                  onMouseDown={(event) => event.preventDefault()}
+                  style={{
+                    ...autoZoomToggleStyle,
+                    ...(recapAutoZoomEnabled
+                      ? autoZoomToggleOnStyle
+                      : autoZoomToggleOffStyle)
+                  }}
+                  title={recapAutoZoomEnabled
+                    ? "Désactiver le zoom automatique"
+                    : "Activer le zoom automatique"}
+                >
+                  Zoom auto
+                </button>
               </div>
 
               <div style={recapTableStyle}>
@@ -1199,7 +1254,7 @@ export default function MapReview({
                           ref={setRecapRowRef(item.code)}
                           role="button"
                           tabIndex={0}
-                          onClick={() => focusRecapCode(item.code)}
+                          onClick={() => selectRecapZone(item.code)}
                           onKeyDown={(event) => {
                             if (event.target !== event.currentTarget) {
                               return;
@@ -1207,7 +1262,7 @@ export default function MapReview({
 
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              focusRecapCode(item.code);
+                              selectRecapZone(item.code);
                             }
                           }}
                           style={{
@@ -1483,7 +1538,8 @@ const recapMapPanelStyle = {
   borderRadius: "14px",
   overflow: "hidden",
   border: "1px solid #262626",
-  minHeight: "clamp(430px, 64vh, 780px)"
+  minHeight: "clamp(430px, 64vh, 780px)",
+  position: "relative"
 };
 
 const recapTableStyle = {
