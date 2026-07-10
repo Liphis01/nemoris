@@ -183,7 +183,7 @@ describe("useReviewSession", () => {
 
     await act(async () => {
       await result.current.submitMapAnswer({ 10: 0 }, "type_all");
-      await result.current.submitMediaAnswer({ 11: 2 }, "click_prompt");
+      await result.current.submitMediaAnswer({ 11: 2 }, "multiple_choice_image");
       await result.current.submitTimelineAnswer({ 12: { start: { year: 2000 } } });
     });
 
@@ -195,7 +195,7 @@ describe("useReviewSession", () => {
     );
     expect(sendMediaAnswer).toHaveBeenCalledWith(
       { 11: 2 },
-      "click_prompt",
+      "multiple_choice_image",
       undefined,
       "2026-01-01"
     );
@@ -371,7 +371,7 @@ describe("useReviewSession", () => {
     });
   });
 
-  it("keeps small click-prompt image retries in click_prompt mode", async () => {
+  it("keeps small image retries in the served mode", async () => {
     const items = Array.from({ length: 10 }, (_, index) => ({
       question_id: 100 + index,
       answer: `Image ${index}`
@@ -381,7 +381,7 @@ describe("useReviewSession", () => {
         group_id: 5,
         type_q: "media",
         name: "Flags",
-        mode: "click_prompt",
+        mode: "multiple_choice_image",
         items
       }
     ]);
@@ -398,12 +398,12 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions[1]).toMatchObject({
-      mode: "click_prompt",
+      mode: "multiple_choice_image",
       items: items.slice(0, 9)
     });
   });
 
-  it("keeps click-prompt image retries when enough failed items remain", async () => {
+  it("keeps image retries when enough failed items remain", async () => {
     const items = Array.from({ length: 10 }, (_, index) => ({
       question_id: 200 + index,
       answer: `Image ${index}`
@@ -413,7 +413,7 @@ describe("useReviewSession", () => {
         group_id: 5,
         type_q: "media",
         name: "Flags",
-        mode: "click_prompt",
+        mode: "multiple_choice_image",
         items
       }
     ]);
@@ -430,7 +430,7 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions[1]).toMatchObject({
-      mode: "click_prompt",
+      mode: "multiple_choice_image",
       items
     });
   });

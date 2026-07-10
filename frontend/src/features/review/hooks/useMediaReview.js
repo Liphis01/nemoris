@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { sendMediaAnswer } from "../../../api/review";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
@@ -490,18 +489,6 @@ export function useMediaReview(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reviewKey]
   );
-  const clickPromptPool = useMemo(
-    () => (
-      mode === IMAGE_MODE_CLICK_PROMPT
-        ? shuffled([...uniqueItemsByQuestionId(contextItems, reviewItems).values()])
-        : null
-    ),
-    // Locked per session like sessionItems. contextItems is preserved across
-    // retries, so the clickable pool never shrinks to the few prompted (failed)
-    // tiles — the pick stays as hard as the original review.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reviewKey]
-  );
   const promptQueue = useMemo(
     () => {
       if (!isPromptMode(mode)) return sessionItems;
@@ -629,7 +616,6 @@ export function useMediaReview(
   const activeInteractionFeedback = (
     !resultMode &&
     (
-      mode === IMAGE_MODE_CLICK_PROMPT ||
       mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
       mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
     )
@@ -637,10 +623,7 @@ export function useMediaReview(
     ? interactionFeedback
     : null;
   const visibleChoiceOptions = activeInteractionFeedback?.options || choiceOptions;
-  const visualPromptItem = (
-    activeInteractionFeedback?.correctQuestionId &&
-    mode !== IMAGE_MODE_CLICK_PROMPT
-  )
+  const visualPromptItem = activeInteractionFeedback?.correctQuestionId
     ? itemByQuestionId.get(activeInteractionFeedback.correctQuestionId) || currentPromptItem
     : currentPromptItem;
   const completedQuestionIdSet = isPromptMode(mode)
@@ -862,12 +845,9 @@ export function useMediaReview(
   function handleImageSelect(questionId) {
     if (
       resultMode ||
-      (
-        mode !== IMAGE_MODE_CLICK_PROMPT &&
-        mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-      ) ||
+      mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE ||
       !currentPromptItem ||
-      (mode !== IMAGE_MODE_CLICK_PROMPT && interactionFeedback)
+      interactionFeedback
     ) {
       return;
     }
@@ -878,9 +858,7 @@ export function useMediaReview(
       id: Date.now(),
       correctQuestionId: currentPromptItem.question_id,
       isCorrect,
-      options: mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-        ? choiceOptions
-        : null,
+      options: choiceOptions,
       selectedQuestionId: questionId
     });
 
@@ -1010,13 +988,8 @@ export function useMediaReview(
       return visualPromptItem ? [visualPromptItem] : [];
     }
 
-    if (mode === IMAGE_MODE_CLICK_PROMPT && !resultMode) {
-      return clickPromptPool;
-    }
-
     return sessionItems;
   }, [
-    clickPromptPool,
     mode,
     resultMode,
     sessionItems,
@@ -1055,13 +1028,12 @@ export function useMediaReview(
         isSessionMissed ||
         feedbackState === "missed"
       );
-      const shouldRevealWrongFeedback = mode !== IMAGE_MODE_CLICK_PROMPT;
       const isRevealed = (
         isFound ||
         isLockedMissed ||
         (!showsChoiceImages && isPersistentlyRevealed) ||
         feedbackState === "correct" ||
-        (feedbackState === "wrong" && shouldRevealWrongFeedback) ||
+        feedbackState === "wrong" ||
         feedbackState === "missed"
       );
 

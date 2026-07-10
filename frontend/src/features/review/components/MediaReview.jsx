@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
@@ -659,7 +658,6 @@ export default function MediaReview({
     normalizedMode !== IMAGE_MODE_TYPE_ALL &&
     normalizedMode !== IMAGE_MODE_TYPE_PROMPT &&
     (!fillAvailableHeight ||
-      normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
       normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE) &&
     !resultMode
   );
@@ -675,10 +673,7 @@ export default function MediaReview({
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
     !resultMode
   );
-  const answersByClick = (
-    normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-    normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-  );
+  const answersByClick = normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE;
   const selectsPromptImage = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
   const selectsImageByTile = answersByClick || selectsPromptImage;
   const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
@@ -690,10 +685,7 @@ export default function MediaReview({
   const shouldSeparateResolvedItems = (
     separateResolvedItems &&
     !resultMode &&
-    (
-      normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-      normalizedMode === IMAGE_MODE_TYPE_PROMPT
-    )
+    normalizedMode === IMAGE_MODE_TYPE_PROMPT
   );
   const activeGridItems = shouldSeparateResolvedItems
     ? gridItems.filter(row => !resolvedQuestionIdOrder.has(row.item.question_id))
@@ -798,13 +790,11 @@ export default function MediaReview({
       ? "Bonne réponse."
       : normalizedMode === IMAGE_MODE_TYPE_ALL
         ? "Tape les réponses."
-        : normalizedMode === IMAGE_MODE_CLICK_PROMPT
-          ? "Clique la bonne image."
-          : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-            ? "Choisis la bonne image."
-            : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
-              ? "Choisis le bon nom."
-              : "Tape le nom de l'image.";
+        : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+          ? "Choisis la bonne image."
+          : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+            ? "Choisis le bon nom."
+            : "Tape le nom de l'image.";
 
   const focusAnswerInput = useCallback(() => {
     if (!showTextInput) return;
@@ -1081,7 +1071,6 @@ export default function MediaReview({
       resultMode ||
       previewRow ||
       ![
-        IMAGE_MODE_CLICK_PROMPT,
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
       ].includes(normalizedMode)
@@ -2297,8 +2286,7 @@ export default function MediaReview({
                   textTransform: "uppercase"
                 }}
               >
-                {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-                  normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+                {normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
                   ? "Image demandée"
                   : "Image surlignée"}
               </div>
@@ -2313,8 +2301,7 @@ export default function MediaReview({
                 overflowWrap: "anywhere"
               }}
             >
-              {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-                normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+              {normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
                 ? promptLabel
                 : currentPromptItem
                   ? "Trouve son nom"
@@ -2618,9 +2605,9 @@ export default function MediaReview({
   );
 }
 
-const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 214px";
+const imageRecapTableGridColumns = "minmax(210px, 1.35fr) 94px 86px 194px";
 const imageRecapTableGap = "10px";
-const imageRecapTablePadding = "12px 16px";
+const imageRecapTablePadding = "10px 14px";
 const imageRecapStatusStripeBorder = "3px solid transparent";
 
 const imageRecapOverlayStyle = {
@@ -2630,7 +2617,7 @@ const imageRecapOverlayStyle = {
   display: "flex",
   inset: 0,
   justifyContent: "center",
-  padding: "30px",
+  padding: "20px",
   position: "fixed",
   zIndex: 1000
 };
@@ -2641,9 +2628,9 @@ const imageRecapCardStyle = {
   borderRadius: "18px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
   maxHeight: "100%",
-  maxWidth: "1180px",
+  maxWidth: "1560px",
   overflow: "auto",
-  padding: "26px",
+  padding: "24px",
   scrollbarGutter: "stable",
   width: "100%"
 };
@@ -2729,7 +2716,7 @@ const imageRecapPreviewPanelStyle = {
   borderRadius: "14px",
   display: "flex",
   flexDirection: "column",
-  minHeight: "430px",
+  minHeight: "clamp(430px, 64vh, 780px)",
   minWidth: 0,
   overflow: "hidden"
 };
@@ -2914,7 +2901,7 @@ const imageRecapTableBodyStyle = {
   display: "flex",
   flexDirection: "column",
   gap: "1px",
-  maxHeight: "430px",
+  maxHeight: "clamp(430px, 64vh, 780px)",
   overflow: "auto",
   scrollbarGutter: "stable"
 };
@@ -2991,7 +2978,7 @@ const imageRecapRowStyle = {
   font: "inherit",
   gap: imageRecapTableGap,
   gridTemplateColumns: imageRecapTableGridColumns,
-  minHeight: "64px",
+  minHeight: "62px",
   padding: imageRecapTablePadding,
   textAlign: "left",
   transition: "background 0.14s ease, box-shadow 0.14s ease",
@@ -3091,7 +3078,6 @@ const imageRecapThumbnailMissingStyle = {
 
 const imageRecapAnswerTextStyle = {
   color: "#f3f3f3",
-  fontSize: "15px",
   fontWeight: 650,
   minWidth: 0,
   overflow: "hidden",
@@ -3143,11 +3129,10 @@ const imageRecapQualityCellStyle = {
 };
 
 const imageRecapQualityButtonStyle = {
-  borderRadius: "10px",
-  fontSize: "17px",
+  borderRadius: "9px",
   fontWeight: 600,
-  height: "40px",
-  lineHeight: "40px",
+  height: "34px",
+  lineHeight: "34px",
   padding: 0,
-  width: "38px"
+  width: "32px"
 };

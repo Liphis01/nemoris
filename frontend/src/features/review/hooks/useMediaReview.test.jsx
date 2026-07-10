@@ -8,7 +8,6 @@ import {
 } from "./useMediaReview";
 import { sendMediaAnswer } from "../../../api/review";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
@@ -450,126 +449,6 @@ describe("useMediaReview", () => {
     expect(result.current.currentPromptItem.question_id).not.toBe(
       skipped.question_id
     );
-  });
-
-  it("click_prompt resolves correct and wrong image clicks", () => {
-    vi.useFakeTimers();
-    const items = [
-      imageItem(1, "France"),
-      imageItem(2, "Germany")
-    ];
-
-    try {
-      const { result } = renderHook(() =>
-        useMediaReview(items, vi.fn(), undefined, {
-          mode: IMAGE_MODE_CLICK_PROMPT
-        })
-      );
-      const prompt = result.current.currentPromptItem;
-      const wrong = items.find(item => item.question_id !== prompt.question_id);
-
-      act(() => {
-        result.current.handleImageSelect(wrong.question_id);
-      });
-
-      expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
-      expect(result.current.resolvedQuestionIdsRecentFirst).toEqual([
-        prompt.question_id
-      ]);
-      expect(result.current.resolvedQuestionIdsRecentFirst).not.toContain(
-        wrong.question_id
-      );
-      expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
-      expect(result.current.interactionFeedback).toMatchObject({
-        correctQuestionId: prompt.question_id,
-        isCorrect: false,
-        selectedQuestionId: wrong.question_id
-      });
-      expect(result.current.gridItems.find(row =>
-        row.item.question_id === prompt.question_id
-      )).toMatchObject({
-        feedbackState: "missed",
-        isMissed: true,
-        isRevealed: true
-      });
-      expect(result.current.gridItems.find(row =>
-        row.item.question_id === wrong.question_id
-      )).toMatchObject({
-        feedbackState: "wrong",
-        isMissed: false,
-        isRevealed: false
-      });
-
-      const nextPrompt = result.current.currentPromptItem;
-
-      expect(nextPrompt.question_id).not.toBe(prompt.question_id);
-      expect(result.current.promptLabel).toBe(nextPrompt.label);
-
-      act(() => {
-        result.current.handleImageSelect(nextPrompt.question_id);
-      });
-
-      expect(result.current.foundQuestionIds).toContain(nextPrompt.question_id);
-      expect(result.current.interactionFeedback).toMatchObject({
-        correctQuestionId: nextPrompt.question_id,
-        isCorrect: true,
-        selectedQuestionId: nextPrompt.question_id
-      });
-
-      act(() => {
-        vi.advanceTimersByTime(1300);
-      });
-
-      expect(result.current.resultMode).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("click_prompt keeps the full context grid when only a subset is prompted", () => {
-    // Mirrors a failed-retry pass: only 2 of the original 6 items are prompted,
-    // but the clickable grid must stay the full context so the pick never
-    // degenerates to a handful of tiles.
-    const items = [
-      imageItem(1, "France"),
-      imageItem(2, "Germany")
-    ];
-    const contextItems = [
-      ...items,
-      imageItem(3, "Spain"),
-      imageItem(4, "Italy"),
-      imageItem(5, "Portugal"),
-      imageItem(6, "Belgium")
-    ];
-    const { result } = renderHook(() =>
-      useMediaReview(items, vi.fn(), undefined, {
-        mode: IMAGE_MODE_CLICK_PROMPT,
-        contextItems
-      })
-    );
-
-    // The grid shows the full 6-item pool...
-    expect(optionIds(result.current.gridItems.map(row => row.item))).toEqual([
-      1, 2, 3, 4, 5, 6
-    ]);
-    // ...but only the 2 re-queued items are actually in play.
-    expect([1, 2]).toContain(result.current.currentPromptItem.question_id);
-
-    // Clicking a context-only distractor (never prompted) counts as a miss for
-    // the current prompt.
-    const prompt = result.current.currentPromptItem;
-
-    act(() => {
-      result.current.handleImageSelect(4);
-    });
-
-    expect(result.current.resolvedQuestionIds).toContain(prompt.question_id);
-    expect(result.current.foundQuestionIds).not.toContain(prompt.question_id);
-    expect(result.current.interactionFeedback).toMatchObject({
-      correctQuestionId: prompt.question_id,
-      isCorrect: false,
-      selectedQuestionId: 4
-    });
   });
 
   it("multiple_choice_label chooses from labels for the target image", () => {

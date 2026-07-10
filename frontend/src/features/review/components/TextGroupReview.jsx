@@ -264,8 +264,8 @@ export default function TextGroupReview({
 
   if (phase === "recap") {
     return (
-      <div style={{ ...containerStyle, maxWidth: "880px" }}>
-        <div style={{ alignItems: "center", color: "#8fc7ff", display: "flex", fontSize: "13px", fontWeight: 800, gap: "10px", justifyContent: "space-between", letterSpacing: 1 }}>
+      <div style={{ ...containerStyle, maxWidth: "1180px" }}>
+        <div style={{ alignItems: "center", color: "#8fc7ff", display: "flex", fontSize: "12px", fontWeight: 800, gap: "10px", justifyContent: "space-between", letterSpacing: 1 }}>
           <span>RÉSULTAT</span>
           <span style={{ color: "#666", fontSize: "11px", fontWeight: 600, letterSpacing: 0, textTransform: "none" }}>
             ↑/↓ pour naviguer · 0-3 pour noter
@@ -273,7 +273,7 @@ export default function TextGroupReview({
         </div>
         <div
           className="app-scrollbar"
-          style={{ display: "grid", gap: "10px", overflowY: "auto", paddingRight: "4px" }}
+          style={{ display: "grid", gap: "8px", overflowY: "auto", paddingRight: "4px" }}
         >
           {items.map((item, index) => {
             const quality = qualities[item.question_id] ?? 0;
@@ -290,25 +290,25 @@ export default function TextGroupReview({
                   alignItems: "center",
                   background: isSelected ? "#1c1c1c" : "#161616",
                   border: "1px solid #2a2a2a",
-                  borderLeft: `4px solid ${quality > 0 ? "#38bdf8" : "#f59e0b"}`,
-                  borderRadius: "12px",
+                  borderLeft: `3px solid ${quality > 0 ? "#38bdf8" : "#f59e0b"}`,
+                  borderRadius: "10px",
                   boxShadow: isSelected ? "0 0 0 2px rgba(143, 199, 255, 0.55)" : "none",
                   cursor: "pointer",
                   display: "grid",
-                  gap: "12px",
+                  gap: "10px",
                   gridTemplateColumns: "minmax(0, 1fr) auto",
-                  padding: "13px 15px"
+                  padding: "10px 12px"
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#eee", fontSize: "15px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: "#eee", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {item.question}
                   </div>
-                  <div style={{ color: "#8fc7ff", fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: "#8fc7ff", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {item.answer}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "5px" }}>
                   {qualityOptions.map(option => {
                     const active = quality === option.value;
                     const colors = qualityButtonColors[option.value];
@@ -330,8 +330,8 @@ export default function TextGroupReview({
                           borderRadius: "8px",
                           color: active ? colors.color : "#999",
                           cursor: "pointer",
-                          fontSize: "18px",
-                          padding: "9px 12px"
+                          fontSize: "15px",
+                          padding: "6px 9px"
                         }}
                       >
                         {option.icon}
@@ -353,9 +353,7 @@ export default function TextGroupReview({
               background: "#1e3a5f",
               border: "1px solid #345b7a",
               color: "#dbeafe",
-              fontSize: "15px",
-              opacity: submitting ? 0.6 : 1,
-              padding: "12px 20px"
+              opacity: submitting ? 0.6 : 1
             }}
           >
             Valider

@@ -343,8 +343,8 @@ def test_easy_mode_scales_whole_interval_on_correct_answer():
 
 def test_click_prompt_difficulty_models_shrinking_pool():
     # Re-anchored curve tracks the AVERAGE (shrinking) pool, so it is lower than
-    # the old 0.95 - 0.55/sqrt(N) at every pool size, and all three formula sites
-    # (map serve, image serve, scheduler replay) agree for a given pool size.
+    # the old 0.95 - 0.55/sqrt(N) at every pool size, and both formula sites
+    # (map serve, scheduler replay) agree for a given pool size.
     expected = {5: 0.5509, 9: 0.65, 16: 0.7225, 30: 0.7812}
     tuning = DEFAULT_SCHEDULER_TUNING_SETTINGS
 
@@ -353,7 +353,6 @@ def test_click_prompt_difficulty_models_shrinking_pool():
         assert click_prompt_base_difficulty(n) < 0.95 - (0.55 / (n ** 0.5))
 
         served_map = map_mode_difficulty("click_prompt", context_count=n, tuning=tuning)
-        served_image = image_mode_difficulty("click_prompt", context_count=n, tuning=tuning)
         replayed = mode_difficulty_for_event(
             HistoryEvent(
                 question_id=1,
@@ -365,7 +364,6 @@ def test_click_prompt_difficulty_models_shrinking_pool():
             ),
             TuningParams()
         )
-        assert abs(served_map - served_image) < 1e-9
         assert abs(served_map - replayed) < 1e-9
 
 

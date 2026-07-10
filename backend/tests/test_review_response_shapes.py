@@ -1249,7 +1249,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertIn("mode_reward_factor", item_a_history)
 
-    def test_review_endpoint_returns_missed_image_items_below_click_minimum(self):
+    def test_review_endpoint_returns_missed_image_items_below_choice_minimum(self):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]
 
@@ -1257,7 +1257,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             MediaAnswerRequest(items={
                 item_a.id: 2,
                 item_b.id: 0
-            }, mode="click_prompt"),
+            }, mode="multiple_choice_image"),
             db=self.db
         )
 
@@ -1277,7 +1277,10 @@ class ReviewResponseShapeTests(unittest.TestCase):
             [item["question_id"] for item in image_groups[0]["context_items"]],
             [item_b.id]
         )
-        self.assertNotEqual(image_groups[0]["mode"], "click_prompt")
+        self.assertNotIn(
+            image_groups[0]["mode"],
+            {"multiple_choice_image", "multiple_choice_label"}
+        )
         self.assertEqual(item_b.progress.next_review, date.today())
 
     def test_answer_media_uses_submitted_chunk_size_for_mode_metadata(self):
@@ -1309,7 +1312,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
                     item.id: 2
                     for item in submitted_items
                 },
-                mode="click_prompt"
+                mode="multiple_choice_image"
             ),
             db=self.db
         )
@@ -1317,11 +1320,11 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(response, {"status": "ok"})
 
         history = submitted_items[0].progress.history[-1]
-        self.assertEqual(history["image_mode"], "click_prompt")
+        self.assertEqual(history["image_mode"], "multiple_choice_image")
         self.assertEqual(history["image_context_count"], 5)
         self.assertAlmostEqual(
             history["mode_difficulty"],
-            image_mode_difficulty("click_prompt", 5)
+            image_mode_difficulty("multiple_choice_image", 5)
         )
 
     def test_answer_timeline_endpoint_returns_per_item_result_shapes(self):

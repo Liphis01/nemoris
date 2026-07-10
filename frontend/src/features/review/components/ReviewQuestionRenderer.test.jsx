@@ -1,7 +1,6 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_TYPE_PROMPT
 } from "../imageModes";
@@ -72,10 +71,9 @@ describe("ReviewQuestionRenderer image review props", () => {
     vi.clearAllMocks();
   });
 
-  it.each([
-    IMAGE_MODE_CLICK_PROMPT,
-    IMAGE_MODE_TYPE_PROMPT
-  ])("enables the resolved split for %s in review and training", (mode) => {
+  it("enables the resolved split for type_prompt in review and training", () => {
+    const mode = IMAGE_MODE_TYPE_PROMPT;
+
     renderRenderer({
       q: imageQuestion(mode),
       trainingMode: false

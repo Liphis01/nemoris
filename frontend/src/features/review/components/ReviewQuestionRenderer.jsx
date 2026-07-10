@@ -5,7 +5,6 @@ import TextGroupReview from "./TextGroupReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
 import {
-    IMAGE_MODE_CLICK_PROMPT,
     IMAGE_MODE_TYPE_PROMPT,
     normalizeImageMode
 } from "../imageModes";
@@ -78,10 +77,7 @@ export default function ReviewQuestionRenderer({
 
     if (q.type_q === "media" && q.items) {
         const imageMode = normalizeImageMode(q.mode);
-        const separatesResolvedItems = (
-            imageMode === IMAGE_MODE_CLICK_PROMPT ||
-            imageMode === IMAGE_MODE_TYPE_PROMPT
-        );
+        const separatesResolvedItems = imageMode === IMAGE_MODE_TYPE_PROMPT;
 
         return (
             <MediaReview

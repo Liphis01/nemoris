@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import MediaReview from "./MediaReview";
 import { useMediaReview } from "../hooks/useMediaReview";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
@@ -316,7 +315,7 @@ function typePromptHookState({
 
 function imageClickHookState({
   rows,
-  mode = IMAGE_MODE_CLICK_PROMPT,
+  mode = IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   activeQuestionId = rows[0]?.item.question_id || null,
   foundQuestionIds = [],
   resolvedQuestionIds = [],
@@ -638,10 +637,8 @@ describe("MediaReview answer label preview", () => {
       .toBeInTheDocument();
   });
 
-  it.each([
-    IMAGE_MODE_CLICK_PROMPT,
-    IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-  ])("keeps zoom separate from image selection in %s mode", (mode) => {
+  it("keeps zoom separate from image selection in multiple_choice_image mode", () => {
+    const mode = IMAGE_MODE_MULTIPLE_CHOICE_IMAGE;
     const handleImageSelect = vi.fn();
     const rows = [
       imageGridRow(1),
@@ -735,7 +732,7 @@ describe("MediaReview answer label preview", () => {
     expect(passedTile).not.toHaveTextContent("Image 1");
   });
 
-  it("reveals only the target image during wrong click_prompt feedback", () => {
+  it("reveals only the target image during wrong image-choice feedback", () => {
     const rows = [
       imageGridRow(1, {
         feedbackState: "missed",
@@ -956,68 +953,6 @@ describe("MediaReview answer label preview", () => {
     fireEvent.click(resolvedSection.querySelector('[data-image-question-id="3"]'));
 
     expect(selectItem).not.toHaveBeenCalled();
-  });
-
-  it("puts only the resolved click_prompt target in the treated section", () => {
-    const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
-    const scrollIntoView = vi.fn();
-    const rows = [
-      imageGridRow(1, {
-        feedbackState: "missed",
-        isMissed: true,
-        isRevealed: true
-      }),
-      imageGridRow(2, {
-        feedbackState: "wrong"
-      }),
-      imageGridRow(3)
-    ];
-    useMediaReview.mockReturnValue(
-      imageClickHookState({
-        rows,
-        activeQuestionId: 1,
-        resolvedQuestionIds: [1],
-        hookOverrides: {
-          feedbackTone: "incorrect",
-          interactionFeedback: {
-            correctQuestionId: 1,
-            isCorrect: false,
-            selectedQuestionId: 2
-          },
-          wrongAnsweredCount: 1
-        }
-      })
-    );
-    Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView
-    });
-
-    try {
-      const { container } = renderMediaReview({
-        reviewItems: rows.map(row => row.item),
-        separateResolvedItems: true
-      });
-      const activeGrid = container.querySelector("[data-image-active-grid]");
-      const resolvedSection = container.querySelector("[data-image-resolved-section]");
-
-      expect(resolvedSection.querySelector('[data-image-question-id="1"]'))
-        .toBeInTheDocument();
-      expect(resolvedSection.querySelector('[data-image-question-id="2"]'))
-        .not.toBeInTheDocument();
-      expect(activeGrid.querySelector('[data-image-question-id="2"]'))
-        .toBeInTheDocument();
-      expect(scrollIntoView).not.toHaveBeenCalled();
-    } finally {
-      if (originalScrollIntoView) {
-        Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
-          configurable: true,
-          value: originalScrollIntoView
-        });
-      } else {
-        delete window.HTMLElement.prototype.scrollIntoView;
-      }
-    }
   });
 
   it("keeps the full grid together in image result mode", () => {

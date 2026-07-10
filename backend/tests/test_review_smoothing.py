@@ -284,10 +284,6 @@ class SchedulerSmoothingTests(unittest.TestCase):
             image_mode_difficulty("multiple_choice_image", 20),
             0.55
         )
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 1), 0.4)
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 4), 0.505)
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 16), 0.7225)
-        self.assertLess(image_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_image_review_mode_selector_uses_difficulty_size_and_variety(self):
         hard = Question(type_q="media", answer="Hard")
@@ -376,39 +372,6 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 rng=FixedRandom(0.999999)
             ),
             "multiple_choice_label"
-        )
-
-    def test_image_click_prompt_requires_minimum_review_context(self):
-        context = [
-            Question(id=index, type_q="media", answer=f"Image {index}")
-            for index in range(1, 6)
-        ]
-
-        for question in context:
-            question.progress = Progress(
-                reps=3,
-                difficulty=5.0,
-                history=[]
-            )
-
-        for size in range(1, 5):
-            modes = {
-                choose_image_review_mode(
-                    [context[0]],
-                    context[:size],
-                    rng=random.Random(seed)
-                )
-                for seed in range(50)
-            }
-            self.assertNotIn("click_prompt", modes)
-
-        self.assertEqual(
-            choose_image_review_mode(
-                [context[0]],
-                context,
-                rng=FixedRandom(0)
-            ),
-            "click_prompt"
         )
 
     def test_again_projected_interval_is_immediate_retry(self):

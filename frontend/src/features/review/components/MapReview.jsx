@@ -1427,20 +1427,20 @@ const overlayStyle = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  padding: "30px",
+  padding: "20px",
   zIndex: 1000
 };
 
 const recapCardStyle = {
   width: "100%",
-  maxWidth: "1180px",
+  maxWidth: "1560px",
   maxHeight: "100%",
   overflow: "auto",
   scrollbarGutter: "stable",
   background: "#1a1a1a",
   border: "1px solid #2a2a2a",
   borderRadius: "18px",
-  padding: "26px",
+  padding: "24px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)"
 };
 
@@ -1483,7 +1483,7 @@ const recapMapPanelStyle = {
   borderRadius: "14px",
   overflow: "hidden",
   border: "1px solid #262626",
-  minHeight: "430px"
+  minHeight: "clamp(430px, 64vh, 780px)"
 };
 
 const recapTableStyle = {
@@ -1494,9 +1494,9 @@ const recapTableStyle = {
   background: "#111"
 };
 
-const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 214px";
+const recapTableGridColumns = "minmax(150px, 1.35fr) 94px 86px 194px";
 const recapTableGap = "10px";
-const recapTablePadding = "12px 16px";
+const recapTablePadding = "10px 14px";
 const recapStatusStripeBorder = "3px solid transparent";
 
 const recapTableHeaderStyle = {
@@ -1561,7 +1561,7 @@ const recapTableBodyStyle = {
   display: "flex",
   flexDirection: "column",
   gap: "1px",
-  maxHeight: "430px",
+  maxHeight: "clamp(430px, 64vh, 780px)",
   overflow: "auto",
   scrollbarGutter: "stable",
   background: "#242424"
@@ -1631,7 +1631,7 @@ const recapRowStyle = {
   gap: recapTableGap,
   alignItems: "center",
   width: "100%",
-  minHeight: "64px",
+  minHeight: "58px",
   padding: recapTablePadding,
   background: "#181818",
   border: "0",
@@ -1712,7 +1712,6 @@ const recapAnswerTextStyle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-  fontSize: "15px",
   fontWeight: "650",
   color: "#f3f3f3"
 };
@@ -1748,13 +1747,12 @@ const recapQualityCellStyle = {
 };
 
 const recapQualityButtonStyle = {
-  width: "38px",
-  height: "40px",
+  width: "32px",
+  height: "34px",
   padding: 0,
-  borderRadius: "10px",
-  fontSize: "17px",
+  borderRadius: "9px",
   fontWeight: "600",
-  lineHeight: "40px"
+  lineHeight: "34px"
 };
 
 const zoneHistoryRateStyle = {

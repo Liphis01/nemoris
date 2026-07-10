@@ -25,7 +25,6 @@ MapMode = Literal[
 
 ImageMode = Literal[
     "type_all",
-    "click_prompt",
     "type_prompt",
     "multiple_choice_label",
     "multiple_choice_image"

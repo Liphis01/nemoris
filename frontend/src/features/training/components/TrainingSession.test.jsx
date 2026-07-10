@@ -100,13 +100,6 @@ describe("TrainingSession", () => {
               best_time_at: "2026-06-02T10:00:00+00:00",
               question_count: 5
             },
-            click_prompt: {
-              best_found_percent: 50,
-              best_found_count: 3,
-              best_found_elapsed_ms: 35000,
-              best_found_at: "2026-06-02T10:00:00+00:00",
-              question_count: 5
-            },
             multiple_choice_image: {
               best_found_percent: 100,
               best_found_count: 5,
