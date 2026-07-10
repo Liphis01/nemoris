@@ -171,6 +171,7 @@ export function useTrainingSession(active = true) {
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completedElapsedMs, setCompletedElapsedMs] = useState(null);
+  const [answeringComplete, setAnsweringComplete] = useState(false);
   const [recordSaveStatus, setRecordSaveStatus] = useState("idle");
   const [recordSaveError, setRecordSaveError] = useState("");
   const [recordResult, setRecordResult] = useState(null);
@@ -218,6 +219,7 @@ export function useTrainingSession(active = true) {
     setRunStartedAt(shouldStartTimer ? performance.now() : null);
     setElapsedMs(0);
     setCompletedElapsedMs(null);
+    setAnsweringComplete(false);
     setRecordSaveStatus("idle");
     setRecordSaveError("");
     setRecordResult(null);
@@ -344,9 +346,12 @@ export function useTrainingSession(active = true) {
   }, []);
 
   // Every question type ends on a recap the user dismisses by hand. Reading it
-  // is not solving, so the run clock stops as soon as the last question has
-  // nothing left to answer rather than when the recap is dismissed.
-  const markAnsweringComplete = useCallback(() => {
+  // is not solving, so on the last question the run clock stops and the attempt
+  // is saved right away, rather than waiting for the recap to be dismissed.
+  // The caller passes its failed ids because only it knows them at this point.
+  const markAnsweringComplete = useCallback((failedIds = []) => {
+    addFailedIds(setFailedQuestionIds, failedIds);
+
     if (runStartedAt === null) return;
     if (questions.length === 0 || currentIndex < questions.length - 1) return;
 
@@ -358,6 +363,7 @@ export function useTrainingSession(active = true) {
     setElapsedMs(finalElapsed);
     setCompletedElapsedMs(finalElapsed);
     setRunStartedAt(null);
+    setAnsweringComplete(true);
   }, [currentIndex, questions.length, runStartedAt]);
 
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
@@ -416,7 +422,7 @@ export function useTrainingSession(active = true) {
 
   useEffect(() => {
     if (
-      !isComplete ||
+      (!isComplete && !answeringComplete) ||
       !recordEligible ||
       completedElapsedMs === null ||
       recordSubmittedRef.current
@@ -507,6 +513,7 @@ export function useTrainingSession(active = true) {
   }, [
     activeScope,
     allQuestionIds.length,
+    answeringComplete,
     attemptFoundCount,
     completedElapsedMs,
     isComplete,

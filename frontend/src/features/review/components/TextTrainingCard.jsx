@@ -179,18 +179,21 @@ export default function TextTrainingCard({
 
     // Whichever branch follows, the user is done answering: a correct answer
     // moves on, the others just reveal the expected one.
-    onAnsweringComplete?.();
+    const questionId = q.question_id ?? q.id;
 
     if (!normalizeTextTrainingAnswer(draft).trim()) {
+      onAnsweringComplete?.([questionId]);
       setResult("skipped");
       return;
     }
 
     if (matchesTextTrainingAnswer(q, draft)) {
+      onAnsweringComplete?.([]);
       onComplete({ failedQuestionIds: [] });
       return;
     }
 
+    onAnsweringComplete?.([questionId]);
     setResult("wrong");
   }
 

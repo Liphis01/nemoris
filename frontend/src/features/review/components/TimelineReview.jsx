@@ -2942,7 +2942,11 @@ export default function TimelineReview({
       );
 
       setRecapResults(sortedResults);
-      onAnsweringComplete?.();
+      onAnsweringComplete?.(
+        sortedResults
+          .filter(result => result.quality === 0)
+          .map(result => result.question_id)
+      );
     } catch (requestError) {
       setError(requestError.message || "Impossible de valider cette timeline.");
     } finally {

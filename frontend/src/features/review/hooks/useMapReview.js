@@ -172,6 +172,13 @@ function submittedMapQualities(qualityByQuestionId) {
 }
 
 
+function failedMapQuestionIds(qualityByQuestionId) {
+  return Object.entries(submittedMapQualities(qualityByQuestionId))
+    .filter(([, quality]) => quality === 0)
+    .map(([questionId]) => Number(questionId));
+}
+
+
 function compareDefaultRecapRows(a, b) {
   if (b.difficultyScore !== a.difficultyScore) {
     return b.difficultyScore - a.difficultyScore;
@@ -661,11 +668,13 @@ export function useMapReview(
 
     if (!allZonesComplete) return;
 
-    setQualityByQuestionId(
-      buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
+    const nextQualities = buildMapRecapQualities(
+      reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
     );
+
+    setQualityByQuestionId(nextQualities);
     setShowRecap(true);
-    onAnsweringComplete?.();
+    onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
   }, [
     allowPartialSubmit,
     completedQuestionIdSet,
@@ -850,11 +859,13 @@ export function useMapReview(
   }
 
   function finishMap() {
-    setQualityByQuestionId(
-      buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
+    const nextQualities = buildMapRecapQualities(
+      reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
     );
+
+    setQualityByQuestionId(nextQualities);
     setShowRecap(true);
-    onAnsweringComplete?.();
+    onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
   }
 
   async function sendResult() {

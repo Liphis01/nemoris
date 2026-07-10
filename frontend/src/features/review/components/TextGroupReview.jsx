@@ -103,8 +103,6 @@ export default function TextGroupReview({
     : foundIds.size >= items.length;
 
   function finishAnswering() {
-    onAnsweringComplete?.();
-
     const nextQualities = {};
 
     items.forEach(item => {
@@ -116,6 +114,11 @@ export default function TextGroupReview({
     });
 
     setQualities(nextQualities);
+    onAnsweringComplete?.(
+      Object.entries(nextQualities)
+        .filter(([, quality]) => quality === 0)
+        .map(([questionId]) => Number(questionId))
+    );
 
     if (showQualityControls) {
       setSelectedRecapIndex(0);

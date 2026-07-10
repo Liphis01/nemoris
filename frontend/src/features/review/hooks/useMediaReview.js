@@ -729,7 +729,7 @@ export function useMediaReview(
     setInteractionFeedback(null);
     setResultMode(true);
     setActivePromptQuestionId(null);
-    onAnsweringComplete?.();
+    onAnsweringComplete?.(missedIds);
   }
 
   function rememberFound(item) {

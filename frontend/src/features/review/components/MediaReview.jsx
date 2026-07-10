@@ -682,9 +682,11 @@ export default function MediaReview({
   const resolvedQuestionIdOrder = new Map(
     recentResolvedQuestionIds.map((questionId, index) => [questionId, index])
   );
+  // type_prompt already parts the tiles as the run goes: solved ones drop into
+  // the resolved strip, the rest stay put. The result screen keeps that exact
+  // layout and only reveals the answers, so no tile ever jumps.
   const shouldSeparateResolvedItems = (
     separateResolvedItems &&
-    !resultMode &&
     normalizedMode === IMAGE_MODE_TYPE_PROMPT
   );
   const activeGridItems = shouldSeparateResolvedItems
@@ -706,6 +708,25 @@ export default function MediaReview({
         resolvedQuestionIdOrder.get(right.item.question_id)
       ))
     : [];
+  // The choice modes never part their tiles during the run, so their result
+  // screen is the one place the two outcomes would otherwise be interleaved.
+  // type_all keeps its single in-place grid.
+  const splitsResultItems = (
+    resultMode && [
+      IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    ].includes(normalizedMode)
+  );
+  const correctResultItems = splitsResultItems
+    ? gridItems.filter(row => row.isFound)
+    : [];
+  const missedResultItems = splitsResultItems
+    ? gridItems.filter(row => !row.isFound)
+    : [];
+  const showsResultSections = (
+    correctResultItems.length > 0 &&
+    missedResultItems.length > 0
+  );
   const completedQuestionCount = answeredCount + wrongAnsweredCount;
   const correctProgressPercent = reviewItems.length
     ? Math.min((answeredCount / reviewItems.length) * 100, 100)
@@ -1302,6 +1323,42 @@ export default function MediaReview({
           label={answerLabel(row.item)}
           revealed={revealed}
         />
+      </div>
+    );
+  }
+
+  function renderResultSection(sectionKey, title, accentColor, rows, divided) {
+    return (
+      <div
+        data-image-result-section={sectionKey}
+        style={divided
+          ? { borderTop: "1px solid #262626", marginTop: "16px", paddingTop: "14px" }
+          : undefined}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            color: accentColor,
+            display: "flex",
+            fontSize: "12px",
+            fontWeight: 800,
+            justifyContent: "space-between",
+            marginBottom: "10px",
+            textTransform: "uppercase"
+          }}
+        >
+          <span>{title}</span>
+          <span style={{ color: "#6b7280" }}>{rows.length}</span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: "12px",
+            gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))"
+          }}
+        >
+          {rows.map(row => renderImageTile(row))}
+        </div>
       </div>
     );
   }
@@ -2199,7 +2256,16 @@ export default function MediaReview({
               })
               : null}
           </div>
-        ) : (
+        ) : showsResultSections ? (
+          <div data-image-result-grid>
+            {renderResultSection(
+              "correct", "Correctes", "#86efac", correctResultItems, false
+            )}
+            {renderResultSection(
+              "missed", "À revoir", "#fca5a5", missedResultItems, true
+            )}
+          </div>
+        ) : activeGridItems.length > 0 ? (
           <div
             data-image-active-grid
             style={{
@@ -2210,16 +2276,18 @@ export default function MediaReview({
           >
             {activeGridItems.map(row => renderImageTile(row))}
           </div>
-        )}
+        ) : null}
 
         {!showImageChoiceBoard && !showPromptImageBoard && resolvedGridItems.length > 0 && (
           <div
             data-image-resolved-section
-            style={{
-              borderTop: "1px solid #262626",
-              marginTop: "16px",
-              paddingTop: "14px"
-            }}
+            style={activeGridItems.length > 0
+              ? {
+                borderTop: "1px solid #262626",
+                marginTop: "16px",
+                paddingTop: "14px"
+              }
+              : undefined}
           >
             <div
               style={{
