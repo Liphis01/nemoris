@@ -161,10 +161,18 @@ function modeConfigForGroup(group) {
 
 function recordForMode(group, mode) {
   const config = modeConfigForGroup(group);
+  const records = group?.training_records;
 
-  return group?.training_records?.[mode] || (
-    mode === config?.defaultMode ? group?.training_record : null
-  );
+  // When a per-mode map is present it is authoritative: a mode with no entry
+  // has no record. The flat `training_record` is only a legacy fallback for the
+  // default mode, and must not be consulted otherwise — after recording a
+  // non-default mode the hook overwrites it with that mode's score, which would
+  // otherwise leak into the default mode until the next refresh.
+  if (records && typeof records === "object") {
+    return records[mode] || null;
+  }
+
+  return mode === config?.defaultMode ? group?.training_record : null;
 }
 
 

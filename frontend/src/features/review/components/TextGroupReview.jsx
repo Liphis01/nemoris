@@ -486,6 +486,7 @@ export default function TextGroupReview({
               columnGap: "92px",
               display: "grid",
               gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+              isolation: "isolate",
               position: "relative"
             }}
           >
@@ -497,7 +498,8 @@ export default function TextGroupReview({
                 overflow: "visible",
                 pointerEvents: "none",
                 position: "absolute",
-                width: "100%"
+                width: "100%",
+                zIndex: -1
               }}
             >
               {orderedLinks.map(link => {
@@ -507,7 +509,7 @@ export default function TextGroupReview({
                   <g
                     key={link.id}
                     opacity={active ? 1 : hoveredPairId == null ? 0.9 : 0.15}
-                    style={{ transition: "opacity 120ms ease" }}
+                    style={{ transition: "opacity 60ms ease" }}
                   >
                     <path
                       d={link.d}
@@ -552,7 +554,7 @@ export default function TextGroupReview({
                       color: matched ? pairColor : "#eee",
                       cursor: matched ? "default" : "pointer",
                       textAlign: "left",
-                      transition: "opacity 120ms ease, box-shadow 120ms ease"
+                      transition: "opacity 60ms ease, box-shadow 60ms ease"
                     }}
                   >
                     {item.question}
@@ -587,7 +589,7 @@ export default function TextGroupReview({
                       color: matched ? pairColor : "#eee",
                       cursor: matched ? "default" : "pointer",
                       textAlign: "left",
-                      transition: "opacity 120ms ease, box-shadow 120ms ease"
+                      transition: "opacity 60ms ease, box-shadow 60ms ease"
                     }}
                   >
                     {item.answer}

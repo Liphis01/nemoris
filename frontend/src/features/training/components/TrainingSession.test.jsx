@@ -237,6 +237,50 @@ describe("TrainingSession", () => {
     expect(screen.getAllByText("1:30").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("does not leak a non-default mode record into the default mode total", async () => {
+    // Reproduces the association-mode score bleeding into type_all: after
+    // recording a non-default mode the flat `training_record` carries that
+    // mode's score, but the per-mode map is authoritative and type_all has no
+    // record, so the total must be 40% (0 + 80) / 2, not 80%.
+    listTrainingScopes.mockResolvedValue({
+      groups: [
+        {
+          id: 7,
+          type_group: "text",
+          name: "Zodiaque",
+          media: null,
+          tags: ["Geo"],
+          question_count: 12,
+          training_record: {
+            best_found_percent: 80,
+            best_found_count: 10,
+            best_found_elapsed_ms: 60000,
+            best_found_at: "2026-06-02T10:00:00+00:00",
+            question_count: 12
+          },
+          training_records: {
+            match: {
+              best_found_percent: 80,
+              best_found_count: 10,
+              best_found_elapsed_ms: 60000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              question_count: 12
+            }
+          }
+        }
+      ],
+      collections: [],
+      tags: []
+    });
+
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    const zodiaqueTile = await screen.findByRole("button", { name: "Sélectionner Zodiaque" });
+
+    expect(within(zodiaqueTile).getByText("40%")).toBeInTheDocument();
+    expect(within(zodiaqueTile).queryByText("80%")).not.toBeInTheDocument();
+  });
+
   it("opens side-panel mode lists for map and image groups", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
