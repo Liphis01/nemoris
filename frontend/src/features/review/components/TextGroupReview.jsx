@@ -70,6 +70,7 @@ export default function TextGroupReview({
   reviewItems,
   contextItems = reviewItems,
   mode: requestedMode,
+  onAnsweringComplete,
   onComplete,
   submitAnswer,
   showQualityControls = true,
@@ -102,6 +103,8 @@ export default function TextGroupReview({
     : foundIds.size >= items.length;
 
   function finishAnswering() {
+    onAnsweringComplete?.();
+
     const nextQualities = {};
 
     items.forEach(item => {

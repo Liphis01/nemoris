@@ -468,6 +468,7 @@ export function useMediaReview(
 ) {
   const mode = normalizeImageMode(options.mode);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
+  const onAnsweringComplete = options.onAnsweringComplete;
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewItems;
@@ -745,6 +746,7 @@ export function useMediaReview(
     setInteractionFeedback(null);
     setResultMode(true);
     setActivePromptQuestionId(null);
+    onAnsweringComplete?.();
   }
 
   function rememberFound(item) {

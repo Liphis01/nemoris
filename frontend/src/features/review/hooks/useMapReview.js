@@ -409,6 +409,7 @@ export function useMapReview(
   // per-zone grade submission.
   const mode = normalizeMapMode(options.mode);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
+  const onAnsweringComplete = options.onAnsweringComplete;
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
@@ -664,12 +665,14 @@ export function useMapReview(
       buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
     );
     setShowRecap(true);
+    onAnsweringComplete?.();
   }, [
     allowPartialSubmit,
     completedQuestionIdSet,
     choiceFeedback,
     foundQuestionIdSet,
     mode,
+    onAnsweringComplete,
     resolvedQuestionIdSet,
     reviewZones,
     showRecap
@@ -851,6 +854,7 @@ export function useMapReview(
       buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
     );
     setShowRecap(true);
+    onAnsweringComplete?.();
   }
 
   async function sendResult() {

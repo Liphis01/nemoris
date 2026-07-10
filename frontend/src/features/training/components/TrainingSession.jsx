@@ -1852,6 +1852,7 @@ export default function TrainingSession({ setMode }) {
               handleMapComplete={session.handleMapComplete}
               handleImageComplete={session.handleImageComplete}
               handleTimelineComplete={session.handleTimelineComplete}
+              onAnsweringComplete={session.markAnsweringComplete}
               submitMapAnswer={session.submitMapTrainingAnswer}
               submitMediaAnswer={session.submitMediaTrainingAnswer}
               submitTextAnswer={session.submitTextTrainingAnswer}
@@ -2129,6 +2130,7 @@ export default function TrainingSession({ setMode }) {
                   handleMapComplete={session.handleMapComplete}
                   handleImageComplete={session.handleImageComplete}
                   handleTimelineComplete={session.handleTimelineComplete}
+                  onAnsweringComplete={session.markAnsweringComplete}
                   submitMapAnswer={session.submitMapTrainingAnswer}
                   submitMediaAnswer={session.submitMediaTrainingAnswer}
                   submitTextAnswer={session.submitTextTrainingAnswer}

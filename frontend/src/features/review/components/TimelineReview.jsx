@@ -2746,6 +2746,7 @@ function TimelineCanvas({
 export default function TimelineReview({
   group,
   reviewItems,
+  onAnsweringComplete,
   onComplete,
   submitAnswer = sendTimelineAnswer,
   fillAvailableHeight = false
@@ -2941,6 +2942,7 @@ export default function TimelineReview({
       );
 
       setRecapResults(sortedResults);
+      onAnsweringComplete?.();
     } catch (requestError) {
       setError(requestError.message || "Impossible de valider cette timeline.");
     } finally {

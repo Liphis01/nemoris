@@ -357,6 +357,119 @@ describe("useTrainingSession", () => {
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
   });
 
+  it("stops the clock when the last question is answered, not when its recap is dismissed", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    // Last zone answered: the recap opens here.
+    performanceNowSpy.mockReturnValue(4000);
+
+    act(() => {
+      result.current.markAnsweringComplete();
+    });
+
+    expect(result.current.completedElapsedMs).toBe(3000);
+
+    // The user reads the recap for another five seconds before dismissing it.
+    performanceNowSpy.mockReturnValue(9000);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    expect(result.current.completedRunElapsedMs).toBe(3000);
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 3000,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT
+      });
+    });
+  });
+
+  it("keeps the clock running when a question other than the last is answered", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [{ question_id: 10, code: "fr", label: "France" }]
+      },
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Asia",
+        media: "asia.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [{ question_id: 11, code: "jp", label: "Japan" }]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(4000);
+
+    act(() => {
+      result.current.markAnsweringComplete();
+    });
+
+    expect(result.current.completedElapsedMs).toBeNull();
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    // Now on the last question: its recap is what freezes the clock.
+    performanceNowSpy.mockReturnValue(9000);
+
+    act(() => {
+      result.current.markAnsweringComplete();
+    });
+
+    expect(result.current.completedElapsedMs).toBe(8000);
+  });
+
   it("saves a clean full collection attempt as one record", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {

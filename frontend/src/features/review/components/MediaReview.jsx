@@ -588,6 +588,7 @@ export default function MediaReview({
   reviewItems,
   contextItems = reviewItems,
   mode: requestedMode,
+  onAnsweringComplete,
   onComplete,
   submitAnswer,
   allowPartialSubmit = false,
@@ -646,7 +647,8 @@ export default function MediaReview({
   } = useMediaReview(reviewItems, onComplete, submitAnswer, {
     allowPartialSubmit,
     contextItems,
-    mode: requestedMode
+    mode: requestedMode,
+    onAnsweringComplete
   });
   const normalizedMode = normalizeImageMode(mode);
   const showTextInput = (

@@ -343,6 +343,23 @@ export function useTrainingSession(active = true) {
     setCurrentIndex(prev => prev + 1);
   }, []);
 
+  // Every question type ends on a recap the user dismisses by hand. Reading it
+  // is not solving, so the run clock stops as soon as the last question has
+  // nothing left to answer rather than when the recap is dismissed.
+  const markAnsweringComplete = useCallback(() => {
+    if (runStartedAt === null) return;
+    if (questions.length === 0 || currentIndex < questions.length - 1) return;
+
+    const finalElapsed = Math.max(
+      1,
+      Math.round(performance.now() - runStartedAt)
+    );
+
+    setElapsedMs(finalElapsed);
+    setCompletedElapsedMs(finalElapsed);
+    setRunStartedAt(null);
+  }, [currentIndex, questions.length, runStartedAt]);
+
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitMediaTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitTextTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
@@ -553,6 +570,7 @@ export function useTrainingSession(active = true) {
     isComplete,
     labelForActiveScope: labelForScope(activeScope),
     loadScopes,
+    markAnsweringComplete,
     originalQuestions,
     questions,
     recordEligible,

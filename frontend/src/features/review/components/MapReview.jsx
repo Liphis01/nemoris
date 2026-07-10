@@ -186,6 +186,7 @@ function getChoiceButtonStyle(option, feedback) {
 export default function MapReview({
   group,
   reviewZones,
+  onAnsweringComplete,
   onComplete,
   submitAnswer,
   allowPartialSubmit = false,
@@ -243,7 +244,8 @@ export default function MapReview({
   } = useMapReview(reviewZones, onComplete, submitAnswer, {
     allowPartialSubmit,
     mode: normalizedMode,
-    contextItems
+    contextItems,
+    onAnsweringComplete
   });
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);

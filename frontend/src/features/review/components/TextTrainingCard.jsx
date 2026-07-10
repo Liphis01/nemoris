@@ -119,6 +119,7 @@ function TrainingMedia({ media, label = "média", boxed = false, style }) {
 export default function TextTrainingCard({
   q,
   currentIndex,
+  onAnsweringComplete,
   onComplete
 }) {
   const [draft, setDraft] = useState("");
@@ -175,6 +176,10 @@ export default function TextTrainingCard({
       completeMissed();
       return;
     }
+
+    // Whichever branch follows, the user is done answering: a correct answer
+    // moves on, the others just reveal the expected one.
+    onAnsweringComplete?.();
 
     if (!normalizeTextTrainingAnswer(draft).trim()) {
       setResult("skipped");

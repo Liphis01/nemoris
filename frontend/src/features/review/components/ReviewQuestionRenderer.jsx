@@ -36,6 +36,7 @@ export default function ReviewQuestionRenderer({
     handleMapComplete,
     handleImageComplete,
     handleTimelineComplete,
+    onAnsweringComplete,
     submitMapAnswer,
     submitMediaAnswer,
     submitTextAnswer,
@@ -63,6 +64,7 @@ export default function ReviewQuestionRenderer({
                 reviewZones={q.items}
                 contextItems={q.context_items || q.items || []}
                 mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
                 allowPartialSubmit={allowPartialSubmit}
@@ -88,6 +90,7 @@ export default function ReviewQuestionRenderer({
                 reviewItems={q.items || []}
                 contextItems={q.context_items || q.items || []}
                 mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleImageComplete}
                 submitAnswer={submitMediaAnswer}
                 allowPartialSubmit={allowPartialSubmit}
@@ -106,6 +109,7 @@ export default function ReviewQuestionRenderer({
                 key={renderKey}
                 group={q}
                 reviewItems={q.items || []}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
                 fillAvailableHeight={compactVisualLayout}
@@ -121,6 +125,7 @@ export default function ReviewQuestionRenderer({
                 reviewItems={q.items || []}
                 contextItems={q.context_items || q.items || []}
                 mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleImageComplete}
                 submitAnswer={submitTextAnswer}
                 showQualityControls={!trainingMode}
@@ -136,6 +141,7 @@ export default function ReviewQuestionRenderer({
                 key={renderKey}
                 q={q}
                 currentIndex={currentIndex}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleTextAnswer}
             />
         );
