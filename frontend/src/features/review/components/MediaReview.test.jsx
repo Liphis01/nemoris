@@ -869,6 +869,66 @@ describe("MediaReview answer label preview", () => {
     expect(tileFor(container, 1)).toHaveTextContent("Image 1");
   });
 
+  it("multiple_choice_label picks the matching option on a number-key shortcut", () => {
+    const handleChoiceSelect = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleChoiceSelect
+      }
+    }));
+
+    // Each choice shows a discoverable keycap hint.
+    expect(container.querySelectorAll("[data-image-choice-key]")).toHaveLength(4);
+
+    fireEvent.keyDown(window, { key: "3" });
+
+    expect(handleChoiceSelect).toHaveBeenCalledWith(3);
+  });
+
+  it("multiple_choice_image picks the matching tile on a number-key shortcut", () => {
+    const handleImageSelect = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleImageSelect
+      }
+    }));
+
+    expect(container.querySelectorAll("[data-image-choice-key]")).toHaveLength(4);
+
+    fireEvent.keyDown(window, { key: "2" });
+
+    expect(handleImageSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("ignores the number-key shortcut once a choice is revealed", () => {
+    const handleChoiceSelect = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleChoiceSelect,
+        interactionFeedback: { correctQuestionId: 1, isCorrect: true, selectedQuestionId: 1 }
+      }
+    }));
+
+    fireEvent.keyDown(window, { key: "3" });
+
+    expect(handleChoiceSelect).not.toHaveBeenCalled();
+  });
+
   it("reveals the target and clicked wrong image during multiple_choice_image feedback", () => {
     const rows = [
       imageGridRow(1, {

@@ -480,6 +480,33 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
   });
 
+  it("multiple_choice picks the option under its number-key shortcut", async () => {
+    renderMapReview(false, { mode: "multiple_choice" });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+    const choiceButtons = Array.from(
+      document.querySelectorAll("[data-map-choice-feedback]")
+    );
+
+    // Each choice shows a discoverable keycap hint.
+    expect(document.querySelectorAll("[data-map-choice-key]"))
+      .toHaveLength(choiceButtons.length);
+
+    const targetIndex = choiceButtons.findIndex(button =>
+      button.textContent.includes(targetChoice.label)
+    );
+
+    expect(targetIndex).toBeGreaterThanOrEqual(0);
+
+    fireEvent.keyDown(window, { key: String(targetIndex + 1) });
+
+    await waitFor(() => {
+      expect(screen.getByText("Correct").closest("button"))
+        .toHaveAttribute("data-map-choice-feedback", "correct");
+    });
+  });
+
   it("restores Recentrer and Tab focus for multiple_choice", async () => {
     renderMapReview(false, {
       mode: "multiple_choice"

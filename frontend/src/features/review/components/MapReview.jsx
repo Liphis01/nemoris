@@ -538,6 +538,33 @@ export default function MapReview({
     };
   }, [showChoiceRating, choiceFeedback, rateChoice]);
 
+  // Quick answer: number keys pick the matching option before the reveal,
+  // mirroring the keyboard flow of text review (Enter reveals, digits grade).
+  useEffect(() => {
+    if (mode !== MAP_MODE_MULTIPLE_CHOICE || showRecap || choiceFeedback) {
+      return undefined;
+    }
+
+    function handleChoiceKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      const index = Number(event.key) - 1;
+
+      if (!Number.isInteger(index) || index < 0 || index >= choiceOptions.length) {
+        return;
+      }
+
+      event.preventDefault();
+      handleChoiceSelect(choiceOptions[index].question_id);
+    }
+
+    window.addEventListener("keydown", handleChoiceKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleChoiceKeyDown);
+    };
+  }, [mode, showRecap, choiceFeedback, choiceOptions, handleChoiceSelect]);
+
   const previousPromptCodeRef = useRef(promptCode);
 
   useEffect(() => {
@@ -936,7 +963,7 @@ export default function MapReview({
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
             <div style={choiceGridStyle}>
-              {choiceOptions.map(option => (
+              {choiceOptions.map((option, index) => (
                 <button
                   key={option.question_id}
                   type="button"
@@ -945,7 +972,14 @@ export default function MapReview({
                   onClick={() => handleChoiceSelect(option.question_id)}
                   style={getChoiceButtonStyle(option, choiceFeedback)}
                 >
-                  <span>{option.label}</span>
+                  <span style={{ alignItems: "center", display: "flex", gap: "8px", minWidth: 0 }}>
+                    {!choiceFeedback && index < 9 && (
+                      <span aria-hidden="true" data-map-choice-key style={choiceKeyBadgeStyle}>
+                        {index + 1}
+                      </span>
+                    )}
+                    <span>{option.label}</span>
+                  </span>
                   {choiceFeedbackLabel(option, choiceFeedback) && (
                     <span style={choiceFeedbackLabelStyle}>
                       {choiceFeedbackLabel(option, choiceFeedback)}
@@ -1574,6 +1608,32 @@ const choiceGridStyle = {
   gap: "10px",
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
 };
+
+// Small keycap hint shown on each choice so the number shortcut is discoverable.
+const choiceKeyBadgeStyle = {
+  alignItems: "center",
+  background: "#0d0d0d",
+  border: "1px solid #363636",
+  borderRadius: "5px",
+  color: "#8a8a8a",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: 800,
+  height: "18px",
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "18px",
+  padding: "0 5px"
+};
+
+function isEditableTarget(target) {
+  if (!target || typeof target.closest !== "function") {
+    return false;
+  }
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
 
 const choiceButtonStyle = {
   ...buttonStyle,

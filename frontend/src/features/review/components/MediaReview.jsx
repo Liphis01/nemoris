@@ -74,6 +74,26 @@ const buttonStyle = {
   padding: "10px 14px"
 };
 
+// Small keycap hint shown on each choice so the number shortcut is discoverable.
+const choiceKeyBadgeStyle = {
+  alignItems: "center",
+  background: "#0d0d0d",
+  border: "1px solid #363636",
+  borderRadius: "5px",
+  color: "#8a8a8a",
+  display: "inline-flex",
+  fontSize: "10px",
+  fontWeight: 800,
+  height: "16px",
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "16px",
+  padding: "0 4px",
+  position: "absolute",
+  top: "6px",
+  left: "6px"
+};
+
 const inputStyle = {
   width: "100%",
   padding: "12px 14px",
@@ -1176,6 +1196,50 @@ export default function MediaReview({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showChoiceRating, interactionFeedback, previewRow, rateChoice]);
 
+  // Quick answer: number keys pick the matching option before the reveal,
+  // mirroring the keyboard flow of text review (Enter reveals, digits grade).
+  useEffect(() => {
+    const isChoice = (
+      normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+      normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    );
+
+    if (!isChoice || resultMode || interactionFeedback || previewRow) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      const index = Number(event.key) - 1;
+
+      if (!Number.isInteger(index) || index < 0 || index >= choiceOptions.length) {
+        return;
+      }
+
+      event.preventDefault();
+      const questionId = choiceOptions[index].question_id;
+
+      if (normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE) {
+        handleImageSelect(questionId);
+      } else {
+        handleChoiceSelect(questionId);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    choiceOptions,
+    handleChoiceSelect,
+    handleImageSelect,
+    interactionFeedback,
+    normalizedMode,
+    previewRow,
+    resultMode
+  ]);
+
   function renderImageTile(
     row,
     { allowSelection = true, registerForScroll = true } = {}
@@ -1425,7 +1489,7 @@ export default function MediaReview({
     );
   }
 
-  function renderImageChoiceTile(row, { prompt = false, selectable = true } = {}) {
+  function renderImageChoiceTile(row, { prompt = false, selectable = true, keyIndex = null } = {}) {
     const mediaSrc = resolveMediaUrl(row.item.media);
     const mediaKind = getMediaKind(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
@@ -1489,11 +1553,17 @@ export default function MediaReview({
           minWidth: 0,
           overflow: "hidden",
           padding: "10px",
+          position: "relative",
           textAlign: "left",
           transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
           width: "100%"
         }}
       >
+        {!prompt && keyIndex != null && keyIndex < 9 && !interactionFeedback && (
+          <span aria-hidden="true" data-image-choice-key style={{ ...choiceKeyBadgeStyle, zIndex: 2 }}>
+            {keyIndex + 1}
+          </span>
+        )}
         <span
           onClick={previewByThumbnail
             ? (event) => {
@@ -2367,7 +2437,7 @@ export default function MediaReview({
               width: "min(100%, 720px)"
             }}
           >
-            {activeGridItems.map(row => renderImageChoiceTile(row))}
+            {activeGridItems.map((row, index) => renderImageChoiceTile(row, { keyIndex: index }))}
           </div>
         ) : showPromptImageBoard ? (
           <div
@@ -2571,7 +2641,7 @@ export default function MediaReview({
               marginBottom: "14px"
             }}
           >
-            {choiceOptions.map(option => (
+            {choiceOptions.map((option, index) => (
               <button
                 key={option.question_id}
                 type="button"
@@ -2581,8 +2651,16 @@ export default function MediaReview({
                 )}
                 disabled={Boolean(interactionFeedback)}
                 onClick={() => handleChoiceSelect(option.question_id)}
-                style={imageChoiceButtonStyle(option, interactionFeedback)}
+                style={{
+                  ...imageChoiceButtonStyle(option, interactionFeedback),
+                  position: "relative"
+                }}
               >
+                {!interactionFeedback && index < 9 && (
+                  <span aria-hidden="true" data-image-choice-key style={choiceKeyBadgeStyle}>
+                    {index + 1}
+                  </span>
+                )}
                 <span>{answerLabel(option)}</span>
                 {imageChoiceFeedbackLabel(option, interactionFeedback) && (
                   <span
