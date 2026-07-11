@@ -1488,7 +1488,7 @@ const overlayStyle = {
 
 const recapCardStyle = {
   width: "100%",
-  maxWidth: "1560px",
+  maxWidth: "1460px",
   maxHeight: "100%",
   overflow: "auto",
   scrollbarGutter: "stable",

@@ -2696,7 +2696,7 @@ const imageRecapCardStyle = {
   borderRadius: "18px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
   maxHeight: "100%",
-  maxWidth: "1560px",
+  maxWidth: "1460px",
   overflow: "auto",
   padding: "24px",
   scrollbarGutter: "stable",

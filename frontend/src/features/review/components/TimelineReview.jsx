@@ -3188,8 +3188,8 @@ export default function TimelineReview({
           <div
             className="app-scrollbar"
             style={{
-              width: "min(1320px, 100%)",
-              maxHeight: "90vh",
+              width: "min(1240px, 100%)",
+              maxHeight: "88vh",
               overflow: "auto",
               borderRadius: "18px",
               border: "1px solid #303030",

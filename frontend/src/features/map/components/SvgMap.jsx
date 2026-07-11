@@ -19,7 +19,7 @@ const dragThresholdPx = 4;
 
 // Maximum wheel-zoom factor. Kept high so the tiny island hit-areas can be
 // zoomed in far enough to see and click comfortably.
-const maxZoom = 40;
+const maxZoom = 80;
 
 // Island hit-area shapes always render at this opacity so they stay see-through
 // (the map shows through them) while behaving like any other zone.
