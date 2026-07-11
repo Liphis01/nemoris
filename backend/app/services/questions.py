@@ -78,11 +78,6 @@ def create_question(db, payload):
     db.add(question)
     db.flush()
 
-    if payload.group_id and payload.type_q in {"map", "media", "text"}:
-        from .training import clear_training_record_for_group_id
-
-        clear_training_record_for_group_id(db, payload.group_id)
-
     if payload.collection_ids:
         question.collections = get_collections_by_ids(db, payload.collection_ids)
 
@@ -144,20 +139,6 @@ def update_question(db, question_id: int, payload):
     updates = payload.model_dump(exclude_unset=True)
     old_media = question.media
     old_answer_media = question.answer_media
-    old_group_id = question.group_id
-    old_type = question.type_q
-
-    from .training import (
-        clear_training_records_for_group_ids,
-        question_training_signature
-    )
-
-    old_training_signature = question_training_signature(
-        old_type,
-        question.answer,
-        question.media,
-        question.data or {}
-    )
 
     # Validate the final type/group combination, not only fields explicitly
     # present in the payload.
@@ -173,34 +154,6 @@ def update_question(db, question_id: int, payload):
 
     if "collection_ids" in updates:
         question.collections = get_collections_by_ids(db, updates["collection_ids"])
-
-    new_training_signature = question_training_signature(
-        question.type_q,
-        question.answer,
-        question.media,
-        question.data or {}
-    )
-    old_was_grouped_training_item = old_group_id and old_type in {"map", "media", "text"}
-    new_is_grouped_training_item = (
-        question.group_id and
-        question.type_q in {"map", "media", "text"}
-    )
-    training_content_changed = (
-        old_group_id != question.group_id or
-        old_type != question.type_q or
-        old_training_signature != new_training_signature
-    )
-
-    if training_content_changed:
-        affected_group_ids = []
-
-        if old_was_grouped_training_item:
-            affected_group_ids.append(old_group_id)
-
-        if new_is_grouped_training_item:
-            affected_group_ids.append(question.group_id)
-
-        clear_training_records_for_group_ids(db, affected_group_ids)
 
     db.commit()
     db.refresh(question)
@@ -266,10 +219,6 @@ def delete_question(db, question_id: int):
     question_media = question.media
     question_answer_media = question.answer_media
     group_media = group.media if group else None
-    if group and question.type_q in {"map", "media", "text"}:
-        from .training import clear_training_record
-
-        clear_training_record(group)
 
     # Clear many-to-many links and progress explicitly because cascades are not
     # enabled on these relationships.

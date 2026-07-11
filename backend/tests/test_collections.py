@@ -588,8 +588,10 @@ class CollectionTests(unittest.TestCase):
         )
         self.assertEqual(saved_scope["training_record"]["best_time_ms"], 5000)
 
-        question = self.db.get(Question, 1)
-        question.answer = "Paris changed"
+        # Invalidation is driven by membership, not content: swap the member so
+        # the count stays at 1 but the fingerprint changes.
+        self.add_question(2, answer="Berlin")
+        collection.questions = [self.db.get(Question, 2)]
         self.db.commit()
 
         with self.assertRaises(HTTPException) as stale:

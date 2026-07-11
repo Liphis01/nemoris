@@ -20,7 +20,10 @@ from app.services.media_groups import (
     upload_media_group_media_url
 )
 from app.services.questions import create_question
-from app.services.training import group_training_fingerprint
+from app.services.training import (
+    group_training_fingerprint,
+    serialize_training_record
+)
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\npng-data"
@@ -280,7 +283,13 @@ class MediaGroupTests(unittest.TestCase):
         self.assertEqual(response["createdQuestionIds"], [])
         self.assertEqual(response["updatedQuestionIds"], [changed.id])
 
-    def test_bulk_save_invalidates_record_only_on_image_training_content(self):
+    def served_record(self, group):
+        return serialize_training_record(
+            group.data,
+            group_training_fingerprint(self.db, group)
+        )
+
+    def test_bulk_save_invalidates_record_only_on_membership_change(self):
         group = QuestionGroup(
             type_group="media",
             name="Flags",
@@ -310,35 +319,9 @@ class MediaGroupTests(unittest.TestCase):
         self.db.commit()
         self.seed_training_record(group)
 
-        save_media_group_items(
-            self.db,
-            group.id,
-            MediaGroupItemsBulkUpdate(
-                group={
-                    "name": "European flags",
-                    "media": "cover-new.png",
-                    "tags": ["geo"]
-                },
-                items=[
-                    {
-                        "id": first.id,
-                        "answer": "France",
-                        "media": "/static/france.png",
-                        "aliases": ["FR"],
-                        "data": {"favorite": False}
-                    },
-                    {
-                        "id": second.id,
-                        "answer": "Germany",
-                        "media": "/static/germany.png",
-                        "aliases": ["DE"]
-                    }
-                ],
-                deleted_item_ids=[]
-            )
-        )
-        self.assertIn("training_record", group.data)
-
+        # Editing existing items (favorite flag, then aliases) plus renaming the
+        # group and swapping its cover image are all content changes, not
+        # membership changes, so the best-time record survives.
         save_media_group_items(
             self.db,
             group.id,
@@ -366,8 +349,28 @@ class MediaGroupTests(unittest.TestCase):
                 deleted_item_ids=[]
             )
         )
-        self.assertNotIn("training_record", group.data)
+        self.assertIsNotNone(self.served_record(group))
         self.assertEqual(group.data["theme"], "blue")
+
+        # Removing an item changes the group's membership, so the record is no
+        # longer served.
+        save_media_group_items(
+            self.db,
+            group.id,
+            MediaGroupItemsBulkUpdate(
+                items=[
+                    {
+                        "id": first.id,
+                        "answer": "France",
+                        "media": "/static/france.png",
+                        "aliases": ["French Republic"],
+                        "data": {"favorite": False}
+                    }
+                ],
+                deleted_item_ids=[second.id]
+            )
+        )
+        self.assertIsNone(self.served_record(group))
 
     def test_list_media_group_items_returns_editor_shape(self):
         group = QuestionGroup(

@@ -150,77 +150,27 @@ def _clean_string(value):
     return str(value or "").strip()
 
 
-def _normalized_aliases(data):
-    aliases = (data or {}).get("aliases", [])
-
-    return sorted([
-        _clean_string(alias)
-        for alias in aliases
-        if _clean_string(alias)
-    ])
-
-
-def question_training_signature(type_q, answer=None, media=None, data=None):
-    if type_q == "map":
-        return {
-            "answer": _clean_string(answer),
-            "code": _clean_string((data or {}).get("code")),
-            "aliases": _normalized_aliases(data)
-        }
-
-    if type_q == "media":
-        return {
-            "answer": _clean_string(answer),
-            "media": _clean_string(media),
-            "aliases": _normalized_aliases(data)
-        }
-
-    if type_q == "text":
-        return {
-            "answer": _clean_string(answer),
-            "media": _clean_string(media),
-            "aliases": _normalized_aliases(data)
-        }
-
-    if type_q == "timeline":
-        return {
-            "answer": _clean_string(answer),
-            "media": _clean_string(media),
-            "timeline": (data or {}).get("timeline")
-        }
-
-    return None
-
-
 def _group_training_fingerprint_payload(group, questions):
-    items = []
-
-    for question in sorted(questions or [], key=lambda item: item.id or 0):
-        if question.type_q != group.type_group:
-            continue
-
-        signature = question_training_signature(
-            question.type_q,
-            question.answer,
-            question.media,
-            question.data or {}
-        )
-
-        if signature is None:
-            continue
-
-        items.append({
-            "id": question.id,
-            **signature
-        })
+    # The training record is a best-time for completing the whole group, so it
+    # only becomes meaningless when the *set* of items changes. Editing an
+    # existing item's answer/media/aliases is a content fix that leaves the
+    # challenge intact, so the fingerprint is built from item membership and
+    # group-level structure only, never from per-item content.
+    item_ids = sorted(
+        question.id
+        for question in questions or []
+        if question.type_q == group.type_group and question.id is not None
+    )
 
     payload = {
         "group_id": group.id,
         "type_group": group.type_group,
-        "items": items
+        "item_ids": item_ids
     }
 
     if group.type_group == "map":
+        # Swapping a map's background image is a whole-group change, not an item
+        # edit, so it still retires the record.
         payload["media"] = _clean_string(group.media)
 
     return payload
@@ -290,38 +240,18 @@ def group_training_fingerprint(db, group):
     return training_fingerprints_for_groups(db, [group]).get(group.id)
 
 
-def _collection_question_training_signature(question):
-    signature = question_training_signature(
-        question.type_q,
-        question.answer,
-        question.media,
-        question.data or {}
-    ) or {}
-
-    payload = {
-        "id": question.id,
-        "type_q": question.type_q,
-        "question": _clean_string(question.question),
-        **signature
-    }
-
-    if question.group and question.type_q in {"map", "media", "text"}:
-        payload["group"] = {
-            "id": question.group.id,
-            "type_group": question.group.type_group,
-            "media": _clean_string(question.group.media)
-        }
-
-    return payload
-
-
 def _collection_training_fingerprint_payload(collection, questions):
+    # Like groups, a collection's record only depends on which questions belong
+    # to it, not on their content (see _group_training_fingerprint_payload).
+    item_ids = sorted(
+        question.id
+        for question in questions or []
+        if question.id is not None
+    )
+
     return {
         "collection_id": collection.id,
-        "items": [
-            _collection_question_training_signature(question)
-            for question in sorted(questions or [], key=lambda item: item.id or 0)
-        ]
+        "item_ids": item_ids
     }
 
 
@@ -380,50 +310,6 @@ def collection_training_fingerprint(db, collection):
     return training_fingerprints_for_collections(db, [collection]).get(
         collection.id
     )
-
-
-def clear_training_record(group):
-    group_data = dict(group.data or {})
-    changed = False
-
-    if TRAINING_RECORD_KEY in group_data:
-        del group_data[TRAINING_RECORD_KEY]
-        changed = True
-
-    if TRAINING_RECORDS_KEY in group_data:
-        del group_data[TRAINING_RECORDS_KEY]
-        changed = True
-
-    if not changed:
-        return False
-
-    group.data = group_data
-    return True
-
-
-def clear_training_record_for_group_id(db, group_id):
-    if not group_id:
-        return False
-
-    group = (
-        db.query(QuestionGroup)
-        .filter(QuestionGroup.id == group_id)
-        .first()
-    )
-
-    if not group:
-        return False
-
-    return clear_training_record(group)
-
-
-def clear_training_records_for_group_ids(db, group_ids):
-    cleared = False
-
-    for group_id in sorted(set(group_ids or [])):
-        cleared = clear_training_record_for_group_id(db, group_id) or cleared
-
-    return cleared
 
 
 def serialize_training_record(data, content_fingerprint=None):

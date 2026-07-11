@@ -133,9 +133,6 @@ def save_media_group_items(db, group_id: int, payload):
     shared_tags_provided = False
     shared_tags = None
     media_to_delete = []
-    content_changed = False
-
-    from .training import clear_training_record, question_training_signature
 
     if payload.group:
         group_updates = payload.group.model_dump(exclude_unset=True)
@@ -190,7 +187,6 @@ def save_media_group_items(db, group_id: int, payload):
             for item_id in deleted_item_ids
         ]
         media_to_delete.extend(item.media for item in deleted_items)
-        content_changed = content_changed or bool(deleted_item_ids)
 
         if deleted_item_ids:
             delete_question_dependents(db, deleted_item_ids_list)
@@ -244,7 +240,6 @@ def save_media_group_items(db, group_id: int, payload):
                 db.flush()
                 existing_by_id[item.id] = item
                 created_ids.append(item.id)
-                content_changed = True
             else:
                 desired_answer = item_payload.answer or ""
                 desired_media = item_payload.media or ""
@@ -252,18 +247,6 @@ def save_media_group_items(db, group_id: int, payload):
                     item.data or {},
                     item_payload.data or {},
                     aliases
-                )
-                old_signature = question_training_signature(
-                    item.type_q,
-                    item.answer,
-                    item.media,
-                    item.data or {}
-                )
-                desired_signature = question_training_signature(
-                    item.type_q,
-                    desired_answer,
-                    desired_media,
-                    desired_data
                 )
                 payload_changed = media_item_payload_changed(
                     item,
@@ -283,14 +266,8 @@ def save_media_group_items(db, group_id: int, payload):
                 if not media_points_to_same_static_file(old_media, item.media):
                     media_to_delete.append(old_media)
 
-                if old_signature != desired_signature:
-                    content_changed = True
-
                 if payload_changed:
                     updated_ids.append(item.id)
-
-        if content_changed:
-            clear_training_record(group)
 
         db.commit()
     except Exception:

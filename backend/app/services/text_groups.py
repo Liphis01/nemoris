@@ -93,9 +93,6 @@ def save_text_group_items(db, group_id: int, payload):
     group_updates = {}
     shared_tags_provided = False
     shared_tags = None
-    content_changed = False
-
-    from .training import clear_training_record
 
     if payload.group:
         group_updates = payload.group.model_dump(exclude_unset=True)
@@ -141,7 +138,6 @@ def save_text_group_items(db, group_id: int, payload):
             existing_by_id[item_id]
             for item_id in deleted_item_ids
         ]
-        content_changed = content_changed or bool(deleted_item_ids)
 
         if deleted_item_ids:
             delete_question_dependents(db, deleted_item_ids_list)
@@ -193,7 +189,6 @@ def save_text_group_items(db, group_id: int, payload):
                 db.flush()
                 existing_by_id[item.id] = item
                 created_ids.append(item.id)
-                content_changed = True
             else:
                 desired_data = build_text_item_data(
                     item.data or {},
@@ -208,7 +203,6 @@ def save_text_group_items(db, group_id: int, payload):
                     desired_data
                 ):
                     updated_ids.append(item.id)
-                    content_changed = True
 
                 item.question = desired_question
                 item.answer = desired_answer
@@ -216,9 +210,6 @@ def save_text_group_items(db, group_id: int, payload):
 
                 if shared_tags_provided:
                     item.tags = shared_tags
-
-        if content_changed:
-            clear_training_record(group)
 
         db.commit()
     except Exception:

@@ -22,7 +22,8 @@ from app.services.training import (
     get_training_items,
     group_training_fingerprint,
     list_training_scopes,
-    record_training_attempt
+    record_training_attempt,
+    serialize_training_record
 )
 
 
@@ -806,7 +807,18 @@ class TrainingTests(unittest.TestCase):
         )
         self.db.commit()
         stale_fingerprint = group_training_fingerprint(self.db, group)
-        first.answer = "France changed"
+
+        # Swap one item for another: the count stays at 2 but the membership
+        # (and therefore the fingerprint) changes, so an attempt captured before
+        # the swap is stale and must be rejected.
+        delete_question(self.db, first.id)
+        self.add_question(
+            3,
+            type_q="map",
+            answer="Spain",
+            data={"code": "es", "aliases": []},
+            group=group
+        )
         self.db.commit()
 
         with self.assertRaises(HTTPException) as stale_attempt:
@@ -823,7 +835,55 @@ class TrainingTests(unittest.TestCase):
 
         self.assertEqual(stale_attempt.exception.status_code, 409)
 
-    def test_generic_grouped_question_edits_invalidate_records(self):
+    def test_same_count_content_edit_training_attempt_is_accepted(self):
+        group = QuestionGroup(
+            id=48,
+            type_group="map",
+            name="World",
+            media="world.svg",
+            data={}
+        )
+        self.db.add(group)
+        first = self.add_question(
+            1,
+            type_q="map",
+            answer="France",
+            data={"code": "fr", "aliases": []},
+            group=group
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            answer="Germany",
+            data={"code": "de", "aliases": []},
+            group=group
+        )
+        self.db.commit()
+        fingerprint = group_training_fingerprint(self.db, group)
+
+        # Fixing an item's answer is a content edit, not a membership change, so
+        # the fingerprint is unchanged and an in-flight attempt still records.
+        first.answer = "France changed"
+        self.db.commit()
+
+        record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=1000,
+                question_count=2,
+                found_count=2,
+                content_fingerprint=fingerprint
+            )
+        )
+
+        served = serialize_training_record(
+            group.data,
+            group_training_fingerprint(self.db, group)
+        )
+        self.assertIsNotNone(served)
+
+    def test_generic_grouped_question_edits_preserve_records(self):
         group = QuestionGroup(
             id=46,
             type_group="media",
@@ -864,21 +924,21 @@ class TrainingTests(unittest.TestCase):
         }
         self.db.commit()
 
-        update_question(
-            self.db,
-            1,
-            QuestionUpdate(tags=["geo"])
-        )
-        self.assertIn("training_record", group.data)
-        self.assertIn("training_records", group.data)
-
+        # Editing an existing item — tags, aliases, even its answer — is a
+        # content fix, not a membership change, so the best-time record survives
+        # and is still served by the fingerprint.
+        update_question(self.db, 1, QuestionUpdate(tags=["geo"]))
         update_question(
             self.db,
             1,
             QuestionUpdate(data={"aliases": ["France flag"], "favorite": True})
         )
-        self.assertNotIn("training_record", group.data)
-        self.assertNotIn("training_records", group.data)
+        update_question(self.db, 1, QuestionUpdate(answer="France (flag)"))
+
+        fingerprint = group_training_fingerprint(self.db, group)
+        self.assertIsNotNone(serialize_training_record(group.data, fingerprint))
+        self.assertIn("training_record", group.data)
+        self.assertIn("training_records", group.data)
         self.assertEqual(group.data["theme"], "blue")
 
     def test_generic_grouped_question_delete_invalidates_records(self):
@@ -903,7 +963,10 @@ class TrainingTests(unittest.TestCase):
 
         delete_question(self.db, 1)
 
-        self.assertNotIn("training_record", group.data)
+        # The record is no longer served: removing an item changes the group's
+        # membership fingerprint, so the stored record no longer matches.
+        fingerprint = group_training_fingerprint(self.db, group)
+        self.assertIsNone(serialize_training_record(group.data, fingerprint))
 
     def test_training_timeline_grading_does_not_mutate_progress(self):
         history = [{

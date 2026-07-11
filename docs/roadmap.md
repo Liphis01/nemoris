@@ -9,7 +9,6 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- bug: après avoir créé les signes du zodiaque, j'ai fait le mode associer et le score a été appliqué aux deux modes (type_all et associer)
 
 ## quick fixes
 
