@@ -1,4 +1,4 @@
-import { questionTypeChipStyles } from "../../../shared/questionTypes";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { buttonStyle, panelStyle } from "./QuestionEditorStyles";
 
 const questionCreationTypes = [
@@ -23,7 +23,7 @@ const questionCreationTypes = [
     detail: "Créer un groupe d'images, audio ou vidéo"
   },
   {
-    value: "text",
+    value: "text_group",
     label: "Groupe texte",
     detail: "Créer un groupe d'associations texte↔texte"
   }
@@ -45,7 +45,7 @@ export default function QuestionCreationTypeChooser({ onSelect, onCancel }) {
         }}
       >
         {questionCreationTypes.map((type) => {
-          const typeStyle = questionTypeChipStyles[type.value];
+          const typeStyle = getQuestionTypeChipStyle(type.value);
 
           return (
             <button

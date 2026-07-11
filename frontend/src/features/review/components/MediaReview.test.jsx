@@ -859,12 +859,13 @@ describe("MediaReview answer label preview", () => {
         inline: "nearest"
       });
     });
+    // Unified reveal: green = correct answer, red = the wrong pick.
     expect(screen.getByText("Correct").closest("button").style.border)
-      .toContain("solid");
+      .toContain("134, 239, 172");
     expect(screen.getByText("Faux").closest("button").style.background)
       .toContain("repeating-linear-gradient");
     expect(screen.getByText("Faux").closest("button").style.border)
-      .toContain("dashed");
+      .toContain("248, 113, 113");
     expect(tileFor(container, 1)).toHaveTextContent("Image 1");
   });
 

@@ -417,6 +417,9 @@ export function useMapReview(
   const mode = normalizeMapMode(options.mode);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
+  // Review grades each QCM pick inline (reveal + quality) then auto-submits the
+  // group when the last zone is rated. Training keeps the legacy flash + recap.
+  const inlineChoiceRating = Boolean(options.inlineChoiceRating) && mode === MAP_MODE_MULTIPLE_CHOICE;
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
@@ -435,6 +438,7 @@ export function useMapReview(
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
+  const submittingRef = useRef(false);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
   const distractorUsageRef = useRef({
     reviewKey: null,
@@ -445,7 +449,6 @@ export function useMapReview(
   // survive re-renders without triggering them, and be read during render to
   // seed choiceOptions below. The reviewKey-based reset is mirrored in the
   // effect below; reading the ref here is intentional.
-  // eslint-disable-next-line react-hooks/refs
   const distractorUsage = resetDistractorUsageForReviewKey(distractorUsageRef, reviewKey);
 
   useEffect(() => {
@@ -484,7 +487,8 @@ export function useMapReview(
   }, [incorrectFlashId, correctFlashId]);
 
   useEffect(() => {
-    if (!choiceFeedback) return undefined;
+    // Inline rating keeps the reveal on screen until the user rates/continues.
+    if (!choiceFeedback || inlineChoiceRating) return undefined;
 
     const timeout = window.setTimeout(() => {
       setChoiceFeedback(current =>
@@ -495,7 +499,7 @@ export function useMapReview(
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [choiceFeedback]);
+  }, [choiceFeedback, inlineChoiceRating]);
 
   useEffect(() => {
     if (!zoneFeedback) return undefined;
@@ -658,6 +662,48 @@ export function useMapReview(
     return remainingZones.map(item => item.code);
   }, [contextItems, currentPromptItem, mode, remainingZones, resolvedQuestionIdSet]);
 
+  async function submitQualities(qualityMap) {
+    // Send one quality per atomic map question, then tell the parent review
+    // session which zones should be re-queued. Unanswered items are omitted.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    try {
+      const qualities = submittedMapQualities(qualityMap);
+
+      if (Object.keys(qualities).length > 0) {
+        await submitAnswer(qualities, mode, contextItems.length);
+      }
+
+      const failedQuestionIds = Object.entries(qualities)
+        .filter(([, quality]) => quality === 0)
+        .map(([questionId]) => Number(questionId));
+
+      setShowRecap(false);
+      setFoundQuestionIds([]);
+      setResolvedQuestionIds([]);
+      setQualityByQuestionId({});
+      setFocusedCode(null);
+      setRemainingFocusCode(null);
+      setFocusVersion(0);
+      setChoiceFeedback(null);
+
+      onComplete(failedQuestionIds);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
+  function autoSubmitChoiceResult() {
+    // buildMapRecapQualities does not carry inline grades, so overlay the
+    // per-zone qualities the user set during the run on top of the defaults.
+    const base = buildMapRecapQualities(
+      reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
+    );
+
+    submitQualities({ ...base, ...qualityByQuestionId });
+  }
+
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
     if (mode === MAP_MODE_MULTIPLE_CHOICE && choiceFeedback) return;
@@ -668,6 +714,13 @@ export function useMapReview(
 
     if (!allZonesComplete) return;
 
+    if (inlineChoiceRating) {
+      // Every pick already carries its inline quality — submit and advance to
+      // the next group, no recap.
+      autoSubmitChoiceResult();
+      return;
+    }
+
     const nextQualities = buildMapRecapQualities(
       reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
     );
@@ -675,11 +728,13 @@ export function useMapReview(
     setQualityByQuestionId(nextQualities);
     setShowRecap(true);
     onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     allowPartialSubmit,
     completedQuestionIdSet,
     choiceFeedback,
     foundQuestionIdSet,
+    inlineChoiceRating,
     mode,
     onAnsweringComplete,
     resolvedQuestionIdSet,
@@ -869,27 +924,19 @@ export function useMapReview(
   }
 
   async function sendResult() {
-    // Send one quality per atomic map question, then tell the parent review
-    // session which zones should be re-queued. Unanswered items are omitted.
-    const qualities = submittedMapQualities(qualityByQuestionId);
+    await submitQualities(qualityByQuestionId);
+  }
 
-    if (Object.keys(qualities).length > 0) {
-      await submitAnswer(qualities, mode, contextItems.length);
+  // Inline rating: grade the just-revealed pick (correct picks only) and clear
+  // the reveal so the next prompt surfaces. A wrong pick stays quality 0.
+  function rateChoice(quality) {
+    if (!choiceFeedback || !inlineChoiceRating) return;
+
+    if (quality !== undefined && quality !== null) {
+      setQuality(choiceFeedback.correctQuestionId, quality);
     }
 
-    const failedQuestionIds = Object.entries(qualities)
-      .filter(([, quality]) => quality === 0)
-      .map(([questionId]) => Number(questionId));
-
-    setShowRecap(false);
-    setFoundQuestionIds([]);
-    setResolvedQuestionIds([]);
-    setQualityByQuestionId({});
-    setFocusedCode(null);
-    setRemainingFocusCode(null);
-    setFocusVersion(0);
-
-    onComplete(failedQuestionIds);
+    setChoiceFeedback(null);
   }
 
   function setQuality(id, quality) {
@@ -1042,6 +1089,7 @@ export function useMapReview(
     progressPercent,
     promptCode: currentPromptItem?.code || null,
     promptLabel: currentPromptItem?.label || "",
+    rateChoice,
     recapMissCount,
     recapRows,
     recapSort,

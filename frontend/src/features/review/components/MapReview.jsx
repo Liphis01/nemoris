@@ -162,6 +162,7 @@ function getChoiceButtonStyle(option, feedback) {
   if (state === "correct") {
     return {
       ...choiceButtonStyle,
+      animation: "answer-pop 0.42s ease",
       background: "linear-gradient(180deg, #183a24, #12291b)",
       border: "1px solid rgba(134, 239, 172, 0.7)",
       boxShadow: "0 0 0 3px rgba(34, 197, 94, 0.16)",
@@ -172,6 +173,7 @@ function getChoiceButtonStyle(option, feedback) {
   if (state === "wrong") {
     return {
       ...choiceButtonStyle,
+      animation: "answer-shake 0.4s ease",
       background: [
         "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.24) 0 4px, rgba(127, 29, 29, 0) 4px 8px)",
         "linear-gradient(180deg, #3a1d1d, #271414)"
@@ -233,6 +235,7 @@ export default function MapReview({
     missedCodes,
     promptCode,
     promptLabel,
+    rateChoice = () => {},
     recapMissCount,
     recapRows,
     recapSort,
@@ -256,8 +259,15 @@ export default function MapReview({
     allowPartialSubmit,
     mode: normalizedMode,
     contextItems,
+    inlineChoiceRating: showQualityControls,
     onAnsweringComplete
   });
+  const showChoiceRating = (
+    mode === MAP_MODE_MULTIPLE_CHOICE &&
+    !showRecap &&
+    Boolean(choiceFeedback) &&
+    showQualityControls
+  );
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
@@ -494,6 +504,39 @@ export default function MapReview({
       window.removeEventListener("keydown", handlePromptCycleKeyDown);
     };
   }, [mode, remainingZones.length, selectNextPrompt, showRecap]);
+
+  // Keyboard grading of the inline choice reveal: 1/2/3 (or Enter for the Bon
+  // default) on a correct pick, Enter/Space to continue after a wrong pick.
+  useEffect(() => {
+    if (!showChoiceRating) return undefined;
+
+    const correctPick = Boolean(choiceFeedback?.isCorrect);
+
+    function handleChoiceRatingKeyDown(event) {
+      if (correctPick) {
+        if (event.key === "1" || event.key === "2" || event.key === "3") {
+          event.preventDefault();
+          rateChoice(Number(event.key));
+        } else if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          rateChoice(2);
+        }
+
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateChoice();
+      }
+    }
+
+    window.addEventListener("keydown", handleChoiceRatingKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleChoiceRatingKeyDown);
+    };
+  }, [showChoiceRating, choiceFeedback, rateChoice]);
 
   const previousPromptCodeRef = useRef(promptCode);
 
@@ -912,6 +955,85 @@ export default function MapReview({
               ))}
             </div>
           )}
+
+          {showChoiceRating && (() => {
+            const correctPick = Boolean(choiceFeedback?.isCorrect);
+            const correctId = choiceFeedback?.correctQuestionId;
+            const correctLabel = (choiceFeedback?.options || [])
+              .find(option => option.question_id === correctId)?.label || promptLabel;
+            const currentQuality = qualityByQuestionId[correctId] ?? 2;
+
+            return (
+              <div
+                data-map-choice-rating
+                style={{
+                  alignItems: "center",
+                  animation: "fadeIn 0.2s ease",
+                  background: "#121212",
+                  border: `1px solid ${correctPick ? "rgba(134, 239, 172, 0.35)" : "rgba(248, 113, 113, 0.35)"}`,
+                  borderRadius: "10px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px 14px",
+                  justifyContent: "space-between",
+                  marginTop: "10px",
+                  padding: "10px 12px"
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "130px" }}>
+                  <span style={{ color: correctPick ? "#86efac" : "#fca5a5", fontSize: "13px", fontWeight: 900 }}>
+                    {correctPick ? "Bonne réponse" : "Raté"}
+                  </span>
+                  <span style={{ color: "#9a9a9a", fontSize: "12px", overflowWrap: "anywhere" }}>
+                    {correctPick ? "Note la difficulté · 1 · 2 · 3" : `Réponse : ${correctLabel}`}
+                  </span>
+                </div>
+                {correctPick ? (
+                  <div style={{ alignItems: "center", display: "flex", gap: "8px" }}>
+                    {qualityOptions.filter(option => option.value > 0).map(({ value, icon, title }) => {
+                      const active = qualityButtonStyles[value];
+                      const selected = currentQuality === value;
+
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          title={title}
+                          data-map-choice-quality={value}
+                          onClick={() => rateChoice(value)}
+                          style={{
+                            ...recapQualityButtonStyle,
+                            background: selected ? active.background : "#222",
+                            border: selected ? active.border : "1px solid #333",
+                            color: selected ? active.color : "#999",
+                            cursor: "pointer"
+                          }}
+                        >
+                          {icon}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    data-map-choice-continue
+                    onClick={() => rateChoice()}
+                    style={{
+                      ...choiceButtonStyle,
+                      background: "#232323",
+                      border: "1px solid #3a3a3a",
+                      justifyContent: "center",
+                      minHeight: "38px",
+                      padding: "9px 18px"
+                    }}
+                  >
+                    Continuer →
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           {/* FOOTER */}
           {!showRecap && (

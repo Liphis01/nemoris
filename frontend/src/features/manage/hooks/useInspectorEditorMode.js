@@ -61,12 +61,14 @@ export default function useInspectorEditorMode({
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
   const selectQuestionCreationType = useCallback((type_q) => {
-    if (type_q === "media" || type_q === "text") {
+    if (type_q === "media" || type_q === "text_group") {
       // Media/text groups skip the intermediate creation form: create the group
-      // directly (with a default name) and open its editor.
+      // directly (with a default name) and open its editor. Plain "text" is a
+      // regular text question and falls through to the question editor below.
+      const type_group = type_q === "text_group" ? "text" : type_q;
       setViewMode?.("groups");
       setIsCreatingQuestion(false);
-      createGroup?.(directGroupOverrides(type_q));
+      createGroup?.(directGroupOverrides(type_group));
       return;
     }
 

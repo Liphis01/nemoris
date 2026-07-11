@@ -24,6 +24,38 @@
   }
 }
 
+/* Choice reveal: correct answer pops, a wrong pick shakes. */
+@keyframes answer-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  45% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes answer-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
 html,
 body,
 #root {

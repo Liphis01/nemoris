@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMediaAnswer } from "../../../api/review";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -295,6 +295,14 @@ function isPromptMode(mode) {
 }
 
 
+function isChoiceMode(mode) {
+  return (
+    mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+    mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+  );
+}
+
+
 function shouldUseGridPromptOrder(mode) {
   return mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL;
 }
@@ -468,6 +476,9 @@ export function useMediaReview(
   const mode = normalizeImageMode(options.mode);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
+  // Review grades each choice inline (reveal + quality), then auto-submits the
+  // group when the last item is rated. Training keeps the legacy flash + recap.
+  const inlineChoiceRating = Boolean(options.inlineChoiceRating) && isChoiceMode(mode);
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewItems;
@@ -512,6 +523,7 @@ export function useMediaReview(
   const [resultMode, setResultMode] = useState(false);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     setInput("");
@@ -639,7 +651,9 @@ export function useMediaReview(
     : 0;
 
   useEffect(() => {
-    if (!interactionFeedback) return undefined;
+    // In inline-rating mode the reveal stays until the user rates/continues, so
+    // it must not auto-clear. Training keeps the timed flash.
+    if (!interactionFeedback || inlineChoiceRating) return undefined;
 
     const timeout = window.setTimeout(() => {
       setInteractionFeedback(current =>
@@ -650,7 +664,7 @@ export function useMediaReview(
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [interactionFeedback]);
+  }, [interactionFeedback, inlineChoiceRating]);
 
   function selectItem(questionId) {
     if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode) return false;
@@ -795,6 +809,51 @@ export function useMediaReview(
     advanceTypePromptAfterResolved(item);
   }
 
+  async function submitQualities(qualityMap) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    try {
+      const qualities = submittedQualitiesFromRecap(qualityMap);
+
+      if (Object.keys(qualities).length > 0) {
+        await submitAnswer(qualities, mode, contextItems.length);
+      }
+
+      const failedQuestionIds = Object.entries(qualities)
+        .filter(([, quality]) => quality === 0)
+        .map(([questionId]) => Number(questionId));
+
+      setInput("");
+      setFoundQuestionIds([]);
+      setResolvedQuestionIds([]);
+      setLockedMissedQuestionIds([]);
+      setRevealedQuestionIds([]);
+      setQualityByQuestionId({});
+      setFeedbackTone(null);
+      setInteractionFeedback(null);
+      setResultMode(false);
+      setActivePromptQuestionId(null);
+      setRecapSort(initialRecapSort);
+
+      onComplete(failedQuestionIds);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
+  function autoSubmitChoiceResult() {
+    submitQualities(
+      buildRecapQualities(
+        sessionItems,
+        qualityByQuestionId,
+        foundQuestionIds,
+        resolvedQuestionIds,
+        allowPartialSubmit
+      )
+    );
+  }
+
   useEffect(() => {
     if (resultMode || sessionItems.length === 0) return;
     if (interactionFeedback) return;
@@ -805,11 +864,19 @@ export function useMediaReview(
 
     if (!allComplete) return;
 
+    if (inlineChoiceRating) {
+      // Every choice already carries its inline quality — submit and advance
+      // straight to the next group, no recap.
+      autoSubmitChoiceResult();
+      return;
+    }
+
     enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     completedQuestionIdSet,
     foundQuestionIds,
+    inlineChoiceRating,
     interactionFeedback,
     mode,
     qualityByQuestionId,
@@ -954,29 +1021,19 @@ export function useMediaReview(
   }
 
   async function sendResult() {
-    const qualities = submittedQualitiesFromRecap(qualityByQuestionId);
+    await submitQualities(qualityByQuestionId);
+  }
 
-    if (Object.keys(qualities).length > 0) {
-      await submitAnswer(qualities, mode, contextItems.length);
+  // Inline rating: grade the just-revealed choice (correct picks only) and clear
+  // the reveal so the next prompt surfaces. A wrong pick stays quality 0.
+  function rateChoice(quality) {
+    if (!interactionFeedback || !inlineChoiceRating) return;
+
+    if (quality !== undefined && quality !== null) {
+      setQuality(interactionFeedback.correctQuestionId, quality);
     }
 
-    const failedQuestionIds = Object.entries(qualities)
-      .filter(([, quality]) => quality === 0)
-      .map(([questionId]) => Number(questionId));
-
-    setInput("");
-    setFoundQuestionIds([]);
-    setResolvedQuestionIds([]);
-    setLockedMissedQuestionIds([]);
-    setRevealedQuestionIds([]);
-    setQualityByQuestionId({});
-    setFeedbackTone(null);
     setInteractionFeedback(null);
-    setResultMode(false);
-    setActivePromptQuestionId(null);
-    setRecapSort(initialRecapSort);
-
-    onComplete(failedQuestionIds);
   }
 
   const displayItems = useMemo(() => {
@@ -1175,6 +1232,7 @@ export function useMediaReview(
     progressPercent,
     promptLabel: visualPromptItem?.label || visualPromptItem?.answer || "",
     qualityByQuestionId,
+    rateChoice,
     recapMissCount,
     recapRows,
     recapSort,

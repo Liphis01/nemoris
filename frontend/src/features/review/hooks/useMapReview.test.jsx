@@ -501,6 +501,93 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.foundQuestionIds).toEqual([target.question_id]);
   });
 
+  it("inline rating keeps the reveal sticky and auto-submits the chosen quality", async () => {
+    vi.useFakeTimers();
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta" }),
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" })
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, onComplete, submitAnswer, {
+          mode: "multiple_choice",
+          contextItems,
+          inlineChoiceRating: true
+        })
+      );
+      const target = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.handleChoiceSelect(target.question_id);
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(result.current.choiceFeedback).toBeTruthy();
+      expect(result.current.showRecap).toBe(false);
+      expect(submitAnswer).not.toHaveBeenCalled();
+
+      await act(async () => {
+        result.current.rateChoice(3);
+      });
+
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { [target.question_id]: 3 },
+        "multiple_choice",
+        contextItems.length
+      );
+      expect(onComplete).toHaveBeenCalledWith([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("inline rating submits a wrong pick as quality 0 on continue", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta" }),
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" })
+    ];
+
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, onComplete, submitAnswer, {
+        mode: "multiple_choice",
+        contextItems,
+        inlineChoiceRating: true
+      })
+    );
+    const target = result.current.currentPromptItem;
+    const wrong = result.current.choiceOptions.find(
+      option => option.question_id !== target.question_id
+    );
+
+    act(() => {
+      result.current.handleChoiceSelect(wrong.question_id);
+    });
+    expect(result.current.choiceFeedback?.isCorrect).toBe(false);
+
+    await act(async () => {
+      result.current.rateChoice();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { [target.question_id]: 0 },
+      "multiple_choice",
+      contextItems.length
+    );
+    expect(onComplete).toHaveBeenCalledWith([target.question_id]);
+  });
+
   it("multiple_choice uses borrowed context and submits only active zones", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     const submitAnswer = vi.fn().mockResolvedValue({});

@@ -9,6 +9,7 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
+- shortcut pour les qcm (ex: 1,2,3,4 pour les réponses)
 
 ## quick fixes
 

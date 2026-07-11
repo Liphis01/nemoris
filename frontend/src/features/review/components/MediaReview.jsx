@@ -305,40 +305,59 @@ function isImageAnswerState(feedbackState) {
   return feedbackState === "correct" || feedbackState === "missed";
 }
 
+// Live choice reveal (feedbackState set during a pick) unifies on green =
+// correct answer / red = your wrong pick. Persistent recap/typed states
+// (isFound / isMissed / isLockedMissed) keep the blue/amber board palette.
+function tileRevealAnimation(feedbackState) {
+  if (isImageAnswerState(feedbackState)) return "answer-pop 0.42s ease";
+  if (feedbackState === "wrong") return "answer-shake 0.4s ease";
+  return undefined;
+}
+
 function tileBackground({ feedbackState, isActive, isFound, isLockedMissed, isMissed }) {
-  if (feedbackState === "wrong" || isLockedMissed || (isMissed && !isImageAnswerState(feedbackState))) {
+  if (feedbackState === "wrong") {
+    return [
+      "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.26) 0 6px, rgba(127, 29, 29, 0) 6px 12px)",
+      "linear-gradient(180deg, #3a1d1d, #271414)"
+    ].join(", ");
+  }
+
+  if (isImageAnswerState(feedbackState)) return "#152a1e";
+
+  if (isLockedMissed || isMissed) {
     return [
       "repeating-linear-gradient(135deg, rgba(180, 83, 9, 0.24) 0 6px, rgba(180, 83, 9, 0) 6px 12px)",
       "linear-gradient(180deg, #2f2414, #1f1a12)"
     ].join(", ");
   }
 
-  if (isImageAnswerState(feedbackState) || isFound) return "#151f2d";
+  if (isFound) return "#151f2d";
   if (isActive) return "#211f17";
   return "#151515";
 }
 
 function tileBorder({ feedbackState, isActive, isFound, isLockedMissed, isMissed }) {
-  if (feedbackState === "wrong" || isLockedMissed || (isMissed && !isImageAnswerState(feedbackState))) {
+  if (feedbackState === "wrong") return "2px solid rgba(248, 113, 113, 0.82)";
+
+  if (isImageAnswerState(feedbackState)) {
+    return feedbackState === "missed"
+      ? "2px dashed rgba(134, 239, 172, 0.86)"
+      : "2px solid rgba(134, 239, 172, 0.86)";
+  }
+
+  if (isLockedMissed || isMissed) {
     return "1px solid rgba(251, 191, 36, 0.78)";
   }
 
-  if (isImageAnswerState(feedbackState) || isFound) {
-    return feedbackState === "missed"
-      ? "2px dashed rgba(96, 165, 250, 0.86)"
-      : "2px solid rgba(96, 165, 250, 0.86)";
-  }
-
+  if (isFound) return "2px solid rgba(96, 165, 250, 0.86)";
   if (isActive) return "1px solid #d6a91c";
   return "1px solid #292929";
 }
 
 function tileBoxShadow({ feedbackState, isActive }) {
+  if (isImageAnswerState(feedbackState)) return "0 0 0 3px rgba(34, 197, 94, 0.20)";
+  if (feedbackState === "wrong") return "0 0 0 3px rgba(248, 113, 113, 0.20)";
   if (isActive) return "0 0 0 3px rgba(240, 195, 106, 0.16)";
-  if (isImageAnswerState(feedbackState)) return "0 0 0 3px rgba(96, 165, 250, 0.18)";
-  if (feedbackState === "wrong") {
-    return "0 0 0 3px rgba(251, 191, 36, 0.18)";
-  }
 
   return "none";
 }
@@ -354,20 +373,20 @@ function tileFeedbackLabel(feedbackState) {
 function tileFeedbackBadgeStyle(feedbackState) {
   if (isImageAnswerState(feedbackState)) {
     return {
-      background: "#1e3a5f",
-      border: "1px solid rgba(147, 197, 253, 0.76)",
-      color: "#dbeafe"
+      background: "#17331f",
+      border: "1px solid rgba(134, 239, 172, 0.76)",
+      color: "#d7f5df"
     };
   }
 
   if (feedbackState === "wrong") {
     return {
       background: [
-        "repeating-linear-gradient(135deg, rgba(120, 53, 15, 0.36) 0 4px, rgba(120, 53, 15, 0) 4px 8px)",
-        "#3b2a13"
+        "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.36) 0 4px, rgba(127, 29, 29, 0) 4px 8px)",
+        "#3a1d1d"
       ].join(", "),
-      border: "1px solid rgba(251, 191, 36, 0.82)",
-      color: "#fde68a"
+      border: "1px solid rgba(248, 113, 113, 0.82)",
+      color: "#ffd7d7"
     };
   }
 
@@ -502,10 +521,11 @@ function imageChoiceButtonStyle(option, feedback) {
   if (state === "correct") {
     return {
       ...buttonStyle,
-      background: "linear-gradient(180deg, #1e3a5f, #17253d)",
-      border: "2px solid rgba(147, 197, 253, 0.82)",
-      boxShadow: "0 0 0 3px rgba(96, 165, 250, 0.18)",
-      color: "#dbeafe",
+      animation: "answer-pop 0.42s ease",
+      background: "linear-gradient(180deg, #17331f, #10251a)",
+      border: "2px solid rgba(134, 239, 172, 0.85)",
+      boxShadow: "0 0 0 3px rgba(34, 197, 94, 0.20)",
+      color: "#d7f5df",
       minHeight: "44px",
       overflowWrap: "anywhere",
       textAlign: "center"
@@ -515,13 +535,14 @@ function imageChoiceButtonStyle(option, feedback) {
   if (state === "wrong") {
     return {
       ...buttonStyle,
+      animation: "answer-shake 0.4s ease",
       background: [
-        "repeating-linear-gradient(135deg, rgba(180, 83, 9, 0.26) 0 6px, rgba(180, 83, 9, 0) 6px 12px)",
-        "linear-gradient(180deg, #3b2a13, #241b10)"
+        "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.26) 0 6px, rgba(127, 29, 29, 0) 6px 12px)",
+        "linear-gradient(180deg, #3a1d1d, #271414)"
       ].join(", "),
-      border: "2px dashed rgba(251, 191, 36, 0.82)",
-      boxShadow: "0 0 0 3px rgba(251, 191, 36, 0.18)",
-      color: "#fde68a",
+      border: "2px solid rgba(248, 113, 113, 0.82)",
+      boxShadow: "0 0 0 3px rgba(248, 113, 113, 0.20)",
+      color: "#ffd7d7",
       minHeight: "44px",
       overflowWrap: "anywhere",
       textAlign: "center"
@@ -624,6 +645,7 @@ export default function MediaReview({
     mode,
     promptLabel,
     qualityByQuestionId = {},
+    rateChoice = () => {},
     recapMissCount,
     recapRows = [],
     recapSort = { key: null, direction: "asc" },
@@ -646,6 +668,7 @@ export default function MediaReview({
   } = useMediaReview(reviewItems, onComplete, submitAnswer, {
     allowPartialSubmit,
     contextItems,
+    inlineChoiceRating: showQualityControls,
     mode: requestedMode,
     onAnsweringComplete
   });
@@ -798,6 +821,13 @@ export default function MediaReview({
     return hasFoundRows && hasMissedRows;
   }, [effectiveRecapRows]);
   const showResultRecap = resultMode && showQualityControls;
+  // Inline grading: after a choice is picked (reveal active) ask for its quality
+  // right here instead of at a recap. Wrong picks only offer "Continuer".
+  const showChoiceRating = (
+    Boolean(interactionFeedback) &&
+    showQualityControls &&
+    (showLabelChoices || showImageChoiceBoard)
+  );
   const tileImageHeight = fillAvailableHeight ? 154 : 188;
   const tileImageMaxHeight = fillAvailableHeight ? 140 : 174;
   const tileMinHeight = fillAvailableHeight ? "212px" : "250px";
@@ -1115,6 +1145,37 @@ export default function MediaReview({
     scrollImageTileIntoView
   ]);
 
+  // Keyboard grading of the inline choice reveal: 1/2/3 (or Enter for the Bon
+  // default) on a correct pick, Enter/Space to continue after a wrong pick.
+  useEffect(() => {
+    if (!showChoiceRating || previewRow) return undefined;
+
+    const correctPick = Boolean(interactionFeedback?.isCorrect);
+
+    function handleKeyDown(event) {
+      if (correctPick) {
+        if (event.key === "1" || event.key === "2" || event.key === "3") {
+          event.preventDefault();
+          rateChoice(Number(event.key));
+        } else if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          rateChoice(2);
+        }
+
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateChoice();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showChoiceRating, interactionFeedback, previewRow, rateChoice]);
+
   function renderImageTile(
     row,
     { allowSelection = true, registerForScroll = true } = {}
@@ -1163,6 +1224,7 @@ export default function MediaReview({
         role={selectable ? "button" : undefined}
         tabIndex={selectable ? 0 : -1}
         style={{
+          animation: tileRevealAnimation(row.feedbackState),
           background: tileBackground(row),
           border: tileBorder(row),
           borderRadius: "12px",
@@ -1411,6 +1473,7 @@ export default function MediaReview({
         role={selectable ? "button" : undefined}
         tabIndex={selectable ? 0 : undefined}
         style={{
+          animation: tileRevealAnimation(row.feedbackState),
           background: tileBackground(row),
           border: tileBorder(row),
           borderRadius: "10px",
@@ -1586,6 +1649,75 @@ export default function MediaReview({
           label={answerLabel(row.item)}
           revealed={revealed}
         />
+      </div>
+    );
+  }
+
+  function renderChoiceRatingBar() {
+    if (!showChoiceRating) return null;
+
+    const correctPick = Boolean(interactionFeedback?.isCorrect);
+    const correctId = interactionFeedback?.correctQuestionId;
+    const currentQuality = qualityByQuestionId[correctId] ?? 2;
+
+    return (
+      <div
+        data-image-choice-rating
+        style={{
+          ...fadeInStyle,
+          alignItems: "center",
+          background: "#121212",
+          border: `1px solid ${correctPick ? "rgba(134, 239, 172, 0.35)" : "rgba(248, 113, 113, 0.35)"}`,
+          borderRadius: "10px",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px 14px",
+          justifyContent: "space-between",
+          marginBottom: "10px",
+          padding: "10px 12px"
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "130px" }}>
+          <span
+            style={{
+              color: correctPick ? "#86efac" : "#fca5a5",
+              fontSize: "13px",
+              fontWeight: 900
+            }}
+          >
+            {correctPick ? "Bonne réponse" : "Raté"}
+          </span>
+          <span style={{ color: "#9a9a9a", fontSize: "12px", overflowWrap: "anywhere" }}>
+            {correctPick
+              ? "Note la difficulté · 1 · 2 · 3"
+              : `Réponse : ${promptLabel}`}
+          </span>
+        </div>
+        {correctPick ? (
+          <div style={{ alignItems: "center", display: "flex", gap: "8px" }}>
+            {qualityOptions
+              .filter(option => option.value > 0)
+              .map(option => renderImageRecapQualityButton({
+                option,
+                selected: currentQuality === option.value,
+                onClick: () => rateChoice(option.value)
+              }))}
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-image-choice-continue
+            onClick={() => rateChoice()}
+            style={{
+              ...buttonStyle,
+              background: "#232323",
+              border: "1px solid #3a3a3a",
+              padding: "9px 18px"
+            }}
+          >
+            Continuer →
+          </button>
+        )}
       </div>
     );
   }
@@ -2469,6 +2601,8 @@ export default function MediaReview({
             ))}
           </div>
         )}
+
+        {renderChoiceRatingBar()}
 
         <div
           style={{

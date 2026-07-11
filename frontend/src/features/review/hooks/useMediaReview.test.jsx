@@ -532,6 +532,95 @@ describe("useMediaReview", () => {
     }
   });
 
+  it("inline rating keeps the reveal sticky and auto-submits the chosen quality", async () => {
+    vi.useFakeTimers();
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const items = [imageItem(1, "France", [], 1)];
+    const contextItems = [
+      ...items,
+      imageItem(2, "Germany", [], 10),
+      imageItem(3, "Spain", [], 4),
+      imageItem(4, "Italy", [], 8)
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useMediaReview(items, onComplete, submitAnswer, {
+          mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+          contextItems,
+          inlineChoiceRating: true
+        })
+      );
+      const prompt = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.handleChoiceSelect(prompt.question_id);
+      });
+
+      // Reveal stays put (no 1300ms auto-clear) and there is no recap.
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(result.current.interactionFeedback).toBeTruthy();
+      expect(result.current.resultMode).toBe(false);
+      expect(submitAnswer).not.toHaveBeenCalled();
+
+      await act(async () => {
+        result.current.rateChoice(3);
+      });
+
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { [prompt.question_id]: 3 },
+        IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        contextItems.length
+      );
+      expect(onComplete).toHaveBeenCalledWith([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("inline rating submits a wrong pick as quality 0 on continue", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const items = [imageItem(1, "France", [], 1)];
+    const contextItems = [
+      ...items,
+      imageItem(2, "Germany", [], 10),
+      imageItem(3, "Spain", [], 4),
+      imageItem(4, "Italy", [], 8)
+    ];
+
+    const { result } = renderHook(() =>
+      useMediaReview(items, onComplete, submitAnswer, {
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        contextItems,
+        inlineChoiceRating: true
+      })
+    );
+    const prompt = result.current.currentPromptItem;
+    const wrong = result.current.choiceOptions.find(
+      option => option.question_id !== prompt.question_id
+    );
+
+    act(() => {
+      result.current.handleChoiceSelect(wrong.question_id);
+    });
+    expect(result.current.interactionFeedback?.isCorrect).toBe(false);
+
+    await act(async () => {
+      result.current.rateChoice();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { [prompt.question_id]: 0 },
+      IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      contextItems.length
+    );
+    expect(onComplete).toHaveBeenCalledWith([prompt.question_id]);
+  });
+
   it("multiple_choice_label can sample easier distractors from a larger pool", () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.999999);
     const items = [
