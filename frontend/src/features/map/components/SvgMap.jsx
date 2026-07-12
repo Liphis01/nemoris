@@ -57,6 +57,12 @@ export default function SvgMap({
     const [svgVersion, setSvgVersion] = useState(0);
     const [tooltip, setTooltip] = useState(null);
     const [hoveredCode, setHoveredCode] = useState(null);
+    // Set while applying a transform that must not animate (a resize-driven re-fit).
+    const [instantTransform, setInstantTransform] = useState(false);
+    // True once the user pans/zooms by hand, so a resize re-fit leaves their view alone.
+    const userAdjustedRef = useRef(false);
+    // Size of the wrapper the last fit was computed against.
+    const lastFitSizeRef = useRef(null);
     const clickableCodeSet = useMemo(() => {
         if (!Array.isArray(clickableCodes)) return null;
 
@@ -104,6 +110,7 @@ export default function SvgMap({
             }
 
             didDragRef.current = true;
+            userAdjustedRef.current = true;
             hideTooltip();
         }
 
@@ -341,7 +348,7 @@ export default function SvgMap({
         hideTooltip
     ]);
 
-    useEffect(() => {
+    const fitFocusedZone = useCallback(({ instant = false } = {}) => {
         if (!focusCode || !wrapperRef.current) return;
 
         // Find ALL elements with this code (large zones like Argentina, Australia have multiple paths)
@@ -350,6 +357,13 @@ export default function SvgMap({
 
         const wrapperRect = wrapperRef.current.getBoundingClientRect();
         if (!wrapperRect.width || !wrapperRect.height) return;
+
+        // Remember the box this fit was computed against, so a resize observed
+        // afterwards can tell whether the box actually changed under it.
+        lastFitSizeRef.current = {
+            width: wrapperRect.width,
+            height: wrapperRect.height
+        };
 
         // Calculate combined bounding box of all paths for this zone
         let minLeft = Infinity;
@@ -400,12 +414,69 @@ export default function SvgMap({
         // while large zones naturally settle at a low fitScale.
         const newScale = Math.min(Math.max(fitScale, 1), maxZoom);
 
+        // A re-fit forced by the wrapper changing size must land instantly: the
+        // zone was already framed, so animating it would read as a spurious
+        // zoom (and the transform transition visibly blurs while it runs).
+        if (instant) setInstantTransform(true);
+
         setScale(newScale);
         setOffset({
             x: (wrapperRect.width / 2) - (box.x + box.width / 2) * newScale,
             y: (wrapperRect.height / 2) - (box.y + box.height / 2) * newScale
         });
-    }, [focusCode, focusVersion, svgVersion]);
+    }, [focusCode]);
+
+    useEffect(() => {
+        // A programmatic focus supersedes whatever the user had panned/zoomed to.
+        userAdjustedRef.current = false;
+        fitFocusedZone();
+    }, [fitFocusedZone, focusVersion, svgVersion]);
+
+    useEffect(() => {
+        const wrapper = wrapperRef.current;
+
+        if (!wrapper || typeof ResizeObserver === "undefined") return undefined;
+
+        // The map box is a flex child, so panels appearing beside it (the review
+        // quality bar, the manage zone editor, an alias chip wrapping to a new
+        // line) silently resize it. Nothing re-fits on resize, so the zone keeps
+        // its old scale and just gets cropped. Re-fit it to the new box instead.
+        const observer = new ResizeObserver(() => {
+            // Never clobber a pan/zoom the user performed themselves.
+            if (userAdjustedRef.current) return;
+
+            const rect = wrapperRef.current?.getBoundingClientRect();
+            const lastFit = lastFitSizeRef.current;
+
+            if (!rect || !rect.width || !rect.height) return;
+
+            // Only act when the box changed size *after* the last fit. A fit that
+            // already measured this box (e.g. focusing a zone in the same commit
+            // that opens the editor panel) is left to animate normally.
+            if (
+                lastFit &&
+                Math.abs(lastFit.width - rect.width) < 1 &&
+                Math.abs(lastFit.height - rect.height) < 1
+            ) {
+                return;
+            }
+
+            fitFocusedZone({ instant: true });
+        });
+
+        observer.observe(wrapper);
+
+        return () => observer.disconnect();
+    }, [fitFocusedZone]);
+
+    useEffect(() => {
+        if (!instantTransform) return undefined;
+
+        // Restore the transition once the instant transform has been painted.
+        const frame = window.requestAnimationFrame(() => setInstantTransform(false));
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [instantTransform, offset, scale]);
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -435,6 +506,7 @@ export default function SvgMap({
                 y: mouseY - worldY * newScale
             };
 
+            userAdjustedRef.current = true;
             setScale(newScale);
             setOffset(newOffset);
         }
@@ -473,7 +545,9 @@ export default function SvgMap({
                     transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                     transformOrigin: "0 0",
                     cursor: isDragging ? "grabbing" : "grab",
-                    transition: isDragging ? "none" : "transform 0.15s ease-out"
+                    transition: isDragging || instantTransform
+                        ? "none"
+                        : "transform 0.15s ease-out"
                 }}
             />
             {tooltip && (
