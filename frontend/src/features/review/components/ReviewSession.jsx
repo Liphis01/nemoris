@@ -42,25 +42,16 @@ function ReviewOutcomePanel({
   canStartBonusReview,
   startBonusReview,
   bonusReviewLoading,
-  bonusReviewMessage,
   bonusReviewStatus,
   bonusStatusLoading
 }) {
   const isFinished = variant === "finished";
   const titleId = `review-outcome-title-${variant}`;
-  const bonusState = bonusStatusLoading
-    ? "loading"
-    : bonusReviewStatus?.state || "unknown";
   const bonusStatusLabel = bonusStatusLoading
     ? "Analyse"
     : canStartBonusReview
       ? "Bonus disponible"
-      : bonusState === "full"
-        ? "Planning plein"
-        : bonusState === "no_new"
-          ? "Aucun bonus"
-          : "Repos";
-  const showBonusMessage = bonusStatusLoading || Boolean(bonusReviewMessage);
+      : "Aucun bonus";
   const bonusQuestionCount = bonusStatusLoading
     ? null
     : availableBonusQuestionCount(bonusReviewStatus);
@@ -105,17 +96,6 @@ function ReviewOutcomePanel({
             </div>
           )}
         </div>
-
-        {showBonusMessage && (
-          <p
-            aria-live="polite"
-            className={`review-outcome-bonus review-outcome-bonus-${bonusState}`}
-          >
-            {bonusStatusLoading
-              ? "Analyse du planning bonus..."
-              : bonusReviewMessage}
-          </p>
-        )}
 
         {(canReturnToLastQuestion || canStartBonusReview) && (
           <div className="review-outcome-actions">
@@ -260,7 +240,6 @@ export default function ReviewSession({
   canStartBonusReview,
   startBonusReview,
   bonusReviewActive,
-  bonusReviewMessage,
   bonusReviewStatus,
   bonusReviewLoading,
   bonusItemLoading,
@@ -661,7 +640,6 @@ export default function ReviewSession({
             canStartBonusReview={canStartBonusReview}
             startBonusReview={startBonusReview}
             bonusReviewLoading={bonusReviewLoading}
-            bonusReviewMessage={bonusReviewMessage}
             bonusReviewStatus={bonusReviewStatus}
             bonusStatusLoading={bonusStatusLoading}
           />
@@ -681,7 +659,6 @@ export default function ReviewSession({
             canStartBonusReview={canStartBonusReview}
             startBonusReview={startBonusReview}
             bonusReviewLoading={bonusReviewLoading}
-            bonusReviewMessage={bonusReviewMessage}
             bonusReviewStatus={bonusReviewStatus}
             bonusStatusLoading={bonusStatusLoading}
           />

@@ -17,7 +17,6 @@ const baseProps = {
   canStartBonusReview: false,
   startBonusReview: vi.fn(),
   bonusReviewActive: false,
-  bonusReviewMessage: "",
   bonusReviewStatus: null,
   bonusReviewLoading: false,
   bonusStatusLoading: false,
@@ -68,8 +67,7 @@ describe("ReviewSession", () => {
       currentIndex: 0,
       canStartBonusReview: true,
       startBonusReview,
-      bonusReviewMessage: "Le planning est léger.",
-      bonusReviewStatus: { allowed: true, state: "low" }
+      bonusReviewStatus: { allowed: true }
     });
 
     const panel = container.querySelector("[data-review-outcome='empty']");
@@ -80,21 +78,18 @@ describe("ReviewSession", () => {
     expect(screen.getByText("Planning à jour")).toBeInTheDocument();
     expect(screen.getByText("0 question à revoir")).toBeInTheDocument();
     expect(screen.getByText("Bonus disponible")).toBeInTheDocument();
-    expect(screen.getByText("Le planning est léger.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Faire des questions bonus" }))
       .toBeInTheDocument();
   });
 
-  it("shows a full schedule message without a bonus action", () => {
+  it("hides the bonus action when no bonus questions are available", () => {
     renderReviewSession({
       questions: [],
       currentIndex: 0,
-      bonusReviewMessage: "Le planning est déjà rempli.",
-      bonusReviewStatus: { allowed: false, state: "full" }
+      bonusReviewStatus: { allowed: false }
     });
 
-    expect(screen.getByText("Planning plein")).toBeInTheDocument();
-    expect(screen.getByText("Le planning est déjà rempli.")).toBeInTheDocument();
+    expect(screen.getByText("Aucun bonus")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Faire des questions bonus" }))
       .not.toBeInTheDocument();
   });
@@ -110,10 +105,8 @@ describe("ReviewSession", () => {
         }
       ],
       currentIndex: 1,
-      bonusReviewMessage: "Tu peux ajouter quelques questions bonus au planning.",
       bonusReviewStatus: {
         allowed: true,
-        state: "available",
         same_group_filter_applied: true,
         same_group_bonus_question_count: 2
       },

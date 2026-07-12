@@ -1588,7 +1588,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(summary["due_count"], 2)
         self.assertTrue(summary["has_due"])
 
-    def test_bonus_status_encourages_new_questions_when_schedule_is_low(self):
+    def test_bonus_status_allows_bonus_when_new_questions_exist(self):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         self.add_question(1)
         self.db.commit()
@@ -1596,14 +1596,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(db=self.db)
 
         self.assertTrue(status["allowed"])
-        self.assertEqual(status["state"], "low")
         self.assertEqual(status["new_count"], 1)
-        self.assertEqual(status["scheduled_total"], 0)
-        self.assertEqual(status["forecast_days"], 14)
-        self.assertEqual(status["forecast_total"], 0)
-        self.assertEqual(status["static_scheduled_total"], 0)
-        self.assertEqual(status["estimated_bonus_card_cost"], 2)
-        self.assertIn("planning prévu est léger", status["message"])
+        self.assertEqual(status["available_bonus_question_count"], 1)
 
     def test_bonus_status_counts_available_same_group_questions(self):
         today = date.today()
@@ -1629,7 +1623,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(status["same_group_bonus_question_count"], 1)
         self.assertEqual(status["available_bonus_question_count"], 1)
 
-    def test_low_bonus_status_advises_creating_questions_when_same_group_is_empty(self):
+    def test_bonus_status_disallows_when_same_group_is_empty(self):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         first_group = self.add_group(1)
         second_group = self.add_group(2)
@@ -1643,18 +1637,14 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(group_ids="1", db=self.db)
 
         self.assertFalse(status["allowed"])
-        self.assertEqual(status["state"], "no_new")
-        self.assertTrue(status["schedule_is_low"])
         self.assertEqual(status["new_count"], 1)
         self.assertEqual(status["same_group_new_count"], 0)
         self.assertEqual(status["same_group_bonus_question_count"], 0)
-        self.assertIn("Crée de nouvelles questions", status["message"])
-        self.assertIn("même groupe", status["message"])
-        self.assertNotIn("Ajoute quelques questions bonus", status["message"])
+        self.assertEqual(status["available_bonus_question_count"], 0)
 
-    def test_full_schedule_flags_bonus_as_full_but_still_allows_it(self):
-        # Capacity is informational only: a full 14-day forecast surfaces a
-        # warning but never blocks bonus review or the include_new payload.
+    def test_bonus_allowed_and_included_when_new_questions_remain(self):
+        # Bonus review is no longer capped by a forecast: as long as new
+        # questions exist and nothing is due, they are offered and included.
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
         self.add_question(1)
@@ -1673,22 +1663,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(db=self.db)
 
         self.assertTrue(status["allowed"])
-        self.assertEqual(status["state"], "full")
-        self.assertEqual(status["static_scheduled_total"], 13)
-        self.assertEqual(status["scheduled_total"], 27)
-        self.assertEqual(status["forecast_total"], 27)
-        self.assertGreaterEqual(status["forecast_total"], status["full_threshold"])
-        self.assertIn("bien rempli", status["message"])
+        self.assertEqual(status["new_count"], 1)
+        self.assertEqual(status["available_bonus_question_count"], 1)
 
         # No 409 anymore: the endpoint returns items instead of blocking.
         response = get_review(include_new=True, db=self.db)
-        self.assertIsInstance(response, list)
-
-        update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
-        unlocked_status = get_bonus_status(db=self.db)
-
-        self.assertTrue(unlocked_status["allowed"])
-        self.assertNotEqual(unlocked_status["state"], "full")
+        self.assertEqual([item["question_id"] for item in response], [1])
 
     def test_bonus_groups_lists_every_available_group_without_capacity_cap(self):
         # A tiny daily target keeps bonus capacity small, but the selection list
@@ -1766,31 +1746,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         # Unknown / malformed keys are ignored rather than raising.
         self.assertEqual(get_bonus_items(key="nope", db=self.db), [])
 
-    def test_bonus_status_uses_forecast_refill_before_calling_schedule_low(self):
-        today = date.today()
-        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
-        self.add_question(1)
-
-        for offset in range(7):
-            question_id = 100 + offset
-            self.add_question(question_id)
-            self.add_progress(
-                question_id,
-                today + timedelta(days=(offset % 6) + 1),
-                reps=1
-            )
-
-        self.db.commit()
-
-        status = get_bonus_status(db=self.db)
-
-        self.assertTrue(status["allowed"])
-        self.assertEqual(status["state"], "available")
-        self.assertEqual(status["static_scheduled_total"], 7)
-        self.assertLess(status["static_scheduled_total"], status["low_threshold"])
-        self.assertEqual(status["forecast_total"], status["low_threshold"])
-
-    def test_bonus_review_only_returns_remaining_schedule_capacity(self):
+    def test_bonus_review_returns_all_new_questions_without_capacity_cap(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
 
@@ -1811,11 +1767,11 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(db=self.db)
         response = get_review(include_new=True, db=self.db)
 
-        self.assertEqual(status["forecast_total"], 22)
-        self.assertEqual(status["full_threshold"] - status["forecast_total"], 3)
-        self.assertEqual(status["estimated_bonus_card_cost"], 2)
-        self.assertEqual(status["bonus_question_capacity"], 1)
-        self.assertEqual([item["question_id"] for item in response], [1])
+        self.assertEqual(status["available_bonus_question_count"], 4)
+        self.assertEqual(
+            sorted(item["question_id"] for item in response),
+            [1, 2, 3, 4]
+        )
 
     def test_failed_bonus_text_answer_stays_new_until_correct(self):
         self.add_question(1)

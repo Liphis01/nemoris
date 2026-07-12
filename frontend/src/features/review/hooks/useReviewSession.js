@@ -119,9 +119,6 @@ export function useReviewSession(active) {
     currentIndex >= questions.length &&
     bonusReviewStatus?.allowed
   );
-  const bonusReviewMessage = currentIndex >= questions.length
-    ? bonusReviewStatus?.message || ""
-    : "";
 
   const clearTextAnswerTimeout = useCallback(() => {
     if (textAnswerTimeoutRef.current) {
@@ -651,7 +648,6 @@ export function useReviewSession(active) {
     bonusReviewActive,
     bonusReviewLoading,
     bonusItemLoading,
-    bonusReviewMessage,
     bonusReviewStatus,
     bonusStatusLoading,
     bonusMenuOpen,

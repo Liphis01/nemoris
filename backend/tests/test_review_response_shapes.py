@@ -773,7 +773,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             response = get_review_items(
                 self.db,
                 include_new=True,
-                bonus_status={"bonus_question_capacity": 1}
+                bonus_status={"available_bonus_question_count": 1}
             )
 
         image_payload = next(item for item in response if item["type_q"] == "media")

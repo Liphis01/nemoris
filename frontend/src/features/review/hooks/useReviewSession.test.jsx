@@ -253,7 +253,6 @@ describe("useReviewSession", () => {
       expect(result.current.canStartBonusReview).toBe(true);
     });
     expect(result.current.bonusStatusLoading).toBe(false);
-    expect(result.current.bonusReviewMessage).toBe("Le planning est léger.");
 
     await act(async () => {
       await result.current.startBonusReview();
@@ -705,15 +704,13 @@ describe("useReviewSession", () => {
   it("does not load the bonus menu when the status is not allowed", async () => {
     getReview.mockResolvedValue([]);
     getBonusReviewStatus.mockResolvedValue({
-      allowed: false,
-      state: "due_first",
-      message: "Termine d'abord les questions dues."
+      allowed: false
     });
 
     const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
-      expect(result.current.bonusReviewMessage).toBe("Termine d'abord les questions dues.");
+      expect(result.current.bonusStatusLoading).toBe(false);
     });
 
     expect(result.current.canStartBonusReview).toBe(false);
