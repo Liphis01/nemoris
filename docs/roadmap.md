@@ -9,6 +9,7 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
+- zoomer en fonction de la taille des shapes
 
 ## quick fixes
 

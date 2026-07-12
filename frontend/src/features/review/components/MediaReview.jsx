@@ -74,24 +74,30 @@ const buttonStyle = {
   padding: "10px 14px"
 };
 
-// Small keycap hint shown on each choice so the number shortcut is discoverable.
-const choiceKeyBadgeStyle = {
+// Small keycap hint so keyboard shortcuts are discoverable.
+const keyCapStyle = {
   alignItems: "center",
   background: "#0d0d0d",
   border: "1px solid #363636",
   borderRadius: "5px",
   color: "#8a8a8a",
   display: "inline-flex",
+  flex: "0 0 auto",
   fontSize: "10px",
   fontWeight: 800,
   height: "16px",
   justifyContent: "center",
   lineHeight: 1,
   minWidth: "16px",
-  padding: "0 4px",
+  padding: "0 4px"
+};
+
+// Pinned to the corner of a choice so its number shortcut is visible.
+const choiceKeyBadgeStyle = {
+  ...keyCapStyle,
+  left: "6px",
   position: "absolute",
-  top: "6px",
-  left: "6px"
+  top: "6px"
 };
 
 const inputStyle = {
@@ -1173,8 +1179,11 @@ export default function MediaReview({
     const correctPick = Boolean(interactionFeedback?.isCorrect);
 
     function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      // Mirrors text review: 0/1/2/3 grade the revealed answer.
       if (correctPick) {
-        if (event.key === "1" || event.key === "2" || event.key === "3") {
+        if (["0", "1", "2", "3"].includes(event.key)) {
           event.preventDefault();
           rateChoice(Number(event.key));
         } else if (event.key === "Enter" || event.key === " ") {
@@ -1185,7 +1194,7 @@ export default function MediaReview({
         return;
       }
 
-      if (event.key === "Enter" || event.key === " ") {
+      if (event.key === "Enter" || event.key === " " || event.key === "0") {
         event.preventDefault();
         rateChoice();
       }
@@ -1723,6 +1732,36 @@ export default function MediaReview({
     );
   }
 
+  // Same shape as the text-review quality buttons: the shortcut key is part of
+  // the label ("2 · 🙂 Bon"), so grading by keyboard is discoverable.
+  function renderChoiceQualityButton({ option, selected, onClick }) {
+    const activeStyle = qualityButtonStyles[option.value];
+
+    return (
+      <button
+        key={option.value}
+        type="button"
+        aria-pressed={selected}
+        data-image-choice-quality={option.value}
+        onClick={onClick}
+        style={{
+          background: selected ? activeStyle.background : "#222",
+          border: selected ? activeStyle.border : "1px solid #333",
+          borderRadius: "8px",
+          color: selected ? activeStyle.color : "#9a9a9a",
+          cursor: "pointer",
+          fontSize: "12px",
+          fontWeight: 800,
+          padding: "8px 10px",
+          whiteSpace: "nowrap"
+        }}
+        title={option.title}
+      >
+        {`${option.value} · ${option.icon} ${option.title}`}
+      </button>
+    );
+  }
+
   function renderChoiceRatingBar() {
     if (!showChoiceRating) return null;
 
@@ -1759,19 +1798,17 @@ export default function MediaReview({
           </span>
           <span style={{ color: "#9a9a9a", fontSize: "12px", overflowWrap: "anywhere" }}>
             {correctPick
-              ? "Note la difficulté · 1 · 2 · 3"
+              ? "Note la difficulté"
               : `Réponse : ${promptLabel}`}
           </span>
         </div>
         {correctPick ? (
-          <div style={{ alignItems: "center", display: "flex", gap: "8px" }}>
-            {qualityOptions
-              .filter(option => option.value > 0)
-              .map(option => renderImageRecapQualityButton({
-                option,
-                selected: currentQuality === option.value,
-                onClick: () => rateChoice(option.value)
-              }))}
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {qualityOptions.map(option => renderChoiceQualityButton({
+              option,
+              selected: currentQuality === option.value,
+              onClick: () => rateChoice(option.value)
+            }))}
           </div>
         ) : (
           <button
@@ -1780,11 +1817,15 @@ export default function MediaReview({
             onClick={() => rateChoice()}
             style={{
               ...buttonStyle,
+              alignItems: "center",
               background: "#232323",
               border: "1px solid #3a3a3a",
+              display: "flex",
+              gap: "8px",
               padding: "9px 18px"
             }}
           >
+            <span aria-hidden="true" style={keyCapStyle}>Entrée</span>
             Continuer →
           </button>
         )}

@@ -910,6 +910,61 @@ describe("MediaReview answer label preview", () => {
     expect(handleImageSelect).toHaveBeenCalledWith(2);
   });
 
+  it("grades a revealed correct choice with the text-review number shortcuts", () => {
+    const rateChoice = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        rateChoice,
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }));
+
+    // The shortcut key is part of the label, exactly like text review.
+    expect(screen.getByRole("button", { name: "0 · ❌ Faux" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 · 🙂 Bon" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "3" });
+    expect(rateChoice).toHaveBeenCalledWith(3);
+
+    fireEvent.keyDown(window, { key: "0" });
+    expect(rateChoice).toHaveBeenCalledWith(0);
+  });
+
+  it("continues past a revealed wrong choice with Enter", () => {
+    const rateChoice = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        rateChoice,
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: false,
+          selectedQuestionId: 2
+        }
+      }
+    }));
+
+    // A wrong pick is a lapse: no quality choice, just continue.
+    expect(screen.queryByRole("button", { name: "2 · 🙂 Bon" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(rateChoice).toHaveBeenCalledWith();
+  });
+
   it("ignores the number-key shortcut once a choice is revealed", () => {
     const handleChoiceSelect = vi.fn();
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];

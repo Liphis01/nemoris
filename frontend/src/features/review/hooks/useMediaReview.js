@@ -842,18 +842,6 @@ export function useMediaReview(
     }
   }
 
-  function autoSubmitChoiceResult() {
-    submitQualities(
-      buildRecapQualities(
-        sessionItems,
-        qualityByQuestionId,
-        foundQuestionIds,
-        resolvedQuestionIds,
-        allowPartialSubmit
-      )
-    );
-  }
-
   useEffect(() => {
     if (resultMode || sessionItems.length === 0) return;
     if (interactionFeedback) return;
@@ -864,19 +852,14 @@ export function useMediaReview(
 
     if (!allComplete) return;
 
-    if (inlineChoiceRating) {
-      // Every choice already carries its inline quality — submit and advance
-      // straight to the next group, no recap.
-      autoSubmitChoiceResult();
-      return;
-    }
-
+    // Choice modes still end on the recap: buildRecapQualities keeps whatever
+    // quality was graded inline, so the recap opens pre-filled and any grade
+    // can still be corrected before submitting.
     enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     completedQuestionIdSet,
     foundQuestionIds,
-    inlineChoiceRating,
     interactionFeedback,
     mode,
     qualityByQuestionId,

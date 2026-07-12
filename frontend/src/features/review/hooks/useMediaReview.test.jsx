@@ -532,7 +532,7 @@ describe("useMediaReview", () => {
     }
   });
 
-  it("inline rating keeps the reveal sticky and auto-submits the chosen quality", async () => {
+  it("inline rating keeps the reveal sticky and carries the grade into the recap", async () => {
     vi.useFakeTimers();
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
@@ -558,20 +558,34 @@ describe("useMediaReview", () => {
         result.current.handleChoiceSelect(prompt.question_id);
       });
 
-      // Reveal stays put (no 1300ms auto-clear) and there is no recap.
+      // Reveal stays put (no 1300ms auto-clear) until the pick is graded.
       act(() => {
         vi.advanceTimersByTime(2000);
       });
       expect(result.current.interactionFeedback).toBeTruthy();
       expect(result.current.resultMode).toBe(false);
-      expect(submitAnswer).not.toHaveBeenCalled();
 
-      await act(async () => {
+      act(() => {
         result.current.rateChoice(3);
       });
 
+      // The group ends on the recap, pre-filled with the inline grade, and
+      // nothing is submitted until the recap is validated.
+      expect(result.current.resultMode).toBe(true);
+      expect(result.current.qualityByQuestionId[prompt.question_id]).toBe(3);
+      expect(submitAnswer).not.toHaveBeenCalled();
+
+      // The grade can still be corrected on the recap before submitting.
+      act(() => {
+        result.current.setQuality(prompt.question_id, 1);
+      });
+
+      await act(async () => {
+        await result.current.sendResult();
+      });
+
       expect(submitAnswer).toHaveBeenCalledWith(
-        { [prompt.question_id]: 3 },
+        { [prompt.question_id]: 1 },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         contextItems.length
       );
@@ -581,7 +595,7 @@ describe("useMediaReview", () => {
     }
   });
 
-  it("inline rating submits a wrong pick as quality 0 on continue", async () => {
+  it("inline rating carries a wrong pick into the recap as quality 0", async () => {
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
     const items = [imageItem(1, "France", [], 1)];
@@ -609,8 +623,15 @@ describe("useMediaReview", () => {
     });
     expect(result.current.interactionFeedback?.isCorrect).toBe(false);
 
-    await act(async () => {
+    act(() => {
       result.current.rateChoice();
+    });
+
+    expect(result.current.resultMode).toBe(true);
+    expect(result.current.qualityByQuestionId[prompt.question_id]).toBe(0);
+
+    await act(async () => {
+      await result.current.sendResult();
     });
 
     expect(submitAnswer).toHaveBeenCalledWith(

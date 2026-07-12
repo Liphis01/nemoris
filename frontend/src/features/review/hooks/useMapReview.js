@@ -694,16 +694,6 @@ export function useMapReview(
     }
   }
 
-  function autoSubmitChoiceResult() {
-    // buildMapRecapQualities does not carry inline grades, so overlay the
-    // per-zone qualities the user set during the run on top of the defaults.
-    const base = buildMapRecapQualities(
-      reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
-    );
-
-    submitQualities({ ...base, ...qualityByQuestionId });
-  }
-
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
     if (mode === MAP_MODE_MULTIPLE_CHOICE && choiceFeedback) return;
@@ -714,29 +704,27 @@ export function useMapReview(
 
     if (!allZonesComplete) return;
 
-    if (inlineChoiceRating) {
-      // Every pick already carries its inline quality — submit and advance to
-      // the next group, no recap.
-      autoSubmitChoiceResult();
-      return;
-    }
-
-    const nextQualities = buildMapRecapQualities(
-      reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
-    );
+    // buildMapRecapQualities rebuilds every grade from found/missed, which would
+    // discard the qualities graded inline. Overlay them so the recap opens
+    // pre-filled and any grade can still be corrected before submitting.
+    const nextQualities = {
+      ...buildMapRecapQualities(
+        reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
+      ),
+      ...qualityByQuestionId
+    };
 
     setQualityByQuestionId(nextQualities);
     setShowRecap(true);
     onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     allowPartialSubmit,
     completedQuestionIdSet,
     choiceFeedback,
     foundQuestionIdSet,
-    inlineChoiceRating,
     mode,
     onAnsweringComplete,
+    qualityByQuestionId,
     resolvedQuestionIdSet,
     reviewZones,
     showRecap

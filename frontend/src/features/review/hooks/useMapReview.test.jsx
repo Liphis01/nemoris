@@ -501,7 +501,7 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.foundQuestionIds).toEqual([target.question_id]);
   });
 
-  it("inline rating keeps the reveal sticky and auto-submits the chosen quality", async () => {
+  it("inline rating keeps the reveal sticky and carries the grade into the recap", async () => {
     vi.useFakeTimers();
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
@@ -531,14 +531,28 @@ describe("useMapReview recap sorting", () => {
       });
       expect(result.current.choiceFeedback).toBeTruthy();
       expect(result.current.showRecap).toBe(false);
-      expect(submitAnswer).not.toHaveBeenCalled();
 
-      await act(async () => {
+      act(() => {
         result.current.rateChoice(3);
       });
 
+      // The recap opens pre-filled with the inline grade — it must not be reset
+      // to the default 2 by the recap's own quality rebuild.
+      expect(result.current.showRecap).toBe(true);
+      expect(result.current.qualityByQuestionId[target.question_id]).toBe(3);
+      expect(submitAnswer).not.toHaveBeenCalled();
+
+      // The grade can still be corrected on the recap before submitting.
+      act(() => {
+        result.current.setQuality(target.question_id, 1);
+      });
+
+      await act(async () => {
+        await result.current.sendResult();
+      });
+
       expect(submitAnswer).toHaveBeenCalledWith(
-        { [target.question_id]: 3 },
+        { [target.question_id]: 1 },
         "multiple_choice",
         contextItems.length
       );
@@ -548,7 +562,7 @@ describe("useMapReview recap sorting", () => {
     }
   });
 
-  it("inline rating submits a wrong pick as quality 0 on continue", async () => {
+  it("inline rating carries a wrong pick into the recap as quality 0", async () => {
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
     const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
@@ -576,8 +590,15 @@ describe("useMapReview recap sorting", () => {
     });
     expect(result.current.choiceFeedback?.isCorrect).toBe(false);
 
-    await act(async () => {
+    act(() => {
       result.current.rateChoice();
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.qualityByQuestionId[target.question_id]).toBe(0);
+
+    await act(async () => {
+      await result.current.sendResult();
     });
 
     expect(submitAnswer).toHaveBeenCalledWith(

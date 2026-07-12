@@ -268,6 +268,15 @@ export default function MapReview({
     Boolean(choiceFeedback) &&
     showQualityControls
   );
+  // The rating bar's slot is held open for the whole question. If it only took up
+  // space once a choice was revealed, the map box would shrink by exactly that
+  // much mid-question, and SvgMap would re-fit (and visibly re-zoom) the zone it
+  // is already framed on. Reserving the space keeps the map box a constant size.
+  const showsChoiceRatingSlot = (
+    mode === MAP_MODE_MULTIPLE_CHOICE &&
+    !showRecap &&
+    showQualityControls
+  );
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
@@ -513,8 +522,11 @@ export default function MapReview({
     const correctPick = Boolean(choiceFeedback?.isCorrect);
 
     function handleChoiceRatingKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      // Mirrors text review: 0/1/2/3 grade the revealed answer.
       if (correctPick) {
-        if (event.key === "1" || event.key === "2" || event.key === "3") {
+        if (["0", "1", "2", "3"].includes(event.key)) {
           event.preventDefault();
           rateChoice(Number(event.key));
         } else if (event.key === "Enter" || event.key === " ") {
@@ -525,7 +537,7 @@ export default function MapReview({
         return;
       }
 
-      if (event.key === "Enter" || event.key === " ") {
+      if (event.key === "Enter" || event.key === " " || event.key === "0") {
         event.preventDefault();
         rateChoice();
       }
@@ -570,6 +582,13 @@ export default function MapReview({
   useEffect(() => {
     if (![MAP_MODE_TYPE_PROMPT, MAP_MODE_MULTIPLE_CHOICE].includes(mode)) return;
 
+    // While a choice reveal is up, the answered zone is still the one on screen
+    // but promptCode has already advanced to the next zone. Re-focusing now would
+    // only bump focusVersion and make SvgMap re-fit the zone it is already framed
+    // on. Leave previousPromptCodeRef untouched so the zoom still follows the
+    // prompt once the reveal is dismissed.
+    if (choiceFeedback) return;
+
     if (
       autoZoomEnabled &&
       !showRecap &&
@@ -582,7 +601,7 @@ export default function MapReview({
     }
 
     previousPromptCodeRef.current = promptCode;
-  }, [autoZoomEnabled, focusNextRemainingZone, mode, promptCode, showRecap]);
+  }, [autoZoomEnabled, choiceFeedback, focusNextRemainingZone, mode, promptCode, showRecap]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
@@ -990,6 +1009,8 @@ export default function MapReview({
             </div>
           )}
 
+          {showsChoiceRatingSlot && (
+            <div style={choiceRatingSlotStyle}>
           {showChoiceRating && (() => {
             const correctPick = Boolean(choiceFeedback?.isCorrect);
             const correctId = choiceFeedback?.correctQuestionId;
@@ -1006,11 +1027,12 @@ export default function MapReview({
                   background: "#121212",
                   border: `1px solid ${correctPick ? "rgba(134, 239, 172, 0.35)" : "rgba(248, 113, 113, 0.35)"}`,
                   borderRadius: "10px",
+                  boxSizing: "border-box",
                   display: "flex",
                   flexWrap: "wrap",
                   gap: "8px 14px",
+                  height: "100%",
                   justifyContent: "space-between",
-                  marginTop: "10px",
                   padding: "10px 12px"
                 }}
               >
@@ -1019,12 +1041,14 @@ export default function MapReview({
                     {correctPick ? "Bonne réponse" : "Raté"}
                   </span>
                   <span style={{ color: "#9a9a9a", fontSize: "12px", overflowWrap: "anywhere" }}>
-                    {correctPick ? "Note la difficulté · 1 · 2 · 3" : `Réponse : ${correctLabel}`}
+                    {correctPick ? "Note la difficulté" : `Réponse : ${correctLabel}`}
                   </span>
                 </div>
                 {correctPick ? (
-                  <div style={{ alignItems: "center", display: "flex", gap: "8px" }}>
-                    {qualityOptions.filter(option => option.value > 0).map(({ value, icon, title }) => {
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {/* Same shape as the text-review quality buttons: the shortcut
+                        key is part of the label, so keyboard grading is visible. */}
+                    {qualityOptions.map(({ value, icon, title }) => {
                       const active = qualityButtonStyles[value];
                       const selected = currentQuality === value;
 
@@ -1033,17 +1057,22 @@ export default function MapReview({
                           key={value}
                           type="button"
                           title={title}
+                          aria-pressed={selected}
                           data-map-choice-quality={value}
                           onClick={() => rateChoice(value)}
                           style={{
-                            ...recapQualityButtonStyle,
                             background: selected ? active.background : "#222",
                             border: selected ? active.border : "1px solid #333",
-                            color: selected ? active.color : "#999",
-                            cursor: "pointer"
+                            borderRadius: "8px",
+                            color: selected ? active.color : "#9a9a9a",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: 800,
+                            padding: "8px 10px",
+                            whiteSpace: "nowrap"
                           }}
                         >
-                          {icon}
+                          {`${value} · ${icon} ${title}`}
                         </button>
                       );
                     })}
@@ -1062,12 +1091,15 @@ export default function MapReview({
                       padding: "9px 18px"
                     }}
                   >
+                    <span aria-hidden="true" style={choiceKeyBadgeStyle}>Entrée</span>
                     Continuer →
                   </button>
                 )}
               </div>
             );
           })()}
+            </div>
+          )}
 
           {/* FOOTER */}
           {!showRecap && (
@@ -1607,6 +1639,12 @@ const choiceGridStyle = {
   display: "grid",
   gap: "10px",
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
+};
+
+// Fixed so the slot is identical whether or not the rating bar is in it.
+const choiceRatingSlotStyle = {
+  height: "70px",
+  marginTop: "10px"
 };
 
 // Small keycap hint shown on each choice so the number shortcut is discoverable.

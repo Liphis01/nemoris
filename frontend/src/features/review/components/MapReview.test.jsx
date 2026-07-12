@@ -480,6 +480,31 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
   });
 
+  it("multiple_choice grades a correct pick with the number shortcuts", async () => {
+    renderMapReview(true, { mode: "multiple_choice" });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-map-choice-rating]")).toBeInTheDocument();
+    });
+
+    // The shortcut key is part of the label, exactly like text review.
+    expect(screen.getByRole("button", { name: "0 · ❌ Faux" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 · 🙂 Bon" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "3" });
+
+    // Grading dismisses the reveal and moves the session on.
+    await waitFor(() => {
+      expect(document.querySelector("[data-map-choice-rating]"))
+        .not.toBeInTheDocument();
+    });
+  });
+
   it("multiple_choice picks the option under its number-key shortcut", async () => {
     renderMapReview(false, { mode: "multiple_choice" });
     const targetCode = screen.getByTestId("active-map")
