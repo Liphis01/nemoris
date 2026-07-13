@@ -109,14 +109,15 @@ const choiceControlBaseStyle = {
   width: "100%"
 };
 
-function choiceQualityButtonStyle(option, selected) {
-  const active = qualityButtonStyles[option.value];
-
+// The three grades stay visually identical: picking one grades and advances
+// immediately, so there is no lasting selection to show (and tinting the default
+// "Bon" only made it look pre-chosen).
+function choiceQualityButtonStyle() {
   return {
     ...choiceControlBaseStyle,
-    background: selected ? active.background : "#141414",
-    border: selected ? active.border : "1px solid #303030",
-    color: selected ? active.color : "#c9c9c9"
+    background: "#141414",
+    border: "1px solid #303030",
+    color: "#c9c9c9"
   };
 }
 
@@ -938,7 +939,6 @@ export default function MediaReview({
     (showLabelChoices || showImageChoiceBoard)
   );
   const correctChoiceId = interactionFeedback?.correctQuestionId;
-  const currentChoiceQuality = qualityByQuestionId[correctChoiceId] ?? 2;
   // Once answered, only the answers worth looking at stay on the board: the correct
   // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
   function keepRevealed(items, getQuestionId) {
@@ -1875,7 +1875,6 @@ export default function MediaReview({
     );
 
     return choiceQualityOptions.map(option => {
-      const selected = currentChoiceQuality === option.value;
       const interval = correctItem
         ? projectedIntervalForImage(correctItem, option.value)
         : null;
@@ -1885,11 +1884,10 @@ export default function MediaReview({
           key={option.value}
           type="button"
           title={option.title}
-          aria-pressed={selected}
           data-image-choice-quality={option.value}
           onClick={() => rateChoice(option.value)}
           style={{
-            ...choiceQualityButtonStyle(option, selected),
+            ...choiceQualityButtonStyle(),
             ...(onTiles ? choiceQualityTileStyle : null)
           }}
         >

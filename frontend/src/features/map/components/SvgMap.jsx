@@ -552,6 +552,7 @@ export default function SvgMap({
             />
             {tooltip && (
                 <div
+                    data-map-tooltip
                     style={{
                         ...mapTooltipStyle,
                         left: `${tooltip.x}px`,

@@ -157,15 +157,15 @@ const choiceRevealDelay = "0.3s";
 
 // Keeps the regular answer-button shape — only the centred label and the muted
 // text set it apart, since the sliding green answer is what carries the emphasis.
-function choiceQualityButtonStyle(option, selected) {
-  const active = qualityButtonStyles[option.value];
-
+// The three grades stay visually identical: picking one grades and advances
+// immediately, so there is no lasting selection to show (and tinting the default
+// "Bon" only made it look pre-chosen).
+function choiceQualityButtonStyle() {
   return {
     ...choiceButtonStyle,
     animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
-    background: selected ? active.background : choiceButtonStyle.background,
-    border: selected ? active.border : "1px solid #333",
-    color: selected ? active.color : "#c9c9c9",
+    border: "1px solid #333",
+    color: "#c9c9c9",
     gap: "8px",
     justifyContent: "center"
   };
@@ -304,7 +304,6 @@ export default function MapReview({
     showQualityControls
   );
   const correctChoiceId = choiceFeedback?.correctQuestionId;
-  const currentChoiceQuality = qualityByQuestionId[correctChoiceId] ?? 2;
   // Once answered, only the zones worth looking at stay on the board: the correct
   // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
   const revealedChoices = useMemo(() => {
@@ -419,6 +418,19 @@ export default function MapReview({
 
     return labels;
   }, [activeMissedCodes, foundQuestionIdSet, reviewZones]);
+  // While answering, only found/missed zones are labelled so hovering can't spoil
+  // the answer. By the recap every zone is revealed, so all of them get a name.
+  const recapZoneLabels = useMemo(() => {
+    const labels = {};
+
+    reviewZones.forEach(item => {
+      if (!item.code || !item.label) return;
+
+      labels[item.code] = item.label;
+    });
+
+    return labels;
+  }, [reviewZones]);
 
   function setRecapRowRef(code) {
     return (element) => {
@@ -1079,10 +1091,9 @@ export default function MapReview({
                     key={option.value}
                     type="button"
                     title={option.title}
-                    aria-pressed={currentChoiceQuality === option.value}
                     data-map-choice-quality={option.value}
                     onClick={() => rateChoice(option.value)}
-                    style={choiceQualityButtonStyle(option, currentChoiceQuality === option.value)}
+                    style={choiceQualityButtonStyle()}
                   >
                     <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
                     <span>{option.icon} {option.title}</span>
@@ -1268,6 +1279,7 @@ export default function MapReview({
                   selected={focusedCode}
                   focusCode={recapFocusCode}
                   focusVersion={recapFocusVersion}
+                  zoneLabels={recapZoneLabels}
                   onSelect={selectRecapCode}
                 />
                 <button

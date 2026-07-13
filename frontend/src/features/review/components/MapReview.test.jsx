@@ -6,7 +6,9 @@ const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
 
 vi.mock("../../map/components/SvgMap", () => ({
   default: (props) => {
-    const isRecap = props.zoneLabels === undefined;
+    // Both maps are labelled now (the recap names every zone on hover), so tell
+    // them apart by flashCodes, which only the answering map drives.
+    const isRecap = props.flashCodes === undefined;
     const clickableCodes = props.clickableCodes;
     const canSelectBeta = !Array.isArray(clickableCodes) || clickableCodes.includes("beta");
 
@@ -96,6 +98,24 @@ describe("MapReview recap map focus", () => {
       expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-version", "1");
     }
   );
+
+  it("names every zone on hover in the recap, but not while answering", async () => {
+    renderMapReview(true);
+
+    // While answering, only found/missed zones are labelled — hovering an
+    // untouched zone must not give its name away.
+    expect(JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels)).toEqual({});
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+
+    // By the recap every zone is revealed, so all of them are hoverable by name.
+    const recapMap = await screen.findByTestId("recap-map");
+
+    expect(JSON.parse(recapMap.dataset.zoneLabels)).toEqual({
+      alpha: "Alpha",
+      beta: "Beta"
+    });
+  });
 
   it("shows the training timer while answering map groups", async () => {
     renderMapReview(false, {
