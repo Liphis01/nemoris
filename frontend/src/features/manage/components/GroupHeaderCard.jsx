@@ -16,6 +16,7 @@ export default function GroupHeaderCard({
   const mapTypeStyle = questionTypeChipStyles.map;
   const imageTypeStyle = questionTypeChipStyles.media;
   const textTypeStyle = questionTypeChipStyles.text;
+  const sequenceTypeStyle = questionTypeChipStyles.sequence;
   const background = isOpen
     ? "#1a1a1a"
     : selectedInside
@@ -226,6 +227,21 @@ export default function GroupHeaderCard({
               }}
             >
               {groupInfo.textCount} TEXT
+            </span>
+          )}
+          {groupInfo.sequenceCount > 0 && (
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                padding: "2px 6px",
+                borderRadius: "999px",
+                background: sequenceTypeStyle.background,
+                color: sequenceTypeStyle.color,
+                whiteSpace: "nowrap"
+              }}
+            >
+              {groupInfo.sequenceCount} SÉQ
             </span>
           )}
           <span

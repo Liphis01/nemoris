@@ -219,3 +219,28 @@ export function sendTimelineAnswer(items, reviewDate = undefined) {
     })
   });
 }
+
+
+export function sendSequenceAnswer(
+  items,
+  mode = undefined,
+  contextCount = undefined,
+  reviewDate = undefined
+) {
+  const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+
+  // items is an object of question_id -> { position }. Sequences are graded on
+  // the server, so this reads the response instead of discarding it.
+  return requestJson("/answer_sequence", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      items,
+      ...(mode ? { mode } : {}),
+      ...answerContextPayload(resolved.contextCount),
+      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
+    })
+  });
+}

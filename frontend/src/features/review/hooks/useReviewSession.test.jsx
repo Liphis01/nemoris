@@ -20,7 +20,9 @@ vi.mock("../../../api/review", () => ({
   getReview: vi.fn(),
   sendMediaAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
+  sendTextAnswer: vi.fn(),
   sendTimelineAnswer: vi.fn(),
+  sendSequenceAnswer: vi.fn(),
   reviseAnswer: vi.fn(),
   sendAnswer: vi.fn()
 }));

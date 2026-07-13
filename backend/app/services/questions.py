@@ -10,6 +10,7 @@ from ..models import (
 )
 from ..serializers import serialize_manage_question
 from .media import delete_unreferenced_media_file, media_points_to_same_static_file
+from .sequence import validate_question_sequence
 from .timeline import validate_question_timeline
 
 
@@ -18,7 +19,8 @@ GROUP_COMPATIBILITY = {
     # new grouped review type through create/update.
     "map": ["map"],
     "media": ["media"],
-    "text": ["text"]
+    "text": ["text"],
+    "sequence": ["sequence"]
 }
 
 
@@ -62,6 +64,7 @@ def create_question(db, payload):
     # Progress is created lazily on first answer so new cards stay outside the
     # scheduled review workload until the user chooses bonus questions.
     validate_question_timeline(payload.type_q, payload.group_id, payload.data)
+    validate_question_sequence(payload.type_q, payload.group_id, payload.data)
     validate_group_compatibility(db, payload.type_q, payload.group_id)
 
     question = Question(
@@ -146,6 +149,7 @@ def update_question(db, question_id: int, payload):
     future_group_id = updates.get("group_id", question.group_id)
     future_data = updates.get("data", question.data or {})
     validate_question_timeline(future_type, future_group_id, future_data)
+    validate_question_sequence(future_type, future_group_id, future_data)
     validate_group_compatibility(db, future_type, future_group_id)
 
     for field in ["type_q", "question", "answer", "media", "answer_media", "tags", "data", "group_id"]:

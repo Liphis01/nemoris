@@ -24,18 +24,17 @@ function emptyGroupDraft(type_group = "") {
   };
 }
 
-function directGroupOverrides(type_group) {
-  const name = type_group === "text"
-    ? "Nouveau groupe texte"
-    : "Nouveau groupe média";
+// Group types whose editor opens immediately, with no intermediate creation
+// form (nothing to upload first). The group itself is NOT persisted here -- see
+// PENDING_GROUP_EDITORS in ManageInspector: it is created at the first save that
+// has something worth saving, so a mis-click leaves no empty group behind.
+export const DIRECT_GROUP_TYPES = ["text", "media", "sequence"];
 
-  return {
-    type_group,
-    name,
-    media: null,
-    data: {}
-  };
-}
+export const DEFAULT_GROUP_NAMES = {
+  text: "Nouveau groupe texte",
+  media: "Nouveau groupe média",
+  sequence: "Nouvelle liste"
+};
 
 export default function useInspectorEditorMode({
   createGroup,
@@ -47,10 +46,7 @@ export default function useInspectorEditorMode({
   setGroupDraft,
   setIsCreatingGroup,
   setIsCreatingQuestion,
-  setQuestionDraft,
-  setSelectedItem,
-  setViewMode,
-  startCreateGroup
+  setQuestionDraft
 }) {
   const mode = useMemo(() => {
     if (isCreatingGroup) return "createGroup";
@@ -60,62 +56,24 @@ export default function useInspectorEditorMode({
     return "empty";
   }, [isCreatingGroup, isCreatingQuestion, selectedItem]);
 
+  // Only standalone question types reach this now: every grouped type is created
+  // from "Nouveau groupe" via selectGroupCreationType.
   const selectQuestionCreationType = useCallback((type_q) => {
-    if (type_q === "media" || type_q === "text_group") {
-      // Media/text groups skip the intermediate creation form: create the group
-      // directly (with a default name) and open its editor. Plain "text" is a
-      // regular text question and falls through to the question editor below.
-      const type_group = type_q === "text_group" ? "text" : type_q;
-      setViewMode?.("groups");
-      setIsCreatingQuestion(false);
-      createGroup?.(directGroupOverrides(type_group));
-      return;
-    }
-
-    if (type_q === "map") {
-      setViewMode?.("groups");
-
-      if (startCreateGroup) {
-        startCreateGroup(type_q);
-        return;
-      }
-
-      setIsCreatingQuestion(false);
-      setIsCreatingGroup(true);
-      setGroupDraft(emptyGroupDraft(type_q));
-      setSelectedItem(null);
-      return;
-    }
-
     setQuestionDraft((prev) => (
       prepareQuestionDraftForType(prev, type_q)
     ));
-  }, [
-    createGroup,
-    setIsCreatingGroup,
-    setIsCreatingQuestion,
-    setGroupDraft,
-    setQuestionDraft,
-    setSelectedItem,
-    setViewMode,
-    startCreateGroup
-  ]);
+  }, [setQuestionDraft]);
 
   const cancelCreateQuestion = useCallback(() => {
     setIsCreatingQuestion(false);
     setQuestionDraft(emptyQuestionDraft());
   }, [setIsCreatingQuestion, setQuestionDraft]);
 
+  // Every type just records its choice in the draft. Map then shows its creation
+  // form; the direct types open their editor on an unsaved group.
   const selectGroupCreationType = useCallback((type_group) => {
-    if (type_group === "media" || type_group === "text") {
-      // Skip the intermediate creation form and open the editor directly.
-      setIsCreatingGroup(false);
-      createGroup?.(directGroupOverrides(type_group));
-      return;
-    }
-
     setGroupDraft(emptyGroupDraft(type_group));
-  }, [createGroup, setGroupDraft, setIsCreatingGroup]);
+  }, [setGroupDraft]);
 
   const createCurrentQuestion = useCallback(async (submittedDraft) => {
     await createQuestion(submittedDraft || questionDraft);

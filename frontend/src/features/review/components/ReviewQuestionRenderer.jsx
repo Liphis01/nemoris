@@ -4,6 +4,7 @@ import MediaReview from "./MediaReview";
 import TextGroupReview from "./TextGroupReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
+import SequenceReview from "./SequenceReview";
 import {
     IMAGE_MODE_TYPE_PROMPT,
     normalizeImageMode
@@ -35,11 +36,13 @@ export default function ReviewQuestionRenderer({
     handleMapComplete,
     handleImageComplete,
     handleTimelineComplete,
+    handleSequenceComplete,
     onAnsweringComplete,
     submitMapAnswer,
     submitMediaAnswer,
     submitTextAnswer,
     submitTimelineAnswer,
+    submitSequenceAnswer,
     allowPartialSubmit = false,
     trainingMode = false,
     trainingElapsedMs = null,
@@ -108,6 +111,22 @@ export default function ReviewQuestionRenderer({
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
+                fillAvailableHeight={compactVisualLayout}
+            />
+        );
+    }
+
+    if (q.type_q === "sequence" && q.items) {
+        return (
+            <SequenceReview
+                key={renderKey}
+                group={q}
+                reviewItems={q.items || []}
+                contextItems={q.context_items || q.items || []}
+                mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
+                onComplete={handleSequenceComplete}
+                submitAnswer={submitSequenceAnswer}
                 fillAvailableHeight={compactVisualLayout}
             />
         );

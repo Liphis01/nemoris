@@ -8,6 +8,7 @@ import {
   sendMapAnswer,
   sendTextAnswer,
   sendTimelineAnswer,
+  sendSequenceAnswer,
   reviseAnswer,
   sendAnswer
 } from "../../../api/review";
@@ -42,6 +43,7 @@ function bonusEntryTypeLabel(typeQ, isContainer) {
   if (typeQ === "media") return "Médias";
   if (typeQ === "text") return "Texte";
   if (typeQ === "timeline") return "Frise";
+  if (typeQ === "sequence") return "Séquence";
 
   return "Groupe";
 }
@@ -224,6 +226,13 @@ export function useReviewSession(active) {
     sendTimelineAnswer(items, reviewDateRef.current),
   []);
 
+  const submitSequenceAnswer = useCallback((
+    items,
+    mode = undefined,
+    contextCount = undefined
+  ) => sendSequenceAnswer(items, mode, contextCount, reviewDateRef.current),
+  []);
+
   const handleTextAnswer = useCallback((quality) => {
     if (!current || textAnswerPendingRef.current) return;
 
@@ -295,9 +304,10 @@ export function useReviewSession(active) {
     currentIndex
   ]);
 
-  function handleMapComplete(failedQuestionIds = []) {
-    // A map screen can contain many atomic zone questions. Only failed zones are
-    // re-queued, wrapped back into the same runtime map group shape.
+  // Every grouped type finishes the same way: one screen answers many atomic
+  // questions, and only the failed ones are re-queued, wrapped back into the
+  // same runtime group shape so they get another pass this session.
+  function handleGroupComplete(failedQuestionIds = []) {
     const answerIndex = currentIndex;
 
     if (current && failedQuestionIds.length > 0) {
@@ -321,57 +331,10 @@ export function useReviewSession(active) {
     setReturnToLastQuestionArmed(true);
   }
 
-  function handleImageComplete(failedQuestionIds = []) {
-    // Image groups mirror map runtime groups: only failed atomic images are
-    // appended for another pass in the same review session.
-    const answerIndex = currentIndex;
-
-    if (current && failedQuestionIds.length > 0) {
-      const failedItems = (current.items || []).filter(item =>
-        failedQuestionIds.includes(item.question_id)
-      );
-
-      if (failedItems.length > 0) {
-        setQuestions(prev => [
-          ...prev,
-          {
-            ...current,
-            items: failedItems,
-            _reviewRetryOfIndex: answerIndex
-          }
-        ]);
-      }
-    }
-
-    setCurrentIndex(prev => prev + 1);
-    setReturnToLastQuestionArmed(true);
-  }
-
-  function handleTimelineComplete(failedQuestionIds = []) {
-    // Timeline review also updates many atomic questions from one screen.
-    // Failed items are wrapped back into the runtime timeline shape.
-    const answerIndex = currentIndex;
-
-    if (current && failedQuestionIds.length > 0) {
-      const failedItems = (current.items || []).filter(item =>
-        failedQuestionIds.includes(item.question_id)
-      );
-
-      if (failedItems.length > 0) {
-        setQuestions(prev => [
-          ...prev,
-          {
-            ...current,
-            items: failedItems,
-            _reviewRetryOfIndex: answerIndex
-          }
-        ]);
-      }
-    }
-
-    setCurrentIndex(prev => prev + 1);
-    setReturnToLastQuestionArmed(true);
-  }
+  const handleMapComplete = handleGroupComplete;
+  const handleImageComplete = handleGroupComplete;
+  const handleTimelineComplete = handleGroupComplete;
+  const handleSequenceComplete = handleGroupComplete;
 
   useEffect(() => {
     if (!active) {
@@ -594,11 +557,14 @@ export function useReviewSession(active) {
     if (!active) return;
 
     function handleKeyDown(event) {
+      // Self-managed types own their keyboard: sequence needs the digits for
+      // its QCM options and the letters for its typed modes.
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||
         (current?.type_q === "media" && current?.items) ||
-        (current?.type_q === "text" && current?.items)
+        (current?.type_q === "text" && current?.items) ||
+        (current?.type_q === "sequence" && current?.items)
       ) {
         return;
       }
@@ -659,6 +625,7 @@ export function useReviewSession(active) {
     handleImageComplete,
     handleMapComplete,
     handleTimelineComplete,
+    handleSequenceComplete,
     handleTextAnswer,
     canReturnToLastQuestion,
     currentTextQuality: currentTextAnswer?.quality ?? null,
@@ -669,6 +636,7 @@ export function useReviewSession(active) {
     submitMapAnswer,
     submitTextAnswer,
     submitTimelineAnswer,
+    submitSequenceAnswer,
     questions,
     reviewError,
     reviewLoading,

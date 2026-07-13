@@ -52,7 +52,8 @@ const reviewTypes = [
   { label: "Texte", accent: "violet" },
   { label: "Map", accent: "amber" },
   { label: "Image", accent: "green" },
-  { label: "Timeline", accent: "blue" }
+  { label: "Timeline", accent: "blue" },
+  { label: "Séquence", accent: "teal" }
 ];
 
 function DestinationButton({ item, setMode }) {
@@ -176,7 +177,7 @@ export default function Menu({
 
               <span className="menu-review-title">Révision du jour</span>
               <span className="menu-review-text">
-                Lance la session due avec les questions texte, maps, images et timelines.
+                Lance la session due avec les questions texte, maps, images, timelines et séquences.
               </span>
 
               <span className="menu-review-types" aria-label="Types supportés">

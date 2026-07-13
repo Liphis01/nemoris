@@ -7,7 +7,7 @@ from ..scheduler import parse_history_date
 from .progress import progress_is_new
 
 
-KNOWN_TYPES = ("text", "map", "timeline", "media")
+KNOWN_TYPES = ("text", "map", "timeline", "media", "sequence")
 LOAD_WINDOW_DAYS = 30
 RETENTION_WINDOW_DAYS = 90
 HARD_QUESTION_LIMIT = 12
@@ -339,6 +339,11 @@ def build_stats(db, today=None):
                 summary
                 for summary in ranked_reviewed
                 if summary["type_q"] == "media"
+            ][:WEAK_SPOT_LIMIT],
+            "sequence": [
+                summary
+                for summary in ranked_reviewed
+                if summary["type_q"] == "sequence"
             ][:WEAK_SPOT_LIMIT]
         }
     }

@@ -7,7 +7,7 @@ import {
 } from "../../../shared/questionTypes";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
-const typeOrder = ["text", "map", "timeline", "media"];
+const typeOrder = ["text", "map", "timeline", "media", "sequence"];
 
 const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",

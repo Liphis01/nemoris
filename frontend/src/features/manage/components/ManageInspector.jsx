@@ -3,12 +3,23 @@ import CreateMapGroupEditor from "./CreateMapGroupEditor";
 import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
 import MediaGroupEditor from "./MediaGroupEditor";
 import TextGroupEditor from "./TextGroupEditor";
+import SequenceGroupEditor from "./SequenceGroupEditor";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
 import { getQuestionEditorAdapter } from "./questionEditorAdapters";
 import useInspectorAutosave from "../hooks/useInspectorAutosave";
-import useInspectorEditorMode from "../hooks/useInspectorEditorMode";
+import useInspectorEditorMode, {
+  DEFAULT_GROUP_NAMES,
+  DIRECT_GROUP_TYPES
+} from "../hooks/useInspectorEditorMode";
 import useInspectorPreviewState from "../hooks/useInspectorPreviewState";
+
+// The grouped types whose editor opens on a group that does not exist yet.
+const PENDING_GROUP_EDITORS = {
+  text: TextGroupEditor,
+  media: MediaGroupEditor,
+  sequence: SequenceGroupEditor
+};
 
 export default function ManageInspector({
   allGroups,
@@ -32,9 +43,9 @@ export default function ManageInspector({
   setGroupDraft,
   createQuestion,
   createGroup,
+  createGroupSilently,
   editingZone,
   setViewMode,
-  startCreateGroup,
   setHighlightedQuestionIds,
   importQuestionMediaUrl,
   onOpenInCalendar,
@@ -61,10 +72,7 @@ export default function ManageInspector({
     setGroupDraft,
     setIsCreatingGroup,
     setIsCreatingQuestion,
-    setQuestionDraft,
-    setSelectedItem,
-    setViewMode,
-    startCreateGroup
+    setQuestionDraft
   });
 
   const {
@@ -97,6 +105,67 @@ export default function ManageInspector({
     setSelectedItem
   });
 
+  // Shared by the "edit an existing group" and "create a group" paths: a save
+  // reconciles the group and question caches the same way either time.
+  function buildGroupSaveHandler({ selectedGroupItem = null, finishCreate = false }) {
+    return async (saveResult) => {
+      const savedGroup = saveResult?.group;
+      const savedItems = saveResult?.items || [];
+      const deletedIds = saveResult?.deletedQuestionIds || [];
+
+      if (savedGroup) {
+        setAllGroups(prev =>
+          prev.map(g =>
+            g.id === savedGroup.id
+              ? { ...g, ...savedGroup }
+              : g
+          )
+        );
+      }
+
+      setAllQuestions?.(prev => {
+        const deletedIdSet = new Set(deletedIds);
+        const existingIds = new Set(prev.map(question => question.id));
+        const patched = prev
+          .filter(question => !deletedIdSet.has(question.id))
+          .map(question => {
+            const savedItem = savedItems.find(item => item.id === question.id);
+            return savedItem || question;
+          });
+        const created = savedItems.filter(item => !existingIds.has(item.id));
+
+        return [...patched, ...created];
+      });
+
+      const highlightedIds = (saveResult?.createdQuestionIds || []).length > 0
+        ? saveResult.createdQuestionIds
+        : saveResult?.updatedQuestionIds || [];
+
+      if (highlightedIds.length > 0) {
+        setHighlightedQuestionIds?.(highlightedIds);
+      }
+
+      if (selectedGroupItem) {
+        const savedSelectedItem = savedItems.find(
+          item => item.id === selectedGroupItem.id
+        );
+
+        if (savedSelectedItem) {
+          setSelectedItem(savedSelectedItem);
+        }
+      } else if (savedGroup) {
+        setSelectedItem(savedGroup);
+      }
+
+      if (finishCreate && savedGroup) {
+        // The group now exists, so leave creation mode and let the normal edit
+        // branch take over on the next render.
+        setIsCreatingGroup(false);
+        setGroupDraft({ name: "", type_group: "", media: "", data: {} });
+      }
+    };
+  }
+
   if (mode === "createGroup") {
     if (!groupDraft.type_group) {
       return (
@@ -104,6 +173,59 @@ export default function ManageInspector({
           onSelect={selectGroupCreationType}
           onCancel={cancelCreateGroup}
         />
+      );
+    }
+
+    if (DIRECT_GROUP_TYPES.includes(groupDraft.type_group)) {
+      const PendingGroupEditor = PENDING_GROUP_EDITORS[groupDraft.type_group];
+      // The editor opens on a group with no id: nothing exists server-side yet.
+      // It calls ensureGroupId at its first save, and only a named or non-empty
+      // group is worth a row -- so backing out of a mis-click leaves nothing.
+      const pendingGroup = {
+        id: null,
+        type_group: groupDraft.type_group,
+        name: "",
+        media: null,
+        tags: [],
+        data: {}
+      };
+
+      return (
+        <div
+          style={{
+            height: "100%",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column"
+          }}
+        >
+          <PendingGroupEditor
+            group={pendingGroup}
+            selectedItem={null}
+            availableTags={availableTags}
+            ensurePersistedGroup={async ({ name, itemCount }) => {
+              const trimmedName = String(name || "").trim();
+
+              // Nothing named and nothing in it: not worth a row.
+              if (!trimmedName && itemCount === 0) {
+                return null;
+              }
+
+              return await createGroupSilently?.({
+                type_group: groupDraft.type_group,
+                name:
+                  trimmedName ||
+                  DEFAULT_GROUP_NAMES[groupDraft.type_group] ||
+                  "Nouveau groupe",
+                media: null,
+                data: {}
+              }) ?? null;
+            }}
+            onSave={buildGroupSaveHandler({ finishCreate: true })}
+            registerPendingSaveHandler={registerPendingSaveHandler}
+            headerAction={null}
+          />
+        </div>
       );
     }
 
@@ -186,6 +308,11 @@ export default function ManageInspector({
     selectedItem.group?.id
   );
   const isTextGroup = selectedItem.type_group === "text";
+  const selectedIsSequenceItem = selectedItem.type_q === "sequence" && (
+    selectedItem.group_id ||
+    selectedItem.group?.id
+  );
+  const isSequenceGroup = selectedItem.type_group === "sequence";
 
   if (selectedIsMapZone || isMapGroup) {
     // Selecting either a map group or one of its zones opens the full map editor
@@ -404,8 +531,21 @@ export default function ManageInspector({
     );
   }
 
-  if (selectedIsTextItem || isTextGroup) {
-    const groupId = selectedIsTextItem
+  if (
+    selectedIsTextItem ||
+    isTextGroup ||
+    selectedIsSequenceItem ||
+    isSequenceGroup
+  ) {
+    // Text groups and sequences are both "a group of rows" in manage: only the
+    // editor differs, so the group lookup and the save/cache reconciliation
+    // below are shared.
+    const isSequence = selectedIsSequenceItem || isSequenceGroup;
+    const GroupEditor = isSequence ? SequenceGroupEditor : TextGroupEditor;
+    const selectedIsGroupItem = isSequence
+      ? selectedIsSequenceItem
+      : selectedIsTextItem;
+    const groupId = selectedIsGroupItem
       ? selectedItem.group?.id ?? selectedItem.group_id
       : selectedItem.id;
     const group = allGroups.find((g) => g.id === groupId);
@@ -435,60 +575,16 @@ export default function ManageInspector({
           flexDirection: "column"
         }}
       >
-        <TextGroupEditor
+        <GroupEditor
           group={group}
-          selectedItem={selectedIsTextItem ? selectedItem : null}
+          selectedItem={selectedIsGroupItem ? selectedItem : null}
           availableTags={availableTags}
-          onSave={async (saveResult) => {
-            const savedGroup = saveResult?.group;
-            const savedItems = saveResult?.items || [];
-            const deletedIds = saveResult?.deletedQuestionIds || [];
-
-            if (savedGroup) {
-              setAllGroups(prev =>
-                prev.map(g =>
-                  g.id === savedGroup.id
-                    ? { ...g, ...savedGroup }
-                    : g
-                )
-              );
-            }
-
-            setAllQuestions?.(prev => {
-              const deletedIdSet = new Set(deletedIds);
-              const existingIds = new Set(prev.map(question => question.id));
-              const patched = prev
-                .filter(question => !deletedIdSet.has(question.id))
-                .map(question => {
-                  const savedItem = savedItems.find(item => item.id === question.id);
-                  return savedItem || question;
-                });
-              const created = savedItems.filter(item => !existingIds.has(item.id));
-
-              return [...patched, ...created];
-            });
-
-            const highlightedIds = (saveResult?.createdQuestionIds || []).length > 0
-              ? saveResult.createdQuestionIds
-              : saveResult?.updatedQuestionIds || [];
-
-            if (highlightedIds.length > 0) {
-              setHighlightedQuestionIds?.(highlightedIds);
-            }
-
-            if (selectedIsTextItem) {
-              const savedSelectedItem = savedItems.find(item => item.id === selectedItem.id);
-
-              if (savedSelectedItem) {
-                setSelectedItem(savedSelectedItem);
-              }
-            } else if (savedGroup) {
-              setSelectedItem(savedGroup);
-            }
-          }}
+          onSave={buildGroupSaveHandler({
+            selectedGroupItem: selectedIsGroupItem ? selectedItem : null
+          })}
           registerPendingSaveHandler={registerPendingSaveHandler}
           headerAction={
-            selectedIsTextItem ? (
+            selectedIsGroupItem ? (
               <ReviewCalendarAction
                 compact
                 nextReview={selectedNextReview}

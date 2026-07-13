@@ -34,7 +34,7 @@ const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric"
 });
 
-const calendarTypeOrder = ["text", "map", "timeline", "media"];
+const calendarTypeOrder = ["text", "map", "timeline", "media", "sequence"];
 const maxCalendarCellTypeBars = 4;
 
 function toDateKey(date) {
@@ -156,6 +156,7 @@ function dueLabel(question) {
   if (question.type_q === "map") return "Map zone";
   if (question.type_q === "media") return question.answer || "Média";
   if (question.type_q === "timeline") return question.answer || "Timeline";
+  if (question.type_q === "sequence") return question.answer || "Séquence";
   return question.answer || "Question";
 }
 

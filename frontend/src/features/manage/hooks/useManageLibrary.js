@@ -258,6 +258,23 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
+  async function createGroupSilently(overrides) {
+    // Persists the group and nothing else: no draft reset, no mode flip. The
+    // grouped editors open on a group that does not exist server-side yet and
+    // call this at their first real save, so flipping isCreatingGroup here would
+    // unmount the editor mid-save.
+    const createdGroup = await createGroupRequest({
+      type_group: overrides.type_group,
+      name: overrides.name,
+      media: overrides.media || null,
+      data: overrides.data || {}
+    });
+
+    setAllGroups(prev => [...prev, createdGroup]);
+
+    return createdGroup;
+  }
+
   async function createGroup(overrides = null) {
     // Media groups skip the intermediate creation form and are created directly
     // with a default name; the map form still passes its draft (and its onClick
@@ -494,6 +511,7 @@ export function useManageLibrary(mode) {
     sortOrder,
     startCreateQuestion,
     startCreateGroup,
+    createGroupSilently,
     toggleGroupSortOrder,
     toggleSortOrder,
     updateQuestion,

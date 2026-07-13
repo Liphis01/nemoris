@@ -36,6 +36,12 @@ import {
   textModeDetails,
   textModeLabels
 } from "../../review/textModes";
+import {
+  defaultSequenceMode,
+  SEQUENCE_MODES,
+  sequenceModeDetails,
+  sequenceModeLabels
+} from "../../review/sequenceModes";
 import { getMediaKind } from "../../../shared/media";
 import "./TrainingSession.css";
 
@@ -155,6 +161,15 @@ function modeConfigForGroup(group) {
     };
   }
 
+  if (group?.type_group === "sequence") {
+    return {
+      defaultMode: defaultSequenceMode,
+      details: sequenceModeDetails,
+      labels: sequenceModeLabels,
+      modes: SEQUENCE_MODES
+    };
+  }
+
   return null;
 }
 
@@ -179,7 +194,8 @@ function recordForMode(group, mode) {
 function isVisualQuestion(question) {
   return (
     ["media", "map", "timeline"].includes(question?.type_q) ||
-    (question?.type_q === "text" && Array.isArray(question?.items))
+    (question?.type_q === "text" && Array.isArray(question?.items)) ||
+    (question?.type_q === "sequence" && Array.isArray(question?.items))
   );
 }
 
@@ -250,6 +266,7 @@ function groupAccent(group) {
   if (group?.type_group === "map") return "map";
   if (group?.type_group === "media") return "media";
   if (group?.type_group === "text") return "text";
+  if (group?.type_group === "sequence") return "sequence";
 
   return "neutral";
 }
@@ -264,6 +281,7 @@ function questionTypeLabel(type) {
   if (type === "map") return "Map";
   if (type === "media") return "Média";
   if (type === "timeline") return "Timeline";
+  if (type === "sequence") return "Séquence";
   return "Texte";
 }
 
@@ -1860,11 +1878,13 @@ export default function TrainingSession({ setMode }) {
               handleMapComplete={session.handleMapComplete}
               handleImageComplete={session.handleImageComplete}
               handleTimelineComplete={session.handleTimelineComplete}
+              handleSequenceComplete={session.handleSequenceComplete}
               onAnsweringComplete={session.markAnsweringComplete}
               submitMapAnswer={session.submitMapTrainingAnswer}
               submitMediaAnswer={session.submitMediaTrainingAnswer}
               submitTextAnswer={session.submitTextTrainingAnswer}
               submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+              submitSequenceAnswer={session.submitSequenceTrainingAnswer}
               trainingMode
               trainingElapsedMs={null}
               trainingBestTimeMs={null}
@@ -2138,11 +2158,13 @@ export default function TrainingSession({ setMode }) {
                   handleMapComplete={session.handleMapComplete}
                   handleImageComplete={session.handleImageComplete}
                   handleTimelineComplete={session.handleTimelineComplete}
+                  handleSequenceComplete={session.handleSequenceComplete}
                   onAnsweringComplete={session.markAnsweringComplete}
                   submitMapAnswer={session.submitMapTrainingAnswer}
                   submitMediaAnswer={session.submitMediaTrainingAnswer}
                   submitTextAnswer={session.submitTextTrainingAnswer}
                   submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+                  submitSequenceAnswer={session.submitSequenceTrainingAnswer}
                   trainingMode
                   trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
                   trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}

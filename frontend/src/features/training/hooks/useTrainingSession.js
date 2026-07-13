@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTrainingItems,
+  gradeTrainingSequence,
   gradeTrainingTimeline,
   listTrainingScopes,
   recordCollectionTrainingAttempt,
@@ -133,7 +134,8 @@ function scopeRequestOptions(scope) {
       groupId: scope.id,
       ...(scope.mapMode ? { mapMode: scope.mapMode } : {}),
       ...(scope.imageMode ? { imageMode: scope.imageMode } : {}),
-      ...(scope.textMode ? { textMode: scope.textMode } : {})
+      ...(scope.textMode ? { textMode: scope.textMode } : {}),
+      ...(scope.sequenceMode ? { sequenceMode: scope.sequenceMode } : {})
     };
   }
 
@@ -264,7 +266,8 @@ export function useTrainingSession(active = true) {
         groupMode,
         ...(groupTypeForMode === "map" ? { mapMode: groupMode } : {}),
         ...(groupTypeForMode === "media" ? { imageMode: groupMode } : {}),
-        ...(groupTypeForMode === "text" ? { textMode: groupMode } : {})
+        ...(groupTypeForMode === "text" ? { textMode: groupMode } : {}),
+        ...(groupTypeForMode === "sequence" ? { sequenceMode: groupMode } : {})
       }
       : scope;
 
@@ -345,6 +348,11 @@ export function useTrainingSession(active = true) {
     setCurrentIndex(prev => prev + 1);
   }, []);
 
+  const handleSequenceComplete = useCallback((failedIds = []) => {
+    addFailedIds(setFailedQuestionIds, failedIds);
+    setCurrentIndex(prev => prev + 1);
+  }, []);
+
   // Every question type ends on a recap the user dismisses by hand. Reading it
   // is not solving, so on the last question the run clock stops and the attempt
   // is saved right away, rather than waiting for the recap to be dismissed.
@@ -371,6 +379,13 @@ export function useTrainingSession(active = true) {
   const submitTextTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitTimelineTrainingAnswer = useCallback(
     (items) => gradeTrainingTimeline(items),
+    []
+  );
+  // Map/media/text grade client-side, so their training submits are no-ops.
+  // Sequences are graded on the server, so training needs the dedicated grader:
+  // routing this to /answer_sequence would schedule real reviews from practice.
+  const submitSequenceTrainingAnswer = useCallback(
+    (items) => gradeTrainingSequence(items),
     []
   );
 
@@ -574,6 +589,7 @@ export function useTrainingSession(active = true) {
     handleMapComplete,
     handleTextAnswer,
     handleTimelineComplete,
+    handleSequenceComplete,
     isComplete,
     labelForActiveScope: labelForScope(activeScope),
     loadScopes,
@@ -597,6 +613,7 @@ export function useTrainingSession(active = true) {
     submitTextTrainingAnswer,
     submitMapTrainingAnswer,
     submitTimelineTrainingAnswer,
+    submitSequenceTrainingAnswer,
     trainingError,
     trainingLoading
   };

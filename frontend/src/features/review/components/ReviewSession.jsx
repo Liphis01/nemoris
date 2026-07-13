@@ -5,7 +5,8 @@ import "./ReviewSession.css";
 function isVisualQuestion(question) {
   return (
     ["media", "map", "timeline"].includes(question?.type_q) ||
-    (question?.type_q === "text" && Array.isArray(question?.items))
+    (question?.type_q === "text" && Array.isArray(question?.items)) ||
+    (question?.type_q === "sequence" && Array.isArray(question?.items))
   );
 }
 
@@ -235,6 +236,7 @@ export default function ReviewSession({
   handleMapComplete,
   handleImageComplete,
   handleTimelineComplete,
+  handleSequenceComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
   canStartBonusReview,
@@ -253,7 +255,8 @@ export default function ReviewSession({
   submitMapAnswer,
   submitMediaAnswer,
   submitTextAnswer,
-  submitTimelineAnswer
+  submitTimelineAnswer,
+  submitSequenceAnswer
 }) {
   const currentQuestion = questions[currentIndex];
   const reviewedCount = questions.reduce(
@@ -495,10 +498,12 @@ export default function ReviewSession({
               handleMapComplete={handleMapComplete}
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
+              handleSequenceComplete={handleSequenceComplete}
               submitMapAnswer={submitMapAnswer}
               submitMediaAnswer={submitMediaAnswer}
               submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
+              submitSequenceAnswer={submitSequenceAnswer}
               allowPartialSubmit={bonusReviewActive}
               compactVisualLayout
             />
@@ -777,10 +782,12 @@ export default function ReviewSession({
               handleMapComplete={handleMapComplete}
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
+              handleSequenceComplete={handleSequenceComplete}
               submitMapAnswer={submitMapAnswer}
               submitMediaAnswer={submitMediaAnswer}
               submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
+              submitSequenceAnswer={submitSequenceAnswer}
               allowPartialSubmit={bonusReviewActive}
             />
 

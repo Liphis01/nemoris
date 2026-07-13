@@ -8,6 +8,7 @@ from ..schemas import (
     MapAnswerRequest,
     MediaAnswerRequest,
     ReviewSettings,
+    SequenceAnswerRequest,
     TextAnswerRequest,
     TimelineAnswerRequest
 )
@@ -54,6 +55,15 @@ from ..services.settings import (
     get_startup_rebalance_notice,
     load_scheduler_tuning_settings,
     save_review_settings
+)
+from ..services.sequence import (
+    grade_sequence_position,
+    sequence_positions_for_questions
+)
+from ..services.sequence_modes import (
+    DEFAULT_SEQUENCE_MODE,
+    normalize_sequence_mode,
+    sequence_mode_difficulty
 )
 from ..services.timeline import grade_timeline_answer, validate_timeline_data
 
@@ -720,5 +730,136 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
 
     return {
         "status": "ok",
+        "results": results
+    }
+
+
+@router.post("/answer_sequence")
+def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
+    # Sequences are the one type that is both auto-graded (like timeline: the
+    # client posts a position, the server decides the quality) and moded (like
+    # text: the mode's difficulty must reach FSRS). apply_answer_batch cannot be
+    # reused because its contract is a SUBMITTED quality, so this grades like
+    # timeline and then appends the 3-tuples that carry the mode metadata.
+    question_ids = list(data.items.keys())
+
+    questions = (
+        db.query(Question)
+        .filter(Question.id.in_(question_ids))
+        .all()
+    )
+    question_map = {
+        question.id: question
+        for question in questions
+    }
+
+    missing_ids = [
+        question_id
+        for question_id in question_ids
+        if question_id not in question_map
+    ]
+
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Questions not found: {missing_ids}"
+        )
+
+    for question_id, question in question_map.items():
+        if question.type_q != "sequence":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Question {question_id} is not a sequence question"
+            )
+
+    mode = normalize_sequence_mode(data.mode or DEFAULT_SEQUENCE_MODE)
+    scheduler_tuning = load_scheduler_tuning_settings(db)
+    submitted_context_count = normalize_context_count(data.context_count)
+
+    # Ranks are only meaningful against the whole list, and they are recomputed
+    # here through the same helper the serializer used, so what was shown and
+    # what is graded cannot drift.
+    positions, group_sizes = sequence_positions_for_questions(db, questions)
+
+    existing_progresses = (
+        db.query(Progress)
+        .filter(Progress.question_id.in_(question_ids))
+        .all()
+    )
+    progress_map = {
+        progress.question_id: progress
+        for progress in existing_progresses
+    }
+    results = []
+    progress_quality_pairs = []
+
+    for question_id, guess in data.items.items():
+        question = question_map[question_id]
+        expected_position = positions.get(question_id)
+        grading = grade_sequence_position(expected_position, guess.position)
+        raw_quality = grading["quality"]
+        progress = progress_map.get(question_id)
+
+        active_context_count = (
+            submitted_context_count
+            if submitted_context_count is not None
+            else group_sizes.get(question.group_id, 0)
+        )
+        difficulty = sequence_mode_difficulty(
+            mode,
+            context_count=active_context_count,
+            tuning=scheduler_tuning
+        )
+
+        if should_schedule_answer(progress, raw_quality):
+            if not progress:
+                progress = create_initial_progress(
+                    question_id,
+                    today=data.review_date
+                )
+                db.add(progress)
+                progress_map[question_id] = progress
+
+            progress_quality_pairs.append((
+                progress,
+                raw_quality,
+                {
+                    "sequence_mode": mode,
+                    "sequence_context_count": active_context_count,
+                    "raw_quality": raw_quality,
+                    "effective_quality": raw_quality,
+                    "mode_adjusted": difficulty != 1.0,
+                    "mode_difficulty": difficulty
+                }
+            ))
+
+        results.append({
+            "question_id": question_id,
+            "quality": raw_quality,
+            "expected_position": expected_position,
+            "guessed_position": guess.position,
+            "distance": grading["distance"],
+            "label": question.answer
+        })
+
+    if progress_quality_pairs:
+        apply_scheduling_batch(
+            db,
+            progress_quality_pairs,
+            scheduler_tuning=scheduler_tuning,
+            today=data.review_date
+        )
+
+    for result in results:
+        result["progress"] = serialize_progress(
+            progress_map.get(result["question_id"])
+        )
+
+    db.commit()
+    sync_generated_hard_collection(db)
+
+    return {
+        "status": "ok",
+        "mode": mode,
         "results": results
     }

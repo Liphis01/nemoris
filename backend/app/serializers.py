@@ -7,6 +7,10 @@ from .services.map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
 )
+from .services.sequence_modes import (
+    DEFAULT_SEQUENCE_MODE,
+    normalize_sequence_mode
+)
 from .services.text_modes import (
     DEFAULT_TEXT_MODE,
     normalize_text_mode
@@ -88,7 +92,12 @@ def serialize_manage_question(question):
                 "media": question.group.media,
                 "tags": (
                     question.tags or []
-                    if question.group.type_group in {"map", "media", "text"}
+                    if question.group.type_group in {
+                        "map",
+                        "media",
+                        "text",
+                        "sequence"
+                    }
                     else []
                 )
             }
@@ -269,6 +278,92 @@ def serialize_text_review_item(
         "answer": question.answer,
 
         "label": question.answer,
+
+        "tags": question.tags or [],
+
+        "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "progress": serialize_progress(
+            question.progress
+        ),
+
+        "projected_intervals": preview_intervals(
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite")),
+            mode_difficulty=mode_difficulty,
+            scheduler_tuning=scheduler_tuning
+        )
+    }
+
+
+def serialize_sequence_review_group(
+    group,
+    tags=None,
+    mode=None,
+    context_items=None,
+    anchors=None,
+    length=0
+):
+    # Runtime aggregation object for one ordered list. `length` is the full list
+    # size, so the reorder rail can draw every slot even when only a few items
+    # are due. `anchors` are the already-known peers the player may see in
+    # place; they are deliberately NOT context_items, whose count is what the
+    # client posts back as context_count and must match the pool the mode
+    # difficulty was computed on.
+    return {
+        "group_id": group.id,
+
+        "type_q": "sequence",
+
+        "name": group.name,
+
+        "media": group.media,
+
+        "tags": tags or [],
+
+        "mode": normalize_sequence_mode(mode or DEFAULT_SEQUENCE_MODE),
+
+        "length": length,
+
+        "anchors": anchors or [],
+
+        "context_items": context_items or [],
+
+        "items": []
+    }
+
+
+def serialize_sequence_anchor(question, position):
+    return {
+        "question_id": question.id,
+
+        "label": question.answer,
+
+        "position": position
+    }
+
+
+def serialize_sequence_review_item(
+    question,
+    position=None,
+    previous_label=None,
+    mode_difficulty=None,
+    scheduler_tuning=None
+):
+    return {
+        "question_id": question.id,
+
+        "question": question.question,
+
+        "answer": question.answer,
+
+        "label": question.answer,
+
+        "position": position,
+
+        # next_in_sequence prompts with the predecessor; None means this item
+        # opens the list.
+        "previous_label": previous_label,
 
         "tags": question.tags or [],
 

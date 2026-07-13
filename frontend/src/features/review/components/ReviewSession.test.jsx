@@ -12,6 +12,7 @@ const baseProps = {
   handleMapComplete: vi.fn(),
   handleImageComplete: vi.fn(),
   handleTimelineComplete: vi.fn(),
+  handleSequenceComplete: vi.fn(),
   canReturnToLastQuestion: false,
   returnToLastQuestion: vi.fn(),
   canStartBonusReview: false,
@@ -28,7 +29,8 @@ const baseProps = {
   reviewError: "",
   submitMapAnswer: vi.fn(),
   submitMediaAnswer: vi.fn(),
-  submitTimelineAnswer: vi.fn()
+  submitTimelineAnswer: vi.fn(),
+  submitSequenceAnswer: vi.fn()
 };
 
 function renderReviewSession(props = {}) {

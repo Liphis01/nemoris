@@ -25,6 +25,11 @@ from .text_modes import (
     DEFAULT_TEXT_MODE,
     normalize_text_mode
 )
+from .sequence import dense_positions, grade_sequence_position
+from .sequence_modes import (
+    DEFAULT_SEQUENCE_MODE,
+    normalize_sequence_mode
+)
 from .map_zones import merge_tags
 from .review import serialize_review_items
 from .tag_hierarchy import (
@@ -48,7 +53,7 @@ TRAINING_RECORD_FIELDS = {
     "question_count",
     "content_fingerprint"
 }
-MODE_GROUP_TYPES = {"map", "media", "text"}
+MODE_GROUP_TYPES = {"map", "media", "text", "sequence"}
 
 
 def normalize_scope_tag(value):
@@ -173,6 +178,17 @@ def _group_training_fingerprint_payload(group, questions):
         # edit, so it still retires the record.
         payload["media"] = _clean_string(group.media)
 
+    if group.type_group == "sequence":
+        # For every other type the challenge is the *set* of items, so sorted
+        # ids are enough. A sequence is the order itself: permuting the same
+        # items is a different challenge entirely, and sorted ids cannot see it.
+        positions = dense_positions(questions)
+        payload["positions"] = sorted(
+            (question.id, positions[question.id])
+            for question in questions or []
+            if question.type_q == "sequence" and question.id is not None
+        )
+
     return payload
 
 
@@ -204,7 +220,7 @@ def training_fingerprints_for_groups(db, groups):
             db.query(Question)
             .filter(
                 Question.group_id.in_(group_ids),
-                Question.type_q.in_(["map", "media", "text"])
+                Question.type_q.in_(["map", "media", "text", "sequence"])
             )
             .order_by(Question.id)
             .all()
@@ -341,6 +357,9 @@ def default_training_mode_for_group_type(group_type):
     if group_type == "text":
         return DEFAULT_TEXT_MODE
 
+    if group_type == "sequence":
+        return DEFAULT_SEQUENCE_MODE
+
     return None
 
 
@@ -353,6 +372,9 @@ def normalize_training_mode_for_group_type(group_type, mode):
 
     if group_type == "text":
         return normalize_text_mode(mode)
+
+    if group_type == "sequence":
+        return normalize_sequence_mode(mode)
 
     return None
 
@@ -842,7 +864,8 @@ def get_training_items(
     tag=None,
     map_mode=None,
     image_mode=None,
-    text_mode=None
+    text_mode=None,
+    sequence_mode=None
 ):
     if scope_type == "group":
         if group_id is None:
@@ -873,6 +896,7 @@ def get_training_items(
         normalized_map_mode = normalize_map_mode(map_mode)
         normalized_image_mode = normalize_image_mode(image_mode)
         normalized_text_mode = normalize_text_mode(text_mode)
+        normalized_sequence_mode = normalize_sequence_mode(sequence_mode)
 
         for item in items:
             if item.get("group_id") == group_id:
@@ -883,6 +907,8 @@ def get_training_items(
                     item["mode"] = normalized_image_mode
                 elif item.get("type_q") == "text":
                     item["mode"] = normalized_text_mode
+                elif item.get("type_q") == "sequence":
+                    item["mode"] = normalized_sequence_mode
 
         return _shuffled_training_items(items)
 
@@ -929,6 +955,7 @@ def get_training_items(
         normalized_map_mode = normalize_map_mode(DEFAULT_MAP_MODE)
         normalized_image_mode = normalize_image_mode(DEFAULT_IMAGE_MODE)
         normalized_text_mode = normalize_text_mode(DEFAULT_TEXT_MODE)
+        normalized_sequence_mode = normalize_sequence_mode(DEFAULT_SEQUENCE_MODE)
 
         for item in items:
             item["training_fingerprint"] = content_fingerprint
@@ -939,6 +966,8 @@ def get_training_items(
                 item["mode"] = normalized_image_mode
             elif item.get("type_q") == "text":
                 item["mode"] = normalized_text_mode
+            elif item.get("type_q") == "sequence":
+                item["mode"] = normalized_sequence_mode
 
             if isinstance(item.get("context_items"), list):
                 context_items = [
@@ -974,6 +1003,86 @@ def get_training_items(
         )
 
     raise HTTPException(status_code=400, detail="Invalid training scope")
+
+
+def grade_training_sequence(db, items):
+    # Sequences are server-graded, so training needs its own grader: reusing the
+    # review endpoint would write real FSRS history from a practice run. This
+    # returns the same result shape and never touches Progress.
+    question_ids = list(items.keys())
+    questions = (
+        db.query(Question)
+        .options(joinedload(Question.progress))
+        .filter(Question.id.in_(question_ids))
+        .all()
+    )
+    question_map = {
+        question.id: question
+        for question in questions
+    }
+    missing_ids = [
+        question_id
+        for question_id in question_ids
+        if question_id not in question_map
+    ]
+
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Questions not found: {missing_ids}"
+        )
+
+    for question_id, question in question_map.items():
+        if question.type_q != "sequence":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Question {question_id} is not a sequence question"
+            )
+
+    group_ids = {
+        question.group_id
+        for question in questions
+        if question.group_id
+    }
+    siblings = (
+        db.query(Question)
+        .filter(
+            Question.group_id.in_(group_ids),
+            Question.type_q == "sequence"
+        )
+        .all()
+    ) if group_ids else []
+    by_group = {}
+
+    for question in siblings:
+        by_group.setdefault(question.group_id, []).append(question)
+
+    positions = {}
+
+    for group_questions in by_group.values():
+        positions.update(dense_positions(group_questions))
+
+    results = []
+
+    for question_id, guess in items.items():
+        question = question_map[question_id]
+        expected_position = positions.get(question_id)
+        grading = grade_sequence_position(expected_position, guess.position)
+
+        results.append({
+            "question_id": question_id,
+            "quality": grading["quality"],
+            "expected_position": expected_position,
+            "guessed_position": guess.position,
+            "distance": grading["distance"],
+            "label": question.answer,
+            "progress": serialize_progress(question.progress)
+        })
+
+    return {
+        "status": "ok",
+        "results": results
+    }
 
 
 def grade_training_timeline(db, items):

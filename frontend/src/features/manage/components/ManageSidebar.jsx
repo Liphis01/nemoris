@@ -15,14 +15,16 @@ const questionTypeOptions = [
   { value: "text", label: "Text" },
   { value: "map", label: "Map" },
   { value: "timeline", label: "Timeline" },
-  { value: "media", label: "Média" }
+  { value: "media", label: "Média" },
+  { value: "sequence", label: "Séquence" }
 ];
 
 const groupTypeOptions = [
   { value: "", label: "Tous les types" },
   { value: "map", label: "Map" },
   { value: "media", label: "Média" },
-  { value: "text", label: "Texte" }
+  { value: "text", label: "Texte" },
+  { value: "sequence", label: "Séquence" }
 ];
 
 const groupSortOptions = [

@@ -13,6 +13,7 @@ from .routers import (
     media_groups,
     questions,
     review,
+    sequence_groups,
     stats,
     tags,
     text_groups,
@@ -55,6 +56,7 @@ def create_app():
     app.include_router(maps.router)
     app.include_router(media_groups.router)
     app.include_router(text_groups.router)
+    app.include_router(sequence_groups.router)
     app.include_router(uploads.router)
     app.include_router(backup.router)
 

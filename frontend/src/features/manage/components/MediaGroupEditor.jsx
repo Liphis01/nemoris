@@ -526,6 +526,7 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
 export default function MediaGroupEditor({
   group,
   availableTags = [],
+  ensurePersistedGroup,
   onSave,
   onUploadFile,
   onImportMediaUrl,
@@ -609,7 +610,17 @@ export default function MediaGroupEditor({
   });
 
   useEffect(() => {
-    if (!groupId) return undefined;
+    if (!groupId) {
+      // A pending group has nothing to fetch, and it starts clean so the unsaved
+      // marker only appears once the user actually names it or adds an item.
+      setItems([]);
+      setDeletedItemIds([]);
+      setInitialSignature(
+        buildSignature(currentGroupRef.current, [], [], [])
+      );
+
+      return undefined;
+    }
 
     let cancelled = false;
     const selectedGroup = currentGroupRef.current;
@@ -1028,16 +1039,39 @@ export default function MediaGroupEditor({
   }, [handleUploadFiles]);
 
   async function saveImageItems({ autosave = false } = {}) {
-    if (!group?.id || !hasUnsavedChanges) {
+    if (!hasUnsavedChanges) {
       return { saved: false };
+    }
+
+    // The group may not exist server-side yet: it is created at the first save
+    // that has something worth keeping, so backing out of a mis-click leaves no
+    // row behind.
+    let targetGroupId = group?.id;
+    let nameForSave = editableGroup?.name || "";
+
+    if (!targetGroupId) {
+      const created = await ensurePersistedGroup?.({
+        name: nameForSave,
+        itemCount: items.length
+      });
+
+      if (!created?.id) {
+        return { saved: false };
+      }
+
+      targetGroupId = created.id;
+      // An unnamed group is created under a default name. Adopt it, or the PATCH
+      // below would immediately blank it back out.
+      nameForSave = created.name || nameForSave;
+      setEditableGroup(prev => ({ ...(prev || {}), ...created }));
     }
 
     setSaveStatus("Enregistrement...");
 
     try {
-      const saveResult = await patchMediaGroupItems(group.id, {
+      const saveResult = await patchMediaGroupItems(targetGroupId, {
         group: {
-          name: editableGroup.name || "",
+          name: nameForSave,
           media: editableGroup.media || "",
           tags: sharedTags || []
         },

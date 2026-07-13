@@ -49,7 +49,8 @@ function getGroupInfo(groupId, question, groupById) {
     questions: [],
     mapCount: 0,
     imageCount: 0,
-    textCount: 0
+    textCount: 0,
+    sequenceCount: 0
   };
 }
 
@@ -63,6 +64,7 @@ function orderGroupQuestionsForDisplay(questions, sortField) {
   // set; other question types still remain visible below them.
   const mapQuestions = [];
   const imageQuestions = [];
+  const sequenceQuestions = [];
   const otherQuestions = [];
 
   questions.forEach((question) => {
@@ -70,12 +72,25 @@ function orderGroupQuestionsForDisplay(questions, sortField) {
       mapQuestions.push(question);
     } else if (question.type_q === "media") {
       imageQuestions.push(question);
+    } else if (question.type_q === "sequence") {
+      sequenceQuestions.push(question);
     } else {
       otherQuestions.push(question);
     }
   });
 
-  return [...mapQuestions, ...imageQuestions, ...otherQuestions];
+  // A sequence's rank is its content, and ids stop tracking it the moment the
+  // list is reordered, so these list by position rather than by id.
+  sequenceQuestions.sort((left, right) => (
+    (left.data?.position ?? 0) - (right.data?.position ?? 0)
+  ));
+
+  return [
+    ...mapQuestions,
+    ...imageQuestions,
+    ...sequenceQuestions,
+    ...otherQuestions
+  ];
 }
 
 
@@ -121,6 +136,9 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortFie
       groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
     } else if (question.type_q === "media") {
       groupInfo.imageCount += 1;
+      groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
+    } else if (question.type_q === "sequence") {
+      groupInfo.sequenceCount += 1;
       groupInfo.tags = mergeTags(groupInfo.tags, question.tags);
     } else {
       groupInfo.textCount += 1;

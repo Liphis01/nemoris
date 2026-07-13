@@ -18,6 +18,11 @@ export const questionTypeChipStyles = {
     label: "MAP",
     background: "#1f3d2a",
     color: "#75d991"
+  },
+  sequence: {
+    label: "SÉQUENCE",
+    background: "#123a3a",
+    color: "#5eead4"
   }
 };
 

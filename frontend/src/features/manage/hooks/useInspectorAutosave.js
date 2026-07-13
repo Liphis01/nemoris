@@ -10,12 +10,17 @@ function canAutosaveSelectedQuestion(selectedItem) {
     selectedItem.group_id ||
     selectedItem.group?.id
   );
+  // A sequence item's rank lives in `data`, which the autosave payload carries.
+  // Letting the generic autosave fire would clobber data.position from a stale
+  // draft, silently reordering the list behind the group editor's back.
+  const sequenceItem = selectedItem?.type_q === "sequence";
 
   return Boolean(
     selectedItem?.id &&
     selectedItem.type_q &&
     selectedItem.type_q !== "map" &&
-    !groupedImage
+    !groupedImage &&
+    !sequenceItem
   );
 }
 

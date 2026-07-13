@@ -16,6 +16,11 @@ const groupCreationTypes = [
     value: "text",
     label: "Groupe texte",
     detail: "Associations texte↔texte (ex : pays → capitale)"
+  },
+  {
+    value: "sequence",
+    label: "Liste ordonnée",
+    detail: "Liste dont l'ordre compte (ex : alphabet grec)"
   }
 ];
 

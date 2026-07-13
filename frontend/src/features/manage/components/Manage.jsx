@@ -184,6 +184,18 @@ export default function Manage(props) {
     return created;
   }
 
+  async function createGroupSilentlyWithHighlight(overrides) {
+    // Deliberately does not touch selection or view mode: this runs *inside* a
+    // grouped editor's save, and re-selecting would unmount it mid-write.
+    const created = await props.createGroupSilently?.(overrides);
+
+    if (created?.id) {
+      setHighlightedGroupIds([created.id]);
+    }
+
+    return created;
+  }
+
   return (
     <div
       style={{
@@ -263,6 +275,7 @@ export default function Manage(props) {
         setEditingZone={setEditingZone}
         createQuestion={createQuestionWithHighlight}
         createGroup={createGroupWithHighlight}
+        createGroupSilently={createGroupSilentlyWithHighlight}
         setHighlightedQuestionIds={setHighlightedQuestionIds}
         registerPendingSaveHandler={registerPendingSaveHandler}
         requestManageTransition={requestManageTransition}

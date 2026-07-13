@@ -1,11 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getTextGroupItems, patchTextGroupItems } from "../../../api/textGroups";
+import {
+  getSequenceGroupItems,
+  patchSequenceGroupItems
+} from "../../../api/sequenceGroups";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
   dangerButtonStyle,
   disabledSaveButtonStyle,
   inputStyle,
-  labelStyle,
   pendingSaveButtonStyle,
   pendingSaveDotStyle,
   buttonStyle
@@ -19,17 +21,16 @@ let tempItemCounter = 0;
 
 function nextTempId() {
   tempItemCounter += 1;
-  return `new-text-${Date.now()}-${tempItemCounter}`;
+  return `new-sequence-${Date.now()}-${tempItemCounter}`;
 }
 
 function normalizeItem(item) {
   const data = item?.data || {};
 
   return {
-    tempId: item?.id ? `text-${item.id}` : item?.tempId || nextTempId(),
+    tempId: item?.id ? `sequence-${item.id}` : item?.tempId || nextTempId(),
     id: item?.id || null,
-    type_q: "text",
-    question: item?.question || "",
+    type_q: "sequence",
     answer: item?.answer || item?.label || "",
     tags: item?.tags || [],
     group_id: item?.group_id || null,
@@ -42,9 +43,12 @@ function serializeItem(item) {
   const data = { ...(item.data || {}) };
   data.aliases = item.aliases || [];
 
+  // position is deliberately not sent: the backend derives it from this array's
+  // order, which is the single source of truth for the rank.
+  delete data.position;
+
   return {
     ...(item.id ? { id: item.id } : {}),
-    question: item.question || "",
     answer: item.answer || "",
     aliases: item.aliases || [],
     data
@@ -57,12 +61,13 @@ function buildSignature(group, tags, items, deletedItemIds) {
       name: group?.name || "",
       tags: tags || []
     },
+    // The array order IS the content here, so the signature must be
+    // order-sensitive: a pure reorder is an unsaved change like any other.
     items: items.map(item => ({
       id: item.id || item.tempId,
-      question: item.question || "",
       answer: item.answer || "",
       aliases: item.aliases || [],
-      data: item.data || {}
+      favorite: Boolean(item.data?.favorite)
     })),
     deletedItemIds: [...deletedItemIds].sort((a, b) => a - b)
   });
@@ -79,190 +84,125 @@ const compactHeaderButtonStyle = {
   padding: "8px 12px"
 };
 
-const textGroupHeaderTagChipStyle = {
-  background: "#163b63",
-  border: "1px solid #2f5f8f",
-  color: "#8fc7ff",
+const sequenceGroupHeaderTagChipStyle = {
+  background: "#123a3a",
+  border: "1px solid #2f6f6f",
+  color: "#5eead4",
   fontSize: "12px",
   fontWeight: 700
 };
 
-const TextGroupItemRow = memo(function TextGroupItemRow({
-  aliasInputValue,
+const moveButtonStyle = {
+  background: "#232323",
+  border: "1px solid #333",
+  borderRadius: "6px",
+  color: "#aaa",
+  cursor: "pointer",
+  fontSize: "12px",
+  lineHeight: 1,
+  padding: "4px 7px"
+};
+
+const SequenceItemRow = memo(function SequenceItemRow({
+  index,
+  isFirst,
+  isLast,
   item,
-  onAddAlias,
-  onRegisterAliasInput,
-  onRemoveAlias,
+  onDragOver,
+  onDragStart,
+  onDrop,
+  onMove,
   onRemoveItem,
   onToggleFavorite,
-  onUpdateAliasInput,
   onUpdateItem,
   selected
 }) {
-  const hasAliases = (item.aliases || []).length > 0;
-
-  const handleQuestionChange = useCallback((event) => {
-    onUpdateItem(item.tempId, { question: event.target.value });
-  }, [item.tempId, onUpdateItem]);
-
-  const handleAnswerChange = useCallback((event) => {
-    onUpdateItem(item.tempId, { answer: event.target.value });
-  }, [item.tempId, onUpdateItem]);
-
-  const handleAliasInputChange = useCallback((event) => {
-    onUpdateAliasInput(item.tempId, event.target.value);
-  }, [item.tempId, onUpdateAliasInput]);
-
-  const handleAliasKeyDown = useCallback((event) => {
-    if (event.key !== "Enter") return;
-
-    event.preventDefault();
-    onAddAlias(item, true);
-  }, [item, onAddAlias]);
-
-  const handleAliasBlur = useCallback(() => {
-    onAddAlias(item);
-  }, [item, onAddAlias]);
-
-  const handleAliasRef = useCallback((element) => {
-    onRegisterAliasInput(item.tempId, element);
-  }, [item.tempId, onRegisterAliasInput]);
-
   return (
     <div
-      data-text-group-item-row
-      data-text-group-item-id={item.id || item.tempId}
+      data-sequence-item-row={index + 1}
+      draggable
+      onDragOver={onDragOver}
+      onDragStart={event => onDragStart(event, item)}
+      onDrop={event => onDrop(event, index)}
       style={{
-        border: selected ? "1px solid #5eb6ff" : "1px solid #2a2a2a",
+        alignItems: "center",
+        background: selected ? "#232b23" : "#181818",
+        border: `1px solid ${selected ? "#3f6f4f" : "#2a2a2a"}`,
         borderRadius: "10px",
-        background: selected ? "#15202b" : "#171717",
-        boxSizing: "border-box",
-        padding: "12px",
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
-        gap: "12px",
-        alignItems: "start"
+        gap: "10px",
+        gridTemplateColumns: "auto auto 1fr auto",
+        padding: "8px 10px"
       }}
     >
-      <div style={{ display: "grid", gap: "10px", minWidth: 0 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: "10px"
-          }}
-        >
-          <label style={{ display: "grid", gap: "6px" }}>
-            <span style={labelStyle}>Question</span>
-            <input
-              value={item.question || ""}
-              onChange={handleQuestionChange}
-              style={inputStyle}
-            />
-          </label>
+      <span
+        aria-hidden="true"
+        style={{ color: "#555", cursor: "grab", fontSize: "13px" }}
+        title="Glisser pour réordonner"
+      >
+        ⠿
+      </span>
 
-          <label style={{ display: "grid", gap: "6px" }}>
-            <span style={labelStyle}>Réponse</span>
-            <input
-              value={item.answer || ""}
-              onChange={handleAnswerChange}
-              style={inputStyle}
-            />
-          </label>
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div style={{ ...labelStyle, marginBottom: "6px" }}>Alias</div>
-          {hasAliases && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "6px",
-                marginBottom: "8px",
-                minWidth: 0
-              }}
-            >
-              {(item.aliases || []).map((alias, index) => (
-                <div
-                  key={`${alias}-${index}`}
-                  style={{
-                    alignItems: "center",
-                    background: "#333",
-                    borderRadius: "6px",
-                    display: "inline-flex",
-                    gap: "6px",
-                    maxWidth: "180px",
-                    padding: "5px 8px"
-                  }}
-                >
-                  <span
-                    title={alias}
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap"
-                    }}
-                  >
-                    {alias}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Retirer l'alias ${alias}`}
-                    onClick={() => onRemoveAlias(item, index)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "#999",
-                      cursor: "pointer",
-                      lineHeight: 1,
-                      padding: 0
-                    }}
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <input
-            ref={handleAliasRef}
-            value={aliasInputValue || ""}
-            onChange={handleAliasInputChange}
-            onKeyDown={handleAliasKeyDown}
-            onBlur={handleAliasBlur}
-            placeholder="Alias accepté (Entrée)"
-            style={inputStyle}
-          />
-        </div>
-      </div>
-
-      <div
+      <span
         style={{
-          alignItems: "center",
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px"
+          color: "#5eead4",
+          fontSize: "12px",
+          fontWeight: 700,
+          minWidth: "24px",
+          textAlign: "right"
         }}
       >
-        <FavoriteToggleButton
-          favorite={Boolean(item.data?.favorite)}
-          onToggle={() => onToggleFavorite(item)}
-        />
+        {index + 1}
+      </span>
+
+      <input
+        aria-label={`Élément ${index + 1}`}
+        onChange={event =>
+          onUpdateItem(item.tempId, { answer: event.target.value })
+        }
+        placeholder="Élément"
+        style={inputStyle}
+        value={item.answer}
+      />
+
+      <div style={{ alignItems: "center", display: "flex", gap: "5px" }}>
         <button
+          aria-label={`Monter l'élément ${index + 1}`}
+          disabled={isFirst}
+          onClick={() => onMove(index, index - 1)}
+          style={{ ...moveButtonStyle, opacity: isFirst ? 0.35 : 1 }}
           type="button"
-          onClick={() => onRemoveItem(item)}
-          style={{ ...dangerButtonStyle, padding: "8px 10px" }}
         >
-          Supprimer
+          ↑
+        </button>
+        <button
+          aria-label={`Descendre l'élément ${index + 1}`}
+          disabled={isLast}
+          onClick={() => onMove(index, index + 1)}
+          style={{ ...moveButtonStyle, opacity: isLast ? 0.35 : 1 }}
+          type="button"
+        >
+          ↓
+        </button>
+
+        <FavoriteToggleButton
+          active={Boolean(item.data?.favorite)}
+          onClick={() => onToggleFavorite(item)}
+        />
+
+        <button
+          onClick={() => onRemoveItem(item)}
+          style={{ ...dangerButtonStyle, padding: "6px 9px" }}
+          type="button"
+        >
+          ✕
         </button>
       </div>
     </div>
   );
 });
 
-export default function TextGroupEditor({
+export default function SequenceGroupEditor({
   group,
   availableTags = [],
   ensurePersistedGroup,
@@ -279,11 +219,12 @@ export default function TextGroupEditor({
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [initialSignature, setInitialSignature] = useState("");
-  const [aliasInputByTempId, setAliasInputByTempId] = useState({});
+  const [bulkText, setBulkText] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
   const itemsScrollRef = useRef(null);
-  const aliasInputRefs = useRef({});
   const currentGroupRef = useRef(group);
   const saveItemsRef = useRef(null);
+  const dragTempIdRef = useRef(null);
   const groupId = group?.id;
   const selectedItemId = selectedItem?.id ?? null;
 
@@ -316,12 +257,12 @@ export default function TextGroupEditor({
     setSharedTags(selectedGroup.tags || []);
     setTagInput("");
     setDeletedItemIds([]);
-    setAliasInputByTempId({});
-    aliasInputRefs.current = {};
+    setBulkText("");
+    setBulkOpen(false);
     setLoading(true);
     setSaveStatus("");
 
-    getTextGroupItems(groupId)
+    getSequenceGroupItems(groupId)
       .then((data) => {
         if (cancelled) return;
 
@@ -364,47 +305,50 @@ export default function TextGroupEditor({
     );
   }, []);
 
-  const updateAliasInput = useCallback((tempId, value) => {
-    setAliasInputByTempId(prev => ({ ...prev, [tempId]: value }));
-  }, []);
+  const moveItem = useCallback((from, to) => {
+    setItems(prev => {
+      if (to < 0 || to >= prev.length) return prev;
 
-  const registerAliasInput = useCallback((tempId, element) => {
-    if (element) {
-      aliasInputRefs.current[tempId] = element;
-    } else {
-      delete aliasInputRefs.current[tempId];
-    }
-  }, []);
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
 
-  const addAlias = useCallback((item, focusAfter = false) => {
-    const value = String(aliasInputByTempId[item.tempId] || "").trim();
-
-    if (!value) return;
-
-    const currentAliases = item.aliases || [];
-
-    if (!currentAliases.includes(value)) {
-      updateItem(item.tempId, { aliases: [...currentAliases, value] });
-    }
-
-    setAliasInputByTempId(prev => ({ ...prev, [item.tempId]: "" }));
-
-    if (focusAfter) {
-      window.requestAnimationFrame(() => {
-        aliasInputRefs.current[item.tempId]?.focus();
-      });
-    }
-  }, [aliasInputByTempId, updateItem]);
-
-  const removeAlias = useCallback((item, index) => {
-    updateItem(item.tempId, {
-      aliases: (item.aliases || []).filter((_, aliasIndex) => aliasIndex !== index)
+      return next;
     });
-  }, [updateItem]);
+  }, []);
+
+  const handleDragStart = useCallback((event, item) => {
+    dragTempIdRef.current = item.tempId;
+    event.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const handleDragOver = useCallback(event => {
+    event.preventDefault();
+  }, []);
+
+  const handleDrop = useCallback((event, targetIndex) => {
+    event.preventDefault();
+
+    const tempId = dragTempIdRef.current;
+    dragTempIdRef.current = null;
+
+    if (!tempId) return;
+
+    setItems(prev => {
+      const from = prev.findIndex(item => item.tempId === tempId);
+
+      if (from < 0 || from === targetIndex) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(targetIndex, 0, moved);
+
+      return next;
+    });
+  }, []);
 
   const addEmptyItem = useCallback(() => {
     const nextItem = normalizeItem({
-      question: "",
       answer: "",
       data: { aliases: [] },
       group_id: editableGroup?.id
@@ -420,6 +364,31 @@ export default function TextGroupEditor({
     });
   }, [editableGroup]);
 
+  // Typing a 24-letter alphabet one row at a time is the kind of friction that
+  // stops a list from ever being created, so one-item-per-line paste is part of
+  // the editor rather than a nice-to-have.
+  const appendBulkItems = useCallback(() => {
+    const labels = bulkText
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    if (!labels.length) return;
+
+    setItems(prev => [
+      ...prev,
+      ...labels.map(label =>
+        normalizeItem({
+          answer: label,
+          data: { aliases: [] },
+          group_id: editableGroup?.id
+        })
+      )
+    ]);
+    setBulkText("");
+    setBulkOpen(false);
+  }, [bulkText, editableGroup]);
+
   const removeItem = useCallback((item) => {
     if (item.id) {
       setDeletedItemIds(prev =>
@@ -428,12 +397,6 @@ export default function TextGroupEditor({
     }
 
     setItems(prev => prev.filter(candidate => candidate.tempId !== item.tempId));
-    setAliasInputByTempId(prev => {
-      const next = { ...prev };
-      delete next[item.tempId];
-      return next;
-    });
-    delete aliasInputRefs.current[item.tempId];
   }, []);
 
   const toggleFavorite = useCallback((item) => {
@@ -461,7 +424,7 @@ export default function TextGroupEditor({
     setSharedTags(prev => prev.filter(item => item !== tag));
   }, []);
 
-  async function saveTextItems({ autosave = false } = {}) {
+  async function saveSequenceItems({ autosave = false } = {}) {
     if (!hasUnsavedChanges) {
       return { saved: false };
     }
@@ -483,7 +446,7 @@ export default function TextGroupEditor({
       }
 
       targetGroupId = created.id;
-      // An unnamed group is created under a default name. Adopt it, or the PATCH
+      // An unnamed list is created under a default name. Adopt it, or the PATCH
       // below would immediately blank it back out.
       nameForSave = created.name || nameForSave;
       setEditableGroup(prev => ({ ...(prev || {}), ...created }));
@@ -492,7 +455,7 @@ export default function TextGroupEditor({
     setSaveStatus("Enregistrement...");
 
     try {
-      const saveResult = await patchTextGroupItems(targetGroupId, {
+      const saveResult = await patchSequenceGroupItems(targetGroupId, {
         group: {
           name: nameForSave,
           tags: sharedTags || []
@@ -523,7 +486,7 @@ export default function TextGroupEditor({
       setSaveStatus("Enregistrement impossible");
 
       if (!autosave) {
-        alert(error.message || "Impossible de sauvegarder le groupe texte.");
+        alert(error.message || "Impossible de sauvegarder la liste.");
       }
 
       throw error;
@@ -531,7 +494,7 @@ export default function TextGroupEditor({
   }
 
   useEffect(() => {
-    saveItemsRef.current = saveTextItems;
+    saveItemsRef.current = saveSequenceItems;
   });
 
   useEffect(() => {
@@ -575,7 +538,7 @@ export default function TextGroupEditor({
         >
           <div>
             <div style={{ color: "#777", fontSize: "11px", marginBottom: "3px" }}>
-              Groupe texte
+              Liste ordonnée
             </div>
             <div style={{ color: "#eee", fontSize: "17px", fontWeight: 800 }}>
               {editableGroup?.name || "Sans titre"}
@@ -586,7 +549,7 @@ export default function TextGroupEditor({
             {headerAction}
             <button
               type="button"
-              onClick={() => saveTextItems()}
+              onClick={() => saveSequenceItems()}
               disabled={!hasUnsavedChanges}
               style={
                 hasUnsavedChanges
@@ -600,7 +563,7 @@ export default function TextGroupEditor({
           </div>
         </div>
 
-        <QuestionEditorField label="Nom du groupe" compact>
+        <QuestionEditorField label="Nom de la liste" compact>
           <input
             value={editableGroup?.name || ""}
             onChange={(event) => updateGroupField("name", event.target.value)}
@@ -616,7 +579,7 @@ export default function TextGroupEditor({
           onTagInputChange={setTagInput}
           onAddTag={addTag}
           onRemoveTag={removeTag}
-          chipStyle={textGroupHeaderTagChipStyle}
+          chipStyle={sequenceGroupHeaderTagChipStyle}
           inputOverrideStyle={compactHeaderInputStyle}
           labelOverrideStyle={{ fontSize: "12px" }}
         />
@@ -629,22 +592,53 @@ export default function TextGroupEditor({
           >
             Ajouter une ligne
           </button>
+
+          <button
+            type="button"
+            onClick={() => setBulkOpen(prev => !prev)}
+            style={{ ...buttonStyle, ...compactHeaderButtonStyle }}
+          >
+            Coller une liste
+          </button>
+
           {saveStatus && (
             <span style={{ color: "#888", fontSize: "13px" }}>{saveStatus}</span>
           )}
         </div>
+
+        {bulkOpen && (
+          <div style={{ display: "grid", gap: "7px" }}>
+            <textarea
+              aria-label="Coller une liste, un élément par ligne"
+              onChange={event => setBulkText(event.target.value)}
+              placeholder={"Alpha\nBêta\nGamma"}
+              rows={5}
+              style={{ ...compactHeaderInputStyle, resize: "vertical" }}
+              value={bulkText}
+            />
+            <div>
+              <button
+                onClick={appendBulkItems}
+                style={{ ...buttonStyle, ...compactHeaderButtonStyle }}
+                type="button"
+              >
+                Ajouter à la liste
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div
         ref={itemsScrollRef}
-        data-testid="text-group-items-scroll"
+        data-testid="sequence-group-items-scroll"
         className="app-scrollbar"
         style={{
           flex: 1,
           overflow: "auto",
           padding: "14px",
           display: "grid",
-          gap: "10px",
+          gap: "8px",
           alignContent: "start",
           scrollbarGutter: "stable"
         }}
@@ -665,23 +659,25 @@ export default function TextGroupEditor({
               minHeight: "160px"
             }}
           >
-            Aucune paire — ajoute une ligne
+            Liste vide — ajoute une ligne ou colle une liste
           </div>
         )}
 
-        {!loading && items.map((item) => (
-          <TextGroupItemRow
+        {!loading && items.map((item, index) => (
+          <SequenceItemRow
             key={item.tempId}
-            aliasInputValue={aliasInputByTempId[item.tempId] || ""}
+            index={index}
+            isFirst={index === 0}
+            isLast={index === items.length - 1}
             item={item}
-            onAddAlias={addAlias}
-            onRegisterAliasInput={registerAliasInput}
-            onRemoveAlias={removeAlias}
+            onDragOver={handleDragOver}
+            onDragStart={handleDragStart}
+            onDrop={handleDrop}
+            onMove={moveItem}
             onRemoveItem={removeItem}
             onToggleFavorite={toggleFavorite}
-            onUpdateAliasInput={updateAliasInput}
             onUpdateItem={updateItem}
-            selected={Boolean(selectedItemId && selectedItemId === item.id)}
+            selected={Boolean(item.id) && item.id === selectedItemId}
           />
         ))}
       </div>

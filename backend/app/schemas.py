@@ -7,13 +7,15 @@ QuestionType = Literal[
     "text",
     "map",
     "timeline",
-    "media"
+    "media",
+    "sequence"
 ]
 
 GroupType = Literal[
     "map",
     "media",
-    "text"
+    "text",
+    "sequence"
 ]
 
 MapMode = Literal[
@@ -35,6 +37,13 @@ TextMode = Literal[
     "match"
 ]
 
+SequenceMode = Literal[
+    "type_position",
+    "next_in_sequence",
+    "multiple_choice",
+    "reorder"
+]
+
 TrainingGroupMode = Literal[
     "type_all",
     "click_prompt",
@@ -42,7 +51,10 @@ TrainingGroupMode = Literal[
     "multiple_choice",
     "multiple_choice_label",
     "multiple_choice_image",
-    "match"
+    "match",
+    "type_position",
+    "next_in_sequence",
+    "reorder"
 ]
 
 
@@ -240,6 +252,21 @@ class TimelineAnswerRequest(BaseModel):
     review_date: Optional[date] = None
 
 
+class SequenceAnswerItem(BaseModel):
+    # The rank the player's answer lands on. None means "no answer resolved"
+    # (blank input, unmatched label) and always grades as a miss. An object
+    # rather than a bare int so a future server-resolved `text` field can be
+    # added without breaking the endpoint.
+    position: Optional[int] = Field(default=None, ge=1)
+
+
+class SequenceAnswerRequest(BaseModel):
+    items: Dict[int, SequenceAnswerItem]
+    mode: Optional[SequenceMode] = None
+    context_count: Optional[int] = Field(default=None, ge=0)
+    review_date: Optional[date] = None
+
+
 class TrainingAttemptRecordRequest(BaseModel):
     elapsed_ms: int = Field(gt=0)
     question_count: int = Field(ge=0)
@@ -349,6 +376,43 @@ class TextGroupItemsBulkUpdate(BaseModel):
     group: Optional[TextGroupItemsGroupUpdate] = None
 
     items: List[TextGroupItemBulkItem] = Field(
+        default_factory=list
+    )
+
+    deleted_item_ids: List[int] = Field(
+        default_factory=list
+    )
+
+
+class SequenceGroupItemBulkItem(BaseModel):
+
+    id: Optional[int] = None
+
+    answer: Optional[str] = ""
+
+    aliases: List[str] = Field(
+        default_factory=list
+    )
+
+    data: dict[str, Any] = Field(
+        default_factory=dict
+    )
+
+
+class SequenceGroupItemsGroupUpdate(BaseModel):
+
+    name: Optional[str] = None
+
+    tags: Optional[List[str]] = None
+
+
+class SequenceGroupItemsBulkUpdate(BaseModel):
+
+    group: Optional[SequenceGroupItemsGroupUpdate] = None
+
+    # Array order is the rank: the service assigns position = index + 1 and
+    # ignores any position sent in `data`.
+    items: List[SequenceGroupItemBulkItem] = Field(
         default_factory=list
     )
 

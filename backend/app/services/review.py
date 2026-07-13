@@ -12,6 +12,9 @@ from ..serializers import (
     serialize_media_review_group,
     serialize_media_review_item,
     serialize_review_question_item,
+    serialize_sequence_anchor,
+    serialize_sequence_review_group,
+    serialize_sequence_review_item,
     serialize_text_review_group,
     serialize_text_review_item
 )
@@ -36,6 +39,13 @@ from .text_modes import (
     TEXT_MODE_MATCH,
     choose_text_review_mode,
     text_mode_difficulty
+)
+from .sequence import dense_positions
+from .sequence_modes import (
+    SEQUENCE_MODE_MULTIPLE_CHOICE,
+    SEQUENCE_MODE_REORDER,
+    choose_sequence_review_mode,
+    sequence_mode_difficulty
 )
 from .mode_selection import (
     MODE_AFFINITIES,
@@ -408,6 +418,7 @@ def _serialize_review_items(
     map_grouped_items = {}
     media_grouped_items = {}
     text_grouped_items = {}
+    sequence_grouped_items = {}
     timeline_items = []
 
     for question in questions:
@@ -450,6 +461,19 @@ def _serialize_review_items(
                 }
 
             text_grouped_items[group_id]["questions"].append(question)
+            continue
+
+        if question.group and question.group.type_group == "sequence":
+            group_id = question.group.id
+
+            if group_id not in sequence_grouped_items:
+                sequence_grouped_items[group_id] = {
+                    "group": question.group,
+                    "tags": question.tags or [],
+                    "questions": []
+                }
+
+            sequence_grouped_items[group_id]["questions"].append(question)
             continue
 
         if question.type_q == "timeline":
@@ -677,11 +701,115 @@ def _serialize_review_items(
             ]
             text_review_groups.append(text_group)
 
+    sequence_review_groups = []
+
+    for group_data in sequence_grouped_items.values():
+        group = group_data["group"]
+        due_questions = sorted(group_data["questions"], key=lambda item: item.id)
+        all_group_questions = sorted(
+            [
+                item
+                for item in (group.questions or [])
+                if item.type_q == "sequence"
+            ],
+            key=lambda item: item.id
+        )
+        positions = dense_positions(all_group_questions)
+        by_position = {
+            positions[item.id]: item
+            for item in all_group_questions
+        }
+
+        def previous_label_for(item):
+            rank = positions[item.id]
+            previous = by_position.get(rank - 1)
+
+            return previous.answer if previous else None
+
+        # Anchors are the peers the player is allowed to see already in place.
+        # They must exclude EVERY due item of the group, not just the ones in
+        # this chunk: _visual_review_contexts would hand back the other chunk's
+        # still-due items, which on a reorder rail is literally showing the
+        # answers. Unstarted peers are withheld too -- their slots render locked
+        # and blank so a new item is never revealed before its first review.
+        due_ids = {item.id for item in due_questions}
+        anchors = [
+            serialize_sequence_anchor(item, positions[item.id])
+            for item in all_group_questions
+            if progress_has_started(item.progress) and item.id not in due_ids
+        ]
+
+        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+
+        for chunk_questions in question_chunks:
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
+                )
+            )
+            mode = choose_sequence_review_mode(
+                chunk_questions,
+                active_context_questions,
+                multiple_choice_context_count=len(choice_context_questions)
+            )
+
+            if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
+                # Distractors are drawn from the peers on screen.
+                context_questions = choice_context_questions
+            elif mode == SEQUENCE_MODE_REORDER:
+                # reorder is graded on the pool of free slots, which is exactly
+                # the chunk -- that pool is what click_prompt_base_difficulty
+                # expects as its context count.
+                context_questions = chunk_questions
+            else:
+                context_questions = active_context_questions
+
+            mode_difficulty = sequence_mode_difficulty(
+                mode,
+                context_count=len(context_questions),
+                tuning=scheduler_tuning
+            )
+            context_items = [
+                serialize_sequence_review_item(
+                    item,
+                    position=positions[item.id],
+                    previous_label=previous_label_for(item),
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in _shuffled_context_questions(
+                    context_questions,
+                    chunk_questions
+                )
+            ]
+            sequence_group = serialize_sequence_review_group(
+                group,
+                group_data["tags"],
+                mode=mode,
+                context_items=context_items,
+                anchors=anchors,
+                length=len(all_group_questions)
+            )
+            sequence_group["items"] = [
+                serialize_sequence_review_item(
+                    item,
+                    position=positions[item.id],
+                    previous_label=previous_label_for(item),
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in chunk_questions
+            ]
+            sequence_review_groups.append(sequence_group)
+
     return (
         review_items
         + map_review_groups
         + media_review_groups
         + text_review_groups
+        + sequence_review_groups
     )
 
 
@@ -807,7 +935,12 @@ def get_bonus_group_entries(db, group_ids=None):
     for row in rows:
         # Mirror the bucketing used by _serialize_review_items so the menu
         # entries line up with what a picked entry will actually render.
-        if row.group_id is not None and row.group_type in ("map", "media", "text"):
+        if row.group_id is not None and row.group_type in (
+            "map",
+            "media",
+            "text",
+            "sequence"
+        ):
             entry = container_entry(
                 f"group:{row.group_id}",
                 row.group_type,
