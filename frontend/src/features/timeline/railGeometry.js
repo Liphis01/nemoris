@@ -8,12 +8,22 @@ import {
   yearToTimelineIndex
 } from "./timelineUtils";
 
-// The window the global track paints. It is deliberately wider than the answers
-// themselves: a range hugging the answers would be a picture of nothing (and, on
-// a single-card session, would frame the answer dead centre). Reaching forward
-// to today and back by a multiple of the span gives the landmarks room to appear
-// and keeps "where does this sit" answerable. It is answer-independent, so it
-// leaks nothing the backend's randomised padding does not already allow.
+// How much history the frame keeps on screen to the left of the session's
+// answers, no matter how tightly those answers cluster.
+//
+// This floor is the whole point. Scaling the frame off the answers' own spread —
+// which is what it used to do — means a session whose cards all sit in the 20th
+// century gets a 20th-century frame: the era bands collapse to one flat colour
+// and every landmark that makes a date *mean* something (1492, 1789, …) falls
+// off the edge. The frame is the map, and a map has to show more than where you
+// already are. 1000 years reliably spans several named eras.
+export const minFrameContextYears = 1000;
+
+const daysPerYear = 365.25;
+
+// The window the global track paints: the answers, plus a generous left-hand
+// run-up, plus everything forward to today. Answer-independent, so it leaks
+// nothing the backend's randomised padding does not already allow.
 export function buildDisplayRange(range) {
   const today = new Date();
   const todayValue = dateToOrdinal(
@@ -24,9 +34,12 @@ export function buildDisplayRange(range) {
   const rightLimit = Math.max(todayValue, range.end_value);
   const span = Math.max(365, range.end_value - range.start_value);
   const rightPadding = Math.min(120, Math.max(14, Math.round(span * 0.015)));
+  // A wide-ranging session still gets its proportional run-up; a tight one gets
+  // the floor. Whichever is larger wins.
+  const leftPadding = Math.max(span * 1.2, minFrameContextYears * daysPerYear);
 
   return {
-    start_value: Math.max(minTimelineValue, Math.round(range.start_value - span * 1.2)),
+    start_value: Math.max(minTimelineValue, Math.round(range.start_value - leftPadding)),
     end_value: Math.min(maxTimelineValue, rightLimit + rightPadding)
   };
 }
@@ -141,6 +154,95 @@ export function buildYearTicks(slice, widthPx, options = {}) {
     tickStep,
     ticks
   };
+}
+
+// How wide the year rail opens. Wide enough that "the answer is on screen" is
+// only a weak hint; narrow enough that a year is a clickable number of pixels
+// (a ~130-year window on a ~1200px ruler is ~9px per year).
+export const answerWindowMinYears = 90;
+export const answerWindowMaxYears = 170;
+// The answer is never parked against the very edge of the opening window — you
+// should be able to nudge either side of your guess without panning first.
+const answerEdgeMargin = 0.15;
+
+// The rail opens on a window that contains the answer, so you can aim without
+// hunting across a millennium first.
+//
+// Both the window's width and the answer's position inside it are re-randomised
+// every time the card is shown. That is what keeps the help from becoming the
+// answer: "it is somewhere in view" stays true, while "it is in the middle" —
+// or any other fixed spot you could learn to read off — never does. Re-drawing
+// per showing (rather than seeding off the question id) also stops a card's
+// window from becoming a recognisable fingerprint of its own answer.
+export function buildAnswerSlice(targetYearIndexes, bounds, random = Math.random) {
+  const targets = (targetYearIndexes || []).filter(Number.isFinite);
+
+  if (targets.length === 0) return clampSlice({ ...bounds }, bounds);
+
+  const low = Math.min(...targets);
+  const high = Math.max(...targets);
+  const spread = high - low + 1;
+  const boundsSpan = Math.max(1, bounds.end - bounds.start);
+  const padding = answerWindowMinYears +
+    random() * (answerWindowMaxYears - answerWindowMinYears);
+  const span = clampNumber(
+    Math.round(spread + padding),
+    Math.min(minYearRailSpan, boundsSpan),
+    boundsSpan
+  );
+  const slack = Math.max(0, span - spread);
+  const offset = Math.round(
+    slack * (answerEdgeMargin + random() * (1 - 2 * answerEdgeMargin))
+  );
+
+  return clampSlice({ start: low - offset, end: low - offset + span }, bounds);
+}
+
+// --- Ordinal-space viewport (the global track) --------------------------------
+// The rails think in year indices; the global track thinks in day ordinals,
+// because it paints era bands and day-precision pins on the same axis.
+
+export const minViewportSpanDays = 30;
+
+export function clampViewport(viewport, range) {
+  const rangeSpan = Math.max(1, range.end_value - range.start_value);
+  const span = clampNumber(
+    viewport.end_value - viewport.start_value,
+    Math.min(minViewportSpanDays, rangeSpan),
+    rangeSpan
+  );
+  const start = clampNumber(
+    viewport.start_value,
+    range.start_value,
+    range.end_value - span
+  );
+
+  return {
+    start_value: Math.round(start),
+    end_value: Math.round(start + span)
+  };
+}
+
+export function zoomViewportAt(viewport, focusPercent, factor, range) {
+  const span = Math.max(1, viewport.end_value - viewport.start_value);
+  const ratio = clampNumber(focusPercent, 0, 100) / 100;
+  const focusValue = viewport.start_value + ratio * span;
+  const nextSpan = span * factor;
+
+  return clampViewport({
+    start_value: focusValue - ratio * nextSpan,
+    end_value: focusValue + (1 - ratio) * nextSpan
+  }, range);
+}
+
+export function panViewport(viewport, deltaPercent, range) {
+  const span = Math.max(1, viewport.end_value - viewport.start_value);
+  const delta = (deltaPercent / 100) * span;
+
+  return clampViewport({
+    start_value: viewport.start_value + delta,
+    end_value: viewport.end_value + delta
+  }, range);
 }
 
 // The slice, expressed as the ordinal window the global track brackets.

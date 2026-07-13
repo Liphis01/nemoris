@@ -1,33 +1,66 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   anchorBounds,
   anchorCenterValue,
   getEraBands,
   selectVisibleAnchors
 } from "../../timeline/anchors";
+import {
+  clampViewport,
+  panViewport,
+  zoomViewportAt
+} from "../../timeline/railGeometry";
 import { formatTimelineYear, ordinalToDate } from "../../timeline/timelineUtils";
 
 const eraBands = getEraBands();
 
-const axisTop = 88;
-const laneOffsets = [34, 58];
+const laneOffsets = [34, 58, 82];
+// Room kept below the axis for the guess chip, which hangs off it.
+const belowAxisPx = 46;
+// Lane gap and label width move together: labels are centred on their anchor, so
+// a lane can hold two anchors laneGapPx apart only if a label is no wider than
+// that. A wide frame packs landmarks tightly, so both are kept modest and long
+// names ellipsise — a truncated "Découverte de l'Amé…" on the map still beats a
+// landmark that is not on the map at all.
+const laneGapPx = 84;
+const anchorLabelMaxPx = 80;
 
-// selectVisibleAnchors always keeps tier-0 landmarks, collision or not — which
-// is right (a curated landmark should never silently vanish) but leaves the two
-// world wars and "Aujourd'hui" printed on top of each other. Staggering the
-// survivors across two lanes keeps them all, and keeps them readable.
-function assignLanes(entries, widthPx) {
-  const minGapPx = 96;
-  const lastPxByLane = [-Infinity, -Infinity];
+// Anchor priority: curated landmarks first, then the user's own mastered cards,
+// then the optional tier-1 curated set. Mastered cards outrank tier-1 because
+// they are the personal scaffold — the whole reason the anchor layer exists.
+function anchorPriority(entry) {
+  if ((entry.anchor.tier ?? 1) === 0) return 0;
+  if (entry.anchor.source === "mastered") return 1;
 
-  return entries.map(entry => {
+  return 2;
+}
+
+// Collisions are resolved *vertically*, not by dropping. Two landmarks 60 years
+// apart on a 1000-year frame cannot share a row — their labels are wider than
+// the gap — but they sit fine one above the other. So each anchor takes the
+// first lane it fits in, and only a genuinely hopeless one (no free lane at all)
+// is dropped. Resolving these horizontally instead is what used to make the
+// user's mastered anchors quietly disappear whenever the frame got wide.
+function assignLanes(entries, widthPx, lanes) {
+  const placedByLane = lanes.map(() => []);
+  const ordered = [...entries].sort((a, b) =>
+    anchorPriority(a) - anchorPriority(b) || a.percent - b.percent
+  );
+  const laned = [];
+
+  ordered.forEach(entry => {
     const px = (entry.percent / 100) * widthPx;
-    const lane = px - lastPxByLane[0] >= minGapPx ? 0 : 1;
+    const lane = placedByLane.findIndex(placed =>
+      placed.every(other => Math.abs(other - px) >= laneGapPx)
+    );
 
-    lastPxByLane[lane] = px;
+    if (lane === -1) return;
 
-    return { ...entry, lane };
+    placedByLane[lane].push(px);
+    laned.push({ ...entry, lane });
   });
+
+  return laned.sort((a, b) => a.percent - b.percent);
 }
 
 function percentOf(value, range) {
@@ -76,10 +109,21 @@ export default function TimelineGlobalTrack({
   sliceRange,
   guess,
   truth,
-  quality
+  quality,
+  resetSignal
 }) {
   const containerRef = useRef(null);
   const [width, setWidth] = useState(960);
+  const [height, setHeight] = useState(200);
+  const [viewport, setViewport] = useState(() => ({ ...range }));
+  const [isPanning, setIsPanning] = useState(false);
+  const panRef = useRef(null);
+
+  // One stable frame per question: however far you roamed on the last card, the
+  // next one opens on the same full picture.
+  useEffect(() => {
+    setViewport({ ...range });
+  }, [range, resetSignal]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -87,9 +131,10 @@ export default function TimelineGlobalTrack({
     if (!node || typeof ResizeObserver === "undefined") return undefined;
 
     const observer = new ResizeObserver(entries => {
-      const measured = entries[0]?.contentRect?.width;
+      const rect = entries[0]?.contentRect;
 
-      if (measured) setWidth(measured);
+      if (rect?.width) setWidth(rect.width);
+      if (rect?.height) setHeight(rect.height);
     });
 
     observer.observe(node);
@@ -97,10 +142,65 @@ export default function TimelineGlobalTrack({
     return () => observer.disconnect();
   }, []);
 
+  // Wheel must be a manual non-passive listener; React's onWheel is passive and
+  // cannot preventDefault, so the page would scroll while zooming.
+  useEffect(() => {
+    const node = containerRef.current;
+
+    if (!node) return undefined;
+
+    function handleWheel(event) {
+      event.preventDefault();
+
+      const rect = node.getBoundingClientRect();
+      const focusPercent = rect.width
+        ? ((event.clientX - rect.left) / rect.width) * 100
+        : 50;
+
+      setViewport(current => zoomViewportAt(
+        current,
+        focusPercent,
+        event.deltaY > 0 ? 1.25 : 0.8,
+        range
+      ));
+    }
+
+    node.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => node.removeEventListener("wheel", handleWheel);
+  }, [range]);
+
+  const handlePointerDown = useCallback((event) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+
+    if (!rect) return;
+
+    panRef.current = { rect, x: event.clientX };
+    setIsPanning(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((event) => {
+    const pan = panRef.current;
+
+    if (!pan || !pan.rect.width) return;
+
+    const deltaPercent = ((pan.x - event.clientX) / pan.rect.width) * 100;
+
+    panRef.current = { ...pan, x: event.clientX };
+    setViewport(current => panViewport(current, deltaPercent, range));
+  }, [range]);
+
+  const handlePointerUp = useCallback((event) => {
+    panRef.current = null;
+    setIsPanning(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }, []);
+
   const bands = useMemo(() => eraBands
     .map(band => {
-      const startPercent = clampPercent(percentOf(band.startValue, range));
-      const endPercent = clampPercent(percentOf(band.endValue, range));
+      const startPercent = clampPercent(percentOf(band.startValue, viewport));
+      const endPercent = clampPercent(percentOf(band.endValue, viewport));
 
       return {
         ...band,
@@ -108,41 +208,73 @@ export default function TimelineGlobalTrack({
         widthPercent: endPercent - startPercent
       };
     })
-    .filter(band => band.widthPercent > 0.6), [range]);
+    .filter(band => band.widthPercent > 0.6), [viewport]);
 
+  // minGapPx: 1 turns selectVisibleAnchors into a pure in-view / off-view split —
+  // all the crowding is settled by the lane pass below, which can use the vertical
+  // axis that the horizontal filter cannot.
   const anchorLayer = useMemo(
-    () => selectVisibleAnchors(anchors || [], range, width, { minGapPx: 92 }),
-    [anchors, range, width]
+    () => selectVisibleAnchors(anchors || [], viewport, width, { minGapPx: 1 }),
+    [anchors, viewport, width]
+  );
+  // The axis rides the bottom of the track, always leaving the guess chip its
+  // room. When the card is short the track gives up height first — it is context,
+  // while the rails below are the thing you actually answer with — so it must
+  // stay coherent at any height rather than clipping its own chip.
+  const axisTop = Math.max(36, height - belowAxisPx);
+  // Only the lanes that still have headroom above the axis are offered; a short
+  // track simply shows fewer anchors rather than stacking them off the top.
+  const lanes = useMemo(
+    () => laneOffsets.filter(offset => axisTop - offset >= 22),
+    [axisTop]
   );
   const lanedAnchors = useMemo(
-    () => assignLanes(anchorLayer.visible, width),
-    [anchorLayer.visible, width]
+    () => assignLanes(anchorLayer.visible, width, lanes),
+    [anchorLayer.visible, lanes, width]
   );
 
+  const isZoomed = clampViewport(viewport, range).end_value - viewport.start_value <
+    (range.end_value - range.start_value) - 1;
   const sliceCoverage = sliceRange
     ? (sliceRange.end_value - sliceRange.start_value) /
-      Math.max(1, range.end_value - range.start_value)
+      Math.max(1, viewport.end_value - viewport.start_value)
     : 1;
-  const truthPercent = truth ? clampPercent(percentOf(truth.value, range)) : null;
-  const guessPercent = guess ? clampPercent(percentOf(guess.value, range)) : null;
+  const truthPercent = truth ? clampPercent(percentOf(truth.value, viewport)) : null;
+  const guessPercent = guess ? clampPercent(percentOf(guess.value, viewport)) : null;
   const truthColor = quality === 0 ? "#f87171" : quality === 1 ? "#f3d36a" : "#7ee2a8";
 
   return (
     <div
       data-timeline-global
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       ref={containerRef}
       style={{
         background: "#101010",
         border: "1px solid #262626",
         borderRadius: "14px",
         boxSizing: "border-box",
-        flex: "1 1 auto",
-        // Deep enough that the guess chip, which hangs below the axis, is never
-        // clipped by the bottom edge.
-        maxHeight: "168px",
-        minHeight: "142px",
+        // Read-only in the sense that you cannot answer on it — but you can roam
+        // it, which is the whole point of a map.
+        cursor: isPanning ? "grabbing" : "grab",
+        // The track is the elastic member of the card: a tall screen's spare
+        // height goes here (the map is worth more than an empty gap above the
+        // footer was), and a short screen takes it back from here rather than
+        // squeezing the rails you answer with. The axis adapts, so it stays
+        // coherent all the way down.
+        //
+        // The basis must be explicit: every child is absolutely positioned, so the
+        // track's intrinsic content height is 0 and a basis of `auto` collapses it
+        // to nothing the moment its floor is lowered.
+        flex: "1 1 220px",
+        maxHeight: "244px",
+        minHeight: "56px",
         overflow: "hidden",
-        position: "relative"
+        position: "relative",
+        touchAction: "none",
+        // Without this a pan drag selects the era labels it passes over.
+        userSelect: "none"
       }}
     >
       {bands.map(band => (
@@ -184,15 +316,17 @@ export default function TimelineGlobalTrack({
         <div
           data-timeline-slice-bracket
           style={{
-            background: "rgba(196, 181, 253, 0.09)",
-            borderLeft: "1px solid rgba(196, 181, 253, 0.55)",
-            borderRight: "1px solid rgba(196, 181, 253, 0.55)",
+            // Chrome, not data: this says "the rail below is showing this slice".
+            // It is not something you placed, so it does not get the violet.
+            background: "rgba(255, 255, 255, 0.045)",
+            borderLeft: "1px solid rgba(255, 255, 255, 0.28)",
+            borderRight: "1px solid rgba(255, 255, 255, 0.28)",
             bottom: 0,
-            left: `${clampPercent(percentOf(sliceRange.start_value, range))}%`,
+            left: `${clampPercent(percentOf(sliceRange.start_value, viewport))}%`,
             position: "absolute",
             top: 0,
             transition: "left 0.18s ease, width 0.18s ease",
-            width: `${Math.max(0.4, clampPercent(percentOf(sliceRange.end_value, range)) - clampPercent(percentOf(sliceRange.start_value, range)))}%`
+            width: `${Math.max(0.4, clampPercent(percentOf(sliceRange.end_value, viewport)) - clampPercent(percentOf(sliceRange.start_value, viewport)))}%`
           }}
         />
       )}
@@ -233,26 +367,51 @@ export default function TimelineGlobalTrack({
                   : "translateX(-50%)"
             }}
           >
+            {/* Mastered cards used to be painted #9fc2ff — the exact colour of the
+                "Époque contemporaine" era label, which means something else
+                entirely. They now read as ordinary anchors carrying a small violet
+                dot: "yours", said in the one hue that means you. */}
             <div
               style={{
-                color: entry.anchor.source === "mastered" ? "#9fc2ff" : "#8a8a8a",
-                fontSize: "10px",
-                fontWeight: 700,
-                maxWidth: "112px",
-                overflow: "hidden",
-                textAlign: align,
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
+                alignItems: "center",
+                display: "flex",
+                gap: "4px",
+                justifyContent: align === "left"
+                  ? "flex-start"
+                  : align === "right" ? "flex-end" : "center"
               }}
             >
-              {entry.anchor.label}
+              {entry.anchor.source === "mastered" && (
+                <span
+                  style={{
+                    background: "#c4b5fd",
+                    borderRadius: "50%",
+                    flexShrink: 0,
+                    height: "4px",
+                    width: "4px"
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  color: "#8a8a8a",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  maxWidth: `${anchorLabelMaxPx}px`,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {entry.anchor.label}
+              </span>
             </div>
             <div style={{ color: "#666", fontSize: "9px", fontWeight: 700, textAlign: align }}>
               {formatTimelineYear(ordinalToDate(anchorCenterValue(entry.anchor)).year)}
             </div>
             <div
               style={{
-                background: entry.anchor.source === "mastered" ? "#3d5170" : "#4a4a4a",
+                background: "#4a4a4a",
                 height: `${laneOffsets[entry.lane] - 22}px`,
                 margin: tickAlign,
                 marginTop: "2px",
@@ -268,8 +427,8 @@ export default function TimelineGlobalTrack({
         .filter(entry => entry.anchor.end)
         .map(entry => {
           const span = anchorBounds(entry.anchor);
-          const left = clampPercent(percentOf(span.startValue, range));
-          const right = clampPercent(percentOf(span.endValue, range));
+          const left = clampPercent(percentOf(span.startValue, viewport));
+          const right = clampPercent(percentOf(span.endValue, viewport));
 
           return (
             <div
@@ -286,6 +445,33 @@ export default function TimelineGlobalTrack({
             />
           );
         })}
+
+      {isZoomed && (
+        <button
+          data-timeline-global-reset
+          onPointerDown={event => event.stopPropagation()}
+          onClick={() => setViewport({ ...range })}
+          style={{
+            background: "rgba(20, 20, 20, 0.9)",
+            border: "1px solid #333",
+            borderRadius: "7px",
+            color: "#9a9a9a",
+            cursor: "pointer",
+            fontSize: "10px",
+            fontWeight: 800,
+            padding: "3px 8px",
+            position: "absolute",
+            // Bottom-right: the top-right corner is where off-screen anchors
+            // stack their edge pills.
+            bottom: "6px",
+            right: "6px",
+            zIndex: 3
+          }}
+          type="button"
+        >
+          Reset
+        </button>
+      )}
 
       {/* A session sitting in one century leaves every landmark off-screen. They
           still orient you — "1789 is behind us" — so they collapse to an edge

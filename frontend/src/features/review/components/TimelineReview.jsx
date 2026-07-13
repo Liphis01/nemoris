@@ -3,6 +3,7 @@ import { sendTimelineAnswer } from "../../../api/review";
 import { fadeInStyle } from "../../../shared/styles";
 import { buildSessionAnchors, describeValue } from "../../timeline/anchors";
 import {
+  buildAnswerSlice,
   buildDisplayRange,
   clampSlice,
   sliceToOrdinalRange,
@@ -15,7 +16,8 @@ import {
   daysInMonth,
   formatTimelineDate,
   lowerOrdinal,
-  parseTimelineInput
+  parseTimelineInput,
+  yearToTimelineIndex
 } from "../../timeline/timelineUtils";
 import TimelineCascade from "./TimelineCascade";
 import TimelineGlobalTrack from "./TimelineGlobalTrack";
@@ -26,7 +28,7 @@ const emptyAnchors = [];
 // The correction bar's slot is held open for the whole question. If it only took
 // up space once a date was graded, the rails below it would shift by exactly
 // that much mid-question and the whole cascade would jump under the pointer.
-const feedbackSlotHeight = 64;
+const feedbackSlotHeight = "clamp(44px, 6.6vh, 60px)";
 
 const typeBadgeStyle = {
   alignItems: "center",
@@ -104,10 +106,13 @@ const endpointPillStyle = (active) => ({
   padding: "6px 12px"
 });
 
+// Format masks, not example dates. These used to be "14/07/1789" / "1789" — which,
+// on a French history deck, is the answer to a card you are quite likely to be
+// holding. A hint about the format must not be a hint about the date.
 const placeholderByPrecision = {
-  day: "14/07/1789",
-  month: "07/1789",
-  year: "1789"
+  day: "JJ/MM/AAAA",
+  month: "MM/AAAA",
+  year: "AAAA"
 };
 
 const unitNouns = {
@@ -230,12 +235,29 @@ export default function TimelineReview({
   const inputRef = useRef(null);
   const activeId = activeItem?.question_id ?? null;
 
-  // One stable frame per question: the rail always opens on the whole range, so
-  // every card of the session starts from the same picture.
+  // The map above stays the same picture on every card (that is what spatial
+  // memory attaches to). The rail is the opposite: it opens on a fresh random
+  // window around this card's answer, so you can aim at a year straight away
+  // instead of hunting across a millennium. Zooming out to the full frame is
+  // always one "Reset" away.
   useEffect(() => {
-    setSliceState({ ...bounds });
+    if (!activeTimeline) {
+      setSliceState({ ...bounds });
+    } else {
+      const targets = [yearToTimelineIndex(activeTimeline.start.year)];
+
+      if (activeTimeline.kind === "interval" && activeTimeline.end) {
+        targets.push(yearToTimelineIndex(activeTimeline.end.year));
+      }
+
+      setSliceState(buildAnswerSlice(targets, bounds));
+    }
+
     setQuickInput("");
     setQuickError("");
+    // activeTimeline is memoised on activeId, so this re-draws the window once
+    // per card rather than on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, bounds]);
 
   const setSlice = useCallback((updater) => {
@@ -389,28 +411,86 @@ export default function TimelineReview({
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
-        gap: "10px",
+        // Everything that is not the footer yields on a short window. The footer
+        // carries the primary action, so it is the one thing that must never be
+        // the element pushed off the bottom of the card.
+        gap: fillAvailableHeight ? "clamp(9px, 1.5vh, 14px)" : "14px",
         height: fillAvailableHeight ? "100%" : undefined,
         minHeight: fillAvailableHeight ? 0 : undefined,
         overflow: "hidden",
-        padding: fillAvailableHeight ? "14px 18px 16px" : "20px 22px 22px",
+        padding: fillAvailableHeight
+          ? "clamp(12px, 2.4vh, 20px) 22px clamp(6px, 1.4vh, 18px)"
+          : "24px 24px 22px",
         ...fadeInStyle
       }}
     >
-      <div style={{ alignItems: "flex-start", display: "flex", flexShrink: 0, gap: "16px" }}>
-        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          {!fillAvailableHeight && (
-            <div style={{ alignItems: "center", display: "flex", gap: "10px", marginBottom: "8px" }}>
-              <div style={typeBadgeStyle}>TIMELINE</div>
-            </div>
-          )}
+      <div
+        style={{
+          alignItems: "center",
+          display: "grid",
+          flexShrink: 0,
+          gap: "16px",
+          // Equal flexible sides so the question is centred on the card itself,
+          // not on whatever room the right-hand controls happen to leave.
+          gridTemplateColumns: "1fr minmax(0, auto) 1fr",
+          // The prompt is the thing being asked — it gets air on both sides of it
+          // rather than being pressed against the track.
+          marginBottom: "4px"
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
+          {!fillAvailableHeight && <div style={typeBadgeStyle}>TIMELINE</div>}
+        </div>
+
+        {/* The prompt has to win the eye against three rulers and a landscape, and
+            size alone was not doing it. So it gets framed instead: the same violet
+            the app already uses for timeline, as a plaque with a kicker above it.
+            Keying on the question id replays the card's fadeIn on every new
+            question, so the eye is pulled back up here each time. */}
+        <div
+          key={activeId}
+          style={{
+            alignItems: "center",
+            display: "flex",
+            flexDirection: "column",
+            gap: "7px",
+            minWidth: 0,
+            ...fadeInStyle
+          }}
+        >
           <div
             style={{
-              color: "#f3f3f3",
-              fontSize: fillAvailableHeight ? "19px" : "26px",
+              color: "#7a7a7a",
+              fontSize: "10px",
+              fontWeight: 800,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase"
+            }}
+          >
+            Datez cet évènement
+          </div>
+          <div
+            data-testid="timeline-prompt"
+            style={{
+              // Neutral on purpose. Violet in this card means "your mark"; the
+              // prompt is not your mark. It earns the eye by being a raised,
+              // high-contrast surface, not by borrowing a colour that means
+              // something else two rows down.
+              background: "linear-gradient(180deg, #232327, #1a1a1d)",
+              border: "1px solid #34343a",
+              borderRadius: "12px",
+              boxShadow: "0 8px 26px rgba(0, 0, 0, 0.38)",
+              color: "#f6f6f8",
+              // Viewport-relative so a short window trades a little prompt size
+              // for the rails, rather than pushing the footer off the card.
+              fontSize: fillAvailableHeight ? "clamp(19px, 2.7vh, 26px)" : "32px",
               fontWeight: 900,
-              lineHeight: 1.15,
+              letterSpacing: "-0.01em",
+              lineHeight: 1.25,
+              maxWidth: "100%",
               overflow: "hidden",
+              padding: "clamp(7px, 1.2vh, 11px) 28px",
+              textAlign: "center",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap"
             }}
@@ -419,7 +499,7 @@ export default function TimelineReview({
           </div>
         </div>
 
-        <div style={{ alignItems: "center", display: "flex", flexShrink: 0, gap: "10px" }}>
+        <div style={{ alignItems: "center", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
           {isInterval && !revealed && (
             <div style={{ display: "flex", gap: "6px" }}>
               <button
@@ -453,6 +533,7 @@ export default function TimelineReview({
         guess={guessCenter === null ? null : { label: guessLabel, value: guessCenter }}
         quality={result?.quality}
         range={displayRange}
+        resetSignal={activeId}
         sliceRange={sliceRange}
         truth={truthDate
           ? { label: formatTimelineDate(truthDate), value: centerOrdinal(truthDate) }
@@ -490,7 +571,7 @@ export default function TimelineReview({
               fontSize: "16px",
               fontWeight: 700,
               outline: "none",
-              padding: "10px 14px",
+              padding: "clamp(7px, 1.3vh, 10px) 14px",
               transition: "border 0.18s ease",
               width: "150px"
             }}
@@ -534,7 +615,7 @@ export default function TimelineReview({
             style={zoomButtonStyle}
             type="button"
           >
-            Tout voir
+            Reset
           </button>
         </div>
       </div>
@@ -550,7 +631,7 @@ export default function TimelineReview({
         truthDate={truthDate}
       />
 
-      <div style={{ flexShrink: 0, height: `${feedbackSlotHeight}px` }}>
+      <div data-feedback-slot style={{ flexShrink: 0, height: feedbackSlotHeight }}>
         {revealed && result && (
           <div
             data-timeline-feedback={result.quality === 0 ? "wrong" : result.quality === 1 ? "close" : "correct"}

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildYearTicks,
-  clampSlice,
   percentForYear,
   sliceSpan,
   yearFromPercent,
@@ -35,6 +34,72 @@ const railLabelStyle = {
   letterSpacing: "0.09em",
   textTransform: "uppercase"
 };
+
+const accent = "rgba(196, 181, 253, 0.75)";
+
+// A first-time user sees three rulers and no reason to touch any of them. So
+// exactly one rail is lit at a time — the next one that needs an answer — and
+// the light moves down the cascade as units get chosen.
+function railChrome(state) {
+  if (state === "active") {
+    return {
+      border: `1px solid ${accent}`,
+      boxShadow: "0 0 0 3px rgba(196, 181, 253, 0.10)",
+      opacity: 1
+    };
+  }
+
+  if (state === "pending") {
+    return { border: "1px solid #262626", boxShadow: "none", opacity: 0.35 };
+  }
+
+  return { border: "1px solid #262626", boxShadow: "none", opacity: 1 };
+}
+
+const stepBadgeStyle = (state) => ({
+  alignItems: "center",
+  background: state === "active" ? "#2b2047" : "#161616",
+  border: `1px solid ${state === "active" ? accent : "#2d2d2d"}`,
+  borderRadius: "999px",
+  color: state === "active" ? "#d9ccff" : "#5f5f5f",
+  display: "inline-flex",
+  fontSize: "9px",
+  fontWeight: 900,
+  height: "15px",
+  justifyContent: "center",
+  minWidth: "15px"
+});
+
+function RailHeader({ step, title, state, hint }) {
+  return (
+    <div
+      style={{
+        ...railLabelStyle,
+        alignItems: "center",
+        color: state === "active" ? "#c4b5fd" : "#6d6d6d",
+        display: "flex",
+        gap: "7px",
+        marginBottom: "clamp(2px, 0.5vh, 4px)",
+        opacity: state === "pending" ? 0.5 : 1
+      }}
+    >
+      <span style={stepBadgeStyle(state)}>{step}</span>
+      <span>{title}</span>
+      {state === "active" && hint && (
+        <span
+          style={{
+            color: "#7d7d7d",
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            textTransform: "none"
+          }}
+        >
+          {hint}
+        </span>
+      )}
+    </div>
+  );
+}
 
 const cellRowStyle = {
   display: "flex",
@@ -94,46 +159,7 @@ function cellStyle({ selected, correct, wrong, disabled }) {
   return base;
 }
 
-// The trapezoid that ties a rail's selected cell to the full width of the rail
-// below it, so the stack reads as one continuous zoom rather than three
-// unrelated pickers.
-function Connector({ fromPercent, fromWidthPercent, active }) {
-  const left = clampNumber(fromPercent, 0, 100);
-  const right = clampNumber(fromPercent + fromWidthPercent, 0, 100);
-
-  return (
-    <div aria-hidden="true" style={{ flexShrink: 0, height: "16px" }}>
-      <svg
-        preserveAspectRatio="none"
-        style={{ display: "block", height: "100%", width: "100%" }}
-        viewBox="0 0 100 16"
-      >
-        <polygon
-          fill={active ? "rgba(196, 181, 253, 0.10)" : "rgba(120, 120, 120, 0.05)"}
-          points={`${left},0 ${right},0 100,16 0,16`}
-        />
-        <line
-          stroke={active ? "rgba(196, 181, 253, 0.42)" : "rgba(120,120,120,0.22)"}
-          strokeWidth="0.4"
-          x1={left}
-          x2="0"
-          y1="0"
-          y2="16"
-        />
-        <line
-          stroke={active ? "rgba(196, 181, 253, 0.42)" : "rgba(120,120,120,0.22)"}
-          strokeWidth="0.4"
-          x1={right}
-          x2="100"
-          y1="0"
-          y2="16"
-        />
-      </svg>
-    </div>
-  );
-}
-
-function YearRail({ slice, setSlice, bounds, selectedYear, onSelectYear, disabled, truthYear }) {
+function YearRail({ slice, setSlice, bounds, selectedYear, onSelectYear, disabled, truthYear, state }) {
   const railRef = useRef(null);
   const [width, setWidth] = useState(960);
   const draggingRef = useRef(false);
@@ -154,10 +180,7 @@ function YearRail({ slice, setSlice, bounds, selectedYear, onSelectYear, disable
     return () => observer.disconnect();
   }, []);
 
-  const { ticks, pxPerYear } = useMemo(
-    () => buildYearTicks(slice, width),
-    [slice, width]
-  );
+  const { ticks } = useMemo(() => buildYearTicks(slice, width), [slice, width]);
 
   const percentFromEvent = useCallback((event) => {
     const rect = railRef.current?.getBoundingClientRect();
@@ -241,15 +264,16 @@ function YearRail({ slice, setSlice, bounds, selectedYear, onSelectYear, disable
       ref={railRef}
       style={{
         ...railStyle,
+        ...railChrome(state),
         cursor: disabled ? "default" : "crosshair",
-        // The rails share the card's spare height rather than letting it pool as
-        // dead space: bigger targets on a tall screen, still usable on a short one.
-        // Capped, because a year-only question has no month/day rails to share
-        // with and the ruler would otherwise stretch into a 300px void.
-        flex: "2 1 0",
+        // Fills its wrapper. The floor is viewport-relative so a short window
+        // shrinks the rails instead of overflowing them; the cap stops a
+        // year-only question stretching the ruler into a 300px void.
+        flex: "1 1 auto",
         maxHeight: "132px",
-        minHeight: "72px",
-        touchAction: "none"
+        minHeight: "clamp(46px, 7.6vh, 72px)",
+        touchAction: "none",
+        transition: "border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease"
       }}
     >
       {ticks.map(tick => (
@@ -328,19 +352,17 @@ function YearRail({ slice, setSlice, bounds, selectedYear, onSelectYear, disable
   );
 }
 
-function CellRail({ cells, selected, onSelect, disabled, truth, testId, minHeight, maxHeight }) {
+function CellRail({ cells, selected, onSelect, disabled, truth, testId, minHeight, maxHeight, state }) {
   return (
     <div
       data-testid={testId}
       style={{
         ...railStyle,
-        flex: "1 1 0",
-        maxHeight: `${maxHeight}px`,
-        minHeight: `${minHeight}px`,
-        // A rail whose parent unit is still unchosen is inert — say so, rather
-        // than offering 31 buttons that quietly do nothing.
-        opacity: disabled ? 0.4 : 1,
-        transition: "opacity 0.15s ease"
+        ...railChrome(state),
+        flex: "1 1 auto",
+        maxHeight,
+        minHeight,
+        transition: "border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease"
       }}
     >
       <div style={cellRowStyle}>
@@ -405,86 +427,105 @@ export default function TimelineCascade({
     }));
   }, [draft.month, draft.year]);
 
-  const selectedYearIndex = draft.year === null ? null : yearToTimelineIndex(draft.year);
-  const yearCellPercent = selectedYearIndex === null
-    ? 50
-    : clampNumber(percentForYear(selectedYearIndex, slice) - (1 / sliceSpan(slice)) * 50, 0, 100);
-  const yearCellWidth = Math.max((1 / sliceSpan(slice)) * 100, 0.6);
-  const monthCellPercent = draft.month === null ? 50 : ((draft.month - 1) / 12) * 100;
+  // The lit rail is the first one still missing a value. Once a correction is on
+  // screen nothing is actionable, so nothing is lit.
+  const activeUnit = disabled
+    ? null
+    : draft.year === null
+      ? "year"
+      : showMonth && draft.month === null
+        ? "month"
+        : showDay && draft.day === null
+          ? "day"
+          : null;
+
+  function stateOf(unit, parentChosen) {
+    if (activeUnit === unit) return "active";
+    if (!parentChosen) return "pending";
+
+    return "idle";
+  }
 
   return (
     <div
       style={{
         display: "flex",
-        flex: "1 1 auto",
+        // Grows into spare height, but never shrinks: the rails are the surface
+        // you answer with, and squeezing them made them overflow their box and
+        // slide under the correction bar.
+        flex: "1 0 auto",
         flexDirection: "column",
+        gap: "clamp(6px, 1.2vh, 10px)",
         // With the rails capped, leftover height sits evenly around the cascade
         // instead of pooling under it.
-        justifyContent: "center",
-        minHeight: 0
+        justifyContent: "center"
       }}
     >
-      <div style={{ ...railLabelStyle, alignItems: "baseline", display: "flex", gap: "8px", marginBottom: "4px" }}>
-        <span>Année</span>
-        {draft.year === null && !disabled && (
-          <span style={{ color: "#4f4f4f", letterSpacing: "0.02em", textTransform: "none" }}>
-            cliquez sur la règle, ou tapez la date · molette pour zoomer
-          </span>
-        )}
+      {/* flex-basis auto (not 0) and no minHeight:0 — otherwise the wrapper
+          collapses, contributes no intrinsic height to the cascade, and the rail
+          inside it overflows downward onto the correction bar. */}
+      <div style={{ display: "flex", flex: "2 1 auto", flexDirection: "column" }}>
+        <RailHeader
+          hint="cliquez sur la règle, ou tapez la date · molette pour zoomer"
+          state={stateOf("year", true)}
+          step={1}
+          title="Année"
+        />
+        <YearRail
+          bounds={bounds}
+          disabled={disabled}
+          onSelectYear={year => onUnit("year", year)}
+          selectedYear={draft.year}
+          setSlice={setSlice}
+          slice={slice}
+          state={stateOf("year", true)}
+          truthYear={disabled ? truthYear : null}
+        />
       </div>
-      <YearRail
-        bounds={bounds}
-        disabled={disabled}
-        onSelectYear={year => onUnit("year", year)}
-        selectedYear={draft.year}
-        setSlice={setSlice}
-        slice={slice}
-        truthYear={disabled ? truthYear : null}
-      />
 
       {showMonth && (
-        <>
-          <Connector
-            active={draft.year !== null}
-            fromPercent={yearCellPercent}
-            fromWidthPercent={yearCellWidth}
+        <div style={{ display: "flex", flex: "1 1 auto", flexDirection: "column" }}>
+          <RailHeader
+            hint="choisissez le mois"
+            state={stateOf("month", draft.year !== null)}
+            step={2}
+            title="Mois"
           />
-          <div style={{ ...railLabelStyle, marginBottom: "4px" }}>Mois</div>
           <CellRail
             cells={monthCells}
             disabled={disabled || draft.year === null}
-            maxHeight={66}
-            minHeight={46}
+            maxHeight="66px"
+            minHeight="clamp(30px, 4.8vh, 46px)"
             onSelect={value => onUnit("month", value)}
             selected={draft.month}
+            state={stateOf("month", draft.year !== null)}
             testId="timeline-month-rail"
             truth={disabled ? truthMonth : null}
           />
-        </>
+        </div>
       )}
 
       {showDay && (
-        <>
-          <Connector
-            active={draft.month !== null}
-            fromPercent={monthCellPercent}
-            fromWidthPercent={100 / 12}
+        <div style={{ display: "flex", flex: "1 1 auto", flexDirection: "column" }}>
+          <RailHeader
+            hint="choisissez le jour"
+            state={stateOf("day", draft.month !== null)}
+            step={3}
+            title="Jour"
           />
-          <div style={{ ...railLabelStyle, marginBottom: "4px" }}>Jour</div>
           <CellRail
             cells={dayCells}
             disabled={disabled || draft.month === null}
-            maxHeight={62}
-            minHeight={42}
+            maxHeight="62px"
+            minHeight="clamp(28px, 4.4vh, 42px)"
             onSelect={value => onUnit("day", value)}
             selected={draft.day}
+            state={stateOf("day", draft.month !== null)}
             testId="timeline-day-rail"
             truth={disabled ? truthDay : null}
           />
-        </>
+        </div>
       )}
     </div>
   );
 }
-
-export { clampSlice };

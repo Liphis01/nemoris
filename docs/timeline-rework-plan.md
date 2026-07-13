@@ -145,15 +145,45 @@ unchanged.
 
 **Layout** (one screen, never scrolls — the shell is `calc(100dvh - 48px)`):
 
-1. **Global track** (`TimelineGlobalTrack.jsx`) — read-only. Era bands, curated +
-   mastered anchors, and a bracket showing the slice the year rail is magnifying.
-   The same picture every question, so spatial memory has something to attach to.
+1. **Global track** (`TimelineGlobalTrack.jsx`) — read-only *for answering*, but
+   pannable and zoomable (drag to pan, wheel to zoom, "Tout voir" to reset; it
+   resets to the full range on every question, so the resting frame is shared).
+   Era bands, curated + mastered anchors, off-screen landmarks collapsed into
+   edge pills, and a bracket showing the slice the year rail is magnifying.
 2. **Quick input + rails** (`TimelineCascade.jsx`) — a year ruler (drag to pick,
    wheel to zoom), then a 12-cell month rail and a 28–31-cell day rail, each a
-   literal zoom into the cell selected above it, joined by trapezoid connectors.
-   **Only the rails the question's precision requires are rendered.**
+   zoom into the cell selected above it. **Only the rails the question's
+   precision requires are rendered.**
 3. A free-text field (`parseTimelineInput`) fills the whole cascade in one
    gesture: "14/07/1789". Typing a digit anywhere focuses it.
+
+**How the frame is chosen** (`buildDisplayRange`). The backend hands over a range
+hugging the session's answers (+15–35% randomised padding, so the padding itself
+cannot hint). The frame then extends **left by whichever is larger: 1.2× that
+span, or `minFrameContextYears` (1000 years)**, and right to today. The floor is
+the important half: scaling the frame purely off the answers' spread meant a
+session whose cards all sat in one century got a one-century frame — era bands
+collapsed to a single colour and every landmark fell off the edge. The frame is
+the map, and a map must show more than where you already are.
+
+**Where the year rail opens** (`buildAnswerSlice`). The map is wide and stable;
+the rail is neither. Opening the rail on the whole frame meant a year was about
+a pixel wide, so you had to zoom or type before you could even aim. It now opens
+on a **90–170 year window containing the answer**, with both the window's width
+and the answer's position inside it (kept clear of the edges) re-randomised on
+every showing. That is what stops the help becoming the answer: "it is somewhere
+in view" stays true, while "it is in the middle" — or any other spot you could
+learn to read off — never does. Re-drawing per showing rather than seeding off
+the question id also stops a card's window becoming a fingerprint of its answer.
+"Reset" still zooms out to the full frame.
+
+**Progressive guidance.** Three rulers with no starting point is unreadable on
+first contact, so exactly one rail is lit at a time — the first one still missing
+a value — with a numbered step badge and a one-line hint. The light moves down
+the cascade (année → mois → jour) as units are chosen; rails whose parent unit is
+unchosen are dimmed and inert. This is what makes the screen self-explanatory,
+and it replaced an earlier attempt at trapezoid "magnification" connectors
+between the rails, which were decorative and read as noise.
 
 **No silent defaults.** A draft holds only the units actually chosen; Validate
 stays disabled until every required unit is set, so a month is never quietly

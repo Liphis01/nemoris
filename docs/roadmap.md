@@ -10,7 +10,8 @@
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
 - zoomer en fonction de la taille des shapes
-- resume redesign timeline questions UI with multi
+- resumer redesign timeline questions UI with multi
+- travailler sur les nouveaux types
 
 ## quick fixes
 
@@ -71,6 +72,7 @@
 - type liste ? (= juste énumérer)
 - les questions ratées réapparaissent avec un mode différent (si disponible pour le type de question)
 - un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
+----> peut aussi servir pour dessiner des drapeaux, des symboles, des logos (soit self evaluation, soit reconnaissance par l'ia)
 
 ## Conseils/idées issus de la littérature scientifique
 
