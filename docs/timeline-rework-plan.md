@@ -8,8 +8,8 @@ you are* and the "connect dates visually" idea breaks down.
 Direction (chosen): **both, phased** — build an anchored landscape first
 (Phase 1), then layer a reworked answering interaction on top (Phase 2).
 
-**Status:** Phase 1 fully implemented (steps 1–9). Phase 2 (insertion/relative
-placement) not started.
+**Status:** Phase 1 fully implemented (steps 1–9). Phase 2 shipped, but *not* as
+the insertion/drag idea sketched below — see "Phase 2 (as built)".
 
 ## Phase 1 — Anchored landscape
 
@@ -123,7 +123,7 @@ only). 7–8 add the personal scaffold. 9 is polish.
 Mastery thresholds (interval/reps), anchor count caps, era tints, tier-1 anchor
 set, density spacing px.
 
-## Phase 2 — Rework the answering (on the same landscape)
+## Phase 2 — Rework the answering (original sketch, NOT built)
 
 Insertion instead of scrubbing: grab the current card and drop it relative to the
 anchors and already-placed cards; the UI shows "after Waterloo · before WWI". A
@@ -131,3 +131,42 @@ drop position is still an absolute date, so `grade_timeline_answer` works
 unchanged — Phase 2 is purely an input-affordance change on the Phase 1 canvas,
 no backend work. A stricter before/after-only mode would need new ordinal
 grading (later, optional fork).
+
+**Superseded.** Insertion is still a scrubbing gesture: it makes you *aim* at a
+date rather than *state* one, which is slow and leaves the answer imprecise on
+day-precision cards.
+
+## Phase 2 (as built) — Zoom cascade
+
+The answering surface is now a **coarse-to-fine zoom chain** rather than one
+free-floating canvas. Backend untouched: the payload is still
+`{start: {year, month, day, precision}, end?}` and `grade_timeline_answer` is
+unchanged.
+
+**Layout** (one screen, never scrolls — the shell is `calc(100dvh - 48px)`):
+
+1. **Global track** (`TimelineGlobalTrack.jsx`) — read-only. Era bands, curated +
+   mastered anchors, and a bracket showing the slice the year rail is magnifying.
+   The same picture every question, so spatial memory has something to attach to.
+2. **Quick input + rails** (`TimelineCascade.jsx`) — a year ruler (drag to pick,
+   wheel to zoom), then a 12-cell month rail and a 28–31-cell day rail, each a
+   literal zoom into the cell selected above it, joined by trapezoid connectors.
+   **Only the rails the question's precision requires are rendered.**
+3. A free-text field (`parseTimelineInput`) fills the whole cascade in one
+   gesture: "14/07/1789". Typing a digit anywhere focuses it.
+
+**No silent defaults.** A draft holds only the units actually chosen; Validate
+stays disabled until every required unit is set, so a month is never quietly
+defaulted to January and graded as the user's answer.
+
+**Instant feedback replaces the end-of-batch recap** (matching the QCM move in
+f62cbc7). `submitAnswer` is called once *per question*; the truth lands on the
+global track beside the guess with the gap annotated ("2 jours trop tard", whose
+direction is derived client-side — the backend returns an unsigned distance), and
+the correct cell lights green on the rails while a wrong pick lights red.
+
+**Files:** `features/timeline/railGeometry.js` (pure, unit-tested: year-index
+space, slice zoom/follow, tick LOD), `buildSessionAnchors` in
+`features/timeline/anchors.js` (the anti-leak filter, now testable),
+`features/review/hooks/useTimelineReview.js` (state machine, mirroring
+`useMapReview`), and the two components above.

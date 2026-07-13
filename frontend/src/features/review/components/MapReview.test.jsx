@@ -480,7 +480,7 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
   });
 
-  it("multiple_choice grades a correct pick with the number shortcuts", async () => {
+  it("multiple_choice replaces the decoys with the quality buttons", async () => {
     renderMapReview(true, { mode: "multiple_choice" });
     const targetCode = screen.getByTestId("active-map")
       .getAttribute("data-due-items");
@@ -488,20 +488,19 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
 
+    // Only the correct zone stays; the decoy slots become Dur/Bon/Facile.
     await waitFor(() => {
-      expect(document.querySelector("[data-map-choice-rating]")).toBeInTheDocument();
+      expect(document.querySelectorAll("[data-map-choice-quality]")).toHaveLength(3);
     });
-
-    // The shortcut key is part of the label, exactly like text review.
-    expect(screen.getByRole("button", { name: "0 · ❌ Faux" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "2 · 🙂 Bon" })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-map-choice-feedback]")).toHaveLength(1);
+    // A correct pick is never "Faux".
+    expect(document.querySelector("[data-map-choice-quality='0']")).toBeNull();
 
     fireEvent.keyDown(window, { key: "3" });
 
     // Grading dismisses the reveal and moves the session on.
     await waitFor(() => {
-      expect(document.querySelector("[data-map-choice-rating]"))
-        .not.toBeInTheDocument();
+      expect(document.querySelectorAll("[data-map-choice-quality]")).toHaveLength(0);
     });
   });
 

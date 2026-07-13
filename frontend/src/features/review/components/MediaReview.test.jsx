@@ -910,10 +910,10 @@ describe("MediaReview answer label preview", () => {
     expect(handleImageSelect).toHaveBeenCalledWith(2);
   });
 
-  it("grades a revealed correct choice with the text-review number shortcuts", () => {
+  it("replaces the decoys with the quality buttons after a correct pick", () => {
     const rateChoice = vi.fn();
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
-    renderMediaReviewWithState(imageClickHookState({
+    const { container } = renderMediaReviewWithState(imageClickHookState({
       rows,
       mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
       activeQuestionId: 1,
@@ -928,21 +928,23 @@ describe("MediaReview answer label preview", () => {
       }
     }));
 
-    // The shortcut key is part of the label, exactly like text review.
-    expect(screen.getByRole("button", { name: "0 · ❌ Faux" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "2 · 🙂 Bon" })).toBeInTheDocument();
+    // Only the correct answer stays; the three decoy slots become Dur/Bon/Facile.
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(3);
+    // A correct pick is never "Faux".
+    expect(container.querySelector("[data-image-choice-quality='0']")).toBeNull();
 
     fireEvent.keyDown(window, { key: "3" });
     expect(rateChoice).toHaveBeenCalledWith(3);
 
-    fireEvent.keyDown(window, { key: "0" });
-    expect(rateChoice).toHaveBeenCalledWith(0);
+    fireEvent.keyDown(window, { key: "2" });
+    expect(rateChoice).toHaveBeenCalledWith(2);
   });
 
   it("continues past a revealed wrong choice with Enter", () => {
     const rateChoice = vi.fn();
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
-    renderMediaReviewWithState(imageClickHookState({
+    const { container } = renderMediaReviewWithState(imageClickHookState({
       rows,
       mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
       activeQuestionId: 1,
@@ -957,8 +959,11 @@ describe("MediaReview answer label preview", () => {
       }
     }));
 
+    // The correct answer and your pick stay; the two freed slots become Continuer.
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(2);
     // A wrong pick is a lapse: no quality choice, just continue.
-    expect(screen.queryByRole("button", { name: "2 · 🙂 Bon" })).not.toBeInTheDocument();
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(0);
+    expect(container.querySelector("[data-image-choice-continue]")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Enter" });
 

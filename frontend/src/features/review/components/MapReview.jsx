@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
+import { useFlip } from "../../../shared/useFlip";
 import {
   MAP_RECAP_UNANSWERED,
   useMapReview
@@ -94,6 +95,10 @@ const qualityOptions = [
   { value: 3, icon: "✅", title: "Facile" }
 ];
 
+// A correct pick is never "Faux", and dropping it leaves exactly three options —
+// which is exactly how many slots the three decoys free up.
+const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+
 const unansweredQualityOption = {
   value: MAP_RECAP_UNANSWERED,
   icon: "NR",
@@ -134,6 +139,36 @@ function readMapAutoZoomPreference() {
 
 function readRecapAutoZoomPreference() {
   return readAutoZoomPreference(recapAutoZoomStorageKey);
+}
+
+// The revealed answer keeps its own box and slides between slots (see useFlip), so
+// the slot wrapper — not the button — is what FLIP moves. It rides above the
+// quality buttons while it travels.
+const choiceSlotStyle = {
+  display: "flex",
+  minWidth: 0,
+  position: "relative",
+  zIndex: 2
+};
+
+// The quality buttons only appear once the answer has finished sliding, so the
+// two never read as one row of answers.
+const choiceRevealDelay = "0.3s";
+
+// Keeps the regular answer-button shape — only the centred label and the muted
+// text set it apart, since the sliding green answer is what carries the emphasis.
+function choiceQualityButtonStyle(option, selected) {
+  const active = qualityButtonStyles[option.value];
+
+  return {
+    ...choiceButtonStyle,
+    animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
+    background: selected ? active.background : choiceButtonStyle.background,
+    border: selected ? active.border : "1px solid #333",
+    color: selected ? active.color : "#c9c9c9",
+    gap: "8px",
+    justifyContent: "center"
+  };
 }
 
 function choiceFeedbackState(option, feedback) {
@@ -268,15 +303,33 @@ export default function MapReview({
     Boolean(choiceFeedback) &&
     showQualityControls
   );
-  // The rating bar's slot is held open for the whole question. If it only took up
-  // space once a choice was revealed, the map box would shrink by exactly that
-  // much mid-question, and SvgMap would re-fit (and visibly re-zoom) the zone it
-  // is already framed on. Reserving the space keeps the map box a constant size.
-  const showsChoiceRatingSlot = (
-    mode === MAP_MODE_MULTIPLE_CHOICE &&
-    !showRecap &&
-    showQualityControls
-  );
+  const correctChoiceId = choiceFeedback?.correctQuestionId;
+  const currentChoiceQuality = qualityByQuestionId[correctChoiceId] ?? 2;
+  // Once answered, only the zones worth looking at stay on the board: the correct
+  // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
+  const revealedChoices = useMemo(() => {
+    if (!choiceFeedback) return choiceOptions;
+
+    const correct = choiceOptions.find(
+      option => option.question_id === correctChoiceId
+    );
+
+    if (choiceFeedback.isCorrect) return correct ? [correct] : [];
+
+    const picked = choiceOptions.find(
+      option => option.question_id === choiceFeedback.selectedQuestionId
+    );
+
+    return [correct, picked].filter(Boolean);
+  }, [choiceFeedback, choiceOptions, correctChoiceId]);
+  const choiceGridRef = useRef(null);
+  // Scope the flip keys to the zone being *answered*, not to promptCode — that one
+  // advances to the next zone the moment you pick, which would change every key and
+  // make FLIP treat the correct answer as a brand-new element (so it never slid).
+  const choiceScope = choiceFeedback?.correctCode ?? promptCode;
+  // Slide the surviving answers into their new slots. Scoped per question so the
+  // next one starts fresh instead of animating out of the previous one's layout.
+  useFlip(choiceGridRef, `${choiceScope}:${choiceFeedback?.id ?? "idle"}`);
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
@@ -524,9 +577,9 @@ export default function MapReview({
     function handleChoiceRatingKeyDown(event) {
       if (isEditableTarget(event.target)) return;
 
-      // Mirrors text review: 0/1/2/3 grade the revealed answer.
+      // A correct pick is graded 1/2/3 (never "Faux"); Enter takes the Bon default.
       if (correctPick) {
-        if (["0", "1", "2", "3"].includes(event.key)) {
+        if (["1", "2", "3"].includes(event.key)) {
           event.preventDefault();
           rateChoice(Number(event.key));
         } else if (event.key === "Enter" || event.key === " ") {
@@ -537,7 +590,7 @@ export default function MapReview({
         return;
       }
 
-      if (event.key === "Enter" || event.key === " " || event.key === "0") {
+      if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         rateChoice();
       }
@@ -981,123 +1034,71 @@ export default function MapReview({
           )}
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
-            <div style={choiceGridStyle}>
-              {choiceOptions.map((option, index) => (
-                <button
+            // Answering keeps the same four slots: the decoys drop out, the correct
+            // zone slides into the first slot, and the freed slots become the
+            // quality buttons (or "Continuer" after a wrong pick). Nothing grows,
+            // so the map above never resizes.
+            <div ref={choiceGridRef} style={choiceGridStyle}>
+              {revealedChoices.map((option, index) => (
+                <div
                   key={option.question_id}
-                  type="button"
-                  data-map-choice-feedback={choiceFeedbackState(option, choiceFeedback)}
-                  disabled={Boolean(choiceFeedback)}
-                  onClick={() => handleChoiceSelect(option.question_id)}
-                  style={getChoiceButtonStyle(option, choiceFeedback)}
+                  data-flip-key={`${choiceScope}:${option.question_id}`}
+                  style={choiceSlotStyle}
                 >
-                  <span style={{ alignItems: "center", display: "flex", gap: "8px", minWidth: 0 }}>
-                    {!choiceFeedback && index < 9 && (
-                      <span aria-hidden="true" data-map-choice-key style={choiceKeyBadgeStyle}>
-                        {index + 1}
+                  <button
+                    type="button"
+                    data-map-choice-feedback={choiceFeedbackState(option, choiceFeedback)}
+                    disabled={Boolean(choiceFeedback)}
+                    onClick={() => handleChoiceSelect(option.question_id)}
+                    style={{
+                      ...getChoiceButtonStyle(option, choiceFeedback),
+                      flex: 1,
+                      width: "100%"
+                    }}
+                  >
+                    <span style={{ alignItems: "center", display: "flex", gap: "8px", minWidth: 0 }}>
+                      {!choiceFeedback && index < 9 && (
+                        <span aria-hidden="true" data-map-choice-key style={choiceKeyBadgeStyle}>
+                          {index + 1}
+                        </span>
+                      )}
+                      <span>{option.label}</span>
+                    </span>
+                    {choiceFeedbackLabel(option, choiceFeedback) && (
+                      <span style={choiceFeedbackLabelStyle}>
+                        {choiceFeedbackLabel(option, choiceFeedback)}
                       </span>
                     )}
-                    <span>{option.label}</span>
-                  </span>
-                  {choiceFeedbackLabel(option, choiceFeedback) && (
-                    <span style={choiceFeedbackLabelStyle}>
-                      {choiceFeedbackLabel(option, choiceFeedback)}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {showsChoiceRatingSlot && (
-            <div style={choiceRatingSlotStyle}>
-          {showChoiceRating && (() => {
-            const correctPick = Boolean(choiceFeedback?.isCorrect);
-            const correctId = choiceFeedback?.correctQuestionId;
-            const correctLabel = (choiceFeedback?.options || [])
-              .find(option => option.question_id === correctId)?.label || promptLabel;
-            const currentQuality = qualityByQuestionId[correctId] ?? 2;
-
-            return (
-              <div
-                data-map-choice-rating
-                style={{
-                  alignItems: "center",
-                  animation: "fadeIn 0.2s ease",
-                  background: "#121212",
-                  border: `1px solid ${correctPick ? "rgba(134, 239, 172, 0.35)" : "rgba(248, 113, 113, 0.35)"}`,
-                  borderRadius: "10px",
-                  boxSizing: "border-box",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "8px 14px",
-                  height: "100%",
-                  justifyContent: "space-between",
-                  padding: "10px 12px"
-                }}
-              >
-                <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "130px" }}>
-                  <span style={{ color: correctPick ? "#86efac" : "#fca5a5", fontSize: "13px", fontWeight: 900 }}>
-                    {correctPick ? "Bonne réponse" : "Raté"}
-                  </span>
-                  <span style={{ color: "#9a9a9a", fontSize: "12px", overflowWrap: "anywhere" }}>
-                    {correctPick ? "Note la difficulté" : `Réponse : ${correctLabel}`}
-                  </span>
+                  </button>
                 </div>
-                {correctPick ? (
-                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                    {/* Same shape as the text-review quality buttons: the shortcut
-                        key is part of the label, so keyboard grading is visible. */}
-                    {qualityOptions.map(({ value, icon, title }) => {
-                      const active = qualityButtonStyles[value];
-                      const selected = currentQuality === value;
+              ))}
 
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          title={title}
-                          aria-pressed={selected}
-                          data-map-choice-quality={value}
-                          onClick={() => rateChoice(value)}
-                          style={{
-                            background: selected ? active.background : "#222",
-                            border: selected ? active.border : "1px solid #333",
-                            borderRadius: "8px",
-                            color: selected ? active.color : "#9a9a9a",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            padding: "8px 10px",
-                            whiteSpace: "nowrap"
-                          }}
-                        >
-                          {`${value} · ${icon} ${title}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
+              {showChoiceRating && (choiceFeedback.isCorrect
+                ? choiceQualityOptions.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    title={option.title}
+                    aria-pressed={currentChoiceQuality === option.value}
+                    data-map-choice-quality={option.value}
+                    onClick={() => rateChoice(option.value)}
+                    style={choiceQualityButtonStyle(option, currentChoiceQuality === option.value)}
+                  >
+                    <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
+                    <span>{option.icon} {option.title}</span>
+                  </button>
+                ))
+                : (
                   <button
                     type="button"
                     data-map-choice-continue
                     onClick={() => rateChoice()}
-                    style={{
-                      ...choiceButtonStyle,
-                      background: "#232323",
-                      border: "1px solid #3a3a3a",
-                      justifyContent: "center",
-                      minHeight: "38px",
-                      padding: "9px 18px"
-                    }}
+                    style={choiceContinueButtonStyle}
                   >
                     <span aria-hidden="true" style={choiceKeyBadgeStyle}>Entrée</span>
                     Continuer →
                   </button>
-                )}
-              </div>
-            );
-          })()}
+                ))}
             </div>
           )}
 
@@ -1641,11 +1642,6 @@ const choiceGridStyle = {
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
 };
 
-// Fixed so the slot is identical whether or not the rating bar is in it.
-const choiceRatingSlotStyle = {
-  height: "70px",
-  marginTop: "10px"
-};
 
 // Small keycap hint shown on each choice so the number shortcut is discoverable.
 const choiceKeyBadgeStyle = {
@@ -1682,6 +1678,16 @@ const choiceButtonStyle = {
   justifyContent: "space-between",
   minHeight: "54px",
   textAlign: "left"
+};
+
+// Fills the two slots freed by the decoys after a wrong pick.
+const choiceContinueButtonStyle = {
+  ...choiceButtonStyle,
+  animation: "fadeIn 0.26s ease 0.3s both",
+  color: "#c9c9c9",
+  gap: "8px",
+  gridColumn: "span 2",
+  justifyContent: "center"
 };
 
 const choiceFeedbackLabelStyle = {

@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useR
 import { createPortal } from "react-dom";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
+import { useFlip } from "../../../shared/useFlip";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -22,6 +23,21 @@ const qualityOptions = [
   { value: 2, icon: "🙂", title: "Bon" },
   { value: 3, icon: "✅", title: "Facile" }
 ];
+
+// A correct pick is never "Faux", and dropping it leaves exactly three options —
+// which is exactly how many slots the three decoys free up.
+const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+
+// The revealed answer keeps its own box and slides between slots (see useFlip), so
+// the slot wrapper — not the tile/button — is what FLIP moves. It rides above the
+// quality buttons while it travels.
+const choiceSlotStyle = {
+  display: "flex",
+  minHeight: 0,
+  minWidth: 0,
+  position: "relative",
+  zIndex: 2
+};
 
 const unansweredQualityOption = {
   value: IMAGE_RECAP_UNANSWERED,
@@ -72,6 +88,73 @@ const buttonStyle = {
   cursor: "pointer",
   fontWeight: 700,
   padding: "10px 14px"
+};
+
+// Quality / continue buttons sit in the slots the decoys left behind, and only
+// appear once the answer has finished sliding. They keep the regular choice-button
+// shape — only the centred label and the muted text set them apart, since the
+// sliding green answer is what carries the emphasis.
+const choiceRevealDelay = "0.3s";
+
+const choiceControlBaseStyle = {
+  ...buttonStyle,
+  alignItems: "center",
+  animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
+  display: "flex",
+  gap: "8px",
+  justifyContent: "center",
+  minHeight: "44px",
+  overflowWrap: "anywhere",
+  textAlign: "center",
+  width: "100%"
+};
+
+function choiceQualityButtonStyle(option, selected) {
+  const active = qualityButtonStyles[option.value];
+
+  return {
+    ...choiceControlBaseStyle,
+    background: selected ? active.background : "#141414",
+    border: selected ? active.border : "1px solid #303030",
+    color: selected ? active.color : "#c9c9c9"
+  };
+}
+
+const choiceContinueButtonStyle = {
+  ...choiceControlBaseStyle,
+  background: "#141414",
+  border: "1px solid #303030",
+  color: "#c9c9c9",
+  gridColumn: "span 2"
+};
+
+// In QCM médias each freed slot is a whole media tile, so the button fills it and
+// its content grows to match instead of floating in an empty card.
+const choiceQualityTileStyle = {
+  flexDirection: "column",
+  gap: "8px",
+  height: "100%"
+};
+
+const choiceQualityTileIconStyle = {
+  fontSize: "34px",
+  lineHeight: 1
+};
+
+const choiceQualityTileTitleStyle = {
+  fontSize: "15px",
+  fontWeight: 800
+};
+
+const choiceQualityTileIntervalStyle = {
+  color: "#7d7d7d",
+  fontSize: "12px",
+  fontWeight: 700
+};
+
+const choiceContinueTileStyle = {
+  fontSize: "15px",
+  height: "100%"
 };
 
 // Small keycap hint so keyboard shortcuts are discoverable.
@@ -854,6 +937,35 @@ export default function MediaReview({
     showQualityControls &&
     (showLabelChoices || showImageChoiceBoard)
   );
+  const correctChoiceId = interactionFeedback?.correctQuestionId;
+  const currentChoiceQuality = qualityByQuestionId[correctChoiceId] ?? 2;
+  // Once answered, only the answers worth looking at stay on the board: the correct
+  // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
+  function keepRevealed(items, getQuestionId) {
+    if (!interactionFeedback) return items;
+
+    const correct = items.find(item => getQuestionId(item) === correctChoiceId);
+
+    if (interactionFeedback.isCorrect) return correct ? [correct] : [];
+
+    const picked = items.find(
+      item => getQuestionId(item) === interactionFeedback.selectedQuestionId
+    );
+
+    return [correct, picked].filter(Boolean);
+  }
+
+  const revealedChoiceOptions = keepRevealed(choiceOptions, option => option.question_id);
+  const revealedGridItems = keepRevealed(activeGridItems, row => row.item.question_id);
+  const choiceGridRef = useRef(null);
+  // Scope the flip keys to the item being *answered*, not to currentPromptItem —
+  // that one advances to the next item the moment you pick, which would change
+  // every key and make FLIP treat the correct answer as a brand-new element (so it
+  // never slid).
+  const choiceScope = correctChoiceId ?? currentPromptItem?.question_id ?? "none";
+  // Slide the surviving answers into their new slots. Scoped per question so the
+  // next one starts fresh instead of animating out of the previous one's layout.
+  useFlip(choiceGridRef, `${choiceScope}:${interactionFeedback?.id ?? "idle"}`);
   const tileImageHeight = fillAvailableHeight ? 154 : 188;
   const tileImageMaxHeight = fillAvailableHeight ? 140 : 174;
   const tileMinHeight = fillAvailableHeight ? "212px" : "250px";
@@ -1181,9 +1293,9 @@ export default function MediaReview({
     function handleKeyDown(event) {
       if (isEditableTarget(event.target)) return;
 
-      // Mirrors text review: 0/1/2/3 grade the revealed answer.
+      // A correct pick is graded 1/2/3 (never "Faux"); Enter takes the Bon default.
       if (correctPick) {
-        if (["0", "1", "2", "3"].includes(event.key)) {
+        if (["1", "2", "3"].includes(event.key)) {
           event.preventDefault();
           rateChoice(Number(event.key));
         } else if (event.key === "Enter" || event.key === " ") {
@@ -1194,7 +1306,7 @@ export default function MediaReview({
         return;
       }
 
-      if (event.key === "Enter" || event.key === " " || event.key === "0") {
+      if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         rateChoice();
       }
@@ -1732,105 +1844,77 @@ export default function MediaReview({
     );
   }
 
-  // Same shape as the text-review quality buttons: the shortcut key is part of
-  // the label ("2 · 🙂 Bon"), so grading by keyboard is discoverable.
-  function renderChoiceQualityButton({ option, selected, onClick }) {
-    const activeStyle = qualityButtonStyles[option.value];
-
-    return (
-      <button
-        key={option.value}
-        type="button"
-        aria-pressed={selected}
-        data-image-choice-quality={option.value}
-        onClick={onClick}
-        style={{
-          background: selected ? activeStyle.background : "#222",
-          border: selected ? activeStyle.border : "1px solid #333",
-          borderRadius: "8px",
-          color: selected ? activeStyle.color : "#9a9a9a",
-          cursor: "pointer",
-          fontSize: "12px",
-          fontWeight: 800,
-          padding: "8px 10px",
-          whiteSpace: "nowrap"
-        }}
-        title={option.title}
-      >
-        {`${option.value} · ${option.icon} ${option.title}`}
-      </button>
-    );
-  }
-
-  function renderChoiceRatingBar() {
+  // Fills the slots the decoys vacated: the quality buttons after a correct pick,
+  // "Continuer" after a wrong one. In QCM médias those slots are whole media tiles,
+  // so the content scales up and gains the interval each grade would schedule —
+  // otherwise a tile-sized button holding a one-line label just looks empty.
+  function renderChoiceRatingSlots() {
     if (!showChoiceRating) return null;
 
-    const correctPick = Boolean(interactionFeedback?.isCorrect);
-    const correctId = interactionFeedback?.correctQuestionId;
-    const currentQuality = qualityByQuestionId[correctId] ?? 2;
+    const onTiles = showImageChoiceBoard;
 
-    return (
-      <div
-        data-image-choice-rating
-        style={{
-          ...fadeInStyle,
-          alignItems: "center",
-          background: "#121212",
-          border: `1px solid ${correctPick ? "rgba(134, 239, 172, 0.35)" : "rgba(248, 113, 113, 0.35)"}`,
-          borderRadius: "10px",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px 14px",
-          justifyContent: "space-between",
-          marginBottom: "10px",
-          padding: "10px 12px"
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "130px" }}>
-          <span
-            style={{
-              color: correctPick ? "#86efac" : "#fca5a5",
-              fontSize: "13px",
-              fontWeight: 900
-            }}
-          >
-            {correctPick ? "Bonne réponse" : "Raté"}
-          </span>
-          <span style={{ color: "#9a9a9a", fontSize: "12px", overflowWrap: "anywhere" }}>
-            {correctPick
-              ? "Note la difficulté"
-              : `Réponse : ${promptLabel}`}
-          </span>
-        </div>
-        {correctPick ? (
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "8px" }}>
-            {qualityOptions.map(option => renderChoiceQualityButton({
-              option,
-              selected: currentQuality === option.value,
-              onClick: () => rateChoice(option.value)
-            }))}
-          </div>
-        ) : (
-          <button
-            type="button"
-            data-image-choice-continue
-            onClick={() => rateChoice()}
-            style={{
-              ...buttonStyle,
-              alignItems: "center",
-              background: "#232323",
-              border: "1px solid #3a3a3a",
-              display: "flex",
-              gap: "8px",
-              padding: "9px 18px"
-            }}
-          >
-            <span aria-hidden="true" style={keyCapStyle}>Entrée</span>
-            Continuer →
-          </button>
-        )}
-      </div>
+    if (!interactionFeedback.isCorrect) {
+      return (
+        <button
+          type="button"
+          data-image-choice-continue
+          onClick={() => rateChoice()}
+          style={{
+            ...choiceContinueButtonStyle,
+            ...(onTiles ? choiceContinueTileStyle : null)
+          }}
+        >
+          <span aria-hidden="true" style={keyCapStyle}>Entrée</span>
+          Continuer →
+        </button>
+      );
+    }
+
+    const correctItem = choiceOptions.find(
+      option => option.question_id === correctChoiceId
     );
+
+    return choiceQualityOptions.map(option => {
+      const selected = currentChoiceQuality === option.value;
+      const interval = correctItem
+        ? projectedIntervalForImage(correctItem, option.value)
+        : null;
+
+      return (
+        <button
+          key={option.value}
+          type="button"
+          title={option.title}
+          aria-pressed={selected}
+          data-image-choice-quality={option.value}
+          onClick={() => rateChoice(option.value)}
+          style={{
+            ...choiceQualityButtonStyle(option, selected),
+            ...(onTiles ? choiceQualityTileStyle : null)
+          }}
+        >
+          {onTiles ? (
+            <Fragment>
+              <span aria-hidden="true" style={choiceQualityTileIconStyle}>
+                {option.icon}
+              </span>
+              <span style={choiceQualityTileTitleStyle}>{option.title}</span>
+              {interval > 0 && (
+                <span style={choiceQualityTileIntervalStyle}>
+                  ≈ {interval} j
+                </span>
+              )}
+              <span aria-hidden="true" style={keyCapStyle}>{option.value}</span>
+            </Fragment>
+          ) : (
+            <Fragment>
+              <span aria-hidden="true" style={keyCapStyle}>{option.value}</span>
+              <span>{option.icon} {option.title}</span>
+            </Fragment>
+          )}
+        </button>
+      );
+    });
   }
 
   function renderImageRecapQualityButton({
@@ -2464,7 +2548,11 @@ export default function MediaReview({
         }}
       >
         {showImageChoiceBoard ? (
+          // Same four slots throughout: the decoy media drop out, the correct one
+          // slides into the first slot, and the freed slots become the quality
+          // buttons (or "Continuer" after a wrong pick).
           <div
+            ref={choiceGridRef}
             data-image-choice-board
             style={{
               display: "grid",
@@ -2478,7 +2566,18 @@ export default function MediaReview({
               width: "min(100%, 720px)"
             }}
           >
-            {activeGridItems.map((row, index) => renderImageChoiceTile(row, { keyIndex: index }))}
+            {revealedGridItems.map((row, index) => (
+              <div
+                key={row.item.question_id}
+                data-flip-key={`${choiceScope}:${row.item.question_id}`}
+                style={choiceSlotStyle}
+              >
+                {renderImageChoiceTile(row, {
+                  keyIndex: interactionFeedback ? null : index
+                })}
+              </div>
+            ))}
+            {renderChoiceRatingSlots()}
           </div>
         ) : showPromptImageBoard ? (
           <div
@@ -2674,7 +2773,11 @@ export default function MediaReview({
         )}
 
         {showLabelChoices && (
+          // Same four slots throughout: the decoy names drop out, the correct one
+          // slides into the first slot, and the freed slots become the quality
+          // buttons (or "Continuer" after a wrong pick).
           <div
+            ref={choiceGridRef}
             style={{
               display: "grid",
               gap: "8px",
@@ -2682,46 +2785,52 @@ export default function MediaReview({
               marginBottom: "14px"
             }}
           >
-            {choiceOptions.map((option, index) => (
-              <button
+            {revealedChoiceOptions.map((option, index) => (
+              <div
                 key={option.question_id}
-                type="button"
-                data-image-choice-feedback={imageChoiceFeedbackState(
-                  option,
-                  interactionFeedback
-                )}
-                disabled={Boolean(interactionFeedback)}
-                onClick={() => handleChoiceSelect(option.question_id)}
-                style={{
-                  ...imageChoiceButtonStyle(option, interactionFeedback),
-                  position: "relative"
-                }}
+                data-flip-key={`${choiceScope}:${option.question_id}`}
+                style={choiceSlotStyle}
               >
-                {!interactionFeedback && index < 9 && (
-                  <span aria-hidden="true" data-image-choice-key style={choiceKeyBadgeStyle}>
-                    {index + 1}
-                  </span>
-                )}
-                <span>{answerLabel(option)}</span>
-                {imageChoiceFeedbackLabel(option, interactionFeedback) && (
-                  <span
-                    style={{
-                      display: "block",
-                      fontSize: "11px",
-                      fontWeight: 900,
-                      marginTop: "5px",
-                      textTransform: "uppercase"
-                    }}
-                  >
-                    {imageChoiceFeedbackLabel(option, interactionFeedback)}
-                  </span>
-                )}
-              </button>
+                <button
+                  type="button"
+                  data-image-choice-feedback={imageChoiceFeedbackState(
+                    option,
+                    interactionFeedback
+                  )}
+                  disabled={Boolean(interactionFeedback)}
+                  onClick={() => handleChoiceSelect(option.question_id)}
+                  style={{
+                    ...imageChoiceButtonStyle(option, interactionFeedback),
+                    flex: 1,
+                    position: "relative",
+                    width: "100%"
+                  }}
+                >
+                  {!interactionFeedback && index < 9 && (
+                    <span aria-hidden="true" data-image-choice-key style={choiceKeyBadgeStyle}>
+                      {index + 1}
+                    </span>
+                  )}
+                  <span>{answerLabel(option)}</span>
+                  {imageChoiceFeedbackLabel(option, interactionFeedback) && (
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: "11px",
+                        fontWeight: 900,
+                        marginTop: "5px",
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      {imageChoiceFeedbackLabel(option, interactionFeedback)}
+                    </span>
+                  )}
+                </button>
+              </div>
             ))}
+            {renderChoiceRatingSlots()}
           </div>
         )}
-
-        {renderChoiceRatingBar()}
 
         <div
           style={{

@@ -86,7 +86,10 @@ async function renderEditor(items = makeImageItems(300), props = {}) {
   }
 }
 
-describe("MediaGroupEditor", () => {
+// Every case here mounts and re-virtualises a 250-row group, which runs close to
+// the default 5s budget on its own and tips over it whenever the rest of the
+// suite is competing for CPU. The work is real, not a hang — give it room.
+describe("MediaGroupEditor", { timeout: 25000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

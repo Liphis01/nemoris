@@ -10,6 +10,8 @@
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
 - zoomer en fonction de la taille des shapes
+- resume redesign timeline questions UI with multi
+- add immediate answer quality rating to review: instead of the current layout for quality buttons that takes too much space for no reason, I would prefer an animation that slides the correct answer somewhere and then uses the space left by the decoy answers to show the quality buttons (don't necessarily put the "faux" since it's a correct answer). I don't know if this would work for all multiple choice modes, you tell me.
 
 ## quick fixes
 
@@ -23,6 +25,7 @@
 - mettre une petite loupe plutôt que le + pour la preview des images
 - le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de 
+- changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 
 ## bugs
 
