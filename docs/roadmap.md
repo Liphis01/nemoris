@@ -9,11 +9,7 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- zoomer en fonction de la taille des shapes
-- resume explore new types and modes
-- réduire un peu les auto zooms
 - quand je réponds faux à une question bonus, il faut la queue back dans la review normale
-- bug quand je créée un groupe mais que je veux l'annuler je reste bloqué dedans
 - créer de nouveaux modes timeline
 
 ## quick fixes

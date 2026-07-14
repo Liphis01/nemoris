@@ -21,6 +21,10 @@ const dragThresholdPx = 4;
 // zoomed in far enough to see and click comfortably.
 const maxZoom = 80;
 
+// Exponent applied to the auto-zoom fit (see fitFocusedZone). Below 1 it pulls
+// deep fits back out, and the deeper the fit the more it pulls.
+const autoZoomFalloff = 0.75;
+
 // Island hit-area shapes always render at this opacity so they stay see-through
 // (the map shows through them) while behaving like any other zone.
 const hitAreaRevealOpacity = "0.35";
@@ -409,10 +413,16 @@ export default function SvgMap({
             wrapperRect.width / box.width,
             wrapperRect.height / box.height
         ) * padding;
-        // Cap at maxZoom (not a fixed 8) so the auto-zoom adapts to the zone
-        // size: tiny zones (small islands) zoom in far enough to see and click,
-        // while large zones naturally settle at a low fitScale.
-        const newScale = Math.min(Math.max(fitScale, 1), maxZoom);
+        // A raw fit frames every zone at the same on-screen size, so a small
+        // country gets magnified as hard as a continent and loses the
+        // surrounding coastlines that make it recognisable. Softening the fit
+        // sub-linearly leaves shallow fits (large zones) almost untouched while
+        // pulling deep ones back out, so the smaller the zone the more of the
+        // fit it gives up. Still capped at maxZoom for the tiniest islands.
+        const softenedScale = fitScale > 1
+            ? fitScale ** autoZoomFalloff
+            : fitScale;
+        const newScale = Math.min(Math.max(softenedScale, 1), maxZoom);
 
         // A re-fit forced by the wrapper changing size must land instantly: the
         // zone was already framed, so animating it would read as a spurious
