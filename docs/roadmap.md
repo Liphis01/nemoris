@@ -1,7 +1,6 @@
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
 - question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
-- si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
 - revoir le mode timeline (mettre une timeline globale pour l'année et deux pour mois et jour)
@@ -9,8 +8,8 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- quand je réponds faux à une question bonus, il faut la queue back dans la review normale
 - créer de nouveaux modes timeline
+- should we count the successive fails in the same session as a single fail for the purpose of scheduling? (ex: if I fail 3 times in a row, should it count as 1 fail or 3 fails for scheduling purposes?) or should we count each fail separately? (ex: if I fail 3 times in a row, should it count as 3 fails for scheduling purposes?) (I think the first option is better because it would be more forgiving and would not penalize the user too much for a single mistake, but it might also make the scheduling less accurate)
 
 ## quick fixes
 

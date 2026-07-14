@@ -18,11 +18,8 @@ from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
     create_initial_progress,
-    progress_is_new,
     rebalance_progress_calendar,
-    replace_latest_scheduling,
-    restore_progress_from_history,
-    should_schedule_answer
+    replace_latest_scheduling
 )
 from ..services.map_modes import (
     DEFAULT_MAP_MODE,
@@ -95,20 +92,6 @@ def parse_group_ids(value):
 
 
 def answer_progress_payload(progress):
-    if not progress:
-        return {
-            "stability": 1.0,
-            "difficulty": 5.0,
-            "interval": 0,
-            "ideal_interval": None,
-            "last_review": None,
-            "next_review": None,
-            "ideal_next_review": None,
-            "reps": 0,
-            "lapses": 0,
-            "history": []
-        }
-
     return {
         "stability": progress.stability,
         "difficulty": progress.difficulty,
@@ -121,34 +104,6 @@ def answer_progress_payload(progress):
         "lapses": progress.lapses,
         "history": progress.history or []
     }
-
-
-def bonus_schedule_metadata(progress_was_new, created_progress):
-    if not progress_was_new:
-        return None
-
-    return {
-        "started_from_bonus": True,
-        "created_progress": created_progress
-    }
-
-
-def latest_entry_started_from_bonus(progress):
-    history = list(progress.history or []) if progress else []
-
-    if not history:
-        return False
-
-    return bool(history[-1].get("started_from_bonus"))
-
-
-def latest_entry_created_progress(progress):
-    history = list(progress.history or []) if progress else []
-
-    if not history:
-        return False
-
-    return bool(history[-1].get("created_progress"))
 
 
 @router.get("/review/settings")
@@ -244,18 +199,14 @@ def get_summary(db: Session = Depends(get_db)):
 @router.post("/answer")
 def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
     # Old/imported questions may not have progress yet, so create it lazily on
-    # first answer.
+    # first answer. A failed first answer schedules like any other review: FSRS
+    # keeps a failed card due today, so a bonus question answered wrong lands in
+    # the normal review queue instead of staying new.
     progress = (
         db.query(Progress)
         .filter(Progress.question_id == data.question_id)
         .first()
     )
-
-    if not should_schedule_answer(progress, data.quality):
-        return answer_progress_payload(progress)
-
-    progress_was_new = progress_is_new(progress)
-    created_progress = progress is None
 
     if not progress:
         progress = create_initial_progress(
@@ -268,8 +219,7 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         db,
         progress,
         data.quality,
-        today=data.review_date,
-        metadata=bonus_schedule_metadata(progress_was_new, created_progress)
+        today=data.review_date
     )
     db.commit()
     sync_generated_hard_collection(db)
@@ -285,33 +235,6 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         .first()
     )
 
-    latest_started_from_bonus = latest_entry_started_from_bonus(progress)
-
-    if data.quality == 0 and latest_started_from_bonus:
-        history = list(progress.history or [])
-
-        if history[-1].get("created_progress"):
-            db.delete(progress)
-            db.commit()
-            sync_generated_hard_collection(db)
-            return answer_progress_payload(None)
-
-        restore_progress_from_history(progress, history[:-1], today=data.review_date)
-        db.commit()
-        sync_generated_hard_collection(db)
-        return answer_progress_payload(progress)
-
-    if not should_schedule_answer(progress, data.quality):
-        return answer_progress_payload(progress)
-
-    progress_was_new = progress_is_new(progress)
-    created_progress = progress is None
-    created_from_bonus = (
-        latest_entry_created_progress(progress)
-        if latest_started_from_bonus
-        else created_progress
-    )
-
     if not progress:
         progress = create_initial_progress(
             data.question_id,
@@ -323,11 +246,7 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         db,
         progress,
         data.quality,
-        today=data.review_date,
-        metadata=bonus_schedule_metadata(
-            progress_was_new or latest_started_from_bonus,
-            created_from_bonus
-        )
+        today=data.review_date
     )
     db.commit()
     sync_generated_hard_collection(db)
@@ -511,9 +430,6 @@ def apply_answer_batch(
         if normalized_map_mode:
             raw_quality = calibrate_map_quality(quality)
 
-            if not should_schedule_answer(progress, raw_quality):
-                continue
-
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
                 db.add(progress)
@@ -546,9 +462,6 @@ def apply_answer_batch(
             ))
         elif normalized_image_mode:
             raw_quality = calibrate_image_quality(quality)
-
-            if not should_schedule_answer(progress, raw_quality):
-                continue
 
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -588,9 +501,6 @@ def apply_answer_batch(
         elif normalized_text_mode:
             raw_quality = calibrate_text_quality(quality)
 
-            if not should_schedule_answer(progress, raw_quality):
-                continue
-
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
                 db.add(progress)
@@ -622,9 +532,6 @@ def apply_answer_batch(
                 }
             ))
         else:
-            if not should_schedule_answer(progress, quality):
-                continue
-
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
                 db.add(progress)
@@ -694,15 +601,13 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
         timeline = validate_timeline_data(question.data or {})
         grading = grade_timeline_answer(timeline, guess.model_dump())
         progress = progress_map.get(question_id)
-        schedule_answer = should_schedule_answer(progress, grading["quality"])
 
-        if schedule_answer and not progress:
+        if not progress:
             progress = create_initial_progress(question_id, today=data.review_date)
             db.add(progress)
             progress_map[question_id] = progress
 
-        if schedule_answer:
-            progress_quality_pairs.append((progress, grading["quality"]))
+        progress_quality_pairs.append((progress, grading["quality"]))
 
         results.append({
             "question_id": question_id,
@@ -811,27 +716,26 @@ def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
             tuning=scheduler_tuning
         )
 
-        if should_schedule_answer(progress, raw_quality):
-            if not progress:
-                progress = create_initial_progress(
-                    question_id,
-                    today=data.review_date
-                )
-                db.add(progress)
-                progress_map[question_id] = progress
+        if not progress:
+            progress = create_initial_progress(
+                question_id,
+                today=data.review_date
+            )
+            db.add(progress)
+            progress_map[question_id] = progress
 
-            progress_quality_pairs.append((
-                progress,
-                raw_quality,
-                {
-                    "sequence_mode": mode,
-                    "sequence_context_count": active_context_count,
-                    "raw_quality": raw_quality,
-                    "effective_quality": raw_quality,
-                    "mode_adjusted": difficulty != 1.0,
-                    "mode_difficulty": difficulty
-                }
-            ))
+        progress_quality_pairs.append((
+            progress,
+            raw_quality,
+            {
+                "sequence_mode": mode,
+                "sequence_context_count": active_context_count,
+                "raw_quality": raw_quality,
+                "effective_quality": raw_quality,
+                "mode_adjusted": difficulty != 1.0,
+                "mode_difficulty": difficulty
+            }
+        ))
 
         results.append({
             "question_id": question_id,

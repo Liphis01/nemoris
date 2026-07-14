@@ -50,15 +50,6 @@ def progress_is_new(progress: Progress | None):
     return not progress_has_started(progress)
 
 
-def should_schedule_answer(progress: Progress | None, quality: int):
-    try:
-        normalized_quality = int(quality)
-    except (TypeError, ValueError):
-        normalized_quality = 0
-
-    return progress_has_started(progress) or normalized_quality > 0
-
-
 def count_reviews_on_day(progresses, day):
     count = 0
 

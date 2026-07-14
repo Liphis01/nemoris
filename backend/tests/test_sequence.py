@@ -507,7 +507,7 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
             places=6
         )
 
-    def test_a_failed_new_card_is_returned_but_not_scheduled(self):
+    def test_a_failed_new_card_is_scheduled_and_stays_due(self):
         group = self.add_group()
         self.add_item(group, "Alpha", 1, question_id=1)
         self.db.commit()
@@ -520,11 +520,16 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
             db=self.db
         )
 
-        self.assertEqual(len(response["results"]), 1)
-        self.assertEqual(response["results"][0]["quality"], 0)
-        self.assertIsNone(
+        progress = (
             self.db.query(Progress).filter(Progress.question_id == 1).first()
         )
+
+        self.assertEqual(len(response["results"]), 1)
+        self.assertEqual(response["results"][0]["quality"], 0)
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.history[-1]["quality"], 0)
+        self.assertEqual(progress.next_review, date.today())
 
     def test_rejects_a_non_sequence_question(self):
         item = Question(

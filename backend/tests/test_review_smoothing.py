@@ -1165,7 +1165,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
         self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
 
-    def test_bonus_text_retry_uses_supplied_review_date_for_first_schedule(self):
+    def test_bonus_text_retry_records_the_failure_and_the_retry(self):
+        # The failed first answer is a real review, and the in-session retry is
+        # a second one, both on the supplied review date.
         review_day = date(2026, 1, 1)
         self.add_question(1, type_q="text")
         self.db.commit()
@@ -1196,8 +1198,13 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(
             [entry["reviewed_on"] for entry in progress.history],
-            [review_day.isoformat()]
+            [review_day.isoformat(), review_day.isoformat()]
         )
+        self.assertEqual(
+            [entry["quality"] for entry in progress.history],
+            [0, 2]
+        )
+        self.assertEqual(progress.reps, 2)
 
     def test_revise_single_answer_uses_supplied_review_date(self):
         review_day = date(2026, 1, 1)
@@ -1231,7 +1238,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(progress.history[-1]["reviewed_on"], review_day.isoformat())
 
-    def test_revise_bonus_text_to_again_removes_created_progress(self):
+    def test_revise_bonus_text_to_again_keeps_the_card_scheduled(self):
+        # Re-grading a bonus answer down to Again corrects the grade, it does not
+        # send the card back to the bonus pool: one review, due today.
+        today = date.today()
         self.add_question(1, type_q="text")
         self.db.commit()
 
@@ -1244,48 +1254,21 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response["history"], [])
-        self.assertEqual(response["reps"], 0)
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
-        )
-
-    def test_revise_correct_bonus_text_preserves_unschedule_marker(self):
-        self.add_question(1, type_q="text")
-        self.db.commit()
-
-        answer_question(
-            AnswerRequest(question_id=1, quality=2),
-            db=self.db
-        )
-        revise_answer_question(
-            AnswerRequest(question_id=1, quality=3),
-            db=self.db
-        )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
             .first()
         )
 
-        self.assertTrue(progress.history[-1]["started_from_bonus"])
-        self.assertTrue(progress.history[-1]["created_progress"])
+        self.assertEqual(len(response["history"]), 1)
+        self.assertEqual(response["history"][-1]["quality"], 0)
+        self.assertEqual(response["reps"], 1)
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.lapses, 1)
+        self.assertEqual(progress.next_review, today)
 
-        response = revise_answer_question(
-            AnswerRequest(question_id=1, quality=0),
-            db=self.db
-        )
-
-        self.assertEqual(response["history"], [])
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
-        )
-
-    def test_revise_bonus_text_to_again_restores_unstarted_progress(self):
+    def test_revise_bonus_text_to_again_keeps_unstarted_progress_row(self):
         today = date.today()
         self.add_question(1, type_q="text")
         progress = self.add_progress(1, today, reps=0)
@@ -1300,11 +1283,11 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response["history"], [])
-        self.assertEqual(response["reps"], 0)
-        self.assertEqual(progress.history, [])
-        self.assertEqual(progress.reps, 0)
-        self.assertIsNone(progress.last_review)
+        self.assertEqual(len(response["history"]), 1)
+        self.assertEqual(response["history"][-1]["quality"], 0)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.last_review, today)
+        self.assertEqual(progress.next_review, today)
 
     def test_grouped_answers_use_supplied_review_date(self):
         review_day = date(2026, 1, 1)
@@ -1773,7 +1756,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             [1, 2, 3, 4]
         )
 
-    def test_failed_bonus_text_answer_stays_new_until_correct(self):
+    def test_failed_bonus_text_answer_enters_the_normal_review(self):
+        today = date.today()
         self.add_question(1)
         self.add_question(2)
         self.db.commit()
@@ -1783,23 +1767,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(failed_response["reps"], 0)
-        self.assertEqual(failed_response["history"], [])
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
-        )
-        bonus_response = get_review(include_new=True, db=self.db)
-        self.assertEqual(
-            [item["question_id"] for item in bonus_response],
-            [1, 2]
-        )
+        self.assertEqual(failed_response["reps"], 1)
+        self.assertEqual(len(failed_response["history"]), 1)
+        self.assertEqual(failed_response["history"][-1]["quality"], 0)
 
-        answer_question(
-            AnswerRequest(question_id=1, quality=2),
-            db=self.db
-        )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
@@ -1808,9 +1779,23 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertIsNotNone(progress)
         self.assertEqual(progress.reps, 1)
-        self.assertEqual(progress.history[-1]["quality"], 2)
+        self.assertEqual(progress.lapses, 1)
+        self.assertEqual(progress.next_review, today)
 
-    def test_failed_bonus_grouped_answers_stay_new_until_correct(self):
+        # The failed question is now due work, and it has left the bonus pool.
+        due_response = get_review(db=self.db)
+        self.assertEqual(
+            [item["question_id"] for item in due_response],
+            [1]
+        )
+        self.assertEqual(
+            get_bonus_status(db=self.db)["available_bonus_question_count"],
+            1
+        )
+
+    def test_failed_bonus_grouped_answers_enter_the_normal_review(self):
+        today = date.today()
+
         for question_id, type_q in [
             (1, "map"),
             (2, "map"),
@@ -1835,12 +1820,14 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             for progress in self.db.query(Progress).all()
         }
 
-        self.assertNotIn(1, progress_by_question_id)
-        self.assertNotIn(3, progress_by_question_id)
+        self.assertEqual(progress_by_question_id[1].history[-1]["quality"], 0)
+        self.assertEqual(progress_by_question_id[1].next_review, today)
+        self.assertEqual(progress_by_question_id[3].history[-1]["quality"], 0)
+        self.assertEqual(progress_by_question_id[3].next_review, today)
         self.assertEqual(progress_by_question_id[2].history[-1]["quality"], 2)
         self.assertEqual(progress_by_question_id[4].history[-1]["quality"], 3)
 
-    def test_failed_bonus_timeline_answer_stays_new_until_correct(self):
+    def test_failed_bonus_timeline_answer_enters_the_normal_review(self):
         question = self.add_question(1, type_q="timeline")
         question.data = {
             "timeline": {
@@ -1867,25 +1854,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         failed_result = failed_response["results"][0]
         self.assertEqual(failed_result["quality"], 0)
-        self.assertEqual(failed_result["progress"]["reps"], 0)
-        self.assertIsNone(failed_result["progress"]["next_review"])
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
+        self.assertEqual(failed_result["progress"]["reps"], 1)
+        self.assertEqual(
+            failed_result["progress"]["next_review"],
+            date.today().isoformat()
         )
 
-        answer_timeline(
-            TimelineAnswerRequest(items={
-                1: TimelineAnswerItem(
-                    start=TimelineDateValue(
-                        year=2000,
-                        precision="year"
-                    )
-                )
-            }),
-            db=self.db
-        )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
@@ -1894,7 +1868,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertIsNotNone(progress)
         self.assertEqual(progress.reps, 1)
-        self.assertEqual(progress.history[-1]["quality"], 2)
+        self.assertEqual(progress.lapses, 1)
+        self.assertEqual(progress.history[-1]["quality"], 0)
+        self.assertEqual(progress.next_review, date.today())
 
     def test_rebalance_route_ignores_unstarted_progress_rows(self):
         today = date.today()
