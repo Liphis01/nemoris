@@ -35,6 +35,22 @@ export default function Manage(props) {
   const pendingSaveHandlerRef = useRef(null);
   const transitionInProgressRef = useRef(false);
   const autosaveTimeoutRef = useRef(null);
+  const abandonGroupCreationRef = useRef(null);
+
+  useEffect(() => {
+    abandonGroupCreationRef.current = () => {
+      if (!props.isCreatingGroup) return;
+
+      props.setIsCreatingGroup?.(false);
+      props.resetGroupDraft?.();
+    };
+  });
+
+  // Leaving Manage abandons an in-flight group creation. Exit paths run through
+  // requestManageTransition first, so a named or non-empty group has already
+  // been persisted; only an untouched draft is dropped. Without this the flag
+  // survives in useManageLibrary and the pending editor reappears on return.
+  useEffect(() => () => abandonGroupCreationRef.current?.(), []);
   const {
     allQuestions,
     clearOpenQuestionId,

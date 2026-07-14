@@ -250,7 +250,7 @@ export default function SequenceReview({
     });
   }, []);
 
-  const buildPositions = useCallback(() => {
+  const buildPositions = useCallback((currentInputs) => {
     const positions = {};
 
     items.forEach(item => {
@@ -264,28 +264,30 @@ export default function SequenceReview({
 
       if (isChoice) {
         positions[item.question_id] = {
-          position: inputs[item.question_id] ?? null
+          position: currentInputs[item.question_id] ?? null
         };
 
         return;
       }
 
       positions[item.question_id] = {
-        position: resolvePosition(pool, inputs[item.question_id])
+        position: resolvePosition(pool, currentInputs[item.question_id])
       };
     });
 
     return positions;
-  }, [inputs, isChoice, isReorder, items, placements, pool]);
+  }, [isChoice, isReorder, items, placements, pool]);
 
-  async function submit() {
+  // Takes the answers explicitly so the QCM can submit on its last pick without
+  // waiting for the state update to land.
+  const submit = useCallback(async (currentInputs = inputs) => {
     if (submitting || revealed) return;
 
     setSubmitting(true);
 
     try {
       const response = await submitAnswer?.(
-        buildPositions(),
+        buildPositions(currentInputs),
         mode,
         pool.length
       );
@@ -308,7 +310,17 @@ export default function SequenceReview({
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [
+    buildPositions,
+    inputs,
+    mode,
+    onAnsweringComplete,
+    onComplete,
+    pool.length,
+    revealed,
+    submitAnswer,
+    submitting
+  ]);
 
   function finish() {
     onComplete?.(failedRef.current);
@@ -316,10 +328,18 @@ export default function SequenceReview({
 
   const pickChoice = useCallback(
     (item, choice) => {
-      setInputs(prev => ({ ...prev, [item.question_id]: choice.position }));
+      const nextInputs = { ...inputs, [item.question_id]: choice.position };
+
+      setInputs(nextInputs);
       setChoiceIndex(prev => prev + 1);
+
+      // Last card answered: grade the set straight away rather than bouncing
+      // through an effect.
+      if (choiceIndex + 1 >= items.length) {
+        submit(nextInputs);
+      }
     },
-    []
+    [choiceIndex, inputs, items.length, submit]
   );
 
   // The session's global grading shortcuts are suppressed for this type, so the
@@ -341,12 +361,6 @@ export default function SequenceReview({
 
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeChoiceItem, choicesByItem, isChoice, pickChoice, revealed]);
-
-  useEffect(() => {
-    if (isChoice && !revealed && choiceIndex >= items.length && items.length) {
-      submit();
-    }
-  }, [choiceIndex, isChoice, items.length, revealed]);
 
   const containerStyle = {
     display: "flex",
@@ -675,7 +689,7 @@ export default function SequenceReview({
           !isChoice && (
             <button
               disabled={!canSubmit || submitting}
-              onClick={submit}
+              onClick={() => submit()}
               style={{
                 ...buttonStyle,
                 opacity: canSubmit && !submitting ? 1 : 0.5

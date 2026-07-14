@@ -23,6 +23,9 @@ export default function ManageList({
   isCreatingQuestion,
   resetQuestionDraft,
   setIsCreatingQuestion,
+  isCreatingGroup,
+  resetGroupDraft,
+  setIsCreatingGroup,
   questionScrollRequest = null,
   requestManageTransition,
   updateQuestion,
@@ -381,8 +384,20 @@ export default function ManageList({
     resetQuestionDraft?.();
   }
 
+  // A group being created is not persisted until its first real save, and the
+  // caller has already flushed that save through runManageTransition. So picking
+  // something else abandons it: a named or non-empty group was just written, and
+  // an untouched one has nothing worth keeping.
+  function closeGroupCreation() {
+    if (!isCreatingGroup) return;
+
+    setIsCreatingGroup?.(false);
+    resetGroupDraft?.();
+  }
+
   function selectQuestion(q) {
     closeQuestionCreation();
+    closeGroupCreation();
     setOpenDeleteId(null);
     setSelectedItem(q);
     setEditingZone(q.type_q === "map" ? q : null);
@@ -652,6 +667,8 @@ export default function ManageList({
 
               onClick={() => {
                 runManageTransition(() => {
+                  closeQuestionCreation();
+                  closeGroupCreation();
                   setOpenDeleteId(null);
                   setSelectedItem(group);
                   setEditingZone?.(null);

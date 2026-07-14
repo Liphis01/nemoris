@@ -37,7 +37,6 @@ export const DEFAULT_GROUP_NAMES = {
 };
 
 export default function useInspectorEditorMode({
-  createGroup,
   createQuestion,
   isCreatingGroup,
   isCreatingQuestion,

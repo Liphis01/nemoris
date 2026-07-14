@@ -15,13 +15,6 @@ const MEDIA_LABELS = {
   typeError: "Seuls les fichiers image, audio et vidéo sont acceptés."
 };
 
-const mediaCaptionStyle = {
-  color: "#7a7a7a",
-  fontSize: "12px",
-  letterSpacing: "0.02em",
-  textAlign: "left"
-};
-
 const sectionTextareaStyle = {
   ...inputStyle,
   resize: "vertical",
