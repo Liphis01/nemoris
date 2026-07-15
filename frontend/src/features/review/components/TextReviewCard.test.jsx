@@ -85,3 +85,68 @@ describe("TextReviewCard media preview", () => {
         });
     });
 });
+
+describe("TextReviewCard relearning", () => {
+    afterEach(() => {
+        cleanup();
+        vi.clearAllMocks();
+    });
+
+    const plainQuestion = {
+        question_id: 1,
+        type_q: "text",
+        question: "Capitale ?",
+        answer: "Paris"
+    };
+
+    it("keeps the four grades for a normal question", () => {
+        render(<TextReviewCard {...textReviewCardProps({
+            q: plainQuestion,
+            showAnswer: true
+        })} />);
+
+        expect(screen.getByText(/Faux/)).toBeInTheDocument();
+        expect(screen.getByText(/Facile/)).toBeInTheDocument();
+        expect(screen.queryByText(/Encore/)).not.toBeInTheDocument();
+    });
+
+    it("shows the binary Encore/Acquis on an in-session retry", () => {
+        render(<TextReviewCard {...textReviewCardProps({
+            q: { ...plainQuestion, _reviewRetryOfIndex: 0 },
+            showAnswer: true
+        })} />);
+
+        expect(screen.getByText(/Encore/)).toBeInTheDocument();
+        expect(screen.getByText(/Acquis/)).toBeInTheDocument();
+        expect(screen.queryByText(/Bon/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Facile/)).not.toBeInTheDocument();
+    });
+
+    it("shows the binary choice for a card reloaded in relearning (refresh case)", () => {
+        // No in-session marker: the persisted progress.relearning flag drives it,
+        // which is what survives an app refresh.
+        render(<TextReviewCard {...textReviewCardProps({
+            q: { ...plainQuestion, progress: { relearning: true } },
+            showAnswer: true
+        })} />);
+
+        expect(screen.getByText(/Encore/)).toBeInTheDocument();
+        expect(screen.getByText(/Acquis/)).toBeInTheDocument();
+        expect(screen.queryByText(/Facile/)).not.toBeInTheDocument();
+    });
+
+    it("sends Encore as 0 and Acquis as 1", () => {
+        const handleAnswer = vi.fn();
+        render(<TextReviewCard {...textReviewCardProps({
+            q: { ...plainQuestion, _reviewRetryOfIndex: 0 },
+            showAnswer: true,
+            handleAnswer
+        })} />);
+
+        fireEvent.click(screen.getByText(/Encore/));
+        expect(handleAnswer).toHaveBeenLastCalledWith(0);
+
+        fireEvent.click(screen.getByText(/Acquis/));
+        expect(handleAnswer).toHaveBeenLastCalledWith(1);
+    });
+});

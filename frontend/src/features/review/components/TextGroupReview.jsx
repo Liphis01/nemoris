@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { normalizeTextMode, TEXT_MODE_MATCH } from "../textModes";
+import {
+  GOT_IT_QUALITY,
+  isRelearningGroupItem,
+  partitionRelearningQualities,
+  relearningQualityOptions
+} from "../relearningGrades";
 
 const qualityOptions = [
   { value: 0, icon: "❌", title: "Faux" },
@@ -13,6 +19,12 @@ const qualityButtonColors = {
   1: { background: "#3a3420", border: "1px solid #6f6434", color: "#f3d36a" },
   2: { background: "#20303a", border: "1px solid #345b7a", color: "#8fc7ff" },
   3: { background: "#203a2a", border: "1px solid #2c5c3e", color: "#7ee2a8" }
+};
+
+// Encore stays red like a fail; Acquis is green.
+const relearningButtonColors = {
+  0: { background: "#3a2420", border: "1px solid #6b2b31", color: "#ff8c94" },
+  1: { background: "#203a2a", border: "1px solid #2c5c3e", color: "#7ee2a8" }
 };
 
 // One colour per matched pair, so crossing connector lines stay tellable apart.
@@ -81,12 +93,14 @@ function shuffled(list) {
 }
 
 export default function TextGroupReview({
+  group,
   reviewItems,
   contextItems = reviewItems,
   mode: requestedMode,
   onAnsweringComplete,
   onComplete,
   submitAnswer,
+  graduateAnswer,
   showQualityControls = true,
   fillAvailableHeight = false
 }) {
@@ -138,8 +152,13 @@ export default function TextGroupReview({
       const resolvedOk = isMatch
         ? matchedIds.has(item.question_id) && !failedIds.has(item.question_id)
         : foundIds.has(item.question_id);
+      // A relearning item collapses to the binary "Acquis" on success so the
+      // recap shows the two-way choice, not a graded one.
+      const passQuality = isRelearningGroupItem(group, item)
+        ? GOT_IT_QUALITY
+        : 2;
 
-      nextQualities[item.question_id] = resolvedOk ? 2 : 0;
+      nextQualities[item.question_id] = resolvedOk ? passQuality : 0;
     });
 
     setQualities(nextQualities);
@@ -165,9 +184,20 @@ export default function TextGroupReview({
     const failed = Object.entries(finalQualities)
       .filter(([, quality]) => Number(quality) === 0)
       .map(([questionId]) => Number(questionId));
+    // Relearning items never re-grade: send only the ordinary grades and
+    // graduate the "Acquis" ones. "Encore" stays in `failed` and re-queues.
+    const { graded, graduateIds } = partitionRelearningQualities(
+      group,
+      finalQualities
+    );
 
     try {
-      await submitAnswer?.(finalQualities, mode, contextItems.length);
+      await Promise.all([
+        Object.keys(graded).length > 0
+          ? submitAnswer?.(graded, mode, contextItems.length)
+          : null,
+        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
+      ].filter(Boolean));
     } catch (error) {
       console.error(error);
     } finally {
@@ -355,6 +385,13 @@ export default function TextGroupReview({
           {items.map((item, index) => {
             const quality = qualities[item.question_id] ?? 0;
             const isSelected = index === selectedRecapIndex;
+            const relearning = isRelearningGroupItem(group, item);
+            const rowQualityOptions = relearning
+              ? relearningQualityOptions
+              : qualityOptions;
+            const rowButtonColors = relearning
+              ? relearningButtonColors
+              : qualityButtonColors;
 
             return (
               <div
@@ -386,9 +423,9 @@ export default function TextGroupReview({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "5px" }}>
-                  {qualityOptions.map(option => {
+                  {rowQualityOptions.map(option => {
                     const active = quality === option.value;
-                    const colors = qualityButtonColors[option.value];
+                    const colors = rowButtonColors[option.value];
 
                     return (
                       <button

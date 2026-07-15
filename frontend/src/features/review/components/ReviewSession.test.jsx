@@ -301,4 +301,146 @@ describe("ReviewSession", () => {
 
     expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
   });
+
+  it("marks a re-queued text question as relearning", () => {
+    const { container } = renderReviewSession({
+      questions: [
+        {
+          id: 1,
+          type_q: "text",
+          question: "Capital?",
+          answer: "Paris",
+          _reviewRetryOfIndex: 0
+        }
+      ],
+      currentIndex: 0
+    });
+
+    expect(container.querySelector("[data-relearning-badge]"))
+      .toBeInTheDocument();
+    expect(screen.getByText("Réapprentissage")).toBeInTheDocument();
+  });
+
+  it("does not mark a question being seen for the first time", () => {
+    const { container } = renderReviewSession({
+      questions: [
+        {
+          id: 1,
+          type_q: "text",
+          question: "Capital?",
+          answer: "Paris"
+        }
+      ],
+      currentIndex: 0
+    });
+
+    expect(container.querySelector("[data-relearning-badge]"))
+      .not.toBeInTheDocument();
+  });
+
+  it("marks a re-queued visual question and replaces the session kicker", () => {
+    // The retry of a failed bonus group is the first answer of the session, so
+    // its retry index is 0 -- the badge must not be hidden by a falsy check.
+    const { container } = renderReviewSession({
+      questions: [
+        {
+          type_q: "media",
+          name: "Flags",
+          mode: "type_prompt",
+          tags: [],
+          items: [
+            {
+              question_id: 1,
+              answer: "France",
+              label: "France",
+              media: "/static/france.png"
+            }
+          ],
+          _reviewRetryOfIndex: 0
+        }
+      ],
+      currentIndex: 0,
+      bonusReviewActive: true
+    });
+    const status = container.querySelector("[data-visual-session-status]");
+
+    expect(status).toContainElement(
+      container.querySelector("[data-relearning-badge]")
+    );
+    expect(status).toHaveTextContent("Réapprentissage");
+    expect(status).not.toHaveTextContent("Bonus");
+  });
+
+  it("keeps the total at the base count when retries are queued", () => {
+    // Two questions were failed and re-queued, so the array holds four items,
+    // but the user should still read the session as two questions.
+    const { container } = renderReviewSession({
+      questions: [
+        { id: 1, type_q: "text", question: "Q1", answer: "A1" },
+        { id: 2, type_q: "text", question: "Q2", answer: "A2" },
+        { id: 1, type_q: "text", question: "Q1", answer: "A1", _reviewRetryOfIndex: 0 },
+        { id: 2, type_q: "text", question: "Q2", answer: "A2", _reviewRetryOfIndex: 1 }
+      ],
+      currentIndex: 0
+    });
+
+    expect(screen.getByText("Question 1 / 2")).toBeInTheDocument();
+    expect(screen.queryByText(/\/ 4/)).not.toBeInTheDocument();
+    // The two failed questions are surfaced apart from the total.
+    expect(container.querySelector("[data-relearning-count]"))
+      .toHaveTextContent("2 à revoir");
+    expect(container.querySelector("[data-relearning-badge]"))
+      .not.toBeInTheDocument();
+  });
+
+  it("rests the counter on the total while relearning and counts down retries", () => {
+    const { container } = renderReviewSession({
+      questions: [
+        { id: 1, type_q: "text", question: "Q1", answer: "A1" },
+        { id: 2, type_q: "text", question: "Q2", answer: "A2" },
+        { id: 1, type_q: "text", question: "Q1", answer: "A1", _reviewRetryOfIndex: 0 },
+        { id: 2, type_q: "text", question: "Q2", answer: "A2", _reviewRetryOfIndex: 1 }
+      ],
+      currentIndex: 2
+    });
+
+    // On the first retry: both base questions are behind, one retry still
+    // waiting after this one (the current one is marked by the badge, not the
+    // count).
+    expect(screen.getByText("Question 2 / 2")).toBeInTheDocument();
+    expect(container.querySelector("[data-relearning-count]"))
+      .toHaveTextContent("1 à revoir");
+    expect(container.querySelector("[data-relearning-badge]"))
+      .toBeInTheDocument();
+  });
+
+  it("drops the count on the last retry, leaving only the badge", () => {
+    const { container } = renderReviewSession({
+      questions: [
+        { id: 1, type_q: "text", question: "Q1", answer: "A1" },
+        { id: 1, type_q: "text", question: "Q1", answer: "A1", _reviewRetryOfIndex: 0 }
+      ],
+      currentIndex: 1
+    });
+
+    expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
+    expect(container.querySelector("[data-relearning-count]"))
+      .not.toBeInTheDocument();
+    expect(container.querySelector("[data-relearning-badge]"))
+      .toBeInTheDocument();
+  });
+
+  it("shows no relearning count when nothing has been failed", () => {
+    const { container } = renderReviewSession({
+      questions: [
+        { id: 1, type_q: "text", question: "Q1", answer: "A1" },
+        { id: 2, type_q: "text", question: "Q2", answer: "A2" }
+      ],
+      currentIndex: 0
+    });
+
+    expect(screen.getByText("Question 1 / 2")).toBeInTheDocument();
+    expect(container.querySelector("[data-relearning-count]"))
+      .not.toBeInTheDocument();
+  });
 });

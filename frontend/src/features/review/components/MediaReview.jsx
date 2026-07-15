@@ -721,6 +721,7 @@ export default function MediaReview({
   onAnsweringComplete,
   onComplete,
   submitAnswer,
+  graduateAnswer,
   allowPartialSubmit = false,
   separateFoundItems = false,
   separateResolvedItems = separateFoundItems,
@@ -780,7 +781,9 @@ export default function MediaReview({
     contextItems,
     inlineChoiceRating: showQualityControls,
     mode: requestedMode,
-    onAnsweringComplete
+    onAnsweringComplete,
+    group,
+    graduateAnswer
   });
   const normalizedMode = normalizeImageMode(mode);
   const showTextInput = (

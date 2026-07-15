@@ -1,5 +1,6 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { isRelearningQuestion } from "../relearningGrades";
 import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
@@ -12,6 +13,60 @@ function isVisualQuestion(question) {
 
 function reviewItemCount(question) {
   return Array.isArray(question?.items) ? question.items.length : 1;
+}
+
+function RelearningBadge({ compact = false }) {
+  return (
+    <div
+      data-relearning-badge
+      title="Question ratée : elle revient jusqu'à ce qu'elle soit sue. Les essais suivants ne comptent pas comme de nouveaux oublis."
+      style={{
+        alignItems: "center",
+        background: "#3a2413",
+        border: "1px solid #6b4a21",
+        borderRadius: "999px",
+        color: "#f0a868",
+        display: "inline-flex",
+        fontSize: compact ? "11px" : "12px",
+        fontWeight: 800,
+        gap: "6px",
+        letterSpacing: "0.04em",
+        padding: compact ? "3px 9px" : "5px 11px",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap"
+      }}
+    >
+      <span aria-hidden="true">↻</span>
+      Réapprentissage
+    </div>
+  );
+}
+
+// Shows how many failed questions are still waiting to be relearned, kept apart
+// from the "Question X / Y" total so re-queued retries never inflate Y.
+function RelearningCountChip({ count, compact = false }) {
+  return (
+    <div
+      data-relearning-count
+      title="Questions ratées à revoir avant la fin de la session. Elles ne sont pas comptées dans le total."
+      style={{
+        alignItems: "center",
+        background: "#241a10",
+        border: "1px solid #4a3418",
+        borderRadius: "999px",
+        color: "#e0a05c",
+        display: "inline-flex",
+        fontSize: compact ? "11px" : "12px",
+        fontWeight: 800,
+        gap: "5px",
+        padding: compact ? "3px 9px" : "4px 10px",
+        whiteSpace: "nowrap"
+      }}
+    >
+      <span aria-hidden="true">↻</span>
+      {compact ? count : `${count} à revoir`}
+    </div>
+  );
 }
 
 function reviewedQuestionsLabel(count) {
@@ -256,7 +311,8 @@ export default function ReviewSession({
   submitMediaAnswer,
   submitTextAnswer,
   submitTimelineAnswer,
-  submitSequenceAnswer
+  submitSequenceAnswer,
+  graduateGroupedAnswer
 }) {
   const currentQuestion = questions[currentIndex];
   const reviewedCount = questions.reduce(
@@ -273,6 +329,35 @@ export default function ReviewSession({
   const useCompactVisualLayout = hasActiveQuestion && isVisualQuestion(currentQuestion);
   const showReturnToBonusMenu = bonusReviewActive && !bonusMenuOpen;
   const headerSubtitle = `${questions.length} questions disponibles`;
+  const relearning = hasActiveQuestion && isRelearningQuestion(currentQuestion);
+  // Failing a question appends a retry to `questions`, so its length grows as
+  // the session goes. The counter denominator stays the number of distinct
+  // questions the session started with, and the relearning retries are surfaced
+  // separately instead of inflating the total.
+  const baseQuestionTotal = questions.reduce(
+    (total, question) => total + (isRelearningQuestion(question) ? 0 : 1),
+    0
+  );
+  const questionsReachedThroughCurrent = questions
+    .slice(0, currentIndex + 1)
+    .reduce(
+      (total, question) => total + (isRelearningQuestion(question) ? 0 : 1),
+      0
+    );
+  // On a relearning pass every base question has already been reached, so the
+  // counter rests at the total rather than counting past it.
+  const questionNumber = relearning
+    ? baseQuestionTotal
+    : questionsReachedThroughCurrent;
+  // Failed questions still queued behind the current one. The current card, if
+  // it is itself a retry, is left out: the RÉAPPRENTISSAGE badge already marks
+  // it, so the count reads as "still waiting" rather than double-marking it.
+  const relearningRemaining = questions.reduce(
+    (total, question, index) =>
+      total + (isRelearningQuestion(question) && index > currentIndex ? 1 : 0),
+    0
+  );
+  const showRelearningCount = hasActiveQuestion && relearningRemaining > 0;
 
   if (useCompactVisualLayout) {
     return (
@@ -402,16 +487,20 @@ export default function ReviewSession({
                 width: "100%"
               }}
             >
-              <div
-                style={{
-                  color: "#f0c36a",
-                  fontSize: "11px",
-                  fontWeight: 900,
-                  textTransform: "uppercase"
-                }}
-              >
-                {bonusReviewActive ? "Bonus" : "Révision"}
-              </div>
+              {relearning ? (
+                <RelearningBadge compact />
+              ) : (
+                <div
+                  style={{
+                    color: "#f0c36a",
+                    fontSize: "11px",
+                    fontWeight: 900,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  {bonusReviewActive ? "Bonus" : "Révision"}
+                </div>
+              )}
               <div
                 style={{
                   color: "#888",
@@ -420,8 +509,11 @@ export default function ReviewSession({
                   lineHeight: 1.2
                 }}
               >
-                Question {currentIndex + 1} / {questions.length}
+                Question {questionNumber} / {baseQuestionTotal}
               </div>
+              {showRelearningCount && (
+                <RelearningCountChip count={relearningRemaining} compact />
+              )}
               {(currentQuestion.tags || []).length > 0 && (
                 <div
                   style={{
@@ -504,6 +596,7 @@ export default function ReviewSession({
               submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               submitSequenceAnswer={submitSequenceAnswer}
+              graduateGroupedAnswer={graduateGroupedAnswer}
               allowPartialSubmit={bonusReviewActive}
               compactVisualLayout
             />
@@ -701,8 +794,14 @@ export default function ReviewSession({
                     fontSize: "14px"
                   }}
                 >
-                  Question {currentIndex + 1} / {questions.length}
+                  Question {questionNumber} / {baseQuestionTotal}
                 </div>
+
+                {showRelearningCount && (
+                  <RelearningCountChip count={relearningRemaining} />
+                )}
+
+                {relearning && <RelearningBadge />}
 
                 {showReturnToBonusMenu && (
                   <button
@@ -788,6 +887,7 @@ export default function ReviewSession({
               submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               submitSequenceAnswer={submitSequenceAnswer}
+              graduateGroupedAnswer={graduateGroupedAnswer}
               allowPartialSubmit={bonusReviewActive}
             />
 

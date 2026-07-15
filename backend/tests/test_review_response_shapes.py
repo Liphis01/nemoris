@@ -46,6 +46,7 @@ PROGRESS_KEYS = {
     "ideal_next_review",
     "fsrs_state",
     "fsrs_version",
+    "relearning",
     "history"
 }
 TEXT_REVIEW_KEYS = {

@@ -115,6 +115,22 @@ export function reviseAnswer(questionId, quality, reviewDate = undefined) {
 }
 
 
+// "Acquis": end the relearning loop for these cards. Carries no grade -- the
+// backend reschedules from the frozen first-fail state.
+export function graduateRelearning(questionIds, reviewDate = undefined) {
+  return requestOk("/answer/relearning_graduate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      question_ids: questionIds,
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+
+
 function answerContextPayload(contextCount) {
   return Number.isFinite(contextCount)
     ? { context_count: contextCount }

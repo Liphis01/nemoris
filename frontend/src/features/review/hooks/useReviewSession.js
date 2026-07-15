@@ -4,6 +4,7 @@ import {
   getBonusGroups,
   getBonusGroupItems,
   getReview,
+  graduateRelearning,
   sendMediaAnswer,
   sendMapAnswer,
   sendTextAnswer,
@@ -12,6 +13,11 @@ import {
   reviseAnswer,
   sendAnswer
 } from "../../../api/review";
+import {
+  GOT_IT_QUALITY,
+  STILL_LEARNING_QUALITY,
+  isRelearningQuestion
+} from "../relearningGrades";
 
 
 function isEditableTarget(target) {
@@ -233,26 +239,40 @@ export function useReviewSession(active) {
   ) => sendSequenceAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
+  // "Acquis" for grouped items: graduate them from the frozen first-fail state
+  // on the pinned session date, carrying no grade.
+  const graduateGroupedAnswer = useCallback((questionIds) =>
+    graduateRelearning(questionIds, reviewDateRef.current),
+  []);
+
   const handleTextAnswer = useCallback((quality) => {
     if (!current || textAnswerPendingRef.current) return;
 
     // Fire-and-advance keeps review fast. Failures are appended to the end so
     // they appear again after the current queue.
     const answerIndex = currentIndex;
+    const relearning = isRelearningQuestion(current);
     const existingAnswer = answeredTextByIndex[answerIndex]?.questionId === current.question_id
       ? answeredTextByIndex[answerIndex]
       : null;
     const previousQuality = existingAnswer?.quality;
     const previousRequest = textAnswerRequestsRef.current[answerIndex] || Promise.resolve();
-    const request = existingAnswer
-      ? previousRequest
-        .catch(() => null)
-        .then(() => reviseAnswer(
-          current.question_id,
-          quality,
-          reviewDateRef.current
-        ))
-      : sendAnswer(current.question_id, quality, reviewDateRef.current);
+    // A relearning retry never re-grades: the first fail already set the
+    // schedule and froze FSRS. "Encore" just loops (re-queued below); "Acquis"
+    // graduates the card from its frozen state via the dedicated endpoint.
+    const request = relearning
+      ? (quality === STILL_LEARNING_QUALITY
+        ? Promise.resolve()
+        : graduateRelearning([current.question_id], reviewDateRef.current))
+      : existingAnswer
+        ? previousRequest
+          .catch(() => null)
+          .then(() => reviseAnswer(
+            current.question_id,
+            quality,
+            reviewDateRef.current
+          ))
+        : sendAnswer(current.question_id, quality, reviewDateRef.current);
 
     textAnswerRequestsRef.current[answerIndex] = request;
     request.catch(console.error);
@@ -584,19 +604,23 @@ export function useReviewSession(active) {
       }
 
       if (showAnswer) {
+        // A relearning retry is binary: only Encore (0) and Acquis (1) act, so
+        // the 2/3 grades can't slip a same-day retry back into FSRS.
+        const relearning = isRelearningQuestion(current);
+
         if (event.key === "0") {
           event.preventDefault();
-          handleTextAnswer(0);
+          handleTextAnswer(STILL_LEARNING_QUALITY);
         }
         if (event.key === "1") {
           event.preventDefault();
-          handleTextAnswer(1);
+          handleTextAnswer(relearning ? GOT_IT_QUALITY : 1);
         }
-        if (event.key === "2") {
+        if (!relearning && event.key === "2") {
           event.preventDefault();
           handleTextAnswer(2);
         }
-        if (event.key === "3") {
+        if (!relearning && event.key === "3") {
           event.preventDefault();
           handleTextAnswer(3);
         }
@@ -637,6 +661,7 @@ export function useReviewSession(active) {
     submitTextAnswer,
     submitTimelineAnswer,
     submitSequenceAnswer,
+    graduateGroupedAnswer,
     questions,
     reviewError,
     reviewLoading,

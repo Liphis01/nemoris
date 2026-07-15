@@ -3,6 +3,11 @@ import { createPortal } from "react-dom";
 import { fadeInStyle } from "../../../shared/styles";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import {
+    GOT_IT_QUALITY,
+    STILL_LEARNING_QUALITY,
+    isRelearningQuestion
+} from "../relearningGrades";
 
 const answerButtonStyle = {
     flex: 1,
@@ -44,6 +49,28 @@ const answerOptions = [
     {
         value: 3,
         label: "3 · ✅ Facile",
+        background: "#1d3a2b",
+        selectedBackground: "#256844",
+        color: "#7ee2a8",
+        selectedColor: "#ddffeb"
+    }
+];
+
+// On a relearning retry the four grades collapse to a binary choice. Encore
+// keeps the card in the session loop; Acquis graduates it. Same button shape as
+// answerOptions so getAnswerButtonStyle can render both.
+const relearningOptions = [
+    {
+        value: STILL_LEARNING_QUALITY,
+        label: "0 · ❌ Encore",
+        background: "#3a1f24",
+        selectedBackground: "#6a2732",
+        color: "#ff9aa5",
+        selectedColor: "#ffe2e5"
+    },
+    {
+        value: GOT_IT_QUALITY,
+        label: "1 · ✅ Acquis",
         background: "#1d3a2b",
         selectedBackground: "#256844",
         color: "#7ee2a8",
@@ -290,6 +317,8 @@ export default function TextReviewCard({
     const displayQuality = selectedQuality ?? currentQuality;
     const hasQuestionMedia = Boolean(q.media);
     const typeStyle = getQuestionTypeChipStyle(q.type_q);
+    const relearning = isRelearningQuestion(q);
+    const gradeOptions = relearning ? relearningOptions : answerOptions;
 
     useEffect(() => {
         if (!showAnswer) return undefined;
@@ -463,7 +492,7 @@ export default function TextReviewCard({
                                 }}
                             >
 
-                                {answerOptions.map(option => (
+                                {gradeOptions.map(option => (
                                     <button
                                         key={option.value}
                                         aria-pressed={displayQuality === option.value}

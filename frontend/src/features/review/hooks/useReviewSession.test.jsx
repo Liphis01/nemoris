@@ -6,6 +6,7 @@ import {
   getBonusGroups,
   getBonusGroupItems,
   getReview,
+  graduateRelearning,
   sendMediaAnswer,
   sendMapAnswer,
   sendTimelineAnswer,
@@ -18,6 +19,7 @@ vi.mock("../../../api/review", () => ({
   getBonusGroups: vi.fn(),
   getBonusGroupItems: vi.fn(),
   getReview: vi.fn(),
+  graduateRelearning: vi.fn(),
   sendMediaAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
   sendTextAnswer: vi.fn(),
@@ -49,6 +51,7 @@ describe("useReviewSession", () => {
     sendMediaAnswer.mockResolvedValue({});
     sendTimelineAnswer.mockResolvedValue({});
     reviseAnswer.mockResolvedValue({});
+    graduateRelearning.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -128,11 +131,14 @@ describe("useReviewSession", () => {
 
     vi.setSystemTime(new Date(2026, 0, 2, 0, 5));
 
+    // The retry is a relearning card, so "Acquis" graduates it (no re-grade) on
+    // the pinned session date rather than sending another answer.
     act(() => {
-      result.current.handleTextAnswer(2);
+      result.current.handleTextAnswer(1);
     });
 
-    expect(sendAnswer).toHaveBeenLastCalledWith(10, 2, "2026-01-01");
+    expect(graduateRelearning).toHaveBeenLastCalledWith([10], "2026-01-01");
+    expect(sendAnswer).toHaveBeenCalledTimes(1);
   });
 
   it("keeps text answer revisions on the original session date after midnight", async () => {

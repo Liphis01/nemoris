@@ -7,17 +7,20 @@ from ..schemas import (
     AnswerRequest,
     MapAnswerRequest,
     MediaAnswerRequest,
+    RelearningGraduateRequest,
     ReviewSettings,
     SequenceAnswerRequest,
     TextAnswerRequest,
     TimelineAnswerRequest
 )
+from ..scheduler import progress_in_relearning
 from ..serializers import serialize_progress
 from ..services.collections import sync_generated_hard_collection
 from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
     create_initial_progress,
+    graduate_relearning,
     rebalance_progress_calendar,
     replace_latest_scheduling
 )
@@ -91,7 +94,7 @@ def parse_group_ids(value):
     return group_ids
 
 
-def answer_progress_payload(progress):
+def answer_progress_payload(progress, today=None):
     return {
         "stability": progress.stability,
         "difficulty": progress.difficulty,
@@ -102,6 +105,7 @@ def answer_progress_payload(progress):
         "ideal_next_review": progress.ideal_next_review,
         "reps": progress.reps,
         "lapses": progress.lapses,
+        "relearning": progress_in_relearning(progress, today),
         "history": progress.history or []
     }
 
@@ -224,7 +228,7 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
     db.commit()
     sync_generated_hard_collection(db)
 
-    return answer_progress_payload(progress)
+    return answer_progress_payload(progress, today=data.review_date)
 
 
 @router.post("/answer/revise")
@@ -251,7 +255,27 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
     db.commit()
     sync_generated_hard_collection(db)
 
-    return answer_progress_payload(progress)
+    return answer_progress_payload(progress, today=data.review_date)
+
+
+@router.post("/answer/relearning_graduate")
+def graduate_relearning_cards(
+    data: RelearningGraduateRequest,
+    db: Session = Depends(get_db)
+):
+    # "Acquis": end the in-session relearning loop for these cards without
+    # grading them. Scheduling is derived from the frozen first-fail state.
+    graduated = graduate_relearning(
+        db,
+        data.question_ids,
+        today=data.review_date
+    )
+    db.commit()
+
+    return {
+        "status": "ok",
+        "graduated": [progress.question_id for progress in graduated]
+    }
 
 
 @router.post("/answer_map")

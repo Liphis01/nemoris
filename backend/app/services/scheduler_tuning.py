@@ -174,7 +174,19 @@ def mode_difficulty_for_event(event, params):
     return 1.0
 
 
-def write_replay_progress(progress, scheduling):
+def write_replay_progress(progress, quality, scheduling):
+    # update_progress reads the previous answer back off the history to spot a
+    # same-day retry, so the replay has to keep one exactly like the live write
+    # path does. Without it the tuner would fit against compounded lapses the
+    # real scheduler no longer books.
+    progress.history = [
+        *(progress.history or []),
+        {
+            "reviewed_on": scheduling["last_review"].isoformat(),
+            "quality": quality,
+            "repeat_lapse": scheduling.get("repeat_lapse", False)
+        }
+    ]
     progress.stability = scheduling["stability"]
     progress.difficulty = scheduling["difficulty"]
     progress.reps = scheduling["reps"]
@@ -254,7 +266,7 @@ def replay_progress_for_samples(progress, params):
             scheduler_tuning=params.to_settings(),
             enable_fuzzing=False
         )
-        write_replay_progress(replay, scheduling)
+        write_replay_progress(replay, event.quality, scheduling)
         previous_event = event
 
     return samples

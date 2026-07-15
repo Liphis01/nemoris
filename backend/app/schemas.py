@@ -200,6 +200,13 @@ class AnswerRequest(BaseModel):
     review_date: Optional[date] = None
 
 
+class RelearningGraduateRequest(BaseModel):
+    # "Acquis": the user finished relearning these cards this session. It carries
+    # no grade -- the schedule is derived from the frozen first-fail state.
+    question_ids: List[int]
+    review_date: Optional[date] = None
+
+
 class ReviewSettings(BaseModel):
     catchup_daily_target: int = Field(
         ge=1,

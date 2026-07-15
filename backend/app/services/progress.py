@@ -1,14 +1,18 @@
-from datetime import date
+from datetime import date, timedelta
 
 from ..models import Progress, Question
 from ..scheduler import (
     FSRS_VERSION,
+    MIN_STABILITY,
     assign_smoothed_schedules,
     apply_favorite_review_frequency,
     candidate_review_dates,
+    create_fsrs_scheduler,
     new_fsrs_card_data,
     parse_history_date,
+    progress_in_relearning,
     rebalance_review_calendar,
+    set_fsrs_card_due_date,
     update_progress
 )
 from .settings import get_review_settings, load_scheduler_tuning_settings
@@ -113,6 +117,11 @@ def record_answer_history(
         if key in scheduling:
             entry[key] = scheduling[key]
 
+    if scheduling.get("repeat_lapse"):
+        # Marks the retries that deliberately did not move stability, difficulty
+        # or the lapse count, so replayed history matches what was scheduled.
+        entry["repeat_lapse"] = True
+
     if metadata:
         entry.update(metadata)
 
@@ -145,7 +154,10 @@ def write_scheduling(
     progress.fsrs_card = scheduling.get("fsrs_card")
     progress.fsrs_version = scheduling.get("fsrs_version", FSRS_VERSION)
 
-    record_answer_history(progress, quality, scheduling, metadata=metadata)
+    # A frozen relearning retry leaves no trace in history, so the day keeps
+    # showing exactly one fail and stats stay honest.
+    if not scheduling.get("skip_history"):
+        record_answer_history(progress, quality, scheduling, metadata=metadata)
 
     return scheduling
 
@@ -194,7 +206,11 @@ def restore_progress_from_history(progress: Progress, history, today=None):
     progress.lapses = _number_from_history(
         latest,
         "lapses",
-        sum(1 for entry in history if entry.get("quality") == 0),
+        sum(
+            1
+            for entry in history
+            if entry.get("quality") == 0 and not entry.get("repeat_lapse")
+        ),
         caster=int
     )
     progress.interval = _number_from_history(latest, "interval", 0, caster=int)
@@ -430,6 +446,49 @@ def apply_scheduling(
         [(progress, quality, metadata)] if metadata else [(progress, quality)],
         today=today
     )[0]
+
+
+def graduate_relearning(db, question_ids, today=None):
+    """
+    Finish the in-session relearning loop for the given cards ("Acquis").
+
+    This carries no grade: the first fail already recorded the lapse and froze the
+    memory state, and the user's directive is that FSRS ignores everything after
+    it. So this only moves the card out of today's queue, to the interval its
+    frozen stability already implies (~1-2 days) -- stability, difficulty, lapses,
+    reps and history are left untouched. Cards that are not actually in relearning
+    are skipped, so the call is safe and idempotent.
+    """
+    today = today or date.today()
+    scheduler = create_fsrs_scheduler(enable_fuzzing=False)
+    graduated = []
+
+    for question_id in question_ids:
+        progress = (
+            db.query(Progress)
+            .filter(Progress.question_id == question_id)
+            .first()
+        )
+
+        if not progress or not progress_in_relearning(progress, today):
+            continue
+
+        interval = scheduler._next_interval(
+            stability=progress.stability or MIN_STABILITY
+        )
+        next_review = today + timedelta(days=interval)
+
+        progress.interval = interval
+        progress.ideal_interval = interval
+        progress.next_review = next_review
+        progress.ideal_next_review = next_review
+        progress.fsrs_card = set_fsrs_card_due_date(
+            progress.fsrs_card,
+            next_review
+        )
+        graduated.append(progress)
+
+    return graduated
 
 
 def rebalance_progress_calendar(db, today=None):

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMapAnswer } from "../../../api/review";
+import { partitionRelearningQualities } from "../relearningGrades";
 import {
   MAP_MODE_CLICK_PROMPT,
   MAP_MODE_MULTIPLE_CHOICE,
@@ -423,6 +424,8 @@ export function useMapReview(
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
+  const relearningGroup = options.group;
+  const graduateAnswer = options.graduateAnswer;
   const isPromptMode = mode !== MAP_MODE_TYPE_ALL;
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
@@ -670,10 +673,19 @@ export function useMapReview(
 
     try {
       const qualities = submittedMapQualities(qualityMap);
+      // Relearning zones never re-grade: send only the ordinary grades and
+      // graduate the "Acquis" ones. "Encore" (0) stays in failedQuestionIds.
+      const { graded, graduateIds } = partitionRelearningQualities(
+        relearningGroup,
+        qualities
+      );
 
-      if (Object.keys(qualities).length > 0) {
-        await submitAnswer(qualities, mode, contextItems.length);
-      }
+      await Promise.all([
+        Object.keys(graded).length > 0
+          ? submitAnswer(graded, mode, contextItems.length)
+          : null,
+        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
+      ].filter(Boolean));
 
       const failedQuestionIds = Object.entries(qualities)
         .filter(([, quality]) => quality === 0)

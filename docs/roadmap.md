@@ -8,8 +8,7 @@
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- créer de nouveaux modes timeline
-- should we count the successive fails in the same session as a single fail for the purpose of scheduling? (ex: if I fail 3 times in a row, should it count as 1 fail or 3 fails for scheduling purposes?) or should we count each fail separately? (ex: if I fail 3 times in a row, should it count as 3 fails for scheduling purposes?) (I think the first option is better because it would be more forgiving and would not penalize the user too much for a single mistake, but it might also make the scheduling less accurate)
+- créer de nouveaux modes timeline (et revoir la création ?)
 
 ## quick fixes
 

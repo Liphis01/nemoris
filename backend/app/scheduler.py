@@ -161,6 +161,82 @@ def _apply_failure_difficulty_penalty(previous, current, penalty_factor):
     )
 
 
+def is_repeat_lapse(rating, previous_rating, review_day, previous_review_day):
+    """
+    True when a card is failed again on a day it has already failed on.
+
+    A lapse is the event of forgetting a card on a given day, not each wrong
+    answer: once the card has failed today it is being relearned, and the
+    retries the session queues behind it carry no new evidence, because the
+    answer was on screen moments ago. Counting them again would book one
+    forgotten card as several.
+
+    The rule reads the previous answer rather than a session id, so a retry is
+    still recognised after the user leaves and reopens review, while a new day
+    is fresh evidence and lapses again. It cannot key off the FSRS card state:
+    create_fsrs_scheduler runs with no relearning steps, so cards stay in
+    State.Review and never report being relearned.
+    """
+    return (
+        rating == Rating.Again
+        and previous_rating == Rating.Again
+        and previous_review_day is not None
+        and previous_review_day == review_day
+    )
+
+
+def progress_repeat_lapse(progress, rating, today):
+    """Apply is_repeat_lapse to the last answer recorded on a Progress row."""
+    history = progress_value(progress, "history", None) or []
+    latest = history[-1] if history else None
+
+    if not isinstance(latest, dict):
+        return False
+
+    previous_rating = (
+        Rating.Again
+        if latest.get("quality") == APP_QUALITY_AGAIN
+        else None
+    )
+
+    return is_repeat_lapse(
+        rating,
+        previous_rating,
+        today,
+        parse_history_date(latest.get("reviewed_on"))
+    )
+
+
+def progress_in_relearning(progress, today=None):
+    """
+    True when a card is mid-relearning: it lapsed earlier today and has not yet
+    been graduated, so it is still due today.
+
+    Derived entirely from persisted state (next_review + the last history entry),
+    so the relearning status survives an app refresh with no extra column. The
+    day rollover retires it automatically: once the lapse is no longer "today"
+    the card reads as an ordinary due review, and its recorded fail still stands.
+    """
+    today = today or date.today()
+
+    if progress is None:
+        return False
+
+    if getattr(progress, "next_review", None) != today:
+        return False
+
+    history = progress_value(progress, "history", None) or []
+    latest = history[-1] if history else None
+
+    if not isinstance(latest, dict):
+        return False
+
+    return (
+        latest.get("quality") == APP_QUALITY_AGAIN
+        and parse_history_date(latest.get("reviewed_on")) == today
+    )
+
+
 def review_datetime_for_date(day):
     day = day or date.today()
     return datetime(
@@ -778,7 +854,8 @@ def apply_mode_difficulty_to_review(
     review_datetime,
     mode_difficulty=None,
     easy_reward_floor=None,
-    failure_penalty_power=None
+    failure_penalty_power=None,
+    repeat_lapse=False
 ):
     mode_difficulty = normalize_mode_difficulty(mode_difficulty)
     base_interval = max(0, (next_review - last_review).days)
@@ -815,30 +892,35 @@ def apply_mode_difficulty_to_review(
     }
 
     if rating == Rating.Again:
-        penalty_factor = failure_penalty_factor(
-            mode_difficulty,
-            failure_penalty_power=failure_penalty_power
-        )
-
-        if stability is not None and stability < previous_stability:
-            stability = _apply_failure_stability_penalty(
-                previous_stability,
-                stability,
-                penalty_factor
+        # The mode penalty rides on top of the FSRS lapse, so it has to be held
+        # back on a retry for the same reason the lapse itself is: it would
+        # otherwise re-anchor on the already-penalised values and compound.
+        if not repeat_lapse:
+            penalty_factor = failure_penalty_factor(
+                mode_difficulty,
+                failure_penalty_power=failure_penalty_power
             )
 
-        if difficulty is not None and difficulty > previous_difficulty:
-            difficulty = _apply_failure_difficulty_penalty(
-                previous_difficulty,
-                difficulty,
-                penalty_factor
-            )
+            if stability is not None and stability < previous_stability:
+                stability = _apply_failure_stability_penalty(
+                    previous_stability,
+                    stability,
+                    penalty_factor
+                )
+
+            if difficulty is not None and difficulty > previous_difficulty:
+                difficulty = _apply_failure_difficulty_penalty(
+                    previous_difficulty,
+                    difficulty,
+                    penalty_factor
+                )
+
+            result["mode_penalty_factor"] = penalty_factor
 
         reviewed_card.due = review_datetime
         result.update({
             "interval": 0,
-            "next_review": date_from_review_datetime(reviewed_card.due),
-            "mode_penalty_factor": penalty_factor
+            "next_review": date_from_review_datetime(reviewed_card.due)
         })
     else:
         reward_factor = success_reward_factor(
@@ -893,6 +975,49 @@ def apply_mode_difficulty_to_review(
     return result
 
 
+def _frozen_relearning_scheduling(progress, rating, today, enable_fuzzing):
+    """
+    Scheduling for a retry on a card that already lapsed today.
+
+    The first fail is the whole scheduling story for the day, so a retry never
+    re-grades: stability, difficulty, lapses and reps are held, and no history
+    entry is recorded (the day shows exactly one fail). "Encore" (Again) keeps
+    the card due today so the loop continues and survives a refresh; any success
+    graduates it to the interval its frozen stability already implies -- the same
+    schedule the first fail would have produced.
+    """
+    stability = progress_value(progress, "stability", 1.0)
+    difficulty = progress_value(progress, "difficulty", 5.0)
+    reps = progress_value(progress, "reps", 0)
+    lapses = progress_value(progress, "lapses", 0)
+    last_review = getattr(progress, "last_review", None) or today
+
+    if rating == Rating.Again:
+        interval = 0
+        next_review = today
+    else:
+        scheduler = create_fsrs_scheduler(enable_fuzzing=False)
+        interval = scheduler._next_interval(stability=stability)
+        next_review = today + timedelta(days=interval)
+
+    return {
+        "stability": stability,
+        "difficulty": difficulty,
+        "reps": reps,
+        "lapses": lapses,
+        "relearning_frozen": True,
+        "skip_history": True,
+        "interval": interval,
+        "next_review": next_review,
+        "last_review": last_review,
+        "fsrs_card": set_fsrs_card_due_date(
+            getattr(progress, "fsrs_card", None),
+            next_review
+        ),
+        "fsrs_version": FSRS_VERSION
+    }
+
+
 def update_progress(
     progress,
     quality,
@@ -911,6 +1036,21 @@ def update_progress(
     isolated from database mutation.
     """
     today = today or date.today()
+    rating = app_quality_to_fsrs_rating(quality)
+
+    # A retry on a card that already lapsed today is in-session relearning, not a
+    # new review: FSRS is frozen at the first fail. The server-graded types
+    # (timeline, sequence) reach this after the answer was graded for feedback;
+    # the client-graded types divert relearning items on the frontend, so this is
+    # also a safety net that keeps the freeze holding across a refresh.
+    if progress_in_relearning(progress, today):
+        return _frozen_relearning_scheduling(
+            progress,
+            rating,
+            today,
+            enable_fuzzing
+        )
+
     easy_reward_floor = _tuning_value(
         scheduler_tuning,
         "easy_reward_floor",
@@ -921,22 +1061,33 @@ def update_progress(
         "failure_penalty_power",
         failure_penalty_power
     )
-    rating = app_quality_to_fsrs_rating(quality)
     scheduler = create_fsrs_scheduler(enable_fuzzing=enable_fuzzing)
     review_datetime = review_datetime_for_date(today)
     card = fsrs_card_for_progress(progress, today=today)
+    repeat_lapse = progress_repeat_lapse(progress, rating, today)
     reviewed_card, review_log = scheduler.review_card(
         card,
         rating,
         review_datetime=review_datetime
     )
+
+    if repeat_lapse:
+        # The card already lapsed today, so this is a retry rather than a second
+        # memory failure. FSRS compounds every same-day fail: three of them take
+        # stability 18.2 -> 1.8 -> 0.6 -> 0.2 and difficulty 2.1 -> 7.4 -> 9.1 ->
+        # 9.7, burying a card the user fumbled once. Hold the memory state at the
+        # single lapse; the passing grade that ends the retry still moves it.
+        reviewed_card.stability = card.stability
+        reviewed_card.difficulty = card.difficulty
+
     next_review = date_from_review_datetime(reviewed_card.due)
     last_review = date_from_review_datetime(reviewed_card.last_review) or today
     reps = progress_value(progress, "reps", 0) + 1
     lapses = progress_value(progress, "lapses", 0)
 
     if rating == Rating.Again:
-        lapses += 1
+        if not repeat_lapse:
+            lapses += 1
         # A failed card stays due immediately so leaving and reopening review
         # does not drop the retry that the frontend would have queued in memory.
         reviewed_card.due = review_datetime
@@ -952,7 +1103,8 @@ def update_progress(
         review_datetime,
         mode_difficulty=mode_difficulty,
         easy_reward_floor=easy_reward_floor,
-        failure_penalty_power=failure_penalty_power
+        failure_penalty_power=failure_penalty_power,
+        repeat_lapse=repeat_lapse
     )
     reviewed_card = mode_adjustment["card"]
     next_review = mode_adjustment["next_review"]
@@ -962,6 +1114,7 @@ def update_progress(
         "difficulty": reviewed_card.difficulty,
         "reps": reps,
         "lapses": lapses,
+        "repeat_lapse": repeat_lapse,
         "interval": mode_adjustment["interval"],
         "next_review": next_review,
         "last_review": last_review,

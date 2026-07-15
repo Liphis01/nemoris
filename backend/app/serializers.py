@@ -1,4 +1,4 @@
-from .scheduler import preview_intervals
+from .scheduler import preview_intervals, progress_in_relearning
 from .services.image_modes import (
     DEFAULT_IMAGE_MODE,
     normalize_image_mode
@@ -17,7 +17,7 @@ from .services.text_modes import (
 )
 
 
-def serialize_progress(progress):
+def serialize_progress(progress, today=None):
     # Frontend components expect a complete progress object even for old rows
     # that do not yet have a Progress record.
     if not progress:
@@ -33,6 +33,7 @@ def serialize_progress(progress):
             "ideal_next_review": None,
             "fsrs_state": None,
             "fsrs_version": None,
+            "relearning": False,
             "history": []
         }
 
@@ -66,6 +67,10 @@ def serialize_progress(progress):
         ),
         "fsrs_state": fsrs_state,
         "fsrs_version": progress.fsrs_version,
+        # Derived, not stored: a card that lapsed today and is still due today is
+        # in the in-session relearning loop. Lets the frontend show the binary
+        # Encore/Acquis controls even after a refresh.
+        "relearning": progress_in_relearning(progress, today),
         "history": progress.history or []
     }
 

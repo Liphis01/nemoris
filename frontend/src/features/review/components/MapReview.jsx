@@ -9,6 +9,11 @@ import {
 } from "../hooks/useMapReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 import {
+  GOT_IT_QUALITY,
+  isRelearningGroupItem,
+  relearningQualityOptions
+} from "../relearningGrades";
+import {
   MAP_MODE_CLICK_PROMPT,
   MAP_MODE_MULTIPLE_CHOICE,
   MAP_MODE_TYPE_ALL,
@@ -237,6 +242,7 @@ export default function MapReview({
   onAnsweringComplete,
   onComplete,
   submitAnswer,
+  graduateAnswer,
   allowPartialSubmit = false,
   showQualityControls = true,
   trainingElapsedMs = null,
@@ -295,7 +301,9 @@ export default function MapReview({
     mode: normalizedMode,
     contextItems,
     inlineChoiceRating: showQualityControls,
-    onAnsweringComplete
+    onAnsweringComplete,
+    group,
+    graduateAnswer
   });
   const showChoiceRating = (
     mode === MAP_MODE_MULTIPLE_CHOICE &&
@@ -1417,7 +1425,9 @@ export default function MapReview({
                       showRecapSections &&
                       (index === 0 || recapRows[index - 1].isFound !== isFound);
                     const isFocused = focusedCode === item.code;
-                    const selectedQuality = qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
+                    const rowRelearning = isRelearningGroupItem(group, item);
+                    const selectedQuality = qualityByQuestionId[item.question_id]
+                      ?? (isFound ? (rowRelearning ? GOT_IT_QUALITY : 2) : 0);
                     const recapStatusLabel = isUnanswered
                       ? "Non répondu"
                       : isFound ? "Trouvée" : "À revoir";
@@ -1428,9 +1438,13 @@ export default function MapReview({
                         item.progress?.interval ??
                         0
                       );
-                    const rowQualityOptions = canBeUnanswered
-                      ? [unansweredQualityOption, ...qualityOptions]
-                      : qualityOptions;
+                    // A relearning zone collapses to the binary Encore/Acquis
+                    // choice; the grade is never re-applied to FSRS.
+                    const rowQualityOptions = rowRelearning
+                      ? relearningQualityOptions
+                      : canBeUnanswered
+                        ? [unansweredQualityOption, ...qualityOptions]
+                        : qualityOptions;
 
                     return (
                       <Fragment key={item.question_id}>

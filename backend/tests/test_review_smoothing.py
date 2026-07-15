@@ -1165,9 +1165,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
         self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
 
-    def test_bonus_text_retry_records_the_failure_and_the_retry(self):
-        # The failed first answer is a real review, and the in-session retry is
-        # a second one, both on the supplied review date.
+    def test_bonus_text_retry_is_frozen_and_graduates_the_card(self):
+        # The failed first answer is the only recorded review of the day. A
+        # same-day pass is a relearning "Acquis": it is frozen (no new history,
+        # no extra rep) and graduates the card forward from the frozen state.
         review_day = date(2026, 1, 1)
         self.add_question(1, type_q="text")
         self.db.commit()
@@ -1197,14 +1198,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(
-            [entry["reviewed_on"] for entry in progress.history],
-            [review_day.isoformat(), review_day.isoformat()]
-        )
-        self.assertEqual(
             [entry["quality"] for entry in progress.history],
-            [0, 2]
+            [0]
         )
-        self.assertEqual(progress.reps, 2)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.lapses, 1)
+        self.assertGreater(progress.next_review, review_day)
 
     def test_revise_single_answer_uses_supplied_review_date(self):
         review_day = date(2026, 1, 1)

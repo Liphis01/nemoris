@@ -43,6 +43,7 @@ export default function ReviewQuestionRenderer({
     submitTextAnswer,
     submitTimelineAnswer,
     submitSequenceAnswer,
+    graduateGroupedAnswer,
     allowPartialSubmit = false,
     trainingMode = false,
     trainingElapsedMs = null,
@@ -69,6 +70,7 @@ export default function ReviewQuestionRenderer({
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 allowPartialSubmit={allowPartialSubmit}
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
@@ -92,6 +94,7 @@ export default function ReviewQuestionRenderer({
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleImageComplete}
                 submitAnswer={submitMediaAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 allowPartialSubmit={allowPartialSubmit}
                 separateResolvedItems={separatesResolvedItems}
                 showQualityControls={!trainingMode}
@@ -111,6 +114,7 @@ export default function ReviewQuestionRenderer({
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 fillAvailableHeight={compactVisualLayout}
             />
         );
@@ -127,6 +131,7 @@ export default function ReviewQuestionRenderer({
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleSequenceComplete}
                 submitAnswer={submitSequenceAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 fillAvailableHeight={compactVisualLayout}
             />
         );
@@ -143,6 +148,7 @@ export default function ReviewQuestionRenderer({
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleImageComplete}
                 submitAnswer={submitTextAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 showQualityControls={!trainingMode}
                 fillAvailableHeight={compactVisualLayout}
             />

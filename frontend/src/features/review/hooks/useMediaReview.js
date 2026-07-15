@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMediaAnswer } from "../../../api/review";
+import { partitionRelearningQualities } from "../relearningGrades";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -482,6 +483,8 @@ export function useMediaReview(
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewItems;
+  const relearningGroup = options.group;
+  const graduateAnswer = options.graduateAnswer;
   const reviewKey = useMemo(
     () => `${mode}:${idsFor(reviewItems).join("|")}`,
     [mode, reviewItems]
@@ -815,10 +818,19 @@ export function useMediaReview(
 
     try {
       const qualities = submittedQualitiesFromRecap(qualityMap);
+      // Relearning items never re-grade: send only the ordinary grades and
+      // graduate the "Acquis" ones. "Encore" (0) stays in failedQuestionIds.
+      const { graded, graduateIds } = partitionRelearningQualities(
+        relearningGroup,
+        qualities
+      );
 
-      if (Object.keys(qualities).length > 0) {
-        await submitAnswer(qualities, mode, contextItems.length);
-      }
+      await Promise.all([
+        Object.keys(graded).length > 0
+          ? submitAnswer(graded, mode, contextItems.length)
+          : null,
+        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
+      ].filter(Boolean));
 
       const failedQuestionIds = Object.entries(qualities)
         .filter(([, quality]) => quality === 0)
