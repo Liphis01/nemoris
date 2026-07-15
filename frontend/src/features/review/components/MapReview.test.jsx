@@ -524,6 +524,25 @@ describe("MapReview recap map focus", () => {
     });
   });
 
+  it("multiple_choice centers the reveal with no quality buttons in training", async () => {
+    renderMapReview(false, { mode: "multiple_choice" });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+
+    // Training: no quality buttons, and the lone correct zone is centered.
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-map-choice-feedback]")).toHaveLength(1);
+    });
+    expect(document.querySelectorAll("[data-map-choice-quality]")).toHaveLength(0);
+
+    const grid = document.querySelector("[data-map-choice-grid]");
+    expect(grid.style.justifyContent).toBe("center");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(160px, 260px))");
+  });
+
   it("multiple_choice picks the option under its number-key shortcut", async () => {
     renderMapReview(false, { mode: "multiple_choice" });
     const targetCode = screen.getByTestId("active-map")

@@ -941,6 +941,10 @@ export default function MediaReview({
     showQualityControls &&
     (showLabelChoices || showImageChoiceBoard)
   );
+  // Training has no quality buttons to fill the freed slots, so instead of leaving
+  // the answer pinned to the first slot with dead space beside it, center the
+  // surviving answer(s) in the row.
+  const centerReveal = Boolean(interactionFeedback) && !showQualityControls;
   const correctChoiceId = interactionFeedback?.correctQuestionId;
   // Once answered, only the answers worth looking at stay on the board: the correct
   // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
@@ -2558,12 +2562,20 @@ export default function MediaReview({
             style={{
               display: "grid",
               gap: fillAvailableHeight ? "12px" : "14px",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+              // Centered reveal keeps each cell ~half the board (as in the 2x2),
+              // so the surviving tile is the same size it was and FLIP slides it
+              // to the middle instead of snapping its size.
+              gridTemplateColumns: centerReveal
+                ? `repeat(${revealedGridItems.length}, minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"})))`
+                : "repeat(2, minmax(0, 1fr))",
+              gridTemplateRows: centerReveal
+                ? `minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"}))`
+                : "repeat(2, minmax(0, 1fr))",
               height: "100%",
               margin: "0 auto",
               maxWidth: "720px",
               minHeight: 0,
+              placeContent: centerReveal ? "center" : undefined,
               width: "min(100%, 720px)"
             }}
           >
@@ -2779,10 +2791,14 @@ export default function MediaReview({
           // buttons (or "Continuer" after a wrong pick).
           <div
             ref={choiceGridRef}
+            data-image-choice-grid
             style={{
               display: "grid",
               gap: "8px",
-              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gridTemplateColumns: centerReveal
+                ? `repeat(${revealedChoiceOptions.length}, minmax(150px, 250px))`
+                : "repeat(auto-fit, minmax(150px, 1fr))",
+              justifyContent: centerReveal ? "center" : undefined,
               marginBottom: "14px"
             }}
           >

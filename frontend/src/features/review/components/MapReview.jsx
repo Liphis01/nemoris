@@ -311,6 +311,15 @@ export default function MapReview({
     Boolean(choiceFeedback) &&
     showQualityControls
   );
+  // Training has no quality buttons to fill the freed slots, so instead of leaving
+  // the answer pinned to the first slot with dead space beside it, center the
+  // surviving answer(s) in the row.
+  const centerReveal = (
+    mode === MAP_MODE_MULTIPLE_CHOICE &&
+    !showRecap &&
+    Boolean(choiceFeedback) &&
+    !showQualityControls
+  );
   const correctChoiceId = choiceFeedback?.correctQuestionId;
   // Once answered, only the zones worth looking at stay on the board: the correct
   // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
@@ -1058,7 +1067,19 @@ export default function MapReview({
             // zone slides into the first slot, and the freed slots become the
             // quality buttons (or "Continuer" after a wrong pick). Nothing grows,
             // so the map above never resizes.
-            <div ref={choiceGridRef} style={choiceGridStyle}>
+            <div
+              ref={choiceGridRef}
+              data-map-choice-grid
+              style={{
+                ...choiceGridStyle,
+                ...(centerReveal
+                  ? {
+                    gridTemplateColumns: `repeat(${revealedChoices.length}, minmax(160px, 260px))`,
+                    justifyContent: "center"
+                  }
+                  : null)
+              }}
+            >
               {revealedChoices.map((option, index) => (
                 <div
                   key={option.question_id}

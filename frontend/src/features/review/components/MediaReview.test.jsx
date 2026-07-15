@@ -152,10 +152,11 @@ function renderMediaReview(props = {}) {
   );
 }
 
-function renderMediaReviewWithState(initialState) {
+function renderMediaReviewWithState(initialState, extraProps = {}) {
   let hookState = initialState;
   const props = {
-    reviewItems: hookState.gridItems.map(row => row.item)
+    reviewItems: hookState.gridItems.map(row => row.item),
+    ...extraProps
   };
 
   useMediaReview.mockImplementation(() => hookState);
@@ -172,6 +173,7 @@ function renderMediaReviewWithState(initialState) {
           reviewItems={props.reviewItems}
           onComplete={noop}
           submitAnswer={noop}
+          {...extraProps}
         />
       );
     }
@@ -939,6 +941,81 @@ describe("MediaReview answer label preview", () => {
 
     fireEvent.keyDown(window, { key: "2" });
     expect(rateChoice).toHaveBeenCalledWith(2);
+  });
+
+  it("centers the correct answer with no quality buttons in training", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }), { showQualityControls: false });
+
+    // Training has no quality buttons; the lone correct answer is centered.
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(1);
+
+    const grid = container.querySelector("[data-image-choice-grid]");
+    expect(grid.style.justifyContent).toBe("center");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(150px, 250px))");
+  });
+
+  it("centers both answers after a wrong pick in training", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: false,
+          selectedQuestionId: 2
+        }
+      }
+    }), { showQualityControls: false });
+
+    // Both the correct answer and the wrong pick stay, centered, no Continuer.
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(2);
+    expect(container.querySelector("[data-image-choice-continue]")).toBeNull();
+
+    const grid = container.querySelector("[data-image-choice-grid]");
+    expect(grid.style.justifyContent).toBe("center");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(150px, 250px))");
+  });
+
+  it("centers the image board reveal in training", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }), { showQualityControls: false });
+
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(0);
+
+    const board = container.querySelector("[data-image-choice-board]");
+    expect(board.style.placeContent).toBe("center");
+    // One surviving tile, sized like a 2x2 cell so FLIP slides it without resizing.
+    expect(board.style.gridTemplateColumns).toContain("repeat(1,");
+    expect(board.style.gridTemplateColumns).toContain("calc(50%");
   });
 
   it("continues past a revealed wrong choice with Enter", () => {

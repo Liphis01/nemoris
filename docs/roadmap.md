@@ -3,7 +3,6 @@
 - question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
 
 ## Urgent
-- revoir le mode timeline (mettre une timeline globale pour l'année et deux pour mois et jour)
 - ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
@@ -13,7 +12,6 @@
 ## quick fixes
 
 - ajouter le timer final dans la recap d'entrainement de maps
-- le timer continue quand on regarde les réponses
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
 - faire un bouton toggle pour l'era dans la preview
 - ajouter bouton annuler dans les autres types
