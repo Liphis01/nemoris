@@ -1749,7 +1749,7 @@ const choiceFeedbackLabelStyle = {
 
 const overlayStyle = {
   position: "fixed",
-  inset: 0,
+  inset: "var(--shell-top, 0px) 0 0 0",
   background: "rgba(0,0,0,0.75)",
   backdropFilter: "blur(6px)",
   display: "flex",

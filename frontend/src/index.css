@@ -67,6 +67,8 @@ body,
 body {
   margin: 0;
   padding: 0;
+  /* Room for the desktop shell's custom title bar; 0 in a browser. */
+  padding-top: var(--shell-top, 0px);
   background: var(--bg);
 }
 

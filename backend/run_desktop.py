@@ -13,8 +13,60 @@ DEFAULT_PORT = 8000
 PORT_SCAN_ATTEMPTS = 10
 SERVER_STARTUP_TIMEOUT_SECONDS = 30
 WINDOW_TITLE = "Nemoris"
+MIN_WINDOW_SIZE = (1024, 700)
 BUNDLED_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 ICON_FILE = BUNDLED_DIR / "assets" / "nemoris.png"
+
+
+class WindowBridge:
+    # Exposed to the page as window.pywebview.api: the window is frameless,
+    # so the frontend's custom title bar drives the chrome actions. Only
+    # underscore-prefixed attributes stay out of the generated JS API —
+    # pywebview walks public ones recursively.
+    def __init__(self):
+        self._window = None
+        self._maximized = False
+
+    def minimize(self):
+        self._window.minimize()
+
+    def toggle_maximize(self):
+        if self._maximized:
+            if not self._gtk_unmaximize():
+                self._window.restore()
+        else:
+            self._window.maximize()
+
+        self._maximized = not self._maximized
+        return self._maximized
+
+    def _gtk_unmaximize(self):
+        # pywebview's GTK restore() only deiconifies and never leaves the
+        # maximized state; reach the Gtk window directly. The import fails
+        # wherever GTK isn't the backend, so Windows uses plain restore().
+        try:
+            from webview.platforms.gtk import BrowserView, glib
+        except Exception:
+            return False
+
+        view = BrowserView.instances.get(self._window.uid)
+
+        if not view:
+            return False
+
+        glib.idle_add(view.window.unmaximize)
+        return True
+
+    def resize_to(self, width, height):
+        # Frameless windows lose the OS resize borders; the frontend's
+        # corner grip calls this instead.
+        self._window.resize(
+            max(int(width), MIN_WINDOW_SIZE[0]),
+            max(int(height), MIN_WINDOW_SIZE[1]),
+        )
+
+    def close(self):
+        self._window.destroy()
 
 
 def app_dir():
@@ -122,12 +174,19 @@ def open_native_window(url):
     # this flag pywebview drops downloads silently.
     webview.settings["ALLOW_DOWNLOADS"] = True
 
-    webview.create_window(
+    bridge = WindowBridge()
+
+    # frameless: the frontend renders its own title bar (DesktopTitleBar)
+    # with a pywebview drag region and the WindowBridge controls.
+    bridge._window = webview.create_window(
         WINDOW_TITLE,
         url,
         width=1280,
         height=850,
-        min_size=(1024, 700),
+        min_size=MIN_WINDOW_SIZE,
+        frameless=True,
+        easy_drag=False,
+        js_api=bridge,
     )
 
     from app.config import APP_DATA_DIR

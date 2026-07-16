@@ -21,7 +21,7 @@ const reviewDateFormatter = new Intl.DateTimeFormat("fr-FR", {
 });
 
 const shellStyle = {
-  minHeight: "100vh",
+  minHeight: "calc(100vh - var(--shell-top, 0px))",
   background: "#111",
   color: "#eee",
   padding: "30px 24px 70px",

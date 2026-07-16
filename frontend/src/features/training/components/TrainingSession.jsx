@@ -1901,7 +1901,7 @@ export default function TrainingSession({ setMode }) {
       style={{
         background: "#111",
         color: "#eee",
-        minHeight: "100vh",
+        minHeight: "calc(100vh - var(--shell-top, 0px))",
         padding: "30px 24px 80px"
       }}
     >

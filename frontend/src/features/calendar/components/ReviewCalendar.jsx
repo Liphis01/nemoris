@@ -1215,7 +1215,7 @@ export default function ReviewCalendar({
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "calc(100vh - var(--shell-top, 0px))",
         background: "#111",
         color: "#eee",
         padding: "30px 24px 70px",

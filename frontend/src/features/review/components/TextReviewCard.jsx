@@ -140,7 +140,7 @@ function TextMediaPreview({ src, alt, onClose }) {
                 alignItems: "center",
                 background: "rgba(0, 0, 0, 0.82)",
                 display: "flex",
-                inset: 0,
+                inset: "var(--shell-top, 0px) 0 0 0",
                 justifyContent: "center",
                 padding: "28px",
                 position: "fixed",

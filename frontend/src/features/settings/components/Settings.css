@@ -5,7 +5,7 @@
     #101010;
   box-sizing: border-box;
   color: #eeeeee;
-  min-height: calc(100svh - 48px);
+  min-height: calc(100svh - 48px - var(--shell-top, 0px));
   padding: 22px 0 56px;
   text-align: left;
   width: 100%;
