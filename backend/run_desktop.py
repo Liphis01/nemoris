@@ -75,6 +75,31 @@ def start_server(application, port):
     return server, thread
 
 
+def redirect_windowed_io():
+    # PyInstaller --windowed builds have no console, so sys.stdout/stderr are
+    # None and anything touching them crashes (uvicorn's log formatter calls
+    # sys.stdout.isatty() during startup). Route output to a log file in the
+    # app data dir so installed builds also leave a debugging trail.
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    from app.config import APP_DATA_DIR
+
+    try:
+        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        stream = open(
+            APP_DATA_DIR / "nemoris.log", "a", buffering=1, encoding="utf-8"
+        )
+    except OSError:
+        stream = open(os.devnull, "w", encoding="utf-8")
+
+    if sys.stdout is None:
+        sys.stdout = stream
+
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
 def apply_wsl_rendering_fix():
     # Under WSLg, WebKitGTK's DMA-BUF GPU transport is broken (Vulkan device
     # unavailable) and halves the frame rate (measured 26 fps vs 54 fps).
@@ -131,6 +156,8 @@ def serve_in_browser(url, thread):
 
 if __name__ == "__main__":
     os.chdir(app_dir())
+
+    redirect_windowed_io()
 
     from app.main import app
 
