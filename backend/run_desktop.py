@@ -177,10 +177,13 @@ def open_native_window(url):
     bridge = WindowBridge()
 
     # frameless: the frontend renders its own title bar (DesktopTitleBar)
-    # with a pywebview drag region and the WindowBridge controls.
+    # with a pywebview drag region and the WindowBridge controls. The query
+    # flag makes the title bar render deterministically — the pywebview JS
+    # bridge injects at a backend-dependent moment (after NavigationCompleted
+    # on WebView2), too late to be the render signal.
     bridge._window = webview.create_window(
         WINDOW_TITLE,
-        url,
+        f"{url}/?shell=desktop",
         width=1280,
         height=850,
         min_size=MIN_WINDOW_SIZE,
@@ -199,6 +202,9 @@ def open_native_window(url):
         private_mode=False,
         storage_path=str(APP_DATA_DIR / "webview-data"),
         icon=str(ICON_FILE) if ICON_FILE.exists() else None,
+        # NEMORIS_DEBUG=1 opens the engine devtools in the installed app —
+        # the only way to inspect the page in a --windowed build.
+        debug=os.environ.get("NEMORIS_DEBUG") == "1",
     )
 
 

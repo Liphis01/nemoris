@@ -4,18 +4,40 @@ import "./DesktopTitleBar.css";
 const TITLEBAR_HEIGHT = "36px";
 
 
-// True once pywebview injects its JS bridge: only the desktop shell shows
-// the custom title bar; browser and dev usage keep the plain page. The
-// --shell-top variable is how the rest of the app makes room for the bar.
+// The desktop launcher opens the app with ?shell=desktop: that flag is the
+// render signal for the custom title bar, because the pywebview JS bridge
+// injects at a backend-dependent moment (after NavigationCompleted on
+// WebView2 — later than React's mount) and cannot be relied on for timing.
+// Browser and dev usage keep the plain page. The --shell-top variable is
+// how the rest of the app makes room for the bar.
 function useDesktopShell() {
-  const [ready, setReady] = useState(() => Boolean(window.pywebview));
+  const [ready, setReady] = useState(
+    () =>
+      Boolean(window.pywebview) ||
+      new URLSearchParams(window.location.search).get("shell") === "desktop"
+  );
 
   useEffect(() => {
     if (ready) return undefined;
 
+    if (window.pywebview) {
+      setReady(true);
+      return undefined;
+    }
+
     const onReady = () => setReady(true);
     window.addEventListener("pywebviewready", onReady);
-    return () => window.removeEventListener("pywebviewready", onReady);
+
+    // Fallback for bridge injections whose ready event slips between the
+    // initial check and this listener.
+    const poll = window.setInterval(() => {
+      if (window.pywebview) setReady(true);
+    }, 300);
+
+    return () => {
+      window.removeEventListener("pywebviewready", onReady);
+      window.clearInterval(poll);
+    };
   }, [ready]);
 
   useEffect(() => {
@@ -29,14 +51,33 @@ function useDesktopShell() {
 }
 
 
+// The bar can render before the bridge finishes injecting, so every call
+// waits for window.pywebview.api instead of assuming it exists.
+function waitForWindowApi(timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const tick = () => {
+      const api = window.pywebview?.api;
+
+      if (api) {
+        resolve(api);
+      } else if (Date.now() - start > timeoutMs) {
+        resolve(null);
+      } else {
+        setTimeout(tick, 100);
+      }
+    };
+
+    tick();
+  });
+}
+
+
 function callWindowApi(method, ...args) {
-  const api = window.pywebview?.api;
-
-  if (!api?.[method]) {
-    return Promise.resolve(null);
-  }
-
-  return api[method](...args);
+  return waitForWindowApi().then((api) =>
+    api?.[method] ? api[method](...args) : null
+  );
 }
 
 
