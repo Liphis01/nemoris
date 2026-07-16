@@ -154,6 +154,18 @@ function DesktopTitleBar() {
     });
   }, [ready]);
 
+  // Report whether the bridge ever appeared: a dead bridge is invisible
+  // from outside (buttons silently no-op), so surface it in the app log.
+  useEffect(() => {
+    if (!ready) return;
+
+    waitForWindowApi(8000).then((api) => {
+      fetch(`/shell/bridge-status?ok=${Boolean(api)}`, {
+        method: "POST"
+      }).catch(() => {});
+    });
+  }, [ready]);
+
   const toggleMaximize = useCallback(() => {
     callWindowApi("toggle_maximize").then((state) => {
       if (typeof state === "boolean") {

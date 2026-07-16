@@ -73,6 +73,34 @@ class WindowBridge:
     def close(self):
         self._window.destroy()
 
+    def _on_shown(self, *args):
+        self._apply_windows_maximized_bounds()
+
+    def _apply_windows_maximized_bounds(self):
+        # A borderless WinForms window maximizes over the taskbar (Windows
+        # treats it as fullscreen); clamp its maximize bounds to the work
+        # area. The import fails outside the winforms backend.
+        try:
+            from webview.platforms.winforms import BrowserView, WinForms
+        except Exception:
+            return
+
+        form = BrowserView.instances.get(self._window.uid)
+
+        if not form:
+            return
+
+        def clamp():
+            form.MaximizedBounds = WinForms.Screen.FromControl(form).WorkingArea
+
+            # Re-apply the maximized state so the clamp takes effect on the
+            # already-maximized startup window.
+            if form.WindowState == WinForms.FormWindowState.Maximized:
+                form.WindowState = WinForms.FormWindowState.Normal
+                form.WindowState = WinForms.FormWindowState.Maximized
+
+        form.Invoke(WinForms.MethodInvoker(clamp))
+
 
 def app_dir():
     if getattr(sys, "frozen", False):
@@ -197,6 +225,8 @@ def open_native_window(url):
         easy_drag=False,
         js_api=bridge,
     )
+
+    bridge._window.events.shown += bridge._on_shown
 
     from app.config import APP_DATA_DIR
 

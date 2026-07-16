@@ -60,6 +60,15 @@ def create_app():
     app.include_router(uploads.router)
     app.include_router(backup.router)
 
+    @app.post("/shell/bridge-status")
+    def shell_bridge_status(ok: bool):
+        # The desktop shell reports whether the pywebview JS bridge appeared
+        # in the page. A missing bridge is otherwise invisible (dead title
+        # bar buttons, nothing in any log); this line lands in nemoris.log
+        # and the release smoke test asserts on it.
+        print(f"SHELL BRIDGE ok={ok}", flush=True)
+        return {"ok": ok}
+
     if FRONTEND_DIST_DIR.exists():
         assets_dir = FRONTEND_DIST_DIR / "assets"
 
