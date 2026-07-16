@@ -67,6 +67,7 @@ Invoke-Checked {
     --noconfirm `
     --windowed `
     --icon "assets\nemoris.ico" `
+    --collect-all webview `
     --add-data "assets;assets" `
     --add-data "..\frontend\dist;frontend\dist" `
     run_desktop.py
