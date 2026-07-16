@@ -142,6 +142,18 @@ function DesktopTitleBar() {
   const ready = useDesktopShell();
   const [maximized, setMaximized] = useState(false);
 
+  // The window opens maximized by default; ask the bridge for the real
+  // starting state so the restore/maximize glyph is right from the start.
+  useEffect(() => {
+    if (!ready) return;
+
+    callWindowApi("is_maximized").then((state) => {
+      if (typeof state === "boolean") {
+        setMaximized(state);
+      }
+    });
+  }, [ready]);
+
   const toggleMaximize = useCallback(() => {
     callWindowApi("toggle_maximize").then((state) => {
       if (typeof state === "boolean") {

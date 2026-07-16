@@ -23,9 +23,14 @@ class WindowBridge:
     # so the frontend's custom title bar drives the chrome actions. Only
     # underscore-prefixed attributes stay out of the generated JS API —
     # pywebview walks public ones recursively.
-    def __init__(self):
+    def __init__(self, maximized=False):
         self._window = None
-        self._maximized = False
+        self._maximized = maximized
+
+    def is_maximized(self):
+        # Lets the title bar sync its restore/maximize glyph with the
+        # window's actual starting state.
+        return self._maximized
 
     def minimize(self):
         self._window.minimize()
@@ -174,7 +179,7 @@ def open_native_window(url):
     # this flag pywebview drops downloads silently.
     webview.settings["ALLOW_DOWNLOADS"] = True
 
-    bridge = WindowBridge()
+    bridge = WindowBridge(maximized=True)
 
     # frameless: the frontend renders its own title bar (DesktopTitleBar)
     # with a pywebview drag region and the WindowBridge controls. The query
@@ -187,6 +192,7 @@ def open_native_window(url):
         width=1280,
         height=850,
         min_size=MIN_WINDOW_SIZE,
+        maximized=True,
         frameless=True,
         easy_drag=False,
         js_api=bridge,
