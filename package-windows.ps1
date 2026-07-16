@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $FrontendDir = Join-Path $RootDir "frontend"
 $BackendDir = Join-Path $RootDir "backend"
-$AppName = "QuizApp"
+$AppName = "Nemoris"
 $OutputDir = Join-Path $BackendDir "dist\$AppName"
 $DatabaseFile = Join-Path $BackendDir "questions.db"
 $StaticDir = Join-Path $BackendDir "static"
@@ -56,6 +56,7 @@ if (-not (Test-Path "venv\Scripts\Activate.ps1")) {
 & ".\venv\Scripts\Activate.ps1"
 Invoke-Checked { python -m pip install --upgrade pip } "pip upgrade failed."
 Invoke-Checked { python -m pip install -r requirements.txt } "Backend dependency install failed."
+Invoke-Checked { python -m pip install -r requirements-desktop.txt } "Desktop dependency install failed."
 Invoke-Checked { python -m pip install pyinstaller } "PyInstaller install failed."
 
 Write-Host "Building Windows executable..."
@@ -64,6 +65,9 @@ Invoke-Checked {
     --name $AppName `
     --onedir `
     --noconfirm `
+    --windowed `
+    --icon "assets\nemoris.ico" `
+    --add-data "assets;assets" `
     --add-data "..\frontend\dist;frontend\dist" `
     run_desktop.py
 } "PyInstaller build failed."
@@ -72,22 +76,38 @@ if (-not (Test-Path $OutputDir)) {
   throw "PyInstaller did not create the expected output folder: $OutputDir"
 }
 
-Write-Host "Copying writable app data..."
-New-Item -ItemType Directory -Force $OutputDir | Out-Null
-Copy-Item $DatabaseFile (Join-Path $OutputDir "questions.db") -Force
-New-Item -ItemType Directory -Force (Join-Path $OutputDir "static") | Out-Null
+Write-Host "Copying seed data (imported into %APPDATA%\Nemoris on first run)..."
+$SeedDir = Join-Path $OutputDir "seed"
+New-Item -ItemType Directory -Force (Join-Path $SeedDir "static") | Out-Null
+Copy-Item $DatabaseFile (Join-Path $SeedDir "questions.db") -Force
 
 if (Test-Path $StaticDir) {
   $StaticItems = Get-ChildItem $StaticDir -Force
 
   if ($StaticItems.Count -gt 0) {
-    Copy-Item $StaticItems.FullName (Join-Path $OutputDir "static") -Recurse -Force
+    Copy-Item $StaticItems.FullName (Join-Path $SeedDir "static") -Recurse -Force
   }
 }
 
-Write-Host ""
-Write-Host "Done. Export this folder:"
-Write-Host "  $OutputDir"
-Write-Host ""
-Write-Host "Run it with:"
-Write-Host "  $(Join-Path $OutputDir "$AppName.exe")"
+Write-Host "Building installer..."
+$InnoCompiler = @(
+  (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+  (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
+  (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
+) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+if ($InnoCompiler) {
+  Invoke-Checked { & $InnoCompiler (Join-Path $RootDir "installer\nemoris.iss") } "Installer build failed."
+  Write-Host ""
+  Write-Host "Done. Distribute the installer:"
+  Write-Host "  $(Join-Path $BackendDir "dist\Nemoris-Setup.exe")"
+} else {
+  Write-Host ""
+  Write-Host "Inno Setup not found - skipped the installer."
+  Write-Host "Install it from https://jrsoftware.org/isdl.php and rerun to get Nemoris-Setup.exe."
+  Write-Host ""
+  Write-Host "Portable build is ready at:"
+  Write-Host "  $OutputDir"
+  Write-Host "Run it with:"
+  Write-Host "  $(Join-Path $OutputDir "$AppName.exe")"
+}

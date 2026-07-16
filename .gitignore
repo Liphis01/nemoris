@@ -11,6 +11,9 @@ backend/tuning_reports/
 node_modules/
 dist/
 
+# Desktop webview profile (localStorage, cookies)
+backend/webview-data/
+
 # Database
 *.db
 *.db-shm
