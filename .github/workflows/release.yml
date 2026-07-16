@@ -14,8 +14,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  label: linux,   sep: ":", archive: QuizApp-linux.tar.gz }
-          - { os: windows-latest, label: windows, sep: ";", archive: QuizApp-windows.zip }
+          - os: ubuntu-latest
+            label: linux
+            sep: ":"
+            archive: Nemoris-linux.tar.gz
+            icon: ""
+          - os: windows-latest
+            label: windows
+            sep: ";"
+            archive: Nemoris-windows.zip
+            icon: --icon assets/nemoris.ico
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -28,6 +36,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      # PyGObject (pywebview's GTK backend) builds from source and needs the
+      # introspection/webkit dev packages; the frozen app then uses the
+      # system webkit2gtk at runtime.
+      - name: Install GTK/WebKit build deps (linux)
+        if: matrix.label == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config python3-dev gcc gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
+
       - name: Build frontend
         working-directory: frontend
         run: |
@@ -38,7 +55,7 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
+          pip install -r requirements.txt -r requirements-desktop.txt pyinstaller
 
       - name: Seed a fresh database
         working-directory: backend
@@ -46,32 +63,53 @@ jobs:
           python -c "from app.bootstrap import init_database; init_database()"  # build + stamp schema via migrations
           python import_csv.py                                                  # populate from the tracked questions.csv
 
+      # --windowed hides the console on Windows (no-op elsewhere); the icon
+      # flag is Windows-only because PyInstaller ignores .ico on Linux.
       - name: Build executable (PyInstaller)
         working-directory: backend
         run: >
-          pyinstaller --name QuizApp --onedir --noconfirm
+          pyinstaller --name Nemoris --onedir --noconfirm --windowed
+          ${{ matrix.icon }}
+          --add-data "assets${{ matrix.sep }}assets"
           --add-data "../frontend/dist${{ matrix.sep }}frontend/dist"
           run_desktop.py
 
-      - name: Stage app data
+      # seed/ is imported into the user's app-data dir on first launch
+      # (see app/bootstrap.py); the app never writes next to the executable.
+      - name: Stage seed data
         working-directory: backend
         shell: bash
         run: |
-          cp questions.db dist/QuizApp/questions.db
-          mkdir -p dist/QuizApp/static
-          [ -d static ] && cp -R static/. dist/QuizApp/static/ || true
+          mkdir -p dist/Nemoris/seed/static
+          cp questions.db dist/Nemoris/seed/questions.db
+          [ -d static ] && cp -R static/. dist/Nemoris/seed/static/ || true
 
       - name: Archive (linux)
         if: matrix.label == 'linux'
         working-directory: backend/dist
-        run: tar -czf ${{ matrix.archive }} QuizApp
+        run: tar -czf ${{ matrix.archive }} Nemoris
 
       - name: Archive (windows)
         if: matrix.label == 'windows'
         working-directory: backend/dist
-        run: Compress-Archive -Path QuizApp -DestinationPath ${{ matrix.archive }}
+        run: Compress-Archive -Path Nemoris -DestinationPath ${{ matrix.archive }}
 
+      - name: Build installer (windows)
+        if: matrix.label == 'windows'
+        shell: pwsh
+        run: |
+          $Iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $Iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $Iscc installer\nemoris.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed." }
+
+      # The unmatched installer pattern on Linux is ignored
+      # (fail_on_unmatched_files defaults to false).
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: backend/dist/${{ matrix.archive }}
+          files: |
+            backend/dist/${{ matrix.archive }}
+            backend/dist/Nemoris-Setup.exe
