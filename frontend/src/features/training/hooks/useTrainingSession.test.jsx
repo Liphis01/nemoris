@@ -570,6 +570,12 @@ describe("useTrainingSession", () => {
       });
     });
     expect(recordGroupTrainingAttempt).not.toHaveBeenCalled();
+
+    // The record lands in state only when the save resolves; asserting right
+    // after the API-call waitFor races the state commit on slow runners.
+    await waitFor(() => {
+      expect(result.current.recordSaveStatus).toBe("saved");
+    });
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
     expect(result.current.scopes.collections[0].training_record.best_time_ms).toBe(5500);
   });
