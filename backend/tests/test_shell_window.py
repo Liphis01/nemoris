@@ -24,8 +24,8 @@ class StubBridge:
     def start_drag(self):
         self.calls.append("start_drag")
 
-    def start_resize(self):
-        self.calls.append("start_resize")
+    def start_resize(self, edge="se"):
+        self.calls.append(f"start_resize:{edge}")
 
     def close(self):
         self.calls.append("close")
@@ -65,10 +65,19 @@ class ShellWindowRouteTests(unittest.TestCase):
         self.assertIsNotNone(endpoint, f"missing route {method} {path}")
         return endpoint()
 
-    def test_state_reports_maximized(self):
-        self.assertEqual(
-            self.call("/shell/window/state", "GET"), {"maximized": True}
+    def test_state_reports_maximized_and_platform(self):
+        state = self.call("/shell/window/state", "GET")
+
+        self.assertTrue(state["maximized"])
+        self.assertIn(state["platform"], ("windows", "gtk"))
+
+    def test_start_resize_forwards_the_edge(self):
+        endpoint = find_endpoint(
+            self.app, "/shell/window/start-resize", "POST"
         )
+        endpoint(edge="nw")
+
+        self.assertEqual(self.bridge.calls, ["start_resize:nw"])
 
     def test_toggle_maximize_flips_and_returns_state(self):
         self.assertEqual(
@@ -101,7 +110,7 @@ class ShellWindowRouteTests(unittest.TestCase):
 
         self.assertEqual(
             self.bridge.calls,
-            ["minimize", "start_drag", "start_resize", "close"],
+            ["minimize", "start_drag", "start_resize:se", "close"],
         )
 
 

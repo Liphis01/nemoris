@@ -59,16 +59,20 @@
 html,
 body,
 #root {
-  min-height: 100vh;
-  min-height: 100svh;
+  /* Subtract the desktop shell's title bar (0 in a browser) or the 100vh
+     minimums overflow the padded body and pin a permanent scrollbar. */
+  min-height: calc(100vh - var(--shell-top, 0px));
+  min-height: calc(100svh - var(--shell-top, 0px));
   height: 100%;
 }
 
 body {
   margin: 0;
   padding: 0;
-  /* Room for the desktop shell's custom title bar; 0 in a browser. */
+  /* Room for the desktop shell's custom title bar; 0 in a browser.
+     border-box keeps height: 100% from overflowing by the padding. */
   padding-top: var(--shell-top, 0px);
+  box-sizing: border-box;
   background: var(--bg);
 }
 

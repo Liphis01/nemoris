@@ -37,43 +37,41 @@ function shellWindowRequest(action, method = "POST") {
 }
 
 
-// Starting a native OS resize loop from the corner grip: the backend posts
-// a non-client hit (Windows) or begins a GTK resize drag while the mouse
-// button is still held.
-function ResizeGrip() {
-  const onPointerDown = (event) => {
-    if (event.button === 0) {
-      shellWindowRequest("start-resize");
-    }
-  };
+const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
-  return (
+
+// GTK only: invisible strips along the borders that start native resize
+// drags over HTTP. Windows never renders these — WS_THICKFRAME gives it
+// real OS resize borders on every edge and corner.
+function ResizeEdges() {
+  return RESIZE_EDGES.map((edge) => (
     <div
-      className="desktop-resize-grip"
-      onPointerDown={onPointerDown}
+      key={edge}
+      className={`shell-resize-edge shell-resize-edge--${edge}`}
+      onPointerDown={(event) => {
+        if (event.button === 0) {
+          shellWindowRequest(`start-resize?edge=${edge}`);
+        }
+      }}
       aria-hidden="true"
-    >
-      <svg width="12" height="12" viewBox="0 0 12 12">
-        <path
-          d="M11 1 1 11M11 6 6 11"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          fill="none"
-        />
-      </svg>
-    </div>
-  );
+    />
+  ));
 }
 
 
 function DesktopTitleBar() {
   const ready = useDesktopShell();
   const [maximized, setMaximized] = useState(true);
+  const [platform, setPlatform] = useState(null);
 
   const syncWindowState = useCallback(() => {
     shellWindowRequest("state", "GET").then((state) => {
       if (typeof state?.maximized === "boolean") {
         setMaximized(state.maximized);
+      }
+
+      if (state?.platform) {
+        setPlatform(state.platform);
       }
     });
   }, []);
@@ -94,6 +92,9 @@ function DesktopTitleBar() {
     });
   }, []);
 
+  // On Windows the native caption (app-region: drag) swallows these events,
+  // so this only fires on GTK — or as a fallback on a WebView2 runtime too
+  // old for non-client region support.
   const onDragPointerDown = (event) => {
     // detail === 1 keeps the second press of a double-click for the
     // maximize toggle instead of starting another native drag.
@@ -189,7 +190,7 @@ function DesktopTitleBar() {
           </svg>
         </button>
       </header>
-      <ResizeGrip />
+      {platform === "gtk" && <ResizeEdges />}
     </>
   );
 }

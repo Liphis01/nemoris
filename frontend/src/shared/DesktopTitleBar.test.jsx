@@ -35,10 +35,64 @@ describe("DesktopTitleBar", () => {
     expect(
       container.querySelectorAll(".desktop-titlebar__button")
     ).toHaveLength(3);
-    expect(container.querySelector(".desktop-resize-grip")).not.toBeNull();
     expect(
       document.documentElement.style.getPropertyValue("--shell-top")
     ).toBe("36px");
+  });
+
+  it("renders resize edge strips on gtk but not on windows", async () => {
+    window.history.replaceState(null, "", "/?shell=desktop");
+
+    fetch.mockImplementation((url) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url === "/shell/window/state"
+              ? { maximized: true, platform: "gtk" }
+              : {}
+          )
+      })
+    );
+
+    const { container, unmount } = render(<DesktopTitleBar />);
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".shell-resize-edge")).toHaveLength(8);
+    });
+
+    fireEvent.pointerDown(
+      container.querySelector(".shell-resize-edge--nw"),
+      { button: 0 }
+    );
+    expect(fetch).toHaveBeenCalledWith("/shell/window/start-resize?edge=nw", {
+      method: "POST"
+    });
+
+    unmount();
+
+    fetch.mockImplementation((url) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url === "/shell/window/state"
+              ? { maximized: true, platform: "windows" }
+              : {}
+          )
+      })
+    );
+
+    const windowsRender = render(<DesktopTitleBar />);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/shell/window/state", {
+        method: "GET"
+      });
+    });
+    expect(
+      windowsRender.container.querySelectorAll(".shell-resize-edge")
+    ).toHaveLength(0);
   });
 
   it("drives the window over the /shell/window HTTP routes", async () => {
@@ -71,11 +125,5 @@ describe("DesktopTitleBar", () => {
       method: "POST"
     });
 
-    fireEvent.pointerDown(container.querySelector(".desktop-resize-grip"), {
-      button: 0
-    });
-    expect(fetch).toHaveBeenCalledWith("/shell/window/start-resize", {
-      method: "POST"
-    });
   });
 });

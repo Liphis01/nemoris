@@ -21,7 +21,10 @@ ICON_FILE = BUNDLED_DIR / "assets" / "nemoris.png"
 # mouse to the OS move/size loop — native drag, including Aero Snap.
 WM_NCLBUTTONDOWN = 0x00A1
 HTCAPTION = 2
-HTBOTTOMRIGHT = 17
+WINDOWS_RESIZE_HIT_CODES = {
+    "w": 10, "e": 11, "n": 12, "nw": 13,
+    "ne": 14, "s": 15, "sw": 16, "se": 17,
+}
 
 
 class WindowBridge:
@@ -65,12 +68,14 @@ class WindowBridge:
     def start_drag(self):
         self._start_system_loop(resize=False)
 
-    def start_resize(self):
-        self._start_system_loop(resize=True)
+    def start_resize(self, edge="se"):
+        self._start_system_loop(resize=True, edge=edge)
 
-    def _start_system_loop(self, resize):
+    def _start_system_loop(self, resize, edge="se"):
         # Called from a mousedown in the page while the button is still held:
         # the OS takes over the move/size loop from the current pointer state.
+        # On Windows this is only a fallback — the native caption regions
+        # (app-region: drag) and WS_THICKFRAME borders handle it at OS level.
         if self._window is None:
             return
 
@@ -79,8 +84,13 @@ class WindowBridge:
         if not resize and self._maximized:
             self.toggle_maximize()
 
-        if not self._winforms_nc_hit(HTBOTTOMRIGHT if resize else HTCAPTION):
-            self._gtk_begin_drag(resize)
+        if resize:
+            hit_code = WINDOWS_RESIZE_HIT_CODES.get(edge, 17)
+        else:
+            hit_code = HTCAPTION
+
+        if not self._winforms_nc_hit(hit_code):
+            self._gtk_begin_drag(resize, edge)
 
     def _winforms_nc_hit(self, hit_code):
         try:
@@ -110,7 +120,7 @@ class WindowBridge:
         form.BeginInvoke(WinForms.MethodInvoker(begin))
         return True
 
-    def _gtk_begin_drag(self, resize):
+    def _gtk_begin_drag(self, resize, edge="se"):
         try:
             from gi.repository import Gdk, Gtk
             from webview.platforms.gtk import BrowserView, glib
@@ -122,6 +132,17 @@ class WindowBridge:
         if not view:
             return False
 
+        gdk_edges = {
+            "n": Gdk.WindowEdge.NORTH,
+            "s": Gdk.WindowEdge.SOUTH,
+            "e": Gdk.WindowEdge.EAST,
+            "w": Gdk.WindowEdge.WEST,
+            "ne": Gdk.WindowEdge.NORTH_EAST,
+            "nw": Gdk.WindowEdge.NORTH_WEST,
+            "se": Gdk.WindowEdge.SOUTH_EAST,
+            "sw": Gdk.WindowEdge.SOUTH_WEST,
+        }
+
         def begin():
             win = view.window
             seat = win.get_display().get_default_seat()
@@ -130,7 +151,8 @@ class WindowBridge:
 
             if resize:
                 win.begin_resize_drag(
-                    Gdk.WindowEdge.SOUTH_EAST, 1, x, y, timestamp
+                    gdk_edges.get(edge, Gdk.WindowEdge.SOUTH_EAST),
+                    1, x, y, timestamp,
                 )
             else:
                 win.begin_move_drag(1, x, y, timestamp)
@@ -157,6 +179,71 @@ class WindowBridge:
 
     def _on_shown(self, *args):
         self._apply_windows_maximized_bounds()
+        self._apply_windows_native_frame()
+
+    def _apply_windows_native_frame(self):
+        # WS_THICKFRAME restores the native resize borders on the frameless
+        # window (grab any edge/corner, snap-compatible); the WM_NCCALCSIZE
+        # subclass removes the frame insets so content stays full-bleed.
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            from webview.platforms.winforms import BrowserView, WinForms
+        except Exception:
+            return
+
+        form = BrowserView.instances.get(self._window.uid)
+
+        if not form:
+            return
+
+        user32 = ctypes.windll.user32
+        comctl32 = ctypes.windll.comctl32
+
+        GWL_STYLE = -16
+        WS_THICKFRAME = 0x00040000
+        WM_NCCALCSIZE = 0x0083
+        # NOSIZE | NOMOVE | NOZORDER | FRAMECHANGED
+        SWP_FLAGS = 0x0001 | 0x0002 | 0x0004 | 0x0020
+
+        user32.GetWindowLongPtrW.restype = ctypes.c_longlong
+        user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.SetWindowLongPtrW.restype = ctypes.c_longlong
+        user32.SetWindowLongPtrW.argtypes = [
+            wintypes.HWND, ctypes.c_int, ctypes.c_longlong,
+        ]
+        comctl32.DefSubclassProc.restype = ctypes.c_longlong
+        comctl32.DefSubclassProc.argtypes = [
+            wintypes.HWND, ctypes.c_uint, ctypes.c_ulonglong,
+            ctypes.c_longlong,
+        ]
+
+        SUBCLASSPROC = ctypes.WINFUNCTYPE(
+            ctypes.c_longlong,
+            wintypes.HWND, ctypes.c_uint,
+            ctypes.c_ulonglong, ctypes.c_longlong,
+            ctypes.c_ulonglong, ctypes.c_ulonglong,
+        )
+
+        def subclass_proc(hwnd, msg, wparam, lparam, _subclass_id, _ref):
+            if msg == WM_NCCALCSIZE and wparam:
+                return 0
+
+            return comctl32.DefSubclassProc(hwnd, msg, wparam, lparam)
+
+        # The callback must outlive the window or the process crashes when
+        # Windows calls a garbage-collected function pointer.
+        self._subclass_proc = SUBCLASSPROC(subclass_proc)
+
+        def apply():
+            handle = wintypes.HWND(form.Handle.ToInt64())
+            style = user32.GetWindowLongPtrW(handle, GWL_STYLE)
+            user32.SetWindowLongPtrW(handle, GWL_STYLE, style | WS_THICKFRAME)
+            comctl32.SetWindowSubclass(handle, self._subclass_proc, 1, 0)
+            user32.SetWindowPos(handle, None, 0, 0, 0, 0, SWP_FLAGS)
+
+        form.BeginInvoke(WinForms.MethodInvoker(apply))
 
     def _apply_windows_maximized_bounds(self):
         # A borderless WinForms window maximizes over the taskbar (Windows
@@ -184,12 +271,43 @@ class WindowBridge:
         form.Invoke(WinForms.MethodInvoker(clamp))
 
 
+def enable_native_caption_regions():
+    # WebView2's official custom-titlebar support: elements with the CSS
+    # app-region: drag become a real caption (OS drag with Aero Snap,
+    # double-click max/restore, right-click system menu). It must be on
+    # before navigation, so wrap pywebview's settings hook. The import
+    # fails outside Windows.
+    try:
+        from webview.platforms import edgechromium
+    except Exception:
+        return
+
+    original = edgechromium.EdgeChrome.on_webview_ready
+
+    def on_webview_ready(self, sender, args):
+        original(self, sender, args)
+
+        try:
+            if args.IsSuccess:
+                settings = sender.CoreWebView2.Settings
+                settings.IsNonClientRegionSupportEnabled = True
+        except Exception as error:
+            # Old fixed-version runtime: the frontend's HTTP drag fallback
+            # still applies.
+            print(f"Native caption regions unavailable ({error}).")
+
+    edgechromium.EdgeChrome.on_webview_ready = on_webview_ready
+
+
 def register_shell_routes(application, bridge):
     # Window controls for the desktop title bar, served over HTTP so they
     # work whenever the page itself does — no injected JS bridge involved.
     @application.get("/shell/window/state")
     def shell_window_state():
-        return {"maximized": bridge.is_maximized()}
+        return {
+            "maximized": bridge.is_maximized(),
+            "platform": "windows" if sys.platform == "win32" else "gtk",
+        }
 
     @application.post("/shell/window/minimize")
     def shell_window_minimize():
@@ -206,8 +324,8 @@ def register_shell_routes(application, bridge):
         return {"ok": True}
 
     @application.post("/shell/window/start-resize")
-    def shell_window_start_resize():
-        bridge.start_resize()
+    def shell_window_start_resize(edge: str = "se"):
+        bridge.start_resize(edge)
         return {"ok": True}
 
     @application.post("/shell/window/close")
@@ -334,6 +452,8 @@ def open_native_window(bridge, url):
     # The database export downloads a zip through an anchor click; without
     # this flag pywebview drops downloads silently.
     webview.settings["ALLOW_DOWNLOADS"] = True
+
+    enable_native_caption_regions()
 
     # frameless: the frontend renders its own title bar (DesktopTitleBar).
     # The query flag makes the title bar render deterministically; all its
