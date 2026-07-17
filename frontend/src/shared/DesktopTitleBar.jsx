@@ -40,9 +40,11 @@ function shellWindowRequest(action, method = "POST") {
 const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 
-// GTK only: invisible strips along the borders that start native resize
-// drags over HTTP. Windows never renders these — WS_THICKFRAME gives it
-// real OS resize borders on every edge and corner.
+// Invisible strips along the borders that start native OS resize loops
+// over HTTP, on every platform: the WebView2 child covers the whole
+// window, so OS-level border hit-testing can never fire — the strips are
+// how frameless browser windows get "grab any edge", hidden while
+// maximized like real borders.
 function ResizeEdges() {
   return RESIZE_EDGES.map((edge) => (
     <div
@@ -62,16 +64,11 @@ function ResizeEdges() {
 function DesktopTitleBar() {
   const ready = useDesktopShell();
   const [maximized, setMaximized] = useState(true);
-  const [platform, setPlatform] = useState(null);
 
   const syncWindowState = useCallback(() => {
     shellWindowRequest("state", "GET").then((state) => {
       if (typeof state?.maximized === "boolean") {
         setMaximized(state.maximized);
-      }
-
-      if (state?.platform) {
-        setPlatform(state.platform);
       }
     });
   }, []);
@@ -82,6 +79,26 @@ function DesktopTitleBar() {
     if (!ready) return;
 
     syncWindowState();
+  }, [ready, syncWindowState]);
+
+  // Native gestures (caption drag-restore, Aero Snap, OS resize) bypass our
+  // JS entirely but always resize the viewport: re-learn the real state.
+  useEffect(() => {
+    if (!ready) return undefined;
+
+    let timer = null;
+
+    const onResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(syncWindowState, 250);
+    };
+
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
   }, [ready, syncWindowState]);
 
   const toggleMaximize = useCallback(() => {
@@ -190,7 +207,7 @@ function DesktopTitleBar() {
           </svg>
         </button>
       </header>
-      {platform === "gtk" && <ResizeEdges />}
+      {!maximized && <ResizeEdges />}
     </>
   );
 }

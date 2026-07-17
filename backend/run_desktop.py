@@ -38,7 +38,43 @@ class WindowBridge:
         self._maximized = maximized
 
     def is_maximized(self):
+        # Native gestures (caption drag-restore, Aero Snap) change the state
+        # without going through toggle_maximize, so ask the real window and
+        # keep the flag as a fallback for the pre-window gap.
+        real = self._query_real_maximized()
+
+        if real is not None:
+            self._maximized = real
+
         return self._maximized
+
+    def _query_real_maximized(self):
+        if self._window is None:
+            return None
+
+        try:
+            from webview.platforms.winforms import BrowserView, WinForms
+
+            form = BrowserView.instances.get(self._window.uid)
+
+            if form:
+                return (
+                    form.WindowState == WinForms.FormWindowState.Maximized
+                )
+        except Exception:
+            pass
+
+        try:
+            from webview.platforms.gtk import BrowserView
+
+            view = BrowserView.instances.get(self._window.uid)
+
+            if view:
+                return bool(view.window.is_maximized())
+        except Exception:
+            pass
+
+        return None
 
     def minimize(self):
         if self._window is None:
@@ -50,13 +86,15 @@ class WindowBridge:
         if self._window is None:
             return self._maximized
 
-        if self._maximized:
+        if self.is_maximized():
             if not self._gtk_unmaximize():
                 self._window.restore()
+
+            self._maximized = False
         else:
             self._window.maximize()
+            self._maximized = True
 
-        self._maximized = not self._maximized
         return self._maximized
 
     def close(self):

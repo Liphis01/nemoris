@@ -2,7 +2,7 @@
 ; Run via package-windows.ps1 (auto-detected) or open in the Inno Setup IDE.
 
 #define MyAppName "Nemoris"
-#define MyAppVersion "1.0.11"
+#define MyAppVersion "1.0.12"
 #define MyAppExeName "Nemoris.exe"
 #define BuildDir "..\backend\dist\Nemoris"
 
