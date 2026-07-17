@@ -142,6 +142,18 @@ jobs:
             throw "toggle-maximize had no effect (still maximized=$($State.maximized))"
           }
 
+          # Real input simulation: drag the title bar and grab the window
+          # edges with SendInput, asserting the window actually moves and
+          # resizes. This is what proves the native caption regions and
+          # WS_THICKFRAME borders work — the exact gestures a user makes.
+          python ..\scripts\windows_gesture_test.py $Port
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "=== nemoris.log ==="
+            Get-Content $Log -ErrorAction SilentlyContinue
+            throw "Window gesture test failed."
+          }
+
           try {
             Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/shell/window/close" -TimeoutSec 10 | Out-Null
           } catch {

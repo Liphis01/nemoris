@@ -79,9 +79,10 @@ class WindowBridge:
         if self._window is None:
             return
 
-        # Dragging a maximized window restores it first, like a native
-        # caption bar would.
-        if not resize and self._maximized:
+        # GTK only: dragging a maximized window restores it first, like a
+        # native caption would. On Windows the native caption handles this
+        # itself, and the state flip breaks the synthetic fallback loop.
+        if not resize and self._maximized and sys.platform != "win32":
             self.toggle_maximize()
 
         if resize:
@@ -237,11 +238,19 @@ class WindowBridge:
         self._subclass_proc = SUBCLASSPROC(subclass_proc)
 
         def apply():
-            handle = wintypes.HWND(form.Handle.ToInt64())
-            style = user32.GetWindowLongPtrW(handle, GWL_STYLE)
-            user32.SetWindowLongPtrW(handle, GWL_STYLE, style | WS_THICKFRAME)
-            comctl32.SetWindowSubclass(handle, self._subclass_proc, 1, 0)
-            user32.SetWindowPos(handle, None, 0, 0, 0, 0, SWP_FLAGS)
+            # BeginInvoke swallows exceptions; print them or failures here
+            # are invisible in nemoris.log.
+            try:
+                handle = wintypes.HWND(form.Handle.ToInt64())
+                style = user32.GetWindowLongPtrW(handle, GWL_STYLE)
+                user32.SetWindowLongPtrW(
+                    handle, GWL_STYLE, style | WS_THICKFRAME
+                )
+                comctl32.SetWindowSubclass(handle, self._subclass_proc, 1, 0)
+                user32.SetWindowPos(handle, None, 0, 0, 0, 0, SWP_FLAGS)
+                print("Native frame applied (thickframe + subclass).", flush=True)
+            except Exception as error:
+                print(f"Native frame setup failed ({error}).", flush=True)
 
         form.BeginInvoke(WinForms.MethodInvoker(apply))
 
@@ -260,13 +269,20 @@ class WindowBridge:
             return
 
         def clamp():
-            form.MaximizedBounds = WinForms.Screen.FromControl(form).WorkingArea
+            # BeginInvoke/Invoke swallow exceptions; print them or failures
+            # here are invisible in nemoris.log.
+            try:
+                form.MaximizedBounds = (
+                    WinForms.Screen.FromControl(form).WorkingArea
+                )
 
-            # Re-apply the maximized state so the clamp takes effect on the
-            # already-maximized startup window.
-            if form.WindowState == WinForms.FormWindowState.Maximized:
-                form.WindowState = WinForms.FormWindowState.Normal
-                form.WindowState = WinForms.FormWindowState.Maximized
+                # Re-apply the maximized state so the clamp takes effect on
+                # the already-maximized startup window.
+                if form.WindowState == WinForms.FormWindowState.Maximized:
+                    form.WindowState = WinForms.FormWindowState.Normal
+                    form.WindowState = WinForms.FormWindowState.Maximized
+            except Exception as error:
+                print(f"Maximized bounds clamp failed ({error}).", flush=True)
 
         form.Invoke(WinForms.MethodInvoker(clamp))
 
