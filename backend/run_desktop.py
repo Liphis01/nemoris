@@ -36,6 +36,16 @@ class WindowBridge:
     def __init__(self, maximized=False):
         self._window = None
         self._maximized = maximized
+        self._client_ready = False
+
+    def mark_client_ready(self):
+        # Set by the page once the title bar has mounted: the gesture-level
+        # release test must not touch the window before the caption regions
+        # and resize strips exist.
+        self._client_ready = True
+
+    def is_client_ready(self):
+        return self._client_ready
 
     def is_maximized(self):
         # Native gestures (caption drag-restore, Aero Snap) change the state
@@ -361,7 +371,13 @@ def register_shell_routes(application, bridge):
         return {
             "maximized": bridge.is_maximized(),
             "platform": "windows" if sys.platform == "win32" else "gtk",
+            "client_ready": bridge.is_client_ready(),
         }
+
+    @application.post("/shell/window/client-ready")
+    def shell_window_client_ready():
+        bridge.mark_client_ready()
+        return {"ok": True}
 
     @application.post("/shell/window/minimize")
     def shell_window_minimize():
@@ -509,12 +525,22 @@ def open_native_window(bridge, url):
 
     enable_native_caption_regions()
 
+    from app.config import FRONTEND_DIST_DIR
+
+    # Cache-buster: the webview engines cache the document aggressively
+    # (WebKitGTK even outside storage_path) and have served stale bundles
+    # across app updates. A build-specific URL makes that impossible.
+    try:
+        build_stamp = int((FRONTEND_DIST_DIR / "index.html").stat().st_mtime)
+    except OSError:
+        build_stamp = 0
+
     # frameless: the frontend renders its own title bar (DesktopTitleBar).
     # The query flag makes the title bar render deterministically; all its
     # actions go through the /shell/window HTTP routes.
     bridge._window = webview.create_window(
         WINDOW_TITLE,
-        f"{url}/?shell=desktop",
+        f"{url}/?shell=desktop&v={build_stamp}",
         width=1280,
         height=850,
         min_size=MIN_WINDOW_SIZE,

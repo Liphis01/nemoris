@@ -9,9 +9,16 @@ class StubBridge:
     def __init__(self, maximized=True):
         self.calls = []
         self._maximized = maximized
+        self._client_ready = False
 
     def is_maximized(self):
         return self._maximized
+
+    def mark_client_ready(self):
+        self._client_ready = True
+
+    def is_client_ready(self):
+        return self._client_ready
 
     def minimize(self):
         self.calls.append("minimize")
@@ -70,6 +77,14 @@ class ShellWindowRouteTests(unittest.TestCase):
 
         self.assertTrue(state["maximized"])
         self.assertIn(state["platform"], ("windows", "gtk"))
+        self.assertFalse(state["client_ready"])
+
+    def test_client_ready_flips_after_the_page_reports_in(self):
+        self.call("/shell/window/client-ready")
+
+        state = self.call("/shell/window/state", "GET")
+
+        self.assertTrue(state["client_ready"])
 
     def test_start_resize_forwards_the_edge(self):
         endpoint = find_endpoint(

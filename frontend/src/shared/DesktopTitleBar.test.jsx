@@ -96,11 +96,14 @@ describe("DesktopTitleBar", () => {
 
     const { getByLabelText, container } = render(<DesktopTitleBar />);
 
-    // Initial glyph sync.
+    // Initial glyph sync + readiness report for the gesture test.
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/shell/window/state", {
         method: "GET"
       });
+    });
+    expect(fetch).toHaveBeenCalledWith("/shell/window/client-ready", {
+      method: "POST"
     });
 
     fireEvent.click(getByLabelText("Réduire"));

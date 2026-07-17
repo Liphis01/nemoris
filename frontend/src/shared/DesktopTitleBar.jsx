@@ -74,11 +74,14 @@ function DesktopTitleBar() {
   }, []);
 
   // The window opens maximized by default; confirm the real state so the
-  // restore/maximize glyph is right even if that ever changes.
+  // restore/maximize glyph is right even if that ever changes. Also tell
+  // the launcher the title bar exists — the release gesture test waits for
+  // this before simulating input.
   useEffect(() => {
     if (!ready) return;
 
     syncWindowState();
+    shellWindowRequest("client-ready");
   }, [ready, syncWindowState]);
 
   // Native gestures (caption drag-restore, Aero Snap, OS resize) bypass our

@@ -101,6 +101,19 @@ def shell(port, action, method="POST"):
 def main(port):
     failures = []
 
+    # The server comes up well before WebView2 finishes rendering the page;
+    # gesturing before the title bar and strips exist tests a blank window.
+    for _ in range(60):
+        if shell(port, "state", "GET").get("client_ready"):
+            break
+
+        time.sleep(1)
+    else:
+        print("FAIL client-ready: page never reported the title bar mounted")
+        return 1
+
+    time.sleep(1)
+
     # A restored (non-maximized) window is needed to move and resize it.
     if shell(port, "state", "GET")["maximized"]:
         shell(port, "toggle-maximize")
