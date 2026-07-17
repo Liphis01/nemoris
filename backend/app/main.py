@@ -60,16 +60,6 @@ def create_app():
     app.include_router(uploads.router)
     app.include_router(backup.router)
 
-    @app.post("/shell/bridge-status")
-    def shell_bridge_status(status: str):
-        # The desktop shell reports which pywebview bridge stage it reached
-        # (ok / api-empty / no-bridge / call-timeout...). A broken bridge is
-        # otherwise invisible (dead title bar buttons, nothing in any log);
-        # this line lands in nemoris.log and the release smoke test asserts
-        # on status=ok.
-        print(f"SHELL BRIDGE status={status}", flush=True)
-        return {"status": status}
-
     if FRONTEND_DIST_DIR.exists():
         assets_dir = FRONTEND_DIST_DIR / "assets"
 

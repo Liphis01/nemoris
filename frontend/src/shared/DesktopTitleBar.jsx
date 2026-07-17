@@ -1,44 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./DesktopTitleBar.css";
 
 const TITLEBAR_HEIGHT = "36px";
 
 
 // The desktop launcher opens the app with ?shell=desktop: that flag is the
-// render signal for the custom title bar, because the pywebview JS bridge
-// injects at a backend-dependent moment (after NavigationCompleted on
-// WebView2 — later than React's mount) and cannot be relied on for timing.
-// Browser and dev usage keep the plain page. The --shell-top variable is
-// how the rest of the app makes room for the bar.
+// render signal for the custom title bar. Browser and dev usage keep the
+// plain page. The --shell-top variable is how the rest of the app makes
+// room for the bar.
 function useDesktopShell() {
-  const [ready, setReady] = useState(
+  const [ready] = useState(
     () =>
-      Boolean(window.pywebview) ||
       new URLSearchParams(window.location.search).get("shell") === "desktop"
   );
-
-  useEffect(() => {
-    if (ready) return undefined;
-
-    if (window.pywebview) {
-      setReady(true);
-      return undefined;
-    }
-
-    const onReady = () => setReady(true);
-    window.addEventListener("pywebviewready", onReady);
-
-    // Fallback for bridge injections whose ready event slips between the
-    // initial check and this listener.
-    const poll = window.setInterval(() => {
-      if (window.pywebview) setReady(true);
-    }, 300);
-
-    return () => {
-      window.removeEventListener("pywebviewready", onReady);
-      window.clearInterval(poll);
-    };
-  }, [ready]);
 
   useEffect(() => {
     document.documentElement.style.setProperty(
@@ -51,102 +25,32 @@ function useDesktopShell() {
 }
 
 
-// pywebview injects in two stages: window.pywebview.api first exists as an
-// EMPTY object, then a second script fills in the Python methods. Waiting
-// for the method itself (not the api object) covers both stages.
-function waitForWindowApi(method, timeoutMs = 5000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-
-    const tick = () => {
-      const api = window.pywebview?.api;
-
-      if (typeof api?.[method] === "function") {
-        resolve(api);
-      } else if (Date.now() - start > timeoutMs) {
-        resolve(null);
-      } else {
-        setTimeout(tick, 100);
-      }
-    };
-
-    tick();
-  });
+// Window actions go through plain HTTP to the launcher-registered
+// /shell/window routes — the same channel the whole app runs on, so the
+// buttons work whenever the page itself does. (pywebview's injected JS
+// bridge proved unreliable in frozen Windows builds: the api object could
+// exist with its methods silently missing.)
+function shellWindowRequest(action, method = "POST") {
+  return fetch(`/shell/window/${action}`, { method })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null);
 }
 
 
-function callWindowApi(method, ...args) {
-  return waitForWindowApi(method).then((api) =>
-    api ? api[method](...args) : null
-  );
-}
-
-
-// Pin down which bridge stage failed: no injection at all, an api object
-// whose methods never arrived (stage 2 dead), a call that never returns,
-// or a working round-trip.
-function probeBridgeStatus() {
-  return waitForWindowApi("is_maximized", 8000).then((api) => {
-    if (!api) {
-      if (!window.pywebview) return "no-bridge";
-      if (!window.pywebview.api) return "no-api";
-      return "api-empty";
-    }
-
-    return Promise.race([
-      api
-        .is_maximized()
-        .then((v) => (typeof v === "boolean" ? "ok" : "bad-result")),
-      new Promise((resolve) =>
-        setTimeout(() => resolve("call-timeout"), 4000)
-      )
-    ]).catch(() => "call-error");
-  });
-}
-
-
-// pywebview frameless windows have no OS resize borders, so a bottom-right
-// grip drives the window size through the bridge instead.
+// Starting a native OS resize loop from the corner grip: the backend posts
+// a non-client hit (Windows) or begins a GTK resize drag while the mouse
+// button is still held.
 function ResizeGrip() {
-  const drag = useRef(null);
-
   const onPointerDown = (event) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = {
-      startX: event.screenX,
-      startY: event.screenY,
-      width: window.innerWidth,
-      height: window.innerHeight,
-      raf: null
-    };
-  };
-
-  const onPointerMove = (event) => {
-    const state = drag.current;
-
-    if (!state) return;
-
-    state.targetWidth = state.width + (event.screenX - state.startX);
-    state.targetHeight = state.height + (event.screenY - state.startY);
-
-    if (!state.raf) {
-      state.raf = requestAnimationFrame(() => {
-        state.raf = null;
-        callWindowApi("resize_to", state.targetWidth, state.targetHeight);
-      });
+    if (event.button === 0) {
+      shellWindowRequest("start-resize");
     }
-  };
-
-  const onPointerUp = () => {
-    drag.current = null;
   };
 
   return (
     <div
       className="desktop-resize-grip"
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
       aria-hidden="true"
     >
       <svg width="12" height="12" viewBox="0 0 12 12">
@@ -164,39 +68,35 @@ function ResizeGrip() {
 
 function DesktopTitleBar() {
   const ready = useDesktopShell();
-  const [maximized, setMaximized] = useState(false);
+  const [maximized, setMaximized] = useState(true);
 
-  // The window opens maximized by default; ask the bridge for the real
-  // starting state so the restore/maximize glyph is right from the start.
+  // The window opens maximized by default; confirm the real state so the
+  // restore/maximize glyph is right even if that ever changes.
   useEffect(() => {
     if (!ready) return;
 
-    callWindowApi("is_maximized").then((state) => {
-      if (typeof state === "boolean") {
-        setMaximized(state);
+    shellWindowRequest("state", "GET").then((state) => {
+      if (typeof state?.maximized === "boolean") {
+        setMaximized(state.maximized);
       }
-    });
-  }, [ready]);
-
-  // Report the bridge's health stage: a dead bridge is invisible from
-  // outside (buttons silently no-op), so surface it in the app log.
-  useEffect(() => {
-    if (!ready) return;
-
-    probeBridgeStatus().then((status) => {
-      fetch(`/shell/bridge-status?status=${status}`, {
-        method: "POST"
-      }).catch(() => {});
     });
   }, [ready]);
 
   const toggleMaximize = useCallback(() => {
-    callWindowApi("toggle_maximize").then((state) => {
-      if (typeof state === "boolean") {
-        setMaximized(state);
+    shellWindowRequest("toggle-maximize").then((state) => {
+      if (typeof state?.maximized === "boolean") {
+        setMaximized(state.maximized);
       }
     });
   }, []);
+
+  const onDragPointerDown = (event) => {
+    // detail === 1 keeps the second press of a double-click for the
+    // maximize toggle instead of starting another native drag.
+    if (event.button === 0 && event.detail === 1) {
+      shellWindowRequest("start-drag");
+    }
+  };
 
   if (!ready) {
     return null;
@@ -206,7 +106,8 @@ function DesktopTitleBar() {
     <>
       <header className="desktop-titlebar">
         <div
-          className="desktop-titlebar__drag pywebview-drag-region"
+          className="desktop-titlebar__drag"
+          onPointerDown={onDragPointerDown}
           onDoubleClick={toggleMaximize}
         >
           <img className="desktop-titlebar__icon" src="/favicon.svg" alt="" />
@@ -216,7 +117,7 @@ function DesktopTitleBar() {
         <button
           type="button"
           className="desktop-titlebar__button"
-          onClick={() => callWindowApi("minimize")}
+          onClick={() => shellWindowRequest("minimize")}
           aria-label="Réduire"
           tabIndex={-1}
         >
@@ -268,7 +169,7 @@ function DesktopTitleBar() {
         <button
           type="button"
           className="desktop-titlebar__button desktop-titlebar__button--close"
-          onClick={() => callWindowApi("close")}
+          onClick={() => shellWindowRequest("close")}
           aria-label="Fermer"
           tabIndex={-1}
         >

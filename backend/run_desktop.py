@@ -17,25 +17,36 @@ MIN_WINDOW_SIZE = (1024, 700)
 BUNDLED_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 ICON_FILE = BUNDLED_DIR / "assets" / "nemoris.png"
 
+# Win32 non-client hit codes: posting WM_NCLBUTTONDOWN with these hands the
+# mouse to the OS move/size loop — native drag, including Aero Snap.
+WM_NCLBUTTONDOWN = 0x00A1
+HTCAPTION = 2
+HTBOTTOMRIGHT = 17
+
 
 class WindowBridge:
-    # Exposed to the page as window.pywebview.api: the window is frameless,
-    # so the frontend's custom title bar drives the chrome actions. Only
-    # underscore-prefixed attributes stay out of the generated JS API —
-    # pywebview walks public ones recursively.
+    # Drives the frameless window for the frontend's custom title bar. The
+    # frontend reaches these methods over plain HTTP (see
+    # register_shell_routes): the pywebview JS bridge proved unreliable in
+    # frozen Windows builds, while HTTP is the same channel the whole app
+    # already depends on.
     def __init__(self, maximized=False):
         self._window = None
         self._maximized = maximized
 
     def is_maximized(self):
-        # Lets the title bar sync its restore/maximize glyph with the
-        # window's actual starting state.
         return self._maximized
 
     def minimize(self):
+        if self._window is None:
+            return
+
         self._window.minimize()
 
     def toggle_maximize(self):
+        if self._window is None:
+            return self._maximized
+
         if self._maximized:
             if not self._gtk_unmaximize():
                 self._window.restore()
@@ -44,6 +55,73 @@ class WindowBridge:
 
         self._maximized = not self._maximized
         return self._maximized
+
+    def close(self):
+        if self._window is None:
+            return
+
+        self._window.destroy()
+
+    def start_drag(self):
+        self._start_system_loop(resize=False)
+
+    def start_resize(self):
+        self._start_system_loop(resize=True)
+
+    def _start_system_loop(self, resize):
+        # Called from a mousedown in the page while the button is still held:
+        # the OS takes over the move/size loop from the current pointer state.
+        if self._window is None:
+            return
+
+        if not self._winforms_nc_hit(HTBOTTOMRIGHT if resize else HTCAPTION):
+            self._gtk_begin_drag(resize)
+
+    def _winforms_nc_hit(self, hit_code):
+        try:
+            import ctypes
+
+            from webview.platforms.winforms import BrowserView
+        except Exception:
+            return False
+
+        form = BrowserView.instances.get(self._window.uid)
+
+        if not form:
+            return False
+
+        user32 = ctypes.windll.user32
+        user32.ReleaseCapture()
+        user32.PostMessageW(form.Handle.ToInt64(), WM_NCLBUTTONDOWN, hit_code, 0)
+        return True
+
+    def _gtk_begin_drag(self, resize):
+        try:
+            from gi.repository import Gdk, Gtk
+            from webview.platforms.gtk import BrowserView, glib
+        except Exception:
+            return False
+
+        view = BrowserView.instances.get(self._window.uid)
+
+        if not view:
+            return False
+
+        def begin():
+            win = view.window
+            seat = win.get_display().get_default_seat()
+            _screen, x, y = seat.get_pointer().get_position()
+            timestamp = Gtk.get_current_event_time()
+
+            if resize:
+                win.begin_resize_drag(
+                    Gdk.WindowEdge.SOUTH_EAST, 1, x, y, timestamp
+                )
+            else:
+                win.begin_move_drag(1, x, y, timestamp)
+
+        glib.idle_add(begin)
+        return True
 
     def _gtk_unmaximize(self):
         # pywebview's GTK restore() only deiconifies and never leaves the
@@ -61,17 +139,6 @@ class WindowBridge:
 
         glib.idle_add(view.window.unmaximize)
         return True
-
-    def resize_to(self, width, height):
-        # Frameless windows lose the OS resize borders; the frontend's
-        # corner grip calls this instead.
-        self._window.resize(
-            max(int(width), MIN_WINDOW_SIZE[0]),
-            max(int(height), MIN_WINDOW_SIZE[1]),
-        )
-
-    def close(self):
-        self._window.destroy()
 
     def _on_shown(self, *args):
         self._apply_windows_maximized_bounds()
@@ -100,6 +167,52 @@ class WindowBridge:
                 form.WindowState = WinForms.FormWindowState.Maximized
 
         form.Invoke(WinForms.MethodInvoker(clamp))
+
+
+def register_shell_routes(application, bridge):
+    # Window controls for the desktop title bar, served over HTTP so they
+    # work whenever the page itself does — no injected JS bridge involved.
+    @application.get("/shell/window/state")
+    def shell_window_state():
+        return {"maximized": bridge.is_maximized()}
+
+    @application.post("/shell/window/minimize")
+    def shell_window_minimize():
+        bridge.minimize()
+        return {"ok": True}
+
+    @application.post("/shell/window/toggle-maximize")
+    def shell_window_toggle_maximize():
+        return {"maximized": bridge.toggle_maximize()}
+
+    @application.post("/shell/window/start-drag")
+    def shell_window_start_drag():
+        bridge.start_drag()
+        return {"ok": True}
+
+    @application.post("/shell/window/start-resize")
+    def shell_window_start_resize():
+        bridge.start_resize()
+        return {"ok": True}
+
+    @application.post("/shell/window/close")
+    def shell_window_close():
+        bridge.close()
+        return {"ok": True}
+
+    # The SPA catch-all (GET /{full_path:path}) is registered during app
+    # creation, before these routes, and would swallow the GET state route.
+    # Starlette matches in order, so move the shell routes to the front.
+    shell_routes = [
+        route
+        for route in application.router.routes
+        if getattr(route, "path", "").startswith("/shell/window/")
+    ]
+
+    for route in shell_routes:
+        application.router.routes.remove(route)
+
+    application.router.routes[:0] = shell_routes
 
 
 def app_dir():
@@ -198,7 +311,7 @@ def apply_wsl_rendering_fix():
         os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 
 
-def open_native_window(url):
+def open_native_window(bridge, url):
     apply_wsl_rendering_fix()
 
     import webview
@@ -207,13 +320,9 @@ def open_native_window(url):
     # this flag pywebview drops downloads silently.
     webview.settings["ALLOW_DOWNLOADS"] = True
 
-    bridge = WindowBridge(maximized=True)
-
-    # frameless: the frontend renders its own title bar (DesktopTitleBar)
-    # with a pywebview drag region and the WindowBridge controls. The query
-    # flag makes the title bar render deterministically — the pywebview JS
-    # bridge injects at a backend-dependent moment (after NavigationCompleted
-    # on WebView2), too late to be the render signal.
+    # frameless: the frontend renders its own title bar (DesktopTitleBar).
+    # The query flag makes the title bar render deterministically; all its
+    # actions go through the /shell/window HTTP routes.
     bridge._window = webview.create_window(
         WINDOW_TITLE,
         f"{url}/?shell=desktop",
@@ -223,7 +332,6 @@ def open_native_window(url):
         maximized=True,
         frameless=True,
         easy_drag=False,
-        js_api=bridge,
     )
 
     bridge._window.events.shown += bridge._on_shown
@@ -262,13 +370,16 @@ if __name__ == "__main__":
 
     from app.main import app
 
+    bridge = WindowBridge(maximized=True)
+    register_shell_routes(app, bridge)
+
     port = pick_port()
     server, thread = start_server(app, port)
     url = f"http://127.0.0.1:{port}"
 
     try:
         try:
-            open_native_window(url)
+            open_native_window(bridge, url)
         except Exception as error:
             print(f"Native window unavailable ({error}); using the browser.")
             serve_in_browser(url, thread)

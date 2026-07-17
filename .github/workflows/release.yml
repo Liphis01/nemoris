@@ -126,24 +126,37 @@ jobs:
             throw "Smoke test failed (port=$Port, exited=$($Proc.HasExited))"
           }
 
-          # The page reports which pywebview bridge stage it reached; only a
-          # full Python round-trip (status=ok) counts. An api object whose
-          # methods never arrive gives dead title bar buttons with no error.
-          $BridgeStatus = $null
-          foreach ($i in 1..15) {
-            $B = Select-String -Path $Log -Pattern 'SHELL BRIDGE status=(\S+)' -ErrorAction SilentlyContinue | Select-Object -Last 1
-            if ($B) { $BridgeStatus = $B.Matches[0].Groups[1].Value; break }
-            Start-Sleep -Seconds 2
-          }
-
-          if ($BridgeStatus -ne 'ok') {
+          # Drive the title bar's actual control channel: read the window
+          # state, toggle maximize, then close — the process must exit on
+          # its own. This is exactly what the title bar buttons do.
+          try {
+            $State = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/shell/window/state" -TimeoutSec 5
+            $Toggled = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/shell/window/toggle-maximize" -TimeoutSec 10
+          } catch {
             Write-Host "=== nemoris.log ==="
             Get-Content $Log -ErrorAction SilentlyContinue
-            throw "JS bridge unhealthy: status=$BridgeStatus (expected ok)"
+            throw "Window control routes unreachable: $_"
           }
 
-          Stop-Process -Id $Proc.Id -Force
-          Write-Host "Smoke test passed on port $Port (bridge OK)"
+          if ($Toggled.maximized -eq $State.maximized) {
+            throw "toggle-maximize had no effect (still maximized=$($State.maximized))"
+          }
+
+          try {
+            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/shell/window/close" -TimeoutSec 10 | Out-Null
+          } catch {
+            # The server may die before the response flushes; the exit
+            # check below is the real assertion.
+          }
+
+          if (-not $Proc.WaitForExit(15000)) {
+            Write-Host "=== nemoris.log ==="
+            Get-Content $Log -ErrorAction SilentlyContinue
+            Stop-Process -Id $Proc.Id -Force
+            throw "close did not exit the app"
+          }
+
+          Write-Host "Smoke test passed on port $Port (window controls OK, clean exit)"
 
       - name: Archive (linux)
         if: matrix.label == 'linux'
