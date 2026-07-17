@@ -51,16 +51,17 @@ function useDesktopShell() {
 }
 
 
-// The bar can render before the bridge finishes injecting, so every call
-// waits for window.pywebview.api instead of assuming it exists.
-function waitForWindowApi(timeoutMs = 5000) {
+// pywebview injects in two stages: window.pywebview.api first exists as an
+// EMPTY object, then a second script fills in the Python methods. Waiting
+// for the method itself (not the api object) covers both stages.
+function waitForWindowApi(method, timeoutMs = 5000) {
   return new Promise((resolve) => {
     const start = Date.now();
 
     const tick = () => {
       const api = window.pywebview?.api;
 
-      if (api) {
+      if (typeof api?.[method] === "function") {
         resolve(api);
       } else if (Date.now() - start > timeoutMs) {
         resolve(null);
@@ -75,9 +76,32 @@ function waitForWindowApi(timeoutMs = 5000) {
 
 
 function callWindowApi(method, ...args) {
-  return waitForWindowApi().then((api) =>
-    api?.[method] ? api[method](...args) : null
+  return waitForWindowApi(method).then((api) =>
+    api ? api[method](...args) : null
   );
+}
+
+
+// Pin down which bridge stage failed: no injection at all, an api object
+// whose methods never arrived (stage 2 dead), a call that never returns,
+// or a working round-trip.
+function probeBridgeStatus() {
+  return waitForWindowApi("is_maximized", 8000).then((api) => {
+    if (!api) {
+      if (!window.pywebview) return "no-bridge";
+      if (!window.pywebview.api) return "no-api";
+      return "api-empty";
+    }
+
+    return Promise.race([
+      api
+        .is_maximized()
+        .then((v) => (typeof v === "boolean" ? "ok" : "bad-result")),
+      new Promise((resolve) =>
+        setTimeout(() => resolve("call-timeout"), 4000)
+      )
+    ]).catch(() => "call-error");
+  });
 }
 
 
@@ -154,13 +178,13 @@ function DesktopTitleBar() {
     });
   }, [ready]);
 
-  // Report whether the bridge ever appeared: a dead bridge is invisible
-  // from outside (buttons silently no-op), so surface it in the app log.
+  // Report the bridge's health stage: a dead bridge is invisible from
+  // outside (buttons silently no-op), so surface it in the app log.
   useEffect(() => {
     if (!ready) return;
 
-    waitForWindowApi(8000).then((api) => {
-      fetch(`/shell/bridge-status?ok=${Boolean(api)}`, {
+    probeBridgeStatus().then((status) => {
+      fetch(`/shell/bridge-status?status=${status}`, {
         method: "POST"
       }).catch(() => {});
     });

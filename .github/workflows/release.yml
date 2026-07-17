@@ -126,20 +126,20 @@ jobs:
             throw "Smoke test failed (port=$Port, exited=$($Proc.HasExited))"
           }
 
-          # The page reports whether the pywebview JS bridge appeared; a
-          # frozen build with missing webview JS assets fails silently
-          # otherwise (window fine, title bar buttons dead).
-          $BridgeOk = $false
+          # The page reports which pywebview bridge stage it reached; only a
+          # full Python round-trip (status=ok) counts. An api object whose
+          # methods never arrive gives dead title bar buttons with no error.
+          $BridgeStatus = $null
           foreach ($i in 1..15) {
-            $B = Select-String -Path $Log -Pattern 'SHELL BRIDGE ok=(\w+)' -ErrorAction SilentlyContinue | Select-Object -Last 1
-            if ($B) { $BridgeOk = $B.Matches[0].Groups[1].Value -eq 'True'; break }
+            $B = Select-String -Path $Log -Pattern 'SHELL BRIDGE status=(\S+)' -ErrorAction SilentlyContinue | Select-Object -Last 1
+            if ($B) { $BridgeStatus = $B.Matches[0].Groups[1].Value; break }
             Start-Sleep -Seconds 2
           }
 
-          if (-not $BridgeOk) {
+          if ($BridgeStatus -ne 'ok') {
             Write-Host "=== nemoris.log ==="
             Get-Content $Log -ErrorAction SilentlyContinue
-            throw "JS bridge did not initialize in the page (SHELL BRIDGE ok=True missing)"
+            throw "JS bridge unhealthy: status=$BridgeStatus (expected ok)"
           }
 
           Stop-Process -Id $Proc.Id -Force
