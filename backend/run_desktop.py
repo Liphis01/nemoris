@@ -74,6 +74,11 @@ class WindowBridge:
         if self._window is None:
             return
 
+        # Dragging a maximized window restores it first, like a native
+        # caption bar would.
+        if not resize and self._maximized:
+            self.toggle_maximize()
+
         if not self._winforms_nc_hit(HTBOTTOMRIGHT if resize else HTCAPTION):
             self._gtk_begin_drag(resize)
 
@@ -81,7 +86,7 @@ class WindowBridge:
         try:
             import ctypes
 
-            from webview.platforms.winforms import BrowserView
+            from webview.platforms.winforms import BrowserView, WinForms
         except Exception:
             return False
 
@@ -91,8 +96,18 @@ class WindowBridge:
             return False
 
         user32 = ctypes.windll.user32
-        user32.ReleaseCapture()
-        user32.PostMessageW(form.Handle.ToInt64(), WM_NCLBUTTONDOWN, hit_code, 0)
+        handle = ctypes.c_void_p(form.Handle.ToInt64())
+
+        def begin():
+            # Both calls must run on the UI thread: the WebView2 control owns
+            # the mouse capture there (ReleaseCapture is per-thread), and the
+            # modal move/size loop runs on the thread that sends the message.
+            user32.ReleaseCapture()
+            user32.SendMessageW(handle, WM_NCLBUTTONDOWN, hit_code, 0)
+
+        # BeginInvoke, not Invoke: the move loop blocks until mouse-up and
+        # this is called from an HTTP worker thread.
+        form.BeginInvoke(WinForms.MethodInvoker(begin))
         return True
 
     def _gtk_begin_drag(self, resize):

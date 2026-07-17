@@ -70,17 +70,21 @@ function DesktopTitleBar() {
   const ready = useDesktopShell();
   const [maximized, setMaximized] = useState(true);
 
-  // The window opens maximized by default; confirm the real state so the
-  // restore/maximize glyph is right even if that ever changes.
-  useEffect(() => {
-    if (!ready) return;
-
+  const syncWindowState = useCallback(() => {
     shellWindowRequest("state", "GET").then((state) => {
       if (typeof state?.maximized === "boolean") {
         setMaximized(state.maximized);
       }
     });
-  }, [ready]);
+  }, []);
+
+  // The window opens maximized by default; confirm the real state so the
+  // restore/maximize glyph is right even if that ever changes.
+  useEffect(() => {
+    if (!ready) return;
+
+    syncWindowState();
+  }, [ready, syncWindowState]);
 
   const toggleMaximize = useCallback(() => {
     shellWindowRequest("toggle-maximize").then((state) => {
@@ -94,7 +98,10 @@ function DesktopTitleBar() {
     // detail === 1 keeps the second press of a double-click for the
     // maximize toggle instead of starting another native drag.
     if (event.button === 0 && event.detail === 1) {
-      shellWindowRequest("start-drag");
+      // Dragging restores a maximized window; re-sync the glyph after.
+      shellWindowRequest("start-drag").then(() => {
+        setTimeout(syncWindowState, 400);
+      });
     }
   };
 
