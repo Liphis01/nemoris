@@ -252,6 +252,7 @@ class WindowBridge:
             import ctypes
             from ctypes import wintypes
 
+            from System.Drawing import ColorTranslator
             from webview.platforms.winforms import BrowserView, WinForms
         except Exception:
             return
@@ -272,13 +273,28 @@ class WindowBridge:
         SWP_FLAGS = 0x0001 | 0x0002 | 0x0004 | 0x0020
 
         # Hit-test results for the eight resize directions, plus the client
-        # fallback. The border is how many pixels in from each edge start a
-        # resize; kept a little generous so grabbing the visible edge is easy.
+        # fallback.
         HTCLIENT = 1
         HTLEFT, HTRIGHT = 10, 11
         HTTOP, HTTOPLEFT, HTTOPRIGHT = 12, 13, 14
         HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT = 15, 16, 17
-        RESIZE_BORDER = 8
+
+        SM_CXSIZEFRAME = 32
+        SM_CXPADDEDBORDER = 92
+        user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+        user32.GetSystemMetrics.restype = ctypes.c_int
+
+        # The WebView2 child fills the window and never yields edge pixels for
+        # resize, so we inset it by this margin to expose a thin band of the
+        # host form at every edge. The band clears the invisible DWM border
+        # (~8px) and leaves ~6px of visible grab; the resize hit-test must
+        # cover the whole band, so RESIZE_BORDER == margin.
+        margin = (
+            user32.GetSystemMetrics(SM_CXSIZEFRAME)
+            + user32.GetSystemMetrics(SM_CXPADDEDBORDER)
+            + 6
+        )
+        RESIZE_BORDER = margin
 
         user32.GetWindowLongPtrW.restype = ctypes.c_longlong
         user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -302,6 +318,17 @@ class WindowBridge:
             ctypes.c_ulonglong, ctypes.c_longlong,
             ctypes.c_ulonglong, ctypes.c_ulonglong,
         )
+
+        # One-time confirmation that the host proc actually classifies a
+        # point as a resize edge (i.e. the exposed band is being hit).
+        logged_hit = []
+
+        def log_hit(code):
+            if not logged_hit:
+                logged_hit.append(True)
+                print(f"NCHITTEST resize hit: {code}", flush=True)
+
+            return code
 
         def subclass_proc(hwnd, msg, wparam, lparam, _subclass_id, _ref):
             if msg == WM_NCCALCSIZE and wparam:
@@ -327,21 +354,21 @@ class WindowBridge:
                 on_bottom = y >= rect.bottom - RESIZE_BORDER
 
                 if on_top and on_left:
-                    return HTTOPLEFT
+                    return log_hit(HTTOPLEFT)
                 if on_top and on_right:
-                    return HTTOPRIGHT
+                    return log_hit(HTTOPRIGHT)
                 if on_bottom and on_left:
-                    return HTBOTTOMLEFT
+                    return log_hit(HTBOTTOMLEFT)
                 if on_bottom and on_right:
-                    return HTBOTTOMRIGHT
+                    return log_hit(HTBOTTOMRIGHT)
                 if on_left:
-                    return HTLEFT
+                    return log_hit(HTLEFT)
                 if on_right:
-                    return HTRIGHT
+                    return log_hit(HTRIGHT)
                 if on_top:
-                    return HTTOP
+                    return log_hit(HTTOP)
                 if on_bottom:
-                    return HTBOTTOM
+                    return log_hit(HTBOTTOM)
 
                 # Interior: let the page (and app-region drag) handle it.
                 return HTCLIENT
@@ -363,8 +390,17 @@ class WindowBridge:
                 )
                 comctl32.SetWindowSubclass(handle, self._subclass_proc, 1, 0)
                 user32.SetWindowPos(handle, None, 0, 0, 0, 0, SWP_FLAGS)
+
+                # Inset the Fill-docked WebView2 so a themed band of the form
+                # shows at every edge for the OS to resize; the dark band is
+                # invisible against the app background.
+                form.BackColor = ColorTranslator.FromHtml("#121212")
+                form.Padding = WinForms.Padding(margin)
+                form.PerformLayout()
+
                 print(
-                    "Native frame applied (thickframe + nchittest resize).",
+                    f"Native frame applied (nchittest resize, "
+                    f"margin={margin}px).",
                     flush=True,
                 )
             except Exception as error:
