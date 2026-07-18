@@ -37,6 +37,24 @@ function shellWindowRequest(action, method = "POST") {
 }
 
 
+// Reports readiness plus the viewport's real screen geometry: the window
+// rect and the page can disagree by a few pixels per edge, and the release
+// gesture test aims at the page's actual pixels.
+function reportClientReady() {
+  return fetch("/shell/window/client-ready", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      screen_x: window.screenX,
+      screen_y: window.screenY,
+      inner_w: window.innerWidth,
+      inner_h: window.innerHeight,
+      dpr: window.devicePixelRatio || 1
+    })
+  }).catch(() => {});
+}
+
+
 const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 
@@ -81,7 +99,7 @@ function DesktopTitleBar() {
     if (!ready) return;
 
     syncWindowState();
-    shellWindowRequest("client-ready");
+    reportClientReady();
   }, [ready, syncWindowState]);
 
   // Native gestures (caption drag-restore, Aero Snap, OS resize) bypass our
@@ -93,7 +111,10 @@ function DesktopTitleBar() {
 
     const onResize = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(syncWindowState, 250);
+      timer = window.setTimeout(() => {
+        syncWindowState();
+        reportClientReady();
+      }, 250);
     };
 
     window.addEventListener("resize", onResize);

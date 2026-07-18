@@ -68,7 +68,9 @@ def drag_pointer(x1, y1, x2, y2, steps=20):
     send_mouse(0, x1, y1)
     time.sleep(0.2)
     send_mouse(MOUSEEVENTF_LEFTDOWN)
-    time.sleep(0.2)
+    # Hold before moving: the resize strips reach the OS loop over HTTP
+    # (~100ms); moving immediately loses the first part of the gesture.
+    time.sleep(0.4)
 
     for i in range(1, steps + 1):
         send_mouse(
@@ -76,7 +78,7 @@ def drag_pointer(x1, y1, x2, y2, steps=20):
             x1 + (x2 - x1) * i / steps,
             y1 + (y2 - y1) * i / steps,
         )
-        time.sleep(0.02)
+        time.sleep(0.03)
 
     time.sleep(0.2)
     send_mouse(MOUSEEVENTF_LEFTUP)
@@ -128,6 +130,44 @@ def main(port):
     user32.SetForegroundWindow(hwnd)
     time.sleep(0.5)
 
+    # The window rect and the page's pixels can disagree by a few pixels
+    # per edge (frame insets); aim at the page, which the frontend reports
+    # after every resize. Wait until the metrics reflect the restored size.
+    metrics = None
+
+    for _ in range(15):
+        metrics = shell(port, "state", "GET").get("client_metrics")
+
+        if metrics and metrics["inner_w"] * metrics.get("dpr", 1) < SCREEN_W - 50:
+            break
+
+        time.sleep(1)
+
+    if not metrics:
+        print("FAIL client-metrics: page never reported its geometry")
+        return 1
+
+    dpr = metrics.get("dpr") or 1
+    rect = window_rect(hwnd)
+    page_left = int(metrics["screen_x"] * dpr)
+    page_top = int(metrics["screen_y"] * dpr)
+    page_right = page_left + int(metrics["inner_w"] * dpr)
+    page_bottom = page_top + int(metrics["inner_h"] * dpr)
+
+    # Constant offsets: valid as the window moves/resizes during the test.
+    off_l = page_left - rect[0]
+    off_t = page_top - rect[1]
+    off_r = rect[2] - page_right
+    off_b = rect[3] - page_bottom
+    print(
+        f"GEOMETRY window={rect} page=({page_left},{page_top},"
+        f"{page_right},{page_bottom}) offsets l={off_l} t={off_t} "
+        f"r={off_r} b={off_b} dpr={dpr}"
+    )
+
+    def edges(r):
+        return (r[0] + off_l, r[1] + off_t, r[2] - off_r, r[3] - off_b)
+
     def check(name, condition, detail):
         if condition:
             print(f"PASS {name} ({detail})")
@@ -137,54 +177,59 @@ def main(port):
 
     # 1. Drag the title bar: press left of center (away from the buttons),
     #    move, and the window must follow.
-    left, top, right, bottom = window_rect(hwnd)
-    drag_pointer(left + 150, top + 18, left + 150 + 140, top + 18 + 90)
+    rect = window_rect(hwnd)
+    pl, pt, pr, pb = edges(rect)
+    drag_pointer(pl + 150, pt + 18, pl + 150 + 140, pt + 18 + 90)
     new = window_rect(hwnd)
     check(
         "drag-titlebar",
-        abs(new[0] - left) >= 80 and abs(new[1] - top) >= 50,
-        f"moved by ({new[0] - left}, {new[1] - top})",
+        abs(new[0] - rect[0]) >= 80 and abs(new[1] - rect[1]) >= 50,
+        f"moved by ({new[0] - rect[0]}, {new[1] - rect[1]})",
     )
 
     # 2. Right edge resize.
-    left, top, right, bottom = window_rect(hwnd)
-    drag_pointer(right - 2, (top + bottom) // 2, right - 2 + 80, (top + bottom) // 2)
+    rect = window_rect(hwnd)
+    pl, pt, pr, pb = edges(rect)
+    drag_pointer(pr - 3, (pt + pb) // 2, pr - 3 + 80, (pt + pb) // 2)
     new = window_rect(hwnd)
     check(
         "resize-right-edge",
-        (new[2] - new[0]) - (right - left) >= 50,
-        f"width {right - left} -> {new[2] - new[0]}",
+        (new[2] - new[0]) - (rect[2] - rect[0]) >= 50,
+        f"width {rect[2] - rect[0]} -> {new[2] - new[0]}",
     )
 
     # 3. Left edge resize (window must both move and grow).
-    left, top, right, bottom = window_rect(hwnd)
-    drag_pointer(left + 2, (top + bottom) // 2, left + 2 - 80, (top + bottom) // 2)
+    rect = window_rect(hwnd)
+    pl, pt, pr, pb = edges(rect)
+    drag_pointer(pl + 3, (pt + pb) // 2, pl + 3 - 80, (pt + pb) // 2)
     new = window_rect(hwnd)
     check(
         "resize-left-edge",
-        (new[2] - new[0]) - (right - left) >= 50,
-        f"width {right - left} -> {new[2] - new[0]}",
+        (new[2] - new[0]) - (rect[2] - rect[0]) >= 50,
+        f"width {rect[2] - rect[0]} -> {new[2] - new[0]}",
     )
 
     # 4. Bottom edge resize.
-    left, top, right, bottom = window_rect(hwnd)
-    drag_pointer((left + right) // 2, bottom - 2, (left + right) // 2, bottom - 2 + 70)
+    rect = window_rect(hwnd)
+    pl, pt, pr, pb = edges(rect)
+    drag_pointer((pl + pr) // 2, pb - 3, (pl + pr) // 2, pb - 3 + 70)
     new = window_rect(hwnd)
     check(
         "resize-bottom-edge",
-        (new[3] - new[1]) - (bottom - top) >= 40,
-        f"height {bottom - top} -> {new[3] - new[1]}",
+        (new[3] - new[1]) - (rect[3] - rect[1]) >= 40,
+        f"height {rect[3] - rect[1]} -> {new[3] - new[1]}",
     )
 
     # 5. Corner resize (bottom-right, both dimensions at once).
-    left, top, right, bottom = window_rect(hwnd)
-    drag_pointer(right - 3, bottom - 3, right - 3 + 60, bottom - 3 + 60)
+    rect = window_rect(hwnd)
+    pl, pt, pr, pb = edges(rect)
+    drag_pointer(pr - 4, pb - 4, pr - 4 + 60, pb - 4 + 60)
     new = window_rect(hwnd)
     check(
         "resize-corner",
-        (new[2] - new[0]) - (right - left) >= 30
-        and (new[3] - new[1]) - (bottom - top) >= 30,
-        f"size {right - left}x{bottom - top} -> "
+        (new[2] - new[0]) - (rect[2] - rect[0]) >= 30
+        and (new[3] - new[1]) - (rect[3] - rect[1]) >= 30,
+        f"size {rect[2] - rect[0]}x{rect[3] - rect[1]} -> "
         f"{new[2] - new[0]}x{new[3] - new[1]}",
     )
 

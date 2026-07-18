@@ -10,15 +10,22 @@ class StubBridge:
         self.calls = []
         self._maximized = maximized
         self._client_ready = False
+        self._client_metrics = None
 
     def is_maximized(self):
         return self._maximized
 
-    def mark_client_ready(self):
+    def mark_client_ready(self, metrics=None):
         self._client_ready = True
+
+        if metrics:
+            self._client_metrics = metrics
 
     def is_client_ready(self):
         return self._client_ready
+
+    def client_metrics(self):
+        return self._client_metrics
 
     def minimize(self):
         self.calls.append("minimize")
@@ -79,12 +86,18 @@ class ShellWindowRouteTests(unittest.TestCase):
         self.assertIn(state["platform"], ("windows", "gtk"))
         self.assertFalse(state["client_ready"])
 
-    def test_client_ready_flips_after_the_page_reports_in(self):
-        self.call("/shell/window/client-ready")
+    def test_client_ready_flips_and_stores_metrics(self):
+        endpoint = find_endpoint(
+            self.app, "/shell/window/client-ready", "POST"
+        )
+        endpoint(metrics={"screen_x": 10, "inner_w": 1280})
 
         state = self.call("/shell/window/state", "GET")
 
         self.assertTrue(state["client_ready"])
+        self.assertEqual(
+            state["client_metrics"], {"screen_x": 10, "inner_w": 1280}
+        )
 
     def test_start_resize_forwards_the_edge(self):
         endpoint = find_endpoint(

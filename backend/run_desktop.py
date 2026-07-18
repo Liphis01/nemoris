@@ -7,6 +7,7 @@ import time
 import webbrowser
 
 import uvicorn
+from fastapi import Body
 
 
 DEFAULT_PORT = 8000
@@ -37,15 +38,24 @@ class WindowBridge:
         self._window = None
         self._maximized = maximized
         self._client_ready = False
+        self._client_metrics = None
 
-    def mark_client_ready(self):
+    def mark_client_ready(self, metrics=None):
         # Set by the page once the title bar has mounted: the gesture-level
         # release test must not touch the window before the caption regions
-        # and resize strips exist.
+        # and resize strips exist. The metrics (viewport screen position and
+        # size) let the test aim at the page's real pixels — the window rect
+        # and the page can disagree by several pixels per edge.
         self._client_ready = True
+
+        if metrics:
+            self._client_metrics = metrics
 
     def is_client_ready(self):
         return self._client_ready
+
+    def client_metrics(self):
+        return self._client_metrics
 
     def is_maximized(self):
         # Native gestures (caption drag-restore, Aero Snap) change the state
@@ -372,11 +382,12 @@ def register_shell_routes(application, bridge):
             "maximized": bridge.is_maximized(),
             "platform": "windows" if sys.platform == "win32" else "gtk",
             "client_ready": bridge.is_client_ready(),
+            "client_metrics": bridge.client_metrics(),
         }
 
     @application.post("/shell/window/client-ready")
-    def shell_window_client_ready():
-        bridge.mark_client_ready()
+    def shell_window_client_ready(metrics: dict = Body(default=None)):
+        bridge.mark_client_ready(metrics)
         return {"ok": True}
 
     @application.post("/shell/window/minimize")

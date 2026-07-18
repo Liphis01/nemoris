@@ -102,9 +102,10 @@ describe("DesktopTitleBar", () => {
         method: "GET"
       });
     });
-    expect(fetch).toHaveBeenCalledWith("/shell/window/client-ready", {
-      method: "POST"
-    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/shell/window/client-ready",
+      expect.objectContaining({ method: "POST" })
+    );
 
     fireEvent.click(getByLabelText("Réduire"));
     expect(fetch).toHaveBeenCalledWith("/shell/window/minimize", {
