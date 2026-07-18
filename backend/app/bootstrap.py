@@ -3,9 +3,8 @@ import shutil
 from .config import (
     APP_DATA_DIR,
     DATABASE_FILE,
-    INSTALL_DIR,
     IS_FROZEN,
-    SEED_DIR,
+    SEED_SOURCE_DIRS,
     STATIC_DIR,
 )
 from .migrations import run_migrations
@@ -13,19 +12,21 @@ from .migrations import run_migrations
 
 def _adopt_initial_data():
     # First run of an installed build: app data lives in the user profile,
-    # so nothing exists there yet. Prefer data from the old layout (next to
-    # the executable, pre-installer builds) over the bundled seed.
+    # so nothing exists there yet. Seed it from the first candidate source
+    # that has a database (see SEED_SOURCE_DIRS for the priority order).
     if not IS_FROZEN or DATABASE_FILE.exists():
         return
 
+    source_dir = next(
+        (d for d in SEED_SOURCE_DIRS if (d / "questions.db").exists()),
+        None,
+    )
+
+    if source_dir is None:
+        return
+
     APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    legacy_db = INSTALL_DIR / "questions.db"
-    source_dir = INSTALL_DIR if legacy_db.exists() else SEED_DIR
-    source_db = source_dir / "questions.db"
-
-    if source_db.exists():
-        shutil.copy2(source_db, DATABASE_FILE)
+    shutil.copy2(source_dir / "questions.db", DATABASE_FILE)
 
     source_static = source_dir / "static"
 

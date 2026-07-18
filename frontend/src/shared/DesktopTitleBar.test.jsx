@@ -1,135 +1,72 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const windowApi = {
+  minimize: vi.fn(),
+  toggleMaximize: vi.fn(),
+  close: vi.fn(),
+  isMaximized: vi.fn(() => Promise.resolve(true)),
+  onResized: vi.fn(() => Promise.resolve(() => {}))
+};
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => windowApi
+}));
+
 import DesktopTitleBar from "./DesktopTitleBar";
 
 describe("DesktopTitleBar", () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() =>
-        Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-      )
-    );
-  });
-
   afterEach(() => {
     cleanup();
-    vi.unstubAllGlobals();
-    window.history.replaceState(null, "", "/");
+    delete window.__NEMORIS_BACKEND__;
     document.documentElement.style.removeProperty("--shell-top");
+    vi.clearAllMocks();
   });
 
-  it("stays hidden in a plain browser", () => {
+  it("stays hidden outside the Tauri shell", () => {
     const { container } = render(<DesktopTitleBar />);
 
     expect(container.querySelector(".desktop-titlebar")).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("renders from the ?shell=desktop flag alone", () => {
-    window.history.replaceState(null, "", "/?shell=desktop");
-
-    const { container } = render(<DesktopTitleBar />);
-
-    expect(container.querySelector(".desktop-titlebar")).not.toBeNull();
-    expect(
-      container.querySelectorAll(".desktop-titlebar__button")
-    ).toHaveLength(3);
     expect(
       document.documentElement.style.getPropertyValue("--shell-top")
-    ).toBe("36px");
+    ).toBe("0px");
   });
 
-  it("shows resize edge strips on restored gtk, and never on windows", async () => {
-    window.history.replaceState(null, "", "/?shell=desktop");
-
-    // GTK, restored → 8 strips wired to the resize routes.
-    fetch.mockImplementation((url) =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve(
-            url === "/shell/window/state"
-              ? { maximized: false, platform: "gtk" }
-              : {}
-          )
-      })
-    );
-
-    const { container, unmount } = render(<DesktopTitleBar />);
-
-    await waitFor(() => {
-      expect(container.querySelectorAll(".shell-resize-edge")).toHaveLength(8);
+  describe("inside the Tauri shell", () => {
+    beforeEach(() => {
+      window.__NEMORIS_BACKEND__ = "http://127.0.0.1:1234";
     });
 
-    fireEvent.pointerDown(
-      container.querySelector(".shell-resize-edge--nw"),
-      { button: 0 }
-    );
-    expect(fetch).toHaveBeenCalledWith("/shell/window/start-resize?edge=nw", {
-      method: "POST"
+    it("renders the bar with a native drag region and reserves --shell-top", async () => {
+      const { container } = render(<DesktopTitleBar />);
+
+      expect(container.querySelector(".desktop-titlebar")).not.toBeNull();
+      expect(
+        container.querySelector(".desktop-titlebar__drag[data-tauri-drag-region]")
+      ).not.toBeNull();
+      expect(
+        container.querySelectorAll(".desktop-titlebar__button")
+      ).toHaveLength(3);
+      expect(
+        document.documentElement.style.getPropertyValue("--shell-top")
+      ).toBe("36px");
+
+      await waitFor(() => expect(windowApi.isMaximized).toHaveBeenCalled());
     });
 
-    unmount();
+    it("drives the window through the Tauri window API", async () => {
+      const { getByLabelText } = render(<DesktopTitleBar />);
 
-    // Windows resizes via native WM_NCHITTEST borders; strips would block it.
-    fetch.mockImplementation((url) =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve(
-            url === "/shell/window/state"
-              ? { maximized: false, platform: "windows" }
-              : {}
-          )
-      })
-    );
+      await waitFor(() => expect(windowApi.isMaximized).toHaveBeenCalled());
 
-    const windowsRender = render(<DesktopTitleBar />);
+      fireEvent.click(getByLabelText("Réduire"));
+      expect(windowApi.minimize).toHaveBeenCalled();
 
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/shell/window/state", {
-        method: "GET"
-      });
+      fireEvent.click(getByLabelText("Restaurer"));
+      expect(windowApi.toggleMaximize).toHaveBeenCalled();
+
+      fireEvent.click(getByLabelText("Fermer"));
+      expect(windowApi.close).toHaveBeenCalled();
     });
-    expect(
-      windowsRender.container.querySelectorAll(".shell-resize-edge")
-    ).toHaveLength(0);
-  });
-
-  it("drives the window over the /shell/window HTTP routes", async () => {
-    window.history.replaceState(null, "", "/?shell=desktop");
-
-    const { getByLabelText, container } = render(<DesktopTitleBar />);
-
-    // Initial glyph sync + readiness report for the gesture test.
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/shell/window/state", {
-        method: "GET"
-      });
-    });
-    expect(fetch).toHaveBeenCalledWith(
-      "/shell/window/client-ready",
-      expect.objectContaining({ method: "POST" })
-    );
-
-    fireEvent.click(getByLabelText("Réduire"));
-    expect(fetch).toHaveBeenCalledWith("/shell/window/minimize", {
-      method: "POST"
-    });
-
-    fireEvent.click(getByLabelText("Fermer"));
-    expect(fetch).toHaveBeenCalledWith("/shell/window/close", {
-      method: "POST"
-    });
-
-    fireEvent.pointerDown(
-      container.querySelector(".desktop-titlebar__drag"),
-      { button: 0, detail: 1 }
-    );
-    expect(fetch).toHaveBeenCalledWith("/shell/window/start-drag", {
-      method: "POST"
-    });
-
   });
 });

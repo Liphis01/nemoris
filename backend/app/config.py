@@ -11,6 +11,12 @@ INSTALL_DIR = Path(sys.executable).resolve().parent if IS_FROZEN else BACKEND_DI
 # First-run data shipped by the packaging scripts next to the executable.
 SEED_DIR = INSTALL_DIR / "seed"
 
+# Candidate directories that may hold first-run data, in priority order:
+# the old next-to-exe layout (questions.db beside the exe), the packaging
+# scripts' seed/ folder, and data bundled inside a onefile build (extracted
+# to _MEIPASS/seed by the Tauri sidecar build).
+SEED_SOURCE_DIRS = [INSTALL_DIR, SEED_DIR, BUNDLED_DIR / "seed"]
+
 
 def _frozen_app_data_dir():
     # Installed builds must not write next to the executable (Program Files
