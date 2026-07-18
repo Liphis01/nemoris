@@ -8,194 +8,62 @@ permissions:
   contents: write          # required to create/upload the GitHub Release
 
 jobs:
-  build:
-    name: Build (${{ matrix.label }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux
-            sep: ":"
-            archive: Nemoris-linux.tar.gz
-            icon: ""
-          - os: windows-latest
-            label: windows
-            sep: ";"
-            archive: Nemoris-windows.zip
-            icon: --icon assets/nemoris.ico
-    runs-on: ${{ matrix.os }}
+  release:
+    name: Build Windows installer (Tauri)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      # PyGObject (pywebview's GTK backend) builds from source and needs the
-      # introspection/webkit dev packages; the frozen app then uses the
-      # system webkit2gtk at runtime.
-      - name: Install GTK/WebKit build deps (linux)
-        if: matrix.label == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config python3-dev gcc gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build frontend
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      - name: Install frontend deps
         working-directory: frontend
-        run: |
-          npm ci --legacy-peer-deps
-          npm run build
+        run: npm ci --legacy-peer-deps
 
-      - name: Install backend deps
+      # The FastAPI backend ships as a single-file console binary that Tauri
+      # spawns as a sidecar. questions.db is seeded from the tracked CSV and
+      # bundled so the app has data on first run.
+      - name: Build backend sidecar
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-desktop.txt pyinstaller
+          pip install -r requirements.txt pyinstaller
+          python -c "from app.bootstrap import init_database; init_database()"
+          python import_csv.py
+          pyinstaller --name nemoris-backend --onefile --noconfirm --add-data "questions.db;seed" run_sidecar.py
 
-      - name: Seed a fresh database
-        working-directory: backend
-        run: |
-          python -c "from app.bootstrap import init_database; init_database()"  # build + stamp schema via migrations
-          python import_csv.py                                                  # populate from the tracked questions.csv
-
-      # --windowed hides the console on Windows (no-op elsewhere); the icon
-      # flag is Windows-only because PyInstaller ignores .ico on Linux.
-      # --collect-all webview forces every pywebview runtime file (WebView2
-      # DLLs, js) into the bundle; the stock hook has missed files before.
-      - name: Build executable (PyInstaller)
-        working-directory: backend
-        run: >
-          pyinstaller --name Nemoris --onedir --noconfirm --windowed
-          ${{ matrix.icon }}
-          --collect-all webview
-          --add-data "assets${{ matrix.sep }}assets"
-          --add-data "../frontend/dist${{ matrix.sep }}frontend/dist"
-          run_desktop.py
-
-      # seed/ is imported into the user's app-data dir on first launch
-      # (see app/bootstrap.py); the app never writes next to the executable.
-      - name: Stage seed data
-        working-directory: backend
+      # Tauri resolves externalBin by target triple; place the built binary
+      # where tauri.conf.json's "binaries/nemoris-backend" expects it.
+      - name: Place sidecar for Tauri
         shell: bash
         run: |
-          mkdir -p dist/Nemoris/seed/static
-          cp questions.db dist/Nemoris/seed/questions.db
-          [ -d static ] && cp -R static/. dist/Nemoris/seed/static/ || true
+          mkdir -p frontend/src-tauri/binaries
+          cp backend/dist/nemoris-backend.exe \
+            "frontend/src-tauri/binaries/nemoris-backend-x86_64-pc-windows-msvc.exe"
 
-      # Launch the real exe on the runner: it must reach a serving state and
-      # stay alive (a native pywebview crash kills the process silently).
-      # Failing here blocks the release upload and prints the app log.
-      - name: Smoke test (windows)
-        if: matrix.label == 'windows'
-        shell: pwsh
-        working-directory: backend
-        run: |
-          $Log = "$env:APPDATA\Nemoris\nemoris.log"
-          $Proc = Start-Process -FilePath "dist\Nemoris\Nemoris.exe" -PassThru
-
-          $Port = $null
-          foreach ($i in 1..30) {
-            Start-Sleep -Seconds 2
-            if ($Proc.HasExited) { break }
-            $Match = Select-String -Path $Log -Pattern 'running on http://127\.0\.0\.1:(\d+)' -ErrorAction SilentlyContinue | Select-Object -Last 1
-            if ($Match) { $Port = $Match.Matches[0].Groups[1].Value; break }
-          }
-
-          $Ok = $false
-          if ($Port -and -not $Proc.HasExited) {
-            foreach ($i in 1..10) {
-              try {
-                $Resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/stats" -UseBasicParsing -TimeoutSec 3
-                if ($Resp.StatusCode -eq 200) { $Ok = $true; break }
-              } catch { Start-Sleep -Seconds 2 }
-            }
-          }
-
-          # The original bug died right after the server came up; make sure
-          # the process survives past window creation.
-          if ($Ok) { Start-Sleep -Seconds 8 }
-
-          if (-not $Ok -or $Proc.HasExited) {
-            Write-Host "=== nemoris.log ==="
-            Get-Content $Log -ErrorAction SilentlyContinue
-            throw "Smoke test failed (port=$Port, exited=$($Proc.HasExited))"
-          }
-
-          # Drive the title bar's actual control channel: read the window
-          # state, toggle maximize, then close — the process must exit on
-          # its own. This is exactly what the title bar buttons do.
-          try {
-            $State = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/shell/window/state" -TimeoutSec 5
-            $Toggled = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/shell/window/toggle-maximize" -TimeoutSec 10
-          } catch {
-            Write-Host "=== nemoris.log ==="
-            Get-Content $Log -ErrorAction SilentlyContinue
-            throw "Window control routes unreachable: $_"
-          }
-
-          if ($Toggled.maximized -eq $State.maximized) {
-            throw "toggle-maximize had no effect (still maximized=$($State.maximized))"
-          }
-
-          # Real input simulation: drag the title bar and grab the window
-          # edges with SendInput, asserting the window actually moves and
-          # resizes. This is what proves the native caption regions and
-          # WS_THICKFRAME borders work — the exact gestures a user makes.
-          python ..\scripts\windows_gesture_test.py $Port
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "=== nemoris.log ==="
-            Get-Content $Log -ErrorAction SilentlyContinue
-            throw "Window gesture test failed."
-          }
-
-          try {
-            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/shell/window/close" -TimeoutSec 10 | Out-Null
-          } catch {
-            # The server may die before the response flushes; the exit
-            # check below is the real assertion.
-          }
-
-          if (-not $Proc.WaitForExit(15000)) {
-            Write-Host "=== nemoris.log ==="
-            Get-Content $Log -ErrorAction SilentlyContinue
-            Stop-Process -Id $Proc.Id -Force
-            throw "close did not exit the app"
-          }
-
-          Write-Host "Smoke test passed on port $Port (window controls OK, clean exit)"
-
-      - name: Archive (linux)
-        if: matrix.label == 'linux'
-        working-directory: backend/dist
-        run: tar -czf ${{ matrix.archive }} Nemoris
-
-      - name: Archive (windows)
-        if: matrix.label == 'windows'
-        working-directory: backend/dist
-        run: Compress-Archive -Path Nemoris -DestinationPath ${{ matrix.archive }}
-
-      - name: Build installer (windows)
-        if: matrix.label == 'windows'
-        shell: pwsh
-        run: |
-          $Iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $Iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          & $Iscc installer\nemoris.iss
-          if ($LASTEXITCODE -ne 0) { throw "Installer build failed." }
-
-      # The unmatched installer pattern on Linux is ignored
-      # (fail_on_unmatched_files defaults to false).
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      # tauri-action runs the beforeBuildCommand (npm run build) then bundles
+      # the NSIS installer + MSI and uploads them to the tag's release.
+      - name: Build Tauri app and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: |
-            backend/dist/${{ matrix.archive }}
-            backend/dist/Nemoris-Setup.exe
+          projectPath: frontend
+          tagName: ${{ github.ref_name }}
+          releaseName: "Nemoris ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
