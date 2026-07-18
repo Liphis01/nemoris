@@ -58,11 +58,9 @@ function reportClientReady() {
 const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 
-// Invisible strips along the borders that start native OS resize loops
-// over HTTP, on every platform: the WebView2 child covers the whole
-// window, so OS-level border hit-testing can never fire — the strips are
-// how frameless browser windows get "grab any edge", hidden while
-// maximized like real borders.
+// GTK only: invisible strips along the borders that start native OS resize
+// loops over HTTP. Windows uses WM_NCHITTEST on the host window instead
+// (strips would claim the edge pixels as client and block it).
 function ResizeEdges() {
   return RESIZE_EDGES.map((edge) => (
     <div
@@ -82,11 +80,16 @@ function ResizeEdges() {
 function DesktopTitleBar() {
   const ready = useDesktopShell();
   const [maximized, setMaximized] = useState(true);
+  const [platform, setPlatform] = useState(null);
 
   const syncWindowState = useCallback(() => {
     shellWindowRequest("state", "GET").then((state) => {
       if (typeof state?.maximized === "boolean") {
         setMaximized(state.maximized);
+      }
+
+      if (state?.platform) {
+        setPlatform(state.platform);
       }
     });
   }, []);
@@ -231,7 +234,10 @@ function DesktopTitleBar() {
           </svg>
         </button>
       </header>
-      {!maximized && <ResizeEdges />}
+      {/* GTK only: Windows resizes via native WM_NCHITTEST borders, and
+          these strips (app-region: no-drag) would force those edge pixels
+          back to client and block it. */}
+      {platform === "gtk" && !maximized && <ResizeEdges />}
     </>
   );
 }

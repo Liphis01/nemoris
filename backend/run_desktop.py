@@ -241,9 +241,13 @@ class WindowBridge:
         self._apply_windows_native_frame()
 
     def _apply_windows_native_frame(self):
-        # WS_THICKFRAME restores the native resize borders on the frameless
-        # window (grab any edge/corner, snap-compatible); the WM_NCCALCSIZE
-        # subclass removes the frame insets so content stays full-bleed.
+        # Native all-edge resize on a frameless window fully covered by the
+        # WebView2 child. WS_THICKFRAME makes the window resizable and
+        # WM_NCCALCSIZE→0 removes the visible frame so content is full-bleed;
+        # WM_NCHITTEST then claims the border pixels as resize edges/corners
+        # so the OS runs its own resize loop (the same native modal loop that
+        # makes caption drag track perfectly). WebView2's non-client region
+        # support forwards the hit test to this host window proc.
         try:
             import ctypes
             from ctypes import wintypes
@@ -263,8 +267,18 @@ class WindowBridge:
         GWL_STYLE = -16
         WS_THICKFRAME = 0x00040000
         WM_NCCALCSIZE = 0x0083
+        WM_NCHITTEST = 0x0084
         # NOSIZE | NOMOVE | NOZORDER | FRAMECHANGED
         SWP_FLAGS = 0x0001 | 0x0002 | 0x0004 | 0x0020
+
+        # Hit-test results for the eight resize directions, plus the client
+        # fallback. The border is how many pixels in from each edge start a
+        # resize; kept a little generous so grabbing the visible edge is easy.
+        HTCLIENT = 1
+        HTLEFT, HTRIGHT = 10, 11
+        HTTOP, HTTOPLEFT, HTTOPRIGHT = 12, 13, 14
+        HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT = 15, 16, 17
+        RESIZE_BORDER = 8
 
         user32.GetWindowLongPtrW.restype = ctypes.c_longlong
         user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -272,6 +286,10 @@ class WindowBridge:
         user32.SetWindowLongPtrW.argtypes = [
             wintypes.HWND, ctypes.c_int, ctypes.c_longlong,
         ]
+        user32.GetWindowRect.argtypes = [
+            wintypes.HWND, ctypes.POINTER(wintypes.RECT),
+        ]
+        user32.GetWindowRect.restype = wintypes.BOOL
         comctl32.DefSubclassProc.restype = ctypes.c_longlong
         comctl32.DefSubclassProc.argtypes = [
             wintypes.HWND, ctypes.c_uint, ctypes.c_ulonglong,
@@ -288,6 +306,45 @@ class WindowBridge:
         def subclass_proc(hwnd, msg, wparam, lparam, _subclass_id, _ref):
             if msg == WM_NCCALCSIZE and wparam:
                 return 0
+
+            if msg == WM_NCHITTEST:
+                # lParam packs the cursor's screen x/y as signed 16-bit words.
+                x = lparam & 0xFFFF
+                y = (lparam >> 16) & 0xFFFF
+
+                if x >= 0x8000:
+                    x -= 0x10000
+
+                if y >= 0x8000:
+                    y -= 0x10000
+
+                rect = wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+
+                on_left = x < rect.left + RESIZE_BORDER
+                on_right = x >= rect.right - RESIZE_BORDER
+                on_top = y < rect.top + RESIZE_BORDER
+                on_bottom = y >= rect.bottom - RESIZE_BORDER
+
+                if on_top and on_left:
+                    return HTTOPLEFT
+                if on_top and on_right:
+                    return HTTOPRIGHT
+                if on_bottom and on_left:
+                    return HTBOTTOMLEFT
+                if on_bottom and on_right:
+                    return HTBOTTOMRIGHT
+                if on_left:
+                    return HTLEFT
+                if on_right:
+                    return HTRIGHT
+                if on_top:
+                    return HTTOP
+                if on_bottom:
+                    return HTBOTTOM
+
+                # Interior: let the page (and app-region drag) handle it.
+                return HTCLIENT
 
             return comctl32.DefSubclassProc(hwnd, msg, wparam, lparam)
 
@@ -306,7 +363,10 @@ class WindowBridge:
                 )
                 comctl32.SetWindowSubclass(handle, self._subclass_proc, 1, 0)
                 user32.SetWindowPos(handle, None, 0, 0, 0, 0, SWP_FLAGS)
-                print("Native frame applied (thickframe + subclass).", flush=True)
+                print(
+                    "Native frame applied (thickframe + nchittest resize).",
+                    flush=True,
+                )
             except Exception as error:
                 print(f"Native frame setup failed ({error}).", flush=True)
 

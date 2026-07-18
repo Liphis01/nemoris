@@ -40,15 +40,18 @@ describe("DesktopTitleBar", () => {
     ).toBe("36px");
   });
 
-  it("shows resize edge strips when restored and hides them maximized", async () => {
+  it("shows resize edge strips on restored gtk, and never on windows", async () => {
     window.history.replaceState(null, "", "/?shell=desktop");
 
+    // GTK, restored → 8 strips wired to the resize routes.
     fetch.mockImplementation((url) =>
       Promise.resolve({
         ok: true,
         json: () =>
           Promise.resolve(
-            url === "/shell/window/state" ? { maximized: false } : {}
+            url === "/shell/window/state"
+              ? { maximized: false, platform: "gtk" }
+              : {}
           )
       })
     );
@@ -69,17 +72,20 @@ describe("DesktopTitleBar", () => {
 
     unmount();
 
+    // Windows resizes via native WM_NCHITTEST borders; strips would block it.
     fetch.mockImplementation((url) =>
       Promise.resolve({
         ok: true,
         json: () =>
           Promise.resolve(
-            url === "/shell/window/state" ? { maximized: true } : {}
+            url === "/shell/window/state"
+              ? { maximized: false, platform: "windows" }
+              : {}
           )
       })
     );
 
-    const maximizedRender = render(<DesktopTitleBar />);
+    const windowsRender = render(<DesktopTitleBar />);
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/shell/window/state", {
@@ -87,7 +93,7 @@ describe("DesktopTitleBar", () => {
       });
     });
     expect(
-      maximizedRender.container.querySelectorAll(".shell-resize-edge")
+      windowsRender.container.querySelectorAll(".shell-resize-edge")
     ).toHaveLength(0);
   });
 
