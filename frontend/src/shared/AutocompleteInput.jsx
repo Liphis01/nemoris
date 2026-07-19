@@ -153,6 +153,7 @@ export default function AutocompleteInput({
         <div
           id={helperId}
           role="listbox"
+          className="app-scrollbar"
           style={{
             background: "#161616",
             border: "1px solid #333",

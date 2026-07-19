@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 
 const LONG_TEXT_LENGTH = 48;
 const CLOSE_DELAY_MS = 140;
@@ -188,8 +188,7 @@ export function useManageTextPreview(items, options = {}) {
       <div
         id={previewId}
         role="tooltip"
-        onPointerEnter={clearCloseTimer}
-        onPointerLeave={scheduleClose}
+        className="app-scrollbar"
         style={{
           position: "fixed",
           left: `${position.left}px`,
@@ -217,7 +216,27 @@ export function useManageTextPreview(items, options = {}) {
             gap: "10px"
           }}
         >
-          {mediaSrc && (
+          {mediaSrc && getMediaKind(options.media) === "audio" && (
+            <audio
+              src={mediaSrc}
+              controls
+              style={{ width: "100%" }}
+            />
+          )}
+          {mediaSrc && getMediaKind(options.media) === "video" && (
+            <video
+              src={mediaSrc}
+              controls
+              style={{
+                width: "100%",
+                maxHeight: "190px",
+                borderRadius: "8px",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                background: "#0f0f0f"
+              }}
+            />
+          )}
+          {mediaSrc && getMediaKind(options.media) === "image" && (
             <img
               src={mediaSrc}
               alt=""

@@ -8,9 +8,19 @@ const groupCreationTypes = [
     detail: "Carte SVG et zones associées"
   },
   {
-    value: "image",
-    label: "Groupe d'images",
-    detail: "Images avec réponses indépendantes"
+    value: "media",
+    label: "Groupe média",
+    detail: "Images, audio et vidéo à réviser"
+  },
+  {
+    value: "text",
+    label: "Groupe texte",
+    detail: "Associations texte↔texte (ex : pays → capitale)"
+  },
+  {
+    value: "sequence",
+    label: "Liste ordonnée",
+    detail: "Liste dont l'ordre compte (ex : alphabet grec)"
   }
 ];
 

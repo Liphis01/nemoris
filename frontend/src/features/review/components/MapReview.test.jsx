@@ -6,7 +6,9 @@ const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
 
 vi.mock("../../map/components/SvgMap", () => ({
   default: (props) => {
-    const isRecap = props.zoneLabels === undefined;
+    // Both maps are labelled now (the recap names every zone on hover), so tell
+    // them apart by flashCodes, which only the answering map drives.
+    const isRecap = props.flashCodes === undefined;
     const clickableCodes = props.clickableCodes;
     const canSelectBeta = !Array.isArray(clickableCodes) || clickableCodes.includes("beta");
 
@@ -96,6 +98,24 @@ describe("MapReview recap map focus", () => {
       expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-version", "1");
     }
   );
+
+  it("names every zone on hover in the recap, but not while answering", async () => {
+    renderMapReview(true);
+
+    // While answering, only found/missed zones are labelled — hovering an
+    // untouched zone must not give its name away.
+    expect(JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels)).toEqual({});
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+
+    // By the recap every zone is revealed, so all of them are hoverable by name.
+    const recapMap = await screen.findByTestId("recap-map");
+
+    expect(JSON.parse(recapMap.dataset.zoneLabels)).toEqual({
+      alpha: "Alpha",
+      beta: "Beta"
+    });
+  });
 
   it("shows the training timer while answering map groups", async () => {
     renderMapReview(false, {
@@ -478,6 +498,76 @@ describe("MapReview recap map focus", () => {
 
     expect(screen.queryByText("Zone surlignée")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
+  });
+
+  it("multiple_choice replaces the decoys with the quality buttons", async () => {
+    renderMapReview(true, { mode: "multiple_choice" });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+
+    // Only the correct zone stays; the decoy slots become Dur/Bon/Facile.
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-map-choice-quality]")).toHaveLength(3);
+    });
+    expect(document.querySelectorAll("[data-map-choice-feedback]")).toHaveLength(1);
+    // A correct pick is never "Faux".
+    expect(document.querySelector("[data-map-choice-quality='0']")).toBeNull();
+
+    fireEvent.keyDown(window, { key: "3" });
+
+    // Grading dismisses the reveal and moves the session on.
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-map-choice-quality]")).toHaveLength(0);
+    });
+  });
+
+  it("multiple_choice centers the reveal with no quality buttons in training", async () => {
+    renderMapReview(false, { mode: "multiple_choice" });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+
+    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+
+    // Training: no quality buttons, and the lone correct zone is centered.
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-map-choice-feedback]")).toHaveLength(1);
+    });
+    expect(document.querySelectorAll("[data-map-choice-quality]")).toHaveLength(0);
+
+    const grid = document.querySelector("[data-map-choice-grid]");
+    expect(grid.style.justifyContent).toBe("center");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(160px, 260px))");
+  });
+
+  it("multiple_choice picks the option under its number-key shortcut", async () => {
+    renderMapReview(false, { mode: "multiple_choice" });
+    const targetCode = screen.getByTestId("active-map")
+      .getAttribute("data-due-items");
+    const targetChoice = reviewZones.find(zone => zone.code === targetCode);
+    const choiceButtons = Array.from(
+      document.querySelectorAll("[data-map-choice-feedback]")
+    );
+
+    // Each choice shows a discoverable keycap hint.
+    expect(document.querySelectorAll("[data-map-choice-key]"))
+      .toHaveLength(choiceButtons.length);
+
+    const targetIndex = choiceButtons.findIndex(button =>
+      button.textContent.includes(targetChoice.label)
+    );
+
+    expect(targetIndex).toBeGreaterThanOrEqual(0);
+
+    fireEvent.keyDown(window, { key: String(targetIndex + 1) });
+
+    await waitFor(() => {
+      expect(screen.getByText("Correct").closest("button"))
+        .toHaveAttribute("data-map-choice-feedback", "correct");
+    });
   });
 
   it("restores Recentrer and Tab focus for multiple_choice", async () => {

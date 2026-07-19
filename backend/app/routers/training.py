@@ -4,9 +4,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
-from ..schemas import TimelineAnswerRequest, TrainingAttemptRecordRequest
+from ..schemas import (
+    SequenceAnswerRequest,
+    TimelineAnswerRequest,
+    TrainingAttemptRecordRequest
+)
 from ..services.training import (
     get_training_items,
+    grade_training_sequence,
     grade_training_timeline,
     list_training_scopes,
     record_collection_training_attempt,
@@ -30,6 +35,8 @@ def get_training(
     tag: Optional[str] = None,
     map_mode: Optional[str] = None,
     image_mode: Optional[str] = None,
+    text_mode: Optional[str] = None,
+    sequence_mode: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     return get_training_items(
@@ -39,7 +46,9 @@ def get_training(
         collection_id=collection_id,
         tag=tag,
         map_mode=map_mode,
-        image_mode=image_mode
+        image_mode=image_mode,
+        text_mode=text_mode,
+        sequence_mode=sequence_mode
     )
 
 
@@ -49,6 +58,14 @@ def grade_timeline_training(
     db: Session = Depends(get_db)
 ):
     return grade_training_timeline(db, data.items)
+
+
+@router.post("/training/grade_sequence")
+def grade_sequence_training(
+    data: SequenceAnswerRequest,
+    db: Session = Depends(get_db)
+):
+    return grade_training_sequence(db, data.items)
 
 
 @router.post("/training/groups/{group_id}/attempt_record")

@@ -8,7 +8,10 @@ from app.models import Base, Progress, Question, QuestionGroup
 from app.routers.review import get_review
 from app.schemas import MapZonesBulkUpdate
 from app.services.map_zones import save_map_group_zones
-from app.services.training import group_training_fingerprint
+from app.services.training import (
+    group_training_fingerprint,
+    serialize_training_record
+)
 
 
 class MapTagTests(unittest.TestCase):
@@ -106,7 +109,13 @@ class MapTagTests(unittest.TestCase):
             for question in questions
         ))
 
-    def test_bulk_save_invalidates_record_only_on_map_training_content(self):
+    def served_record(self, group):
+        return serialize_training_record(
+            group.data,
+            group_training_fingerprint(self.db, group)
+        )
+
+    def test_bulk_save_invalidates_record_only_on_membership_or_map_change(self):
         group = QuestionGroup(
             type_group="map",
             name="Europe",
@@ -136,6 +145,8 @@ class MapTagTests(unittest.TestCase):
         self.db.commit()
         self.seed_training_record(group)
 
+        # Editing a zone's answer/aliases is a content fix; membership and the
+        # map image are unchanged, so the record survives.
         save_map_group_zones(
             self.db,
             group.id,
@@ -155,14 +166,17 @@ class MapTagTests(unittest.TestCase):
                     {
                         "id": second.id,
                         "code": "de",
-                        "answer": "Allemagne",
+                        "answer": "Germany",
                         "aliases": []
                     }
                 ]
             )
         )
-        self.assertIn("training_record", group.data)
+        self.assertIsNotNone(self.served_record(group))
+        self.assertEqual(group.data["theme"], "blue")
 
+        # Swapping the map's background image is a whole-group change, so the
+        # record is retired.
         save_map_group_zones(
             self.db,
             group.id,
@@ -188,8 +202,43 @@ class MapTagTests(unittest.TestCase):
                 ]
             )
         )
-        self.assertNotIn("training_record", group.data)
-        self.assertEqual(group.data["theme"], "blue")
+        self.assertIsNone(self.served_record(group))
+
+        # Re-seed against the current content, then add a zone: membership
+        # changes, so the record is retired again.
+        self.seed_training_record(group)
+        self.assertIsNotNone(self.served_record(group))
+        save_map_group_zones(
+            self.db,
+            group.id,
+            MapZonesBulkUpdate(
+                group={
+                    "name": "European map",
+                    "media": "europe-v2.svg",
+                    "tags": ["geo"]
+                },
+                zones=[
+                    {
+                        "id": first.id,
+                        "code": "fr",
+                        "answer": "France",
+                        "aliases": ["FR"]
+                    },
+                    {
+                        "id": second.id,
+                        "code": "de",
+                        "answer": "Germany",
+                        "aliases": []
+                    },
+                    {
+                        "code": "es",
+                        "answer": "Spain",
+                        "aliases": []
+                    }
+                ]
+            )
+        )
+        self.assertIsNone(self.served_record(group))
 
     def test_review_map_group_includes_shared_tags(self):
         group = QuestionGroup(

@@ -1,11 +1,18 @@
 import {
+  centerOrdinal,
   dateToOrdinal,
   lowerOrdinal,
   maxTimelineValue,
   minTimelineValue,
+  normalizeTimeline,
   ordinalToDate,
   upperOrdinal
 } from "./timelineUtils";
+
+// Days within which an anchor is considered to "sit on" another date. Anchors
+// that land on a session answer are dropped, so the reference layer can never
+// spell out a date the user is being asked for.
+export const anchorLeakToleranceDays = 200;
 
 // Named historical eras (French periodisation). `startYear`/`endYear` are
 // inclusive-of-start, exclusive-of-end; `null` means the era is open on that
@@ -183,6 +190,47 @@ export function decadeLabel(year) {
   }
 
   return `années ${decadeStart}`;
+}
+
+function timelineCenterValue(timeline) {
+  const normalized = normalizeTimeline(timeline);
+
+  if (normalized.kind === "interval" && normalized.end) {
+    return Math.round(
+      (centerOrdinal(normalized.start) + centerOrdinal(normalized.end)) / 2
+    );
+  }
+
+  return centerOrdinal(normalized.start);
+}
+
+// The reference layer for a review session: curated landmarks plus the user's
+// own mastered cards, minus anything that would give the session away.
+//
+// Two filters, in order:
+//  - a mastered card that duplicates a curated landmark is dropped (curated
+//    wins, so one date never carries two flags);
+//  - any anchor sitting on one of the session's expected dates is dropped,
+//    because a labelled landmark on the answer is a free answer.
+export function buildSessionAnchors(items, masteredAnchors = [], options = {}) {
+  const toleranceDays = options.toleranceDays ?? anchorLeakToleranceDays;
+  const curated = options.curated ?? getCuratedAnchors();
+  const sessionCenters = (items || [])
+    .map(item => item.timeline)
+    .filter(Boolean)
+    .map(timelineCenterValue);
+  const curatedCenters = curated.map(anchorCenterValue);
+  const dedupedMastered = (masteredAnchors || []).filter(anchor =>
+    !curatedCenters.some(value =>
+      Math.abs(value - anchorCenterValue(anchor)) < toleranceDays
+    )
+  );
+
+  return [...curated, ...dedupedMastered].filter(anchor =>
+    !sessionCenters.some(value =>
+      Math.abs(value - anchorCenterValue(anchor)) < toleranceDays
+    )
+  );
 }
 
 // Center/bounds of an anchor in timeline ordinals (works for both point anchors

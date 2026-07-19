@@ -9,12 +9,14 @@ from .routers import (
     backup,
     collections,
     groups,
-    image_groups,
     maps,
+    media_groups,
     questions,
     review,
+    sequence_groups,
     stats,
     tags,
+    text_groups,
     training,
     uploads
 )
@@ -52,7 +54,9 @@ def create_app():
     app.include_router(tags.router)
     app.include_router(training.router)
     app.include_router(maps.router)
-    app.include_router(image_groups.router)
+    app.include_router(media_groups.router)
+    app.include_router(text_groups.router)
+    app.include_router(sequence_groups.router)
     app.include_router(uploads.router)
     app.include_router(backup.router)
 
@@ -66,9 +70,17 @@ def create_app():
                 name="frontend-assets"
             )
 
+        # index.html must revalidate on every load: without Cache-Control
+        # the webview's heuristic caching can serve a stale document (and
+        # therefore an entire stale app bundle) across app updates. The
+        # hashed /assets files stay safely cacheable.
+        index_headers = {"Cache-Control": "no-cache"}
+
         @app.get("/")
         def serve_frontend():
-            return FileResponse(FRONTEND_DIST_DIR / "index.html")
+            return FileResponse(
+                FRONTEND_DIST_DIR / "index.html", headers=index_headers
+            )
 
         @app.get("/{full_path:path}")
         def serve_frontend_route(full_path: str):
@@ -79,7 +91,9 @@ def create_app():
             if frontend_file.is_file():
                 return FileResponse(frontend_file)
 
-            return FileResponse(FRONTEND_DIST_DIR / "index.html")
+            return FileResponse(
+                FRONTEND_DIST_DIR / "index.html", headers=index_headers
+            )
 
     return app
 

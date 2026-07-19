@@ -1,106 +1,65 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendTimelineAnswer } from "../../../api/review";
 import { fadeInStyle } from "../../../shared/styles";
+import { buildSessionAnchors, describeValue } from "../../timeline/anchors";
 import {
-  anchorBounds,
-  anchorCenterValue,
-  describeValue,
-  getCuratedAnchors,
-  getEraBands,
-  selectVisibleAnchors
-} from "../../timeline/anchors";
+  buildAnswerSlice,
+  buildDisplayRange,
+  clampSlice,
+  sliceToOrdinalRange,
+  yearBoundsFromRange,
+  zoomSliceAt
+} from "../../timeline/railGeometry";
 import {
-  buildRangeFromItems,
   centerOrdinal,
   clampNumber,
-  dateToOrdinal,
-  formatTimelineYear,
-  formatTimelineAnswer,
+  daysInMonth,
   formatTimelineDate,
-  getFinestPrecision,
   lowerOrdinal,
-  maxTimelineValue,
-  minTimelineValue,
-  normalizeTimeline,
-  ordinalToDate,
-  ordinalToTimelineDate,
-  timelineIndexToYear,
+  parseTimelineInput,
   yearToTimelineIndex
 } from "../../timeline/timelineUtils";
+import TimelineCascade from "./TimelineCascade";
+import TimelineGlobalTrack from "./TimelineGlobalTrack";
+import useTimelineReview from "../hooks/useTimelineReview";
 
-const eraBands = getEraBands();
-const curatedAnchorList = getCuratedAnchors();
-// Stable reference so the canvas anchor memo doesn't recompute every render when
-// a group has no mastered anchors.
 const emptyAnchors = [];
 
-// Days within which a landmark anchor is considered to "sit on" a session
-// answer; such anchors are dropped so the reference layer never reveals an
-// expected date.
-const anchorLeakToleranceDays = 200;
-
-const markerColors = [
-  "#7dd3fc",
-  "#c4b5fd",
-  "#f9a8d4",
-  "#fcd34d",
-  "#86efac",
-  "#fca5a5",
-  "#93c5fd",
-  "#d8b4fe"
-];
-
-const monthNames = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec"
-];
-
-const answerAnchorTop = 64;
-const activeChipTop = 43;
-const rulerRowHeight = 24;
-const precisionRank = {
-  year: 0,
-  month: 1,
-  day: 2
-};
-const minViewportSpanByPrecision = {
-  year: 365,
-  month: 30,
-  day: 1
-};
+// The correction bar's slot is held open for the whole question. If it only took
+// up space once a date was graded, the rails below it would shift by exactly
+// that much mid-question and the whole cascade would jump under the pointer.
+const feedbackSlotHeight = "clamp(44px, 6.6vh, 60px)";
 
 const typeBadgeStyle = {
-  display: "flex",
   alignItems: "center",
-  gap: "6px",
-  width: "fit-content",
-  padding: "5px 10px",
-  borderRadius: "999px",
-  fontSize: "12px",
-  fontWeight: "700",
   background: "rgba(196, 181, 253, 0.15)",
+  border: "1px solid rgba(196, 181, 253, 0.3)",
+  borderRadius: "999px",
   color: "#c4b5fd",
-  border: "1px solid rgba(196, 181, 253, 0.3)"
+  display: "flex",
+  fontSize: "12px",
+  fontWeight: 700,
+  gap: "6px",
+  padding: "5px 10px",
+  width: "fit-content"
 };
 
 const buttonStyle = {
+  background: "#232323",
   border: "1px solid #333",
   borderRadius: "10px",
-  background: "#232323",
   color: "#eee",
   cursor: "pointer",
-  fontWeight: "700",
-  padding: "12px 16px"
+  fontWeight: 700,
+  padding: "11px 16px",
+  transition: "all 0.15s ease"
+};
+
+const primaryButtonStyle = {
+  ...buttonStyle,
+  background: "#2b2047",
+  border: "1px solid rgba(196, 181, 253, 0.45)",
+  color: "#d9ccff"
 };
 
 const successButtonStyle = {
@@ -110,3202 +69,655 @@ const successButtonStyle = {
   color: "#7ee2a8"
 };
 
-function qualityLabel(quality) {
-  if (quality === 3) return "Facile";
-  if (quality === 2) return "Bon";
-  if (quality === 1) return "Dur";
-  return "Faux";
+const zoomButtonStyle = {
+  background: "#161616",
+  border: "1px solid #2d2d2d",
+  borderRadius: "7px",
+  color: "#8a8a8a",
+  cursor: "pointer",
+  fontSize: "11px",
+  fontWeight: 800,
+  padding: "3px 9px"
+};
+
+const keycapStyle = {
+  alignItems: "center",
+  background: "#0d0d0d",
+  border: "1px solid #363636",
+  borderRadius: "5px",
+  color: "#8a8a8a",
+  display: "inline-flex",
+  fontSize: "10px",
+  fontWeight: 800,
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "18px",
+  padding: "3px 5px"
+};
+
+const endpointPillStyle = (active) => ({
+  background: active ? "#2b2047" : "#161616",
+  border: `1px solid ${active ? "rgba(196, 181, 253, 0.6)" : "#2d2d2d"}`,
+  borderRadius: "8px",
+  color: active ? "#d9ccff" : "#7d7d7d",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 800,
+  padding: "6px 12px"
+});
+
+// Format masks, not example dates. These used to be "14/07/1789" / "1789" — which,
+// on a French history deck, is the answer to a card you are quite likely to be
+// holding. A hint about the format must not be a hint about the date.
+const placeholderByPrecision = {
+  day: "JJ/MM/AAAA",
+  month: "MM/AAAA",
+  year: "AAAA"
+};
+
+const unitNouns = {
+  days: ["jour", "jours"],
+  months: ["mois", "mois"],
+  years: ["an", "ans"]
+};
+
+function isEditableTarget(target) {
+  if (!target || typeof target.closest !== "function") return false;
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable]"));
 }
 
 function qualityColor(quality) {
-  if (quality === 3) return "#7ee2a8";
-  if (quality === 2) return "#8fc7ff";
-  if (quality === 1) return "#ffd36b";
+  if (quality === 2) return "#7ee2a8";
+  if (quality === 1) return "#f3d36a";
+
   return "#ff9aa5";
 }
 
-function sortReviewItems(items) {
-  return [...items].sort((a, b) => {
-    const difficultyA = Number(a.progress?.difficulty ?? 5);
-    const difficultyB = Number(b.progress?.difficulty ?? 5);
+// The backend returns an unsigned distance; the direction is ours to work out,
+// and "3 ans trop tôt" teaches far more than "3 ans d'écart".
+function describeGap(result) {
+  if (!result || result.quality === 2) return "Exact !";
 
-    if (difficultyA !== difficultyB) return difficultyA - difficultyB;
+  const distance = result.start?.distance ?? 0;
+  const unit = result.start?.unit || "years";
+  const [singular, plural] = unitNouns[unit] || unitNouns.years;
+  const noun = distance > 1 ? plural : singular;
+  const expectedValue = lowerOrdinal(result.expected?.start);
+  const guessValue = lowerOrdinal(result.guess?.start || result.start?.guess);
+  const direction = guessValue < expectedValue ? "trop tôt" : "trop tard";
 
-    const repsA = Number(a.progress?.reps ?? 0);
-    const repsB = Number(b.progress?.reps ?? 0);
-
-    if (repsA !== repsB) return repsA - repsB;
-
-    return Number(a.question_id) - Number(b.question_id);
-  });
+  return `${distance} ${noun} ${direction}`;
 }
 
-function formatAnswer(answer, timeline) {
-  if (!answer) return "";
+function answerCenterValue(answer, isInterval, precision) {
+  const start = draftCenter(answer.start, precision);
 
-  if (timeline.kind === "interval") {
-    return `${formatTimelineDate(answer.start)} - ${formatTimelineDate(answer.end)}`;
-  }
+  if (!isInterval) return start;
 
-  return formatTimelineDate(answer.start);
+  const end = draftCenter(answer.end, precision);
+
+  if (start === null || end === null) return start;
+
+  return Math.round((start + end) / 2);
 }
 
-function getAnswerCenterValue(answer, timeline) {
-  if (timeline.kind === "interval") {
-    return Math.round((centerOrdinal(answer.start) + centerOrdinal(answer.end)) / 2);
-  }
+function draftCenter(draft, precision) {
+  if (!draft || draft.year === null) return null;
 
-  return centerOrdinal(answer.start);
-}
-
-function percentFromValue(value, viewport) {
-  const span = Math.max(1, viewport.end_value - viewport.start_value);
-
-  return ((value - viewport.start_value) / span) * 100;
-}
-
-function buildTimelineBounds(range) {
-  const today = new Date();
-  const todayValue = dateToOrdinal(
-    today.getFullYear(),
-    today.getMonth() + 1,
-    today.getDate()
-  );
-  const rightLimit = Math.max(todayValue, range.end_value);
-  const reviewSpan = Math.max(365, range.end_value - range.start_value);
-  const rightPadding = Math.min(120, Math.max(14, Math.round(reviewSpan * 0.015)));
-
-  return {
-    start_value: Math.max(minTimelineValue, Math.round(range.start_value - reviewSpan * 1.2)),
-    end_value: Math.min(maxTimelineValue, rightLimit + rightPadding)
-  };
-}
-
-function minViewportSpanForPrecision(precision) {
-  return minViewportSpanByPrecision[precision] || minViewportSpanByPrecision.day;
-}
-
-function getTimelinePrecision(timeline) {
-  if (timeline.kind === "interval") {
-    return getFinestPrecision(timeline.start, timeline.end);
-  }
-
-  return timeline.start.precision;
-}
-
-function precisionAllows(activePrecision, precision) {
-  return precisionRank[activePrecision] >= precisionRank[precision];
-}
-
-function clampViewport(viewport, bounds, activePrecision = "day") {
-  const boundsSpan = Math.max(1, bounds.end_value - bounds.start_value);
-  const span = Math.min(
-    Math.max(
-      minViewportSpanForPrecision(activePrecision),
-      viewport.end_value - viewport.start_value
-    ),
-    boundsSpan
-  );
-  let start = viewport.start_value;
-  let end = start + span;
-
-  if (start < bounds.start_value) {
-    start = bounds.start_value;
-    end = start + span;
-  }
-
-  if (end > bounds.end_value) {
-    end = bounds.end_value;
-    start = end - span;
-  }
-
-  return {
-    start_value: start,
-    end_value: end
-  };
-}
-
-function zoomViewport(viewport, bounds, centerValue, zoomFactor, activePrecision = "day") {
-  const center = clampNumber(centerValue, viewport.start_value, viewport.end_value);
-
-  return clampViewport({
-    start_value: center - (center - viewport.start_value) * zoomFactor,
-    end_value: center + (viewport.end_value - center) * zoomFactor
-  }, bounds, activePrecision);
-}
-
-function panViewport(viewport, bounds, deltaValue, activePrecision = "day") {
-  return clampViewport({
-    start_value: viewport.start_value + deltaValue,
-    end_value: viewport.end_value + deltaValue
-  }, bounds, activePrecision);
-}
-
-function niceStep(rawStep) {
-  const target = Math.max(1, rawStep);
-  const magnitude = 10 ** Math.floor(Math.log10(target));
-  const normalized = target / magnitude;
-  const multiplier = normalized <= 1
-    ? 1
-    : normalized <= 2
-      ? 2
-      : normalized <= 5
-        ? 5
-        : 10;
-
-  return multiplier * magnitude;
-}
-
-function positiveModulo(value, divisor) {
-  return ((value % divisor) + divisor) % divisor;
-}
-
-function monthIndexFromDate(date) {
-  return yearToTimelineIndex(date.year) * 12 + date.month - 1;
-}
-
-function dateFromMonthIndex(monthIndex) {
-  const yearIndex = Math.floor(monthIndex / 12);
-
-  return {
-    year: timelineIndexToYear(yearIndex),
-    month: positiveModulo(monthIndex, 12) + 1
-  };
-}
-
-function niceMonthStep(rawStep) {
-  const steps = [1, 2, 3, 4, 6, 12, 24, 36, 60, 120];
-
-  return steps.find(step => step >= rawStep) || niceStep(rawStep / 12) * 12;
-}
-
-function buildGridTicks(rulers) {
-  const unitWeight = {
-    millennium: 4,
-    year: 3,
-    month: 2,
-    day: 1
-  };
-  const ticksByValue = new Map();
-
-  rulers.forEach(ruler => {
-    ruler.ticks.forEach(tick => {
-      const current = ticksByValue.get(tick.value);
-
-      if (!current || unitWeight[tick.unit] > unitWeight[current.unit]) {
-        ticksByValue.set(tick.value, tick);
-      }
-    });
-  });
-
-  return [...ticksByValue.values()].sort((a, b) => a.value - b.value);
-}
-
-function buildTimelineScale(viewport, width = 900, activePrecision = "day") {
-  const span = Math.max(1, viewport.end_value - viewport.start_value);
-  const safeWidth = Math.max(320, width || 900);
-  const yearLabelTarget = clampNumber(Math.floor(safeWidth / 52), 10, 32);
-  const monthLabelTarget = clampNumber(Math.floor(safeWidth / 42), 12, 34);
-  const dayLabelTarget = clampNumber(Math.floor(safeWidth / 30), 14, 42);
-  const allowMonths = precisionAllows(activePrecision, "month");
-  const allowDays = precisionAllows(activePrecision, "day");
-  const startDate = ordinalToDate(viewport.start_value);
-  const endDate = ordinalToDate(viewport.end_value);
-  const yearTicks = [];
-  const monthTicks = [];
-  const dayTicks = [];
-  const startYearIndex = yearToTimelineIndex(startDate.year);
-  const endYearIndex = yearToTimelineIndex(endDate.year);
-  const yearCount = Math.max(1, endYearIndex - startYearIndex + 1);
-  const yearStep = yearCount <= yearLabelTarget
-    ? 1
-    : niceStep(yearCount / yearLabelTarget);
-
-  for (
-    let yearIndex = Math.ceil(startYearIndex / yearStep) * yearStep;
-    yearIndex <= endYearIndex;
-    yearIndex += yearStep
-  ) {
-    const year = timelineIndexToYear(yearIndex);
-
-    yearTicks.push({
-      value: dateToOrdinal(year, 1, 1),
-      label: formatTimelineYear(year),
-      level: "major",
-      unit: "year"
-    });
-  }
-
-  const firstMillennium = Math.ceil(startDate.year / 1000) * 1000;
-
-  for (let year = firstMillennium; year <= endDate.year; year += 1000) {
-    if (year === 0) continue;
-
-    const value = dateToOrdinal(year, 1, 1);
-    const existingTick = yearTicks.find(tick => tick.value === value);
-
-    if (existingTick) {
-      existingTick.level = "millennium";
-      existingTick.unit = "millennium";
-      existingTick.label = formatTimelineYear(year);
-    } else {
-      yearTicks.push({
-        value,
-        label: formatTimelineYear(year),
-        level: "millennium",
-        unit: "millennium"
-      });
-    }
-  }
-
-  yearTicks.sort((a, b) => a.value - b.value);
-
-  if (!yearTicks.some(tick =>
-    tick.value >= viewport.start_value && tick.value <= viewport.end_value
-  )) {
-    yearTicks.push({
-      value: viewport.start_value,
-      label: formatTimelineYear(startDate.year),
-      level: "major",
-      unit: "year"
-    });
-  }
-
-  const startMonthIndex = monthIndexFromDate(startDate);
-  const endMonthIndex = monthIndexFromDate(endDate);
-  const monthCount = Math.max(1, endMonthIndex - startMonthIndex + 1);
-  const monthPixelWidth = safeWidth / monthCount;
-  const showMonths = allowMonths && (monthPixelWidth >= 2.5 || span <= 365 * 30);
-  const monthGridStep = monthPixelWidth >= 4
-    ? 1
-    : monthPixelWidth >= 2.5
-      ? 2
-      : 3;
-  const monthLabelStep = niceMonthStep(Math.max(1, Math.ceil(monthCount / monthLabelTarget)));
-
-  if (showMonths) {
-    for (
-      let monthIndex = Math.ceil(startMonthIndex / monthGridStep) * monthGridStep;
-      monthIndex <= endMonthIndex;
-      monthIndex += monthGridStep
-    ) {
-      const { year, month } = dateFromMonthIndex(monthIndex);
-      const labeled = positiveModulo(monthIndex, monthLabelStep) === 0;
-
-      monthTicks.push({
-        value: dateToOrdinal(year, month, 1),
-        label: labeled ? monthNames[month - 1] : "",
-        level: month === 1 ? "major" : "minor",
-        unit: "month"
-      });
-    }
-  }
-
-  if (showMonths && !monthTicks.some(tick =>
-    tick.value >= viewport.start_value && tick.value <= viewport.end_value
-  )) {
-    monthTicks.push({
-      value: viewport.start_value,
-      label: monthNames[startDate.month - 1],
-      level: "major",
-      unit: "month"
-    });
-  }
-
-  const dayPixelWidth = safeWidth / span;
-  const showDays = allowDays && (dayPixelWidth >= 1.8 || span <= 370);
-  const showAllDayLabels = dayPixelWidth >= 12;
-  const dayLabelStep = niceStep(Math.max(1, Math.ceil(span / dayLabelTarget)));
-
-  if (showDays) {
-    for (
-      let value = Math.ceil(viewport.start_value);
-      value <= viewport.end_value;
-      value += 1
-    ) {
-      const date = ordinalToDate(value);
-
-      dayTicks.push({
-        value,
-        label: showAllDayLabels || positiveModulo(Math.round(value), dayLabelStep) === 0
-          ? String(date.day)
-          : "",
-        level: date.day === 1 ? "major" : "minor",
-        unit: "day"
-      });
-    }
-  }
-
-  const rulers = [
-    { ticks: yearTicks },
-    ...(showMonths ? [{ ticks: monthTicks }] : []),
-    ...(showDays ? [{ ticks: dayTicks }] : [])
-  ];
-
-  return {
-    gridTicks: buildGridTicks(rulers),
-    rulers,
-    unit: showDays ? "day" : showMonths ? "month" : "year"
-  };
-}
-
-function percentWithinRange(value, range) {
-  const span = Math.max(1, range.end_value - range.start_value);
-
-  return ((value - range.start_value) / span) * 100;
-}
-
-function centerViewportOn(value, viewport, bounds, activePrecision = "day") {
-  const span = viewport.end_value - viewport.start_value;
-
-  return clampViewport({
-    start_value: value - span / 2,
-    end_value: value + span / 2
-  }, bounds, activePrecision);
-}
-
-function formatValueLabel(value, precision) {
-  return formatTimelineDate(snapValueToDate(value, precision));
-}
-
-function snapValueToDate(value, precision) {
-  return ordinalToTimelineDate(
-    clampNumber(Math.round(value), minTimelineValue, maxTimelineValue),
+  return centerOrdinal({
+    year: draft.year,
+    month: draft.month ?? 1,
+    day: draft.day ?? 1,
     precision
-  );
-}
-
-function normalizeIntervalAnswer(startValue, endValue, timeline, bounds) {
-  const boundedStart = clampNumber(startValue, bounds.start_value, bounds.end_value);
-  const boundedEnd = clampNumber(endValue, bounds.start_value, bounds.end_value);
-  const start = snapValueToDate(Math.min(boundedStart, boundedEnd), timeline.start.precision);
-  const end = snapValueToDate(Math.max(boundedStart, boundedEnd), timeline.end.precision);
-
-  return lowerOrdinal(end) < lowerOrdinal(start)
-    ? { start: end, end }
-    : { start, end };
-}
-
-function answerFromClick(value, timeline) {
-  return {
-    start: snapValueToDate(value, timeline.start.precision)
-  };
-}
-
-function answerToPayload(answer, timeline) {
-  const payload = {
-    start: answer.start
-  };
-
-  if (timeline.kind === "interval") {
-    payload.end = answer.end;
-  }
-
-  return payload;
-}
-
-function buildMarkers(items, answersByQuestionId, activeId, viewport, orderById) {
-  const rawMarkers = items
-    .map(item => {
-      if (item.question_id === activeId) return null;
-
-      const answer = answersByQuestionId[item.question_id];
-      if (!answer) return null;
-
-      const timeline = normalizeTimeline(item.timeline);
-      const centerValue = getAnswerCenterValue(answer, timeline);
-      const centerPercent = percentFromValue(centerValue, viewport);
-
-      if (centerPercent < -20 || centerPercent > 120) return null;
-
-      return {
-        answer,
-        centerPercent,
-        color: markerColors[(orderById.get(item.question_id) || 0) % markerColors.length],
-        item,
-        order: orderById.get(item.question_id) || 0,
-        stack: 0,
-        timeline
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.centerPercent - b.centerPercent);
-
-  const stackEndByLevel = [];
-
-  rawMarkers.forEach(marker => {
-    const level = stackEndByLevel.findIndex(lastPercent =>
-      marker.centerPercent - lastPercent > 13
-    );
-    const nextLevel = level === -1 ? stackEndByLevel.length : level;
-
-    marker.stack = nextLevel;
-    stackEndByLevel[nextLevel] = marker.centerPercent;
   });
-
-  return rawMarkers;
 }
 
-function markerTop(stack) {
-  const lanes = [78, 88, 54, 44, 96, 34, 70, 60];
+function formatDraft(draft, precision) {
+  if (!draft || draft.year === null) return "";
 
-  return lanes[stack % lanes.length];
-}
-
-// Reference-layer accent: green for "today", a cool blue for the user's own
-// mastered cards, warm parchment for curated landmarks. Quiet enough not to
-// compete with the colourful answer chips.
-function anchorAccent(anchor) {
-  if (anchor.id === "today") return "#7ee2a8";
-  if (anchor.source === "mastered") return "#9fb6d6";
-
-  return "#c9bd9f";
-}
-
-function TimelineQueue({
-  activeId,
-  committedAnswers,
-  compact = false,
-  draftAnswers,
-  items,
-  onSelect,
-  skippedIds
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: "8px",
-        overflowX: "auto",
-        padding: compact ? "0 0 4px" : "2px 0 8px"
-      }}
-    >
-      {items.map((item, index) => {
-        const active = activeId === item.question_id;
-        const answered = Boolean(committedAnswers[item.question_id]);
-        const draft = Boolean(draftAnswers[item.question_id]) && !answered;
-        const skipped = skippedIds.has(item.question_id) && !answered;
-        const color = markerColors[index % markerColors.length];
-
-        return (
-          <button
-            key={item.question_id}
-            type="button"
-            onClick={() => onSelect(item.question_id)}
-            title={item.question}
-            style={{
-              minWidth: compact ? "34px" : "42px",
-              height: compact ? "30px" : "36px",
-              borderRadius: "999px",
-              border: active
-                ? "2px solid #fff"
-                : answered
-                  ? `1px solid ${color}`
-                  : skipped
-                    ? "1px solid #6f6434"
-                    : draft
-                      ? "1px solid #3c5f7a"
-                      : "1px solid #333",
-              background: active
-                ? `${color}30`
-                : answered
-                  ? `${color}18`
-                  : skipped
-                    ? "#2d2917"
-                    : draft
-                      ? "#17242d"
-                      : "#171717",
-              color: answered ? color : skipped ? "#f3d36a" : draft ? "#7dd3fc" : "#777",
-              cursor: "pointer",
-              fontWeight: "900",
-              flexShrink: 0
-            }}
-          >
-            {index + 1}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function TimelineTooltip({ tooltip }) {
-  if (!tooltip) return null;
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: `${tooltip.x}%`,
-        top: `${tooltip.y}%`,
-        transform: "translate(-50%, -110%)",
-        maxWidth: "320px",
-        border: "1px solid #3a3a3a",
-        borderRadius: "10px",
-        background: "rgba(18,18,18,0.96)",
-        color: "#f4f4f4",
-        fontSize: "12px",
-        fontWeight: "750",
-        lineHeight: 1.35,
-        padding: "8px 10px",
-        pointerEvents: "none",
-        boxShadow: "0 12px 30px rgba(0,0,0,0.45)",
-        zIndex: 30
-      }}
-    >
-      {tooltip.text}
-    </div>
-  );
-}
-
-function TimelineCanvas({
-  activeAnswer,
-  activeId,
-  activeItem,
-  activeNumber,
-  bounds,
-  compactLayout = false,
-  committedAnswers,
-  items,
-  masteredAnchors,
-  onDraftChange,
-  onSelect,
-  orderById,
-  range,
-  resetSignal
-}) {
-  const activeTimeline = normalizeTimeline(activeItem.timeline);
-  const activePrecision = getTimelinePrecision(activeTimeline);
-  // The resting frame is shared by every question in the session: it spans the
-  // whole group range at the group's finest precision, so the landscape looks
-  // identical on each question and a spatial memory can form. Zoom/pan are a
-  // transient magnifier that resets back to this frame on question switch.
-  const framePrecision = items.reduce((finest, item) => {
-    const precision = getTimelinePrecision(normalizeTimeline(item.timeline));
-
-    return precisionRank[precision] > precisionRank[finest] ? precision : finest;
-  }, "year");
-  const minimapRef = useRef(null);
-  const minimapDragRef = useRef(null);
-  const surfaceRef = useRef(null);
-  const dragRef = useRef(null);
-  const [viewport, setViewport] = useState(() =>
-    clampViewport(range, bounds, framePrecision)
-  );
-  const viewportRef = useRef(viewport);
-  const tweenRef = useRef(null);
-  const [dragMode, setDragMode] = useState("");
-  const [hoveredValue, setHoveredValue] = useState(null);
-  const [markerDateLabel, setMarkerDateLabel] = useState("");
-  const [pendingInterval, setPendingInterval] = useState(null);
-  const [surfaceWidth, setSurfaceWidth] = useState(900);
-  const [tooltip, setTooltip] = useState(null);
-  const activeColor = markerColors[(orderById.get(activeId) || 0) % markerColors.length];
-  const scale = buildTimelineScale(viewport, surfaceWidth, framePrecision);
-  const markers = useMemo(
-    () => buildMarkers(items, committedAnswers, activeId, viewport, orderById),
-    [activeId, committedAnswers, items, orderById, viewport]
-  );
-  const placedAnswers = useMemo(
-    () => items
-      .map(item => {
-        const answer = item.question_id === activeId
-          ? activeAnswer
-          : committedAnswers[item.question_id];
-
-        if (!answer) return null;
-
-        return {
-          answer,
-          color: markerColors[(orderById.get(item.question_id) || 0) % markerColors.length],
-          item,
-          timeline: normalizeTimeline(item.timeline)
-        };
-      })
-      .filter(Boolean),
-    [activeAnswer, activeId, committedAnswers, items, orderById]
-  );
-  const anchorList = useMemo(() => {
-    const sessionCenters = items.map(item => {
-      const timeline = normalizeTimeline(item.timeline);
-
-      if (timeline.kind === "interval" && timeline.end) {
-        return Math.round(
-          (centerOrdinal(timeline.start) + centerOrdinal(timeline.end)) / 2
-        );
-      }
-
-      return centerOrdinal(timeline.start);
-    });
-    const curatedCenters = curatedAnchorList.map(anchorCenterValue);
-    // The user's mastered cards become anchors too, except where they would
-    // duplicate a curated landmark (curated wins, to avoid two flags on one date).
-    const dedupedMastered = masteredAnchors.filter(anchor => {
-      const center = anchorCenterValue(anchor);
-
-      return !curatedCenters.some(value =>
-        Math.abs(value - center) < anchorLeakToleranceDays
-      );
-    });
-
-    return [...curatedAnchorList, ...dedupedMastered].filter(anchor =>
-      !sessionCenters.some(value =>
-        Math.abs(value - anchorCenterValue(anchor)) < anchorLeakToleranceDays
-      )
-    );
-  }, [items, masteredAnchors]);
-  const pendingIntervalAnswer =
-    pendingInterval && activeTimeline.kind === "interval" && !activeAnswer
-      ? normalizeIntervalAnswer(
-        pendingInterval.anchorValue,
-        pendingInterval.floatingValue,
-        activeTimeline,
-        bounds
-      )
-      : null;
-  const canvasDateLabel = markerDateLabel || (pendingIntervalAnswer
-    ? formatAnswer(pendingIntervalAnswer, activeTimeline)
-    : hoveredValue === null
-    ? activeAnswer
-      ? formatAnswer(activeAnswer, activeTimeline)
-      : "Hover timeline to preview date"
-    : formatValueLabel(hoveredValue, activePrecision));
-  const canvasDateContext = markerDateLabel
-    ? "Marker date"
-    : pendingIntervalAnswer
-    ? "Click again to place the other border"
-    : hoveredValue === null
-    ? activeAnswer
-      ? "Placed answer"
-      : "Move pointer over the timeline"
-    : "Hovered date";
-  const viewportStartPercent = percentWithinRange(viewport.start_value, bounds);
-  const viewportEndPercent = percentWithinRange(viewport.end_value, bounds);
-  const viewportWidthPercent = Math.max(2, viewportEndPercent - viewportStartPercent);
-  const viewCenterValue = (viewport.start_value + viewport.end_value) / 2;
-  const viewSpanYears = (viewport.end_value - viewport.start_value) / 365.25;
-  const where = describeValue(viewCenterValue);
-  const viewStartYear = formatTimelineYear(ordinalToDate(viewport.start_value).year);
-  const viewEndYear = formatTimelineYear(ordinalToDate(viewport.end_value).year);
-  const miniAnchors = anchorList
-    .map(anchor => ({
-      anchor,
-      pct: percentWithinRange(anchorCenterValue(anchor), bounds)
-    }))
-    .filter(entry => entry.pct >= 0 && entry.pct <= 100)
-    .sort((a, b) => a.pct - b.pct);
-  const miniLabeledAnchorIds = new Set();
-  let lastMiniLabelPct = -Infinity;
-  miniAnchors.forEach(entry => {
-    if ((entry.anchor.tier ?? 1) === 0 && entry.pct - lastMiniLabelPct > 7) {
-      miniLabeledAnchorIds.add(entry.anchor.id);
-      lastMiniLabelPct = entry.pct;
-    }
+  return formatTimelineDate({
+    year: draft.year,
+    month: draft.month ?? 1,
+    day: draft.day ?? 1,
+    precision: draft.month === null
+      ? "year"
+      : draft.day === null
+        ? "month"
+        : precision
   });
-
-  const updateViewport = useCallback((nextViewport) => {
-    viewportRef.current = nextViewport;
-    setViewport(nextViewport);
-  }, []);
-
-  const cancelTween = useCallback(() => {
-    if (tweenRef.current !== null && typeof cancelAnimationFrame !== "undefined") {
-      cancelAnimationFrame(tweenRef.current);
-    }
-
-    tweenRef.current = null;
-  }, []);
-
-  // Glide the viewport to a target frame so question switches and Reset feel
-  // continuous instead of snapping — reinforcing where things sit in time.
-  const animateViewportTo = useCallback((target) => {
-    cancelTween();
-
-    const start = viewportRef.current;
-    const centerDelta = Math.abs(
-      (start.start_value + start.end_value) - (target.start_value + target.end_value)
-    ) / 2;
-    const spanDelta = Math.abs(
-      (start.end_value - start.start_value) - (target.end_value - target.start_value)
-    );
-
-    if (
-      typeof requestAnimationFrame === "undefined" ||
-      typeof performance === "undefined" ||
-      (centerDelta < 1 && spanDelta < 1)
-    ) {
-      updateViewport(target);
-      return;
-    }
-
-    const startTime = performance.now();
-    const duration = 240;
-
-    const frame = (now) => {
-      const progress = Math.min(1, (now - startTime) / duration);
-      const eased = 1 - (1 - progress) ** 3;
-
-      updateViewport({
-        start_value: start.start_value + (target.start_value - start.start_value) * eased,
-        end_value: start.end_value + (target.end_value - start.end_value) * eased
-      });
-
-      tweenRef.current = progress < 1 ? requestAnimationFrame(frame) : null;
-    };
-
-    tweenRef.current = requestAnimationFrame(frame);
-  }, [cancelTween, updateViewport]);
-
-  useEffect(() => cancelTween, [cancelTween]);
-
-  useEffect(() => {
-    animateViewportTo(clampViewport(range, bounds, framePrecision));
-    setHoveredValue(null);
-    setMarkerDateLabel("");
-    setPendingInterval(null);
-  }, [activeId, animateViewportTo, bounds, framePrecision, range]);
-
-  useEffect(() => {
-    setHoveredValue(null);
-    setMarkerDateLabel("");
-    setPendingInterval(null);
-  }, [activeId, resetSignal]);
-
-  useEffect(() => {
-    if (activeAnswer) {
-      setPendingInterval(null);
-    }
-  }, [activeAnswer]);
-
-  useEffect(() => {
-    const node = surfaceRef.current;
-    if (!node) return undefined;
-
-    const updateWidth = () => {
-      setSurfaceWidth(node.getBoundingClientRect().width || 900);
-    };
-
-    updateWidth();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateWidth);
-      return () => window.removeEventListener("resize", updateWidth);
-    }
-
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(node);
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const nodes = [
-      surfaceRef.current,
-      minimapRef.current
-    ].filter(Boolean);
-
-    if (nodes.length === 0) return undefined;
-
-    function handleWheel(event) {
-      event.preventDefault();
-      event.stopPropagation();
-      cancelTween();
-
-      const rect = event.currentTarget.getBoundingClientRect();
-      const zoomFactor = event.deltaY < 0 ? 0.78 : 1.28;
-      const current = viewportRef.current;
-      const ratio = clampNumber((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
-      const centerValue = current.start_value +
-        ratio * (current.end_value - current.start_value);
-
-      setHoveredValue(centerValue);
-      setPendingInterval(prev => (
-        prev && activeTimeline.kind === "interval" && !activeAnswer
-          ? { ...prev, floatingValue: centerValue }
-          : prev
-      ));
-      updateViewport(zoomViewport(current, bounds, centerValue, zoomFactor, framePrecision));
-    }
-
-    nodes.forEach(node => node.addEventListener("wheel", handleWheel, { passive: false }));
-
-    return () => {
-      nodes.forEach(node => node.removeEventListener("wheel", handleWheel));
-    };
-  }, [activeAnswer, cancelTween, framePrecision, activeTimeline.kind, bounds, updateViewport]);
-
-  function valueFromClientX(clientX, targetViewport = viewport) {
-    const rect = surfaceRef.current?.getBoundingClientRect();
-    if (!rect) return targetViewport.start_value;
-
-    const ratio = clampNumber((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
-
-    return targetViewport.start_value +
-      ratio * (targetViewport.end_value - targetViewport.start_value);
-  }
-
-  function valueFromMinimapClientX(clientX) {
-    const rect = minimapRef.current?.getBoundingClientRect();
-    if (!rect) return viewport.start_value;
-
-    const ratio = clampNumber((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
-
-    return bounds.start_value + ratio * (bounds.end_value - bounds.start_value);
-  }
-
-  function placeDraft(value) {
-    if (activeTimeline.kind !== "interval") {
-      onDraftChange(answerFromClick(value, activeTimeline));
-      return;
-    }
-
-    if (activeAnswer) {
-      return;
-    }
-
-    if (!pendingInterval) {
-      setPendingInterval({
-        anchorValue: value,
-        floatingValue: value
-      });
-      return;
-    }
-
-    onDraftChange(normalizeIntervalAnswer(
-      pendingInterval.anchorValue,
-      value,
-      activeTimeline,
-      bounds
-    ));
-    setPendingInterval(null);
-  }
-
-  function updateDraggedAnswer(mode, value, dragState) {
-    const initialAnswer = dragState.initialAnswer;
-    let nextAnswer;
-
-    if (activeTimeline.kind !== "interval" || mode === "point") {
-      nextAnswer = {
-        start: snapValueToDate(value, activeTimeline.start.precision)
-      };
-    } else if (mode === "start") {
-      const endValue = centerOrdinal(initialAnswer.end);
-      nextAnswer = normalizeIntervalAnswer(
-        Math.min(value, endValue),
-        endValue,
-        activeTimeline,
-        bounds
-      );
-    } else if (mode === "end") {
-      const startValue = centerOrdinal(initialAnswer.start);
-      nextAnswer = normalizeIntervalAnswer(
-        startValue,
-        Math.max(value, startValue),
-        activeTimeline,
-        bounds
-      );
-    } else {
-      const delta = value - dragState.startValue;
-      nextAnswer = normalizeIntervalAnswer(
-        centerOrdinal(initialAnswer.start) + delta,
-        centerOrdinal(initialAnswer.end) + delta,
-        activeTimeline,
-        bounds
-      );
-    }
-
-    onDraftChange(nextAnswer);
-  }
-
-  function capturePointer(event) {
-    try {
-      surfaceRef.current?.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Pointer capture may fail in some browser edge cases; dragging still works over the surface.
-    }
-  }
-
-  function releasePointer(event) {
-    try {
-      surfaceRef.current?.releasePointerCapture?.(event.pointerId);
-    } catch {
-      // Ignore release failures for pointers that were not captured.
-    }
-  }
-
-  function beginSurfaceDrag(event) {
-    if (event.button !== 0) return;
-
-    event.preventDefault();
-    cancelTween();
-    setTooltip(null);
-    capturePointer(event);
-    const startValue = valueFromClientX(event.clientX);
-    setHoveredValue(startValue);
-
-    dragRef.current = {
-      initialViewport: viewport,
-      mode: "surface",
-      moved: false,
-      pointerId: event.pointerId,
-      startValue,
-      startX: event.clientX,
-      startY: event.clientY
-    };
-    setDragMode("surface");
-  }
-
-  function beginAnswerDrag(event, mode) {
-    if (event.button !== 0 || !activeAnswer) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    setTooltip(null);
-    capturePointer(event);
-    setHoveredValue(valueFromClientX(event.clientX));
-
-    dragRef.current = {
-      initialAnswer: activeAnswer,
-      mode,
-      moved: false,
-      pointerId: event.pointerId,
-      startValue: valueFromClientX(event.clientX),
-      startX: event.clientX,
-      startY: event.clientY
-    };
-    setDragMode(mode);
-  }
-
-  function handlePointerMove(event) {
-    const dragState = dragRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    const distance = Math.max(
-      Math.abs(event.clientX - dragState.startX),
-      Math.abs(event.clientY - dragState.startY)
-    );
-
-    if (distance > 3) {
-      dragState.moved = true;
-    }
-
-    if (dragState.mode === "surface") {
-      if (!dragState.moved) return;
-
-      const rect = surfaceRef.current?.getBoundingClientRect();
-      const span = dragState.initialViewport.end_value - dragState.initialViewport.start_value;
-      const deltaValue = -((event.clientX - dragState.startX) / Math.max(1, rect?.width || 1)) * span;
-      const nextViewport = panViewport(
-        dragState.initialViewport,
-        bounds,
-        deltaValue,
-        framePrecision
-      );
-      const nextValue = valueFromClientX(event.clientX, nextViewport);
-
-      setHoveredValue(nextValue);
-      setPendingInterval(prev => (
-        prev && activeTimeline.kind === "interval" && !activeAnswer
-          ? { ...prev, floatingValue: nextValue }
-          : prev
-      ));
-      updateViewport(nextViewport);
-      return;
-    }
-
-    updateDraggedAnswer(dragState.mode, valueFromClientX(event.clientX), dragState);
-  }
-
-  function handleSurfacePointerMove(event) {
-    const dragState = dragRef.current;
-    if (dragState?.mode === "surface" && dragState.pointerId === event.pointerId) {
-      handlePointerMove(event);
-      return;
-    }
-
-    const value = valueFromClientX(event.clientX);
-
-    setHoveredValue(value);
-    setPendingInterval(prev => (
-      prev && activeTimeline.kind === "interval" && !activeAnswer
-        ? { ...prev, floatingValue: value }
-        : prev
-    ));
-    handlePointerMove(event);
-  }
-
-  function handleSurfacePointerLeave() {
-    if (!dragRef.current && !pendingInterval) {
-      setHoveredValue(null);
-    }
-  }
-
-  function handlePointerUp(event) {
-    const dragState = dragRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    if (dragState.mode === "surface" && !dragState.moved) {
-      placeDraft(valueFromClientX(event.clientX));
-    } else if (dragState.mode !== "surface" && !dragState.moved) {
-      updateDraggedAnswer(dragState.mode, valueFromClientX(event.clientX), dragState);
-    }
-
-    releasePointer(event);
-    dragRef.current = null;
-    setHoveredValue(valueFromClientX(event.clientX));
-    setDragMode("");
-  }
-
-  function zoomFromButton(zoomFactor) {
-    cancelTween();
-
-    const centerValue = activeAnswer
-      ? getAnswerCenterValue(activeAnswer, activeTimeline)
-      : (viewport.start_value + viewport.end_value) / 2;
-
-    updateViewport(zoomViewport(
-      viewportRef.current,
-      bounds,
-      centerValue,
-      zoomFactor,
-      framePrecision
-    ));
-  }
-
-  function resetViewport() {
-    animateViewportTo(clampViewport(range, bounds, framePrecision));
-  }
-
-  function beginMinimapDrag(event) {
-    if (event.button !== 0) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    cancelTween();
-    setTooltip(null);
-
-    try {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Pointer capture may fail if the pointer was already released.
-    }
-
-    minimapDragRef.current = {
-      pointerId: event.pointerId
-    };
-    setDragMode("minimap");
-    updateViewport(centerViewportOn(
-      valueFromMinimapClientX(event.clientX),
-      viewportRef.current,
-      bounds,
-      framePrecision
-    ));
-  }
-
-  function handleMinimapPointerMove(event) {
-    const dragState = minimapDragRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    updateViewport(centerViewportOn(
-      valueFromMinimapClientX(event.clientX),
-      viewportRef.current,
-      bounds,
-      framePrecision
-    ));
-  }
-
-  function handleMinimapPointerUp(event) {
-    const dragState = minimapDragRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    try {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    } catch {
-      // Ignore release failures for uncaptured pointers.
-    }
-
-    minimapDragRef.current = null;
-    setDragMode("");
-  }
-
-  function showTooltip(text, x, y) {
-    setTooltip({
-      text,
-      x: clampNumber(x, 8, 92),
-      y: clampNumber(y, 14, 88)
-    });
-  }
-
-  function showMarkerDate(answer, timeline) {
-    setMarkerDateLabel(formatAnswer(answer, timeline));
-  }
-
-  function hideMarkerDate() {
-    setMarkerDateLabel("");
-  }
-
-  function renderRulers() {
-    const rulerHeight = Math.max(rulerRowHeight, scale.rulers.length * rulerRowHeight);
-
-    return (
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: "12px",
-          height: `${rulerHeight}px`,
-          overflow: "hidden",
-          pointerEvents: "none",
-          zIndex: 2
-        }}
-      >
-        {scale.rulers.map((ruler, rowIndex) => (
-          <div
-            key={`ruler-${rowIndex}`}
-            style={{
-              position: "relative",
-              height: `${rulerRowHeight}px`
-            }}
-          >
-            {ruler.ticks.map((tick, index) => {
-              const left = percentFromValue(tick.value, viewport);
-              const millennium = tick.level === "millennium";
-              const major = millennium || tick.level === "major";
-
-              if (left < -4 || left > 104) return null;
-
-              return (
-                <div
-                  key={`ruler-${rowIndex}-${tick.value}-${index}`}
-                  style={{
-                    position: "absolute",
-                    left: `${left}%`,
-                    top: 0,
-                    bottom: 0,
-                    borderLeft: millennium
-                      ? "2px solid rgba(244,212,140,0.72)"
-                      : major
-                        ? "1px solid rgba(244,240,223,0.38)"
-                        : "1px solid rgba(244,240,223,0.16)",
-                    color: millennium ? "#f4d48c" : major ? "#f1e8d4" : "#a99c88",
-                    fontSize: millennium ? "12px" : major ? "11px" : "10px",
-                    fontWeight: millennium ? "950" : major ? "900" : "750",
-                    pointerEvents: "none"
-                  }}
-                >
-                  {tick.label && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: "6px",
-                        top: "7px",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      {tick.label}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderAnchors() {
-    const rulerHeight = Math.max(rulerRowHeight, scale.rulers.length * rulerRowHeight);
-    const lineTop = rulerHeight + 20;
-    const laneTop = rulerHeight + 16;
-    const laneHeight = 23;
-    const selection = selectVisibleAnchors(anchorList, viewport, surfaceWidth, {
-      minGapPx: 46
-    });
-    const labelGapPercent = (118 / Math.max(1, surfaceWidth)) * 100;
-    const hasLeftEdges = selection.offLeft.length > 0;
-    const hasRightEdges = selection.offRight.length > 0;
-    const laneLastPercent = [];
-
-    function laneFor(center) {
-      const free = laneLastPercent.findIndex(last => center - last > labelGapPercent);
-
-      if (free !== -1) {
-        laneLastPercent[free] = center;
-        return free;
-      }
-
-      if (laneLastPercent.length < 3) {
-        laneLastPercent.push(center);
-        return laneLastPercent.length - 1;
-      }
-
-      let lane = 0;
-      for (let index = 1; index < laneLastPercent.length; index += 1) {
-        if (laneLastPercent[index] < laneLastPercent[lane]) lane = index;
-      }
-      laneLastPercent[lane] = center;
-      return lane;
-    }
-
-    function edgePill(entry, side) {
-      const accent = anchorAccent(entry.anchor);
-      const year = formatTimelineYear(ordinalToDate(entry.value).year);
-
-      return (
-        <>
-          {side === "right" && (
-            <span style={{ flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {entry.anchor.label}
-            </span>
-          )}
-          {side === "left" && <span style={{ flexShrink: 0 }}>‹</span>}
-          <span style={{ color: accent, flexShrink: 0 }}>{year}</span>
-          {side === "left" && (
-            <span style={{ flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {entry.anchor.label}
-            </span>
-          )}
-          {side === "right" && <span style={{ flexShrink: 0 }}>›</span>}
-        </>
-      );
-    }
-
-    const edgePillStyle = {
-      position: "absolute",
-      display: "flex",
-      alignItems: "center",
-      gap: "4px",
-      maxWidth: "170px",
-      padding: "2px 8px",
-      borderRadius: "999px",
-      border: "1px solid rgba(201,189,159,0.28)",
-      background: "rgba(16,16,16,0.86)",
-      color: "#a99e86",
-      fontSize: "10px",
-      fontWeight: "800",
-      overflow: "hidden",
-      whiteSpace: "nowrap"
-    };
-
-    return (
-      <div
-        aria-hidden="true"
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 3 }}
-      >
-        {selection.visible.map(entry => {
-          const { anchor, value } = entry;
-          const center = percentFromValue(value, viewport);
-          const accent = anchorAccent(anchor);
-          const span = anchor.end ? anchorBounds(anchor) : null;
-          // Hide the in-view label when it would land in an edge-arrow stack;
-          // the drop-line still marks the exact spot.
-          const showLabel =
-            !(hasLeftEdges && center < 13) && !(hasRightEdges && center > 87);
-          const labelTop = showLabel ? laneTop + laneFor(center) * laneHeight : 0;
-          const labelLeft = clampNumber(center, 6, 94);
-
-          return (
-            <div key={`anchor-${anchor.id}`}>
-              {span ? (
-                (() => {
-                  const startPercent = percentFromValue(span.startValue, viewport);
-                  const endPercent = percentFromValue(span.endValue, viewport);
-                  const left = Math.min(startPercent, endPercent);
-                  const width = Math.max(0.3, Math.abs(endPercent - startPercent));
-
-                  return (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: `${left}%`,
-                        width: `${width}%`,
-                        top: `${lineTop}px`,
-                        bottom: 0,
-                        background: `${accent}0c`,
-                        borderLeft: `1px dashed ${accent}55`,
-                        borderRight: `1px dashed ${accent}55`
-                      }}
-                    />
-                  );
-                })()
-              ) : (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: `${center}%`,
-                    top: `${lineTop}px`,
-                    bottom: 0,
-                    width: 0,
-                    transform: "translateX(-50%)",
-                    borderLeft: `1px dashed ${accent}4d`
-                  }}
-                />
-              )}
-              {showLabel && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: `${labelLeft}%`,
-                    top: `${labelTop}px`,
-                    transform: "translateX(-50%)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    maxWidth: "158px",
-                    padding: "2px 8px",
-                    borderRadius: "999px",
-                    border: `1px solid ${accent}40`,
-                    background: "rgba(16,16,16,0.84)",
-                    color: "#cdc2a8",
-                    fontSize: "10px",
-                    fontWeight: "800",
-                    overflow: "hidden",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  <span style={{ color: accent, flexShrink: 0 }}>
-                    {formatTimelineYear(ordinalToDate(value).year)}
-                  </span>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {anchor.label}
-                  </span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {selection.offLeft.map((entry, index) => (
-          <div
-            key={`edge-left-${entry.anchor.id}`}
-            style={{ ...edgePillStyle, left: "6px", top: `${laneTop + index * laneHeight}px` }}
-          >
-            {edgePill(entry, "left")}
-          </div>
-        ))}
-
-        {selection.offRight.map((entry, index) => (
-          <div
-            key={`edge-right-${entry.anchor.id}`}
-            style={{ ...edgePillStyle, right: "6px", top: `${laneTop + index * laneHeight}px` }}
-          >
-            {edgePill(entry, "right")}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderHoverGuide() {
-    if (hoveredValue === null) return null;
-
-    const left = percentFromValue(hoveredValue, viewport);
-    if (left < -2 || left > 102) return null;
-
-    const labelLeft = clampNumber(left, 9, 91);
-    const rulerHeight = Math.max(rulerRowHeight, scale.rulers.length * rulerRowHeight);
-
-    return (
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 3
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: 0,
-            bottom: 0,
-            width: "46px",
-            transform: "translateX(-50%)",
-            background: "linear-gradient(90deg, rgba(244,212,140,0), rgba(244,212,140,0.1), rgba(244,212,140,0))"
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: 0,
-            bottom: 0,
-            width: "2px",
-            transform: "translateX(-50%)",
-            borderRadius: "999px",
-            background: "linear-gradient(180deg, rgba(244,212,140,0.1), rgba(244,212,140,0.95) 18%, rgba(244,212,140,0.68) 72%, rgba(244,212,140,0.08))",
-            boxShadow: "0 0 18px rgba(244,212,140,0.34)"
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${answerAnchorTop}%`,
-            width: "9px",
-            height: "9px",
-            transform: "translate(-50%, -50%)",
-            border: "2px solid rgba(255,255,255,0.78)",
-            borderRadius: "999px",
-            background: "#f4d48c",
-            boxShadow: "0 0 0 7px rgba(244,212,140,0.15), 0 8px 20px rgba(0,0,0,0.35)"
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: `${labelLeft}%`,
-            top: `${rulerHeight + 22}px`,
-            transform: "translateX(-50%)",
-            border: "1px solid rgba(244,212,140,0.52)",
-            borderRadius: "999px",
-            background: "rgba(19, 18, 15, 0.92)",
-            color: "#f4f0df",
-            fontSize: "11px",
-            fontWeight: "900",
-            letterSpacing: 0,
-            lineHeight: 1,
-            padding: "7px 10px",
-            boxShadow: "0 10px 28px rgba(0,0,0,0.38), 0 0 0 1px rgba(0,0,0,0.32)",
-            whiteSpace: "nowrap"
-          }}
-        >
-          {formatValueLabel(hoveredValue, activePrecision)}
-        </div>
-      </div>
-    );
-  }
-
-  function renderPassiveMarker(marker) {
-    const color = marker.color;
-    const top = markerTop(marker.stack);
-    const text = marker.item.question;
-    const answerText = formatAnswer(marker.answer, marker.timeline);
-    const stemTop = Math.min(top, answerAnchorTop);
-    const stemHeight = Math.abs(answerAnchorTop - top);
-
-    if (marker.timeline.kind === "interval") {
-      const start = percentFromValue(centerOrdinal(marker.answer.start), viewport);
-      const end = percentFromValue(centerOrdinal(marker.answer.end), viewport);
-      const center = (start + end) / 2;
-      const width = Math.max(8, Math.abs(end - start));
-      const left = center - width / 2;
-
-      return (
-        <div
-          key={marker.item.question_id}
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            zIndex: 5
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: `${left}%`,
-              top: `${answerAnchorTop}%`,
-              width: `${width}%`,
-              height: "4px",
-              transform: "translateY(-50%)",
-              borderRadius: "999px",
-              background: `${color}55`,
-              boxShadow: `0 0 0 1px ${color}44`,
-              pointerEvents: "none"
-            }}
-          />
-          {[start, end].map((point, index) => (
-            <div
-              key={`${marker.item.question_id}-endpoint-${index}`}
-              style={{
-                position: "absolute",
-                left: `${point}%`,
-                top: `${answerAnchorTop}%`,
-                width: "9px",
-                height: "9px",
-                transform: "translate(-50%, -50%)",
-                borderRadius: "999px",
-                border: `1px solid ${color}`,
-                background: "#121212",
-                boxShadow: `0 0 0 3px ${color}18`,
-                pointerEvents: "none"
-              }}
-            />
-          ))}
-          <div
-            style={{
-              position: "absolute",
-              left: `${center}%`,
-              top: `${stemTop}%`,
-              height: `${stemHeight}%`,
-              borderLeft: `1px solid ${color}88`,
-              pointerEvents: "none"
-            }}
-          />
-            <button
-              type="button"
-              onClick={() => onSelect(marker.item.question_id)}
-              onBlur={hideMarkerDate}
-              onFocus={() => {
-                showTooltip(`${text}: ${answerText}`, center, top);
-                showMarkerDate(marker.answer, marker.timeline);
-              }}
-              onMouseEnter={() => {
-                showTooltip(`${text}: ${answerText}`, center, top);
-                showMarkerDate(marker.answer, marker.timeline);
-              }}
-              onMouseLeave={() => {
-                setTooltip(null);
-                hideMarkerDate();
-              }}
-            onPointerDown={(event) => event.stopPropagation()}
-            style={{
-              position: "absolute",
-              left: `${center}%`,
-              top: `${top}%`,
-              display: "flex",
-              alignItems: "center",
-              gap: "7px",
-              maxWidth: "230px",
-              height: "30px",
-              transform: "translate(-50%, -50%)",
-              borderRadius: "999px",
-              border: `1px solid ${color}`,
-              background: "#151515",
-              color,
-              cursor: "pointer",
-              fontSize: "11px",
-              fontWeight: "900",
-              overflow: "hidden",
-              padding: "0 10px",
-              pointerEvents: "auto",
-              zIndex: 2
-            }}
-          >
-            <span>{marker.order + 1}</span>
-            <span
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }}
-            >
-              {text}
-            </span>
-          </button>
-        </div>
-      );
-    }
-
-    const left = percentFromValue(centerOrdinal(marker.answer.start), viewport);
-
-    return (
-      <div
-        key={marker.item.question_id}
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 5
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${stemTop}%`,
-            height: `${stemHeight}%`,
-            borderLeft: `1px solid ${color}88`,
-            pointerEvents: "none"
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${answerAnchorTop}%`,
-            width: "11px",
-            height: "11px",
-            transform: "translate(-50%, -50%)",
-            borderRadius: "999px",
-            border: `2px solid ${color}`,
-            background: "#121212",
-            boxShadow: `0 0 0 4px ${color}18`,
-            pointerEvents: "none"
-          }}
-        />
-          <button
-            type="button"
-            onClick={() => onSelect(marker.item.question_id)}
-            onBlur={hideMarkerDate}
-            onFocus={() => {
-              showTooltip(`${text}: ${answerText}`, left, top);
-              showMarkerDate(marker.answer, marker.timeline);
-            }}
-            onMouseEnter={() => {
-              showTooltip(`${text}: ${answerText}`, left, top);
-              showMarkerDate(marker.answer, marker.timeline);
-            }}
-            onMouseLeave={() => {
-              setTooltip(null);
-              hideMarkerDate();
-            }}
-          onPointerDown={(event) => event.stopPropagation()}
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${top}%`,
-            display: "flex",
-            alignItems: "center",
-            gap: "7px",
-            maxWidth: "230px",
-            height: "30px",
-            transform: "translate(-50%, -50%)",
-            borderRadius: "999px",
-            border: `1px solid ${color}`,
-            background: "#151515",
-            color,
-            cursor: "pointer",
-            fontSize: "11px",
-            fontWeight: "900",
-            overflow: "hidden",
-            padding: "0 10px 0 5px",
-            pointerEvents: "auto",
-            zIndex: 2
-          }}
-        >
-          <span
-            style={{
-              alignItems: "center",
-              background: `${color}22`,
-              borderRadius: "999px",
-              display: "inline-flex",
-              flexShrink: 0,
-              height: "22px",
-              justifyContent: "center",
-              width: "22px"
-            }}
-          >
-            {marker.order + 1}
-          </span>
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {text}
-          </span>
-        </button>
-      </div>
-    );
-  }
-
-  function renderPendingInterval() {
-    if (!pendingIntervalAnswer || !pendingInterval) return null;
-
-    const text = activeItem.question;
-    const stemTop = Math.min(activeChipTop, answerAnchorTop);
-    const stemHeight = Math.abs(answerAnchorTop - activeChipTop);
-    const anchor = percentFromValue(
-      clampNumber(pendingInterval.anchorValue, bounds.start_value, bounds.end_value),
-      viewport
-    );
-    const floating = percentFromValue(
-      clampNumber(pendingInterval.floatingValue, bounds.start_value, bounds.end_value),
-      viewport
-    );
-    const center = (anchor + floating) / 2;
-    const width = Math.max(1, Math.abs(floating - anchor));
-    const left = center - width / 2;
-
-    return (
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 11
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${answerAnchorTop}%`,
-            width: `${width}%`,
-            height: "5px",
-            transform: "translateY(-50%)",
-            borderRadius: "999px",
-            background: activeColor,
-            boxShadow: `0 0 0 5px ${activeColor}18, 0 8px 22px rgba(0,0,0,0.34)`,
-            opacity: 0.88
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: `${center}%`,
-            top: `${stemTop}%`,
-            height: `${stemHeight}%`,
-            borderLeft: `2px solid ${activeColor}`,
-            boxShadow: `0 0 16px ${activeColor}55`,
-            opacity: 0.88
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: `${center}%`,
-            top: `${activeChipTop}%`,
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            maxWidth: "280px",
-            height: "38px",
-            transform: "translate(-50%, -50%)",
-            borderRadius: "999px",
-            border: `2px solid ${activeColor}`,
-            background: "#151515",
-            color: "#f7f7f7",
-            fontSize: "12px",
-            fontWeight: "950",
-            overflow: "hidden",
-            padding: "0 14px 0 10px",
-            boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`,
-            opacity: 0.9
-          }}
-          title={formatAnswer(pendingIntervalAnswer, activeTimeline)}
-        >
-          <span
-            style={{
-              alignItems: "center",
-              background: activeColor,
-              borderRadius: "999px",
-              color: "#101010",
-              display: "inline-flex",
-              flexShrink: 0,
-              height: "24px",
-              justifyContent: "center",
-              width: "24px"
-            }}
-          >
-            {activeNumber}
-          </span>
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {text}
-          </span>
-        </div>
-
-        {[
-          ["anchor", anchor],
-          ["floating", floating]
-        ].map(([handle, point]) => (
-          <div
-            key={handle}
-            style={{
-              position: "absolute",
-              left: `${point}%`,
-              top: `${answerAnchorTop}%`,
-              width: "20px",
-              height: "20px",
-              transform: "translate(-50%, -50%)",
-              borderRadius: "999px",
-              border: "2px solid #fff",
-              background: activeColor,
-              boxShadow: handle === "anchor"
-                ? `0 0 0 6px ${activeColor}22, 0 8px 20px rgba(0,0,0,0.42)`
-                : "0 8px 20px rgba(0,0,0,0.42)",
-              zIndex: 2
-            }}
-          />
-        ))}
-        <div
-          style={{
-            position: "absolute",
-            left: `${center}%`,
-            top: `${answerAnchorTop}%`,
-            width: "13px",
-            height: "13px",
-            transform: "translate(-50%, -50%) rotate(45deg)",
-            border: "2px solid #fff",
-            borderRadius: "2px 50% 50% 50%",
-            background: activeColor,
-            boxShadow: `0 0 0 7px ${activeColor}18`,
-            padding: 0,
-            zIndex: 3
-          }}
-        />
-      </div>
-    );
-  }
-
-  function renderActiveAnswer() {
-    if (!activeAnswer) return null;
-
-    const text = activeItem.question;
-    const stemTop = Math.min(activeChipTop, answerAnchorTop);
-    const stemHeight = Math.abs(answerAnchorTop - activeChipTop);
-
-    if (activeTimeline.kind === "interval") {
-      const start = percentFromValue(centerOrdinal(activeAnswer.start), viewport);
-      const end = percentFromValue(centerOrdinal(activeAnswer.end), viewport);
-      const center = (start + end) / 2;
-      const width = Math.max(1, Math.abs(end - start));
-      const left = center - width / 2;
-
-      return (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            zIndex: 12
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: `${left}%`,
-              top: `${answerAnchorTop}%`,
-              width: `${width}%`,
-              height: "5px",
-              transform: "translateY(-50%)",
-              borderRadius: "999px",
-              background: activeColor,
-              boxShadow: `0 0 0 5px ${activeColor}18, 0 8px 22px rgba(0,0,0,0.34)`,
-              pointerEvents: "none"
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              left: `${center}%`,
-              top: `${stemTop}%`,
-              height: `${stemHeight}%`,
-              borderLeft: `2px solid ${activeColor}`,
-              boxShadow: `0 0 16px ${activeColor}55`,
-              pointerEvents: "none"
-            }}
-          />
-          <button
-            type="button"
-            onBlur={hideMarkerDate}
-            onFocus={() => {
-              showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50);
-              showMarkerDate(activeAnswer, activeTimeline);
-            }}
-            onMouseEnter={() => {
-              showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, center, 50);
-              showMarkerDate(activeAnswer, activeTimeline);
-            }}
-            onMouseLeave={() => {
-              setTooltip(null);
-              hideMarkerDate();
-            }}
-            onPointerDown={(event) => beginAnswerDrag(event, "bar")}
-            style={{
-              position: "absolute",
-              left: `${center}%`,
-              top: `${activeChipTop}%`,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              maxWidth: "280px",
-              height: "38px",
-              transform: "translate(-50%, -50%)",
-              borderRadius: "999px",
-              border: `2px solid ${activeColor}`,
-              background: "#151515",
-              color: "#f7f7f7",
-              cursor: dragMode === "bar" ? "grabbing" : "grab",
-              fontSize: "12px",
-              fontWeight: "950",
-              overflow: "hidden",
-              padding: "0 14px 0 10px",
-              pointerEvents: "auto",
-              boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`
-            }}
-          >
-            <span
-              style={{
-                alignItems: "center",
-                background: activeColor,
-                borderRadius: "999px",
-                color: "#101010",
-                display: "inline-flex",
-                flexShrink: 0,
-                height: "24px",
-                justifyContent: "center",
-                width: "24px"
-              }}
-            >
-              {activeNumber}
-            </span>
-            <span
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }}
-            >
-              {text}
-            </span>
-          </button>
-
-          {[
-            ["start", start],
-            ["end", end]
-          ].map(([handle, point]) => (
-            <button
-              key={handle}
-              type="button"
-              aria-label={handle === "start" ? "Move period start" : "Move period end"}
-              onBlur={hideMarkerDate}
-              onFocus={() => showMarkerDate(activeAnswer, activeTimeline)}
-              onMouseEnter={() => showMarkerDate(activeAnswer, activeTimeline)}
-              onMouseLeave={hideMarkerDate}
-              onPointerDown={(event) => beginAnswerDrag(event, handle)}
-              style={{
-                position: "absolute",
-                left: `${point}%`,
-                top: `${answerAnchorTop}%`,
-                width: "20px",
-                height: "20px",
-                transform: "translate(-50%, -50%)",
-                borderRadius: "999px",
-                border: "2px solid #fff",
-                background: activeColor,
-                cursor: "ew-resize",
-                pointerEvents: "auto",
-                boxShadow: "0 8px 20px rgba(0,0,0,0.42)",
-                zIndex: 2
-              }}
-            />
-          ))}
-          <button
-            type="button"
-            aria-label="Move period"
-            onBlur={hideMarkerDate}
-            onFocus={() => showMarkerDate(activeAnswer, activeTimeline)}
-            onMouseEnter={() => showMarkerDate(activeAnswer, activeTimeline)}
-            onMouseLeave={hideMarkerDate}
-            onPointerDown={(event) => beginAnswerDrag(event, "bar")}
-            style={{
-              position: "absolute",
-              left: `${center}%`,
-              top: `${answerAnchorTop}%`,
-              width: "13px",
-              height: "13px",
-              transform: "translate(-50%, -50%) rotate(45deg)",
-              border: "2px solid #fff",
-              borderRadius: "2px 50% 50% 50%",
-              background: activeColor,
-              boxShadow: `0 0 0 7px ${activeColor}18`,
-              cursor: dragMode === "bar" ? "grabbing" : "grab",
-              padding: 0,
-              pointerEvents: "auto",
-              zIndex: 3
-            }}
-          />
-        </div>
-      );
-    }
-
-    const left = percentFromValue(centerOrdinal(activeAnswer.start), viewport);
-
-    return (
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 12
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${stemTop}%`,
-            height: `${stemHeight}%`,
-            borderLeft: `2px solid ${activeColor}`,
-            boxShadow: `0 0 16px ${activeColor}55`,
-            pointerEvents: "none"
-          }}
-        />
-        <button
-          type="button"
-          aria-label="Move date"
-          onBlur={hideMarkerDate}
-          onFocus={() => showMarkerDate(activeAnswer, activeTimeline)}
-          onMouseEnter={() => showMarkerDate(activeAnswer, activeTimeline)}
-          onMouseLeave={hideMarkerDate}
-          onPointerDown={(event) => beginAnswerDrag(event, "point")}
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${answerAnchorTop}%`,
-            width: "16px",
-            height: "16px",
-            transform: "translate(-50%, -50%) rotate(45deg)",
-            border: "2px solid #fff",
-            borderRadius: "2px 50% 50% 50%",
-            background: activeColor,
-            boxShadow: `0 0 0 8px ${activeColor}22, 0 10px 24px rgba(0,0,0,0.38)`,
-            cursor: dragMode === "point" ? "grabbing" : "grab",
-            padding: 0,
-            pointerEvents: "auto"
-          }}
-        />
-        <button
-          type="button"
-          onBlur={hideMarkerDate}
-          onFocus={() => {
-            showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50);
-            showMarkerDate(activeAnswer, activeTimeline);
-          }}
-          onMouseEnter={() => {
-            showTooltip(`${text}: ${formatAnswer(activeAnswer, activeTimeline)}`, left, 50);
-            showMarkerDate(activeAnswer, activeTimeline);
-          }}
-          onMouseLeave={() => {
-            setTooltip(null);
-            hideMarkerDate();
-          }}
-          onPointerDown={(event) => beginAnswerDrag(event, "point")}
-          style={{
-            position: "absolute",
-            left: `${left}%`,
-            top: `${activeChipTop}%`,
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            maxWidth: "280px",
-            height: "38px",
-            transform: "translate(-50%, -50%)",
-            borderRadius: "999px",
-            border: `2px solid ${activeColor}`,
-            background: "#151515",
-            color: "#f7f7f7",
-            cursor: dragMode === "point" ? "grabbing" : "grab",
-            fontSize: "12px",
-            fontWeight: "950",
-            overflow: "hidden",
-            padding: "0 14px 0 10px",
-            pointerEvents: "auto",
-            boxShadow: `0 0 0 8px ${activeColor}16, 0 14px 30px rgba(0,0,0,0.32)`
-          }}
-        >
-          <span
-            style={{
-              alignItems: "center",
-              background: activeColor,
-              borderRadius: "999px",
-              color: "#101010",
-              display: "inline-flex",
-              flexShrink: 0,
-              height: "24px",
-              justifyContent: "center",
-              width: "24px"
-            }}
-          >
-            {activeNumber}
-          </span>
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {text}
-          </span>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        border: "1px solid #282828",
-        borderRadius: "18px",
-        background: "#121212",
-        boxSizing: "border-box",
-        display: "flex",
-        flex: compactLayout ? "1 1 auto" : undefined,
-        flexDirection: "column",
-        height: compactLayout ? "100%" : undefined,
-        minHeight: compactLayout ? 0 : "650px",
-        overflow: "hidden",
-        padding: compactLayout ? "10px 12px" : "18px",
-        position: "relative"
-      }}
-    >
-      <div
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: "14px",
-          justifyContent: "space-between",
-          marginBottom: compactLayout ? "8px" : "14px",
-          position: "relative",
-          zIndex: 10
-        }}
-      >
-        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div
-            style={{
-              color: "#f4f0df",
-              fontSize: compactLayout ? "16px" : "23px",
-              fontWeight: "900",
-              overflow: "hidden",
-              textAlign: "left",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {canvasDateLabel}
-          </div>
-          {!compactLayout && (
-            <div style={{ color: "#777", fontSize: "11px", marginTop: "3px" }}>
-              {canvasDateContext}
-              {" · Wheel zooms, drag canvas or minimap to move"}
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: "flex", flexShrink: 0, gap: "8px" }}>
-          <button
-            type="button"
-            onClick={() => zoomFromButton(0.72)}
-            style={{ ...buttonStyle, height: compactLayout ? "30px" : "36px", padding: 0, width: "40px" }}
-            title="Zoom in"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => zoomFromButton(1.32)}
-            style={{ ...buttonStyle, height: compactLayout ? "30px" : "36px", padding: 0, width: "40px" }}
-            title="Zoom out"
-          >
-            -
-          </button>
-          <button
-            type="button"
-            onClick={resetViewport}
-            style={{ ...buttonStyle, height: compactLayout ? "30px" : "36px", padding: "0 12px" }}
-            title="Reset view"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-
-      <div
-        ref={minimapRef}
-        onPointerDown={beginMinimapDrag}
-        onPointerMove={handleMinimapPointerMove}
-        onPointerUp={handleMinimapPointerUp}
-        onPointerCancel={handleMinimapPointerUp}
-        style={{
-          position: "relative",
-          height: "92px",
-          border: "1px solid #2a2a2a",
-          borderRadius: "13px",
-          background: "linear-gradient(180deg, #161616, #101010)",
-          cursor: dragMode === "minimap" ? "grabbing" : "pointer",
-          marginBottom: compactLayout ? "10px" : "14px",
-          overflow: "hidden",
-          overscrollBehavior: "contain",
-          touchAction: "none"
-        }}
-      >
-        {eraBands.map(band => {
-          const rawLeft = percentWithinRange(band.startValue, bounds);
-          const rawRight = percentWithinRange(band.endValue, bounds);
-          const left = clampNumber(rawLeft, 0, 100);
-          const right = clampNumber(rawRight, 0, 100);
-          const width = Math.max(0, right - left);
-
-          if (width <= 0) return null;
-
-          return (
-            <div key={`mini-era-${band.id}`} style={{ pointerEvents: "none" }}>
-              <div
-                style={{
-                  position: "absolute",
-                  left: `${left}%`,
-                  width: `${width}%`,
-                  top: 0,
-                  bottom: 0,
-                  background: `${band.labelColor}1c`,
-                  borderRight: rawRight <= 100 ? `1px solid ${band.labelColor}33` : "none"
-                }}
-              />
-              {width >= 11 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: `${(left + right) / 2}%`,
-                    bottom: "4px",
-                    transform: "translateX(-50%)",
-                    maxWidth: `${width}%`,
-                    color: band.labelColor,
-                    fontSize: "8px",
-                    fontWeight: "900",
-                    letterSpacing: "0.6px",
-                    opacity: 0.55,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    textTransform: "uppercase",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  {band.label}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        <div
-          style={{
-            position: "absolute",
-            left: "14px",
-            top: "7px",
-            color: "#8a8a8a",
-            fontSize: "10px",
-            fontWeight: "800",
-            zIndex: 2
-          }}
-        >
-          {formatTimelineYear(ordinalToDate(bounds.start_value).year)}
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            right: "14px",
-            top: "7px",
-            color: "#8a8a8a",
-            fontSize: "10px",
-            fontWeight: "800",
-            zIndex: 2
-          }}
-        >
-          {formatTimelineYear(ordinalToDate(bounds.end_value).year)}
-        </div>
-
-        <div
-          style={{
-            position: "absolute",
-            left: "14px",
-            right: "14px",
-            top: "52px",
-            height: "3px",
-            borderRadius: "999px",
-            background: "#3c3326",
-            zIndex: 1
-          }}
-        />
-
-        {miniAnchors.map(entry => {
-          const { anchor, pct } = entry;
-          const isMajor = (anchor.tier ?? 1) === 0;
-          const accent = anchorAccent(anchor);
-
-          return (
-            <div key={`mini-anchor-${anchor.id}`} style={{ pointerEvents: "none" }}>
-              <div
-                style={{
-                  position: "absolute",
-                  left: `${pct}%`,
-                  top: isMajor ? "46px" : "49px",
-                  height: isMajor ? "13px" : "7px",
-                  width: 0,
-                  transform: "translateX(-50%)",
-                  borderLeft: `1px solid ${accent}${isMajor ? "aa" : "5e"}`,
-                  zIndex: 2
-                }}
-              />
-              {miniLabeledAnchorIds.has(anchor.id) && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: `${clampNumber(pct, 4, 96)}%`,
-                    top: "26px",
-                    transform: "translateX(-50%)",
-                    color: accent,
-                    fontSize: "8px",
-                    fontWeight: "900",
-                    whiteSpace: "nowrap",
-                    zIndex: 2
-                  }}
-                >
-                  {formatTimelineYear(ordinalToDate(anchorCenterValue(anchor)).year)}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {placedAnswers.map(entry => {
-          const isActive = entry.item.question_id === activeId;
-
-          if (entry.timeline.kind === "interval") {
-            const start = percentWithinRange(centerOrdinal(entry.answer.start), bounds);
-            const end = percentWithinRange(centerOrdinal(entry.answer.end), bounds);
-            const left = clampNumber(Math.min(start, end), 0, 100);
-            const width = Math.max(1, Math.abs(end - start));
-
-            return (
-              <div
-                key={`mini-${entry.item.question_id}`}
-                title={`${entry.item.question}: ${formatAnswer(entry.answer, entry.timeline)}`}
-                style={{
-                  position: "absolute",
-                  left: `${left}%`,
-                  top: "53px",
-                  width: `${width}%`,
-                  minWidth: isActive ? "12px" : "8px",
-                  height: isActive ? "12px" : "8px",
-                  borderRadius: "999px",
-                  background: entry.color,
-                  boxShadow: isActive ? `0 0 0 5px ${entry.color}22` : "none",
-                  transform: "translateY(-50%)",
-                  zIndex: isActive ? 5 : 3
-                }}
-              />
-            );
-          }
-
-          const left = percentWithinRange(centerOrdinal(entry.answer.start), bounds);
-
-          return (
-            <div
-              key={`mini-${entry.item.question_id}`}
-              title={`${entry.item.question}: ${formatAnswer(entry.answer, entry.timeline)}`}
-              style={{
-                position: "absolute",
-                left: `${left}%`,
-                top: "53px",
-                width: isActive ? "12px" : "8px",
-                height: isActive ? "12px" : "8px",
-                borderRadius: "999px",
-                background: entry.color,
-                border: isActive ? "2px solid #fff" : "none",
-                boxShadow: isActive ? `0 0 0 5px ${entry.color}22` : "none",
-                transform: "translate(-50%, -50%)",
-                zIndex: isActive ? 5 : 3
-              }}
-            />
-          );
-        })}
-
-        <div
-          style={{
-            position: "absolute",
-            left: `${viewportStartPercent}%`,
-            top: "6px",
-            width: `${viewportWidthPercent}%`,
-            minWidth: "28px",
-            bottom: "6px",
-            border: "2px solid #f4d48c",
-            borderRadius: "10px",
-            background: "rgba(244, 212, 140, 0.08)",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.35), 0 10px 22px rgba(0,0,0,0.25)",
-            pointerEvents: "none",
-            zIndex: 4
-          }}
-        />
-      </div>
-
-      <div
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: "12px",
-          justifyContent: "space-between",
-          marginBottom: compactLayout ? "6px" : "10px",
-          minHeight: "16px"
-        }}
-      >
-        <div
-          style={{
-            alignItems: "center",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "7px",
-            fontSize: "12px",
-            fontWeight: "800",
-            minWidth: 0,
-            overflow: "hidden"
-          }}
-        >
-          <span
-            style={{
-              color: where.eraColor,
-              letterSpacing: "0.6px",
-              textTransform: "uppercase",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {where.eraLabel}
-          </span>
-          {viewSpanYears <= 800 && (
-            <>
-              <span style={{ color: "#555" }}>›</span>
-              <span style={{ color: "#9a9384", whiteSpace: "nowrap" }}>
-                {where.centuryLabel}
-              </span>
-            </>
-          )}
-          {viewSpanYears <= 80 && (
-            <>
-              <span style={{ color: "#555" }}>›</span>
-              <span style={{ color: "#9a9384", whiteSpace: "nowrap" }}>
-                {where.decadeLabel}
-              </span>
-            </>
-          )}
-        </div>
-        <div
-          style={{
-            color: "#6f6f6f",
-            flexShrink: 0,
-            fontSize: "11px",
-            fontWeight: "800",
-            whiteSpace: "nowrap"
-          }}
-        >
-          Vue {viewStartYear} – {viewEndYear}
-        </div>
-      </div>
-
-      <div
-        ref={surfaceRef}
-        onPointerDown={beginSurfaceDrag}
-        onPointerMove={handleSurfacePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onPointerLeave={handleSurfacePointerLeave}
-        style={{
-          position: "relative",
-          flex: compactLayout ? "1 1 auto" : undefined,
-          height: compactLayout ? "auto" : "470px",
-          minHeight: compactLayout ? "150px" : undefined,
-          background: "linear-gradient(180deg, #181818 0%, #101010 100%)",
-          border: "1px solid #292929",
-          borderRadius: "14px",
-          cursor: dragMode === "surface"
-            ? "grabbing"
-            : activeTimeline.kind === "interval" && activeAnswer
-              ? "grab"
-              : "crosshair",
-          overflow: "hidden",
-          overscrollBehavior: "contain",
-          touchAction: "none"
-        }}
-      >
-        {eraBands.map(band => {
-          const rawLeft = percentFromValue(band.startValue, viewport);
-          const rawRight = percentFromValue(band.endValue, viewport);
-
-          if (rawRight < -5 || rawLeft > 105) return null;
-
-          const left = clampNumber(rawLeft, -20, 120);
-          const right = clampNumber(rawRight, -20, 120);
-          const width = Math.max(0, right - left);
-          const visibleLeft = clampNumber(rawLeft, 0, 100);
-          const visibleRight = clampNumber(rawRight, 0, 100);
-          const visibleWidth = visibleRight - visibleLeft;
-
-          return (
-            <div key={band.id} style={{ pointerEvents: "none" }}>
-              <div
-                style={{
-                  position: "absolute",
-                  left: `${left}%`,
-                  width: `${width}%`,
-                  top: 0,
-                  bottom: 0,
-                  background: band.tint,
-                  borderRight: rawRight <= 105
-                    ? `1px solid ${band.labelColor}1f`
-                    : "none"
-                }}
-              />
-              {visibleWidth >= 14 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: `${(visibleLeft + visibleRight) / 2}%`,
-                    bottom: "10px",
-                    maxWidth: `${visibleWidth}%`,
-                    transform: "translateX(-50%)",
-                    color: band.labelColor,
-                    fontSize: "13px",
-                    fontWeight: "900",
-                    letterSpacing: "1.4px",
-                    opacity: 0.4,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    textTransform: "uppercase",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  {band.label}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {scale.gridTicks.map((tick, index) => {
-          const left = percentFromValue(tick.value, viewport);
-          const opacity = tick.unit === "millennium"
-            ? 0.5
-            : tick.unit === "year"
-            ? 0.28
-            : tick.unit === "month"
-              ? 0.14
-              : tick.level === "major"
-                ? 0.12
-                : 0.055;
-
-          if (left < -5 || left > 105) return null;
-
-          return (
-            <div
-              key={`grid-${tick.value}-${index}`}
-              style={{
-                position: "absolute",
-                left: `${left}%`,
-                top: 0,
-                bottom: 0,
-                borderLeft: tick.unit === "millennium"
-                  ? `2px solid rgba(244,212,140,${opacity})`
-                  : `1px solid rgba(244,240,223,${opacity})`,
-                pointerEvents: "none",
-                zIndex: 1
-              }}
-            />
-          );
-        })}
-
-        {renderRulers()}
-        {renderAnchors()}
-        {renderHoverGuide()}
-
-        {markers.map(renderPassiveMarker)}
-        {renderPendingInterval()}
-        {renderActiveAnswer()}
-        <TimelineTooltip tooltip={tooltip} />
-
-        {!compactLayout && !activeAnswer && (
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: `${answerAnchorTop}%`,
-              transform: "translate(-50%, 34px)",
-              color: "#9c927f",
-              fontSize: "13px",
-              fontWeight: "800",
-              pointerEvents: "none",
-              textAlign: "center",
-              whiteSpace: "nowrap",
-              zIndex: 4
-            }}
-          >
-            {pendingIntervalAnswer
-              ? "Click again to place the other border"
-              : "Click the timeline to place your answer"}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export default function TimelineReview({
   group,
   reviewItems,
+  onAnsweringComplete,
   onComplete,
   submitAnswer = sendTimelineAnswer,
   fillAvailableHeight = false
 }) {
-  const sortedItems = useMemo(
-    () => sortReviewItems(reviewItems || []),
-    [reviewItems]
-  );
-  const [orderedIds, setOrderedIds] = useState(() =>
-    sortedItems.map(item => item.question_id)
-  );
-  const [activeId, setActiveId] = useState(sortedItems[0]?.question_id || null);
-  const [committedAnswers, setCommittedAnswers] = useState({});
-  const [draftAnswers, setDraftAnswers] = useState({});
-  const [skippedIds, setSkippedIds] = useState(() => new Set());
-  const [recapResults, setRecapResults] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [canvasResetSignal, setCanvasResetSignal] = useState(0);
+  const {
+    activeItem,
+    activeTimeline,
+    answer,
+    answeredCount,
+    draft,
+    endpoint,
+    error,
+    goNext,
+    isComplete,
+    isInterval,
+    isSubmitting,
+    precision,
+    range,
+    result,
+    revealed,
+    setEndpoint,
+    setParsedDate,
+    setUnit,
+    skip,
+    toggleEndpoint,
+    totalCount,
+    validate
+  } = useTimelineReview({
+    group,
+    onAnsweringComplete,
+    onComplete,
+    reviewItems,
+    submitAnswer
+  });
 
-  const itemById = useMemo(
-    () => new Map(sortedItems.map(item => [item.question_id, item])),
-    [sortedItems]
-  );
-  const orderedItems = orderedIds
-    .map(id => itemById.get(id))
-    .filter(Boolean);
-  const orderById = useMemo(
-    () => new Map(orderedItems.map((item, index) => [item.question_id, index])),
-    [orderedItems]
-  );
-  const range = useMemo(
-    () => group.range || buildRangeFromItems(sortedItems),
-    [group.range, sortedItems]
-  );
-  const bounds = useMemo(() => buildTimelineBounds(range), [range]);
-  const masteredAnchors = group.anchors || emptyAnchors;
-  const activeItem = itemById.get(activeId) || sortedItems[0] || null;
-  const activeTimeline = activeItem ? normalizeTimeline(activeItem.timeline) : null;
-  const activeAnswer = activeItem
-    ? draftAnswers[activeItem.question_id] || committedAnswers[activeItem.question_id] || null
-    : null;
-  const activeCanBeCommitted = Boolean(activeItem && activeAnswer);
-  const placedCount = sortedItems.filter(item =>
-    Boolean(committedAnswers[item.question_id]) ||
-    (item.question_id === activeItem?.question_id && activeCanBeCommitted)
-  ).length;
-  const canSubmit = sortedItems.length > 0 && sortedItems.every(item =>
-    Boolean(committedAnswers[item.question_id]) ||
-    (item.question_id === activeItem?.question_id && activeCanBeCommitted)
-  );
+  const displayRange = useMemo(() => buildDisplayRange(range), [range]);
+  const bounds = useMemo(() => yearBoundsFromRange(displayRange), [displayRange]);
+  const [slice, setSliceState] = useState(() => ({ ...bounds }));
+  const [quickInput, setQuickInput] = useState("");
+  const [quickError, setQuickError] = useState("");
+  const inputRef = useRef(null);
+  const activeId = activeItem?.question_id ?? null;
 
-  function setActiveDraft(answer) {
-    if (!activeItem) return;
+  // The map above stays the same picture on every card (that is what spatial
+  // memory attaches to). The rail is the opposite: it opens on a fresh random
+  // window around this card's answer, so you can aim at a year straight away
+  // instead of hunting across a millennium. Zooming out to the full frame is
+  // always one "Reset" away.
+  useEffect(() => {
+    if (!activeTimeline) {
+      setSliceState({ ...bounds });
+    } else {
+      const targets = [yearToTimelineIndex(activeTimeline.start.year)];
 
-    setDraftAnswers(prev => ({
-      ...prev,
-      [activeItem.question_id]: answer
-    }));
-    setSkippedIds(prev => {
-      const next = new Set(prev);
-      next.delete(activeItem.question_id);
-      return next;
-    });
-    setError("");
-  }
-
-  function commitQuestion(questionId) {
-    const item = itemById.get(questionId);
-    const answer = draftAnswers[questionId] || committedAnswers[questionId];
-
-    if (!item || !answer) return null;
-
-    setCommittedAnswers(prev => ({
-      ...prev,
-      [questionId]: answer
-    }));
-    setSkippedIds(prev => {
-      const next = new Set(prev);
-      next.delete(questionId);
-      return next;
-    });
-
-    return answer;
-  }
-
-  function selectItem(questionId) {
-    if (activeItem && questionId !== activeItem.question_id) {
-      commitQuestion(activeItem.question_id);
-    }
-
-    setActiveId(questionId);
-    setError("");
-  }
-
-  function findNextUncommitted(afterId, committedOverride = committedAnswers) {
-    const startIndex = Math.max(0, orderedIds.indexOf(afterId));
-    const rotatedIds = [
-      ...orderedIds.slice(startIndex + 1),
-      ...orderedIds.slice(0, startIndex + 1)
-    ];
-
-    return rotatedIds.find(id => !committedOverride[id]);
-  }
-
-  function goNext() {
-    if (!activeItem) return;
-
-    const answer = commitQuestion(activeItem.question_id);
-
-    if (!answer) {
-      setError("Place an answer on the timeline before moving on.");
-      return;
-    }
-
-    const nextCommitted = {
-      ...committedAnswers,
-      [activeItem.question_id]: answer
-    };
-    const nextId = findNextUncommitted(activeItem.question_id, nextCommitted);
-
-    if (nextId) {
-      setActiveId(nextId);
-    }
-
-    setError("");
-  }
-
-  function skipActiveItem() {
-    if (!activeItem) return;
-
-    setSkippedIds(prev => {
-      const next = new Set(prev);
-      if (!committedAnswers[activeItem.question_id]) {
-        next.add(activeItem.question_id);
+      if (activeTimeline.kind === "interval" && activeTimeline.end) {
+        targets.push(yearToTimelineIndex(activeTimeline.end.year));
       }
-      return next;
-    });
-    setOrderedIds(prev => [
-      ...prev.filter(id => id !== activeItem.question_id),
-      activeItem.question_id
-    ]);
 
-    const nextId = orderedIds.find(id =>
-      id !== activeItem.question_id &&
-      !committedAnswers[id]
-    ) || orderedIds.find(id => id !== activeItem.question_id) || activeItem.question_id;
+      setSliceState(buildAnswerSlice(targets, bounds));
+    }
 
-    setActiveId(nextId);
-    setCanvasResetSignal(prev => prev + 1);
-    setError("");
-  }
+    setQuickInput("");
+    setQuickError("");
+    // activeTimeline is memoised on activeId, so this re-draws the window once
+    // per card rather than on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, bounds]);
 
-  async function submitTimeline() {
-    if (!activeItem) return;
+  const setSlice = useCallback((updater) => {
+    setSliceState(current => clampSlice(
+      typeof updater === "function" ? updater(current) : updater,
+      bounds
+    ));
+  }, [bounds]);
 
-    const activeCommittedAnswer = draftAnswers[activeItem.question_id]
-      || committedAnswers[activeItem.question_id];
-    const answersForSubmit = {
-      ...committedAnswers,
-      ...(activeCommittedAnswer
-        ? { [activeItem.question_id]: activeCommittedAnswer }
-        : {})
-    };
+  const anchors = useMemo(
+    () => buildSessionAnchors(reviewItems || [], group?.anchors || emptyAnchors),
+    [group?.anchors, reviewItems]
+  );
 
-    if (!sortedItems.every(item => answersForSubmit[item.question_id])) {
-      setError("Answer every timeline question before validating.");
+  const nudge = useCallback((unit, delta) => {
+    if (revealed) return;
+
+    if (unit === "year") {
+      const base = draft.year ?? 0;
+      const next = base + delta;
+
+      setUnit("year", next === 0 ? (delta > 0 ? 1 : -1) : next);
       return;
     }
 
-    const payload = {};
-
-    orderedItems.forEach(item => {
-      const timeline = normalizeTimeline(item.timeline);
-      payload[item.question_id] = answerToPayload(
-        answersForSubmit[item.question_id],
-        timeline
-      );
-    });
-
-    setCommittedAnswers(answersForSubmit);
-    setIsSubmitting(true);
-    setError("");
-
-    try {
-      const response = await submitAnswer(payload);
-      const resultOrder = new Map(orderedItems.map((item, index) => [
-        item.question_id,
-        index
-      ]));
-      const sortedResults = (response.results || []).slice().sort((a, b) =>
-        (resultOrder.get(a.question_id) || 0) - (resultOrder.get(b.question_id) || 0)
-      );
-
-      setRecapResults(sortedResults);
-    } catch (requestError) {
-      setError(requestError.message || "Impossible de valider cette timeline.");
-    } finally {
-      setIsSubmitting(false);
+    if (unit === "month" && draft.month !== null) {
+      setUnit("month", clampNumber(draft.month + delta, 1, 12));
+      return;
     }
+
+    if (unit === "day" && draft.day !== null && draft.year !== null && draft.month !== null) {
+      setUnit("day", clampNumber(draft.day + delta, 1, daysInMonth(draft.year, draft.month)));
+    }
+  }, [draft, revealed, setUnit]);
+
+  // The finest unit the question asks for is the one the arrows should move —
+  // on a day question you almost always want to shift by a day, not a year.
+  const finestUnit = precision === "day" && draft.day !== null
+    ? "day"
+    : (precision === "month" || precision === "day") && draft.month !== null
+      ? "month"
+      : "year";
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+
+        if (revealed) {
+          goNext();
+        } else {
+          validate();
+        }
+
+        return;
+      }
+
+      if (revealed) return;
+
+      if (event.key === "Tab" && isInterval) {
+        event.preventDefault();
+        toggleEndpoint();
+        return;
+      }
+
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        nudge(finestUnit, (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 10 : 1));
+        return;
+      }
+
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        nudge("year", (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1));
+        return;
+      }
+
+      // Typing a digit anywhere means "I know the date" — hand the keystroke to
+      // the quick field rather than making the user click into it first.
+      if (/^[0-9-]$/.test(event.key)) {
+        inputRef.current?.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [finestUnit, goNext, isInterval, nudge, revealed, toggleEndpoint, validate]);
+
+  function applyQuickInput() {
+    const parsed = parseTimelineInput(quickInput);
+
+    if (!parsed.timeline) {
+      setQuickError(parsed.error || "Format de date invalide");
+      return;
+    }
+
+    setParsedDate(parsed.timeline.start);
+    setQuickError("");
+    setQuickInput("");
+    inputRef.current?.blur();
   }
 
-  function continueReview() {
-    const failedQuestionIds = (recapResults || [])
-      .filter(result => result.quality === 0)
-      .map(result => result.question_id);
+  function handleQuickKeyDown(event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
 
-    setRecapResults(null);
-    onComplete(failedQuestionIds);
+      if (quickInput.trim()) {
+        applyQuickInput();
+      } else if (revealed) {
+        goNext();
+      } else {
+        validate();
+      }
+
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setQuickInput("");
+      setQuickError("");
+      inputRef.current?.blur();
+    }
   }
 
   if (!activeItem || !activeTimeline) {
     return null;
   }
 
+  const expected = result?.expected || null;
+  const truthDate = expected ? expected.start : null;
+  const guessCenter = answerCenterValue(answer, isInterval, precision);
+  const guessLabel = isInterval
+    ? `${formatDraft(answer.start, precision)} – ${formatDraft(answer.end, precision)}`
+    : formatDraft(answer.start, precision);
+  const context = draft.year !== null && guessCenter !== null
+    ? describeValue(guessCenter)
+    : null;
+  const sliceRange = sliceToOrdinalRange(slice);
+
   return (
-    <>
+    <div
+      style={{
+        background: "#181818",
+        border: "1px solid #262626",
+        borderRadius: "18px",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        // Everything that is not the footer yields on a short window. The footer
+        // carries the primary action, so it is the one thing that must never be
+        // the element pushed off the bottom of the card.
+        gap: fillAvailableHeight ? "clamp(9px, 1.5vh, 14px)" : "14px",
+        height: fillAvailableHeight ? "100%" : undefined,
+        minHeight: fillAvailableHeight ? 0 : undefined,
+        overflow: "hidden",
+        padding: fillAvailableHeight
+          ? "clamp(12px, 2.4vh, 20px) 22px clamp(6px, 1.4vh, 18px)"
+          : "24px 24px 22px",
+        ...fadeInStyle
+      }}
+    >
       <div
         style={{
-          background: "#181818",
-          border: "1px solid #262626",
-          borderRadius: "18px",
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          height: fillAvailableHeight ? "100%" : undefined,
-          minHeight: fillAvailableHeight ? 0 : undefined,
-          overflow: "hidden",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-          ...fadeInStyle
+          alignItems: "center",
+          display: "grid",
+          flexShrink: 0,
+          gap: "16px",
+          // Equal flexible sides so the question is centred on the card itself,
+          // not on whatever room the right-hand controls happen to leave.
+          gridTemplateColumns: "1fr minmax(0, auto) 1fr",
+          // The prompt is the thing being asked — it gets air on both sides of it
+          // rather than being pressed against the track.
+          marginBottom: "4px"
         }}
       >
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
+          {!fillAvailableHeight && <div style={typeBadgeStyle}>TIMELINE</div>}
+        </div>
+
+        {/* The prompt has to win the eye against three rulers and a landscape, and
+            size alone was not doing it. So it gets framed instead: the same violet
+            the app already uses for timeline, as a plaque with a kicker above it.
+            Keying on the question id replays the card's fadeIn on every new
+            question, so the eye is pulled back up here each time. */}
         <div
+          key={activeId}
           style={{
-            flexShrink: 0,
-            order: fillAvailableHeight ? 2 : 1,
-            padding: fillAvailableHeight ? "8px 28px 10px" : "16px 18px 14px",
-            borderBottom: fillAvailableHeight ? "none" : "1px solid #262626",
-            borderTop: fillAvailableHeight ? "1px solid #262626" : "none",
-            background: fillAvailableHeight
-              ? "linear-gradient(to top, rgba(255,255,255,0.03), transparent)"
-              : "linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)"
+            alignItems: "center",
+            display: "flex",
+            flexDirection: "column",
+            gap: "7px",
+            minWidth: 0,
+            ...fadeInStyle
           }}
         >
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "20px",
-              marginBottom: fillAvailableHeight ? "6px" : "14px"
+              color: "#7a7a7a",
+              fontSize: "10px",
+              fontWeight: 800,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase"
             }}
           >
-            <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-              {!fillAvailableHeight && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    marginBottom: "8px"
-                  }}
-                >
-                  <div style={typeBadgeStyle}>TIMELINE</div>
-                  <div style={{ color: "#777", fontSize: "12px", fontWeight: "800" }}>
-                    Question {(orderById.get(activeItem.question_id) || 0) + 1} / {sortedItems.length}
-                  </div>
-                </div>
-              )}
-              <div
-                style={{
-                  color: "#f3f3f3",
-                  display: "-webkit-box",
-                  fontSize: fillAvailableHeight ? "17px" : "30px",
-                  fontWeight: "950",
-                  lineHeight: 1.1,
-                  overflow: "hidden",
-                  textAlign: "left",
-                  WebkitBoxOrient: "vertical",
-                  WebkitLineClamp: fillAvailableHeight ? 1 : 2
-                }}
-              >
-                {activeItem.question}
-              </div>
-              {!fillAvailableHeight && (
-                <div
-                  style={{
-                    color: "#858585",
-                    fontSize: "12px",
-                    fontWeight: "650",
-                    marginTop: "8px"
-                  }}
-                >
-                  {activeAnswer
-                    ? `Placed ${activeTimeline.kind === "interval" ? "period" : "date"}: ${formatAnswer(activeAnswer, activeTimeline)}`
-                    : "No answer placed"}
-                </div>
-              )}
-            </div>
-
-            <div
-              style={{
-                alignItems: fillAvailableHeight ? "center" : "flex-end",
-                display: "flex",
-                flexDirection: fillAvailableHeight ? "row" : "column",
-                gap: "10px",
-                flexShrink: 0
-              }}
-            >
-              <div
-                style={{
-                  color: "#fff",
-                  fontSize: fillAvailableHeight ? "16px" : "24px",
-                  fontWeight: "850"
-                }}
-              >
-                {placedCount}
-                <span
-                  style={{
-                    color: "#666",
-                    fontSize: fillAvailableHeight ? "13px" : "16px",
-                    marginLeft: "4px"
-                  }}
-                >
-                  / {sortedItems.length}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={skipActiveItem}
-                  style={{ ...buttonStyle, padding: fillAvailableHeight ? "7px 11px" : "10px 12px" }}
-                >
-                  Skip
-                </button>
-                <button
-                  type="button"
-                  onClick={goNext}
-                  style={{ ...successButtonStyle, padding: fillAvailableHeight ? "7px 11px" : "10px 12px" }}
-                >
-                  Next
-                </button>
-                <button
-                  type="button"
-                  onClick={submitTimeline}
-                  disabled={isSubmitting || !canSubmit}
-                  style={{
-                    ...successButtonStyle,
-                    cursor: isSubmitting || !canSubmit ? "not-allowed" : "pointer",
-                    opacity: isSubmitting || !canSubmit ? 0.55 : 1,
-                    padding: fillAvailableHeight ? "7px 11px" : "10px 12px"
-                  }}
-                >
-                  {isSubmitting ? "Validation..." : "Validate"}
-                </button>
-              </div>
-            </div>
+            Datez cet évènement
           </div>
-
-          <TimelineQueue
-            activeId={activeItem.question_id}
-            committedAnswers={committedAnswers}
-            compact={fillAvailableHeight}
-            draftAnswers={draftAnswers}
-            items={orderedItems}
-            onSelect={selectItem}
-            skippedIds={skippedIds}
-          />
-        </div>
-
-        <div
-          style={{
-            boxSizing: "border-box",
-            display: fillAvailableHeight ? "flex" : undefined,
-            flex: fillAvailableHeight ? "1 1 auto" : undefined,
-            minHeight: fillAvailableHeight ? 0 : undefined,
-            order: fillAvailableHeight ? 1 : 2,
-            padding: fillAvailableHeight ? "12px 16px" : "18px"
-          }}
-        >
-          <TimelineCanvas
-            activeAnswer={activeAnswer}
-            activeId={activeItem.question_id}
-            activeItem={activeItem}
-            activeNumber={(orderById.get(activeItem.question_id) || 0) + 1}
-            bounds={bounds}
-            compactLayout={fillAvailableHeight}
-            committedAnswers={committedAnswers}
-            items={orderedItems}
-            masteredAnchors={masteredAnchors}
-            onDraftChange={setActiveDraft}
-            onSelect={selectItem}
-            orderById={orderById}
-            range={range}
-            resetSignal={canvasResetSignal}
-          />
-        </div>
-
-        {(error || !fillAvailableHeight) && (
           <div
+            data-testid="timeline-prompt"
             style={{
-              borderTop: "1px solid #262626",
-              flexShrink: 0,
-              order: 3,
-              padding: "12px 18px"
+              // Neutral on purpose. Violet in this card means "your mark"; the
+              // prompt is not your mark. It earns the eye by being a raised,
+              // high-contrast surface, not by borrowing a colour that means
+              // something else two rows down.
+              background: "linear-gradient(180deg, #232327, #1a1a1d)",
+              border: "1px solid #34343a",
+              borderRadius: "12px",
+              boxShadow: "0 8px 26px rgba(0, 0, 0, 0.38)",
+              color: "#f6f6f8",
+              // Viewport-relative so a short window trades a little prompt size
+              // for the rails, rather than pushing the footer off the card.
+              fontSize: fillAvailableHeight ? "clamp(19px, 2.7vh, 26px)" : "32px",
+              fontWeight: 900,
+              letterSpacing: "-0.01em",
+              lineHeight: 1.25,
+              maxWidth: "100%",
+              overflow: "hidden",
+              padding: "clamp(7px, 1.2vh, 11px) 28px",
+              textAlign: "center",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
             }}
           >
-            <div
-              style={{
-                color: error ? "#ff9aa5" : "#777",
-                fontSize: "13px",
-                fontWeight: error ? "700" : "500"
-              }}
-            >
-              {error || "Click the timeline to place an answer. Wheel zooms; the minimap shows where you are."}
+            {activeItem.question}
+          </div>
+        </div>
+
+        <div style={{ alignItems: "center", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          {isInterval && !revealed && (
+            <div style={{ display: "flex", gap: "6px" }}>
+              <button
+                data-timeline-endpoint={endpoint === "start" ? "active" : "idle"}
+                onClick={() => setEndpoint("start")}
+                style={endpointPillStyle(endpoint === "start")}
+                type="button"
+              >
+                Début
+              </button>
+              <button
+                data-timeline-endpoint={endpoint === "end" ? "active" : "idle"}
+                onClick={() => setEndpoint("end")}
+                style={endpointPillStyle(endpoint === "end")}
+                type="button"
+              >
+                Fin
+              </button>
             </div>
+          )}
+          <div style={{ color: "#777", fontSize: "13px", fontWeight: 800, whiteSpace: "nowrap" }}>
+            {/* While a correction is on screen the card is still the current one:
+                answeredCount already counts it, so don't advance the counter too. */}
+            {Math.min(revealed ? answeredCount : answeredCount + 1, totalCount)} / {totalCount}
+          </div>
+        </div>
+      </div>
+
+      <TimelineGlobalTrack
+        anchors={anchors}
+        guess={guessCenter === null ? null : { label: guessLabel, value: guessCenter }}
+        quality={result?.quality}
+        range={displayRange}
+        resetSignal={activeId}
+        sliceRange={sliceRange}
+        truth={truthDate
+          ? { label: formatTimelineDate(truthDate), value: centerOrdinal(truthDate) }
+          : null}
+      />
+
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          flexShrink: 0,
+          gap: "12px",
+          justifyContent: "space-between"
+        }}
+      >
+        <div style={{ alignItems: "center", display: "flex", gap: "10px", minWidth: 0 }}>
+          <input
+            aria-label="Saisir la date"
+            className="app-scrollbar"
+            disabled={revealed}
+            onBlur={() => quickInput.trim() && applyQuickInput()}
+            onChange={event => {
+              setQuickInput(event.target.value);
+              setQuickError("");
+            }}
+            onKeyDown={handleQuickKeyDown}
+            placeholder={placeholderByPrecision[precision]}
+            ref={inputRef}
+            style={{
+              background: "#101010",
+              border: `1px solid ${quickError ? "#f87171" : "#2d2d2d"}`,
+              borderRadius: "10px",
+              boxSizing: "border-box",
+              color: "#eee",
+              fontSize: "16px",
+              fontWeight: 700,
+              outline: "none",
+              padding: "clamp(7px, 1.3vh, 10px) 14px",
+              transition: "border 0.18s ease",
+              width: "150px"
+            }}
+            value={quickInput}
+          />
+          <div
+            data-testid="timeline-answer"
+            style={{
+              color: guessLabel ? "#e5dcff" : "#5a5a5a",
+              fontSize: "20px",
+              fontWeight: 900,
+              whiteSpace: "nowrap"
+            }}
+          >
+            {guessLabel || "—"}
+          </div>
+          {context && !revealed && (
+            <div style={{ color: "#6d6d6d", fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" }}>
+              {context.eraLabel} · {context.centuryLabel}
+            </div>
+          )}
+        </div>
+
+        <div style={{ alignItems: "center", display: "flex", flexShrink: 0, gap: "6px" }}>
+          <button
+            onClick={() => setSlice(current => zoomSliceAt(current, 50, 1.6, bounds))}
+            style={zoomButtonStyle}
+            type="button"
+          >
+            −
+          </button>
+          <button
+            onClick={() => setSlice(current => zoomSliceAt(current, 50, 0.55, bounds))}
+            style={zoomButtonStyle}
+            type="button"
+          >
+            +
+          </button>
+          <button
+            onClick={() => setSlice({ ...bounds })}
+            style={zoomButtonStyle}
+            type="button"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <TimelineCascade
+        bounds={bounds}
+        disabled={revealed || isSubmitting}
+        draft={revealed && truthDate ? (answer[endpoint] || draft) : draft}
+        onUnit={setUnit}
+        precision={precision}
+        setSlice={setSlice}
+        slice={slice}
+        truthDate={truthDate}
+      />
+
+      <div data-feedback-slot style={{ flexShrink: 0, height: feedbackSlotHeight }}>
+        {revealed && result && (
+          <div
+            data-timeline-feedback={result.quality === 0 ? "wrong" : result.quality === 1 ? "close" : "correct"}
+            style={{
+              alignItems: "center",
+              animation: result.quality === 0 ? "answer-shake 0.4s ease" : "answer-pop 0.42s ease",
+              background: result.quality === 0 ? "#3a1d1d" : result.quality === 1 ? "#35311f" : "#183a24",
+              border: `1px solid ${qualityColor(result.quality)}`,
+              borderRadius: "12px",
+              boxSizing: "border-box",
+              display: "flex",
+              gap: "14px",
+              height: "100%",
+              padding: "0 16px"
+            }}
+          >
+            <div style={{ color: qualityColor(result.quality), fontSize: "17px", fontWeight: 900 }}>
+              {result.quality === 2 ? "Exact !" : result.quality === 1 ? "Presque" : "Raté"}
+            </div>
+            <div style={{ color: "#ddd", fontSize: "14px", fontWeight: 700 }}>
+              {formatTimelineDate(expected.start)}
+              {expected.end ? ` – ${formatTimelineDate(expected.end)}` : ""}
+            </div>
+            {result.quality !== 2 && (
+              <div style={{ color: "#9a9a9a", fontSize: "13px", fontWeight: 700 }}>
+                {describeGap(result)}
+              </div>
+            )}
+          </div>
+        )}
+        {!revealed && (error || quickError) && (
+          <div
+            style={{
+              alignItems: "center",
+              color: "#ff9aa5",
+              display: "flex",
+              fontSize: "13px",
+              fontWeight: 700,
+              height: "100%"
+            }}
+          >
+            {error || quickError}
           </div>
         )}
       </div>
 
-      {recapResults && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.72)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-            padding: "24px"
-          }}
-        >
-          <div
-            style={{
-              width: "min(920px, 100%)",
-              maxHeight: "82vh",
-              overflow: "auto",
-              borderRadius: "18px",
-              border: "1px solid #303030",
-              background: "#181818",
-              boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
-              padding: "22px"
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "18px",
-                marginBottom: "18px"
-              }}
-            >
-              <div>
-                <div style={typeBadgeStyle}>TIMELINE RESULT</div>
-                <div
-                  style={{
-                    marginTop: "12px",
-                    color: "#f3f3f3",
-                    fontSize: "26px",
-                    fontWeight: "800"
-                  }}
-                >
-                  Resultat
-                </div>
-              </div>
-
-              <button type="button" onClick={continueReview} style={successButtonStyle}>
-                Continuer
-              </button>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px"
-              }}
-            >
-              {recapResults.map(result => {
-                const item = itemById.get(result.question_id);
-                const timeline = normalizeTimeline(result.expected);
-
-                return (
-                  <div
-                    key={result.question_id}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(0, 1fr) 180px 180px 100px",
-                      gap: "12px",
-                      alignItems: "center",
-                      border: "1px solid #282828",
-                      borderRadius: "12px",
-                      background: "#141414",
-                      padding: "12px"
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        style={{
-                          color: "#eee",
-                          fontSize: "14px",
-                          fontWeight: "800",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap"
-                        }}
-                      >
-                        {item?.question || `Question #${result.question_id}`}
-                      </div>
-                      <div style={{ color: "#777", fontSize: "12px", marginTop: "4px" }}>
-                        Error: {result.start.distance} {result.start.unit}
-                        {result.end
-                          ? ` / ${result.end.distance} ${result.end.unit}`
-                          : ""}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ color: "#666", fontSize: "10px", fontWeight: "800", marginBottom: "4px" }}>
-                        ANSWER
-                      </div>
-                      <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "700" }}>
-                        {formatTimelineAnswer(timeline)}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ color: "#666", fontSize: "10px", fontWeight: "800", marginBottom: "4px" }}>
-                        YOUR ANSWER
-                      </div>
-                      <div style={{ color: "#ddd", fontSize: "13px", fontWeight: "700" }}>
-                        {formatTimelineDate(result.start.guess)}
-                        {result.end
-                          ? ` - ${formatTimelineDate(result.end.guess)}`
-                          : ""}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        justifySelf: "end",
-                        color: qualityColor(result.quality),
-                        border: `1px solid ${qualityColor(result.quality)}55`,
-                        background: `${qualityColor(result.quality)}16`,
-                        borderRadius: "999px",
-                        padding: "5px 10px",
-                        fontSize: "12px",
-                        fontWeight: "900"
-                      }}
-                    >
-                      {qualityLabel(result.quality)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          flexShrink: 0,
+          gap: "10px",
+          justifyContent: "space-between"
+        }}
+      >
+        <div style={{ color: "#5f5f5f", fontSize: "11px", fontWeight: 700 }}>
+          <span style={keycapStyle}>↑↓</span> année · <span style={keycapStyle}>←→</span> ajuster ·{" "}
+          <span style={keycapStyle}>↵</span> valider
         </div>
-      )}
-    </>
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          {!revealed && (
+            <button onClick={skip} style={buttonStyle} type="button">
+              Passer
+            </button>
+          )}
+          {revealed ? (
+            <button data-timeline-continue onClick={goNext} style={successButtonStyle} type="button">
+              Continuer ↵
+            </button>
+          ) : (
+            <button
+              disabled={!isComplete || isSubmitting}
+              onClick={validate}
+              style={{
+                ...primaryButtonStyle,
+                cursor: isComplete && !isSubmitting ? "pointer" : "default",
+                opacity: isComplete && !isSubmitting ? 1 : 0.45
+              }}
+              type="button"
+            >
+              {isSubmitting ? "…" : "Valider ↵"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

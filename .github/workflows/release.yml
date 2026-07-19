@@ -8,70 +8,62 @@ permissions:
   contents: write          # required to create/upload the GitHub Release
 
 jobs:
-  build:
-    name: Build (${{ matrix.label }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest,  label: linux,   sep: ":", archive: QuizApp-linux.tar.gz }
-          - { os: windows-latest, label: windows, sep: ";", archive: QuizApp-windows.zip }
-    runs-on: ${{ matrix.os }}
+  release:
+    name: Build Windows installer (Tauri)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Build frontend
-        working-directory: frontend
-        run: |
-          npm ci --legacy-peer-deps
-          npm run build
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install backend deps
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      # The FastAPI backend ships as a single-file console binary that Tauri
+      # spawns as a sidecar. questions.db is seeded from the tracked CSV and
+      # bundled so the app has data on first run.
+      - name: Build backend sidecar
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
+          python -c "from app.bootstrap import init_database; init_database()"
+          python import_csv.py
+          pyinstaller --name nemoris-backend --onefile --noconfirm --add-data "questions.db;seed" run_sidecar.py
 
-      - name: Seed a fresh database
-        working-directory: backend
-        run: |
-          python -c "from app.database import engine, Base; import app.models; Base.metadata.create_all(engine)"
-          python import_csv.py        # populate from the tracked questions.csv
-
-      - name: Build executable (PyInstaller)
-        working-directory: backend
-        run: >
-          pyinstaller --name QuizApp --onedir --noconfirm
-          --add-data "../frontend/dist${{ matrix.sep }}frontend/dist"
-          run_desktop.py
-
-      - name: Stage app data
-        working-directory: backend
+      # Tauri resolves externalBin by target triple; place the built binary
+      # where tauri.conf.json's "binaries/nemoris-backend" expects it.
+      - name: Place sidecar for Tauri
         shell: bash
         run: |
-          cp questions.db dist/QuizApp/questions.db
-          mkdir -p dist/QuizApp/static
-          [ -d static ] && cp -R static/. dist/QuizApp/static/ || true
+          mkdir -p frontend/src-tauri/binaries
+          cp backend/dist/nemoris-backend.exe \
+            "frontend/src-tauri/binaries/nemoris-backend-x86_64-pc-windows-msvc.exe"
 
-      - name: Archive (linux)
-        if: matrix.label == 'linux'
-        working-directory: backend/dist
-        run: tar -czf ${{ matrix.archive }} QuizApp
-
-      - name: Archive (windows)
-        if: matrix.label == 'windows'
-        working-directory: backend/dist
-        run: Compress-Archive -Path QuizApp -DestinationPath ${{ matrix.archive }}
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      # tauri-action runs the beforeBuildCommand (npm run build) then bundles
+      # the NSIS installer + MSI and uploads them to the tag's release.
+      - name: Build Tauri app and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: backend/dist/${{ matrix.archive }}
+          projectPath: frontend
+          tagName: ${{ github.ref_name }}
+          releaseName: "Nemoris ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false

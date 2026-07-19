@@ -1,26 +1,22 @@
-from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date
 import random
-from types import SimpleNamespace
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
-from ..scheduler import (
-    assign_smoothed_schedules,
-    apply_favorite_review_frequency,
-    candidate_review_dates,
-    new_fsrs_card_data,
-    update_progress
-)
 from ..models import Progress, Question, QuestionGroup
 from ..serializers import (
-    serialize_image_review_group,
-    serialize_image_review_item,
     serialize_map_review_group,
     serialize_map_review_zone,
-    serialize_review_question_item
+    serialize_media_review_group,
+    serialize_media_review_item,
+    serialize_review_question_item,
+    serialize_sequence_anchor,
+    serialize_sequence_review_group,
+    serialize_sequence_review_item,
+    serialize_text_review_group,
+    serialize_text_review_item
 )
 from .timeline import (
     build_mastered_timeline_anchors,
@@ -39,20 +35,29 @@ from .map_modes import (
     choose_map_review_mode,
     map_mode_difficulty
 )
+from .text_modes import (
+    TEXT_MODE_MATCH,
+    choose_text_review_mode,
+    text_mode_difficulty
+)
+from .sequence import dense_positions
+from .sequence_modes import (
+    SEQUENCE_MODE_MULTIPLE_CHOICE,
+    SEQUENCE_MODE_REORDER,
+    choose_sequence_review_mode,
+    sequence_mode_difficulty
+)
 from .mode_selection import (
     MODE_AFFINITIES,
     question_mode_affinity
 )
+from .media import media_kind_from_name
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
 
 REVIEW_GROUP_MAX_CHUNK_SIZE = 30
 REVIEW_IMAGE_MAX_CHUNK_SIZE = REVIEW_GROUP_MAX_CHUNK_SIZE
-BONUS_REVIEW_FORECAST_DAYS = 14
-BONUS_REVIEW_LOW_RATIO = 0.5
-BONUS_REVIEW_FULL_RATIO = 0.9
-BONUS_FORECAST_QUALITY = 2
 
 
 def _balanced_chunks(items, max_size):
@@ -367,224 +372,10 @@ def _new_question_count(db, started_rows=None, group_ids=None):
     return max(0, total_questions - started_count)
 
 
-def _forecast_progress_snapshot(row):
-    return SimpleNamespace(
-        question_id=row.question_id,
-        stability=row.stability or 1.0,
-        difficulty=row.difficulty or 5.0,
-        reps=row.reps or 0,
-        lapses=row.lapses or 0,
-        interval=row.interval or 0,
-        ideal_interval=row.ideal_interval,
-        last_review=row.last_review,
-        next_review=row.next_review,
-        ideal_next_review=row.ideal_next_review,
-        fsrs_card=deepcopy(row.fsrs_card),
-        fsrs_version=row.fsrs_version,
-        history=deepcopy(row.history or []),
-        type_q=row.type_q,
-        favorite=bool((row.question_data or {}).get("favorite"))
-    )
-
-
-def _new_bonus_progress_snapshot(today):
-    return SimpleNamespace(
-        question_id=0,
-        stability=1.0,
-        difficulty=5.0,
-        reps=0,
-        lapses=0,
-        interval=0,
-        ideal_interval=None,
-        last_review=None,
-        next_review=today,
-        ideal_next_review=None,
-        fsrs_card=new_fsrs_card_data(0, due=today),
-        fsrs_version=None,
-        history=[],
-        type_q="text",
-        favorite=False
-    )
-
-
-def _write_forecast_scheduling(progress, scheduling):
-    ideal_interval = scheduling.get("ideal_interval", scheduling["interval"])
-    ideal_next_review = scheduling.get(
-        "ideal_next_review",
-        scheduling["next_review"]
-    )
-
-    progress.stability = scheduling["stability"]
-    progress.difficulty = scheduling["difficulty"]
-    progress.reps = scheduling["reps"]
-    progress.lapses = scheduling["lapses"]
-    progress.interval = scheduling["interval"]
-    progress.ideal_interval = ideal_interval
-    progress.last_review = scheduling["last_review"]
-    progress.next_review = scheduling["next_review"]
-    progress.ideal_next_review = ideal_next_review
-    progress.fsrs_card = scheduling.get("fsrs_card")
-    progress.fsrs_version = scheduling.get("fsrs_version")
-
-
-def _load_day(progress, today):
-    next_review = progress.next_review or today
-
-    return today if next_review < today else next_review
-
-
-def _bucket_forecast_cards(progresses, today):
-    buckets = {}
-
-    for progress in progresses:
-        buckets.setdefault(_load_day(progress, today), []).append(progress)
-
-    return buckets
-
-
-def _loads_for_candidate_dates(buckets, candidate_dates):
-    daily_loads = {}
-    daily_type_loads = {}
-
-    for day in candidate_dates:
-        cards = buckets.get(day, [])
-
-        if not cards:
-            continue
-
-        daily_loads[day] = len(cards)
-        type_counts = daily_type_loads.setdefault(day, {})
-
-        for card in cards:
-            type_key = card.type_q or "unknown"
-            type_counts[type_key] = type_counts.get(type_key, 0) + 1
-
-    return daily_loads, daily_type_loads
-
-
-def _forecast_review_load(progresses, today, forecast_days, daily_target):
-    end_day = today + timedelta(days=forecast_days - 1)
-    buckets = _bucket_forecast_cards(progresses, today)
-    daily_counts = {
-        today + timedelta(days=offset): 0
-        for offset in range(forecast_days)
-    }
-    static_scheduled_total = sum(
-        1
-        for progress in progresses
-        if today <= _load_day(progress, today) <= end_day
-    )
-
-    for offset in range(forecast_days):
-        day = today + timedelta(days=offset)
-        due_cards = buckets.pop(day, [])
-        daily_counts[day] = len(due_cards)
-
-        if not due_cards:
-            continue
-
-        schedulings = []
-
-        for progress in due_cards:
-            scheduling = update_progress(
-                progress,
-                BONUS_FORECAST_QUALITY,
-                today=day,
-                enable_fuzzing=False
-            )
-            scheduling["type_q"] = progress.type_q
-            scheduling = apply_favorite_review_frequency(
-                scheduling,
-                favorite=progress.favorite
-            )
-            scheduling["ideal_interval"] = scheduling["interval"]
-            scheduling["ideal_next_review"] = scheduling["next_review"]
-            schedulings.append(scheduling)
-
-        candidate_dates = set()
-
-        for scheduling in schedulings:
-            candidate_dates.update(
-                candidate_review_dates(
-                    scheduling["last_review"],
-                    scheduling["next_review"],
-                    scheduling["interval"]
-                )
-            )
-
-        daily_loads, daily_type_loads = _loads_for_candidate_dates(
-            buckets,
-            candidate_dates
-        )
-        smoothed_schedules = assign_smoothed_schedules(
-            schedulings,
-            daily_loads,
-            daily_type_loads=daily_type_loads,
-            daily_target=daily_target
-        )
-
-        for progress, scheduling in zip(due_cards, smoothed_schedules):
-            _write_forecast_scheduling(progress, scheduling)
-
-            if progress.next_review and progress.next_review > day:
-                buckets.setdefault(progress.next_review, []).append(progress)
-
-    total = sum(daily_counts.values())
-
-    return {
-        "window_days": forecast_days,
-        "forecast_days": forecast_days,
-        "scheduled_total": total,
-        "scheduled_average": round(total / forecast_days, 1),
-        "forecast_total": total,
-        "forecast_average": round(total / forecast_days, 1),
-        "static_scheduled_total": static_scheduled_total,
-        "daily_counts": [
-            {
-                "date": day.isoformat(),
-                "total": daily_counts[day]
-            }
-            for day in sorted(daily_counts)
-        ]
-    }
-
-
-def _estimated_bonus_card_cost(today, forecast_days, daily_target):
-    progress = _new_bonus_progress_snapshot(today)
-    scheduling = update_progress(
-        progress,
-        BONUS_FORECAST_QUALITY,
-        today=today,
-        enable_fuzzing=False
-    )
-    scheduling["type_q"] = progress.type_q
-    scheduling = apply_favorite_review_frequency(
-        scheduling,
-        favorite=False
-    )
-    scheduling["ideal_interval"] = scheduling["interval"]
-    scheduling["ideal_next_review"] = scheduling["next_review"]
-    _write_forecast_scheduling(progress, scheduling)
-
-    if not progress.next_review or progress.next_review <= today:
-        return 1
-
-    forecast = _forecast_review_load(
-        [progress],
-        today,
-        forecast_days,
-        daily_target
-    )
-
-    return max(1, forecast["forecast_total"])
-
-
 def get_bonus_review_status(db, today=None, group_ids=None):
     today = today or date.today()
     scoped_group_ids = _normalized_group_ids(group_ids)
     same_group_filter_applied = scoped_group_ids is not None
-    settings = get_review_settings(db)
-    daily_target = settings["catchup_daily_target"]
     due_count = _due_question_count(db, today)
     started_rows = _started_progress_rows(db)
     new_count = _new_question_count(db, started_rows=started_rows)
@@ -593,40 +384,9 @@ def get_bonus_review_status(db, today=None, group_ids=None):
         if same_group_filter_applied
         else new_count
     )
-    started_progresses = [
-        _forecast_progress_snapshot(row)
-        for row in started_rows
-        if _progress_row_has_started(row)
-    ]
-    load = _forecast_review_load(
-        started_progresses,
-        today,
-        BONUS_REVIEW_FORECAST_DAYS,
-        daily_target
-    )
-    estimated_bonus_card_cost = _estimated_bonus_card_cost(
-        today,
-        BONUS_REVIEW_FORECAST_DAYS,
-        daily_target
-    )
-    window_capacity = daily_target * BONUS_REVIEW_FORECAST_DAYS
-    low_threshold = max(1, int(window_capacity * BONUS_REVIEW_LOW_RATIO))
-    full_threshold = max(1, int(window_capacity * BONUS_REVIEW_FULL_RATIO))
-    remaining_forecast_event_capacity = max(
-        0,
-        full_threshold - load["forecast_total"]
-    )
-    bonus_question_capacity = (
-        remaining_forecast_event_capacity // estimated_bonus_card_cost
-    )
-    available_bonus_question_count = min(
-        same_group_new_count,
-        bonus_question_capacity
-    )
-    schedule_is_low = load["forecast_total"] < low_threshold
-    status = {
-        **load,
-        "daily_target": daily_target,
+    available_bonus_question_count = same_group_new_count
+
+    return {
         "new_count": new_count,
         "same_group_new_count": same_group_new_count,
         "available_bonus_question_count": available_bonus_question_count,
@@ -634,96 +394,7 @@ def get_bonus_review_status(db, today=None, group_ids=None):
         "same_group_filter_applied": same_group_filter_applied,
         "same_group_ids": scoped_group_ids or [],
         "due_count": due_count,
-        "low_threshold": low_threshold,
-        "full_threshold": full_threshold,
-        "schedule_is_low": schedule_is_low,
-        "forecast_fill_ratio": round(load["forecast_total"] / window_capacity, 3),
-        "estimated_bonus_card_cost": estimated_bonus_card_cost,
-        "bonus_question_capacity": bonus_question_capacity
-    }
-
-    if due_count > 0:
-        return {
-            **status,
-            "state": "due_first",
-            "allowed": False,
-            "message": "Termine d'abord les questions dues avant d'ajouter des bonus."
-        }
-
-    if same_group_new_count == 0:
-        if schedule_is_low:
-            create_action = "Crée de nouvelles questions"
-
-            if same_group_filter_applied:
-                create_scope = (
-                    "dans le même groupe"
-                    if len(scoped_group_ids) == 1
-                    else "dans les mêmes groupes"
-                )
-                create_action = f"{create_action} {create_scope}"
-
-            return {
-                **status,
-                "state": "no_new",
-                "allowed": False,
-                "message": (
-                    "Le planning prévu est léger "
-                    f"({load['scheduled_average']}/jour sur "
-                    f"{BONUS_REVIEW_FORECAST_DAYS} jours, cible "
-                    f"{daily_target}/jour). {create_action} pour alimenter "
-                    "les prochaines révisions."
-                )
-            }
-
-        message = (
-            "Aucune question bonus du même groupe disponible."
-            if same_group_filter_applied
-            else "Aucune nouvelle question disponible."
-        )
-
-        return {
-            **status,
-            "state": "no_new",
-            "allowed": False,
-            "message": message
-        }
-
-    if (
-        load["forecast_total"] >= full_threshold or
-        bonus_question_capacity < 1
-    ):
-        return {
-            **status,
-            "state": "full",
-            "allowed": False,
-            "message": (
-                "Le planning prévu est déjà rempli "
-                f"({load['scheduled_average']}/jour sur "
-                f"{BONUS_REVIEW_FORECAST_DAYS} jours, cible "
-                f"{daily_target}/jour). Augmente la cible quotidienne dans "
-                "les réglages pour débloquer les bonus."
-            )
-        }
-
-    if schedule_is_low:
-        return {
-            **status,
-            "state": "low",
-            "allowed": True,
-            "message": (
-                "Le planning prévu est léger "
-                f"({load['scheduled_average']}/jour sur "
-                f"{BONUS_REVIEW_FORECAST_DAYS} jours, cible "
-                f"{daily_target}/jour). Ajoute quelques questions bonus pour "
-                "alimenter les prochaines révisions."
-            )
-        }
-
-    return {
-        **status,
-        "state": "available",
-        "allowed": True,
-        "message": "Tu peux ajouter quelques questions bonus au planning."
+        "allowed": due_count == 0 and available_bonus_question_count > 0
     }
 
 
@@ -745,7 +416,9 @@ def _serialize_review_items(
 ):
     review_items = []
     map_grouped_items = {}
-    image_grouped_items = {}
+    media_grouped_items = {}
+    text_grouped_items = {}
+    sequence_grouped_items = {}
     timeline_items = []
 
     for question in questions:
@@ -764,17 +437,43 @@ def _serialize_review_items(
             map_grouped_items[group_id]["questions"].append(question)
             continue
 
-        if question.group and question.group.type_group == "image":
+        if question.group and question.group.type_group == "media":
             group_id = question.group.id
 
-            if group_id not in image_grouped_items:
-                image_grouped_items[group_id] = {
+            if group_id not in media_grouped_items:
+                media_grouped_items[group_id] = {
                     "group": question.group,
                     "tags": question.tags or [],
                     "questions": []
                 }
 
-            image_grouped_items[group_id]["questions"].append(question)
+            media_grouped_items[group_id]["questions"].append(question)
+            continue
+
+        if question.group and question.group.type_group == "text":
+            group_id = question.group.id
+
+            if group_id not in text_grouped_items:
+                text_grouped_items[group_id] = {
+                    "group": question.group,
+                    "tags": question.tags or [],
+                    "questions": []
+                }
+
+            text_grouped_items[group_id]["questions"].append(question)
+            continue
+
+        if question.group and question.group.type_group == "sequence":
+            group_id = question.group.id
+
+            if group_id not in sequence_grouped_items:
+                sequence_grouped_items[group_id] = {
+                    "group": question.group,
+                    "tags": question.tags or [],
+                    "questions": []
+                }
+
+            sequence_grouped_items[group_id]["questions"].append(question)
             continue
 
         if question.type_q == "timeline":
@@ -856,19 +555,27 @@ def _serialize_review_items(
             ]
             map_review_groups.append(map_group)
 
-    image_review_groups = []
+    media_review_groups = []
 
-    for group_data in image_grouped_items.values():
+    for group_data in media_grouped_items.values():
         group = group_data["group"]
         due_questions = sorted(group_data["questions"], key=lambda item: item.id)
         all_group_questions = sorted(
             [
                 item
                 for item in (group.questions or [])
-                if item.type_q == "image"
+                if item.type_q == "media"
             ],
             key=lambda item: item.id
         )
+        # Audio can't be scanned in parallel, so an audio-only group is limited to
+        # the prompt->name modes. Kind is inferred per item from its extension.
+        media_kinds = {
+            media_kind_from_name(item.media)
+            for item in all_group_questions
+            if item.media
+        }
+        audio_only = bool(media_kinds) and media_kinds == {"audio"}
         question_chunks = _group_review_chunks(due_questions, scheduled_review)
         previous_mode = None
 
@@ -884,12 +591,12 @@ def _serialize_review_items(
                 chunk_questions,
                 active_context_questions,
                 multiple_choice_context_count=len(choice_context_questions),
-                require_click_prompt_min=scheduled_review,
                 discouraged_modes=(
                     [previous_mode]
                     if scheduled_review and previous_mode
                     else None
-                )
+                ),
+                audio_only=audio_only
             )
             context_questions = (
                 choice_context_questions
@@ -902,7 +609,7 @@ def _serialize_review_items(
                 tuning=scheduler_tuning
             )
             context_items = [
-                serialize_image_review_item(
+                serialize_media_review_item(
                     item,
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
@@ -912,24 +619,198 @@ def _serialize_review_items(
                     chunk_questions
                 )
             ]
-            image_group = serialize_image_review_group(
+            media_group = serialize_media_review_group(
                 group,
                 group_data["tags"],
                 mode=mode,
                 context_items=context_items
             )
-            image_group["items"] = [
-                serialize_image_review_item(
+            media_group["items"] = [
+                serialize_media_review_item(
                     item,
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
                 )
                 for item in chunk_questions
             ]
-            image_review_groups.append(image_group)
+            media_review_groups.append(media_group)
             previous_mode = mode
 
-    return review_items + map_review_groups + image_review_groups
+    text_review_groups = []
+
+    for group_data in text_grouped_items.values():
+        group = group_data["group"]
+        due_questions = sorted(group_data["questions"], key=lambda item: item.id)
+        all_group_questions = sorted(
+            [
+                item
+                for item in (group.questions or [])
+                if item.type_q == "text"
+            ],
+            key=lambda item: item.id
+        )
+        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+
+        for chunk_questions in question_chunks:
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
+                )
+            )
+            mode = choose_text_review_mode(
+                chunk_questions,
+                active_context_questions,
+                multiple_choice_context_count=len(choice_context_questions)
+            )
+            context_questions = (
+                choice_context_questions
+                if mode == TEXT_MODE_MATCH
+                else active_context_questions
+            )
+            mode_difficulty = text_mode_difficulty(
+                mode,
+                context_count=len(context_questions),
+                tuning=scheduler_tuning
+            )
+            context_items = [
+                serialize_text_review_item(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in _shuffled_context_questions(
+                    context_questions,
+                    chunk_questions
+                )
+            ]
+            text_group = serialize_text_review_group(
+                group,
+                group_data["tags"],
+                mode=mode,
+                context_items=context_items
+            )
+            text_group["items"] = [
+                serialize_text_review_item(
+                    item,
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in chunk_questions
+            ]
+            text_review_groups.append(text_group)
+
+    sequence_review_groups = []
+
+    for group_data in sequence_grouped_items.values():
+        group = group_data["group"]
+        due_questions = sorted(group_data["questions"], key=lambda item: item.id)
+        all_group_questions = sorted(
+            [
+                item
+                for item in (group.questions or [])
+                if item.type_q == "sequence"
+            ],
+            key=lambda item: item.id
+        )
+        positions = dense_positions(all_group_questions)
+        by_position = {
+            positions[item.id]: item
+            for item in all_group_questions
+        }
+
+        def previous_label_for(item):
+            rank = positions[item.id]
+            previous = by_position.get(rank - 1)
+
+            return previous.answer if previous else None
+
+        # Anchors are the peers the player is allowed to see already in place.
+        # They must exclude EVERY due item of the group, not just the ones in
+        # this chunk: _visual_review_contexts would hand back the other chunk's
+        # still-due items, which on a reorder rail is literally showing the
+        # answers. Unstarted peers are withheld too -- their slots render locked
+        # and blank so a new item is never revealed before its first review.
+        due_ids = {item.id for item in due_questions}
+        anchors = [
+            serialize_sequence_anchor(item, positions[item.id])
+            for item in all_group_questions
+            if progress_has_started(item.progress) and item.id not in due_ids
+        ]
+
+        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+
+        for chunk_questions in question_chunks:
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
+                )
+            )
+            mode = choose_sequence_review_mode(
+                chunk_questions,
+                active_context_questions,
+                multiple_choice_context_count=len(choice_context_questions)
+            )
+
+            if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
+                # Distractors are drawn from the peers on screen.
+                context_questions = choice_context_questions
+            elif mode == SEQUENCE_MODE_REORDER:
+                # reorder is graded on the pool of free slots, which is exactly
+                # the chunk -- that pool is what click_prompt_base_difficulty
+                # expects as its context count.
+                context_questions = chunk_questions
+            else:
+                context_questions = active_context_questions
+
+            mode_difficulty = sequence_mode_difficulty(
+                mode,
+                context_count=len(context_questions),
+                tuning=scheduler_tuning
+            )
+            context_items = [
+                serialize_sequence_review_item(
+                    item,
+                    position=positions[item.id],
+                    previous_label=previous_label_for(item),
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in _shuffled_context_questions(
+                    context_questions,
+                    chunk_questions
+                )
+            ]
+            sequence_group = serialize_sequence_review_group(
+                group,
+                group_data["tags"],
+                mode=mode,
+                context_items=context_items,
+                anchors=anchors,
+                length=len(all_group_questions)
+            )
+            sequence_group["items"] = [
+                serialize_sequence_review_item(
+                    item,
+                    position=positions[item.id],
+                    previous_label=previous_label_for(item),
+                    mode_difficulty=mode_difficulty,
+                    scheduler_tuning=scheduler_tuning
+                )
+                for item in chunk_questions
+            ]
+            sequence_review_groups.append(sequence_group)
+
+    return (
+        review_items
+        + map_review_groups
+        + media_review_groups
+        + text_review_groups
+        + sequence_review_groups
+    )
 
 
 def serialize_review_items(
@@ -988,16 +869,129 @@ def get_review_items(db, include_new=False, bonus_status=None, group_ids=None):
         )
         remaining_bonus_slots = max(
             0,
-            bonus_status.get(
-                "available_bonus_question_count",
-                bonus_status["bonus_question_capacity"]
-            )
+            bonus_status.get("available_bonus_question_count", 0)
         )
         questions = _new_questions(
             db,
             limit=remaining_bonus_slots,
             group_ids=group_ids
         )
+
+    return serialize_review_items(
+        questions,
+        scheduler_tuning=scheduler_tuning,
+        scheduled_review=True,
+        timeline_anchors=_timeline_anchors_for(db, questions)
+    )
+
+
+def get_bonus_group_entries(db, group_ids=None):
+    # Lightweight bonus menu: one entry per group / loose question that still has
+    # new (unstarted) questions. Reads only the columns the menu needs (no ORM
+    # objects, no scheduling math), so listing every available bonus stays cheap;
+    # the heavy work (modes, contexts, projected intervals) is deferred to
+    # get_bonus_group_items when a single entry is picked.
+    new_ids = _new_question_ids(db, group_ids=group_ids)
+
+    if not new_ids:
+        return []
+
+    rows = (
+        db.query(
+            Question.id,
+            Question.question,
+            Question.type_q,
+            Question.tags,
+            QuestionGroup.id.label("group_id"),
+            QuestionGroup.name.label("group_name"),
+            QuestionGroup.type_group.label("group_type")
+        )
+        .outerjoin(QuestionGroup, QuestionGroup.id == Question.group_id)
+        .filter(Question.id.in_(new_ids))
+        .order_by(Question.id)
+        .all()
+    )
+
+    entries = []
+    entry_by_key = {}
+
+    def container_entry(key, type_q, name, tags):
+        entry = entry_by_key.get(key)
+
+        if entry is None:
+            entry = {
+                "key": key,
+                "type_q": type_q,
+                "name": name,
+                "tags": list(tags or []),
+                "item_count": 0,
+                "is_container": True
+            }
+            entry_by_key[key] = entry
+            entries.append(entry)
+
+        return entry
+
+    for row in rows:
+        # Mirror the bucketing used by _serialize_review_items so the menu
+        # entries line up with what a picked entry will actually render.
+        if row.group_id is not None and row.group_type in (
+            "map",
+            "media",
+            "text",
+            "sequence"
+        ):
+            entry = container_entry(
+                f"group:{row.group_id}",
+                row.group_type,
+                row.group_name,
+                row.tags
+            )
+            entry["item_count"] += 1
+            continue
+
+        if row.type_q == "timeline":
+            # Every due timeline item shares one combined review screen.
+            entry = container_entry("type:timeline", "timeline", "Timeline", [])
+            entry["item_count"] += 1
+            continue
+
+        entries.append({
+            "key": f"q:{row.id}",
+            "type_q": row.type_q,
+            "name": row.question,
+            "tags": row.tags or [],
+            "item_count": 1,
+            "is_container": False
+        })
+
+    return entries
+
+
+def get_bonus_group_items(db, key):
+    # Full serialization for a single picked bonus entry. Reuses the shared
+    # review serializer so modes/contexts/projected intervals stay identical to
+    # a scheduled session, just scoped to one group / question.
+    if not key:
+        return []
+
+    try:
+        if key == "type:timeline":
+            questions = [
+                question
+                for question in _new_questions(db)
+                if question.type_q == "timeline"
+            ]
+        elif key.startswith("group:"):
+            questions = _new_questions(db, group_ids=[int(key[len("group:"):])])
+        elif key.startswith("q:"):
+            questions = _questions_by_ids(db, [int(key[len("q:"):])])
+        else:
+            return []
+    except ValueError:
+        return []
+
+    scheduler_tuning = load_scheduler_tuning_settings(db)
 
     return serialize_review_items(
         questions,

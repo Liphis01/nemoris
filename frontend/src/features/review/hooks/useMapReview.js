@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMapAnswer } from "../../../api/review";
+import { partitionRelearningQualities } from "../relearningGrades";
 import {
   MAP_MODE_CLICK_PROMPT,
   MAP_MODE_MULTIPLE_CHOICE,
@@ -169,6 +170,13 @@ function submittedMapQualities(qualityByQuestionId) {
   return Object.fromEntries(
     Object.entries(qualityByQuestionId).filter(([, q]) => q !== MAP_RECAP_UNANSWERED)
   );
+}
+
+
+function failedMapQuestionIds(qualityByQuestionId) {
+  return Object.entries(submittedMapQualities(qualityByQuestionId))
+    .filter(([, quality]) => quality === 0)
+    .map(([questionId]) => Number(questionId));
 }
 
 
@@ -409,9 +417,15 @@ export function useMapReview(
   // per-zone grade submission.
   const mode = normalizeMapMode(options.mode);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
+  const onAnsweringComplete = options.onAnsweringComplete;
+  // Review grades each QCM pick inline (reveal + quality) then auto-submits the
+  // group when the last zone is rated. Training keeps the legacy flash + recap.
+  const inlineChoiceRating = Boolean(options.inlineChoiceRating) && mode === MAP_MODE_MULTIPLE_CHOICE;
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
+  const relearningGroup = options.group;
+  const graduateAnswer = options.graduateAnswer;
   const isPromptMode = mode !== MAP_MODE_TYPE_ALL;
   const [input, setInput] = useState("");
   const [foundQuestionIds, setFoundQuestionIds] = useState([]);
@@ -427,6 +441,7 @@ export function useMapReview(
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
+  const submittingRef = useRef(false);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
   const distractorUsageRef = useRef({
     reviewKey: null,
@@ -437,7 +452,6 @@ export function useMapReview(
   // survive re-renders without triggering them, and be read during render to
   // seed choiceOptions below. The reviewKey-based reset is mirrored in the
   // effect below; reading the ref here is intentional.
-  // eslint-disable-next-line react-hooks/refs
   const distractorUsage = resetDistractorUsageForReviewKey(distractorUsageRef, reviewKey);
 
   useEffect(() => {
@@ -476,7 +490,8 @@ export function useMapReview(
   }, [incorrectFlashId, correctFlashId]);
 
   useEffect(() => {
-    if (!choiceFeedback) return undefined;
+    // Inline rating keeps the reveal on screen until the user rates/continues.
+    if (!choiceFeedback || inlineChoiceRating) return undefined;
 
     const timeout = window.setTimeout(() => {
       setChoiceFeedback(current =>
@@ -487,7 +502,7 @@ export function useMapReview(
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [choiceFeedback]);
+  }, [choiceFeedback, inlineChoiceRating]);
 
   useEffect(() => {
     if (!zoneFeedback) return undefined;
@@ -621,13 +636,75 @@ export function useMapReview(
     [completedQuestionIdSet, reviewZones]
   );
 
+  const contextByCode = useMemo(() => {
+    const lookup = new Map();
+
+    contextItems.forEach(item => {
+      if (item?.code && !lookup.has(item.code)) {
+        lookup.set(item.code, item);
+      }
+    });
+
+    return lookup;
+  }, [contextItems]);
+
   const dueCodes = useMemo(() => {
     if (mode === MAP_MODE_TYPE_PROMPT || mode === MAP_MODE_MULTIPLE_CHOICE) {
       return currentPromptItem?.code ? [currentPromptItem.code] : [];
     }
 
+    if (mode === MAP_MODE_CLICK_PROMPT) {
+      // Keep the whole review context clickable even when only a subset of
+      // zones is prompted (e.g. failed-retry passes), so the pick never
+      // degenerates to a handful of highlighted zones.
+      return contextItems
+        .filter(item => item?.code && !resolvedQuestionIdSet.has(item.question_id))
+        .map(item => item.code);
+    }
+
     return remainingZones.map(item => item.code);
-  }, [currentPromptItem, mode, remainingZones]);
+  }, [contextItems, currentPromptItem, mode, remainingZones, resolvedQuestionIdSet]);
+
+  async function submitQualities(qualityMap) {
+    // Send one quality per atomic map question, then tell the parent review
+    // session which zones should be re-queued. Unanswered items are omitted.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    try {
+      const qualities = submittedMapQualities(qualityMap);
+      // Relearning zones never re-grade: send only the ordinary grades and
+      // graduate the "Acquis" ones. "Encore" (0) stays in failedQuestionIds.
+      const { graded, graduateIds } = partitionRelearningQualities(
+        relearningGroup,
+        qualities
+      );
+
+      await Promise.all([
+        Object.keys(graded).length > 0
+          ? submitAnswer(graded, mode, contextItems.length)
+          : null,
+        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
+      ].filter(Boolean));
+
+      const failedQuestionIds = Object.entries(qualities)
+        .filter(([, quality]) => quality === 0)
+        .map(([questionId]) => Number(questionId));
+
+      setShowRecap(false);
+      setFoundQuestionIds([]);
+      setResolvedQuestionIds([]);
+      setQualityByQuestionId({});
+      setFocusedCode(null);
+      setRemainingFocusCode(null);
+      setFocusVersion(0);
+      setChoiceFeedback(null);
+
+      onComplete(failedQuestionIds);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
 
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
@@ -639,16 +716,27 @@ export function useMapReview(
 
     if (!allZonesComplete) return;
 
-    setQualityByQuestionId(
-      buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
-    );
+    // buildMapRecapQualities rebuilds every grade from found/missed, which would
+    // discard the qualities graded inline. Overlay them so the recap opens
+    // pre-filled and any grade can still be corrected before submitting.
+    const nextQualities = {
+      ...buildMapRecapQualities(
+        reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
+      ),
+      ...qualityByQuestionId
+    };
+
+    setQualityByQuestionId(nextQualities);
     setShowRecap(true);
+    onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
   }, [
     allowPartialSubmit,
     completedQuestionIdSet,
     choiceFeedback,
     foundQuestionIdSet,
     mode,
+    onAnsweringComplete,
+    qualityByQuestionId,
     resolvedQuestionIdSet,
     reviewZones,
     showRecap
@@ -754,24 +842,25 @@ export function useMapReview(
       return;
     }
 
-    const clickedItem = reviewZones.find(item => item.code === code);
+    if (currentPromptItem.code === code) {
+      markFound(currentPromptItem);
+      return;
+    }
+
+    // Any other zone in the clickable pool — including context-only distractors
+    // that are not themselves being prompted — counts as a wrong answer for the
+    // current prompt.
+    const clickedItem = contextByCode.get(code);
 
     if (!clickedItem || resolvedQuestionIdSet.has(clickedItem.question_id)) {
       return;
     }
 
-    if (currentPromptItem.code === code) {
-      markFound(currentPromptItem);
-    } else {
-      if (clickedItem?.code) {
-        setZoneFeedback({
-          id: Date.now(),
-          flashCodes: [clickedItem.code]
-        });
-      }
-
-      markMissed(currentPromptItem);
-    }
+    setZoneFeedback({
+      id: Date.now(),
+      flashCodes: [code]
+    });
+    markMissed(currentPromptItem);
   }
 
   function handleChoiceSelect(questionId) {
@@ -825,34 +914,29 @@ export function useMapReview(
   }
 
   function finishMap() {
-    setQualityByQuestionId(
-      buildMapRecapQualities(reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit)
+    const nextQualities = buildMapRecapQualities(
+      reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
     );
+
+    setQualityByQuestionId(nextQualities);
     setShowRecap(true);
+    onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
   }
 
   async function sendResult() {
-    // Send one quality per atomic map question, then tell the parent review
-    // session which zones should be re-queued. Unanswered items are omitted.
-    const qualities = submittedMapQualities(qualityByQuestionId);
+    await submitQualities(qualityByQuestionId);
+  }
 
-    if (Object.keys(qualities).length > 0) {
-      await submitAnswer(qualities, mode, contextItems.length);
+  // Inline rating: grade the just-revealed pick (correct picks only) and clear
+  // the reveal so the next prompt surfaces. A wrong pick stays quality 0.
+  function rateChoice(quality) {
+    if (!choiceFeedback || !inlineChoiceRating) return;
+
+    if (quality !== undefined && quality !== null) {
+      setQuality(choiceFeedback.correctQuestionId, quality);
     }
 
-    const failedQuestionIds = Object.entries(qualities)
-      .filter(([, quality]) => quality === 0)
-      .map(([questionId]) => Number(questionId));
-
-    setShowRecap(false);
-    setFoundQuestionIds([]);
-    setResolvedQuestionIds([]);
-    setQualityByQuestionId({});
-    setFocusedCode(null);
-    setRemainingFocusCode(null);
-    setFocusVersion(0);
-
-    onComplete(failedQuestionIds);
+    setChoiceFeedback(null);
   }
 
   function setQuality(id, quality) {
@@ -1005,6 +1089,7 @@ export function useMapReview(
     progressPercent,
     promptCode: currentPromptItem?.code || null,
     promptLabel: currentPromptItem?.label || "",
+    rateChoice,
     recapMissCount,
     recapRows,
     recapSort,

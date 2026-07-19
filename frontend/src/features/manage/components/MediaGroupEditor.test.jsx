@@ -1,16 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getImageGroupItems, patchImageGroupItems } from "../../../api/imageGroups";
-import ImageGroupEditor from "./ImageGroupEditor";
+import { getMediaGroupItems, patchMediaGroupItems } from "../../../api/mediaGroups";
+import MediaGroupEditor from "./MediaGroupEditor";
 
-vi.mock("../../../api/imageGroups", () => ({
-  getImageGroupItems: vi.fn(),
-  patchImageGroupItems: vi.fn()
+vi.mock("../../../api/mediaGroups", () => ({
+  getMediaGroupItems: vi.fn(),
+  patchMediaGroupItems: vi.fn()
 }));
 
 const group = {
   id: 7,
-  type_group: "image",
+  type_group: "media",
   name: "Drapeaux",
   media: "",
   tags: ["flags"],
@@ -23,7 +23,7 @@ function makeImageItems(count) {
 
     return {
       id,
-      type_q: "image",
+      type_q: "media",
       question: `Drapeaux - Country ${id}`,
       answer: `Country ${id}`,
       label: `Country ${id}`,
@@ -46,8 +46,8 @@ function scrollEditorTo(index) {
 }
 
 async function renderEditor(items = makeImageItems(300), props = {}) {
-  getImageGroupItems.mockResolvedValue(items);
-  patchImageGroupItems.mockImplementation(async (groupId, payload) => ({
+  getMediaGroupItems.mockResolvedValue(items);
+  patchMediaGroupItems.mockImplementation(async (groupId, payload) => ({
     group: {
       ...group,
       ...payload.group,
@@ -55,7 +55,7 @@ async function renderEditor(items = makeImageItems(300), props = {}) {
     },
     items: payload.items.map((item) => ({
       id: item.id,
-      type_q: "image",
+      type_q: "media",
       question: `Drapeaux - ${item.answer}`,
       answer: item.answer,
       label: item.answer,
@@ -70,7 +70,7 @@ async function renderEditor(items = makeImageItems(300), props = {}) {
   }));
 
   render(
-    <ImageGroupEditor
+    <MediaGroupEditor
       group={group}
       onUploadFile={vi.fn()}
       {...props}
@@ -81,12 +81,15 @@ async function renderEditor(items = makeImageItems(300), props = {}) {
     await screen.findByDisplayValue(items[0].answer);
   } else {
     await waitFor(() => {
-      expect(getImageGroupItems).toHaveBeenCalledWith(group.id);
+      expect(getMediaGroupItems).toHaveBeenCalledWith(group.id);
     });
   }
 }
 
-describe("ImageGroupEditor", () => {
+// Every case here mounts and re-virtualises a 250-row group, which runs close to
+// the default 5s budget on its own and tips over it whenever the rest of the
+// suite is competing for CPU. The work is real, not a hang — give it room.
+describe("MediaGroupEditor", { timeout: 25000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -101,7 +104,7 @@ describe("ImageGroupEditor", () => {
 
     const rows = document.querySelectorAll("[data-image-group-item-row]");
 
-    expect(getImageGroupItems).toHaveBeenCalledWith(group.id);
+    expect(getMediaGroupItems).toHaveBeenCalledWith(group.id);
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThan(60);
     expect(screen.getAllByText("Réponse")).toHaveLength(rows.length);
@@ -147,7 +150,7 @@ describe("ImageGroupEditor", () => {
 
   it("imports a remote URL as a new compact image row", async () => {
     const onImportMediaUrl = vi.fn().mockResolvedValue({
-      url: "/static/image-groups/7/France.png"
+      url: "/static/media-groups/7/France.png"
     });
     await renderEditor([], { onImportMediaUrl });
 
@@ -163,14 +166,14 @@ describe("ImageGroupEditor", () => {
     const row = document.querySelector("[data-image-group-item-row]");
 
     expect(onImportMediaUrl).toHaveBeenCalledWith("https://example.com/France.png");
-    expect(screen.getByDisplayValue("/static/image-groups/7/France.png")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("/static/media-groups/7/France.png")).toBeInTheDocument();
     expect(row).toBeInTheDocument();
     expect(row.style.height).toBe("292px");
   });
 
   it("pastes copied image bytes as a new compact image row", async () => {
     const onUploadFile = vi.fn().mockResolvedValue({
-      url: "/static/image-groups/7/Brazil.png"
+      url: "/static/media-groups/7/Brazil.png"
     });
     const imageFile = new File(["image"], "Brazil.png", { type: "image/png" });
     await renderEditor([], { onUploadFile });
@@ -186,7 +189,7 @@ describe("ImageGroupEditor", () => {
     const row = document.querySelector("[data-image-group-item-row]");
 
     expect(onUploadFile).toHaveBeenCalledWith(imageFile);
-    expect(screen.getByDisplayValue("/static/image-groups/7/Brazil.png")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("/static/media-groups/7/Brazil.png")).toBeInTheDocument();
     expect(row).toBeInTheDocument();
     expect(row.style.height).toBe("292px");
   });
@@ -209,10 +212,10 @@ describe("ImageGroupEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
 
     await waitFor(() => {
-      expect(patchImageGroupItems).toHaveBeenCalledTimes(1);
+      expect(patchMediaGroupItems).toHaveBeenCalledTimes(1);
     });
 
-    const [groupId, payload] = patchImageGroupItems.mock.calls[0];
+    const [groupId, payload] = patchMediaGroupItems.mock.calls[0];
     const savedIds = payload.items.map((item) => item.id);
 
     expect(groupId).toBe(group.id);

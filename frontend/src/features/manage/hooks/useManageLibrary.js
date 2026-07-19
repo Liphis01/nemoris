@@ -14,9 +14,9 @@ import {
   listGroups
 } from "../../../api/groups";
 import {
-  importImageGroupMediaUrl as importImageGroupMediaUrlRequest,
-  uploadImageGroupMedia as uploadImageGroupMediaRequest
-} from "../../../api/imageGroups";
+  importMediaGroupMediaUrl as importMediaGroupMediaUrlRequest,
+  uploadMediaGroupMedia as uploadMediaGroupMediaRequest
+} from "../../../api/mediaGroups";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
@@ -92,6 +92,7 @@ export function useManageLibrary(mode) {
   const [tagFilter, setTagFilter] = useState("");
   const [questionTypeFilter, setQuestionTypeFilter] = useState("");
   const [dueOnly, setDueOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("asc");
   const [groupSearch, setGroupSearch] = useState("");
@@ -155,6 +156,7 @@ export function useManageLibrary(mode) {
     setTagFilter("");
     setQuestionTypeFilter("");
     setDueOnly(false);
+    setFavoritesOnly(false);
     setSortField("id");
     setSortOrder("asc");
     setGroupSearch("");
@@ -182,6 +184,10 @@ export function useManageLibrary(mode) {
     const deletedQuestion = allQuestions.find(question => question.id === id);
 
     setAllQuestions(prev => prev.filter(question => question.id !== id));
+
+    setSelectedItem(prev =>
+      prev && !prev.type_group && prev.id === id ? null : prev
+    );
 
     if (deletedQuestion?.group?.id) {
       // Group counts are denormalized in the frontend list response, so adjust
@@ -252,27 +258,49 @@ export function useManageLibrary(mode) {
     setSelectedItem(null);
   }
 
-  async function createGroup() {
-    if (!groupDraft.type_group) {
+  async function createGroupSilently(overrides) {
+    // Persists the group and nothing else: no draft reset, no mode flip. The
+    // grouped editors open on a group that does not exist server-side yet and
+    // call this at their first real save, so flipping isCreatingGroup here would
+    // unmount the editor mid-save.
+    const createdGroup = await createGroupRequest({
+      type_group: overrides.type_group,
+      name: overrides.name,
+      media: overrides.media || null,
+      data: overrides.data || {}
+    });
+
+    setAllGroups(prev => [...prev, createdGroup]);
+
+    return createdGroup;
+  }
+
+  async function createGroup(overrides = null) {
+    // Media groups skip the intermediate creation form and are created directly
+    // with a default name; the map form still passes its draft (and its onClick
+    // event, which has no type_group, harmlessly falls back to the draft).
+    const source = overrides && overrides.type_group ? overrides : groupDraft;
+
+    if (!source.type_group) {
       alert("Le type de groupe est requis.");
       return;
     }
 
-    if (!groupDraft.name) {
+    if (!source.name) {
       alert("Le nom du groupe est requis.");
       return;
     }
 
-    if (groupDraft.type_group === "map" && !groupDraft.media) {
+    if (source.type_group === "map" && !source.media) {
       alert("Le fichier SVG de la carte est requis.");
       return;
     }
 
     const createdGroup = await createGroupRequest({
-      type_group: groupDraft.type_group,
-      name: groupDraft.name,
-      media: groupDraft.media || null,
-      data: groupDraft.data
+      type_group: source.type_group,
+      name: source.name,
+      media: source.media || null,
+      data: source.data || {}
     });
 
     setAllGroups(prev => [...prev, createdGroup]);
@@ -282,42 +310,43 @@ export function useManageLibrary(mode) {
     return createdGroup;
   }
 
-  async function uploadQuestionMedia(file, question) {
+  async function uploadQuestionMedia(file, question, field = "media") {
     if (!file) return;
 
     // Uploads only create the static asset. The question.media value is saved
     // through the normal editor save flow so dirty-state/autosave stays intact.
+    // `field` targets either the question media or the answer media draft slot.
     const data = await uploadMedia(file);
 
     if (question?.id === "new") {
-      setQuestionDraft(prev => ({ ...prev, media: data.url }));
+      setQuestionDraft(prev => ({ ...prev, [field]: data.url }));
     }
 
     return data;
   }
 
-  async function importQuestionMediaUrl(url, question) {
+  async function importQuestionMediaUrl(url, question, field = "media") {
     if (!url) return;
 
     const data = await importMediaUrl(url);
 
     if (question?.id === "new") {
-      setQuestionDraft(prev => ({ ...prev, media: data.url }));
+      setQuestionDraft(prev => ({ ...prev, [field]: data.url }));
     }
 
     return data;
   }
 
-  async function uploadImageGroupMedia(groupId, file) {
+  async function uploadMediaGroupMedia(groupId, file) {
     if (!file || !groupId) return;
 
-    return uploadImageGroupMediaRequest(groupId, file);
+    return uploadMediaGroupMediaRequest(groupId, file);
   }
 
-  async function importImageGroupMediaUrl(groupId, url) {
+  async function importMediaGroupMediaUrl(groupId, url) {
     if (!url || !groupId) return;
 
-    return importImageGroupMediaUrlRequest(groupId, url);
+    return importMediaGroupMediaUrlRequest(groupId, url);
   }
 
   function handleSort(field) {
@@ -387,12 +416,14 @@ export function useManageLibrary(mode) {
         tagFilter,
         questionTypeFilter,
         dueOnly,
+        favoritesOnly,
         sortField,
         sortOrder
       }),
     [
       allQuestions,
       dueOnly,
+      favoritesOnly,
       questionTypeFilter,
       tagFilter,
       search,
@@ -430,6 +461,7 @@ export function useManageLibrary(mode) {
     removeQuestionMedia,
     deleteQuestion,
     dueOnly,
+    favoritesOnly,
     filteredGroups,
     filteredQuestions,
     groupHasMediaOnly,
@@ -440,9 +472,9 @@ export function useManageLibrary(mode) {
     tagFilter,
     handleSort,
     importQuestionMediaUrl,
-    importImageGroupMediaUrl,
+    importMediaGroupMediaUrl,
     uploadQuestionMedia,
-    uploadImageGroupMedia,
+    uploadMediaGroupMedia,
     isCreatingQuestion,
     isCreatingGroup,
     loadAllGroups,
@@ -462,6 +494,7 @@ export function useManageLibrary(mode) {
     setAllGroups,
     setAllQuestions,
     setDueOnly,
+    setFavoritesOnly,
     setGroupHasMediaOnly,
     setGroupSearch,
     setGroupTypeFilter,
@@ -478,6 +511,7 @@ export function useManageLibrary(mode) {
     sortOrder,
     startCreateQuestion,
     startCreateGroup,
+    createGroupSilently,
     toggleGroupSortOrder,
     toggleSortOrder,
     updateQuestion,

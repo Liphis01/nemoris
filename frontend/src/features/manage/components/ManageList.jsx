@@ -23,6 +23,10 @@ export default function ManageList({
   isCreatingQuestion,
   resetQuestionDraft,
   setIsCreatingQuestion,
+  isCreatingGroup,
+  resetGroupDraft,
+  setIsCreatingGroup,
+  questionScrollRequest = null,
   requestManageTransition,
   updateQuestion,
   search = "",
@@ -49,6 +53,7 @@ export default function ManageList({
     selectedId: null,
     viewMode: null
   });
+  const handledScrollRequestRef = useRef(null);
 
   function handleDeleteQuestion(id) {
     setRemovingId(id);
@@ -131,6 +136,21 @@ export default function ManageList({
       : visibleGroupRowKey;
   const highlightedQuestionKey = highlightedQuestionIds.join("|");
 
+  function expandQuestionGroup(question) {
+    // A row nested in a collapsed group has to be revealed before it can be
+    // scrolled to.
+    const groupId = getQuestionGroupId(question);
+    if (!groupId) return;
+
+    setExpandedGroupIds((current) => {
+      if (current.has(groupId)) return current;
+
+      const next = new Set(current);
+      next.add(groupId);
+      return next;
+    });
+  }
+
   useLayoutEffect(() => {
     const previous = lastQuestionScrollSignalRef.current;
 
@@ -180,16 +200,7 @@ export default function ManageList({
       rowKey: `question:${scrollTarget.id}`
     };
 
-    const groupId = getQuestionGroupId(scrollTarget);
-    if (!groupId) return;
-
-    setExpandedGroupIds((current) => {
-      if (current.has(groupId)) return current;
-
-      const next = new Set(current);
-      next.add(groupId);
-      return next;
-    });
+    expandQuestionGroup(scrollTarget);
   }, [filteredQuestions, highlightedQuestionIds, selectedItem?.id, selectedItem?.type_q, viewMode]);
 
   useEffect(() => {
@@ -266,6 +277,31 @@ export default function ManageList({
   }, [filteredGroups, selectedItem?.id, selectedItem?.type_group, viewMode]);
 
   useLayoutEffect(() => {
+    // Panels outside the list (currently the map editor) can ask for a question
+    // row to be revealed without changing the selection.
+    if (
+      !questionScrollRequest ||
+      questionScrollRequest === handledScrollRequestRef.current ||
+      viewMode !== "questions"
+    ) {
+      return;
+    }
+
+    const scrollTarget = filteredQuestions.find(
+      (question) => question.id === questionScrollRequest.questionId
+    );
+    if (!scrollTarget) return;
+
+    handledScrollRequestRef.current = questionScrollRequest;
+    pendingScrollRef.current = {
+      viewMode: "questions",
+      rowKey: `question:${scrollTarget.id}`
+    };
+
+    expandQuestionGroup(scrollTarget);
+  }, [filteredQuestions, questionScrollRequest, viewMode]);
+
+  useLayoutEffect(() => {
     // Execute pending scrolls only after React has committed the matching rows
     // and refs are available.
     const pendingScroll = pendingScrollRef.current;
@@ -277,7 +313,7 @@ export default function ManageList({
 
     centerListItem(list, row);
     pendingScrollRef.current = null;
-  }, [highlightedQuestionKey, renderedRowKey, selectedItem?.id, viewMode]);
+  }, [highlightedQuestionKey, questionScrollRequest, renderedRowKey, selectedItem?.id, viewMode]);
 
   function setRowRef(rowKey) {
     return (element) => {
@@ -348,8 +384,20 @@ export default function ManageList({
     resetQuestionDraft?.();
   }
 
+  // A group being created is not persisted until its first real save, and the
+  // caller has already flushed that save through runManageTransition. So picking
+  // something else abandons it: a named or non-empty group was just written, and
+  // an untouched one has nothing worth keeping.
+  function closeGroupCreation() {
+    if (!isCreatingGroup) return;
+
+    setIsCreatingGroup?.(false);
+    resetGroupDraft?.();
+  }
+
   function selectQuestion(q) {
     closeQuestionCreation();
+    closeGroupCreation();
     setOpenDeleteId(null);
     setSelectedItem(q);
     setEditingZone(q.type_q === "map" ? q : null);
@@ -434,8 +482,8 @@ export default function ManageList({
               borderRadius: "999px",
               background: q.type_q === "map"
                 ? questionTypeChipStyles.map.background
-                : q.type_q === "image"
-                  ? questionTypeChipStyles.image.background
+                : q.type_q === "media"
+                  ? questionTypeChipStyles.media.background
                   : questionTypeChipStyles.text.background,
               opacity: sharedProps.selected || sharedProps.isHighlighted ? 1 : 0.55,
               margin: "6px 0",
@@ -619,6 +667,8 @@ export default function ManageList({
 
               onClick={() => {
                 runManageTransition(() => {
+                  closeQuestionCreation();
+                  closeGroupCreation();
                   setOpenDeleteId(null);
                   setSelectedItem(group);
                   setEditingZone?.(null);

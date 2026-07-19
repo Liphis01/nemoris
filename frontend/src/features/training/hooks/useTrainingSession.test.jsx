@@ -357,6 +357,169 @@ describe("useTrainingSession", () => {
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
   });
 
+  it("stops the clock when the last question is answered, not when its recap is dismissed", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    // Last zone answered: the recap opens here.
+    performanceNowSpy.mockReturnValue(4000);
+
+    act(() => {
+      result.current.markAnsweringComplete([]);
+    });
+
+    expect(result.current.completedElapsedMs).toBe(3000);
+
+    // The attempt is saved immediately, without waiting for the recap dismissal.
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 3000,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT
+      });
+    });
+
+    // The user reads the recap for another five seconds before dismissing it.
+    performanceNowSpy.mockReturnValue(9000);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    expect(result.current.completedRunElapsedMs).toBe(3000);
+    expect(recordGroupTrainingAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves the attempt with the score known when answering ended", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(4000);
+
+    // "Terminer" pressed with one zone still missing.
+    act(() => {
+      result.current.markAnsweringComplete([11]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 3000,
+        question_count: 2,
+        found_count: 1,
+        content_fingerprint: TRAINING_FINGERPRINT
+      });
+    });
+    expect(result.current.failedCount).toBe(1);
+  });
+
+  it("keeps the clock running when a question other than the last is answered", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [{ question_id: 10, code: "fr", label: "France" }]
+      },
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Asia",
+        media: "asia.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [{ question_id: 11, code: "jp", label: "Japan" }]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    performanceNowSpy.mockReturnValue(4000);
+
+    act(() => {
+      result.current.markAnsweringComplete([]);
+    });
+
+    expect(result.current.completedElapsedMs).toBeNull();
+    expect(recordGroupTrainingAttempt).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    // Now on the last question: its recap is what freezes the clock.
+    performanceNowSpy.mockReturnValue(9000);
+
+    act(() => {
+      result.current.markAnsweringComplete([]);
+    });
+
+    expect(result.current.completedElapsedMs).toBe(8000);
+  });
+
   it("saves a clean full collection attempt as one record", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {
@@ -407,6 +570,12 @@ describe("useTrainingSession", () => {
       });
     });
     expect(recordGroupTrainingAttempt).not.toHaveBeenCalled();
+
+    // The record lands in state only when the save resolves; asserting right
+    // after the API-call waitFor races the state commit on slow runners.
+    await waitFor(() => {
+      expect(result.current.recordSaveStatus).toBe("saved");
+    });
     expect(result.current.activeScope.training_record.best_found_percent).toBe(100);
     expect(result.current.scopes.collections[0].training_record.best_time_ms).toBe(5500);
   });
@@ -493,7 +662,7 @@ describe("useTrainingSession", () => {
     getTrainingItems.mockResolvedValueOnce([
       {
         group_id: 6,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         mode: "multiple_choice_image",
         training_fingerprint: TRAINING_FINGERPRINT,
@@ -540,7 +709,7 @@ describe("useTrainingSession", () => {
     await act(async () => {
       await result.current.startScope({
         type: "group",
-        type_group: "image",
+        type_group: "media",
         id: 6,
         name: "Flags",
         question_count: 2

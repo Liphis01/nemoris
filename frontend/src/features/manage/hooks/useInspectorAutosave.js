@@ -6,16 +6,21 @@ import {
 } from "../utils/questionDrafts";
 
 function canAutosaveSelectedQuestion(selectedItem) {
-  const groupedImage = selectedItem?.type_q === "image" && (
+  const groupedImage = selectedItem?.type_q === "media" && (
     selectedItem.group_id ||
     selectedItem.group?.id
   );
+  // A sequence item's rank lives in `data`, which the autosave payload carries.
+  // Letting the generic autosave fire would clobber data.position from a stale
+  // draft, silently reordering the list behind the group editor's back.
+  const sequenceItem = selectedItem?.type_q === "sequence";
 
   return Boolean(
     selectedItem?.id &&
     selectedItem.type_q &&
     selectedItem.type_q !== "map" &&
-    !groupedImage
+    !groupedImage &&
+    !sequenceItem
   );
 }
 
@@ -138,10 +143,15 @@ export default function useInspectorAutosave({
     setDraft((prev) => ({ ...prev, media: "" }));
   }, []);
 
+  const removeAnswerMedia = useCallback(() => {
+    setDraft((prev) => ({ ...prev, answer_media: "" }));
+  }, []);
+
   return {
     draft: editorDraft,
     hasUnsavedChanges,
     removeMedia,
+    removeAnswerMedia,
     resetDraft,
     saveDraft,
     saveStatus,

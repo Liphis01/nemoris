@@ -4,24 +4,18 @@ from sqlalchemy.orm import joinedload
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
 from .map_zones import merge_tags
-from .media import (
-    delete_unreferenced_media_files,
-    media_points_to_same_static_file,
-    store_remote_image,
-    store_uploaded_image
-)
 from .questions import delete_question_dependents
 
 
-def derive_image_group_tags(questions):
+def derive_text_group_tags(questions):
     return merge_tags(*[
         question.tags or []
         for question in questions or []
-        if question.type_q == "image"
+        if question.type_q == "text"
     ])
 
 
-def get_image_group_or_404(db, group_id: int):
+def get_text_group_or_404(db, group_id: int):
     group = (
         db.query(QuestionGroup)
         .filter(QuestionGroup.id == group_id)
@@ -31,20 +25,19 @@ def get_image_group_or_404(db, group_id: int):
     if not group:
         raise HTTPException(404, "Group not found")
 
-    if group.type_group != "image":
-        raise HTTPException(400, "Group is not an image group")
+    if group.type_group != "text":
+        raise HTTPException(400, "Group is not a text group")
 
     return group
 
 
-def serialize_image_item_for_editor(question):
+def serialize_text_item_for_editor(question):
     return {
         "id": question.id,
         "type_q": question.type_q,
         "question": question.question,
         "answer": question.answer,
         "label": question.answer,
-        "media": question.media,
         "tags": question.tags or [],
         "group_id": question.group_id,
         "data": question.data or {},
@@ -53,7 +46,7 @@ def serialize_image_item_for_editor(question):
     }
 
 
-def list_image_group_items(db, group_id: int):
+def list_text_group_items(db, group_id: int):
     group = (
         db.query(QuestionGroup)
         .options(joinedload(QuestionGroup.questions).joinedload(Question.progress))
@@ -64,40 +57,17 @@ def list_image_group_items(db, group_id: int):
     if not group:
         raise HTTPException(404, "Group not found")
 
-    if group.type_group != "image":
-        raise HTTPException(400, "Group is not an image group")
+    if group.type_group != "text":
+        raise HTTPException(400, "Group is not a text group")
 
     return [
-        serialize_image_item_for_editor(question)
+        serialize_text_item_for_editor(question)
         for question in group.questions
-        if question.type_q == "image"
+        if question.type_q == "text"
     ]
 
 
-def upload_image_group_media(db, group_id: int, upload_file):
-    group = get_image_group_or_404(db, group_id)
-
-    return store_uploaded_image(
-        upload_file,
-        storage_subdir=f"image-groups/{group.id}"
-    )
-
-
-def upload_image_group_media_url(db, group_id: int, url: str):
-    group = get_image_group_or_404(db, group_id)
-
-    return store_remote_image(
-        url,
-        storage_subdir=f"image-groups/{group.id}"
-    )
-
-
-def build_image_question_text(group, answer):
-    label = str(answer or "").strip() or "Image"
-    return f"{group.name} - {label}"
-
-
-def build_image_item_data(existing_data, payload_data, aliases):
+def build_text_item_data(existing_data, payload_data, aliases):
     data = {
         **(existing_data or {}),
         **(payload_data or {})
@@ -110,41 +80,25 @@ def build_image_item_data(existing_data, payload_data, aliases):
     return data
 
 
-def media_values_equal(left, right):
-    return (left or "") == (right or "") or media_points_to_same_static_file(left, right)
-
-
-def image_item_payload_changed(item, desired_answer, desired_media, desired_data):
+def text_item_payload_changed(item, desired_question, desired_answer, desired_data):
     return (
+        (item.question or "") != desired_question or
         (item.answer or "") != desired_answer or
-        not media_values_equal(item.media, desired_media) or
         (item.data or {}) != desired_data
     )
 
 
-def save_image_group_items(db, group_id: int, payload):
-    group = get_image_group_or_404(db, group_id)
+def save_text_group_items(db, group_id: int, payload):
+    group = get_text_group_or_404(db, group_id)
     group_updates = {}
     shared_tags_provided = False
     shared_tags = None
-    media_to_delete = []
-    content_changed = False
-
-    from .training import clear_training_record, question_training_signature
 
     if payload.group:
         group_updates = payload.group.model_dump(exclude_unset=True)
-        old_group_media = group.media
 
-        for field in ["name", "media"]:
-            if field in group_updates:
-                setattr(group, field, group_updates[field])
-
-        if (
-            "media" in group_updates and
-            not media_points_to_same_static_file(old_group_media, group.media)
-        ):
-            media_to_delete.append(old_group_media)
+        if "name" in group_updates:
+            group.name = group_updates["name"]
 
         if "tags" in group_updates:
             shared_tags_provided = True
@@ -154,7 +108,7 @@ def save_image_group_items(db, group_id: int, payload):
         db.query(Question)
         .filter(
             Question.group_id == group_id,
-            Question.type_q == "image"
+            Question.type_q == "text"
         )
         .all()
     )
@@ -173,7 +127,7 @@ def save_image_group_items(db, group_id: int, payload):
     if missing_deleted_ids:
         raise HTTPException(
             404,
-            f"Image items not found: {missing_deleted_ids}"
+            f"Text items not found: {missing_deleted_ids}"
         )
 
     created_ids = []
@@ -184,8 +138,6 @@ def save_image_group_items(db, group_id: int, payload):
             existing_by_id[item_id]
             for item_id in deleted_item_ids
         ]
-        media_to_delete.extend(item.media for item in deleted_items)
-        content_changed = content_changed or bool(deleted_item_ids)
 
         if deleted_item_ids:
             delete_question_dependents(db, deleted_item_ids_list)
@@ -197,11 +149,6 @@ def save_image_group_items(db, group_id: int, payload):
             for item in existing_items:
                 if item.id not in deleted_item_ids:
                     item.tags = shared_tags
-
-        if "name" in group_updates:
-            for item in existing_items:
-                if item.id not in deleted_item_ids:
-                    item.question = build_image_question_text(group, item.answer)
 
         for item_payload in payload.items:
             aliases = [
@@ -217,17 +164,20 @@ def save_image_group_items(db, group_id: int, payload):
                 if not item or item.id in deleted_item_ids:
                     raise HTTPException(
                         404,
-                        f"Image item {item_payload.id} not found"
+                        f"Text item {item_payload.id} not found"
                     )
+
+            desired_question = item_payload.question or ""
+            desired_answer = item_payload.answer or ""
 
             if not item:
                 item = Question(
-                    type_q="image",
-                    question=build_image_question_text(group, item_payload.answer),
-                    answer=item_payload.answer or "",
-                    media=item_payload.media or "",
+                    type_q="text",
+                    question=desired_question,
+                    answer=desired_answer,
+                    media=None,
                     tags=shared_tags if shared_tags_provided else [],
-                    data=build_image_item_data(
+                    data=build_text_item_data(
                         {},
                         item_payload.data or {},
                         aliases
@@ -239,53 +189,27 @@ def save_image_group_items(db, group_id: int, payload):
                 db.flush()
                 existing_by_id[item.id] = item
                 created_ids.append(item.id)
-                content_changed = True
             else:
-                desired_answer = item_payload.answer or ""
-                desired_media = item_payload.media or ""
-                desired_data = build_image_item_data(
+                desired_data = build_text_item_data(
                     item.data or {},
                     item_payload.data or {},
                     aliases
                 )
-                old_signature = question_training_signature(
-                    item.type_q,
-                    item.answer,
-                    item.media,
-                    item.data or {}
-                )
-                desired_signature = question_training_signature(
-                    item.type_q,
-                    desired_answer,
-                    desired_media,
-                    desired_data
-                )
-                payload_changed = image_item_payload_changed(
+
+                if text_item_payload_changed(
                     item,
+                    desired_question,
                     desired_answer,
-                    desired_media,
                     desired_data
-                )
-                old_media = item.media
+                ):
+                    updated_ids.append(item.id)
+
+                item.question = desired_question
                 item.answer = desired_answer
-                item.question = build_image_question_text(group, item.answer)
-                item.media = desired_media
                 item.data = desired_data
 
                 if shared_tags_provided:
                     item.tags = shared_tags
-
-                if not media_points_to_same_static_file(old_media, item.media):
-                    media_to_delete.append(old_media)
-
-                if old_signature != desired_signature:
-                    content_changed = True
-
-                if payload_changed:
-                    updated_ids.append(item.id)
-
-        if content_changed:
-            clear_training_record(group)
 
         db.commit()
     except Exception:
@@ -301,16 +225,14 @@ def save_image_group_items(db, group_id: int, payload):
         )
         .filter(
             Question.group_id == group_id,
-            Question.type_q == "image"
+            Question.type_q == "text"
         )
         .all()
     )
     question_count = len(saved_items)
-    response_tags = shared_tags if shared_tags_provided else derive_image_group_tags(
+    response_tags = shared_tags if shared_tags_provided else derive_text_group_tags(
         saved_items
     )
-
-    delete_unreferenced_media_files(db, media_to_delete)
 
     return {
         "group": {

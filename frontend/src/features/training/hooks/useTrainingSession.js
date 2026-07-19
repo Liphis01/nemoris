@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTrainingItems,
+  gradeTrainingSequence,
   gradeTrainingTimeline,
   listTrainingScopes,
   recordCollectionTrainingAttempt,
@@ -132,7 +133,9 @@ function scopeRequestOptions(scope) {
       scopeType: "group",
       groupId: scope.id,
       ...(scope.mapMode ? { mapMode: scope.mapMode } : {}),
-      ...(scope.imageMode ? { imageMode: scope.imageMode } : {})
+      ...(scope.imageMode ? { imageMode: scope.imageMode } : {}),
+      ...(scope.textMode ? { textMode: scope.textMode } : {}),
+      ...(scope.sequenceMode ? { sequenceMode: scope.sequenceMode } : {})
     };
   }
 
@@ -170,6 +173,7 @@ export function useTrainingSession(active = true) {
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completedElapsedMs, setCompletedElapsedMs] = useState(null);
+  const [answeringComplete, setAnsweringComplete] = useState(false);
   const [recordSaveStatus, setRecordSaveStatus] = useState("idle");
   const [recordSaveError, setRecordSaveError] = useState("");
   const [recordResult, setRecordResult] = useState(null);
@@ -217,6 +221,7 @@ export function useTrainingSession(active = true) {
     setRunStartedAt(shouldStartTimer ? performance.now() : null);
     setElapsedMs(0);
     setCompletedElapsedMs(null);
+    setAnsweringComplete(false);
     setRecordSaveStatus("idle");
     setRecordSaveError("");
     setRecordResult(null);
@@ -260,7 +265,9 @@ export function useTrainingSession(active = true) {
         ...scope,
         groupMode,
         ...(groupTypeForMode === "map" ? { mapMode: groupMode } : {}),
-        ...(groupTypeForMode === "image" ? { imageMode: groupMode } : {})
+        ...(groupTypeForMode === "media" ? { imageMode: groupMode } : {}),
+        ...(groupTypeForMode === "text" ? { textMode: groupMode } : {}),
+        ...(groupTypeForMode === "sequence" ? { sequenceMode: groupMode } : {})
       }
       : scope;
 
@@ -341,10 +348,44 @@ export function useTrainingSession(active = true) {
     setCurrentIndex(prev => prev + 1);
   }, []);
 
+  const handleSequenceComplete = useCallback((failedIds = []) => {
+    addFailedIds(setFailedQuestionIds, failedIds);
+    setCurrentIndex(prev => prev + 1);
+  }, []);
+
+  // Every question type ends on a recap the user dismisses by hand. Reading it
+  // is not solving, so on the last question the run clock stops and the attempt
+  // is saved right away, rather than waiting for the recap to be dismissed.
+  // The caller passes its failed ids because only it knows them at this point.
+  const markAnsweringComplete = useCallback((failedIds = []) => {
+    addFailedIds(setFailedQuestionIds, failedIds);
+
+    if (runStartedAt === null) return;
+    if (questions.length === 0 || currentIndex < questions.length - 1) return;
+
+    const finalElapsed = Math.max(
+      1,
+      Math.round(performance.now() - runStartedAt)
+    );
+
+    setElapsedMs(finalElapsed);
+    setCompletedElapsedMs(finalElapsed);
+    setRunStartedAt(null);
+    setAnsweringComplete(true);
+  }, [currentIndex, questions.length, runStartedAt]);
+
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
-  const submitImageTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
+  const submitMediaTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
+  const submitTextTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitTimelineTrainingAnswer = useCallback(
     (items) => gradeTrainingTimeline(items),
+    []
+  );
+  // Map/media/text grade client-side, so their training submits are no-ops.
+  // Sequences are graded on the server, so training needs the dedicated grader:
+  // routing this to /answer_sequence would schedule real reviews from practice.
+  const submitSequenceTrainingAnswer = useCallback(
+    (items) => gradeTrainingSequence(items),
     []
   );
 
@@ -396,7 +437,7 @@ export function useTrainingSession(active = true) {
 
   useEffect(() => {
     if (
-      !isComplete ||
+      (!isComplete && !answeringComplete) ||
       !recordEligible ||
       completedElapsedMs === null ||
       recordSubmittedRef.current
@@ -487,6 +528,7 @@ export function useTrainingSession(active = true) {
   }, [
     activeScope,
     allQuestionIds.length,
+    answeringComplete,
     attemptFoundCount,
     completedElapsedMs,
     isComplete,
@@ -505,7 +547,7 @@ export function useTrainingSession(active = true) {
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||
-        (current?.type_q === "image" && current?.items)
+        (current?.type_q === "media" && current?.items)
       ) {
         return;
       }
@@ -547,9 +589,11 @@ export function useTrainingSession(active = true) {
     handleMapComplete,
     handleTextAnswer,
     handleTimelineComplete,
+    handleSequenceComplete,
     isComplete,
     labelForActiveScope: labelForScope(activeScope),
     loadScopes,
+    markAnsweringComplete,
     originalQuestions,
     questions,
     recordEligible,
@@ -565,9 +609,11 @@ export function useTrainingSession(active = true) {
     setShowAnswer,
     showAnswer,
     startScope,
-    submitImageTrainingAnswer,
+    submitMediaTrainingAnswer,
+    submitTextTrainingAnswer,
     submitMapTrainingAnswer,
     submitTimelineTrainingAnswer,
+    submitSequenceTrainingAnswer,
     trainingError,
     trainingLoading
   };

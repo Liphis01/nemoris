@@ -17,6 +17,7 @@ from ..scheduler import (
     review_datetime_for_date,
     update_progress
 )
+from .mode_difficulty import click_prompt_base_difficulty
 from .settings import (
     SCHEDULER_TUNING_SETTINGS_KEY,
     load_scheduler_tuning_settings,
@@ -38,8 +39,8 @@ PARAMETER_STEPS = {
 
 @dataclass
 class TuningParams:
-    type_prompt_difficulty: float = 1.15
-    multiple_choice_difficulty: float = 0.50
+    type_prompt_difficulty: float = 1.05
+    multiple_choice_difficulty: float = 0.55
     click_prompt_bias: float = 0.0
     easy_reward_floor: float = 0.50
     failure_penalty_power: float = 1.0
@@ -167,14 +168,25 @@ def mode_difficulty_for_event(event, params):
         return params.multiple_choice_difficulty
 
     if event.mode == "click_prompt":
-        count = max(1, event.context_count or 1)
-        difficulty = 0.95 - (0.55 / (count ** 0.5))
+        difficulty = click_prompt_base_difficulty(event.context_count)
         return clamp(difficulty + params.click_prompt_bias, 0.35, 0.98)
 
     return 1.0
 
 
-def write_replay_progress(progress, scheduling):
+def write_replay_progress(progress, quality, scheduling):
+    # update_progress reads the previous answer back off the history to spot a
+    # same-day retry, so the replay has to keep one exactly like the live write
+    # path does. Without it the tuner would fit against compounded lapses the
+    # real scheduler no longer books.
+    progress.history = [
+        *(progress.history or []),
+        {
+            "reviewed_on": scheduling["last_review"].isoformat(),
+            "quality": quality,
+            "repeat_lapse": scheduling.get("repeat_lapse", False)
+        }
+    ]
     progress.stability = scheduling["stability"]
     progress.difficulty = scheduling["difficulty"]
     progress.reps = scheduling["reps"]
@@ -254,7 +266,7 @@ def replay_progress_for_samples(progress, params):
             scheduler_tuning=params.to_settings(),
             enable_fuzzing=False
         )
-        write_replay_progress(replay, scheduling)
+        write_replay_progress(replay, event.quality, scheduling)
         previous_event = event
 
     return samples

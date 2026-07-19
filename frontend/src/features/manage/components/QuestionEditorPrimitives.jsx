@@ -13,8 +13,16 @@ import {
   primaryButtonStyle
 } from "./QuestionEditorStyles";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+
+const DEFAULT_MEDIA_LABELS = {
+  import: "Importer une image",
+  replace: "Remplacer l'image",
+  hint: "Glisser-déposer ou coller",
+  dragging: "Déposer l'image",
+  typeError: "Seules les images sont acceptées."
+};
 
 function tagKey(tag) {
   return String(tag || "").trim().toLowerCase();
@@ -79,7 +87,8 @@ export function QuestionEditorShell({
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: "14px"
+          gap: "18px",
+          textAlign: "left"
         }}
       >
         {children}
@@ -119,6 +128,8 @@ export function MediaPreview({ media }) {
 
   if (!src) return null;
 
+  const kind = getMediaKind(media);
+
   return (
     <div
       style={{
@@ -133,15 +144,32 @@ export function MediaPreview({ media }) {
         width: "108px"
       }}
     >
-      <img
-        src={src}
-        alt="preview"
-        style={{
-          maxHeight: "100%",
-          maxWidth: "100%",
-          objectFit: "contain"
-        }}
-      />
+      {kind === "audio" ? (
+        <audio
+          src={src}
+          controls
+          style={{ maxWidth: "100%" }}
+        />
+      ) : kind === "video" ? (
+        <video
+          src={src}
+          controls
+          style={{
+            maxHeight: "100%",
+            maxWidth: "100%"
+          }}
+        />
+      ) : (
+        <img
+          src={src}
+          alt="preview"
+          style={{
+            maxHeight: "100%",
+            maxWidth: "100%",
+            objectFit: "contain"
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -151,24 +179,42 @@ export function ImageMediaField({
   onMediaChange,
   onUploadFile,
   onImportMediaUrl,
-  onRemoveMedia
+  onRemoveMedia,
+  accept = "image/*",
+  labels
 }) {
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isImportingUrl, setIsImportingUrl] = useState(false);
+  const [showUrl, setShowUrl] = useState(false);
   const [error, setError] = useState("");
   const mediaValue = media || "";
   const hasMedia = Boolean(String(mediaValue).trim());
   const canImportUrl = Boolean(onImportMediaUrl) &&
     /^https?:\/\//i.test(String(mediaValue).trim());
   const isBusy = isUploading || isImportingUrl;
+  const text = { ...DEFAULT_MEDIA_LABELS, ...labels };
+  const acceptedTypePrefixes = accept
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/\*$/, ""));
+
+  function fileMatchesAccept(file) {
+    // Files with an unknown type are allowed, matching the historical behaviour.
+    if (!file?.type) return true;
+
+    return acceptedTypePrefixes.some((prefix) =>
+      prefix.endsWith("/") ? file.type.startsWith(prefix) : file.type === prefix
+    );
+  }
 
   async function uploadFile(file) {
     if (!file || !onUploadFile) return;
 
-    if (file.type && !file.type.startsWith("image/")) {
-      setError("Seules les images sont acceptées.");
+    if (file.type && !fileMatchesAccept(file)) {
+      setError(text.typeError);
       return;
     }
 
@@ -193,28 +239,26 @@ export function ImageMediaField({
     }
   }
 
-  function firstImageFile(fileList) {
-    return Array.from(fileList || []).find((file) =>
-      !file.type || file.type.startsWith("image/")
-    );
+  function firstAcceptedFile(fileList) {
+    return Array.from(fileList || []).find(fileMatchesAccept);
   }
 
   function handleFileInputChange(event) {
-    uploadFile(firstImageFile(event.target.files));
+    uploadFile(firstAcceptedFile(event.target.files));
   }
 
   function handleDrop(event) {
     event.preventDefault();
     setIsDragging(false);
-    uploadFile(firstImageFile(event.dataTransfer?.files));
+    uploadFile(firstAcceptedFile(event.dataTransfer?.files));
   }
 
   function handlePaste(event) {
-    const pastedImage = firstImageFile(event.clipboardData?.files);
+    const pastedFile = firstAcceptedFile(event.clipboardData?.files);
 
-    if (pastedImage) {
+    if (pastedFile) {
       event.preventDefault();
-      uploadFile(pastedImage);
+      uploadFile(pastedFile);
       return;
     }
 
@@ -225,7 +269,7 @@ export function ImageMediaField({
       (
         /^(https?:)?\/\//.test(pastedText) ||
         pastedText.startsWith("/static/") ||
-        pastedText.startsWith("data:image/")
+        pastedText.startsWith("data:")
       )
     ) {
       onMediaChange?.(pastedText);
@@ -268,6 +312,23 @@ export function ImageMediaField({
     }
   }
 
+  const ghostButtonStyle = {
+    ...buttonStyle,
+    background: "transparent",
+    border: "1px solid #333",
+    color: "#aaa",
+    fontSize: "13px",
+    padding: "9px 12px",
+    whiteSpace: "nowrap"
+  };
+
+  const compactPrimaryStyle = {
+    ...primaryButtonStyle,
+    opacity: !onUploadFile || isBusy ? 0.6 : 1,
+    padding: "9px 14px",
+    whiteSpace: "nowrap"
+  };
+
   return (
     <div
       onDragEnter={(event) => {
@@ -287,111 +348,129 @@ export function ImageMediaField({
       onPaste={handlePaste}
       style={{
         border: isDragging
-          ? "1px solid rgba(126, 226, 168, 0.75)"
-          : "1px solid #2a2a2a",
+          ? "1px dashed rgba(126, 226, 168, 0.75)"
+          : hasMedia
+            ? "1px solid #2a2a2a"
+            : "1px dashed #333",
         borderRadius: "10px",
         background: isDragging ? "#17231b" : "#121212",
         padding: "12px",
         transition: "background 0.14s ease, border 0.14s ease"
       }}
     >
-      <div
-        style={{
-          alignItems: "start",
-          display: "grid",
-          gap: "12px",
-          gridTemplateColumns: hasMedia
-            ? "108px minmax(0, 1fr)"
-            : "minmax(0, 1fr)"
-        }}
-      >
-        {hasMedia && <MediaPreview media={mediaValue} />}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        onChange={handleFileInputChange}
+        style={{ display: "none" }}
+      />
 
-        <div style={{ minWidth: 0 }}>
-          <QuestionEditorField label="Image / URL">
-            <input
-              value={mediaValue}
-              onChange={(event) => onMediaChange?.(event.target.value)}
-              placeholder="https://... ou /static/image.jpg"
-              style={{
-                ...inputStyle,
-                marginBottom: 0
-              }}
-            />
-          </QuestionEditorField>
+      {hasMedia ? (
+        <div
+          style={{
+            alignItems: "center",
+            display: "grid",
+            gap: "14px",
+            gridTemplateColumns: "108px minmax(0, 1fr)"
+          }}
+        >
+          <MediaPreview media={mediaValue} />
 
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "8px",
-              marginTop: "10px"
-            }}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileInputChange}
-              style={{ display: "none" }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!onUploadFile || isBusy}
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: 0 }}>
+            <div
               style={{
-                ...primaryButtonStyle,
-                opacity: !onUploadFile || isBusy ? 0.6 : 1,
-                padding: "10px 14px",
+                color: "#888",
+                fontSize: "12px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
                 whiteSpace: "nowrap"
               }}
+              title={mediaValue}
             >
-              {isUploading
-                ? "Import..."
-                : hasMedia
-                  ? "Remplacer l'image"
-                  : "Importer une image"}
-            </button>
-            {canImportUrl && (
+              {mediaValue}
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               <button
                 type="button"
-                onClick={importCurrentUrl}
-                disabled={isBusy}
-                style={{
-                  ...buttonStyle,
-                  opacity: isBusy ? 0.6 : 1,
-                  padding: "10px 14px",
-                  whiteSpace: "nowrap"
-                }}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!onUploadFile || isBusy}
+                style={compactPrimaryStyle}
               >
-                {isImportingUrl ? "Import URL..." : "Importer l'URL"}
+                {isUploading ? "Import..." : text.replace}
               </button>
-            )}
-            {hasMedia && (
               <button
                 type="button"
                 onClick={removeMedia}
-                style={{
-                  ...dangerButtonStyle,
-                  padding: "10px 14px",
-                  whiteSpace: "nowrap"
-                }}
+                style={{ ...dangerButtonStyle, padding: "9px 14px", whiteSpace: "nowrap" }}
               >
                 Retirer
               </button>
-            )}
-            <span
-              style={{
-                color: isDragging ? "#7ee2a8" : "#777",
-                fontSize: "12px"
-              }}
-            >
-              {isDragging ? "Déposer l'image" : "Glisser-déposer ou coller"}
-            </span>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "10px"
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!onUploadFile || isBusy}
+            style={compactPrimaryStyle}
+          >
+            {isUploading ? "Import..." : `＋ ${text.import}`}
+          </button>
+
+          {onImportMediaUrl && (
+            <button
+              type="button"
+              onClick={() => setShowUrl((value) => !value)}
+              style={ghostButtonStyle}
+            >
+              Ajouter par URL
+            </button>
+          )}
+
+          <span style={{ color: isDragging ? "#7ee2a8" : "#666", fontSize: "12px" }}>
+            {isDragging ? text.dragging : text.hint}
+          </span>
+        </div>
+      )}
+
+      {(showUrl && !hasMedia) && (
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+            marginTop: "10px"
+          }}
+        >
+          <input
+            value={mediaValue}
+            onChange={(event) => onMediaChange?.(event.target.value)}
+            placeholder="https://... ou /static/fichier"
+            style={{ ...inputStyle, marginBottom: 0 }}
+          />
+          {canImportUrl && (
+            <button
+              type="button"
+              onClick={importCurrentUrl}
+              disabled={isBusy}
+              style={{ ...buttonStyle, opacity: isBusy ? 0.6 : 1, padding: "12px 14px", whiteSpace: "nowrap" }}
+            >
+              {isImportingUrl ? "Import..." : "Importer"}
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div

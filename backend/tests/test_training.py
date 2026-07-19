@@ -22,7 +22,8 @@ from app.services.training import (
     get_training_items,
     group_training_fingerprint,
     list_training_scopes,
-    record_training_attempt
+    record_training_attempt,
+    serialize_training_record
 )
 
 
@@ -210,7 +211,7 @@ class TrainingTests(unittest.TestCase):
     def test_image_group_training_accepts_mode_and_context_items(self):
         group = QuestionGroup(
             id=11,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -218,7 +219,7 @@ class TrainingTests(unittest.TestCase):
         self.db.add(group)
         self.add_question(
             1,
-            type_q="image",
+            type_q="media",
             answer="France",
             media="/static/france.png",
             tags=["Geo"],
@@ -226,7 +227,7 @@ class TrainingTests(unittest.TestCase):
         )
         self.add_question(
             2,
-            type_q="image",
+            type_q="media",
             answer="Germany",
             media="/static/germany.png",
             tags=["Geo"],
@@ -242,7 +243,7 @@ class TrainingTests(unittest.TestCase):
         )
 
         self.assertEqual(len(response), 1)
-        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["type_q"], "media")
         self.assertEqual(response[0]["group_id"], group.id)
         self.assertEqual(response[0]["mode"], "multiple_choice_image")
         self.assertEqual(len(response[0]["items"]), 2)
@@ -256,7 +257,7 @@ class TrainingTests(unittest.TestCase):
         today = date.today()
         group = QuestionGroup(
             id=20,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -266,7 +267,7 @@ class TrainingTests(unittest.TestCase):
         self.add_question(2, tags=["geology"], reps=1, next_review=today)
         self.add_question(
             3,
-            type_q="image",
+            type_q="media",
             answer="France",
             tags=["geo"],
             group=group
@@ -289,7 +290,7 @@ class TrainingTests(unittest.TestCase):
         ]
         image_groups = [
             item for item in response
-            if item["type_q"] == "image"
+            if item["type_q"] == "media"
         ]
         returned_ids = {
             item["question_id"]
@@ -392,7 +393,7 @@ class TrainingTests(unittest.TestCase):
     def test_tag_training_keeps_full_visual_context_for_tagged_items(self):
         group = QuestionGroup(
             id=21,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
@@ -402,7 +403,7 @@ class TrainingTests(unittest.TestCase):
         for question_id in range(1, 8):
             self.add_question(
                 question_id,
-                type_q="image",
+                type_q="media",
                 answer=f"Flag {question_id}",
                 media=f"/static/flag-{question_id}.png",
                 tags=["target"] if question_id in {2, 5} else ["other"],
@@ -414,7 +415,7 @@ class TrainingTests(unittest.TestCase):
         response = get_training_items(self.db, scope_type="tag", tag="target")
 
         self.assertEqual(len(response), 1)
-        self.assertEqual(response[0]["type_q"], "image")
+        self.assertEqual(response[0]["type_q"], "media")
         self.assertEqual(response[0]["group_id"], group.id)
         self.assertEqual(
             {item["question_id"] for item in response[0]["items"]},
@@ -579,14 +580,14 @@ class TrainingTests(unittest.TestCase):
     def test_image_training_records_are_saved_per_mode(self):
         group = QuestionGroup(
             id=402,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         self.db.add(group)
-        self.add_question(1, type_q="image", group=group)
-        self.add_question(2, type_q="image", group=group)
+        self.add_question(1, type_q="media", group=group)
+        self.add_question(2, type_q="media", group=group)
         self.db.commit()
 
         choices = record_training_attempt(
@@ -632,14 +633,14 @@ class TrainingTests(unittest.TestCase):
     def test_partial_attempt_updates_best_percent_but_not_clean_time(self):
         group = QuestionGroup(
             id=41,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         self.db.add(group)
-        self.add_question(1, type_q="image", group=group)
-        self.add_question(2, type_q="image", group=group)
+        self.add_question(1, type_q="media", group=group)
+        self.add_question(2, type_q="media", group=group)
         self.db.commit()
 
         response = record_training_attempt(
@@ -706,14 +707,14 @@ class TrainingTests(unittest.TestCase):
     def test_faster_clean_time_preserves_better_percent_elapsed(self):
         group = QuestionGroup(
             id=43,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={}
         )
         self.db.add(group)
-        self.add_question(1, type_q="image", group=group)
-        self.add_question(2, type_q="image", group=group)
+        self.add_question(1, type_q="media", group=group)
+        self.add_question(2, type_q="media", group=group)
         self.db.commit()
         self.seed_training_record(group, {
             "best_found_percent": 100,
@@ -806,7 +807,18 @@ class TrainingTests(unittest.TestCase):
         )
         self.db.commit()
         stale_fingerprint = group_training_fingerprint(self.db, group)
-        first.answer = "France changed"
+
+        # Swap one item for another: the count stays at 2 but the membership
+        # (and therefore the fingerprint) changes, so an attempt captured before
+        # the swap is stale and must be rejected.
+        delete_question(self.db, first.id)
+        self.add_question(
+            3,
+            type_q="map",
+            answer="Spain",
+            data={"code": "es", "aliases": []},
+            group=group
+        )
         self.db.commit()
 
         with self.assertRaises(HTTPException) as stale_attempt:
@@ -823,10 +835,58 @@ class TrainingTests(unittest.TestCase):
 
         self.assertEqual(stale_attempt.exception.status_code, 409)
 
-    def test_generic_grouped_question_edits_invalidate_records(self):
+    def test_same_count_content_edit_training_attempt_is_accepted(self):
+        group = QuestionGroup(
+            id=48,
+            type_group="map",
+            name="World",
+            media="world.svg",
+            data={}
+        )
+        self.db.add(group)
+        first = self.add_question(
+            1,
+            type_q="map",
+            answer="France",
+            data={"code": "fr", "aliases": []},
+            group=group
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            answer="Germany",
+            data={"code": "de", "aliases": []},
+            group=group
+        )
+        self.db.commit()
+        fingerprint = group_training_fingerprint(self.db, group)
+
+        # Fixing an item's answer is a content edit, not a membership change, so
+        # the fingerprint is unchanged and an in-flight attempt still records.
+        first.answer = "France changed"
+        self.db.commit()
+
+        record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=1000,
+                question_count=2,
+                found_count=2,
+                content_fingerprint=fingerprint
+            )
+        )
+
+        served = serialize_training_record(
+            group.data,
+            group_training_fingerprint(self.db, group)
+        )
+        self.assertIsNotNone(served)
+
+    def test_generic_grouped_question_edits_preserve_records(self):
         group = QuestionGroup(
             id=46,
-            type_group="image",
+            type_group="media",
             name="Flags",
             media=None,
             data={"theme": "blue"}
@@ -834,7 +894,7 @@ class TrainingTests(unittest.TestCase):
         self.db.add(group)
         self.add_question(
             1,
-            type_q="image",
+            type_q="media",
             answer="France",
             media="/static/france.png",
             data={"aliases": ["FR"], "favorite": True},
@@ -842,7 +902,7 @@ class TrainingTests(unittest.TestCase):
         )
         self.add_question(
             2,
-            type_q="image",
+            type_q="media",
             answer="Germany",
             media="/static/germany.png",
             data={"aliases": []},
@@ -864,21 +924,21 @@ class TrainingTests(unittest.TestCase):
         }
         self.db.commit()
 
-        update_question(
-            self.db,
-            1,
-            QuestionUpdate(tags=["geo"])
-        )
-        self.assertIn("training_record", group.data)
-        self.assertIn("training_records", group.data)
-
+        # Editing an existing item — tags, aliases, even its answer — is a
+        # content fix, not a membership change, so the best-time record survives
+        # and is still served by the fingerprint.
+        update_question(self.db, 1, QuestionUpdate(tags=["geo"]))
         update_question(
             self.db,
             1,
             QuestionUpdate(data={"aliases": ["France flag"], "favorite": True})
         )
-        self.assertNotIn("training_record", group.data)
-        self.assertNotIn("training_records", group.data)
+        update_question(self.db, 1, QuestionUpdate(answer="France (flag)"))
+
+        fingerprint = group_training_fingerprint(self.db, group)
+        self.assertIsNotNone(serialize_training_record(group.data, fingerprint))
+        self.assertIn("training_record", group.data)
+        self.assertIn("training_records", group.data)
         self.assertEqual(group.data["theme"], "blue")
 
     def test_generic_grouped_question_delete_invalidates_records(self):
@@ -903,7 +963,10 @@ class TrainingTests(unittest.TestCase):
 
         delete_question(self.db, 1)
 
-        self.assertNotIn("training_record", group.data)
+        # The record is no longer served: removing an item changes the group's
+        # membership fingerprint, so the stored record no longer matches.
+        fingerprint = group_training_fingerprint(self.db, group)
+        self.assertIsNone(serialize_training_record(group.data, fingerprint))
 
     def test_training_timeline_grading_does_not_mutate_progress(self):
         history = [{

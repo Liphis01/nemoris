@@ -15,13 +15,16 @@ const questionTypeOptions = [
   { value: "text", label: "Text" },
   { value: "map", label: "Map" },
   { value: "timeline", label: "Timeline" },
-  { value: "image", label: "Image" }
+  { value: "media", label: "Média" },
+  { value: "sequence", label: "Séquence" }
 ];
 
 const groupTypeOptions = [
   { value: "", label: "Tous les types" },
   { value: "map", label: "Map" },
-  { value: "image", label: "Image" }
+  { value: "media", label: "Média" },
+  { value: "text", label: "Texte" },
+  { value: "sequence", label: "Séquence" }
 ];
 
 const groupSortOptions = [
@@ -43,6 +46,8 @@ export default function ManageSidebar({
   setQuestionTypeFilter,
   dueOnly,
   setDueOnly,
+  favoritesOnly,
+  setFavoritesOnly,
   sortField,
   sortOrder,
   selectSortField,
@@ -507,7 +512,31 @@ export default function ManageSidebar({
                 }}
               />
 
-              Questions dues uniquement
+              À réviser uniquement
+
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                color: "#999",
+                fontSize: "14px",
+                cursor: "pointer"
+              }}
+            >
+
+              <input
+                type="checkbox"
+                checked={favoritesOnly}
+                onChange={(e) => setFavoritesOnly(e.target.checked)}
+                style={{
+                  accentColor: "#ffcc7a"
+                }}
+              />
+
+              Favoris uniquement
 
             </label>
 

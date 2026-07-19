@@ -9,6 +9,7 @@ from ..scheduler import (
     date_from_review_datetime,
     fsrs_card_for_progress,
     fsrs_card_to_dict,
+    is_repeat_lapse,
     legacy_quality_to_fsrs_rating,
     parse_history_date,
     review_datetime_for_date
@@ -96,15 +97,33 @@ def replay_history_to_fsrs_card(progress, type_q):
     reps = 0
     lapses = 0
 
+    previous_rating = None
+    previous_reviewed_on = None
+
     for reviewed_on, _, rating in history_items:
+        # Replaying legacy history has to apply the same-day retry rule the live
+        # scheduler applies, or a card the user fumbled a few times in one
+        # session migrates in with a compounded lapse it never actually earned.
+        repeat_lapse = is_repeat_lapse(
+            rating,
+            previous_rating,
+            reviewed_on,
+            previous_reviewed_on
+        )
+        previous_card = card
         card, _ = scheduler.review_card(
             card,
             rating,
             review_datetime=review_datetime_for_date(reviewed_on)
         )
         reps += 1
+        previous_rating = rating
+        previous_reviewed_on = reviewed_on
 
-        if rating == Rating.Again:
+        if repeat_lapse:
+            card.stability = previous_card.stability
+            card.difficulty = previous_card.difficulty
+        elif rating == Rating.Again:
             lapses += 1
 
     return {

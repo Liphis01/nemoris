@@ -49,7 +49,7 @@ def get_groups(db: Session = Depends(get_db)):
         db.query(Question.group_id, Question.tags)
         .filter(
             Question.group_id.in_(group_ids),
-            Question.type_q.in_(["map", "image"])
+            Question.type_q.in_(["map", "media", "text"])
         )
         .all()
         if group_ids else []
@@ -96,7 +96,7 @@ def get_group(group_id: int, db: Session = Depends(get_db)):
         "tags": merge_tags(*[
             question.tags or []
             for question in group.questions
-            if question.type_q in {"map", "image"}
+            if question.type_q in {"map", "media", "text"}
         ]),
         "data": group.data or {},
         "questions": [
@@ -137,15 +137,6 @@ def update_group(
     for field in ["name", "media", "data"]:
         if field in updates:
             setattr(group, field, updates[field])
-
-    if (
-        group.type_group == "map" and
-        "media" in updates and
-        not media_points_to_same_static_file(old_media, group.media)
-    ):
-        from ..services.training import clear_training_record
-
-        clear_training_record(group)
 
     db.commit()
     db.refresh(group)

@@ -3,7 +3,7 @@ import {
   getQuestionTypeChipStyle,
   questionTypeChipStyles
 } from "../../../shared/questionTypes";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import CalendarGroupRecap from "./CalendarGroupRecap";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
@@ -34,7 +34,7 @@ const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric"
 });
 
-const calendarTypeOrder = ["text", "map", "timeline", "image"];
+const calendarTypeOrder = ["text", "map", "timeline", "media", "sequence"];
 const maxCalendarCellTypeBars = 4;
 
 function toDateKey(date) {
@@ -154,8 +154,9 @@ function buildCalendarDays(monthDate) {
 function dueLabel(question) {
   if (question.group?.name) return question.group.name;
   if (question.type_q === "map") return "Map zone";
-  if (question.type_q === "image") return question.answer || "Image";
+  if (question.type_q === "media") return question.answer || "Média";
   if (question.type_q === "timeline") return question.answer || "Timeline";
+  if (question.type_q === "sequence") return question.answer || "Séquence";
   return question.answer || "Question";
 }
 
@@ -164,8 +165,8 @@ function dueTitle(question) {
     return question.answer || question.question || "Zone sans titre";
   }
 
-  if (question.type_q === "image") {
-    return question.answer || question.question || "Image sans titre";
+  if (question.type_q === "media") {
+    return question.answer || question.question || "Média sans titre";
   }
 
   return question.question || "Question sans titre";
@@ -204,7 +205,7 @@ function getEventGroup(event, groupId) {
     name: `Groupe #${groupId}`,
     type_group: event.question.type_q || "groupe",
     media: null,
-    tags: ["map", "image"].includes(event.question.type_q)
+    tags: ["map", "media"].includes(event.question.type_q)
       ? event.question.tags || []
       : []
   };
@@ -425,7 +426,7 @@ function buildDisplayRows(events) {
     row.tags = mergeTags(
       row.tags,
       row.group?.tags,
-      ["map", "image"].includes(event.question.type_q)
+      ["map", "media"].includes(event.question.type_q)
         ? event.question.tags
         : []
     );
@@ -483,6 +484,7 @@ function EventCard({
   const question = event.question;
   const isHistory = event.kind === "history";
   const mediaSrc = resolveMediaUrl(question.media);
+  const mediaKind = getMediaKind(question.media);
   const tags = question.tags || [];
   const visibleTags = isSelected ? tags : tags.slice(0, 3);
   const reviewStats = getQuestionReviewStats(question);
@@ -609,22 +611,41 @@ function EventCard({
         </div>
 
         {mediaSrc && (
-          <img
-            src={mediaSrc}
-            alt=""
-            style={{
-              width: isSelected ? "58px" : "48px",
-              height: isSelected ? "46px" : "38px",
-              borderRadius: "7px",
-              border: "1px solid #2d2d2d",
-              objectFit: "cover",
-              background: "#101010"
-            }}
-          />
+          mediaKind === "image" ? (
+            <img
+              src={mediaSrc}
+              alt=""
+              style={{
+                width: isSelected ? "58px" : "48px",
+                height: isSelected ? "46px" : "38px",
+                borderRadius: "7px",
+                border: "1px solid #2d2d2d",
+                objectFit: "cover",
+                background: "#101010"
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              style={{
+                alignItems: "center",
+                background: "#101010",
+                border: "1px solid #2d2d2d",
+                borderRadius: "7px",
+                display: "flex",
+                fontSize: isSelected ? "22px" : "18px",
+                height: isSelected ? "46px" : "38px",
+                justifyContent: "center",
+                width: isSelected ? "58px" : "48px"
+              }}
+            >
+              {mediaKind === "audio" ? "🎧" : "🎬"}
+            </div>
+          )
         )}
       </div>
 
-      {mediaSrc && isSelected && (
+      {mediaSrc && isSelected && mediaKind === "image" && (
         <img
           src={mediaSrc}
           alt=""
@@ -632,6 +653,25 @@ function EventCard({
             width: "100%",
             maxHeight: "260px",
             objectFit: "contain",
+            borderRadius: "10px",
+            border: "1px solid #2d2d2d",
+            background: "#101010",
+            marginTop: "10px"
+          }}
+        />
+      )}
+
+      {mediaSrc && isSelected && mediaKind === "audio" && (
+        <audio src={mediaSrc} controls style={{ width: "100%", marginTop: "10px" }} />
+      )}
+
+      {mediaSrc && isSelected && mediaKind === "video" && (
+        <video
+          src={mediaSrc}
+          controls
+          style={{
+            width: "100%",
+            maxHeight: "260px",
             borderRadius: "10px",
             border: "1px solid #2d2d2d",
             background: "#101010",
@@ -1175,7 +1215,7 @@ export default function ReviewCalendar({
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "calc(100vh - var(--shell-top, 0px))",
         background: "#111",
         color: "#eee",
         padding: "30px 24px 70px",

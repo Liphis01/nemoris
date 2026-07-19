@@ -25,7 +25,7 @@ describe("manageRows", () => {
   };
   const imageQuestion = {
     id: 23,
-    type_q: "image",
+    type_q: "media",
     question: "Flags - France",
     answer: "France",
     tags: ["flag"],

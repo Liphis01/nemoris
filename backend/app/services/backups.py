@@ -1,3 +1,4 @@
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
@@ -52,8 +53,12 @@ def _unique_backup_path(backup_dir, timestamp, label):
 def _write_database_snapshot(zip_file, database_file, temp_dir):
     snapshot_file = temp_dir / "questions.db"
 
-    with sqlite3.connect(str(database_file)) as source:
-        with sqlite3.connect(str(snapshot_file)) as target:
+    # A sqlite3 connection used as a context manager only commits/rolls back the
+    # transaction; it does NOT close the connection. Close both explicitly so the
+    # temp snapshot is unlocked before the TemporaryDirectory cleanup deletes it
+    # (Windows refuses to delete a file with an open handle).
+    with closing(sqlite3.connect(str(database_file))) as source:
+        with closing(sqlite3.connect(str(snapshot_file))) as target:
             source.backup(target)
 
     zip_file.write(snapshot_file, "questions.db")
@@ -185,7 +190,9 @@ def _replace_database_file(zip_file, database_file):
     try:
         staged_path.write_bytes(zip_file.read("questions.db"))
 
-        with sqlite3.connect(str(staged_path)) as connection:
+        # Close the validation connection before os.replace: on Windows the
+        # rename fails if a handle to the staged file is still open.
+        with closing(sqlite3.connect(str(staged_path))) as connection:
             connection.execute("SELECT name FROM sqlite_master LIMIT 1")
 
         os.replace(staged_path, database_file)

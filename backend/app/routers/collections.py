@@ -42,7 +42,7 @@ def _text_preview(value, max_length=120):
 
 
 def _question_title(question):
-    if question.type_q in {"map", "image"}:
+    if question.type_q in {"map", "media"}:
         return (
             question.answer
             or question.question

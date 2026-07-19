@@ -14,10 +14,17 @@ import {
   useMapZones
 } from "../hooks/useMapZones";
 
+// The zone editor's resting height, reserved in the layout so the map box is a
+// constant size. Anything that makes the editor taller (an alias chip wrapping to
+// a new line) grows it upwards over the map instead of shrinking the map
+// underneath, which would re-fit and visibly move an already-framed zone.
+const zoneEditorReservedHeight = 248;
+
 export default function MapEditor({
   group,
   onClose,
   onSave,
+  onZoneSelect,
   selectedZone,
   headerAction,
   registerPendingSaveHandler,
@@ -33,6 +40,7 @@ export default function MapEditor({
   const aliasInputRef = useRef(null);
   const focusLabelAfterZoneChangeRef = useRef(false);
   const saveMapEditsRef = useRef(null);
+  const suppressFocusForCodeRef = useRef(null);
   const {
     clearDirty,
     dirtyZoneCodes,
@@ -61,6 +69,16 @@ export default function MapEditor({
     // unsaved blank temporary row from a previous click.
     setZones(prev => prev.filter(zone => !isBlankTemporaryZone(zone)));
     setEditingZone(normalizeZone(selectedZone, group));
+
+    // A save re-selects the zone it just persisted so the list scrolls to it.
+    // That re-selection must not re-zoom the map onto the saved zone, so skip the
+    // focus for this one code while keeping every other auto-zoom intact.
+    if (suppressFocusForCodeRef.current === selectedCode) {
+      suppressFocusForCodeRef.current = null;
+      return;
+    }
+
+    suppressFocusForCodeRef.current = null;
     setMapFocusCode(selectedCode);
   }, [group, selectedZone, setZones]);
 
@@ -159,6 +177,8 @@ export default function MapEditor({
     const zone = sourceZones.find(z => getZoneCode(z) === code)
       || createTemporaryZone(code);
     setEditingZone(zone);
+
+    return zone;
   }
 
   function handleSelect(code) {
@@ -170,7 +190,13 @@ export default function MapEditor({
       setZones(nextZones);
     }
 
-    selectZoneCode(code, nextZones);
+    const zone = selectZoneCode(code, nextZones);
+
+    // Only saved zones own a question row, so temporary ids have nothing to
+    // reveal in the Manage list.
+    if (!String(zone.id || "").startsWith("tmp-")) {
+      onZoneSelect?.(zone);
+    }
   }
 
   function handleZoneTab(e) {
@@ -367,6 +393,12 @@ export default function MapEditor({
     const { delta, savedZones, saveResult } = saved;
     setEditingZone(null);
 
+    if (savedEditingCode) {
+      // The parent re-selects this saved zone to scroll the list to it; flag the
+      // code so the resulting re-selection does not auto-zoom the map.
+      suppressFocusForCodeRef.current = savedEditingCode;
+    }
+
     if (onSave) {
       // Bubble enough detail to ManageInspector to patch local lists and
       // highlight newly created/updated question rows.
@@ -436,7 +468,12 @@ export default function MapEditor({
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          minHeight: 0
+          minHeight: 0,
+          // The zone editor below is taken out of flow and overlaid on the map,
+          // so growing it (an alias chip wrapping to a new line) can never resize
+          // the map box underneath — a resize would re-fit and visibly move a zone
+          // that is already framed.
+          position: "relative"
         }}
       >
 
@@ -771,12 +808,30 @@ export default function MapEditor({
           </div>
         </div>
 
-        {/* EDITOR */}
+        {/* The editor's normal footprint, held open in flow. The map box is sized
+            against this and therefore never changes, while the editor itself is
+            out of flow and simply grows up over the map when it needs more room. */}
+        <div aria-hidden="true" style={{ flexShrink: 0, height: `${zoneEditorReservedHeight}px` }} />
+
+        {/* EDITOR — overlays the map instead of shrinking it. */}
         <div
+          className="app-scrollbar"
           style={{
+            background: "#181818",
             borderTop: "1px solid #333",
+            bottom: 0,
+            // border-box so the reserved height below is the rendered height, not
+            // the content height (padding would otherwise push it over the map).
+            boxSizing: "border-box",
+            boxShadow: "0 -12px 24px rgba(0, 0, 0, 0.45)",
+            left: 0,
+            maxHeight: "70%",
+            minHeight: `${zoneEditorReservedHeight}px`,
+            overflowY: "auto",
             padding: "15px",
-            background: "#181818"
+            position: "absolute",
+            right: 0,
+            zIndex: 3
           }}
         >
           {editingZone ? (

@@ -844,7 +844,7 @@ export default function TagNetworkModal({ open, onClose, availableTags = [] }) {
       }}
       style={{
         position: "fixed",
-        inset: 0,
+        inset: "var(--shell-top, 0px) 0 0 0",
         zIndex: 50,
         display: "flex",
         alignItems: "center",

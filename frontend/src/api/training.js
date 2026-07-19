@@ -33,6 +33,14 @@ export function getTrainingItems(options = {}) {
     params.set("image_mode", options.imageMode);
   }
 
+  if (options.textMode) {
+    params.set("text_mode", options.textMode);
+  }
+
+  if (options.sequenceMode) {
+    params.set("sequence_mode", options.sequenceMode);
+  }
+
   const query = params.toString();
 
   return requestJson(`/training${query ? `?${query}` : ""}`);
@@ -41,6 +49,20 @@ export function getTrainingItems(options = {}) {
 
 export function gradeTrainingTimeline(items) {
   return requestJson("/training/grade_timeline", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ items })
+  });
+}
+
+
+export function gradeTrainingSequence(items) {
+  // Sequences are server-graded, so training must NOT go through /answer_sequence
+  // or a practice run would write real FSRS history. This grades without
+  // scheduling.
+  return requestJson("/training/grade_sequence", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

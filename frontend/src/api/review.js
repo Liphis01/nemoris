@@ -67,6 +67,24 @@ export function getReview(options = {}) {
 }
 
 
+export function getBonusGroups(options = {}) {
+  // Cheap bonus selection list: names/types/counts only, no per-item payload.
+  const params = new URLSearchParams();
+  appendGroupIds(params, options.groupIds);
+  const query = params.toString();
+
+  return requestJson(`/review/bonus_groups${query ? `?${query}` : ""}`);
+}
+
+
+export function getBonusGroupItems(key) {
+  // Full review payload for one picked bonus entry (group / question / timeline).
+  const params = new URLSearchParams({ key });
+
+  return requestJson(`/review/bonus_items?${params.toString()}`);
+}
+
+
 export function sendAnswer(questionId, quality, reviewDate = undefined) {
   return requestOk("/answer", {
     method: "POST",
@@ -91,6 +109,22 @@ export function reviseAnswer(questionId, quality, reviewDate = undefined) {
     body: JSON.stringify({
       question_id: questionId,
       quality,
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+
+
+// "Acquis": end the relearning loop for these cards. Carries no grade -- the
+// backend reschedules from the frozen first-fail state.
+export function graduateRelearning(questionIds, reviewDate = undefined) {
+  return requestOk("/answer/relearning_graduate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      question_ids: questionIds,
       ...(reviewDate ? { review_date: reviewDate } : {})
     })
   });
@@ -140,7 +174,7 @@ export function sendMapAnswer(
 }
 
 
-export function sendImageAnswer(
+export function sendMediaAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
@@ -149,7 +183,31 @@ export function sendImageAnswer(
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
 
   // items is an object of question_id -> quality, one entry per atomic image.
-  return requestOk("/answer_image", {
+  return requestOk("/answer_media", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      items,
+      ...(mode ? { mode } : {}),
+      ...answerContextPayload(resolved.contextCount),
+      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
+    })
+  });
+}
+
+
+export function sendTextAnswer(
+  items,
+  mode = undefined,
+  contextCount = undefined,
+  reviewDate = undefined
+) {
+  const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+
+  // items is an object of question_id -> quality, one entry per text pair.
+  return requestOk("/answer_text", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -174,6 +232,31 @@ export function sendTimelineAnswer(items, reviewDate = undefined) {
     body: JSON.stringify({
       items,
       ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+
+
+export function sendSequenceAnswer(
+  items,
+  mode = undefined,
+  contextCount = undefined,
+  reviewDate = undefined
+) {
+  const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+
+  // items is an object of question_id -> { position }. Sequences are graded on
+  // the server, so this reads the response instead of discarding it.
+  return requestJson("/answer_sequence", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      items,
+      ...(mode ? { mode } : {}),
+      ...answerContextPayload(resolved.contextCount),
+      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
     })
   });
 }

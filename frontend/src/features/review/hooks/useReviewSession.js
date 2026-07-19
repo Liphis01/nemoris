@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getBonusReviewStatus,
+  getBonusGroups,
+  getBonusGroupItems,
   getReview,
-  sendImageAnswer,
+  graduateRelearning,
+  sendMediaAnswer,
   sendMapAnswer,
+  sendTextAnswer,
   sendTimelineAnswer,
+  sendSequenceAnswer,
   reviseAnswer,
   sendAnswer
 } from "../../../api/review";
+import {
+  GOT_IT_QUALITY,
+  STILL_LEARNING_QUALITY,
+  isRelearningQuestion
+} from "../relearningGrades";
 
 
 function isEditableTarget(target) {
@@ -21,71 +31,6 @@ function isEditableTarget(target) {
 const TEXT_ANSWER_FEEDBACK_MS = 240;
 
 
-function nextReviewSkipId(counterRef) {
-  counterRef.current += 1;
-
-  return `skip-${counterRef.current}`;
-}
-
-
-function removeSkippedReviewItemId(ids, id) {
-  if (!id) return ids;
-
-  return ids.filter(itemId => itemId !== id);
-}
-
-
-function stripReviewSkipId(item) {
-  if (!item?._reviewSkipId) return item;
-
-  const { _reviewSkipId, ...rest } = item;
-
-  return rest;
-}
-
-
-function findLastSkippedReviewItem(skippedIds, questions, currentIndex) {
-  for (let index = skippedIds.length - 1; index >= 0; index -= 1) {
-    const id = skippedIds[index];
-    const questionIndex = questions.findIndex(
-      question => question?._reviewSkipId === id
-    );
-
-    if (questionIndex === -1) {
-      continue;
-    }
-
-    if (questionIndex <= currentIndex) {
-      return null;
-    }
-
-    return {
-      id,
-      index: questionIndex
-    };
-  }
-
-  return null;
-}
-
-
-function countFutureSkippedReviewItems(skippedIds, questions, currentIndex) {
-  const futureSkippedIds = new Set();
-
-  for (const id of skippedIds) {
-    const questionIndex = questions.findIndex(
-      question => question?._reviewSkipId === id
-    );
-
-    if (questionIndex > currentIndex) {
-      futureSkippedIds.add(id);
-    }
-  }
-
-  return futureSkippedIds.size;
-}
-
-
 function localReviewDateString(now = new Date()) {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -95,49 +40,33 @@ function localReviewDateString(now = new Date()) {
 }
 
 
-function progressIsNew(progress) {
-  const history = progress?.history || [];
-
-  return !progress || ((progress.reps || 0) === 0 && history.length === 0);
-}
-
-
-function reviewItemIsNew(item) {
-  if (Array.isArray(item?.items)) {
-    return item.items.every(child => progressIsNew(child.progress));
+function bonusEntryTypeLabel(typeQ, isContainer) {
+  if (!isContainer) {
+    return "Question";
   }
 
-  return progressIsNew(item?.progress);
+  if (typeQ === "map") return "Carte";
+  if (typeQ === "media") return "Médias";
+  if (typeQ === "text") return "Texte";
+  if (typeQ === "timeline") return "Frise";
+  if (typeQ === "sequence") return "Séquence";
+
+  return "Groupe";
 }
 
 
-function reviewGroupIdKey(items) {
-  const seen = new Set();
-  const groupIds = [];
-
-  (items || []).forEach(item => {
-    const groupId = Number(item?.group_id);
-
-    if (!Number.isInteger(groupId) || seen.has(groupId)) {
-      return;
-    }
-
-    seen.add(groupId);
-    groupIds.push(groupId);
-  });
-
-  return groupIds.join(",");
-}
-
-
-function bonusGroupScopeOptions(groupIdKey) {
-  if (!groupIdKey) {
-    return {};
-  }
-
-  return {
-    groupIds: groupIdKey.split(",").map(Number)
-  };
+function buildBonusMenuEntries(entries) {
+  // The backend already collapses new questions into one menu entry per group /
+  // loose question (name, type, count, tags). The full per-item payload is
+  // fetched lazily when the entry is picked, so entries here carry no chunks.
+  return (entries || []).map(entry => ({
+    key: entry.key,
+    label: entry.name || (entry.is_container ? "Groupe" : "Question"),
+    typeLabel: bonusEntryTypeLabel(entry.type_q, Boolean(entry.is_container)),
+    isContainer: Boolean(entry.is_container),
+    itemCount: entry.item_count || 0,
+    tags: entry.tags || []
+  }));
 }
 
 
@@ -152,35 +81,36 @@ export function useReviewSession(active) {
   const [bonusReviewStatus, setBonusReviewStatus] = useState(null);
   const [bonusStatusLoading, setBonusStatusLoading] = useState(false);
   const [bonusReviewLoading, setBonusReviewLoading] = useState(false);
+  const [bonusItemLoading, setBonusItemLoading] = useState(false);
   const [bonusReviewActive, setBonusReviewActive] = useState(false);
   const [bonusReviewStarted, setBonusReviewStarted] = useState(false);
+  const [bonusMenuItems, setBonusMenuItems] = useState([]);
+  const [bonusMenuOpen, setBonusMenuOpen] = useState(false);
+  const [completedBonusKeys, setCompletedBonusKeys] = useState([]);
+  const [activeBonusKey, setActiveBonusKey] = useState(null);
   const [selectedTextQuality, setSelectedTextQuality] = useState(null);
   const [answeredTextByIndex, setAnsweredTextByIndex] = useState({});
   const [returnToLastQuestionArmed, setReturnToLastQuestionArmed] = useState(false);
-  const [skippedReviewItemIds, setSkippedReviewItemIds] = useState([]);
-  const reviewSkipIdCounterRef = useRef(0);
   const textAnswerTimeoutRef = useRef(null);
   const textAnswerPendingRef = useRef(false);
   const textAnswerRequestsRef = useRef({});
   const reviewDateRef = useRef(null);
 
   const current = questions[currentIndex];
-  const sameGroupBonusGroupIdKey = useMemo(
-    () => reviewGroupIdKey(questions),
-    [questions]
-  );
-  const sameGroupBonusOptions = useMemo(
-    () => bonusGroupScopeOptions(sameGroupBonusGroupIdKey),
-    [sameGroupBonusGroupIdKey]
+  const bonusMenuEntries = useMemo(
+    () => buildBonusMenuEntries(bonusMenuItems).filter(
+      entry => !completedBonusKeys.includes(entry.key)
+    ),
+    [bonusMenuItems, completedBonusKeys]
   );
   const lastQuestionIndex = currentIndex - 1;
   const lastQuestion = questions[lastQuestionIndex];
   const currentIsTextLike = current?.type_q === "text" || (
-    current?.type_q === "image" &&
+    current?.type_q === "media" &&
     !current?.items
   );
   const lastQuestionIsTextLike = lastQuestion?.type_q === "text" || (
-    lastQuestion?.type_q === "image" &&
+    lastQuestion?.type_q === "media" &&
     !lastQuestion?.items
   );
   const currentTextAnswer = currentIsTextLike
@@ -192,36 +122,11 @@ export function useReviewSession(active) {
     answeredTextByIndex[lastQuestionIndex] &&
     selectedTextQuality === null
   );
-  const lastSkippedReviewItem = findLastSkippedReviewItem(
-    skippedReviewItemIds,
-    questions,
-    currentIndex
-  );
-  const skippedQuestionCount = countFutureSkippedReviewItems(
-    skippedReviewItemIds,
-    questions,
-    currentIndex
-  );
-  const canSkipCurrentQuestion = Boolean(
-    bonusReviewActive &&
-    current &&
-    currentIndex < questions.length - 1 &&
-    selectedTextQuality === null
-  );
-  const canReturnToLastSkippedQuestion = Boolean(
-    bonusReviewActive &&
-    current &&
-    lastSkippedReviewItem &&
-    selectedTextQuality === null
-  );
   const canStartBonusReview = Boolean(
     !bonusReviewStarted &&
     currentIndex >= questions.length &&
     bonusReviewStatus?.allowed
   );
-  const bonusReviewMessage = currentIndex >= questions.length
-    ? bonusReviewStatus?.message || ""
-    : "";
 
   const clearTextAnswerTimeout = useCallback(() => {
     if (textAnswerTimeoutRef.current) {
@@ -242,72 +147,55 @@ export function useReviewSession(active) {
     setCurrentIndex(prev => Math.max(0, prev - 1));
   }, [canReturnToLastQuestion, clearTextAnswerTimeout]);
 
-  const skipCurrentQuestion = useCallback(() => {
-    if (!canSkipCurrentQuestion) return;
-
-    const skipId = current._reviewSkipId || nextReviewSkipId(reviewSkipIdCounterRef);
+  const selectBonusItem = useCallback(async (entry) => {
+    if (!entry || bonusItemLoading) return;
 
     clearTextAnswerTimeout();
-    setShowAnswer(false);
-    setSelectedTextQuality(null);
-    setReturnToLastQuestionArmed(false);
-    setQuestions(prev => {
-      if (currentIndex >= prev.length - 1) {
-        return prev;
+    setBonusItemLoading(true);
+    setReviewError("");
+
+    try {
+      // The menu only carries names/counts; fetch the picked entry's full
+      // payload (questions, media, projected intervals) on demand.
+      const chunks = await getBonusGroupItems(entry.key);
+
+      if (!Array.isArray(chunks) || chunks.length === 0) {
+        // Nothing left to review for this entry: drop it and stay in the menu.
+        setCompletedBonusKeys(prev =>
+          prev.includes(entry.key) ? prev : [...prev, entry.key]
+        );
+        return;
       }
 
-      const skipped = {
-        ...prev[currentIndex],
-        _reviewSkipId: skipId
-      };
+      setActiveBonusKey(entry.key);
+      setQuestions(chunks);
+      setCurrentIndex(0);
+      setShowAnswer(false);
+      setSelectedTextQuality(null);
+      setAnsweredTextByIndex({});
+      setReturnToLastQuestionArmed(false);
+      setBonusMenuOpen(false);
+      textAnswerRequestsRef.current = {};
+    } catch (error) {
+      console.error(error);
+      setReviewError(error.message || "Impossible de charger la question bonus.");
+    } finally {
+      setBonusItemLoading(false);
+    }
+  }, [bonusItemLoading, clearTextAnswerTimeout]);
 
-      return [
-        ...prev.slice(0, currentIndex),
-        ...prev.slice(currentIndex + 1),
-        skipped
-      ];
-    });
-    setSkippedReviewItemIds(prev => [...prev, skipId]);
-  }, [
-    canSkipCurrentQuestion,
-    clearTextAnswerTimeout,
-    current,
-    currentIndex
-  ]);
-
-  const returnToLastSkippedQuestion = useCallback(() => {
-    if (!canReturnToLastSkippedQuestion) return;
-
-    const skippedId = lastSkippedReviewItem.id;
-
+  const returnToBonusMenu = useCallback(() => {
     clearTextAnswerTimeout();
+    setActiveBonusKey(null);
+    setQuestions([]);
+    setCurrentIndex(0);
     setShowAnswer(false);
     setSelectedTextQuality(null);
+    setAnsweredTextByIndex({});
     setReturnToLastQuestionArmed(false);
-    setQuestions(prev => {
-      const skippedIndex = prev.findIndex(
-        question => question?._reviewSkipId === skippedId
-      );
-
-      if (skippedIndex <= currentIndex) {
-        return prev;
-      }
-
-      const skipped = prev[skippedIndex];
-
-      return [
-        ...prev.slice(0, currentIndex),
-        skipped,
-        ...prev.slice(currentIndex, skippedIndex),
-        ...prev.slice(skippedIndex + 1)
-      ];
-    });
-  }, [
-    canReturnToLastSkippedQuestion,
-    clearTextAnswerTimeout,
-    currentIndex,
-    lastSkippedReviewItem
-  ]);
+    setBonusMenuOpen(true);
+    textAnswerRequestsRef.current = {};
+  }, [clearTextAnswerTimeout]);
 
   const waitForTextAnswerRequests = useCallback(() => {
     const requests = Object.values(textAnswerRequestsRef.current);
@@ -326,15 +214,35 @@ export function useReviewSession(active) {
   ) => sendMapAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
-  const submitImageAnswer = useCallback((
+  const submitMediaAnswer = useCallback((
     items,
     mode = undefined,
     contextCount = undefined
-  ) => sendImageAnswer(items, mode, contextCount, reviewDateRef.current),
+  ) => sendMediaAnswer(items, mode, contextCount, reviewDateRef.current),
+  []);
+
+  const submitTextAnswer = useCallback((
+    items,
+    mode = undefined,
+    contextCount = undefined
+  ) => sendTextAnswer(items, mode, contextCount, reviewDateRef.current),
   []);
 
   const submitTimelineAnswer = useCallback((items) =>
     sendTimelineAnswer(items, reviewDateRef.current),
+  []);
+
+  const submitSequenceAnswer = useCallback((
+    items,
+    mode = undefined,
+    contextCount = undefined
+  ) => sendSequenceAnswer(items, mode, contextCount, reviewDateRef.current),
+  []);
+
+  // "Acquis" for grouped items: graduate them from the frozen first-fail state
+  // on the pinned session date, carrying no grade.
+  const graduateGroupedAnswer = useCallback((questionIds) =>
+    graduateRelearning(questionIds, reviewDateRef.current),
   []);
 
   const handleTextAnswer = useCallback((quality) => {
@@ -343,20 +251,28 @@ export function useReviewSession(active) {
     // Fire-and-advance keeps review fast. Failures are appended to the end so
     // they appear again after the current queue.
     const answerIndex = currentIndex;
+    const relearning = isRelearningQuestion(current);
     const existingAnswer = answeredTextByIndex[answerIndex]?.questionId === current.question_id
       ? answeredTextByIndex[answerIndex]
       : null;
     const previousQuality = existingAnswer?.quality;
     const previousRequest = textAnswerRequestsRef.current[answerIndex] || Promise.resolve();
-    const request = existingAnswer
-      ? previousRequest
-        .catch(() => null)
-        .then(() => reviseAnswer(
-          current.question_id,
-          quality,
-          reviewDateRef.current
-        ))
-      : sendAnswer(current.question_id, quality, reviewDateRef.current);
+    // A relearning retry never re-grades: the first fail already set the
+    // schedule and froze FSRS. "Encore" just loops (re-queued below); "Acquis"
+    // graduates the card from its frozen state via the dedicated endpoint.
+    const request = relearning
+      ? (quality === STILL_LEARNING_QUALITY
+        ? Promise.resolve()
+        : graduateRelearning([current.question_id], reviewDateRef.current))
+      : existingAnswer
+        ? previousRequest
+          .catch(() => null)
+          .then(() => reviseAnswer(
+            current.question_id,
+            quality,
+            reviewDateRef.current
+          ))
+        : sendAnswer(current.question_id, quality, reviewDateRef.current);
 
     textAnswerRequestsRef.current[answerIndex] = request;
     request.catch(console.error);
@@ -385,7 +301,7 @@ export function useReviewSession(active) {
           return [
             ...nextQuestions,
             {
-              ...stripReviewSkipId(current),
+              ...current,
               _reviewRetryOfIndex: answerIndex
             }
           ];
@@ -398,10 +314,6 @@ export function useReviewSession(active) {
       setCurrentIndex(prev => prev + 1);
       setReturnToLastQuestionArmed(true);
       setSelectedTextQuality(null);
-      setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
-        prev,
-        current._reviewSkipId
-      ));
       textAnswerTimeoutRef.current = null;
       textAnswerPendingRef.current = false;
     }, TEXT_ANSWER_FEEDBACK_MS);
@@ -412,9 +324,10 @@ export function useReviewSession(active) {
     currentIndex
   ]);
 
-  function handleMapComplete(failedQuestionIds = []) {
-    // A map screen can contain many atomic zone questions. Only failed zones are
-    // re-queued, wrapped back into the same runtime map group shape.
+  // Every grouped type finishes the same way: one screen answers many atomic
+  // questions, and only the failed ones are re-queued, wrapped back into the
+  // same runtime group shape so they get another pass this session.
+  function handleGroupComplete(failedQuestionIds = []) {
     const answerIndex = currentIndex;
 
     if (current && failedQuestionIds.length > 0) {
@@ -426,7 +339,7 @@ export function useReviewSession(active) {
         setQuestions(prev => [
           ...prev,
           {
-            ...stripReviewSkipId(current),
+            ...current,
             items: failedItems,
             _reviewRetryOfIndex: answerIndex
           }
@@ -436,71 +349,12 @@ export function useReviewSession(active) {
 
     setCurrentIndex(prev => prev + 1);
     setReturnToLastQuestionArmed(true);
-    setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
-      prev,
-      current?._reviewSkipId
-    ));
   }
 
-  function handleImageComplete(failedQuestionIds = []) {
-    // Image groups mirror map runtime groups: only failed atomic images are
-    // appended for another pass in the same review session.
-    const answerIndex = currentIndex;
-
-    if (current && failedQuestionIds.length > 0) {
-      const failedItems = (current.items || []).filter(item =>
-        failedQuestionIds.includes(item.question_id)
-      );
-
-      if (failedItems.length > 0) {
-        setQuestions(prev => [
-          ...prev,
-          {
-            ...stripReviewSkipId(current),
-            items: failedItems,
-            _reviewRetryOfIndex: answerIndex
-          }
-        ]);
-      }
-    }
-
-    setCurrentIndex(prev => prev + 1);
-    setReturnToLastQuestionArmed(true);
-    setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
-      prev,
-      current?._reviewSkipId
-    ));
-  }
-
-  function handleTimelineComplete(failedQuestionIds = []) {
-    // Timeline review also updates many atomic questions from one screen.
-    // Failed items are wrapped back into the runtime timeline shape.
-    const answerIndex = currentIndex;
-
-    if (current && failedQuestionIds.length > 0) {
-      const failedItems = (current.items || []).filter(item =>
-        failedQuestionIds.includes(item.question_id)
-      );
-
-      if (failedItems.length > 0) {
-        setQuestions(prev => [
-          ...prev,
-          {
-            ...stripReviewSkipId(current),
-            items: failedItems,
-            _reviewRetryOfIndex: answerIndex
-          }
-        ]);
-      }
-    }
-
-    setCurrentIndex(prev => prev + 1);
-    setReturnToLastQuestionArmed(true);
-    setSkippedReviewItemIds(prev => removeSkippedReviewItemId(
-      prev,
-      current?._reviewSkipId
-    ));
-  }
+  const handleMapComplete = handleGroupComplete;
+  const handleImageComplete = handleGroupComplete;
+  const handleTimelineComplete = handleGroupComplete;
+  const handleSequenceComplete = handleGroupComplete;
 
   useEffect(() => {
     if (!active) {
@@ -511,12 +365,15 @@ export function useReviewSession(active) {
       setBonusReviewStatus(null);
       setBonusStatusLoading(false);
       setBonusReviewLoading(false);
+      setBonusItemLoading(false);
       setBonusReviewActive(false);
       setBonusReviewStarted(false);
+      setBonusMenuItems([]);
+      setBonusMenuOpen(false);
+      setCompletedBonusKeys([]);
+      setActiveBonusKey(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
-      setSkippedReviewItemIds([]);
-      reviewSkipIdCounterRef.current = 0;
       textAnswerRequestsRef.current = {};
       reviewDateRef.current = null;
       return;
@@ -530,16 +387,19 @@ export function useReviewSession(active) {
       setBonusReviewStatus(null);
       setBonusStatusLoading(false);
       setBonusReviewLoading(false);
+      setBonusItemLoading(false);
       setBonusReviewActive(false);
       setBonusReviewStarted(false);
+      setBonusMenuItems([]);
+      setBonusMenuOpen(false);
+      setCompletedBonusKeys([]);
+      setActiveBonusKey(null);
       setQuestions([]);
       setCurrentIndex(0);
       setShowAnswer(false);
       setSelectedTextQuality(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
-      setSkippedReviewItemIds([]);
-      reviewSkipIdCounterRef.current = 0;
       textAnswerRequestsRef.current = {};
       reviewDateRef.current = localReviewDateString();
 
@@ -602,7 +462,7 @@ export function useReviewSession(active) {
 
       try {
         await waitForTextAnswerRequests();
-        const status = await getBonusReviewStatus(sameGroupBonusOptions);
+        const status = await getBonusReviewStatus();
 
         if (!cancelled) {
           setBonusReviewStatus(status);
@@ -633,8 +493,39 @@ export function useReviewSession(active) {
     questions.length,
     reviewError,
     reviewLoading,
-    sameGroupBonusOptions,
     waitForTextAnswerRequests
+  ]);
+
+  // When a picked bonus item (and its retries) is fully answered, mark it done
+  // and return to the bonus menu instead of ending the whole session.
+  useEffect(() => {
+    if (!bonusReviewActive || bonusMenuOpen) {
+      return;
+    }
+
+    if (questions.length === 0 || currentIndex < questions.length) {
+      return;
+    }
+
+    setCompletedBonusKeys(prev =>
+      activeBonusKey && !prev.includes(activeBonusKey)
+        ? [...prev, activeBonusKey]
+        : prev
+    );
+    setActiveBonusKey(null);
+    setBonusMenuOpen(true);
+    setQuestions([]);
+    setCurrentIndex(0);
+    setShowAnswer(false);
+    setSelectedTextQuality(null);
+    setAnsweredTextByIndex({});
+    setReturnToLastQuestionArmed(false);
+  }, [
+    activeBonusKey,
+    bonusMenuOpen,
+    bonusReviewActive,
+    currentIndex,
+    questions.length
   ]);
 
   const startBonusReview = useCallback(async () => {
@@ -645,27 +536,29 @@ export function useReviewSession(active) {
 
     try {
       await waitForTextAnswerRequests();
-      const bonusStatus = await getBonusReviewStatus(sameGroupBonusOptions);
+      const bonusStatus = await getBonusReviewStatus();
       setBonusReviewStatus(bonusStatus);
 
       if (!bonusStatus.allowed) {
         return;
       }
 
-      const data = await getReview({
-        includeNew: true,
-        ...sameGroupBonusOptions
-      });
+      // Load only the selection list (names/counts) — every available group,
+      // no cap. Each entry's full payload is fetched lazily on pick.
+      const entries = await getBonusGroups();
 
-      setQuestions(data);
+      setBonusMenuItems(entries);
+      setCompletedBonusKeys([]);
+      setActiveBonusKey(null);
+      setQuestions([]);
       setCurrentIndex(0);
       setShowAnswer(false);
       setSelectedTextQuality(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
-      setSkippedReviewItemIds([]);
       setBonusReviewActive(true);
-      setBonusReviewStarted(data.length === 0 || data.every(reviewItemIsNew));
+      setBonusMenuOpen(true);
+      setBonusReviewStarted(true);
       textAnswerRequestsRef.current = {};
     } catch (error) {
       console.error(error);
@@ -677,7 +570,6 @@ export function useReviewSession(active) {
     bonusReviewLoading,
     currentIndex,
     questions.length,
-    sameGroupBonusOptions,
     waitForTextAnswerRequests
   ]);
 
@@ -685,10 +577,14 @@ export function useReviewSession(active) {
     if (!active) return;
 
     function handleKeyDown(event) {
+      // Self-managed types own their keyboard: sequence needs the digits for
+      // its QCM options and the letters for its typed modes.
       if (
         current?.type_q === "map" ||
         current?.type_q === "timeline" ||
-        (current?.type_q === "image" && current?.items)
+        (current?.type_q === "media" && current?.items) ||
+        (current?.type_q === "text" && current?.items) ||
+        (current?.type_q === "sequence" && current?.items)
       ) {
         return;
       }
@@ -708,19 +604,23 @@ export function useReviewSession(active) {
       }
 
       if (showAnswer) {
+        // A relearning retry is binary: only Encore (0) and Acquis (1) act, so
+        // the 2/3 grades can't slip a same-day retry back into FSRS.
+        const relearning = isRelearningQuestion(current);
+
         if (event.key === "0") {
           event.preventDefault();
-          handleTextAnswer(0);
+          handleTextAnswer(STILL_LEARNING_QUALITY);
         }
         if (event.key === "1") {
           event.preventDefault();
-          handleTextAnswer(1);
+          handleTextAnswer(relearning ? GOT_IT_QUALITY : 1);
         }
-        if (event.key === "2") {
+        if (!relearning && event.key === "2") {
           event.preventDefault();
           handleTextAnswer(2);
         }
-        if (event.key === "3") {
+        if (!relearning && event.key === "3") {
           event.preventDefault();
           handleTextAnswer(3);
         }
@@ -737,28 +637,31 @@ export function useReviewSession(active) {
   return {
     bonusReviewActive,
     bonusReviewLoading,
-    bonusReviewMessage,
+    bonusItemLoading,
     bonusReviewStatus,
     bonusStatusLoading,
+    bonusMenuOpen,
+    bonusMenuEntries,
+    selectBonusItem,
+    returnToBonusMenu,
     canStartBonusReview,
     currentIndex,
     handleImageComplete,
     handleMapComplete,
     handleTimelineComplete,
+    handleSequenceComplete,
     handleTextAnswer,
     canReturnToLastQuestion,
-    canReturnToLastSkippedQuestion,
-    canSkipCurrentQuestion,
     currentTextQuality: currentTextAnswer?.quality ?? null,
-    returnToLastSkippedQuestion,
     returnToLastQuestion,
-    skipCurrentQuestion,
-    skippedQuestionCount,
     startBonusReview,
     selectedTextQuality,
-    submitImageAnswer,
+    submitMediaAnswer,
     submitMapAnswer,
+    submitTextAnswer,
     submitTimelineAnswer,
+    submitSequenceAnswer,
+    graduateGroupedAnswer,
     questions,
     reviewError,
     reviewLoading,

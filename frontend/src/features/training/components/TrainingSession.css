@@ -293,9 +293,19 @@
   color: #ffcc7a;
 }
 
-.training-scope-badge-image {
+.training-scope-badge-media {
   background: #163524;
   color: #7ee2a8;
+}
+
+.training-scope-badge-text {
+  background: #163b63;
+  color: #5eb6ff;
+}
+
+.training-scope-badge-sequence {
+  background: #123a3a;
+  color: #5eead4;
 }
 
 .training-scope-badge-tag {
@@ -393,8 +403,16 @@
   border-left-color: #ffcc7a;
 }
 
-.training-detail-panel-image {
+.training-detail-panel-media {
   border-left-color: #7ee2a8;
+}
+
+.training-detail-panel-text {
+  border-left-color: #5eb6ff;
+}
+
+.training-detail-panel-sequence {
+  border-left-color: #5eead4;
 }
 
 .training-detail-panel-neutral {

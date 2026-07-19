@@ -1,9 +1,14 @@
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
 - question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
-- si peu d'éléments, type_all et type_prompt doit être presque la même difficulté
 
 ## Urgent
+- ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
+- ne pas nécessairement reset les records après un edit
+- intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
+- do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
+- créer de nouveaux modes timeline (et revoir la création ?)
+- resume do a plan for the pywebview option
 
 ## quick fixes
 
@@ -15,19 +20,20 @@
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
 - le recap d'images est légèrement moins propre que maps
+- scroll automatique à enlever quand on quitte la preview d'une image de 
+- changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 
 ## bugs
 
 - recentrer les svg
 - empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
 - timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
-- chargement très long des questions bonus -> est ce qu'on charge tout d'un coup ?
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
-- après avoir fait une question bonus (le drapeau du listenbourg) il m'a remis sur le menu de fin de review pour faire d'autres questions bonus
+- les tags marchent pas bien
+- parfois on peut scroll la page alors qu'il n'y a rien en dessous
 
 ## to do when i have more time
 
-- mettre en évidence les zones trop petites (c.f. jetpunk)
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
 - trouver un meilleur agencement pour les aliases dans map preview
@@ -42,6 +48,7 @@
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
 - make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
+- faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 
 ## refactors
 
@@ -60,6 +67,8 @@
 - indice dans l'entraînement (exemple: premières lettres, éliminer la moitié des zones restantes, ...)
 - type liste ? (= juste énumérer)
 - les questions ratées réapparaissent avec un mode différent (si disponible pour le type de question)
+- un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
+----> peut aussi servir pour dessiner des drapeaux, des symboles, des logos (soit self evaluation, soit reconnaissance par l'ia)
 
 ## Conseils/idées issus de la littérature scientifique
 

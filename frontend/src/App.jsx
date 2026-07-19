@@ -6,6 +6,7 @@ import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import Stats from "./features/stats/components/Stats";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
+import DesktopTitleBar from "./shared/DesktopTitleBar";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
@@ -134,7 +135,8 @@ function App() {
   }
 
   return (
-    <div style={appStyle}>
+    <div className="app-scrollbar" style={appStyle}>
+      <DesktopTitleBar />
       {mode === "menu" && (
         <Menu
           setMode={setMode}

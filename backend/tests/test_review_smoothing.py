@@ -3,7 +3,6 @@ import unittest
 from collections import Counter
 from datetime import date, timedelta
 
-from fastapi import HTTPException
 from fsrs import Rating
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -12,10 +11,12 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import AppSetting, Progress, Question, QuestionGroup
 from app.routers.review import (
-    answer_image,
+    answer_media,
     answer_map,
     answer_question,
     answer_timeline,
+    get_bonus_groups,
+    get_bonus_items,
     get_bonus_status,
     get_review,
     get_summary,
@@ -51,7 +52,7 @@ from app.services.image_modes import (
 )
 from app.schemas import (
     AnswerRequest,
-    ImageAnswerRequest,
+    MediaAnswerRequest,
     MapAnswerRequest,
     ReviewSettings,
     TimelineAnswerItem,
@@ -133,11 +134,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
     def test_map_mode_difficulty_uses_type_all_as_reference(self):
         self.assertEqual(map_mode_difficulty("type_all", 2), 1.0)
-        self.assertEqual(map_mode_difficulty("type_prompt", 20), 1.15)
-        self.assertEqual(map_mode_difficulty("multiple_choice", 20), 0.5)
+        self.assertEqual(map_mode_difficulty("type_prompt", 20), 1.05)
+        self.assertEqual(map_mode_difficulty("multiple_choice", 20), 0.55)
         self.assertAlmostEqual(map_mode_difficulty("click_prompt", 1), 0.4)
-        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 4), 0.675)
-        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 16), 0.8125)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 4), 0.505)
+        self.assertAlmostEqual(map_mode_difficulty("click_prompt", 16), 0.7225)
         self.assertLess(map_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_map_review_mode_selector_uses_difficulty_size_and_variety(self):
@@ -215,11 +216,24 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
 
     def test_map_random_selector_keeps_mixed_chunks_varied(self):
-        support = Question(type_q="map", answer="Support")
-        support.progress = Progress(reps=1, difficulty=3.0, history=[])
-        strong = Question(type_q="map", answer="Strong")
-        strong.progress = Progress(reps=4, difficulty=3.0, history=[])
-        items = [support, strong]
+        # click_prompt requires at least CHOICE_MODE_MIN_CONTEXT (5) elements, so
+        # exercise the variety guarantee with a valid-size mixed chunk.
+        items = []
+
+        for _ in range(2):
+            support = Question(type_q="map", answer="Support")
+            support.progress = Progress(reps=1, difficulty=3.0, history=[])
+            items.append(support)
+
+        for _ in range(2):
+            strong = Question(type_q="map", answer="Strong")
+            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            items.append(strong)
+
+        medium = Question(type_q="map", answer="Medium")
+        medium.progress = Progress(reps=4, difficulty=5.0, history=[])
+        items.append(medium)
+
         rng = random.Random(3)
         modes = Counter(
             choose_map_review_mode(items, items, rng=rng)
@@ -230,33 +244,58 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreater(modes["click_prompt"], 0)
         self.assertGreater(modes["type_prompt"], 0)
 
+    def test_map_click_prompt_requires_minimum_review_context(self):
+        context = [
+            Question(id=index, type_q="map", answer=f"Zone {index}")
+            for index in range(1, 6)
+        ]
+
+        for question in context:
+            question.progress = Progress(reps=3, difficulty=5.0, history=[])
+
+        for size in range(1, 5):
+            modes = {
+                choose_map_review_mode(
+                    [context[0]],
+                    context[:size],
+                    rng=random.Random(seed)
+                )
+                for seed in range(50)
+            }
+            self.assertNotIn("click_prompt", modes)
+
+        self.assertEqual(
+            choose_map_review_mode(
+                [context[0]],
+                context,
+                rng=FixedRandom(0)
+            ),
+            "click_prompt"
+        )
+
     def test_image_mode_difficulty_uses_type_all_as_reference(self):
         self.assertEqual(image_mode_difficulty("type_all", 2), 1.0)
-        self.assertEqual(image_mode_difficulty("type_prompt", 20), 1.15)
+        self.assertEqual(image_mode_difficulty("type_prompt", 20), 1.05)
         self.assertEqual(
             image_mode_difficulty("multiple_choice_label", 20),
-            0.5
+            0.55
         )
         self.assertEqual(
             image_mode_difficulty("multiple_choice_image", 20),
-            0.5
+            0.55
         )
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 1), 0.4)
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 4), 0.675)
-        self.assertAlmostEqual(image_mode_difficulty("click_prompt", 16), 0.8125)
-        self.assertLess(image_mode_difficulty("click_prompt", 1000), 0.95)
 
     def test_image_review_mode_selector_uses_difficulty_size_and_variety(self):
-        hard = Question(type_q="image", answer="Hard")
+        hard = Question(type_q="media", answer="Hard")
         hard.progress = Progress(reps=0, difficulty=5.0, history=[])
-        strong = Question(type_q="image", answer="Strong")
+        strong = Question(type_q="media", answer="Strong")
         strong.progress = Progress(
             reps=4,
             difficulty=3.0,
             history=[{"image_mode": "type_prompt"} for _ in range(4)]
         )
         extras = [
-            Question(type_q="image", answer=f"Extra {index}")
+            Question(type_q="media", answer=f"Extra {index}")
             for index in range(3)
         ]
 
@@ -292,11 +331,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
         strong_items = []
 
         for index in range(12):
-            support = Question(type_q="image", answer=f"Support {index}")
+            support = Question(type_q="media", answer=f"Support {index}")
             support.progress = Progress(reps=1, difficulty=3.0, history=[])
             support_items.append(support)
 
-            strong = Question(type_q="image", answer=f"Strong {index}")
+            strong = Question(type_q="media", answer=f"Strong {index}")
             strong.progress = Progress(reps=4, difficulty=3.0, history=[])
             strong_items.append(strong)
 
@@ -323,7 +362,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
 
     def test_image_random_selector_can_pick_non_top_modes(self):
-        support = Question(type_q="image", answer="Support")
+        support = Question(type_q="media", answer="Support")
         support.progress = Progress(reps=1, difficulty=3.0, history=[])
 
         self.assertNotEqual(
@@ -333,37 +372,6 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 rng=FixedRandom(0.999999)
             ),
             "multiple_choice_label"
-        )
-
-    def test_image_click_prompt_requires_minimum_review_context(self):
-        context = [
-            Question(id=index, type_q="image", answer=f"Image {index}")
-            for index in range(1, 11)
-        ]
-
-        for question in context:
-            question.progress = Progress(
-                reps=3,
-                difficulty=5.0,
-                history=[]
-            )
-
-        self.assertNotEqual(
-            choose_image_review_mode(
-                [context[0]],
-                context[:9],
-                require_click_prompt_min=True
-            ),
-            "click_prompt"
-        )
-        self.assertEqual(
-            choose_image_review_mode(
-                [context[0]],
-                context,
-                require_click_prompt_min=True,
-                rng=FixedRandom(0)
-            ),
-            "click_prompt"
         )
 
     def test_again_projected_interval_is_immediate_retry(self):
@@ -464,6 +472,44 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreater(easier["stability"], MIN_STABILITY)
         self.assertGreater(easier["difficulty"], reference["difficulty"])
         self.assertLess(easier["difficulty"], MAX_DIFFICULTY)
+
+    def test_miss_penalty_is_monotonic_in_mode_difficulty(self):
+        # click_prompt difficulty slides continuously with the zone count, so
+        # neighbouring session sizes must not swap the penalty ordering.
+        today = date(2026, 1, 10)
+        progress = self.review_progress()
+        misses = [
+            (
+                mode_difficulty,
+                update_progress(
+                    progress,
+                    0,
+                    today=today,
+                    mode_difficulty=mode_difficulty,
+                    enable_fuzzing=False
+                )
+            )
+            for mode_difficulty in (
+                0.40, 0.50, 0.55, 0.60, 0.65, 0.70,
+                0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05
+            )
+        ]
+
+        for (_, easier), (mode_difficulty, harder) in zip(misses, misses[1:]):
+            self.assertLessEqual(
+                harder["difficulty"],
+                easier["difficulty"],
+                f"difficulty penalty grew at mode_difficulty={mode_difficulty}"
+            )
+            self.assertGreaterEqual(
+                harder["stability"],
+                easier["stability"],
+                f"stability penalty grew at mode_difficulty={mode_difficulty}"
+            )
+
+        for mode_difficulty, miss in misses:
+            self.assertGreater(miss["stability"], MIN_STABILITY)
+            self.assertLess(miss["difficulty"], MAX_DIFFICULTY)
 
     def test_easier_mode_rewards_correct_answers_less_than_type_all(self):
         today = date(2026, 1, 10)
@@ -829,7 +875,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 today - timedelta(days=9),
                 difficulty=8.0,
                 last_review=today - timedelta(days=8),
-                type_q="image",
+                type_q="media",
                 ideal_next_review=today - timedelta(days=5),
                 ideal_interval=0
             ),
@@ -838,7 +884,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
                 today - timedelta(days=7),
                 difficulty=9.0,
                 last_review=today - timedelta(days=13),
-                type_q="image"
+                type_q="media"
             )
         ]
         entries[1]["interval"] = 6
@@ -928,7 +974,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.db.add(question)
         return question
 
-    def add_group(self, group_id, type_group="image"):
+    def add_group(self, group_id, type_group="media"):
         group = QuestionGroup(
             id=group_id,
             type_group=type_group,
@@ -1119,7 +1165,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertTrue(progress.fsrs_card["due"].startswith(today.isoformat()))
         self.assertEqual(progress.history[-1]["next_review"], today.isoformat())
 
-    def test_bonus_text_retry_uses_supplied_review_date_for_first_schedule(self):
+    def test_bonus_text_retry_is_frozen_and_graduates_the_card(self):
+        # The failed first answer is the only recorded review of the day. A
+        # same-day pass is a relearning "Acquis": it is frozen (no new history,
+        # no extra rep) and graduates the card forward from the frozen state.
         review_day = date(2026, 1, 1)
         self.add_question(1, type_q="text")
         self.db.commit()
@@ -1149,9 +1198,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(
-            [entry["reviewed_on"] for entry in progress.history],
-            [review_day.isoformat()]
+            [entry["quality"] for entry in progress.history],
+            [0]
         )
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.lapses, 1)
+        self.assertGreater(progress.next_review, review_day)
 
     def test_revise_single_answer_uses_supplied_review_date(self):
         review_day = date(2026, 1, 1)
@@ -1185,7 +1237,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.last_review, review_day)
         self.assertEqual(progress.history[-1]["reviewed_on"], review_day.isoformat())
 
-    def test_revise_bonus_text_to_again_removes_created_progress(self):
+    def test_revise_bonus_text_to_again_keeps_the_card_scheduled(self):
+        # Re-grading a bonus answer down to Again corrects the grade, it does not
+        # send the card back to the bonus pool: one review, due today.
+        today = date.today()
         self.add_question(1, type_q="text")
         self.db.commit()
 
@@ -1198,48 +1253,21 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response["history"], [])
-        self.assertEqual(response["reps"], 0)
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
-        )
-
-    def test_revise_correct_bonus_text_preserves_unschedule_marker(self):
-        self.add_question(1, type_q="text")
-        self.db.commit()
-
-        answer_question(
-            AnswerRequest(question_id=1, quality=2),
-            db=self.db
-        )
-        revise_answer_question(
-            AnswerRequest(question_id=1, quality=3),
-            db=self.db
-        )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
             .first()
         )
 
-        self.assertTrue(progress.history[-1]["started_from_bonus"])
-        self.assertTrue(progress.history[-1]["created_progress"])
+        self.assertEqual(len(response["history"]), 1)
+        self.assertEqual(response["history"][-1]["quality"], 0)
+        self.assertEqual(response["reps"], 1)
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.lapses, 1)
+        self.assertEqual(progress.next_review, today)
 
-        response = revise_answer_question(
-            AnswerRequest(question_id=1, quality=0),
-            db=self.db
-        )
-
-        self.assertEqual(response["history"], [])
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
-        )
-
-    def test_revise_bonus_text_to_again_restores_unstarted_progress(self):
+    def test_revise_bonus_text_to_again_keeps_unstarted_progress_row(self):
         today = date.today()
         self.add_question(1, type_q="text")
         progress = self.add_progress(1, today, reps=0)
@@ -1254,11 +1282,11 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response["history"], [])
-        self.assertEqual(response["reps"], 0)
-        self.assertEqual(progress.history, [])
-        self.assertEqual(progress.reps, 0)
-        self.assertIsNone(progress.last_review)
+        self.assertEqual(len(response["history"]), 1)
+        self.assertEqual(response["history"][-1]["quality"], 0)
+        self.assertEqual(progress.reps, 1)
+        self.assertEqual(progress.last_review, today)
+        self.assertEqual(progress.next_review, today)
 
     def test_grouped_answers_use_supplied_review_date(self):
         review_day = date(2026, 1, 1)
@@ -1266,8 +1294,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         for question_id, type_q in [
             (1, "map"),
             (2, "map"),
-            (3, "image"),
-            (4, "image")
+            (3, "media"),
+            (4, "media")
         ]:
             self.add_question(question_id, type_q=type_q)
 
@@ -1292,8 +1320,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             ),
             db=self.db
         )
-        answer_image(
-            ImageAnswerRequest(
+        answer_media(
+            MediaAnswerRequest(
                 items={3: 0, 4: 2},
                 review_date=review_day
             ),
@@ -1542,7 +1570,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(summary["due_count"], 2)
         self.assertTrue(summary["has_due"])
 
-    def test_bonus_status_encourages_new_questions_when_schedule_is_low(self):
+    def test_bonus_status_allows_bonus_when_new_questions_exist(self):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         self.add_question(1)
         self.db.commit()
@@ -1550,25 +1578,19 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(db=self.db)
 
         self.assertTrue(status["allowed"])
-        self.assertEqual(status["state"], "low")
         self.assertEqual(status["new_count"], 1)
-        self.assertEqual(status["scheduled_total"], 0)
-        self.assertEqual(status["forecast_days"], 14)
-        self.assertEqual(status["forecast_total"], 0)
-        self.assertEqual(status["static_scheduled_total"], 0)
-        self.assertEqual(status["estimated_bonus_card_cost"], 2)
-        self.assertIn("planning prévu est léger", status["message"])
+        self.assertEqual(status["available_bonus_question_count"], 1)
 
     def test_bonus_status_counts_available_same_group_questions(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         first_group = self.add_group(1)
         second_group = self.add_group(2)
-        same_group_bonus = self.add_question(1, type_q="image")
+        same_group_bonus = self.add_question(1, type_q="media")
         same_group_bonus.group = first_group
-        started_same_group = self.add_question(2, type_q="image")
+        started_same_group = self.add_question(2, type_q="media")
         started_same_group.group = first_group
-        other_group_bonus = self.add_question(3, type_q="image")
+        other_group_bonus = self.add_question(3, type_q="media")
         other_group_bonus.group = second_group
         self.add_progress(2, today + timedelta(days=3), reps=1)
         self.db.commit()
@@ -1583,13 +1605,13 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(status["same_group_bonus_question_count"], 1)
         self.assertEqual(status["available_bonus_question_count"], 1)
 
-    def test_low_bonus_status_advises_creating_questions_when_same_group_is_empty(self):
+    def test_bonus_status_disallows_when_same_group_is_empty(self):
         update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
         first_group = self.add_group(1)
         second_group = self.add_group(2)
-        same_group_started = self.add_question(1, type_q="image")
+        same_group_started = self.add_question(1, type_q="media")
         same_group_started.group = first_group
-        other_group_bonus = self.add_question(2, type_q="image")
+        other_group_bonus = self.add_question(2, type_q="media")
         other_group_bonus.group = second_group
         self.add_progress(1, date.today() + timedelta(days=3), reps=1)
         self.db.commit()
@@ -1597,16 +1619,14 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(group_ids="1", db=self.db)
 
         self.assertFalse(status["allowed"])
-        self.assertEqual(status["state"], "no_new")
-        self.assertTrue(status["schedule_is_low"])
         self.assertEqual(status["new_count"], 1)
         self.assertEqual(status["same_group_new_count"], 0)
         self.assertEqual(status["same_group_bonus_question_count"], 0)
-        self.assertIn("Crée de nouvelles questions", status["message"])
-        self.assertIn("même groupe", status["message"])
-        self.assertNotIn("Ajoute quelques questions bonus", status["message"])
+        self.assertEqual(status["available_bonus_question_count"], 0)
 
-    def test_bonus_review_is_blocked_when_schedule_is_full_until_target_changes(self):
+    def test_bonus_allowed_and_included_when_new_questions_remain(self):
+        # Bonus review is no longer capped by a forecast: as long as new
+        # questions exist and nothing is due, they are offered and included.
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
         self.add_question(1)
@@ -1624,50 +1644,91 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         status = get_bonus_status(db=self.db)
 
-        self.assertFalse(status["allowed"])
-        self.assertEqual(status["state"], "full")
-        self.assertEqual(status["static_scheduled_total"], 13)
-        self.assertEqual(status["scheduled_total"], 27)
-        self.assertEqual(status["forecast_total"], 27)
-        self.assertGreaterEqual(status["forecast_total"], status["full_threshold"])
-        self.assertIn("Augmente la cible quotidienne", status["message"])
+        self.assertTrue(status["allowed"])
+        self.assertEqual(status["new_count"], 1)
+        self.assertEqual(status["available_bonus_question_count"], 1)
 
-        with self.assertRaises(HTTPException) as error:
-            get_review(include_new=True, db=self.db)
+        # No 409 anymore: the endpoint returns items instead of blocking.
+        response = get_review(include_new=True, db=self.db)
+        self.assertEqual([item["question_id"] for item in response], [1])
 
-        self.assertEqual(error.exception.status_code, 409)
-
-        update_settings(ReviewSettings(catchup_daily_target=4), db=self.db)
-        unlocked_status = get_bonus_status(db=self.db)
-
-        self.assertTrue(unlocked_status["allowed"])
-        self.assertNotEqual(unlocked_status["state"], "full")
-
-    def test_bonus_status_uses_forecast_refill_before_calling_schedule_low(self):
+    def test_bonus_groups_lists_every_available_group_without_capacity_cap(self):
+        # A tiny daily target keeps bonus capacity small, but the selection list
+        # must still surface every group / loose question that has new questions.
         today = date.today()
-        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
-        self.add_question(1)
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+        media_group = self.add_group(1, type_group="media")
 
-        for offset in range(7):
-            question_id = 100 + offset
-            self.add_question(question_id)
-            self.add_progress(
-                question_id,
-                today + timedelta(days=(offset % 6) + 1),
-                reps=1
-            )
+        for question_id in range(10, 20):
+            media_question = self.add_question(question_id, type_q="media")
+            media_question.group = media_group
+
+        started = self.add_question(20, type_q="media")
+        started.group = media_group
+        self.add_progress(20, today + timedelta(days=3), reps=1)
+
+        self.add_question(30, type_q="text")
+        self.add_question(31, type_q="text")
+        self.db.commit()
+
+        entries = get_bonus_groups(db=self.db)
+        by_key = {entry["key"]: entry for entry in entries}
+
+        # The group appears once, counts only its new questions, and is uncapped.
+        self.assertIn("group:1", by_key)
+        self.assertEqual(by_key["group:1"]["item_count"], 10)
+        self.assertEqual(by_key["group:1"]["type_q"], "media")
+        self.assertTrue(by_key["group:1"]["is_container"])
+
+        # Loose questions each get their own selectable entry.
+        self.assertIn("q:30", by_key)
+        self.assertIn("q:31", by_key)
+        self.assertFalse(by_key["q:30"]["is_container"])
+
+    def test_bonus_groups_collapses_text_groups_into_one_entry(self):
+        # Text groups are reviewed on a single screen like maps and media, so the
+        # bonus menu must offer them as one container instead of one entry per item.
+        text_group = self.add_group(1, type_group="text")
+
+        for question_id in range(10, 14):
+            text_question = self.add_question(question_id, type_q="text")
+            text_question.group = text_group
 
         self.db.commit()
 
-        status = get_bonus_status(db=self.db)
+        by_key = {entry["key"]: entry for entry in get_bonus_groups(db=self.db)}
 
-        self.assertTrue(status["allowed"])
-        self.assertEqual(status["state"], "available")
-        self.assertEqual(status["static_scheduled_total"], 7)
-        self.assertLess(status["static_scheduled_total"], status["low_threshold"])
-        self.assertEqual(status["forecast_total"], status["low_threshold"])
+        self.assertEqual(list(by_key), ["group:1"])
+        self.assertEqual(by_key["group:1"]["item_count"], 4)
+        self.assertEqual(by_key["group:1"]["type_q"], "text")
+        self.assertTrue(by_key["group:1"]["is_container"])
 
-    def test_bonus_review_only_returns_remaining_schedule_capacity(self):
+        payload = get_bonus_items(key="group:1", db=self.db)
+        text_groups = [item for item in payload if item.get("type_q") == "text"]
+
+        self.assertTrue(text_groups)
+        self.assertEqual(sum(len(item["items"]) for item in text_groups), 4)
+
+    def test_bonus_items_returns_full_payload_for_one_picked_group(self):
+        media_group = self.add_group(1, type_group="media")
+
+        for question_id in range(10, 13):
+            media_question = self.add_question(question_id, type_q="media")
+            media_question.group = media_group
+
+        self.db.commit()
+
+        payload = get_bonus_items(key="group:1", db=self.db)
+
+        media_groups = [item for item in payload if item.get("type_q") == "media"]
+        self.assertTrue(media_groups)
+        total_items = sum(len(item["items"]) for item in media_groups)
+        self.assertEqual(total_items, 3)
+
+        # Unknown / malformed keys are ignored rather than raising.
+        self.assertEqual(get_bonus_items(key="nope", db=self.db), [])
+
+    def test_bonus_review_returns_all_new_questions_without_capacity_cap(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
 
@@ -1688,13 +1749,14 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         status = get_bonus_status(db=self.db)
         response = get_review(include_new=True, db=self.db)
 
-        self.assertEqual(status["forecast_total"], 22)
-        self.assertEqual(status["full_threshold"] - status["forecast_total"], 3)
-        self.assertEqual(status["estimated_bonus_card_cost"], 2)
-        self.assertEqual(status["bonus_question_capacity"], 1)
-        self.assertEqual([item["question_id"] for item in response], [1])
+        self.assertEqual(status["available_bonus_question_count"], 4)
+        self.assertEqual(
+            sorted(item["question_id"] for item in response),
+            [1, 2, 3, 4]
+        )
 
-    def test_failed_bonus_text_answer_stays_new_until_correct(self):
+    def test_failed_bonus_text_answer_enters_the_normal_review(self):
+        today = date.today()
         self.add_question(1)
         self.add_question(2)
         self.db.commit()
@@ -1704,23 +1766,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(failed_response["reps"], 0)
-        self.assertEqual(failed_response["history"], [])
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
-        )
-        bonus_response = get_review(include_new=True, db=self.db)
-        self.assertEqual(
-            [item["question_id"] for item in bonus_response],
-            [1, 2]
-        )
+        self.assertEqual(failed_response["reps"], 1)
+        self.assertEqual(len(failed_response["history"]), 1)
+        self.assertEqual(failed_response["history"][-1]["quality"], 0)
 
-        answer_question(
-            AnswerRequest(question_id=1, quality=2),
-            db=self.db
-        )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
@@ -1729,14 +1778,28 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertIsNotNone(progress)
         self.assertEqual(progress.reps, 1)
-        self.assertEqual(progress.history[-1]["quality"], 2)
+        self.assertEqual(progress.lapses, 1)
+        self.assertEqual(progress.next_review, today)
 
-    def test_failed_bonus_grouped_answers_stay_new_until_correct(self):
+        # The failed question is now due work, and it has left the bonus pool.
+        due_response = get_review(db=self.db)
+        self.assertEqual(
+            [item["question_id"] for item in due_response],
+            [1]
+        )
+        self.assertEqual(
+            get_bonus_status(db=self.db)["available_bonus_question_count"],
+            1
+        )
+
+    def test_failed_bonus_grouped_answers_enter_the_normal_review(self):
+        today = date.today()
+
         for question_id, type_q in [
             (1, "map"),
             (2, "map"),
-            (3, "image"),
-            (4, "image")
+            (3, "media"),
+            (4, "media")
         ]:
             self.add_question(question_id, type_q=type_q)
 
@@ -1746,8 +1809,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             MapAnswerRequest(items={1: 0, 2: 2}),
             db=self.db
         )
-        answer_image(
-            ImageAnswerRequest(items={3: 0, 4: 3}),
+        answer_media(
+            MediaAnswerRequest(items={3: 0, 4: 3}),
             db=self.db
         )
 
@@ -1756,12 +1819,14 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             for progress in self.db.query(Progress).all()
         }
 
-        self.assertNotIn(1, progress_by_question_id)
-        self.assertNotIn(3, progress_by_question_id)
+        self.assertEqual(progress_by_question_id[1].history[-1]["quality"], 0)
+        self.assertEqual(progress_by_question_id[1].next_review, today)
+        self.assertEqual(progress_by_question_id[3].history[-1]["quality"], 0)
+        self.assertEqual(progress_by_question_id[3].next_review, today)
         self.assertEqual(progress_by_question_id[2].history[-1]["quality"], 2)
         self.assertEqual(progress_by_question_id[4].history[-1]["quality"], 3)
 
-    def test_failed_bonus_timeline_answer_stays_new_until_correct(self):
+    def test_failed_bonus_timeline_answer_enters_the_normal_review(self):
         question = self.add_question(1, type_q="timeline")
         question.data = {
             "timeline": {
@@ -1788,25 +1853,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         failed_result = failed_response["results"][0]
         self.assertEqual(failed_result["quality"], 0)
-        self.assertEqual(failed_result["progress"]["reps"], 0)
-        self.assertIsNone(failed_result["progress"]["next_review"])
-        self.assertIsNone(
-            self.db.query(Progress)
-            .filter(Progress.question_id == 1)
-            .first()
+        self.assertEqual(failed_result["progress"]["reps"], 1)
+        self.assertEqual(
+            failed_result["progress"]["next_review"],
+            date.today().isoformat()
         )
 
-        answer_timeline(
-            TimelineAnswerRequest(items={
-                1: TimelineAnswerItem(
-                    start=TimelineDateValue(
-                        year=2000,
-                        precision="year"
-                    )
-                )
-            }),
-            db=self.db
-        )
         progress = (
             self.db.query(Progress)
             .filter(Progress.question_id == 1)
@@ -1815,7 +1867,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertIsNotNone(progress)
         self.assertEqual(progress.reps, 1)
-        self.assertEqual(progress.history[-1]["quality"], 2)
+        self.assertEqual(progress.lapses, 1)
+        self.assertEqual(progress.history[-1]["quality"], 0)
+        self.assertEqual(progress.next_review, date.today())
 
     def test_rebalance_route_ignores_unstarted_progress_rows(self):
         today = date.today()
@@ -1905,7 +1959,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
 
-        self.add_question(1, type_q="image")
+        self.add_question(1, type_q="media")
         first_progress = self.add_progress(
             1,
             today - timedelta(days=9),
@@ -1916,7 +1970,7 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         )
         first_progress.last_review = today - timedelta(days=8)
 
-        self.add_question(2, type_q="image")
+        self.add_question(2, type_q="media")
         missing_anchor = self.add_progress(
             2,
             today - timedelta(days=7),

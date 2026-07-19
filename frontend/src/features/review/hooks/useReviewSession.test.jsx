@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useReviewSession } from "./useReviewSession";
 import {
   getBonusReviewStatus,
+  getBonusGroups,
+  getBonusGroupItems,
   getReview,
-  sendImageAnswer,
+  graduateRelearning,
+  sendMediaAnswer,
   sendMapAnswer,
   sendTimelineAnswer,
   reviseAnswer,
@@ -13,10 +16,15 @@ import {
 
 vi.mock("../../../api/review", () => ({
   getBonusReviewStatus: vi.fn(),
+  getBonusGroups: vi.fn(),
+  getBonusGroupItems: vi.fn(),
   getReview: vi.fn(),
-  sendImageAnswer: vi.fn(),
+  graduateRelearning: vi.fn(),
+  sendMediaAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
+  sendTextAnswer: vi.fn(),
   sendTimelineAnswer: vi.fn(),
+  sendSequenceAnswer: vi.fn(),
   reviseAnswer: vi.fn(),
   sendAnswer: vi.fn()
 }));
@@ -36,11 +44,14 @@ describe("useReviewSession", () => {
       state: "low",
       message: "Le planning est léger."
     });
+    getBonusGroups.mockResolvedValue([]);
+    getBonusGroupItems.mockResolvedValue([]);
     sendAnswer.mockResolvedValue({});
     sendMapAnswer.mockResolvedValue({});
-    sendImageAnswer.mockResolvedValue({});
+    sendMediaAnswer.mockResolvedValue({});
     sendTimelineAnswer.mockResolvedValue({});
     reviseAnswer.mockResolvedValue({});
+    graduateRelearning.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -120,11 +131,14 @@ describe("useReviewSession", () => {
 
     vi.setSystemTime(new Date(2026, 0, 2, 0, 5));
 
+    // The retry is a relearning card, so "Acquis" graduates it (no re-grade) on
+    // the pinned session date rather than sending another answer.
     act(() => {
-      result.current.handleTextAnswer(2);
+      result.current.handleTextAnswer(1);
     });
 
-    expect(sendAnswer).toHaveBeenLastCalledWith(10, 2, "2026-01-01");
+    expect(graduateRelearning).toHaveBeenLastCalledWith([10], "2026-01-01");
+    expect(sendAnswer).toHaveBeenCalledTimes(1);
   });
 
   it("keeps text answer revisions on the original session date after midnight", async () => {
@@ -177,7 +191,7 @@ describe("useReviewSession", () => {
 
     await act(async () => {
       await result.current.submitMapAnswer({ 10: 0 }, "type_all");
-      await result.current.submitImageAnswer({ 11: 2 }, "click_prompt");
+      await result.current.submitMediaAnswer({ 11: 2 }, "multiple_choice_image");
       await result.current.submitTimelineAnswer({ 12: { start: { year: 2000 } } });
     });
 
@@ -187,9 +201,9 @@ describe("useReviewSession", () => {
       undefined,
       "2026-01-01"
     );
-    expect(sendImageAnswer).toHaveBeenCalledWith(
+    expect(sendMediaAnswer).toHaveBeenCalledWith(
       { 11: 2 },
-      "click_prompt",
+      "multiple_choice_image",
       undefined,
       "2026-01-01"
     );
@@ -224,18 +238,17 @@ describe("useReviewSession", () => {
   });
 
   it("offers bonus review when scheduled review is empty", async () => {
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            question_id: 11,
-            type_q: "text",
-            question: "Bonus",
-            answer: "Answer"
-          }
-        ]
-        : []
-    ));
+    getReview.mockResolvedValue([]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      }
+    ]);
 
     const { result } = renderHook(() => useReviewSession(true));
 
@@ -248,55 +261,53 @@ describe("useReviewSession", () => {
       expect(result.current.canStartBonusReview).toBe(true);
     });
     expect(result.current.bonusStatusLoading).toBe(false);
-    expect(result.current.bonusReviewMessage).toBe("Le planning est léger.");
 
     await act(async () => {
       await result.current.startBonusReview();
     });
 
     expect(getBonusReviewStatus).toHaveBeenCalled();
-    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
-    expect(result.current.questions).toEqual([
-      {
-        question_id: 11,
-        type_q: "text",
-        question: "Bonus",
-        answer: "Answer"
-      }
-    ]);
+    // Only the lightweight selection list is loaded up front.
+    expect(getBonusGroups).toHaveBeenCalledWith();
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.questions).toEqual([]);
+    expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
     expect(result.current.canStartBonusReview).toBe(false);
   });
 
-  it("checks and loads bonus questions from the reviewed groups", async () => {
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            group_id: 7,
-            type_q: "image",
-            name: "Bonus images",
-            items: [{ question_id: 12 }]
-          }
-        ]
-        : [
-          {
-            group_id: 7,
-            type_q: "map",
-            name: "Map",
-            media: "map.svg",
-            items: [{ question_id: 10 }],
-            context_items: [{ question_id: 10 }]
-          }
-        ]
-    ));
+  it("lists every group in the bonus menu and loads a group's items only on pick", async () => {
+    const bonusImages = {
+      group_id: 7,
+      type_q: "media",
+      name: "Bonus images",
+      items: [{ question_id: 12 }]
+    };
+    getReview.mockResolvedValue([
+      {
+        group_id: 7,
+        type_q: "map",
+        name: "Map",
+        media: "map.svg",
+        items: [{ question_id: 10 }],
+        context_items: [{ question_id: 10 }]
+      }
+    ]);
     getBonusReviewStatus.mockResolvedValue({
       allowed: true,
       state: "low",
-      message: "Le planning est léger.",
-      same_group_filter_applied: true,
-      same_group_ids: [7],
-      same_group_bonus_question_count: 1
+      message: "Le planning est léger."
     });
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "group:7",
+        type_q: "media",
+        name: "Bonus images",
+        tags: [],
+        item_count: 1,
+        is_container: true
+      }
+    ]);
+    getBonusGroupItems.mockResolvedValue([bonusImages]);
 
     const { result } = renderHook(() => useReviewSession(true));
 
@@ -309,25 +320,36 @@ describe("useReviewSession", () => {
     });
 
     await waitFor(() => {
-      expect(getBonusReviewStatus).toHaveBeenCalledWith({ groupIds: [7] });
+      expect(result.current.canStartBonusReview).toBe(true);
     });
-    expect(result.current.canStartBonusReview).toBe(true);
+    // Bonus is scoped to all groups, so the status is fetched without groupIds.
+    expect(getBonusReviewStatus).toHaveBeenCalledWith();
 
     await act(async () => {
       await result.current.startBonusReview();
     });
 
-    expect(getReview).toHaveBeenCalledWith({
-      includeNew: true,
-      groupIds: [7]
+    // The menu is populated from the cheap list; no per-item payload yet.
+    expect(getBonusGroups).toHaveBeenCalledWith();
+    expect(getBonusGroupItems).not.toHaveBeenCalled();
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.bonusMenuEntries.map(entry => entry.key)).toEqual(["group:7"]);
+
+    // Picking a group fetches its full payload lazily.
+    await act(async () => {
+      await result.current.selectBonusItem(result.current.bonusMenuEntries[0]);
     });
+
+    expect(getBonusGroupItems).toHaveBeenCalledWith("group:7");
+    expect(result.current.bonusMenuOpen).toBe(false);
+    expect(result.current.questions).toEqual([bonusImages]);
   });
 
   it("requeues only failed image group items", async () => {
     getReview.mockResolvedValue([
       {
         group_id: 5,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         items: [
           { question_id: 10, answer: "France" },
@@ -348,7 +370,7 @@ describe("useReviewSession", () => {
     expect(result.current.currentIndex).toBe(1);
     expect(result.current.questions).toHaveLength(2);
     expect(result.current.questions[1]).toMatchObject({
-      type_q: "image",
+      type_q: "media",
       _reviewRetryOfIndex: 0,
       items: [
         { question_id: 11, answer: "Germany" }
@@ -356,7 +378,7 @@ describe("useReviewSession", () => {
     });
   });
 
-  it("keeps small click-prompt image retries in click_prompt mode", async () => {
+  it("keeps small image retries in the served mode", async () => {
     const items = Array.from({ length: 10 }, (_, index) => ({
       question_id: 100 + index,
       answer: `Image ${index}`
@@ -364,9 +386,9 @@ describe("useReviewSession", () => {
     getReview.mockResolvedValue([
       {
         group_id: 5,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
-        mode: "click_prompt",
+        mode: "multiple_choice_image",
         items
       }
     ]);
@@ -383,12 +405,12 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions[1]).toMatchObject({
-      mode: "click_prompt",
+      mode: "multiple_choice_image",
       items: items.slice(0, 9)
     });
   });
 
-  it("keeps click-prompt image retries when enough failed items remain", async () => {
+  it("keeps image retries when enough failed items remain", async () => {
     const items = Array.from({ length: 10 }, (_, index) => ({
       question_id: 200 + index,
       answer: `Image ${index}`
@@ -396,9 +418,9 @@ describe("useReviewSession", () => {
     getReview.mockResolvedValue([
       {
         group_id: 5,
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
-        mode: "click_prompt",
+        mode: "multiple_choice_image",
         items
       }
     ]);
@@ -415,7 +437,7 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions[1]).toMatchObject({
-      mode: "click_prompt",
+      mode: "multiple_choice_image",
       items
     });
   });
@@ -425,25 +447,24 @@ describe("useReviewSession", () => {
     const answerPromise = new Promise(resolve => {
       resolveAnswer = resolve;
     });
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            question_id: 11,
-            type_q: "text",
-            question: "Bonus",
-            answer: "Answer"
-          }
-        ]
-        : [
-          {
-            question_id: 10,
-            type_q: "text",
-            question: "Question",
-            answer: "Answer"
-          }
-        ]
-    ));
+    getReview.mockResolvedValue([
+      {
+        question_id: 10,
+        type_q: "text",
+        question: "Question",
+        answer: "Answer"
+      }
+    ]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      }
+    ]);
     sendAnswer.mockReturnValue(answerPromise);
 
     const { result } = renderHook(() => useReviewSession(true));
@@ -470,62 +491,56 @@ describe("useReviewSession", () => {
       bonusPromise = result.current.startBonusReview();
     });
 
-    expect(getReview).toHaveBeenCalledTimes(1);
+    // Bonus loading is blocked until the pending text answer resolves.
+    expect(getBonusGroups).not.toHaveBeenCalled();
 
     await act(async () => {
       resolveAnswer({});
       await bonusPromise;
     });
 
-    expect(getReview).toHaveBeenCalledWith({ includeNew: true });
-    expect(result.current.questions).toEqual([
-      {
-        question_id: 11,
-        type_q: "text",
-        question: "Bonus",
-        answer: "Answer"
-      }
-    ]);
+    expect(getBonusGroups).toHaveBeenCalledWith();
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
     expect(result.current.currentIndex).toBe(0);
     expect(result.current.canStartBonusReview).toBe(false);
   });
 
-  it("cycles skipped bonus review items through the active queue", async () => {
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            question_id: 11,
-            type_q: "text",
-            question: "Bonus text",
-            answer: "Answer"
-          },
-          {
-            type_q: "timeline",
-            name: "Bonus timeline",
-            items: [
-              {
-                question_id: 12,
-                answer: "1900",
-                timeline: {
-                  kind: "point",
-                  start: { year: 1900 },
-                  precision: "year"
-                }
-              }
-            ]
-          },
-          {
-            group_id: 5,
-            type_q: "image",
-            name: "Bonus images",
-            items: [
-              { question_id: 13, answer: "France" }
-            ]
-          }
-        ]
-        : []
-    ));
+  it("opens a bonus menu and runs a picked item, then returns to the menu", async () => {
+    const bonusText = {
+      question_id: 11,
+      type_q: "text",
+      question: "Bonus text",
+      answer: "Answer"
+    };
+    const bonusImages = {
+      group_id: 5,
+      type_q: "media",
+      name: "Bonus images",
+      items: [{ question_id: 13, answer: "France" }]
+    };
+    getReview.mockResolvedValue([]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus text",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      },
+      {
+        key: "group:5",
+        type_q: "media",
+        name: "Bonus images",
+        tags: [],
+        item_count: 1,
+        is_container: true
+      }
+    ]);
+    getBonusGroupItems.mockImplementation(key =>
+      Promise.resolve(key === "group:5" ? [bonusImages] : [bonusText])
+    );
 
     const { result } = renderHook(() => useReviewSession(true));
 
@@ -537,107 +552,173 @@ describe("useReviewSession", () => {
       await result.current.startBonusReview();
     });
 
-    expect(result.current.canSkipCurrentQuestion).toBe(true);
-
-    act(() => {
-      result.current.skipCurrentQuestion();
-    });
-
-    expect(sendAnswer).not.toHaveBeenCalled();
-    expect(result.current.currentIndex).toBe(0);
-    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
-      "Bonus timeline",
-      "Bonus images",
-      "Bonus text"
-    ]);
-    expect(result.current.canReturnToLastSkippedQuestion).toBe(true);
-
-    act(() => {
-      result.current.skipCurrentQuestion();
-    });
-
-    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
-      "Bonus images",
+    expect(getBonusGroups).toHaveBeenCalledWith();
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.questions).toEqual([]);
+    expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual([
       "Bonus text",
-      "Bonus timeline"
+      "Bonus images"
     ]);
 
-    act(() => {
-      result.current.returnToLastSkippedQuestion();
-    });
-
-    expect(result.current.currentIndex).toBe(0);
-    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
-      "Bonus timeline",
-      "Bonus images",
-      "Bonus text"
-    ]);
-    expect(result.current.canReturnToLastSkippedQuestion).toBe(false);
-  });
-
-  it("keeps skipped bonus items out of the skipped stack after completion", async () => {
-    getReview.mockImplementation((options = {}) => Promise.resolve(
-      options.includeNew
-        ? [
-          {
-            question_id: 11,
-            type_q: "text",
-            question: "Bonus text",
-            answer: "Answer"
-          },
-          {
-            group_id: 5,
-            type_q: "image",
-            name: "Bonus images",
-            items: [
-              { question_id: 13, answer: "France" }
-            ]
-          }
-        ]
-        : []
-    ));
-
-    const { result } = renderHook(() => useReviewSession(true));
-
-    await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
-    });
-
+    // Pick the image group from the menu; its payload is fetched on demand.
     await act(async () => {
-      await result.current.startBonusReview();
+      await result.current.selectBonusItem(
+        result.current.bonusMenuEntries.find(entry => entry.key === "group:5")
+      );
     });
 
-    act(() => {
-      result.current.skipCurrentQuestion();
-    });
+    expect(getBonusGroupItems).toHaveBeenCalledWith("group:5");
+    expect(result.current.bonusMenuOpen).toBe(false);
+    expect(result.current.bonusReviewActive).toBe(true);
+    expect(result.current.questions).toEqual([bonusImages]);
+    expect(result.current.currentIndex).toBe(0);
 
-    expect(result.current.questions.map(item => item.name || item.question)).toEqual([
-      "Bonus images",
-      "Bonus text"
-    ]);
-    expect(result.current.canReturnToLastSkippedQuestion).toBe(true);
-
+    // Finishing the item marks it done and returns to the menu.
     act(() => {
       result.current.handleImageComplete([]);
     });
 
-    expect(result.current.currentIndex).toBe(1);
-    expect(result.current.canSkipCurrentQuestion).toBe(false);
-    expect(result.current.canReturnToLastSkippedQuestion).toBe(false);
+    await waitFor(() => {
+      expect(result.current.bonusMenuOpen).toBe(true);
+    });
+    expect(result.current.questions).toEqual([]);
+    expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual([
+      "Bonus text"
+    ]);
   });
 
-  it("blocks bonus review when the schedule status is full", async () => {
+  it("returns to the bonus menu without consuming the current item", async () => {
+    const bonusText = {
+      question_id: 11,
+      type_q: "text",
+      question: "Bonus text",
+      answer: "Answer"
+    };
+    const bonusImages = {
+      group_id: 5,
+      type_q: "media",
+      name: "Bonus images",
+      items: [{ question_id: 13, answer: "France" }]
+    };
+    getReview.mockResolvedValue([]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus text",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      },
+      {
+        key: "group:5",
+        type_q: "media",
+        name: "Bonus images",
+        tags: [],
+        item_count: 1,
+        is_container: true
+      }
+    ]);
+    getBonusGroupItems.mockImplementation(key =>
+      Promise.resolve(key === "group:5" ? [bonusImages] : [bonusText])
+    );
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.canStartBonusReview).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    await act(async () => {
+      await result.current.selectBonusItem(
+        result.current.bonusMenuEntries.find(entry => entry.key === "q:11")
+      );
+    });
+
+    expect(result.current.questions).toEqual([bonusText]);
+
+    act(() => {
+      result.current.returnToBonusMenu();
+    });
+
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.questions).toEqual([]);
+    // The item was not answered, so it stays in the menu.
+    expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual([
+      "Bonus text",
+      "Bonus images"
+    ]);
+    expect(sendAnswer).not.toHaveBeenCalled();
+  });
+
+  it("runs every chunk of a picked group back-to-back", async () => {
+    const chunkA = {
+      group_id: 8,
+      type_q: "map",
+      name: "Grande carte",
+      tags: ["geo"],
+      items: [{ question_id: 21 }, { question_id: 22 }]
+    };
+    const chunkB = {
+      group_id: 8,
+      type_q: "map",
+      name: "Grande carte",
+      tags: ["geo"],
+      items: [{ question_id: 23 }]
+    };
+    getReview.mockResolvedValue([]);
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "group:8",
+        type_q: "map",
+        name: "Grande carte",
+        tags: ["geo"],
+        item_count: 3,
+        is_container: true
+      }
+    ]);
+    getBonusGroupItems.mockResolvedValue([chunkA, chunkB]);
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.canStartBonusReview).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    // The backend collapses the group's chunks into one menu entry.
+    expect(result.current.bonusMenuEntries).toHaveLength(1);
+    const [entry] = result.current.bonusMenuEntries;
+    expect(entry.key).toBe("group:8");
+    expect(entry.label).toBe("Grande carte");
+    expect(entry.itemCount).toBe(3);
+
+    // Picking it fetches and runs both chunks back-to-back in one mini-session.
+    await act(async () => {
+      await result.current.selectBonusItem(result.current.bonusMenuEntries[0]);
+    });
+
+    expect(getBonusGroupItems).toHaveBeenCalledWith("group:8");
+    expect(result.current.questions).toEqual([chunkA, chunkB]);
+  });
+
+  it("does not load the bonus menu when the status is not allowed", async () => {
     getReview.mockResolvedValue([]);
     getBonusReviewStatus.mockResolvedValue({
-      allowed: false,
-      state: "full",
-      message: "Le planning est déjà rempli."
+      allowed: false
     });
 
     const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
-      expect(result.current.bonusReviewMessage).toBe("Le planning est déjà rempli.");
+      expect(result.current.bonusStatusLoading).toBe(false);
     });
 
     expect(result.current.canStartBonusReview).toBe(false);
@@ -646,6 +727,6 @@ describe("useReviewSession", () => {
       await result.current.startBonusReview();
     });
 
-    expect(getReview).not.toHaveBeenCalledWith({ includeNew: true });
+    expect(getBonusGroups).not.toHaveBeenCalled();
   });
 });

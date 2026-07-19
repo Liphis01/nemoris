@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { resolveMediaUrl } from "../../../shared/media";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
+import { useFlip } from "../../../shared/useFlip";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
@@ -13,8 +13,8 @@ import {
 } from "../imageModes";
 import {
   IMAGE_RECAP_UNANSWERED,
-  useImageReview
-} from "../hooks/useImageReview";
+  useMediaReview
+} from "../hooks/useMediaReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const qualityOptions = [
@@ -23,6 +23,21 @@ const qualityOptions = [
   { value: 2, icon: "🙂", title: "Bon" },
   { value: 3, icon: "✅", title: "Facile" }
 ];
+
+// A correct pick is never "Faux", and dropping it leaves exactly three options —
+// which is exactly how many slots the three decoys free up.
+const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+
+// The revealed answer keeps its own box and slides between slots (see useFlip), so
+// the slot wrapper — not the tile/button — is what FLIP moves. It rides above the
+// quality buttons while it travels.
+const choiceSlotStyle = {
+  display: "flex",
+  minHeight: 0,
+  minWidth: 0,
+  position: "relative",
+  zIndex: 2
+};
 
 const unansweredQualityOption = {
   value: IMAGE_RECAP_UNANSWERED,
@@ -59,7 +74,7 @@ const qualityButtonStyles = {
 };
 
 const imageRecapHeaderColumns = [
-  { key: "answer", label: "Image" },
+  { key: "answer", label: "Média" },
   { key: "success", label: "Réussite" },
   { key: "interval", label: "Intervalle" },
   { key: "quality", label: "Qualité" }
@@ -73,6 +88,100 @@ const buttonStyle = {
   cursor: "pointer",
   fontWeight: 700,
   padding: "10px 14px"
+};
+
+// Quality / continue buttons sit in the slots the decoys left behind, and only
+// appear once the answer has finished sliding. They keep the regular choice-button
+// shape — only the centred label and the muted text set them apart, since the
+// sliding green answer is what carries the emphasis.
+const choiceRevealDelay = "0.3s";
+
+const choiceControlBaseStyle = {
+  ...buttonStyle,
+  alignItems: "center",
+  animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
+  display: "flex",
+  gap: "8px",
+  justifyContent: "center",
+  minHeight: "44px",
+  overflowWrap: "anywhere",
+  textAlign: "center",
+  width: "100%"
+};
+
+// The three grades stay visually identical: picking one grades and advances
+// immediately, so there is no lasting selection to show (and tinting the default
+// "Bon" only made it look pre-chosen).
+function choiceQualityButtonStyle() {
+  return {
+    ...choiceControlBaseStyle,
+    background: "#141414",
+    border: "1px solid #303030",
+    color: "#c9c9c9"
+  };
+}
+
+const choiceContinueButtonStyle = {
+  ...choiceControlBaseStyle,
+  background: "#141414",
+  border: "1px solid #303030",
+  color: "#c9c9c9",
+  gridColumn: "span 2"
+};
+
+// In QCM médias each freed slot is a whole media tile, so the button fills it and
+// its content grows to match instead of floating in an empty card.
+const choiceQualityTileStyle = {
+  flexDirection: "column",
+  gap: "8px",
+  height: "100%"
+};
+
+const choiceQualityTileIconStyle = {
+  fontSize: "34px",
+  lineHeight: 1
+};
+
+const choiceQualityTileTitleStyle = {
+  fontSize: "15px",
+  fontWeight: 800
+};
+
+const choiceQualityTileIntervalStyle = {
+  color: "#7d7d7d",
+  fontSize: "12px",
+  fontWeight: 700
+};
+
+const choiceContinueTileStyle = {
+  fontSize: "15px",
+  height: "100%"
+};
+
+// Small keycap hint so keyboard shortcuts are discoverable.
+const keyCapStyle = {
+  alignItems: "center",
+  background: "#0d0d0d",
+  border: "1px solid #363636",
+  borderRadius: "5px",
+  color: "#8a8a8a",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: 800,
+  height: "16px",
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "16px",
+  padding: "0 4px"
+};
+
+// Pinned to the corner of a choice so its number shortcut is visible.
+const choiceKeyBadgeStyle = {
+  ...keyCapStyle,
+  left: "6px",
+  position: "absolute",
+  top: "6px"
 };
 
 const inputStyle = {
@@ -225,6 +334,7 @@ function ImageAnswerLabel({ color, label, revealed }) {
       <div
         id={tooltipId}
         role="tooltip"
+        className="app-scrollbar"
         style={{
           animation: "fadeIn 0.12s ease",
           background: "rgba(22, 22, 22, 0.98)",
@@ -305,40 +415,59 @@ function isImageAnswerState(feedbackState) {
   return feedbackState === "correct" || feedbackState === "missed";
 }
 
+// Live choice reveal (feedbackState set during a pick) unifies on green =
+// correct answer / red = your wrong pick. Persistent recap/typed states
+// (isFound / isMissed / isLockedMissed) keep the blue/amber board palette.
+function tileRevealAnimation(feedbackState) {
+  if (isImageAnswerState(feedbackState)) return "answer-pop 0.42s ease";
+  if (feedbackState === "wrong") return "answer-shake 0.4s ease";
+  return undefined;
+}
+
 function tileBackground({ feedbackState, isActive, isFound, isLockedMissed, isMissed }) {
-  if (feedbackState === "wrong" || isLockedMissed || (isMissed && !isImageAnswerState(feedbackState))) {
+  if (feedbackState === "wrong") {
+    return [
+      "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.26) 0 6px, rgba(127, 29, 29, 0) 6px 12px)",
+      "linear-gradient(180deg, #3a1d1d, #271414)"
+    ].join(", ");
+  }
+
+  if (isImageAnswerState(feedbackState)) return "#152a1e";
+
+  if (isLockedMissed || isMissed) {
     return [
       "repeating-linear-gradient(135deg, rgba(180, 83, 9, 0.24) 0 6px, rgba(180, 83, 9, 0) 6px 12px)",
       "linear-gradient(180deg, #2f2414, #1f1a12)"
     ].join(", ");
   }
 
-  if (isImageAnswerState(feedbackState) || isFound) return "#151f2d";
+  if (isFound) return "#151f2d";
   if (isActive) return "#211f17";
   return "#151515";
 }
 
 function tileBorder({ feedbackState, isActive, isFound, isLockedMissed, isMissed }) {
-  if (feedbackState === "wrong" || isLockedMissed || (isMissed && !isImageAnswerState(feedbackState))) {
+  if (feedbackState === "wrong") return "2px solid rgba(248, 113, 113, 0.82)";
+
+  if (isImageAnswerState(feedbackState)) {
+    return feedbackState === "missed"
+      ? "2px dashed rgba(134, 239, 172, 0.86)"
+      : "2px solid rgba(134, 239, 172, 0.86)";
+  }
+
+  if (isLockedMissed || isMissed) {
     return "1px solid rgba(251, 191, 36, 0.78)";
   }
 
-  if (isImageAnswerState(feedbackState) || isFound) {
-    return feedbackState === "missed"
-      ? "2px dashed rgba(96, 165, 250, 0.86)"
-      : "2px solid rgba(96, 165, 250, 0.86)";
-  }
-
+  if (isFound) return "2px solid rgba(96, 165, 250, 0.86)";
   if (isActive) return "1px solid #d6a91c";
   return "1px solid #292929";
 }
 
 function tileBoxShadow({ feedbackState, isActive }) {
+  if (isImageAnswerState(feedbackState)) return "0 0 0 3px rgba(34, 197, 94, 0.20)";
+  if (feedbackState === "wrong") return "0 0 0 3px rgba(248, 113, 113, 0.20)";
   if (isActive) return "0 0 0 3px rgba(240, 195, 106, 0.16)";
-  if (isImageAnswerState(feedbackState)) return "0 0 0 3px rgba(96, 165, 250, 0.18)";
-  if (feedbackState === "wrong") {
-    return "0 0 0 3px rgba(251, 191, 36, 0.18)";
-  }
 
   return "none";
 }
@@ -354,20 +483,20 @@ function tileFeedbackLabel(feedbackState) {
 function tileFeedbackBadgeStyle(feedbackState) {
   if (isImageAnswerState(feedbackState)) {
     return {
-      background: "#1e3a5f",
-      border: "1px solid rgba(147, 197, 253, 0.76)",
-      color: "#dbeafe"
+      background: "#17331f",
+      border: "1px solid rgba(134, 239, 172, 0.76)",
+      color: "#d7f5df"
     };
   }
 
   if (feedbackState === "wrong") {
     return {
       background: [
-        "repeating-linear-gradient(135deg, rgba(120, 53, 15, 0.36) 0 4px, rgba(120, 53, 15, 0) 4px 8px)",
-        "#3b2a13"
+        "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.36) 0 4px, rgba(127, 29, 29, 0) 4px 8px)",
+        "#3a1d1d"
       ].join(", "),
-      border: "1px solid rgba(251, 191, 36, 0.82)",
-      color: "#fde68a"
+      border: "1px solid rgba(248, 113, 113, 0.82)",
+      color: "#ffd7d7"
     };
   }
 
@@ -502,10 +631,11 @@ function imageChoiceButtonStyle(option, feedback) {
   if (state === "correct") {
     return {
       ...buttonStyle,
-      background: "linear-gradient(180deg, #1e3a5f, #17253d)",
-      border: "2px solid rgba(147, 197, 253, 0.82)",
-      boxShadow: "0 0 0 3px rgba(96, 165, 250, 0.18)",
-      color: "#dbeafe",
+      animation: "answer-pop 0.42s ease",
+      background: "linear-gradient(180deg, #17331f, #10251a)",
+      border: "2px solid rgba(134, 239, 172, 0.85)",
+      boxShadow: "0 0 0 3px rgba(34, 197, 94, 0.20)",
+      color: "#d7f5df",
       minHeight: "44px",
       overflowWrap: "anywhere",
       textAlign: "center"
@@ -515,13 +645,14 @@ function imageChoiceButtonStyle(option, feedback) {
   if (state === "wrong") {
     return {
       ...buttonStyle,
+      animation: "answer-shake 0.4s ease",
       background: [
-        "repeating-linear-gradient(135deg, rgba(180, 83, 9, 0.26) 0 6px, rgba(180, 83, 9, 0) 6px 12px)",
-        "linear-gradient(180deg, #3b2a13, #241b10)"
+        "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.26) 0 6px, rgba(127, 29, 29, 0) 6px 12px)",
+        "linear-gradient(180deg, #3a1d1d, #271414)"
       ].join(", "),
-      border: "2px dashed rgba(251, 191, 36, 0.82)",
-      boxShadow: "0 0 0 3px rgba(251, 191, 36, 0.18)",
-      color: "#fde68a",
+      border: "2px solid rgba(248, 113, 113, 0.82)",
+      boxShadow: "0 0 0 3px rgba(248, 113, 113, 0.20)",
+      color: "#ffd7d7",
       minHeight: "44px",
       overflowWrap: "anywhere",
       textAlign: "center"
@@ -582,13 +713,15 @@ function projectedIntervalForImage(item, quality) {
   return Number.isFinite(interval) ? interval : 0;
 }
 
-export default function ImageReview({
+export default function MediaReview({
   group,
   reviewItems,
   contextItems = reviewItems,
   mode: requestedMode,
+  onAnsweringComplete,
   onComplete,
   submitAnswer,
+  graduateAnswer,
   allowPartialSubmit = false,
   separateFoundItems = false,
   separateResolvedItems = separateFoundItems,
@@ -604,6 +737,7 @@ export default function ImageReview({
   const previousFoundQuestionIdsRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const [selectedRecapQuestionId, setSelectedRecapQuestionId] = useState(null);
+  const imageRecapRowRefs = useRef(new Map());
   const {
     activeQuestionId,
     answeredCount,
@@ -622,6 +756,7 @@ export default function ImageReview({
     mode,
     promptLabel,
     qualityByQuestionId = {},
+    rateChoice = () => {},
     recapMissCount,
     recapRows = [],
     recapSort = { key: null, direction: "asc" },
@@ -641,10 +776,14 @@ export default function ImageReview({
     skipCurrentPrompt,
     toggleRecapSort = () => {},
     wrongAnsweredCount
-  } = useImageReview(reviewItems, onComplete, submitAnswer, {
+  } = useMediaReview(reviewItems, onComplete, submitAnswer, {
     allowPartialSubmit,
     contextItems,
-    mode: requestedMode
+    inlineChoiceRating: showQualityControls,
+    mode: requestedMode,
+    onAnsweringComplete,
+    group,
+    graduateAnswer
   });
   const normalizedMode = normalizeImageMode(mode);
   const showTextInput = (
@@ -655,7 +794,6 @@ export default function ImageReview({
     normalizedMode !== IMAGE_MODE_TYPE_ALL &&
     normalizedMode !== IMAGE_MODE_TYPE_PROMPT &&
     (!fillAvailableHeight ||
-      normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
       normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE) &&
     !resultMode
   );
@@ -671,10 +809,7 @@ export default function ImageReview({
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
     !resultMode
   );
-  const answersByClick = (
-    normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-    normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-  );
+  const answersByClick = normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE;
   const selectsPromptImage = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
   const selectsImageByTile = answersByClick || selectsPromptImage;
   const canSkipPrompt = normalizedMode === IMAGE_MODE_TYPE_PROMPT;
@@ -683,13 +818,12 @@ export default function ImageReview({
   const resolvedQuestionIdOrder = new Map(
     recentResolvedQuestionIds.map((questionId, index) => [questionId, index])
   );
+  // type_prompt already parts the tiles as the run goes: solved ones drop into
+  // the resolved strip, the rest stay put. The result screen keeps that exact
+  // layout and only reveals the answers, so no tile ever jumps.
   const shouldSeparateResolvedItems = (
     separateResolvedItems &&
-    !resultMode &&
-    (
-      normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-      normalizedMode === IMAGE_MODE_TYPE_PROMPT
-    )
+    normalizedMode === IMAGE_MODE_TYPE_PROMPT
   );
   const activeGridItems = shouldSeparateResolvedItems
     ? gridItems.filter(row => !resolvedQuestionIdOrder.has(row.item.question_id))
@@ -710,6 +844,25 @@ export default function ImageReview({
         resolvedQuestionIdOrder.get(right.item.question_id)
       ))
     : [];
+  // The choice modes never part their tiles during the run, so their result
+  // screen is the one place the two outcomes would otherwise be interleaved.
+  // type_all keeps its single in-place grid.
+  const splitsResultItems = (
+    resultMode && [
+      IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    ].includes(normalizedMode)
+  );
+  const correctResultItems = splitsResultItems
+    ? gridItems.filter(row => row.isFound)
+    : [];
+  const missedResultItems = splitsResultItems
+    ? gridItems.filter(row => !row.isFound)
+    : [];
+  const showsResultSections = (
+    correctResultItems.length > 0 &&
+    missedResultItems.length > 0
+  );
   const completedQuestionCount = answeredCount + wrongAnsweredCount;
   const correctProgressPercent = reviewItems.length
     ? Math.min((answeredCount / reviewItems.length) * 100, 100)
@@ -781,6 +934,45 @@ export default function ImageReview({
     return hasFoundRows && hasMissedRows;
   }, [effectiveRecapRows]);
   const showResultRecap = resultMode && showQualityControls;
+  // Inline grading: after a choice is picked (reveal active) ask for its quality
+  // right here instead of at a recap. Wrong picks only offer "Continuer".
+  const showChoiceRating = (
+    Boolean(interactionFeedback) &&
+    showQualityControls &&
+    (showLabelChoices || showImageChoiceBoard)
+  );
+  // Training has no quality buttons to fill the freed slots, so instead of leaving
+  // the answer pinned to the first slot with dead space beside it, center the
+  // surviving answer(s) in the row.
+  const centerReveal = Boolean(interactionFeedback) && !showQualityControls;
+  const correctChoiceId = interactionFeedback?.correctQuestionId;
+  // Once answered, only the answers worth looking at stay on the board: the correct
+  // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
+  function keepRevealed(items, getQuestionId) {
+    if (!interactionFeedback) return items;
+
+    const correct = items.find(item => getQuestionId(item) === correctChoiceId);
+
+    if (interactionFeedback.isCorrect) return correct ? [correct] : [];
+
+    const picked = items.find(
+      item => getQuestionId(item) === interactionFeedback.selectedQuestionId
+    );
+
+    return [correct, picked].filter(Boolean);
+  }
+
+  const revealedChoiceOptions = keepRevealed(choiceOptions, option => option.question_id);
+  const revealedGridItems = keepRevealed(activeGridItems, row => row.item.question_id);
+  const choiceGridRef = useRef(null);
+  // Scope the flip keys to the item being *answered*, not to currentPromptItem —
+  // that one advances to the next item the moment you pick, which would change
+  // every key and make FLIP treat the correct answer as a brand-new element (so it
+  // never slid).
+  const choiceScope = correctChoiceId ?? currentPromptItem?.question_id ?? "none";
+  // Slide the surviving answers into their new slots. Scoped per question so the
+  // next one starts fresh instead of animating out of the previous one's layout.
+  useFlip(choiceGridRef, `${choiceScope}:${interactionFeedback?.id ?? "idle"}`);
   const tileImageHeight = fillAvailableHeight ? 154 : 188;
   const tileImageMaxHeight = fillAvailableHeight ? 140 : 174;
   const tileMinHeight = fillAvailableHeight ? "212px" : "250px";
@@ -794,13 +986,11 @@ export default function ImageReview({
       ? "Bonne réponse."
       : normalizedMode === IMAGE_MODE_TYPE_ALL
         ? "Tape les réponses."
-        : normalizedMode === IMAGE_MODE_CLICK_PROMPT
-          ? "Clique la bonne image."
-          : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-            ? "Choisis la bonne image."
-            : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
-              ? "Choisis le bon nom."
-              : "Tape le nom de l'image.";
+        : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+          ? "Choisis la bonne image."
+          : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+            ? "Choisis le bon nom."
+            : "Tape le nom de l'image.";
 
   const focusAnswerInput = useCallback(() => {
     if (!showTextInput) return;
@@ -900,6 +1090,72 @@ export default function ImageReview({
       setSelectedRecapQuestionId(effectiveRecapRows[0].item.question_id);
     }
   }, [effectiveRecapRows, selectedRecapQuestionId, showResultRecap]);
+
+  // Keep the selected recap row visible and DOM-focused as the selection moves,
+  // so a click never leaves a stale focus outline on a now-unselected row.
+  useEffect(() => {
+    if (!showResultRecap || selectedRecapQuestionId == null) return;
+
+    const row = imageRecapRowRefs.current.get(selectedRecapQuestionId);
+    row?.scrollIntoView({ block: "nearest" });
+    row?.focus({ preventScroll: true });
+  }, [showResultRecap, selectedRecapQuestionId]);
+
+  // Recap keyboard: up/down to move the selected row, 0-3 to grade it.
+  useEffect(() => {
+    if (!showResultRecap || effectiveRecapRows.length === 0) return undefined;
+
+    function handleRecapKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        previewRow
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        const currentIndex = effectiveRecapRows.findIndex(
+          row => row.item.question_id === selectedRecapQuestionId
+        );
+        const baseIndex = currentIndex === -1 ? (delta === 1 ? -1 : 0) : currentIndex;
+        const nextIndex = Math.min(
+          effectiveRecapRows.length - 1,
+          Math.max(0, baseIndex + delta)
+        );
+        const nextRow = effectiveRecapRows[nextIndex];
+
+        if (nextRow) setSelectedRecapQuestionId(nextRow.item.question_id);
+        return;
+      }
+
+      // Accept the character (0-3) or the physical key, so the shortcut works
+      // on AZERTY layouts where the top-row digits need Shift.
+      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
+      const quality = ["0", "1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality === null) return;
+
+      const selectedRow = effectiveRecapRows.find(
+        row => row.item.question_id === selectedRecapQuestionId
+      ) || effectiveRecapRows[0];
+      if (!selectedRow) return;
+
+      event.preventDefault();
+      setQuality(selectedRow.item.question_id, quality);
+    }
+
+    window.addEventListener("keydown", handleRecapKeyDown);
+    return () => window.removeEventListener("keydown", handleRecapKeyDown);
+  }, [showResultRecap, effectiveRecapRows, selectedRecapQuestionId, setQuality, previewRow]);
 
   useEffect(() => {
     if (!previewRow) return undefined;
@@ -1011,7 +1267,6 @@ export default function ImageReview({
       resultMode ||
       previewRow ||
       ![
-        IMAGE_MODE_CLICK_PROMPT,
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
       ].includes(normalizedMode)
@@ -1035,11 +1290,90 @@ export default function ImageReview({
     scrollImageTileIntoView
   ]);
 
+  // Keyboard grading of the inline choice reveal: 1/2/3 (or Enter for the Bon
+  // default) on a correct pick, Enter/Space to continue after a wrong pick.
+  useEffect(() => {
+    if (!showChoiceRating || previewRow) return undefined;
+
+    const correctPick = Boolean(interactionFeedback?.isCorrect);
+
+    function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      // A correct pick is graded 1/2/3 (never "Faux"); Enter takes the Bon default.
+      if (correctPick) {
+        if (["1", "2", "3"].includes(event.key)) {
+          event.preventDefault();
+          rateChoice(Number(event.key));
+        } else if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          rateChoice(2);
+        }
+
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateChoice();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showChoiceRating, interactionFeedback, previewRow, rateChoice]);
+
+  // Quick answer: number keys pick the matching option before the reveal,
+  // mirroring the keyboard flow of text review (Enter reveals, digits grade).
+  useEffect(() => {
+    const isChoice = (
+      normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+      normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    );
+
+    if (!isChoice || resultMode || interactionFeedback || previewRow) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      const index = Number(event.key) - 1;
+
+      if (!Number.isInteger(index) || index < 0 || index >= choiceOptions.length) {
+        return;
+      }
+
+      event.preventDefault();
+      const questionId = choiceOptions[index].question_id;
+
+      if (normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE) {
+        handleImageSelect(questionId);
+      } else {
+        handleChoiceSelect(questionId);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    choiceOptions,
+    handleChoiceSelect,
+    handleImageSelect,
+    interactionFeedback,
+    normalizedMode,
+    previewRow,
+    resultMode
+  ]);
+
   function renderImageTile(
     row,
     { allowSelection = true, registerForScroll = true } = {}
   ) {
     const mediaSrc = resolveMediaUrl(row.item.media);
+    const mediaKind = getMediaKind(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
     const isWrongOrMissed = (
       row.feedbackState === "wrong" ||
@@ -1082,6 +1416,7 @@ export default function ImageReview({
         role={selectable ? "button" : undefined}
         tabIndex={selectable ? 0 : -1}
         style={{
+          animation: tileRevealAnimation(row.feedbackState),
           background: tileBackground(row),
           border: tileBorder(row),
           borderRadius: "12px",
@@ -1138,18 +1473,39 @@ export default function ImageReview({
           }}
         >
           {mediaSrc ? (
-            <img
-              src={mediaSrc}
-              alt={revealed ? answerLabel(row.item) : "image"}
-              style={{
-                maxHeight: `${tileImageMaxHeight}px`,
-                maxWidth: "100%",
-                objectFit: "contain"
-              }}
-            />
+            mediaKind === "audio" ? (
+              <audio
+                src={mediaSrc}
+                controls
+                onClick={(event) => event.stopPropagation()}
+                style={{ width: "94%" }}
+              />
+            ) : mediaKind === "video" ? (
+              <video
+                src={mediaSrc}
+                controls
+                playsInline
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  maxHeight: `${tileImageMaxHeight}px`,
+                  maxWidth: "100%",
+                  objectFit: "contain"
+                }}
+              />
+            ) : (
+              <img
+                src={mediaSrc}
+                alt={revealed ? answerLabel(row.item) : "image"}
+                style={{
+                  maxHeight: `${tileImageMaxHeight}px`,
+                  maxWidth: "100%",
+                  objectFit: "contain"
+                }}
+              />
+            )
           ) : (
             <span style={{ color: "#666", fontSize: "12px" }}>
-              Image manquante
+              Média manquant
             </span>
           )}
           {feedbackBadgeLabel && (
@@ -1225,8 +1581,45 @@ export default function ImageReview({
     );
   }
 
-  function renderImageChoiceTile(row, { prompt = false, selectable = true } = {}) {
+  function renderResultSection(sectionKey, title, accentColor, rows, divided) {
+    return (
+      <div
+        data-image-result-section={sectionKey}
+        style={divided
+          ? { borderTop: "1px solid #262626", marginTop: "16px", paddingTop: "14px" }
+          : undefined}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            color: accentColor,
+            display: "flex",
+            fontSize: "12px",
+            fontWeight: 800,
+            justifyContent: "space-between",
+            marginBottom: "10px",
+            textTransform: "uppercase"
+          }}
+        >
+          <span>{title}</span>
+          <span style={{ color: "#6b7280" }}>{rows.length}</span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: "12px",
+            gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))"
+          }}
+        >
+          {rows.map(row => renderImageTile(row))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderImageChoiceTile(row, { prompt = false, selectable = true, keyIndex = null } = {}) {
     const mediaSrc = resolveMediaUrl(row.item.media);
+    const mediaKind = getMediaKind(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
     const isWrongOrMissed = (
       row.feedbackState === "wrong" ||
@@ -1272,6 +1665,7 @@ export default function ImageReview({
         role={selectable ? "button" : undefined}
         tabIndex={selectable ? 0 : undefined}
         style={{
+          animation: tileRevealAnimation(row.feedbackState),
           background: tileBackground(row),
           border: tileBorder(row),
           borderRadius: "10px",
@@ -1287,11 +1681,17 @@ export default function ImageReview({
           minWidth: 0,
           overflow: "hidden",
           padding: "10px",
+          position: "relative",
           textAlign: "left",
           transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
           width: "100%"
         }}
       >
+        {!prompt && keyIndex != null && keyIndex < 9 && !interactionFeedback && (
+          <span aria-hidden="true" data-image-choice-key style={{ ...choiceKeyBadgeStyle, zIndex: 2 }}>
+            {keyIndex + 1}
+          </span>
+        )}
         <span
           onClick={previewByThumbnail
             ? (event) => {
@@ -1332,23 +1732,50 @@ export default function ImageReview({
           }}
         >
           {mediaSrc ? (
-            <img
-              src={mediaSrc}
-              alt={revealed ? answerLabel(row.item) : "image"}
-              {...imageMarkerProps}
-              style={{
-                display: "block",
-                height: "100%",
-                maxHeight: "100%",
-                maxWidth: "100%",
-                objectFit: "contain",
-                objectPosition: "center",
-                width: "100%"
-              }}
-            />
+            mediaKind === "audio" ? (
+              <audio
+                src={mediaSrc}
+                controls
+                onClick={(event) => event.stopPropagation()}
+                {...imageMarkerProps}
+                style={{ width: "94%" }}
+              />
+            ) : mediaKind === "video" ? (
+              <video
+                src={mediaSrc}
+                controls
+                playsInline
+                onClick={(event) => event.stopPropagation()}
+                {...imageMarkerProps}
+                style={{
+                  display: "block",
+                  height: "100%",
+                  maxHeight: "100%",
+                  maxWidth: "100%",
+                  objectFit: "contain",
+                  objectPosition: "center",
+                  width: "100%"
+                }}
+              />
+            ) : (
+              <img
+                src={mediaSrc}
+                alt={revealed ? answerLabel(row.item) : "image"}
+                {...imageMarkerProps}
+                style={{
+                  display: "block",
+                  height: "100%",
+                  maxHeight: "100%",
+                  maxWidth: "100%",
+                  objectFit: "contain",
+                  objectPosition: "center",
+                  width: "100%"
+                }}
+              />
+            )
           ) : (
             <span style={{ color: "#666", fontSize: "12px" }}>
-              Image manquante
+              Média manquant
             </span>
           )}
           {feedbackBadgeLabel && (
@@ -1424,6 +1851,77 @@ export default function ImageReview({
     );
   }
 
+  // Fills the slots the decoys vacated: the quality buttons after a correct pick,
+  // "Continuer" after a wrong one. In QCM médias those slots are whole media tiles,
+  // so the content scales up and gains the interval each grade would schedule —
+  // otherwise a tile-sized button holding a one-line label just looks empty.
+  function renderChoiceRatingSlots() {
+    if (!showChoiceRating) return null;
+
+    const onTiles = showImageChoiceBoard;
+
+    if (!interactionFeedback.isCorrect) {
+      return (
+        <button
+          type="button"
+          data-image-choice-continue
+          onClick={() => rateChoice()}
+          style={{
+            ...choiceContinueButtonStyle,
+            ...(onTiles ? choiceContinueTileStyle : null)
+          }}
+        >
+          <span aria-hidden="true" style={keyCapStyle}>Entrée</span>
+          Continuer →
+        </button>
+      );
+    }
+
+    const correctItem = choiceOptions.find(
+      option => option.question_id === correctChoiceId
+    );
+
+    return choiceQualityOptions.map(option => {
+      const interval = correctItem
+        ? projectedIntervalForImage(correctItem, option.value)
+        : null;
+
+      return (
+        <button
+          key={option.value}
+          type="button"
+          title={option.title}
+          data-image-choice-quality={option.value}
+          onClick={() => rateChoice(option.value)}
+          style={{
+            ...choiceQualityButtonStyle(),
+            ...(onTiles ? choiceQualityTileStyle : null)
+          }}
+        >
+          {onTiles ? (
+            <Fragment>
+              <span aria-hidden="true" style={choiceQualityTileIconStyle}>
+                {option.icon}
+              </span>
+              <span style={choiceQualityTileTitleStyle}>{option.title}</span>
+              {interval > 0 && (
+                <span style={choiceQualityTileIntervalStyle}>
+                  ≈ {interval} j
+                </span>
+              )}
+              <span aria-hidden="true" style={keyCapStyle}>{option.value}</span>
+            </Fragment>
+          ) : (
+            <Fragment>
+              <span aria-hidden="true" style={keyCapStyle}>{option.value}</span>
+              <span>{option.icon} {option.title}</span>
+            </Fragment>
+          )}
+        </button>
+      );
+    });
+  }
+
   function renderImageRecapQualityButton({
     disabled = false,
     option,
@@ -1477,8 +1975,11 @@ export default function ImageReview({
         <div className="app-scrollbar" style={imageRecapCardStyle}>
           <div style={imageRecapHeaderStyle}>
             <div>
-              <div style={imageRecapTypeBadgeStyle}>IMAGE RESULT</div>
+              <div style={imageRecapTypeBadgeStyle}>MÉDIA</div>
               <div style={imageRecapTitleStyle}>Résultat</div>
+              <div style={imageRecapKeyboardHintStyle}>
+                ↑/↓ pour naviguer · 0-3 pour noter
+              </div>
             </div>
 
             <button
@@ -1557,14 +2058,31 @@ export default function ImageReview({
                       title={answerLabel(selectedRecapRow.item)}
                     >
                       {resolveMediaUrl(selectedRecapRow.item.media) ? (
-                        <img
-                          src={resolveMediaUrl(selectedRecapRow.item.media)}
-                          alt={answerLabel(selectedRecapRow.item)}
-                          style={imageRecapSelectedPreviewImageStyle}
-                        />
+                        getMediaKind(selectedRecapRow.item.media) === "audio" ? (
+                          <audio
+                            src={resolveMediaUrl(selectedRecapRow.item.media)}
+                            controls
+                            onClick={(event) => event.stopPropagation()}
+                            style={{ width: "94%" }}
+                          />
+                        ) : getMediaKind(selectedRecapRow.item.media) === "video" ? (
+                          <video
+                            src={resolveMediaUrl(selectedRecapRow.item.media)}
+                            controls
+                            playsInline
+                            onClick={(event) => event.stopPropagation()}
+                            style={imageRecapSelectedPreviewImageStyle}
+                          />
+                        ) : (
+                          <img
+                            src={resolveMediaUrl(selectedRecapRow.item.media)}
+                            alt={answerLabel(selectedRecapRow.item)}
+                            style={imageRecapSelectedPreviewImageStyle}
+                          />
+                        )
                       ) : (
                         <span style={imageRecapSelectedMissingImageStyle}>
-                          Image manquante
+                          Média manquant
                         </span>
                       )}
                     </button>
@@ -1733,6 +2251,13 @@ export default function ImageReview({
 
                       <div
                         className="image-recap-row"
+                        ref={(element) => {
+                          if (element) {
+                            imageRecapRowRefs.current.set(row.item.question_id, element);
+                          } else {
+                            imageRecapRowRefs.current.delete(row.item.question_id);
+                          }
+                        }}
                         data-image-recap-row={
                           isUnanswered
                             ? "unanswered"
@@ -1795,11 +2320,17 @@ export default function ImageReview({
 
                           <span style={imageRecapThumbnailStyle}>
                             {mediaSrc ? (
-                              <img
-                                src={mediaSrc}
-                                alt={answerLabel(row.item)}
-                                style={imageRecapThumbnailImageStyle}
-                              />
+                              getMediaKind(row.item.media) === "audio" ? (
+                                <span aria-hidden="true" style={{ fontSize: "18px" }}>🎧</span>
+                              ) : getMediaKind(row.item.media) === "video" ? (
+                                <span aria-hidden="true" style={{ fontSize: "18px" }}>🎬</span>
+                              ) : (
+                                <img
+                                  src={mediaSrc}
+                                  alt={answerLabel(row.item)}
+                                  style={imageRecapThumbnailImageStyle}
+                                />
+                              )
                             ) : (
                               <span style={imageRecapThumbnailMissingStyle} />
                             )}
@@ -1920,16 +2451,16 @@ export default function ImageReview({
                   width: "100%"
                 }}
               >
-                {group.name || "Images"}
+                {group.name || "Média"}
               </div>
             ) : (
               <>
                 <div style={{ color: "#f0c36a", fontSize: "12px", fontWeight: 800 }}>
-                  {resultMode ? "IMAGE RESULT" : `IMAGE · ${imageModeLabels[normalizedMode]}`}
+                  {resultMode ? "MÉDIA" : `MÉDIA · ${imageModeLabels[normalizedMode]}`}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
                   <div style={{ color: "#f3f3f3", fontSize: "20px", fontWeight: 800, lineHeight: 1.1 }}>
-                    {group.name || "Images"}
+                    {group.name || "Média"}
                   </div>
                   {trainingElapsedMs !== null && !resultMode && (
                     <TrainingTimerPanel
@@ -2022,21 +2553,44 @@ export default function ImageReview({
         }}
       >
         {showImageChoiceBoard ? (
+          // Same four slots throughout: the decoy media drop out, the correct one
+          // slides into the first slot, and the freed slots become the quality
+          // buttons (or "Continuer" after a wrong pick).
           <div
+            ref={choiceGridRef}
             data-image-choice-board
             style={{
               display: "grid",
               gap: fillAvailableHeight ? "12px" : "14px",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+              // Centered reveal keeps each cell ~half the board (as in the 2x2),
+              // so the surviving tile is the same size it was and FLIP slides it
+              // to the middle instead of snapping its size.
+              gridTemplateColumns: centerReveal
+                ? `repeat(${revealedGridItems.length}, minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"})))`
+                : "repeat(2, minmax(0, 1fr))",
+              gridTemplateRows: centerReveal
+                ? `minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"}))`
+                : "repeat(2, minmax(0, 1fr))",
               height: "100%",
               margin: "0 auto",
               maxWidth: "720px",
               minHeight: 0,
+              placeContent: centerReveal ? "center" : undefined,
               width: "min(100%, 720px)"
             }}
           >
-            {activeGridItems.map(row => renderImageChoiceTile(row))}
+            {revealedGridItems.map((row, index) => (
+              <div
+                key={row.item.question_id}
+                data-flip-key={`${choiceScope}:${row.item.question_id}`}
+                style={choiceSlotStyle}
+              >
+                {renderImageChoiceTile(row, {
+                  keyIndex: interactionFeedback ? null : index
+                })}
+              </div>
+            ))}
+            {renderChoiceRatingSlots()}
           </div>
         ) : showPromptImageBoard ? (
           <div
@@ -2057,7 +2611,16 @@ export default function ImageReview({
               })
               : null}
           </div>
-        ) : (
+        ) : showsResultSections ? (
+          <div data-image-result-grid>
+            {renderResultSection(
+              "correct", "Correctes", "#86efac", correctResultItems, false
+            )}
+            {renderResultSection(
+              "missed", "À revoir", "#fca5a5", missedResultItems, true
+            )}
+          </div>
+        ) : activeGridItems.length > 0 ? (
           <div
             data-image-active-grid
             style={{
@@ -2068,16 +2631,18 @@ export default function ImageReview({
           >
             {activeGridItems.map(row => renderImageTile(row))}
           </div>
-        )}
+        ) : null}
 
         {!showImageChoiceBoard && !showPromptImageBoard && resolvedGridItems.length > 0 && (
           <div
             data-image-resolved-section
-            style={{
-              borderTop: "1px solid #262626",
-              marginTop: "16px",
-              paddingTop: "14px"
-            }}
+            style={activeGridItems.length > 0
+              ? {
+                borderTop: "1px solid #262626",
+                marginTop: "16px",
+                paddingTop: "14px"
+              }
+              : undefined}
           >
             <div
               style={{
@@ -2144,8 +2709,7 @@ export default function ImageReview({
                   textTransform: "uppercase"
                 }}
               >
-                {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-                  normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+                {normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
                   ? "Image demandée"
                   : "Image surlignée"}
               </div>
@@ -2160,8 +2724,7 @@ export default function ImageReview({
                 overflowWrap: "anywhere"
               }}
             >
-              {normalizedMode === IMAGE_MODE_CLICK_PROMPT ||
-                normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+              {normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
                 ? promptLabel
                 : currentPromptItem
                   ? "Trouve son nom"
@@ -2223,42 +2786,66 @@ export default function ImageReview({
         )}
 
         {showLabelChoices && (
+          // Same four slots throughout: the decoy names drop out, the correct one
+          // slides into the first slot, and the freed slots become the quality
+          // buttons (or "Continuer" after a wrong pick).
           <div
+            ref={choiceGridRef}
+            data-image-choice-grid
             style={{
               display: "grid",
               gap: "8px",
-              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gridTemplateColumns: centerReveal
+                ? `repeat(${revealedChoiceOptions.length}, minmax(150px, 250px))`
+                : "repeat(auto-fit, minmax(150px, 1fr))",
+              justifyContent: centerReveal ? "center" : undefined,
               marginBottom: "14px"
             }}
           >
-            {choiceOptions.map(option => (
-              <button
+            {revealedChoiceOptions.map((option, index) => (
+              <div
                 key={option.question_id}
-                type="button"
-                data-image-choice-feedback={imageChoiceFeedbackState(
-                  option,
-                  interactionFeedback
-                )}
-                disabled={Boolean(interactionFeedback)}
-                onClick={() => handleChoiceSelect(option.question_id)}
-                style={imageChoiceButtonStyle(option, interactionFeedback)}
+                data-flip-key={`${choiceScope}:${option.question_id}`}
+                style={choiceSlotStyle}
               >
-                <span>{answerLabel(option)}</span>
-                {imageChoiceFeedbackLabel(option, interactionFeedback) && (
-                  <span
-                    style={{
-                      display: "block",
-                      fontSize: "11px",
-                      fontWeight: 900,
-                      marginTop: "5px",
-                      textTransform: "uppercase"
-                    }}
-                  >
-                    {imageChoiceFeedbackLabel(option, interactionFeedback)}
-                  </span>
-                )}
-              </button>
+                <button
+                  type="button"
+                  data-image-choice-feedback={imageChoiceFeedbackState(
+                    option,
+                    interactionFeedback
+                  )}
+                  disabled={Boolean(interactionFeedback)}
+                  onClick={() => handleChoiceSelect(option.question_id)}
+                  style={{
+                    ...imageChoiceButtonStyle(option, interactionFeedback),
+                    flex: 1,
+                    position: "relative",
+                    width: "100%"
+                  }}
+                >
+                  {!interactionFeedback && index < 9 && (
+                    <span aria-hidden="true" data-image-choice-key style={choiceKeyBadgeStyle}>
+                      {index + 1}
+                    </span>
+                  )}
+                  <span>{answerLabel(option)}</span>
+                  {imageChoiceFeedbackLabel(option, interactionFeedback) && (
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: "11px",
+                        fontWeight: 900,
+                        marginTop: "5px",
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      {imageChoiceFeedbackLabel(option, interactionFeedback)}
+                    </span>
+                  )}
+                </button>
+              </div>
             ))}
+            {renderChoiceRatingSlots()}
           </div>
         )}
 
@@ -2324,7 +2911,7 @@ export default function ImageReview({
             alignItems: "center",
             background: "rgba(0, 0, 0, 0.82)",
             display: "flex",
-            inset: 0,
+            inset: "var(--shell-top, 0px) 0 0 0",
             justifyContent: "center",
             padding: "28px",
             position: "fixed",
@@ -2378,24 +2965,54 @@ export default function ImageReview({
             </button>
 
             {resolveMediaUrl(previewRow.item.media) ? (
-              <img
-                src={resolveMediaUrl(previewRow.item.media)}
-                alt={
-                  isImageAnswerRevealed(previewRow, resultMode)
-                    ? answerLabel(previewRow.item)
-                    : "image"
-                }
-                style={{
-                  background: "#0d0d0d",
-                  borderRadius: "8px",
-                  display: "block",
-                  height: isImageAnswerRevealed(previewRow, resultMode)
-                    ? "min(62vh, 560px)"
-                    : "min(68vh, 620px)",
-                  objectFit: "contain",
-                  width: "100%"
-                }}
-              />
+              getMediaKind(previewRow.item.media) === "audio" ? (
+                <audio
+                  src={resolveMediaUrl(previewRow.item.media)}
+                  controls
+                  autoPlay
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    width: "100%"
+                  }}
+                />
+              ) : getMediaKind(previewRow.item.media) === "video" ? (
+                <video
+                  src={resolveMediaUrl(previewRow.item.media)}
+                  controls
+                  playsInline
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    height: isImageAnswerRevealed(previewRow, resultMode)
+                      ? "min(62vh, 560px)"
+                      : "min(68vh, 620px)",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              ) : (
+                <img
+                  src={resolveMediaUrl(previewRow.item.media)}
+                  alt={
+                    isImageAnswerRevealed(previewRow, resultMode)
+                      ? answerLabel(previewRow.item)
+                      : "image"
+                  }
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    height: isImageAnswerRevealed(previewRow, resultMode)
+                      ? "min(62vh, 560px)"
+                      : "min(68vh, 620px)",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              )
             ) : (
               <div
                 style={{
@@ -2411,7 +3028,7 @@ export default function ImageReview({
                   width: "100%"
                 }}
               >
-                Image manquante
+                Média manquant
               </div>
             )}
 
@@ -2445,9 +3062,9 @@ const imageRecapOverlayStyle = {
   backdropFilter: "blur(6px)",
   background: "rgba(0,0,0,0.75)",
   display: "flex",
-  inset: 0,
+  inset: "var(--shell-top, 0px) 0 0 0",
   justifyContent: "center",
-  padding: "30px",
+  padding: "20px",
   position: "fixed",
   zIndex: 1000
 };
@@ -2458,11 +3075,18 @@ const imageRecapCardStyle = {
   borderRadius: "18px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
   maxHeight: "100%",
-  maxWidth: "1100px",
+  maxWidth: "1460px",
   overflow: "auto",
   padding: "24px",
   scrollbarGutter: "stable",
   width: "100%"
+};
+
+const imageRecapKeyboardHintStyle = {
+  color: "#666",
+  fontSize: "12px",
+  fontWeight: 600,
+  marginTop: "6px"
 };
 
 const imageRecapHeaderStyle = {
@@ -2539,7 +3163,7 @@ const imageRecapPreviewPanelStyle = {
   borderRadius: "14px",
   display: "flex",
   flexDirection: "column",
-  minHeight: "430px",
+  minHeight: "clamp(430px, 64vh, 780px)",
   minWidth: 0,
   overflow: "hidden"
 };
@@ -2724,7 +3348,7 @@ const imageRecapTableBodyStyle = {
   display: "flex",
   flexDirection: "column",
   gap: "1px",
-  maxHeight: "430px",
+  maxHeight: "clamp(430px, 64vh, 780px)",
   overflow: "auto",
   scrollbarGutter: "stable"
 };

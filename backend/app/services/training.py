@@ -21,6 +21,15 @@ from .map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
 )
+from .text_modes import (
+    DEFAULT_TEXT_MODE,
+    normalize_text_mode
+)
+from .sequence import dense_positions, grade_sequence_position
+from .sequence_modes import (
+    DEFAULT_SEQUENCE_MODE,
+    normalize_sequence_mode
+)
 from .map_zones import merge_tags
 from .review import serialize_review_items
 from .tag_hierarchy import (
@@ -44,7 +53,7 @@ TRAINING_RECORD_FIELDS = {
     "question_count",
     "content_fingerprint"
 }
-MODE_GROUP_TYPES = {"map", "image"}
+MODE_GROUP_TYPES = {"map", "media", "text", "sequence"}
 
 
 def normalize_scope_tag(value):
@@ -146,78 +155,39 @@ def _clean_string(value):
     return str(value or "").strip()
 
 
-def _normalized_aliases(data):
-    aliases = (data or {}).get("aliases", [])
-
-    return sorted([
-        _clean_string(alias)
-        for alias in aliases
-        if _clean_string(alias)
-    ])
-
-
-def question_training_signature(type_q, answer=None, media=None, data=None):
-    if type_q == "map":
-        return {
-            "answer": _clean_string(answer),
-            "code": _clean_string((data or {}).get("code")),
-            "aliases": _normalized_aliases(data)
-        }
-
-    if type_q == "image":
-        return {
-            "answer": _clean_string(answer),
-            "media": _clean_string(media),
-            "aliases": _normalized_aliases(data)
-        }
-
-    if type_q == "text":
-        return {
-            "answer": _clean_string(answer),
-            "media": _clean_string(media),
-            "aliases": _normalized_aliases(data)
-        }
-
-    if type_q == "timeline":
-        return {
-            "answer": _clean_string(answer),
-            "media": _clean_string(media),
-            "timeline": (data or {}).get("timeline")
-        }
-
-    return None
-
-
 def _group_training_fingerprint_payload(group, questions):
-    items = []
-
-    for question in sorted(questions or [], key=lambda item: item.id or 0):
-        if question.type_q != group.type_group:
-            continue
-
-        signature = question_training_signature(
-            question.type_q,
-            question.answer,
-            question.media,
-            question.data or {}
-        )
-
-        if signature is None:
-            continue
-
-        items.append({
-            "id": question.id,
-            **signature
-        })
+    # The training record is a best-time for completing the whole group, so it
+    # only becomes meaningless when the *set* of items changes. Editing an
+    # existing item's answer/media/aliases is a content fix that leaves the
+    # challenge intact, so the fingerprint is built from item membership and
+    # group-level structure only, never from per-item content.
+    item_ids = sorted(
+        question.id
+        for question in questions or []
+        if question.type_q == group.type_group and question.id is not None
+    )
 
     payload = {
         "group_id": group.id,
         "type_group": group.type_group,
-        "items": items
+        "item_ids": item_ids
     }
 
     if group.type_group == "map":
+        # Swapping a map's background image is a whole-group change, not an item
+        # edit, so it still retires the record.
         payload["media"] = _clean_string(group.media)
+
+    if group.type_group == "sequence":
+        # For every other type the challenge is the *set* of items, so sorted
+        # ids are enough. A sequence is the order itself: permuting the same
+        # items is a different challenge entirely, and sorted ids cannot see it.
+        positions = dense_positions(questions)
+        payload["positions"] = sorted(
+            (question.id, positions[question.id])
+            for question in questions or []
+            if question.type_q == "sequence" and question.id is not None
+        )
 
     return payload
 
@@ -250,7 +220,7 @@ def training_fingerprints_for_groups(db, groups):
             db.query(Question)
             .filter(
                 Question.group_id.in_(group_ids),
-                Question.type_q.in_(["map", "image"])
+                Question.type_q.in_(["map", "media", "text", "sequence"])
             )
             .order_by(Question.id)
             .all()
@@ -286,38 +256,18 @@ def group_training_fingerprint(db, group):
     return training_fingerprints_for_groups(db, [group]).get(group.id)
 
 
-def _collection_question_training_signature(question):
-    signature = question_training_signature(
-        question.type_q,
-        question.answer,
-        question.media,
-        question.data or {}
-    ) or {}
-
-    payload = {
-        "id": question.id,
-        "type_q": question.type_q,
-        "question": _clean_string(question.question),
-        **signature
-    }
-
-    if question.group and question.type_q in {"map", "image"}:
-        payload["group"] = {
-            "id": question.group.id,
-            "type_group": question.group.type_group,
-            "media": _clean_string(question.group.media)
-        }
-
-    return payload
-
-
 def _collection_training_fingerprint_payload(collection, questions):
+    # Like groups, a collection's record only depends on which questions belong
+    # to it, not on their content (see _group_training_fingerprint_payload).
+    item_ids = sorted(
+        question.id
+        for question in questions or []
+        if question.id is not None
+    )
+
     return {
         "collection_id": collection.id,
-        "items": [
-            _collection_question_training_signature(question)
-            for question in sorted(questions or [], key=lambda item: item.id or 0)
-        ]
+        "item_ids": item_ids
     }
 
 
@@ -378,50 +328,6 @@ def collection_training_fingerprint(db, collection):
     )
 
 
-def clear_training_record(group):
-    group_data = dict(group.data or {})
-    changed = False
-
-    if TRAINING_RECORD_KEY in group_data:
-        del group_data[TRAINING_RECORD_KEY]
-        changed = True
-
-    if TRAINING_RECORDS_KEY in group_data:
-        del group_data[TRAINING_RECORDS_KEY]
-        changed = True
-
-    if not changed:
-        return False
-
-    group.data = group_data
-    return True
-
-
-def clear_training_record_for_group_id(db, group_id):
-    if not group_id:
-        return False
-
-    group = (
-        db.query(QuestionGroup)
-        .filter(QuestionGroup.id == group_id)
-        .first()
-    )
-
-    if not group:
-        return False
-
-    return clear_training_record(group)
-
-
-def clear_training_records_for_group_ids(db, group_ids):
-    cleared = False
-
-    for group_id in sorted(set(group_ids or [])):
-        cleared = clear_training_record_for_group_id(db, group_id) or cleared
-
-    return cleared
-
-
 def serialize_training_record(data, content_fingerprint=None):
     record = (data or {}).get(TRAINING_RECORD_KEY)
 
@@ -445,8 +351,14 @@ def default_training_mode_for_group_type(group_type):
     if group_type == "map":
         return DEFAULT_MAP_MODE
 
-    if group_type == "image":
+    if group_type == "media":
         return DEFAULT_IMAGE_MODE
+
+    if group_type == "text":
+        return DEFAULT_TEXT_MODE
+
+    if group_type == "sequence":
+        return DEFAULT_SEQUENCE_MODE
 
     return None
 
@@ -455,8 +367,14 @@ def normalize_training_mode_for_group_type(group_type, mode):
     if group_type == "map":
         return normalize_map_mode(mode)
 
-    if group_type == "image":
+    if group_type == "media":
         return normalize_image_mode(mode)
+
+    if group_type == "text":
+        return normalize_text_mode(mode)
+
+    if group_type == "sequence":
+        return normalize_sequence_mode(mode)
 
     return None
 
@@ -548,7 +466,7 @@ def list_training_scopes(db):
         db.query(Question.group_id, Question.tags)
         .filter(
             Question.group_id.in_(group_ids),
-            Question.type_q.in_(["map", "image"])
+            Question.type_q.in_(["map", "media"])
         )
         .all()
         if group_ids else []
@@ -945,7 +863,9 @@ def get_training_items(
     collection_id=None,
     tag=None,
     map_mode=None,
-    image_mode=None
+    image_mode=None,
+    text_mode=None,
+    sequence_mode=None
 ):
     if scope_type == "group":
         if group_id is None:
@@ -975,14 +895,20 @@ def get_training_items(
         content_fingerprint = group_training_fingerprint(db, group_id)
         normalized_map_mode = normalize_map_mode(map_mode)
         normalized_image_mode = normalize_image_mode(image_mode)
+        normalized_text_mode = normalize_text_mode(text_mode)
+        normalized_sequence_mode = normalize_sequence_mode(sequence_mode)
 
         for item in items:
             if item.get("group_id") == group_id:
                 item["training_fingerprint"] = content_fingerprint
                 if item.get("type_q") == "map":
                     item["mode"] = normalized_map_mode
-                elif item.get("type_q") == "image":
+                elif item.get("type_q") == "media":
                     item["mode"] = normalized_image_mode
+                elif item.get("type_q") == "text":
+                    item["mode"] = normalized_text_mode
+                elif item.get("type_q") == "sequence":
+                    item["mode"] = normalized_sequence_mode
 
         return _shuffled_training_items(items)
 
@@ -1028,14 +954,20 @@ def get_training_items(
         )
         normalized_map_mode = normalize_map_mode(DEFAULT_MAP_MODE)
         normalized_image_mode = normalize_image_mode(DEFAULT_IMAGE_MODE)
+        normalized_text_mode = normalize_text_mode(DEFAULT_TEXT_MODE)
+        normalized_sequence_mode = normalize_sequence_mode(DEFAULT_SEQUENCE_MODE)
 
         for item in items:
             item["training_fingerprint"] = content_fingerprint
 
             if item.get("type_q") == "map":
                 item["mode"] = normalized_map_mode
-            elif item.get("type_q") == "image":
+            elif item.get("type_q") == "media":
                 item["mode"] = normalized_image_mode
+            elif item.get("type_q") == "text":
+                item["mode"] = normalized_text_mode
+            elif item.get("type_q") == "sequence":
+                item["mode"] = normalized_sequence_mode
 
             if isinstance(item.get("context_items"), list):
                 context_items = [
@@ -1071,6 +1003,86 @@ def get_training_items(
         )
 
     raise HTTPException(status_code=400, detail="Invalid training scope")
+
+
+def grade_training_sequence(db, items):
+    # Sequences are server-graded, so training needs its own grader: reusing the
+    # review endpoint would write real FSRS history from a practice run. This
+    # returns the same result shape and never touches Progress.
+    question_ids = list(items.keys())
+    questions = (
+        db.query(Question)
+        .options(joinedload(Question.progress))
+        .filter(Question.id.in_(question_ids))
+        .all()
+    )
+    question_map = {
+        question.id: question
+        for question in questions
+    }
+    missing_ids = [
+        question_id
+        for question_id in question_ids
+        if question_id not in question_map
+    ]
+
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Questions not found: {missing_ids}"
+        )
+
+    for question_id, question in question_map.items():
+        if question.type_q != "sequence":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Question {question_id} is not a sequence question"
+            )
+
+    group_ids = {
+        question.group_id
+        for question in questions
+        if question.group_id
+    }
+    siblings = (
+        db.query(Question)
+        .filter(
+            Question.group_id.in_(group_ids),
+            Question.type_q == "sequence"
+        )
+        .all()
+    ) if group_ids else []
+    by_group = {}
+
+    for question in siblings:
+        by_group.setdefault(question.group_id, []).append(question)
+
+    positions = {}
+
+    for group_questions in by_group.values():
+        positions.update(dense_positions(group_questions))
+
+    results = []
+
+    for question_id, guess in items.items():
+        question = question_map[question_id]
+        expected_position = positions.get(question_id)
+        grading = grade_sequence_position(expected_position, guess.position)
+
+        results.append({
+            "question_id": question_id,
+            "quality": grading["quality"],
+            "expected_position": expected_position,
+            "guessed_position": guess.position,
+            "distance": grading["distance"],
+            "label": question.answer,
+            "progress": serialize_progress(question.progress)
+        })
+
+    return {
+        "status": "ok",
+        "results": results
+    }
 
 
 def grade_training_timeline(db, items):

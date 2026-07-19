@@ -27,6 +27,7 @@ export default function Manage(props) {
   // Manage coordinates the three panels. The heavy data/state logic lives in
   // useManageLibrary; this component handles panel-specific selection effects.
   const [editingZone, setEditingZone] = useState(null);
+  const [questionScrollRequest, setQuestionScrollRequest] = useState(null);
   const [highlightedQuestionIds, setHighlightedQuestionIds] = useState([]);
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState(null);
@@ -34,6 +35,22 @@ export default function Manage(props) {
   const pendingSaveHandlerRef = useRef(null);
   const transitionInProgressRef = useRef(false);
   const autosaveTimeoutRef = useRef(null);
+  const abandonGroupCreationRef = useRef(null);
+
+  useEffect(() => {
+    abandonGroupCreationRef.current = () => {
+      if (!props.isCreatingGroup) return;
+
+      props.setIsCreatingGroup?.(false);
+      props.resetGroupDraft?.();
+    };
+  });
+
+  // Leaving Manage abandons an in-flight group creation. Exit paths run through
+  // requestManageTransition first, so a named or non-empty group has already
+  // been persisted; only an untouched draft is dropped. Without this the flag
+  // survives in useManageLibrary and the pending editor reappears on return.
+  useEffect(() => () => abandonGroupCreationRef.current?.(), []);
   const {
     allQuestions,
     clearOpenQuestionId,
@@ -60,6 +77,14 @@ export default function Manage(props) {
         autosaveTimeoutRef.current = null;
       }, 2500);
     }
+  }, []);
+
+  const requestQuestionScroll = useCallback((questionId) => {
+    // A fresh object on every call so repeated requests for the same question
+    // still reach the list.
+    if (!questionId) return;
+
+    setQuestionScrollRequest({ questionId });
   }, []);
 
   const registerPendingSaveHandler = useCallback((handler) => {
@@ -162,13 +187,25 @@ export default function Manage(props) {
     return created;
   }
 
-  async function createGroupWithHighlight() {
-    const created = await props.createGroup?.();
+  async function createGroupWithHighlight(overrides = null) {
+    const created = await props.createGroup?.(overrides);
 
     if (created?.id) {
       props.setViewMode?.("groups");
       props.setSelectedItem?.(created);
       setEditingZone(null);
+      setHighlightedGroupIds([created.id]);
+    }
+
+    return created;
+  }
+
+  async function createGroupSilentlyWithHighlight(overrides) {
+    // Deliberately does not touch selection or view mode: this runs *inside* a
+    // grouped editor's save, and re-selecting would unmount it mid-write.
+    const created = await props.createGroupSilently?.(overrides);
+
+    if (created?.id) {
       setHighlightedGroupIds([created.id]);
     }
 
@@ -243,6 +280,7 @@ export default function Manage(props) {
         setEditingZone={setEditingZone}
         highlightedQuestionIds={highlightedQuestionIds}
         highlightedGroupIds={highlightedGroupIds}
+        questionScrollRequest={questionScrollRequest}
         requestManageTransition={requestManageTransition}
       />
 
@@ -253,9 +291,11 @@ export default function Manage(props) {
         setEditingZone={setEditingZone}
         createQuestion={createQuestionWithHighlight}
         createGroup={createGroupWithHighlight}
+        createGroupSilently={createGroupSilentlyWithHighlight}
         setHighlightedQuestionIds={setHighlightedQuestionIds}
         registerPendingSaveHandler={registerPendingSaveHandler}
         requestManageTransition={requestManageTransition}
+        requestQuestionScroll={requestQuestionScroll}
       />
 
       <TagNetworkModal

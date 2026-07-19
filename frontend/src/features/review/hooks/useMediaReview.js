@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { sendImageAnswer } from "../../../api/review";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { sendMediaAnswer } from "../../../api/review";
+import { partitionRelearningQualities } from "../relearningGrades";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
@@ -296,6 +296,14 @@ function isPromptMode(mode) {
 }
 
 
+function isChoiceMode(mode) {
+  return (
+    mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+    mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+  );
+}
+
+
 function shouldUseGridPromptOrder(mode) {
   return mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL;
 }
@@ -460,17 +468,23 @@ const initialRecapSort = {
 };
 
 
-export function useImageReview(
+export function useMediaReview(
   reviewItems,
   onComplete,
-  submitAnswer = sendImageAnswer,
+  submitAnswer = sendMediaAnswer,
   options = {}
 ) {
   const mode = normalizeImageMode(options.mode);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
+  const onAnsweringComplete = options.onAnsweringComplete;
+  // Review grades each choice inline (reveal + quality), then auto-submits the
+  // group when the last item is rated. Training keeps the legacy flash + recap.
+  const inlineChoiceRating = Boolean(options.inlineChoiceRating) && isChoiceMode(mode);
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewItems;
+  const relearningGroup = options.group;
+  const graduateAnswer = options.graduateAnswer;
   const reviewKey = useMemo(
     () => `${mode}:${idsFor(reviewItems).join("|")}`,
     [mode, reviewItems]
@@ -512,6 +526,7 @@ export function useImageReview(
   const [resultMode, setResultMode] = useState(false);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     setInput("");
@@ -616,7 +631,6 @@ export function useImageReview(
   const activeInteractionFeedback = (
     !resultMode &&
     (
-      mode === IMAGE_MODE_CLICK_PROMPT ||
       mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
       mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
     )
@@ -624,10 +638,7 @@ export function useImageReview(
     ? interactionFeedback
     : null;
   const visibleChoiceOptions = activeInteractionFeedback?.options || choiceOptions;
-  const visualPromptItem = (
-    activeInteractionFeedback?.correctQuestionId &&
-    mode !== IMAGE_MODE_CLICK_PROMPT
-  )
+  const visualPromptItem = activeInteractionFeedback?.correctQuestionId
     ? itemByQuestionId.get(activeInteractionFeedback.correctQuestionId) || currentPromptItem
     : currentPromptItem;
   const completedQuestionIdSet = isPromptMode(mode)
@@ -643,7 +654,9 @@ export function useImageReview(
     : 0;
 
   useEffect(() => {
-    if (!interactionFeedback) return undefined;
+    // In inline-rating mode the reveal stays until the user rates/continues, so
+    // it must not auto-clear. Training keeps the timed flash.
+    if (!interactionFeedback || inlineChoiceRating) return undefined;
 
     const timeout = window.setTimeout(() => {
       setInteractionFeedback(current =>
@@ -654,7 +667,7 @@ export function useImageReview(
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [interactionFeedback]);
+  }, [interactionFeedback, inlineChoiceRating]);
 
   function selectItem(questionId) {
     if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode) return false;
@@ -733,6 +746,7 @@ export function useImageReview(
     setInteractionFeedback(null);
     setResultMode(true);
     setActivePromptQuestionId(null);
+    onAnsweringComplete?.(missedIds);
   }
 
   function rememberFound(item) {
@@ -798,6 +812,48 @@ export function useImageReview(
     advanceTypePromptAfterResolved(item);
   }
 
+  async function submitQualities(qualityMap) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    try {
+      const qualities = submittedQualitiesFromRecap(qualityMap);
+      // Relearning items never re-grade: send only the ordinary grades and
+      // graduate the "Acquis" ones. "Encore" (0) stays in failedQuestionIds.
+      const { graded, graduateIds } = partitionRelearningQualities(
+        relearningGroup,
+        qualities
+      );
+
+      await Promise.all([
+        Object.keys(graded).length > 0
+          ? submitAnswer(graded, mode, contextItems.length)
+          : null,
+        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
+      ].filter(Boolean));
+
+      const failedQuestionIds = Object.entries(qualities)
+        .filter(([, quality]) => quality === 0)
+        .map(([questionId]) => Number(questionId));
+
+      setInput("");
+      setFoundQuestionIds([]);
+      setResolvedQuestionIds([]);
+      setLockedMissedQuestionIds([]);
+      setRevealedQuestionIds([]);
+      setQualityByQuestionId({});
+      setFeedbackTone(null);
+      setInteractionFeedback(null);
+      setResultMode(false);
+      setActivePromptQuestionId(null);
+      setRecapSort(initialRecapSort);
+
+      onComplete(failedQuestionIds);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
   useEffect(() => {
     if (resultMode || sessionItems.length === 0) return;
     if (interactionFeedback) return;
@@ -808,6 +864,9 @@ export function useImageReview(
 
     if (!allComplete) return;
 
+    // Choice modes still end on the recap: buildRecapQualities keeps whatever
+    // quality was graded inline, so the recap opens pre-filled and any grade
+    // can still be corrected before submitting.
     enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -848,12 +907,9 @@ export function useImageReview(
   function handleImageSelect(questionId) {
     if (
       resultMode ||
-      (
-        mode !== IMAGE_MODE_CLICK_PROMPT &&
-        mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-      ) ||
+      mode !== IMAGE_MODE_MULTIPLE_CHOICE_IMAGE ||
       !currentPromptItem ||
-      (mode !== IMAGE_MODE_CLICK_PROMPT && interactionFeedback)
+      interactionFeedback
     ) {
       return;
     }
@@ -864,9 +920,7 @@ export function useImageReview(
       id: Date.now(),
       correctQuestionId: currentPromptItem.question_id,
       isCorrect,
-      options: mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-        ? choiceOptions
-        : null,
+      options: choiceOptions,
       selectedQuestionId: questionId
     });
 
@@ -962,29 +1016,19 @@ export function useImageReview(
   }
 
   async function sendResult() {
-    const qualities = submittedQualitiesFromRecap(qualityByQuestionId);
+    await submitQualities(qualityByQuestionId);
+  }
 
-    if (Object.keys(qualities).length > 0) {
-      await submitAnswer(qualities, mode, contextItems.length);
+  // Inline rating: grade the just-revealed choice (correct picks only) and clear
+  // the reveal so the next prompt surfaces. A wrong pick stays quality 0.
+  function rateChoice(quality) {
+    if (!interactionFeedback || !inlineChoiceRating) return;
+
+    if (quality !== undefined && quality !== null) {
+      setQuality(interactionFeedback.correctQuestionId, quality);
     }
 
-    const failedQuestionIds = Object.entries(qualities)
-      .filter(([, quality]) => quality === 0)
-      .map(([questionId]) => Number(questionId));
-
-    setInput("");
-    setFoundQuestionIds([]);
-    setResolvedQuestionIds([]);
-    setLockedMissedQuestionIds([]);
-    setRevealedQuestionIds([]);
-    setQualityByQuestionId({});
-    setFeedbackTone(null);
     setInteractionFeedback(null);
-    setResultMode(false);
-    setActivePromptQuestionId(null);
-    setRecapSort(initialRecapSort);
-
-    onComplete(failedQuestionIds);
   }
 
   const displayItems = useMemo(() => {
@@ -1036,13 +1080,12 @@ export function useImageReview(
         isSessionMissed ||
         feedbackState === "missed"
       );
-      const shouldRevealWrongFeedback = mode !== IMAGE_MODE_CLICK_PROMPT;
       const isRevealed = (
         isFound ||
         isLockedMissed ||
         (!showsChoiceImages && isPersistentlyRevealed) ||
         feedbackState === "correct" ||
-        (feedbackState === "wrong" && shouldRevealWrongFeedback) ||
+        feedbackState === "wrong" ||
         feedbackState === "missed"
       );
 
@@ -1184,6 +1227,7 @@ export function useImageReview(
     progressPercent,
     promptLabel: visualPromptItem?.label || visualPromptItem?.answer || "",
     qualityByQuestionId,
+    rateChoice,
     recapMissCount,
     recapRows,
     recapSort,

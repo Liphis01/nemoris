@@ -2,11 +2,17 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import SvgMap from "../../map/components/SvgMap";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
+import { useFlip } from "../../../shared/useFlip";
 import {
   MAP_RECAP_UNANSWERED,
   useMapReview
 } from "../hooks/useMapReview";
 import TrainingTimerPanel from "./TrainingTimerPanel";
+import {
+  GOT_IT_QUALITY,
+  isRelearningGroupItem,
+  relearningQualityOptions
+} from "../relearningGrades";
 import {
   MAP_MODE_CLICK_PROMPT,
   MAP_MODE_MULTIPLE_CHOICE,
@@ -94,6 +100,10 @@ const qualityOptions = [
   { value: 3, icon: "✅", title: "Facile" }
 ];
 
+// A correct pick is never "Faux", and dropping it leaves exactly three options —
+// which is exactly how many slots the three decoys free up.
+const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+
 const unansweredQualityOption = {
   value: MAP_RECAP_UNANSWERED,
   icon: "NR",
@@ -108,21 +118,62 @@ const recapHeaderColumns = [
 ];
 
 const mapAutoZoomStorageKey = "quizApp.mapReview.autoZoomEnabled";
+// The recap keeps its own preference: wanting the map to follow the prompt while
+// answering is independent from wanting it to follow the selected row afterwards.
+const recapAutoZoomStorageKey = "quizApp.mapReview.recapAutoZoomEnabled";
 
-function readMapAutoZoomPreference() {
+function readAutoZoomPreference(storageKey) {
   try {
-    return window.localStorage.getItem(mapAutoZoomStorageKey) !== "false";
+    return window.localStorage.getItem(storageKey) !== "false";
   } catch {
     return true;
   }
 }
 
-function writeMapAutoZoomPreference(enabled) {
+function writeAutoZoomPreference(storageKey, enabled) {
   try {
-    window.localStorage.setItem(mapAutoZoomStorageKey, enabled ? "true" : "false");
+    window.localStorage.setItem(storageKey, enabled ? "true" : "false");
   } catch {
     // The in-memory toggle should still work if storage is unavailable.
   }
+}
+
+function readMapAutoZoomPreference() {
+  return readAutoZoomPreference(mapAutoZoomStorageKey);
+}
+
+function readRecapAutoZoomPreference() {
+  return readAutoZoomPreference(recapAutoZoomStorageKey);
+}
+
+// The revealed answer keeps its own box and slides between slots (see useFlip), so
+// the slot wrapper — not the button — is what FLIP moves. It rides above the
+// quality buttons while it travels.
+const choiceSlotStyle = {
+  display: "flex",
+  minWidth: 0,
+  position: "relative",
+  zIndex: 2
+};
+
+// The quality buttons only appear once the answer has finished sliding, so the
+// two never read as one row of answers.
+const choiceRevealDelay = "0.3s";
+
+// Keeps the regular answer-button shape — only the centred label and the muted
+// text set it apart, since the sliding green answer is what carries the emphasis.
+// The three grades stay visually identical: picking one grades and advances
+// immediately, so there is no lasting selection to show (and tinting the default
+// "Bon" only made it look pre-chosen).
+function choiceQualityButtonStyle() {
+  return {
+    ...choiceButtonStyle,
+    animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
+    border: "1px solid #333",
+    color: "#c9c9c9",
+    gap: "8px",
+    justifyContent: "center"
+  };
 }
 
 function choiceFeedbackState(option, feedback) {
@@ -151,6 +202,7 @@ function getChoiceButtonStyle(option, feedback) {
   if (state === "correct") {
     return {
       ...choiceButtonStyle,
+      animation: "answer-pop 0.42s ease",
       background: "linear-gradient(180deg, #183a24, #12291b)",
       border: "1px solid rgba(134, 239, 172, 0.7)",
       boxShadow: "0 0 0 3px rgba(34, 197, 94, 0.16)",
@@ -161,6 +213,7 @@ function getChoiceButtonStyle(option, feedback) {
   if (state === "wrong") {
     return {
       ...choiceButtonStyle,
+      animation: "answer-shake 0.4s ease",
       background: [
         "repeating-linear-gradient(135deg, rgba(127, 29, 29, 0.24) 0 4px, rgba(127, 29, 29, 0) 4px 8px)",
         "linear-gradient(180deg, #3a1d1d, #271414)"
@@ -186,8 +239,10 @@ function getChoiceButtonStyle(option, feedback) {
 export default function MapReview({
   group,
   reviewZones,
+  onAnsweringComplete,
   onComplete,
   submitAnswer,
+  graduateAnswer,
   allowPartialSubmit = false,
   showQualityControls = true,
   trainingElapsedMs = null,
@@ -221,6 +276,7 @@ export default function MapReview({
     missedCodes,
     promptCode,
     promptLabel,
+    rateChoice = () => {},
     recapMissCount,
     recapRows,
     recapSort,
@@ -243,12 +299,58 @@ export default function MapReview({
   } = useMapReview(reviewZones, onComplete, submitAnswer, {
     allowPartialSubmit,
     mode: normalizedMode,
-    contextItems
+    contextItems,
+    inlineChoiceRating: showQualityControls,
+    onAnsweringComplete,
+    group,
+    graduateAnswer
   });
+  const showChoiceRating = (
+    mode === MAP_MODE_MULTIPLE_CHOICE &&
+    !showRecap &&
+    Boolean(choiceFeedback) &&
+    showQualityControls
+  );
+  // Training has no quality buttons to fill the freed slots, so instead of leaving
+  // the answer pinned to the first slot with dead space beside it, center the
+  // surviving answer(s) in the row.
+  const centerReveal = (
+    mode === MAP_MODE_MULTIPLE_CHOICE &&
+    !showRecap &&
+    Boolean(choiceFeedback) &&
+    !showQualityControls
+  );
+  const correctChoiceId = choiceFeedback?.correctQuestionId;
+  // Once answered, only the zones worth looking at stay on the board: the correct
+  // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
+  const revealedChoices = useMemo(() => {
+    if (!choiceFeedback) return choiceOptions;
+
+    const correct = choiceOptions.find(
+      option => option.question_id === correctChoiceId
+    );
+
+    if (choiceFeedback.isCorrect) return correct ? [correct] : [];
+
+    const picked = choiceOptions.find(
+      option => option.question_id === choiceFeedback.selectedQuestionId
+    );
+
+    return [correct, picked].filter(Boolean);
+  }, [choiceFeedback, choiceOptions, correctChoiceId]);
+  const choiceGridRef = useRef(null);
+  // Scope the flip keys to the zone being *answered*, not to promptCode — that one
+  // advances to the next zone the moment you pick, which would change every key and
+  // make FLIP treat the correct answer as a brand-new element (so it never slid).
+  const choiceScope = choiceFeedback?.correctCode ?? promptCode;
+  // Slide the surviving answers into their new slots. Scoped per question so the
+  // next one starts fresh instead of animating out of the previous one's layout.
+  useFlip(choiceGridRef, `${choiceScope}:${choiceFeedback?.id ?? "idle"}`);
   const inputRef = useRef(null);
   const recapTableBodyRef = useRef(null);
   const recapRowRefs = useRef(new Map());
   const [autoZoomEnabled, setAutoZoomEnabled] = useState(readMapAutoZoomPreference);
+  const [recapAutoZoomEnabled, setRecapAutoZoomEnabled] = useState(readRecapAutoZoomPreference);
   const [recapFocusCode, setRecapFocusCode] = useState(null);
   const [recapFocusVersion, setRecapFocusVersion] = useState(0);
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
@@ -333,6 +435,19 @@ export default function MapReview({
 
     return labels;
   }, [activeMissedCodes, foundQuestionIdSet, reviewZones]);
+  // While answering, only found/missed zones are labelled so hovering can't spoil
+  // the answer. By the recap every zone is revealed, so all of them get a name.
+  const recapZoneLabels = useMemo(() => {
+    const labels = {};
+
+    reviewZones.forEach(item => {
+      if (!item.code || !item.label) return;
+
+      labels[item.code] = item.label;
+    });
+
+    return labels;
+  }, [reviewZones]);
 
   function setRecapRowRef(code) {
     return (element) => {
@@ -369,6 +484,28 @@ export default function MapReview({
     setRecapFocusVersion(version => version + 1);
   }, [selectRecapCode]);
 
+  // Selecting a recap row (click, Enter/Space or arrow keys) always highlights it
+  // and scrolls it into view; only the map zoom is gated by the recap toggle.
+  const selectRecapZone = useCallback((code) => {
+    if (recapAutoZoomEnabled) {
+      focusRecapCode(code);
+    } else {
+      selectRecapCode(code);
+    }
+  }, [focusRecapCode, recapAutoZoomEnabled, selectRecapCode]);
+
+  const toggleRecapAutoZoom = useCallback(() => {
+    const nextEnabled = !recapAutoZoomEnabled;
+
+    setRecapAutoZoomEnabled(nextEnabled);
+    writeAutoZoomPreference(recapAutoZoomStorageKey, nextEnabled);
+
+    // Turning it back on catches the map up with the row already selected.
+    if (nextEnabled && focusedCode) {
+      focusRecapCode(focusedCode);
+    }
+  }, [focusRecapCode, focusedCode, recapAutoZoomEnabled]);
+
   const handleZoomRemaining = useCallback(() => {
     focusNextRemainingZone();
     inputRef.current?.focus({ preventScroll: true });
@@ -394,7 +531,7 @@ export default function MapReview({
     setAutoZoomEnabled(enabled => {
       const nextEnabled = !enabled;
 
-      writeMapAutoZoomPreference(nextEnabled);
+      writeAutoZoomPreference(mapAutoZoomStorageKey, nextEnabled);
 
       return nextEnabled;
     });
@@ -459,10 +596,80 @@ export default function MapReview({
     };
   }, [mode, remainingZones.length, selectNextPrompt, showRecap]);
 
+  // Keyboard grading of the inline choice reveal: 1/2/3 (or Enter for the Bon
+  // default) on a correct pick, Enter/Space to continue after a wrong pick.
+  useEffect(() => {
+    if (!showChoiceRating) return undefined;
+
+    const correctPick = Boolean(choiceFeedback?.isCorrect);
+
+    function handleChoiceRatingKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      // A correct pick is graded 1/2/3 (never "Faux"); Enter takes the Bon default.
+      if (correctPick) {
+        if (["1", "2", "3"].includes(event.key)) {
+          event.preventDefault();
+          rateChoice(Number(event.key));
+        } else if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          rateChoice(2);
+        }
+
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateChoice();
+      }
+    }
+
+    window.addEventListener("keydown", handleChoiceRatingKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleChoiceRatingKeyDown);
+    };
+  }, [showChoiceRating, choiceFeedback, rateChoice]);
+
+  // Quick answer: number keys pick the matching option before the reveal,
+  // mirroring the keyboard flow of text review (Enter reveals, digits grade).
+  useEffect(() => {
+    if (mode !== MAP_MODE_MULTIPLE_CHOICE || showRecap || choiceFeedback) {
+      return undefined;
+    }
+
+    function handleChoiceKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      const index = Number(event.key) - 1;
+
+      if (!Number.isInteger(index) || index < 0 || index >= choiceOptions.length) {
+        return;
+      }
+
+      event.preventDefault();
+      handleChoiceSelect(choiceOptions[index].question_id);
+    }
+
+    window.addEventListener("keydown", handleChoiceKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleChoiceKeyDown);
+    };
+  }, [mode, showRecap, choiceFeedback, choiceOptions, handleChoiceSelect]);
+
   const previousPromptCodeRef = useRef(promptCode);
 
   useEffect(() => {
     if (![MAP_MODE_TYPE_PROMPT, MAP_MODE_MULTIPLE_CHOICE].includes(mode)) return;
+
+    // While a choice reveal is up, the answered zone is still the one on screen
+    // but promptCode has already advanced to the next zone. Re-focusing now would
+    // only bump focusVersion and make SvgMap re-fit the zone it is already framed
+    // on. Leave previousPromptCodeRef untouched so the zoom still follows the
+    // prompt once the reveal is dismissed.
+    if (choiceFeedback) return;
 
     if (
       autoZoomEnabled &&
@@ -476,13 +683,66 @@ export default function MapReview({
     }
 
     previousPromptCodeRef.current = promptCode;
-  }, [autoZoomEnabled, focusNextRemainingZone, mode, promptCode, showRecap]);
+  }, [autoZoomEnabled, choiceFeedback, focusNextRemainingZone, mode, promptCode, showRecap]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
 
     scrollRecapRowIntoView(focusedCode);
+    // Keep DOM focus on the selected row so a click never leaves a stale focus
+    // outline on a row that is no longer selected.
+    recapRowRefs.current.get(focusedCode)?.focus({ preventScroll: true });
   }, [focusedCode, recapRowKey, scrollRecapRowIntoView, showRecap]);
+
+  // Recap keyboard: up/down to move the selected zone, 0-3 to grade it.
+  useEffect(() => {
+    if (!showRecap || recapRows.length === 0) return undefined;
+
+    function handleRecapKeyDown(event) {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        const currentIndex = recapRows.findIndex(row => row.item.code === focusedCode);
+        const baseIndex = currentIndex === -1 ? (delta === 1 ? -1 : 0) : currentIndex;
+        const nextIndex = Math.min(
+          recapRows.length - 1,
+          Math.max(0, baseIndex + delta)
+        );
+        const nextCode = recapRows[nextIndex]?.item.code;
+
+        // selectRecapZone zooms the left map preview onto the newly selected
+        // zone, unless the recap "Zoom auto" toggle is off.
+        if (nextCode) selectRecapZone(nextCode);
+        return;
+      }
+
+      if (!showQualityControls) return;
+
+      // Accept the character (0-3) or the physical key, so the shortcut works
+      // on AZERTY layouts where the top-row digits need Shift.
+      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
+      const quality = ["0", "1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality === null) return;
+
+      const focusedRow = recapRows.find(row => row.item.code === focusedCode);
+      if (!focusedRow) return;
+
+      event.preventDefault();
+      setQuality(focusedRow.item.question_id, quality);
+    }
+
+    window.addEventListener("keydown", handleRecapKeyDown);
+    return () => window.removeEventListener("keydown", handleRecapKeyDown);
+  }, [showRecap, recapRows, focusedCode, selectRecapZone, setQuality, showQualityControls]);
 
   return (
     <>
@@ -803,24 +1063,82 @@ export default function MapReview({
           )}
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
-            <div style={choiceGridStyle}>
-              {choiceOptions.map(option => (
-                <button
+            // Answering keeps the same four slots: the decoys drop out, the correct
+            // zone slides into the first slot, and the freed slots become the
+            // quality buttons (or "Continuer" after a wrong pick). Nothing grows,
+            // so the map above never resizes.
+            <div
+              ref={choiceGridRef}
+              data-map-choice-grid
+              style={{
+                ...choiceGridStyle,
+                ...(centerReveal
+                  ? {
+                    gridTemplateColumns: `repeat(${revealedChoices.length}, minmax(160px, 260px))`,
+                    justifyContent: "center"
+                  }
+                  : null)
+              }}
+            >
+              {revealedChoices.map((option, index) => (
+                <div
                   key={option.question_id}
-                  type="button"
-                  data-map-choice-feedback={choiceFeedbackState(option, choiceFeedback)}
-                  disabled={Boolean(choiceFeedback)}
-                  onClick={() => handleChoiceSelect(option.question_id)}
-                  style={getChoiceButtonStyle(option, choiceFeedback)}
+                  data-flip-key={`${choiceScope}:${option.question_id}`}
+                  style={choiceSlotStyle}
                 >
-                  <span>{option.label}</span>
-                  {choiceFeedbackLabel(option, choiceFeedback) && (
-                    <span style={choiceFeedbackLabelStyle}>
-                      {choiceFeedbackLabel(option, choiceFeedback)}
+                  <button
+                    type="button"
+                    data-map-choice-feedback={choiceFeedbackState(option, choiceFeedback)}
+                    disabled={Boolean(choiceFeedback)}
+                    onClick={() => handleChoiceSelect(option.question_id)}
+                    style={{
+                      ...getChoiceButtonStyle(option, choiceFeedback),
+                      flex: 1,
+                      width: "100%"
+                    }}
+                  >
+                    <span style={{ alignItems: "center", display: "flex", gap: "8px", minWidth: 0 }}>
+                      {!choiceFeedback && index < 9 && (
+                        <span aria-hidden="true" data-map-choice-key style={choiceKeyBadgeStyle}>
+                          {index + 1}
+                        </span>
+                      )}
+                      <span>{option.label}</span>
                     </span>
-                  )}
-                </button>
+                    {choiceFeedbackLabel(option, choiceFeedback) && (
+                      <span style={choiceFeedbackLabelStyle}>
+                        {choiceFeedbackLabel(option, choiceFeedback)}
+                      </span>
+                    )}
+                  </button>
+                </div>
               ))}
+
+              {showChoiceRating && (choiceFeedback.isCorrect
+                ? choiceQualityOptions.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    title={option.title}
+                    data-map-choice-quality={option.value}
+                    onClick={() => rateChoice(option.value)}
+                    style={choiceQualityButtonStyle()}
+                  >
+                    <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
+                    <span>{option.icon} {option.title}</span>
+                  </button>
+                ))
+                : (
+                  <button
+                    type="button"
+                    data-map-choice-continue
+                    onClick={() => rateChoice()}
+                    style={choiceContinueButtonStyle}
+                  >
+                    <span aria-hidden="true" style={choiceKeyBadgeStyle}>Entrée</span>
+                    Continuer →
+                  </button>
+                ))}
             </div>
           )}
 
@@ -929,6 +1247,11 @@ export default function MapReview({
                 >
                   Résultat
                 </div>
+
+                <div style={recapKeyboardHintStyle}>
+                  ↑/↓ pour naviguer
+                  {showQualityControls ? " · 0-3 pour noter" : ""}
+                </div>
               </div>
 
               <button
@@ -985,8 +1308,30 @@ export default function MapReview({
                   selected={focusedCode}
                   focusCode={recapFocusCode}
                   focusVersion={recapFocusVersion}
+                  zoneLabels={recapZoneLabels}
                   onSelect={selectRecapCode}
                 />
+                <button
+                  type="button"
+                  data-map-recap-auto-zoom={recapAutoZoomEnabled ? "on" : "off"}
+                  aria-label={recapAutoZoomEnabled
+                    ? "Désactiver le zoom automatique"
+                    : "Activer le zoom automatique"}
+                  aria-pressed={recapAutoZoomEnabled}
+                  onClick={toggleRecapAutoZoom}
+                  onMouseDown={(event) => event.preventDefault()}
+                  style={{
+                    ...autoZoomToggleStyle,
+                    ...(recapAutoZoomEnabled
+                      ? autoZoomToggleOnStyle
+                      : autoZoomToggleOffStyle)
+                  }}
+                  title={recapAutoZoomEnabled
+                    ? "Désactiver le zoom automatique"
+                    : "Activer le zoom automatique"}
+                >
+                  Zoom auto
+                </button>
               </div>
 
               <div style={recapTableStyle}>
@@ -1101,7 +1446,9 @@ export default function MapReview({
                       showRecapSections &&
                       (index === 0 || recapRows[index - 1].isFound !== isFound);
                     const isFocused = focusedCode === item.code;
-                    const selectedQuality = qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
+                    const rowRelearning = isRelearningGroupItem(group, item);
+                    const selectedQuality = qualityByQuestionId[item.question_id]
+                      ?? (isFound ? (rowRelearning ? GOT_IT_QUALITY : 2) : 0);
                     const recapStatusLabel = isUnanswered
                       ? "Non répondu"
                       : isFound ? "Trouvée" : "À revoir";
@@ -1112,9 +1459,13 @@ export default function MapReview({
                         item.progress?.interval ??
                         0
                       );
-                    const rowQualityOptions = canBeUnanswered
-                      ? [unansweredQualityOption, ...qualityOptions]
-                      : qualityOptions;
+                    // A relearning zone collapses to the binary Encore/Acquis
+                    // choice; the grade is never re-applied to FSRS.
+                    const rowQualityOptions = rowRelearning
+                      ? relearningQualityOptions
+                      : canBeUnanswered
+                        ? [unansweredQualityOption, ...qualityOptions]
+                        : qualityOptions;
 
                     return (
                       <Fragment key={item.question_id}>
@@ -1139,7 +1490,7 @@ export default function MapReview({
                           ref={setRecapRowRef(item.code)}
                           role="button"
                           tabIndex={0}
-                          onClick={() => focusRecapCode(item.code)}
+                          onClick={() => selectRecapZone(item.code)}
                           onKeyDown={(event) => {
                             if (event.target !== event.currentTarget) {
                               return;
@@ -1147,7 +1498,7 @@ export default function MapReview({
 
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              focusRecapCode(item.code);
+                              selectRecapZone(item.code);
                             }
                           }}
                           style={{
@@ -1338,6 +1689,33 @@ const choiceGridStyle = {
   gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
 };
 
+
+// Small keycap hint shown on each choice so the number shortcut is discoverable.
+const choiceKeyBadgeStyle = {
+  alignItems: "center",
+  background: "#0d0d0d",
+  border: "1px solid #363636",
+  borderRadius: "5px",
+  color: "#8a8a8a",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: 800,
+  height: "18px",
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "18px",
+  padding: "0 5px"
+};
+
+function isEditableTarget(target) {
+  if (!target || typeof target.closest !== "function") {
+    return false;
+  }
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
+
 const choiceButtonStyle = {
   ...buttonStyle,
   alignItems: "center",
@@ -1347,6 +1725,16 @@ const choiceButtonStyle = {
   justifyContent: "space-between",
   minHeight: "54px",
   textAlign: "left"
+};
+
+// Fills the two slots freed by the decoys after a wrong pick.
+const choiceContinueButtonStyle = {
+  ...choiceButtonStyle,
+  animation: "fadeIn 0.26s ease 0.3s both",
+  color: "#c9c9c9",
+  gap: "8px",
+  gridColumn: "span 2",
+  justifyContent: "center"
 };
 
 const choiceFeedbackLabelStyle = {
@@ -1361,19 +1749,19 @@ const choiceFeedbackLabelStyle = {
 
 const overlayStyle = {
   position: "fixed",
-  inset: 0,
+  inset: "var(--shell-top, 0px) 0 0 0",
   background: "rgba(0,0,0,0.75)",
   backdropFilter: "blur(6px)",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  padding: "30px",
+  padding: "20px",
   zIndex: 1000
 };
 
 const recapCardStyle = {
   width: "100%",
-  maxWidth: "1100px",
+  maxWidth: "1460px",
   maxHeight: "100%",
   overflow: "auto",
   scrollbarGutter: "stable",
@@ -1382,6 +1770,13 @@ const recapCardStyle = {
   borderRadius: "18px",
   padding: "24px",
   boxShadow: "0 20px 60px rgba(0,0,0,0.45)"
+};
+
+const recapKeyboardHintStyle = {
+  color: "#666",
+  fontSize: "12px",
+  fontWeight: "600",
+  marginTop: "6px"
 };
 
 const recapStatStyle = {
@@ -1416,7 +1811,8 @@ const recapMapPanelStyle = {
   borderRadius: "14px",
   overflow: "hidden",
   border: "1px solid #262626",
-  minHeight: "430px"
+  minHeight: "clamp(430px, 64vh, 780px)",
+  position: "relative"
 };
 
 const recapTableStyle = {
@@ -1494,7 +1890,7 @@ const recapTableBodyStyle = {
   display: "flex",
   flexDirection: "column",
   gap: "1px",
-  maxHeight: "430px",
+  maxHeight: "clamp(430px, 64vh, 780px)",
   overflow: "auto",
   scrollbarGutter: "stable",
   background: "#242424"

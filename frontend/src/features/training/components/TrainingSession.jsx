@@ -25,9 +25,24 @@ import {
 import {
   defaultImageMode,
   IMAGE_MODES,
+  IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_TYPE_PROMPT,
   imageModeDetails,
   imageModeLabels
 } from "../../review/imageModes";
+import {
+  defaultTextMode,
+  TEXT_MODES,
+  textModeDetails,
+  textModeLabels
+} from "../../review/textModes";
+import {
+  defaultSequenceMode,
+  SEQUENCE_MODES,
+  sequenceModeDetails,
+  sequenceModeLabels
+} from "../../review/sequenceModes";
+import { getMediaKind } from "../../../shared/media";
 import "./TrainingSession.css";
 
 
@@ -98,6 +113,18 @@ function normalizeText(value) {
 }
 
 
+function groupIsAudioOnly(group) {
+  // Audio can't be scanned in parallel, so audio-only groups drop the grid modes.
+  // Kind is inferred per item from the file extension.
+  const items = group?.questions || group?.items || [];
+  const kinds = items
+    .map((item) => getMediaKind(item?.media))
+    .filter(Boolean);
+
+  return kinds.length > 0 && kinds.every((kind) => kind === "audio");
+}
+
+
 function modeConfigForGroup(group) {
   if (group?.type_group === "map") {
     return {
@@ -108,12 +135,38 @@ function modeConfigForGroup(group) {
     };
   }
 
-  if (group?.type_group === "image") {
+  if (group?.type_group === "media") {
+    const audioOnly = groupIsAudioOnly(group);
+    const modes = audioOnly
+      ? IMAGE_MODES.filter((mode) => (
+        mode === IMAGE_MODE_TYPE_PROMPT ||
+        mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+      ))
+      : IMAGE_MODES;
+
     return {
-      defaultMode: defaultImageMode,
+      defaultMode: audioOnly ? IMAGE_MODE_TYPE_PROMPT : defaultImageMode,
       details: imageModeDetails,
       labels: imageModeLabels,
-      modes: IMAGE_MODES
+      modes
+    };
+  }
+
+  if (group?.type_group === "text") {
+    return {
+      defaultMode: defaultTextMode,
+      details: textModeDetails,
+      labels: textModeLabels,
+      modes: TEXT_MODES
+    };
+  }
+
+  if (group?.type_group === "sequence") {
+    return {
+      defaultMode: defaultSequenceMode,
+      details: sequenceModeDetails,
+      labels: sequenceModeLabels,
+      modes: SEQUENCE_MODES
     };
   }
 
@@ -123,15 +176,27 @@ function modeConfigForGroup(group) {
 
 function recordForMode(group, mode) {
   const config = modeConfigForGroup(group);
+  const records = group?.training_records;
 
-  return group?.training_records?.[mode] || (
-    mode === config?.defaultMode ? group?.training_record : null
-  );
+  // When a per-mode map is present it is authoritative: a mode with no entry
+  // has no record. The flat `training_record` is only a legacy fallback for the
+  // default mode, and must not be consulted otherwise — after recording a
+  // non-default mode the hook overwrites it with that mode's score, which would
+  // otherwise leak into the default mode until the next refresh.
+  if (records && typeof records === "object") {
+    return records[mode] || null;
+  }
+
+  return mode === config?.defaultMode ? group?.training_record : null;
 }
 
 
 function isVisualQuestion(question) {
-  return ["image", "map", "timeline"].includes(question?.type_q);
+  return (
+    ["media", "map", "timeline"].includes(question?.type_q) ||
+    (question?.type_q === "text" && Array.isArray(question?.items)) ||
+    (question?.type_q === "sequence" && Array.isArray(question?.items))
+  );
 }
 
 
@@ -199,7 +264,9 @@ function percentBarWidth(percent) {
 
 function groupAccent(group) {
   if (group?.type_group === "map") return "map";
-  if (group?.type_group === "image") return "image";
+  if (group?.type_group === "media") return "media";
+  if (group?.type_group === "text") return "text";
+  if (group?.type_group === "sequence") return "sequence";
 
   return "neutral";
 }
@@ -212,8 +279,9 @@ function collectionPercent(collection) {
 
 function questionTypeLabel(type) {
   if (type === "map") return "Map";
-  if (type === "image") return "Image";
+  if (type === "media") return "Média";
   if (type === "timeline") return "Timeline";
+  if (type === "sequence") return "Séquence";
   return "Texte";
 }
 
@@ -223,7 +291,7 @@ function questionTitle(question) {
     return question.title;
   }
 
-  if (question?.type_q === "map" || question?.type_q === "image") {
+  if (question?.type_q === "map" || question?.type_q === "media") {
     return question.answer || question.question || `Question #${question.id}`;
   }
 
@@ -934,7 +1002,8 @@ function CollectionComposer({
                   <option value="">Tous les types</option>
                   <option value="text">Texte</option>
                   <option value="map">Map</option>
-                  <option value="image">Image</option>
+                  <option value="media">Média</option>
+                  <option value="text">Texte</option>
                   <option value="timeline">Timeline</option>
                 </select>
               </label>
@@ -1809,9 +1878,13 @@ export default function TrainingSession({ setMode }) {
               handleMapComplete={session.handleMapComplete}
               handleImageComplete={session.handleImageComplete}
               handleTimelineComplete={session.handleTimelineComplete}
+              handleSequenceComplete={session.handleSequenceComplete}
+              onAnsweringComplete={session.markAnsweringComplete}
               submitMapAnswer={session.submitMapTrainingAnswer}
-              submitImageAnswer={session.submitImageTrainingAnswer}
+              submitMediaAnswer={session.submitMediaTrainingAnswer}
+              submitTextAnswer={session.submitTextTrainingAnswer}
               submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+              submitSequenceAnswer={session.submitSequenceTrainingAnswer}
               trainingMode
               trainingElapsedMs={null}
               trainingBestTimeMs={null}
@@ -1828,7 +1901,7 @@ export default function TrainingSession({ setMode }) {
       style={{
         background: "#111",
         color: "#eee",
-        minHeight: "100vh",
+        minHeight: "calc(100vh - var(--shell-top, 0px))",
         padding: "30px 24px 80px"
       }}
     >
@@ -2085,9 +2158,13 @@ export default function TrainingSession({ setMode }) {
                   handleMapComplete={session.handleMapComplete}
                   handleImageComplete={session.handleImageComplete}
                   handleTimelineComplete={session.handleTimelineComplete}
+                  handleSequenceComplete={session.handleSequenceComplete}
+                  onAnsweringComplete={session.markAnsweringComplete}
                   submitMapAnswer={session.submitMapTrainingAnswer}
-                  submitImageAnswer={session.submitImageTrainingAnswer}
+                  submitMediaAnswer={session.submitMediaTrainingAnswer}
+                  submitTextAnswer={session.submitTextTrainingAnswer}
                   submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+                  submitSequenceAnswer={session.submitSequenceTrainingAnswer}
                   trainingMode
                   trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
                   trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}

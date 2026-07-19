@@ -11,6 +11,9 @@ backend/tuning_reports/
 node_modules/
 dist/
 
+# Desktop webview profile (localStorage, cookies)
+backend/webview-data/
+
 # Database
 *.db
 *.db-shm
@@ -26,3 +29,8 @@ backend/static/
 
 # Temp
 *.csv.tmp
+
+# graphify
+graphify-out/
+/CLAUDE.md
+.claude/settings.json

@@ -386,6 +386,48 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.showRecap).toBe(false);
   });
 
+  it("click_prompt keeps the whole context clickable when only a subset is prompted", () => {
+    // Failed-retry pass: only 2 of the original 5 zones are re-prompted, but the
+    // full context stays clickable/highlighted so the pick never degenerates to
+    // a couple of zones.
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" }),
+      zone({ questionId: 5, code: "e", label: "Epsilon" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "click_prompt",
+        contextItems
+      })
+    );
+
+    // The whole context is clickable, not just the 2 prompted zones.
+    expect([...result.current.dueCodes].sort()).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+    ]);
+
+    const prompt = result.current.currentPromptItem;
+
+    // Clicking a context-only distractor (never prompted) misses the prompt.
+    act(() => {
+      result.current.handleZoneSelect("d");
+    });
+
+    expect(result.current.flashCodes).toEqual(["d"]);
+    expect(result.current.activeMissedCodes).toEqual([prompt.code]);
+    expect(result.current.foundQuestionIds).toEqual([]);
+  });
+
   it("type_prompt accepts the highlighted zone name and skipping does not complete the session", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),
@@ -457,6 +499,114 @@ describe("useMapReview recap sorting", () => {
     });
 
     expect(result.current.foundQuestionIds).toEqual([target.question_id]);
+  });
+
+  it("inline rating keeps the reveal sticky and carries the grade into the recap", async () => {
+    vi.useFakeTimers();
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta" }),
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" })
+    ];
+
+    try {
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, onComplete, submitAnswer, {
+          mode: "multiple_choice",
+          contextItems,
+          inlineChoiceRating: true
+        })
+      );
+      const target = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.handleChoiceSelect(target.question_id);
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(result.current.choiceFeedback).toBeTruthy();
+      expect(result.current.showRecap).toBe(false);
+
+      act(() => {
+        result.current.rateChoice(3);
+      });
+
+      // The recap opens pre-filled with the inline grade — it must not be reset
+      // to the default 2 by the recap's own quality rebuild.
+      expect(result.current.showRecap).toBe(true);
+      expect(result.current.qualityByQuestionId[target.question_id]).toBe(3);
+      expect(submitAnswer).not.toHaveBeenCalled();
+
+      // The grade can still be corrected on the recap before submitting.
+      act(() => {
+        result.current.setQuality(target.question_id, 1);
+      });
+
+      await act(async () => {
+        await result.current.sendResult();
+      });
+
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { [target.question_id]: 1 },
+        "multiple_choice",
+        contextItems.length
+      );
+      expect(onComplete).toHaveBeenCalledWith([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("inline rating carries a wrong pick into the recap as quality 0", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
+    const contextItems = [
+      ...reviewZones,
+      zone({ questionId: 2, code: "b", label: "Beta" }),
+      zone({ questionId: 3, code: "c", label: "Gamma" }),
+      zone({ questionId: 4, code: "d", label: "Delta" })
+    ];
+
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, onComplete, submitAnswer, {
+        mode: "multiple_choice",
+        contextItems,
+        inlineChoiceRating: true
+      })
+    );
+    const target = result.current.currentPromptItem;
+    const wrong = result.current.choiceOptions.find(
+      option => option.question_id !== target.question_id
+    );
+
+    act(() => {
+      result.current.handleChoiceSelect(wrong.question_id);
+    });
+    expect(result.current.choiceFeedback?.isCorrect).toBe(false);
+
+    act(() => {
+      result.current.rateChoice();
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.qualityByQuestionId[target.question_id]).toBe(0);
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { [target.question_id]: 0 },
+      "multiple_choice",
+      contextItems.length
+    );
+    expect(onComplete).toHaveBeenCalledWith([target.question_id]);
   });
 
   it("multiple_choice uses borrowed context and submits only active zones", async () => {

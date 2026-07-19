@@ -1,10 +1,11 @@
 import TextReviewCard from "./TextReviewCard";
 import TextTrainingCard from "./TextTrainingCard";
-import ImageReview from "./ImageReview";
+import MediaReview from "./MediaReview";
+import TextGroupReview from "./TextGroupReview";
 import MapReview from "./MapReview";
 import TimelineReview from "./TimelineReview";
+import SequenceReview from "./SequenceReview";
 import {
-    IMAGE_MODE_CLICK_PROMPT,
     IMAGE_MODE_TYPE_PROMPT,
     normalizeImageMode
 } from "../imageModes";
@@ -35,9 +36,14 @@ export default function ReviewQuestionRenderer({
     handleMapComplete,
     handleImageComplete,
     handleTimelineComplete,
+    handleSequenceComplete,
+    onAnsweringComplete,
     submitMapAnswer,
-    submitImageAnswer,
+    submitMediaAnswer,
+    submitTextAnswer,
     submitTimelineAnswer,
+    submitSequenceAnswer,
+    graduateGroupedAnswer,
     allowPartialSubmit = false,
     trainingMode = false,
     trainingElapsedMs = null,
@@ -61,8 +67,10 @@ export default function ReviewQuestionRenderer({
                 reviewZones={q.items}
                 contextItems={q.context_items || q.items || []}
                 mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 allowPartialSubmit={allowPartialSubmit}
                 showQualityControls={!trainingMode}
                 trainingElapsedMs={trainingElapsedMs}
@@ -72,22 +80,21 @@ export default function ReviewQuestionRenderer({
         );
     }
 
-    if (q.type_q === "image" && q.items) {
+    if (q.type_q === "media" && q.items) {
         const imageMode = normalizeImageMode(q.mode);
-        const separatesResolvedItems = (
-            imageMode === IMAGE_MODE_CLICK_PROMPT ||
-            imageMode === IMAGE_MODE_TYPE_PROMPT
-        );
+        const separatesResolvedItems = imageMode === IMAGE_MODE_TYPE_PROMPT;
 
         return (
-            <ImageReview
+            <MediaReview
                 key={renderKey}
                 group={q}
                 reviewItems={q.items || []}
                 contextItems={q.context_items || q.items || []}
                 mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleImageComplete}
-                submitAnswer={submitImageAnswer}
+                submitAnswer={submitMediaAnswer}
+                graduateAnswer={graduateGroupedAnswer}
                 allowPartialSubmit={allowPartialSubmit}
                 separateResolvedItems={separatesResolvedItems}
                 showQualityControls={!trainingMode}
@@ -104,8 +111,45 @@ export default function ReviewQuestionRenderer({
                 key={renderKey}
                 group={q}
                 reviewItems={q.items || []}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
+                graduateAnswer={graduateGroupedAnswer}
+                fillAvailableHeight={compactVisualLayout}
+            />
+        );
+    }
+
+    if (q.type_q === "sequence" && q.items) {
+        return (
+            <SequenceReview
+                key={renderKey}
+                group={q}
+                reviewItems={q.items || []}
+                contextItems={q.context_items || q.items || []}
+                mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
+                onComplete={handleSequenceComplete}
+                submitAnswer={submitSequenceAnswer}
+                graduateAnswer={graduateGroupedAnswer}
+                fillAvailableHeight={compactVisualLayout}
+            />
+        );
+    }
+
+    if (q.type_q === "text" && q.items) {
+        return (
+            <TextGroupReview
+                key={renderKey}
+                group={q}
+                reviewItems={q.items || []}
+                contextItems={q.context_items || q.items || []}
+                mode={q.mode}
+                onAnsweringComplete={onAnsweringComplete}
+                onComplete={handleImageComplete}
+                submitAnswer={submitTextAnswer}
+                graduateAnswer={graduateGroupedAnswer}
+                showQualityControls={!trainingMode}
                 fillAvailableHeight={compactVisualLayout}
             />
         );
@@ -118,6 +162,7 @@ export default function ReviewQuestionRenderer({
                 key={renderKey}
                 q={q}
                 currentIndex={currentIndex}
+                onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleTextAnswer}
             />
         );

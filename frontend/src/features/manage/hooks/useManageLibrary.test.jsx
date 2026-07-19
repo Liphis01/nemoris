@@ -16,9 +16,9 @@ import {
   listGroups
 } from "../../../api/groups";
 import {
-  importImageGroupMediaUrl,
-  uploadImageGroupMedia
-} from "../../../api/imageGroups";
+  importMediaGroupMediaUrl,
+  uploadMediaGroupMedia
+} from "../../../api/mediaGroups";
 
 vi.mock("../../../api/questions", () => ({
   createQuestion: vi.fn(),
@@ -36,9 +36,9 @@ vi.mock("../../../api/groups", () => ({
   listGroups: vi.fn()
 }));
 
-vi.mock("../../../api/imageGroups", () => ({
-  importImageGroupMediaUrl: vi.fn(),
-  uploadImageGroupMedia: vi.fn()
+vi.mock("../../../api/mediaGroups", () => ({
+  importMediaGroupMediaUrl: vi.fn(),
+  uploadMediaGroupMedia: vi.fn()
 }));
 
 describe("useManageLibrary", () => {
@@ -90,10 +90,10 @@ describe("useManageLibrary", () => {
     createQuestion.mockResolvedValue({});
     createGroup.mockResolvedValue({});
     importMediaUrl.mockResolvedValue({});
-    importImageGroupMediaUrl.mockResolvedValue({});
+    importMediaGroupMediaUrl.mockResolvedValue({});
     removeQuestionMedia.mockResolvedValue({});
     uploadMedia.mockResolvedValue({});
-    uploadImageGroupMedia.mockResolvedValue({});
+    uploadMediaGroupMedia.mockResolvedValue({});
     vi.spyOn(window, "alert").mockImplementation(() => {});
   });
 
@@ -171,17 +171,17 @@ describe("useManageLibrary", () => {
     const createdGroup = {
       id: 9,
       name: "Drapeaux",
-      type_group: "image",
+      type_group: "media",
       media: null
     };
     createGroup.mockResolvedValue(createdGroup);
     const { result } = renderHook(() => useManageLibrary("manage"));
 
     act(() => {
-      result.current.startCreateGroup("image");
+      result.current.startCreateGroup("media");
       result.current.setGroupDraft({
         name: "Drapeaux",
-        type_group: "image",
+        type_group: "media",
         media: "",
         data: {}
       });
@@ -192,7 +192,7 @@ describe("useManageLibrary", () => {
     });
 
     expect(createGroup).toHaveBeenCalledWith({
-      type_group: "image",
+      type_group: "media",
       name: "Drapeaux",
       media: null,
       data: {}
@@ -216,17 +216,17 @@ describe("useManageLibrary", () => {
   });
 
   it("imports remote image group media through the group upload endpoint", async () => {
-    importImageGroupMediaUrl.mockResolvedValue({ url: "/static/image-groups/7/france.png" });
+    importMediaGroupMediaUrl.mockResolvedValue({ url: "/static/media-groups/7/france.png" });
     const { result } = renderHook(() => useManageLibrary("manage"));
 
     await act(async () => {
-      await result.current.importImageGroupMediaUrl(
+      await result.current.importMediaGroupMediaUrl(
         7,
         "https://example.com/france.png"
       );
     });
 
-    expect(importImageGroupMediaUrl).toHaveBeenCalledWith(
+    expect(importMediaGroupMediaUrl).toHaveBeenCalledWith(
       7,
       "https://example.com/france.png"
     );

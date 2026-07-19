@@ -1,0 +1,143 @@
+from .mode_selection import (
+    CHOICE_MODE_MIN_CONTEXT,
+    MODE_AFFINITY_STRONG,
+    MODE_AFFINITY_SUPPORT,
+    question_mode_affinity_counts,
+    weighted_mode_choice
+)
+
+
+TEXT_MODE_TYPE_ALL = "type_all"
+TEXT_MODE_MATCH = "match"
+
+TEXT_MODES = (
+    TEXT_MODE_TYPE_ALL,
+    TEXT_MODE_MATCH
+)
+DEFAULT_TEXT_MODE = TEXT_MODE_TYPE_ALL
+
+# type_all is full recall (the shared baseline). match is recognition among all
+# the group's answers as distractors — a touch harder than the 4-option QCM
+# (0.55) because every answer is on screen.
+TEXT_TYPE_ALL_DIFFICULTY = 1.0
+TEXT_MATCH_DIFFICULTY = 0.6
+
+
+def normalize_text_mode(mode):
+    value = str(mode or "").strip()
+
+    return value if value in TEXT_MODES else DEFAULT_TEXT_MODE
+
+
+def _tuned_number(tuning, key, default):
+    if not isinstance(tuning, dict):
+        return default
+
+    try:
+        return float(tuning.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def text_mode_difficulty(mode=None, context_count=0, tuning=None):
+    mode = normalize_text_mode(mode)
+
+    if mode == TEXT_MODE_MATCH:
+        return _tuned_number(tuning, "text_match_difficulty", TEXT_MATCH_DIFFICULTY)
+
+    return _tuned_number(tuning, "text_type_all_difficulty", TEXT_TYPE_ALL_DIFFICULTY)
+
+
+def calibrate_text_quality(raw_quality, mode=None, context_count=0):
+    try:
+        quality = int(raw_quality)
+    except (TypeError, ValueError):
+        quality = 0
+
+    return max(0, min(3, quality))
+
+
+def _recent_mode_counts(questions, limit=6):
+    counts = {}
+
+    for question in questions or []:
+        history = list(question.progress.history or []) if question.progress else []
+        seen = 0
+
+        for entry in reversed(history):
+            if not isinstance(entry, dict):
+                continue
+
+            mode = entry.get("text_mode")
+
+            if mode in TEXT_MODES:
+                counts[mode] = counts.get(mode, 0) + 1
+                seen += 1
+
+            if seen >= limit:
+                break
+
+    return counts
+
+
+def choose_text_review_mode(
+    due_questions,
+    context_questions,
+    multiple_choice_context_count=None,
+    rng=None
+):
+    due_questions = list(due_questions or [])
+    context_questions = list(context_questions or [])
+    context_count = len(context_questions)
+    choice_context_count = (
+        context_count
+        if multiple_choice_context_count is None
+        else multiple_choice_context_count
+    )
+
+    if not due_questions:
+        return DEFAULT_TEXT_MODE
+
+    affinity_counts = question_mode_affinity_counts(due_questions)
+    support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
+    strong_count = affinity_counts[MODE_AFFINITY_STRONG]
+
+    if support_count / len(due_questions) >= 0.55:
+        # Struggling set -> favour the easier recognition mode.
+        base_scores = {
+            TEXT_MODE_MATCH: 3.4,
+            TEXT_MODE_TYPE_ALL: 1.4
+        }
+    elif strong_count / len(due_questions) >= 0.55:
+        # Confident set -> favour recall.
+        base_scores = {
+            TEXT_MODE_TYPE_ALL: 3.4,
+            TEXT_MODE_MATCH: 1.2
+        }
+    else:
+        base_scores = {
+            TEXT_MODE_TYPE_ALL: 2.6,
+            TEXT_MODE_MATCH: 2.2
+        }
+
+    scores = dict(base_scores)
+
+    recent_counts = _recent_mode_counts(due_questions)
+
+    for mode, count in recent_counts.items():
+        scores[mode] = scores.get(mode, 0) - (0.55 * count)
+
+    tie_order = {
+        TEXT_MODE_MATCH: 0,
+        TEXT_MODE_TYPE_ALL: 1
+    }
+    eligible_modes = list(TEXT_MODES)
+
+    # Matching among fewer than the shared minimum is degenerate (too few
+    # distractors), so fall back to typing.
+    if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
+        eligible_modes = [
+            mode for mode in eligible_modes if mode != TEXT_MODE_MATCH
+        ]
+
+    return weighted_mode_choice(eligible_modes, scores, tie_order, rng=rng)

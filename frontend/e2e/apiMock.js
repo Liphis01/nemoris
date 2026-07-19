@@ -179,6 +179,8 @@ export async function mockApi(page, options = {}) {
     },
     questions: clone(options.questions || []),
     groups: clone(options.groups || []),
+    bonusGroups: clone(options.bonusGroups || []),
+    bonusItems: clone(options.bonusItems || {}),
     nextQuestionId: options.nextQuestionId || 100,
     timelineResults: clone(options.timelineResults || null)
   };
@@ -215,6 +217,17 @@ export async function mockApi(page, options = {}) {
 
     if (method === "GET" && path === "/review/bonus_status") {
       await fulfillJson(route, state.bonusReviewStatus);
+      return;
+    }
+
+    if (method === "GET" && path === "/review/bonus_groups") {
+      await fulfillJson(route, state.bonusGroups);
+      return;
+    }
+
+    if (method === "GET" && path === "/review/bonus_items") {
+      const key = url.searchParams.get("key");
+      await fulfillJson(route, state.bonusItems[key] || []);
       return;
     }
 

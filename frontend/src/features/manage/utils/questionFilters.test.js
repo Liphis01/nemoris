@@ -9,6 +9,7 @@ describe("questionFilters", () => {
       question: "Capital of France",
       answer: "Paris",
       tags: ["Geo"],
+      data: { favorite: true },
       progress: { next_review: "2099-01-01", reps: 4 }
     },
     {
@@ -30,7 +31,7 @@ describe("questionFilters", () => {
     },
     {
       id: 4,
-      type_q: "image",
+      type_q: "media",
       question: "Flags - Cote d Ivoire",
       answer: "Cote-d Ivoire",
       tags: ["flags"],
@@ -63,6 +64,19 @@ describe("questionFilters", () => {
     }).map(question => question.id)).toEqual([3]);
   });
 
+  it("keeps only favorites when favoritesOnly is set", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "",
+      tagFilter: "",
+      questionTypeFilter: "",
+      dueOnly: false,
+      favoritesOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([1]);
+  });
+
   it("sorts by review count and next review for review-focused browsing", () => {
     expect(filterAndSortQuestions({
       questions,
@@ -80,7 +94,7 @@ describe("questionFilters", () => {
       questions,
       search: "cote d ivoire",
       tagFilter: "",
-      questionTypeFilter: "image",
+      questionTypeFilter: "media",
       dueOnly: true,
       sortField: "id",
       sortOrder: "asc"

@@ -22,6 +22,7 @@ export function buildQuestionSavePayload(source) {
     question: source?.question || "",
     answer: source?.answer || "",
     media: source?.media || null,
+    answer_media: source?.answer_media || null,
     type_q,
     tags: pendingTag && !tags.includes(pendingTag)
       ? [...tags, pendingTag]
@@ -35,6 +36,7 @@ export function buildQuestionDraft(source) {
     question: source?.question || "",
     answer: source?.answer || "",
     media: source?.media || "",
+    answer_media: source?.answer_media || "",
     type_q: source?.type_q || "text",
     tags: source?.tags || [],
     data: source?.data || {}

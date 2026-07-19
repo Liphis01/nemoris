@@ -1,6 +1,8 @@
-import { questionTypeChipStyles } from "../../../shared/questionTypes";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { buttonStyle, panelStyle } from "./QuestionEditorStyles";
 
+// Only the standalone question types live here. Every grouped type (map, media,
+// text, sequence) is created from "Nouveau groupe" instead.
 const questionCreationTypes = [
   {
     value: "text",
@@ -11,16 +13,6 @@ const questionCreationTypes = [
     value: "timeline",
     label: "Événement timeline",
     detail: "Date ponctuelle ou intervalle"
-  },
-  {
-    value: "map",
-    label: "Carte",
-    detail: "Créer un groupe map et ses zones"
-  },
-  {
-    value: "image",
-    label: "Groupe d'images",
-    detail: "Créer un groupe d'images à réviser"
   }
 ];
 
@@ -40,7 +32,7 @@ export default function QuestionCreationTypeChooser({ onSelect, onCancel }) {
         }}
       >
         {questionCreationTypes.map((type) => {
-          const typeStyle = questionTypeChipStyles[type.value];
+          const typeStyle = getQuestionTypeChipStyle(type.value);
 
           return (
             <button

@@ -5,22 +5,24 @@ from ..dependencies import get_db
 from ..models import Progress, Question
 from ..schemas import (
     AnswerRequest,
-    ImageAnswerRequest,
     MapAnswerRequest,
+    MediaAnswerRequest,
+    RelearningGraduateRequest,
     ReviewSettings,
+    SequenceAnswerRequest,
+    TextAnswerRequest,
     TimelineAnswerRequest
 )
+from ..scheduler import progress_in_relearning
 from ..serializers import serialize_progress
 from ..services.collections import sync_generated_hard_collection
 from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
     create_initial_progress,
-    progress_is_new,
+    graduate_relearning,
     rebalance_progress_calendar,
-    replace_latest_scheduling,
-    restore_progress_from_history,
-    should_schedule_answer
+    replace_latest_scheduling
 )
 from ..services.map_modes import (
     DEFAULT_MAP_MODE,
@@ -35,7 +37,15 @@ from ..services.image_modes import (
     image_mode_difficulty,
     normalize_image_mode
 )
+from ..services.text_modes import (
+    DEFAULT_TEXT_MODE,
+    calibrate_text_quality,
+    text_mode_difficulty,
+    normalize_text_mode
+)
 from ..services.review import (
+    get_bonus_group_entries,
+    get_bonus_group_items,
     get_bonus_review_status,
     get_review_items,
     get_review_summary
@@ -45,6 +55,15 @@ from ..services.settings import (
     get_startup_rebalance_notice,
     load_scheduler_tuning_settings,
     save_review_settings
+)
+from ..services.sequence import (
+    grade_sequence_position,
+    sequence_positions_for_questions
+)
+from ..services.sequence_modes import (
+    DEFAULT_SEQUENCE_MODE,
+    normalize_sequence_mode,
+    sequence_mode_difficulty
 )
 from ..services.timeline import grade_timeline_answer, validate_timeline_data
 
@@ -75,21 +94,7 @@ def parse_group_ids(value):
     return group_ids
 
 
-def answer_progress_payload(progress):
-    if not progress:
-        return {
-            "stability": 1.0,
-            "difficulty": 5.0,
-            "interval": 0,
-            "ideal_interval": None,
-            "last_review": None,
-            "next_review": None,
-            "ideal_next_review": None,
-            "reps": 0,
-            "lapses": 0,
-            "history": []
-        }
-
+def answer_progress_payload(progress, today=None):
     return {
         "stability": progress.stability,
         "difficulty": progress.difficulty,
@@ -100,36 +105,9 @@ def answer_progress_payload(progress):
         "ideal_next_review": progress.ideal_next_review,
         "reps": progress.reps,
         "lapses": progress.lapses,
+        "relearning": progress_in_relearning(progress, today),
         "history": progress.history or []
     }
-
-
-def bonus_schedule_metadata(progress_was_new, created_progress):
-    if not progress_was_new:
-        return None
-
-    return {
-        "started_from_bonus": True,
-        "created_progress": created_progress
-    }
-
-
-def latest_entry_started_from_bonus(progress):
-    history = list(progress.history or []) if progress else []
-
-    if not history:
-        return False
-
-    return bool(history[-1].get("started_from_bonus"))
-
-
-def latest_entry_created_progress(progress):
-    history = list(progress.history or []) if progress else []
-
-    if not history:
-        return False
-
-    return bool(history[-1].get("created_progress"))
 
 
 @router.get("/review/settings")
@@ -177,13 +155,11 @@ def get_review(
     parsed_group_ids = parse_group_ids(group_ids)
 
     if include_new:
+        # Capacity is informational only: it no longer blocks bonus review.
         bonus_status = get_bonus_review_status(
             db,
             group_ids=parsed_group_ids
         )
-
-        if bonus_status["state"] == "full":
-            raise HTTPException(status_code=409, detail=bonus_status["message"])
 
     # The service handles due filtering and runtime map grouping.
     return get_review_items(
@@ -192,6 +168,23 @@ def get_review(
         bonus_status=bonus_status,
         group_ids=parsed_group_ids
     )
+
+
+@router.get("/review/bonus_groups")
+def get_bonus_groups(
+    group_ids: str | None = None,
+    db: Session = Depends(get_db)
+):
+    # Cheap list of every group / question with new questions available. The
+    # frontend renders this as the bonus selection menu, then fetches one
+    # entry's full payload from /review/bonus_items on pick.
+    return get_bonus_group_entries(db, group_ids=parse_group_ids(group_ids))
+
+
+@router.get("/review/bonus_items")
+def get_bonus_items(key: str, db: Session = Depends(get_db)):
+    # Full serialized review payload for a single picked bonus entry.
+    return get_bonus_group_items(db, key)
 
 
 @router.get("/review/bonus_status")
@@ -210,18 +203,14 @@ def get_summary(db: Session = Depends(get_db)):
 @router.post("/answer")
 def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
     # Old/imported questions may not have progress yet, so create it lazily on
-    # first answer.
+    # first answer. A failed first answer schedules like any other review: FSRS
+    # keeps a failed card due today, so a bonus question answered wrong lands in
+    # the normal review queue instead of staying new.
     progress = (
         db.query(Progress)
         .filter(Progress.question_id == data.question_id)
         .first()
     )
-
-    if not should_schedule_answer(progress, data.quality):
-        return answer_progress_payload(progress)
-
-    progress_was_new = progress_is_new(progress)
-    created_progress = progress is None
 
     if not progress:
         progress = create_initial_progress(
@@ -234,13 +223,12 @@ def answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         db,
         progress,
         data.quality,
-        today=data.review_date,
-        metadata=bonus_schedule_metadata(progress_was_new, created_progress)
+        today=data.review_date
     )
     db.commit()
     sync_generated_hard_collection(db)
 
-    return answer_progress_payload(progress)
+    return answer_progress_payload(progress, today=data.review_date)
 
 
 @router.post("/answer/revise")
@@ -249,33 +237,6 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         db.query(Progress)
         .filter(Progress.question_id == data.question_id)
         .first()
-    )
-
-    latest_started_from_bonus = latest_entry_started_from_bonus(progress)
-
-    if data.quality == 0 and latest_started_from_bonus:
-        history = list(progress.history or [])
-
-        if history[-1].get("created_progress"):
-            db.delete(progress)
-            db.commit()
-            sync_generated_hard_collection(db)
-            return answer_progress_payload(None)
-
-        restore_progress_from_history(progress, history[:-1], today=data.review_date)
-        db.commit()
-        sync_generated_hard_collection(db)
-        return answer_progress_payload(progress)
-
-    if not should_schedule_answer(progress, data.quality):
-        return answer_progress_payload(progress)
-
-    progress_was_new = progress_is_new(progress)
-    created_progress = progress is None
-    created_from_bonus = (
-        latest_entry_created_progress(progress)
-        if latest_started_from_bonus
-        else created_progress
     )
 
     if not progress:
@@ -289,16 +250,32 @@ def revise_answer_question(data: AnswerRequest, db: Session = Depends(get_db)):
         db,
         progress,
         data.quality,
-        today=data.review_date,
-        metadata=bonus_schedule_metadata(
-            progress_was_new or latest_started_from_bonus,
-            created_from_bonus
-        )
+        today=data.review_date
     )
     db.commit()
     sync_generated_hard_collection(db)
 
-    return answer_progress_payload(progress)
+    return answer_progress_payload(progress, today=data.review_date)
+
+
+@router.post("/answer/relearning_graduate")
+def graduate_relearning_cards(
+    data: RelearningGraduateRequest,
+    db: Session = Depends(get_db)
+):
+    # "Acquis": end the in-session relearning loop for these cards without
+    # grading them. Scheduling is derived from the frozen first-fail state.
+    graduated = graduate_relearning(
+        db,
+        data.question_ids,
+        today=data.review_date
+    )
+    db.commit()
+
+    return {
+        "status": "ok",
+        "graduated": [progress.question_id for progress in graduated]
+    }
 
 
 @router.post("/answer_map")
@@ -314,13 +291,26 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
-@router.post("/answer_image")
-def answer_image(data: ImageAnswerRequest, db: Session = Depends(get_db)):
+@router.post("/answer_media")
+def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
     apply_answer_batch(
         db,
         data.items,
         image_mode=data.mode or DEFAULT_IMAGE_MODE,
-        require_type="image",
+        require_type="media",
+        today=data.review_date,
+        context_count=data.context_count
+    )
+    return {"status": "ok"}
+
+
+@router.post("/answer_text")
+def answer_text(data: TextAnswerRequest, db: Session = Depends(get_db)):
+    apply_answer_batch(
+        db,
+        data.items,
+        text_mode=data.mode or DEFAULT_TEXT_MODE,
+        require_type="text",
         today=data.review_date,
         context_count=data.context_count
     )
@@ -342,6 +332,7 @@ def apply_answer_batch(
     items,
     map_mode=None,
     image_mode=None,
+    text_mode=None,
     require_type=None,
     today=None,
     context_count=None
@@ -394,6 +385,11 @@ def apply_answer_batch(
         if image_mode
         else None
     )
+    normalized_text_mode = (
+        normalize_text_mode(text_mode)
+        if text_mode
+        else None
+    )
 
     if normalized_map_mode:
         group_ids = set()
@@ -420,7 +416,7 @@ def apply_answer_batch(
 
         if submitted_context_count is None:
             for question in questions:
-                if question.type_q != "image":
+                if question.type_q != "media":
                     continue
 
                 submitted_image_count += 1
@@ -432,6 +428,23 @@ def apply_answer_batch(
             if submitted_image_count == 0:
                 submitted_image_count = len(question_ids)
 
+    elif normalized_text_mode:
+        submitted_text_count = 0
+
+        if submitted_context_count is None:
+            for question in questions:
+                if question.type_q != "text":
+                    continue
+
+                submitted_text_count += 1
+                key = question.group_id
+                context_counts_by_group_id[key] = (
+                    context_counts_by_group_id.get(key, 0) + 1
+                )
+
+            if submitted_text_count == 0:
+                submitted_text_count = len(question_ids)
+
     progress_quality_pairs = []
 
     for question_id, quality in items.items():
@@ -440,9 +453,6 @@ def apply_answer_batch(
 
         if normalized_map_mode:
             raw_quality = calibrate_map_quality(quality)
-
-            if not should_schedule_answer(progress, raw_quality):
-                continue
 
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -476,9 +486,6 @@ def apply_answer_batch(
             ))
         elif normalized_image_mode:
             raw_quality = calibrate_image_quality(quality)
-
-            if not should_schedule_answer(progress, raw_quality):
-                continue
 
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -515,10 +522,40 @@ def apply_answer_batch(
                 raw_quality,
                 metadata
             ))
-        else:
-            if not should_schedule_answer(progress, quality):
-                continue
+        elif normalized_text_mode:
+            raw_quality = calibrate_text_quality(quality)
 
+            if not progress:
+                progress = create_initial_progress(question_id, today=today)
+                db.add(progress)
+                progress_map[question_id] = progress
+
+            active_context_count = (
+                submitted_context_count
+                if submitted_context_count is not None
+                else context_counts_by_group_id.get(
+                    question.group_id if question else None,
+                    submitted_text_count
+                )
+            )
+            difficulty = text_mode_difficulty(
+                normalized_text_mode,
+                context_count=active_context_count,
+                tuning=scheduler_tuning
+            )
+            progress_quality_pairs.append((
+                progress,
+                raw_quality,
+                {
+                    "text_mode": normalized_text_mode,
+                    "text_context_count": active_context_count,
+                    "raw_quality": raw_quality,
+                    "effective_quality": raw_quality,
+                    "mode_adjusted": difficulty != 1.0,
+                    "mode_difficulty": difficulty
+                }
+            ))
+        else:
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
                 db.add(progress)
@@ -588,15 +625,13 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
         timeline = validate_timeline_data(question.data or {})
         grading = grade_timeline_answer(timeline, guess.model_dump())
         progress = progress_map.get(question_id)
-        schedule_answer = should_schedule_answer(progress, grading["quality"])
 
-        if schedule_answer and not progress:
+        if not progress:
             progress = create_initial_progress(question_id, today=data.review_date)
             db.add(progress)
             progress_map[question_id] = progress
 
-        if schedule_answer:
-            progress_quality_pairs.append((progress, grading["quality"]))
+        progress_quality_pairs.append((progress, grading["quality"]))
 
         results.append({
             "question_id": question_id,
@@ -624,5 +659,135 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
 
     return {
         "status": "ok",
+        "results": results
+    }
+
+
+@router.post("/answer_sequence")
+def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
+    # Sequences are the one type that is both auto-graded (like timeline: the
+    # client posts a position, the server decides the quality) and moded (like
+    # text: the mode's difficulty must reach FSRS). apply_answer_batch cannot be
+    # reused because its contract is a SUBMITTED quality, so this grades like
+    # timeline and then appends the 3-tuples that carry the mode metadata.
+    question_ids = list(data.items.keys())
+
+    questions = (
+        db.query(Question)
+        .filter(Question.id.in_(question_ids))
+        .all()
+    )
+    question_map = {
+        question.id: question
+        for question in questions
+    }
+
+    missing_ids = [
+        question_id
+        for question_id in question_ids
+        if question_id not in question_map
+    ]
+
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Questions not found: {missing_ids}"
+        )
+
+    for question_id, question in question_map.items():
+        if question.type_q != "sequence":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Question {question_id} is not a sequence question"
+            )
+
+    mode = normalize_sequence_mode(data.mode or DEFAULT_SEQUENCE_MODE)
+    scheduler_tuning = load_scheduler_tuning_settings(db)
+    submitted_context_count = normalize_context_count(data.context_count)
+
+    # Ranks are only meaningful against the whole list, and they are recomputed
+    # here through the same helper the serializer used, so what was shown and
+    # what is graded cannot drift.
+    positions, group_sizes = sequence_positions_for_questions(db, questions)
+
+    existing_progresses = (
+        db.query(Progress)
+        .filter(Progress.question_id.in_(question_ids))
+        .all()
+    )
+    progress_map = {
+        progress.question_id: progress
+        for progress in existing_progresses
+    }
+    results = []
+    progress_quality_pairs = []
+
+    for question_id, guess in data.items.items():
+        question = question_map[question_id]
+        expected_position = positions.get(question_id)
+        grading = grade_sequence_position(expected_position, guess.position)
+        raw_quality = grading["quality"]
+        progress = progress_map.get(question_id)
+
+        active_context_count = (
+            submitted_context_count
+            if submitted_context_count is not None
+            else group_sizes.get(question.group_id, 0)
+        )
+        difficulty = sequence_mode_difficulty(
+            mode,
+            context_count=active_context_count,
+            tuning=scheduler_tuning
+        )
+
+        if not progress:
+            progress = create_initial_progress(
+                question_id,
+                today=data.review_date
+            )
+            db.add(progress)
+            progress_map[question_id] = progress
+
+        progress_quality_pairs.append((
+            progress,
+            raw_quality,
+            {
+                "sequence_mode": mode,
+                "sequence_context_count": active_context_count,
+                "raw_quality": raw_quality,
+                "effective_quality": raw_quality,
+                "mode_adjusted": difficulty != 1.0,
+                "mode_difficulty": difficulty
+            }
+        ))
+
+        results.append({
+            "question_id": question_id,
+            "quality": raw_quality,
+            "expected_position": expected_position,
+            "guessed_position": guess.position,
+            "distance": grading["distance"],
+            "label": question.answer
+        })
+
+    if progress_quality_pairs:
+        apply_scheduling_batch(
+            db,
+            progress_quality_pairs,
+            scheduler_tuning=scheduler_tuning,
+            today=data.review_date
+        )
+
+    for result in results:
+        result["progress"] = serialize_progress(
+            progress_map.get(result["question_id"])
+        )
+
+    db.commit()
+    sync_generated_hard_collection(db)
+
+    return {
+        "status": "ok",
+        "mode": mode,
         "results": results
     }

@@ -5,6 +5,7 @@ from ..dependencies import get_db
 from ..models import Question
 from ..schemas import MediaUrlImport
 from ..services.media import (
+    MEDIA_UPLOAD_MAX_BYTES,
     delete_unreferenced_media_file,
     store_remote_image,
     store_uploaded_image
@@ -39,9 +40,19 @@ def delete_image(question_id: int, db: Session = Depends(get_db)):
 
 @router.post("/upload")
 def upload_image(file: UploadFile = File(...)):
-    return store_uploaded_image(file)
+    # The shared upload endpoint accepts audio/video so answer media can carry
+    # them; question media stays image-only via the client-side widget.
+    return store_uploaded_image(
+        file,
+        max_bytes=MEDIA_UPLOAD_MAX_BYTES,
+        allow_audio_video=True
+    )
 
 
 @router.post("/upload/url")
 def upload_image_from_url(payload: MediaUrlImport):
-    return store_remote_image(payload.url)
+    return store_remote_image(
+        payload.url,
+        max_bytes=MEDIA_UPLOAD_MAX_BYTES,
+        allow_audio_video=True
+    )

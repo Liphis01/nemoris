@@ -8,7 +8,7 @@
   color: #eeeeee;
   display: flex;
   justify-content: center;
-  min-height: calc(100svh - 48px);
+  min-height: calc(100svh - 48px - var(--shell-top, 0px));
   padding: 22px 0 34px;
   text-align: left;
   width: 100%;
@@ -402,6 +402,11 @@
 .menu-type-blue {
   background: #14283d;
   color: #8fc7ff;
+}
+
+.menu-type-teal {
+  background: #123a3a;
+  color: #5eead4;
 }
 
 .menu-destinations {

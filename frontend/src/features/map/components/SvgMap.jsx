@@ -17,6 +17,18 @@ const zoneStrokeStyle = {
 
 const dragThresholdPx = 4;
 
+// Maximum wheel-zoom factor. Kept high so the tiny island hit-areas can be
+// zoomed in far enough to see and click comfortably.
+const maxZoom = 80;
+
+// Exponent applied to the auto-zoom fit (see fitFocusedZone). Below 1 it pulls
+// deep fits back out, and the deeper the fit the more it pulls.
+const autoZoomFalloff = 0.75;
+
+// Island hit-area shapes always render at this opacity so they stay see-through
+// (the map shows through them) while behaving like any other zone.
+const hitAreaRevealOpacity = "0.35";
+
 export default function SvgMap({
     svgPath,
     found,
@@ -49,6 +61,12 @@ export default function SvgMap({
     const [svgVersion, setSvgVersion] = useState(0);
     const [tooltip, setTooltip] = useState(null);
     const [hoveredCode, setHoveredCode] = useState(null);
+    // Set while applying a transform that must not animate (a resize-driven re-fit).
+    const [instantTransform, setInstantTransform] = useState(false);
+    // True once the user pans/zooms by hand, so a resize re-fit leaves their view alone.
+    const userAdjustedRef = useRef(false);
+    // Size of the wrapper the last fit was computed against.
+    const lastFitSizeRef = useRef(null);
     const clickableCodeSet = useMemo(() => {
         if (!Array.isArray(clickableCodes)) return null;
 
@@ -96,6 +114,7 @@ export default function SvgMap({
             }
 
             didDragRef.current = true;
+            userAdjustedRef.current = true;
             hideTooltip();
         }
 
@@ -239,9 +258,15 @@ export default function SvgMap({
 
         const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
             const isClickable = canSelectCode(code);
+            // Hit-area shapes cover islands too small to draw. They behave like any
+            // other zone (same neutral/state colors, always visible and clickable)
+            // but stay permanently translucent, reading as a see-through overlay so
+            // the underlying map still shows through.
+            const isHitArea = el.getAttribute("data-hit-area") === "1";
 
             el.style.fill = getDisplayColor(code);
             el.style.cursor = "pointer";
+            if (isHitArea) el.style.opacity = hitAreaRevealOpacity;
             const tooltipLabel = String(zoneLabels[code] || "");
             const flashAnimation = flashSet.has(code) && typeof el.animate === "function"
                 ? el.animate(
@@ -327,7 +352,7 @@ export default function SvgMap({
         hideTooltip
     ]);
 
-    useEffect(() => {
+    const fitFocusedZone = useCallback(({ instant = false } = {}) => {
         if (!focusCode || !wrapperRef.current) return;
 
         // Find ALL elements with this code (large zones like Argentina, Australia have multiple paths)
@@ -336,6 +361,13 @@ export default function SvgMap({
 
         const wrapperRect = wrapperRef.current.getBoundingClientRect();
         if (!wrapperRect.width || !wrapperRect.height) return;
+
+        // Remember the box this fit was computed against, so a resize observed
+        // afterwards can tell whether the box actually changed under it.
+        lastFitSizeRef.current = {
+            width: wrapperRect.width,
+            height: wrapperRect.height
+        };
 
         // Calculate combined bounding box of all paths for this zone
         let minLeft = Infinity;
@@ -381,14 +413,80 @@ export default function SvgMap({
             wrapperRect.width / box.width,
             wrapperRect.height / box.height
         ) * padding;
-        const newScale = Math.min(Math.max(fitScale, 1), 8);
+        // A raw fit frames every zone at the same on-screen size, so a small
+        // country gets magnified as hard as a continent and loses the
+        // surrounding coastlines that make it recognisable. Softening the fit
+        // sub-linearly leaves shallow fits (large zones) almost untouched while
+        // pulling deep ones back out, so the smaller the zone the more of the
+        // fit it gives up. Still capped at maxZoom for the tiniest islands.
+        const softenedScale = fitScale > 1
+            ? fitScale ** autoZoomFalloff
+            : fitScale;
+        const newScale = Math.min(Math.max(softenedScale, 1), maxZoom);
+
+        // A re-fit forced by the wrapper changing size must land instantly: the
+        // zone was already framed, so animating it would read as a spurious
+        // zoom (and the transform transition visibly blurs while it runs).
+        if (instant) setInstantTransform(true);
 
         setScale(newScale);
         setOffset({
             x: (wrapperRect.width / 2) - (box.x + box.width / 2) * newScale,
             y: (wrapperRect.height / 2) - (box.y + box.height / 2) * newScale
         });
-    }, [focusCode, focusVersion, svgVersion]);
+    }, [focusCode]);
+
+    useEffect(() => {
+        // A programmatic focus supersedes whatever the user had panned/zoomed to.
+        userAdjustedRef.current = false;
+        fitFocusedZone();
+    }, [fitFocusedZone, focusVersion, svgVersion]);
+
+    useEffect(() => {
+        const wrapper = wrapperRef.current;
+
+        if (!wrapper || typeof ResizeObserver === "undefined") return undefined;
+
+        // The map box is a flex child, so panels appearing beside it (the review
+        // quality bar, the manage zone editor, an alias chip wrapping to a new
+        // line) silently resize it. Nothing re-fits on resize, so the zone keeps
+        // its old scale and just gets cropped. Re-fit it to the new box instead.
+        const observer = new ResizeObserver(() => {
+            // Never clobber a pan/zoom the user performed themselves.
+            if (userAdjustedRef.current) return;
+
+            const rect = wrapperRef.current?.getBoundingClientRect();
+            const lastFit = lastFitSizeRef.current;
+
+            if (!rect || !rect.width || !rect.height) return;
+
+            // Only act when the box changed size *after* the last fit. A fit that
+            // already measured this box (e.g. focusing a zone in the same commit
+            // that opens the editor panel) is left to animate normally.
+            if (
+                lastFit &&
+                Math.abs(lastFit.width - rect.width) < 1 &&
+                Math.abs(lastFit.height - rect.height) < 1
+            ) {
+                return;
+            }
+
+            fitFocusedZone({ instant: true });
+        });
+
+        observer.observe(wrapper);
+
+        return () => observer.disconnect();
+    }, [fitFocusedZone]);
+
+    useEffect(() => {
+        if (!instantTransform) return undefined;
+
+        // Restore the transition once the instant transform has been painted.
+        const frame = window.requestAnimationFrame(() => setInstantTransform(false));
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [instantTransform, offset, scale]);
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -410,7 +508,7 @@ export default function SvgMap({
             const zoomIntensity = 0.0015;
             const newScale = Math.min(
                 Math.max(1, scale * (1 - e.deltaY * zoomIntensity)),
-                15
+                maxZoom
             );
 
             const newOffset = {
@@ -418,6 +516,7 @@ export default function SvgMap({
                 y: mouseY - worldY * newScale
             };
 
+            userAdjustedRef.current = true;
             setScale(newScale);
             setOffset(newOffset);
         }
@@ -456,11 +555,14 @@ export default function SvgMap({
                     transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                     transformOrigin: "0 0",
                     cursor: isDragging ? "grabbing" : "grab",
-                    transition: isDragging ? "none" : "transform 0.15s ease-out"
+                    transition: isDragging || instantTransform
+                        ? "none"
+                        : "transform 0.15s ease-out"
                 }}
             />
             {tooltip && (
                 <div
+                    data-map-tooltip
                     style={{
                         ...mapTooltipStyle,
                         left: `${tooltip.x}px`,

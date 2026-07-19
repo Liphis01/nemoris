@@ -1,13 +1,72 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { isRelearningQuestion } from "../relearningGrades";
 import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
-  return ["image", "map", "timeline"].includes(question?.type_q);
+  return (
+    ["media", "map", "timeline"].includes(question?.type_q) ||
+    (question?.type_q === "text" && Array.isArray(question?.items)) ||
+    (question?.type_q === "sequence" && Array.isArray(question?.items))
+  );
 }
 
 function reviewItemCount(question) {
   return Array.isArray(question?.items) ? question.items.length : 1;
+}
+
+function RelearningBadge({ compact = false }) {
+  return (
+    <div
+      data-relearning-badge
+      title="Question ratée : elle revient jusqu'à ce qu'elle soit sue. Les essais suivants ne comptent pas comme de nouveaux oublis."
+      style={{
+        alignItems: "center",
+        background: "#3a2413",
+        border: "1px solid #6b4a21",
+        borderRadius: "999px",
+        color: "#f0a868",
+        display: "inline-flex",
+        fontSize: compact ? "11px" : "12px",
+        fontWeight: 800,
+        gap: "6px",
+        letterSpacing: "0.04em",
+        padding: compact ? "3px 9px" : "5px 11px",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap"
+      }}
+    >
+      <span aria-hidden="true">↻</span>
+      Réapprentissage
+    </div>
+  );
+}
+
+// Shows how many failed questions are still waiting to be relearned, kept apart
+// from the "Question X / Y" total so re-queued retries never inflate Y.
+function RelearningCountChip({ count, compact = false }) {
+  return (
+    <div
+      data-relearning-count
+      title="Questions ratées à revoir avant la fin de la session. Elles ne sont pas comptées dans le total."
+      style={{
+        alignItems: "center",
+        background: "#241a10",
+        border: "1px solid #4a3418",
+        borderRadius: "999px",
+        color: "#e0a05c",
+        display: "inline-flex",
+        fontSize: compact ? "11px" : "12px",
+        fontWeight: 800,
+        gap: "5px",
+        padding: compact ? "3px 9px" : "4px 10px",
+        whiteSpace: "nowrap"
+      }}
+    >
+      <span aria-hidden="true">↻</span>
+      {compact ? count : `${count} à revoir`}
+    </div>
+  );
 }
 
 function reviewedQuestionsLabel(count) {
@@ -19,7 +78,11 @@ function bonusQuestionsLabel(count) {
 }
 
 function availableBonusQuestionCount(status) {
+  // Every available bonus question is selectable now (capacity is informational
+  // only), so surface the full new-question count rather than the capped slot count.
   const count = Number(
+    status?.same_group_new_count ??
+    status?.new_count ??
     status?.same_group_bonus_question_count ??
     status?.available_bonus_question_count
   );
@@ -35,25 +98,16 @@ function ReviewOutcomePanel({
   canStartBonusReview,
   startBonusReview,
   bonusReviewLoading,
-  bonusReviewMessage,
   bonusReviewStatus,
   bonusStatusLoading
 }) {
   const isFinished = variant === "finished";
   const titleId = `review-outcome-title-${variant}`;
-  const bonusState = bonusStatusLoading
-    ? "loading"
-    : bonusReviewStatus?.state || "unknown";
   const bonusStatusLabel = bonusStatusLoading
     ? "Analyse"
     : canStartBonusReview
       ? "Bonus disponible"
-      : bonusState === "full"
-        ? "Planning plein"
-        : bonusState === "no_new"
-          ? "Aucun bonus"
-          : "Repos";
-  const showBonusMessage = bonusStatusLoading || Boolean(bonusReviewMessage);
+      : "Aucun bonus";
   const bonusQuestionCount = bonusStatusLoading
     ? null
     : availableBonusQuestionCount(bonusReviewStatus);
@@ -99,17 +153,6 @@ function ReviewOutcomePanel({
           )}
         </div>
 
-        {showBonusMessage && (
-          <p
-            aria-live="polite"
-            className={`review-outcome-bonus review-outcome-bonus-${bonusState}`}
-          >
-            {bonusStatusLoading
-              ? "Analyse du planning bonus..."
-              : bonusReviewMessage}
-          </p>
-        )}
-
         {(canReturnToLastQuestion || canStartBonusReview) && (
           <div className="review-outcome-actions">
             {canReturnToLastQuestion && (
@@ -153,50 +196,86 @@ function ReviewOutcomePanel({
   );
 }
 
-function BonusReviewQueueControls({
-  canSkipCurrentQuestion,
-  skipCurrentQuestion,
-  canReturnToLastSkippedQuestion,
-  returnToLastSkippedQuestion,
-  skippedQuestionCount = 0
-}) {
-  if (!canSkipCurrentQuestion && !canReturnToLastSkippedQuestion) {
-    return null;
-  }
+function BonusReviewMenu({ entries, selectBonusItem, itemLoading, setMode }) {
+  const allDone = entries.length === 0;
 
   return (
-    <div className="bonus-review-controls" aria-label="Navigation des bonus">
-      {canSkipCurrentQuestion && (
-        <button
-          type="button"
-          className="bonus-review-control bonus-review-control-set-aside"
-          onClick={skipCurrentQuestion}
-          title="Mettre cette question de côté sans la noter"
-          aria-label="Mettre cette question de côté sans la noter"
-        >
-          <span className="bonus-review-control-icon" aria-hidden="true">↷</span>
-          <span>Mettre de côté</span>
-        </button>
-      )}
+    <section className="bonus-menu" aria-label="Questions bonus">
+      <div className="bonus-menu-head">
+        <div>
+          <div className="bonus-menu-kicker">Questions bonus</div>
+          <h2 className="bonus-menu-title">
+            {allDone ? "Bonus terminés" : "Choisis une question à réviser"}
+          </h2>
+          <p className="bonus-menu-copy">
+            {allDone
+              ? "Tu as fait toutes les questions bonus disponibles."
+              : "Sélectionne la question ou le groupe que tu veux faire. Tu reviens ici après chaque item."}
+          </p>
+        </div>
 
-      {canReturnToLastSkippedQuestion && (
+        <ReturnToMenuButton
+          onClick={() => setMode("menu")}
+          style={{
+            background: "#1a1a1a",
+            border: "1px solid #2a2a2a",
+            borderRadius: "10px",
+            color: "#bbb",
+            cursor: "pointer",
+            flexShrink: 0,
+            fontSize: "14px",
+            padding: "10px 14px"
+          }}
+        />
+      </div>
+
+      {allDone ? (
         <button
           type="button"
-          className="bonus-review-control bonus-review-control-return"
-          onClick={returnToLastSkippedQuestion}
-          title="Reprendre la dernière question mise de côté"
-          aria-label="Reprendre la dernière question mise de côté"
+          className="review-outcome-button review-outcome-button-primary"
+          onClick={() => setMode("menu")}
         >
-          <span className="bonus-review-control-icon" aria-hidden="true">↩</span>
-          <span>Reprendre</span>
-          {skippedQuestionCount > 0 && (
-            <span className="bonus-review-control-count" aria-label={`${skippedQuestionCount} en attente`}>
-              {skippedQuestionCount}
-            </span>
-          )}
+          Retour au menu
         </button>
+      ) : (
+        <ul className="bonus-menu-list app-scrollbar">
+          {entries.map(entry => (
+            <li key={entry.key}>
+              <button
+                type="button"
+                className="bonus-menu-row"
+                onClick={() => selectBonusItem(entry)}
+                disabled={itemLoading}
+                aria-busy={itemLoading}
+              >
+                <span className="bonus-menu-row-main">
+                  <span className="bonus-menu-row-type">
+                    {entry.typeLabel}
+                    {entry.isContainer && (
+                      <span className="bonus-menu-row-count">
+                        {entry.itemCount}
+                      </span>
+                    )}
+                  </span>
+                  <span className="bonus-menu-row-label">
+                    {entry.label}
+                  </span>
+                </span>
+
+                <span className="bonus-menu-row-meta">
+                  {(entry.tags || []).slice(0, 3).map(tag => (
+                    <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
+                  ))}
+                  <span className="bonus-menu-row-arrow" aria-hidden="true">
+                    {itemLoading ? "…" : "→"}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -212,25 +291,28 @@ export default function ReviewSession({
   handleMapComplete,
   handleImageComplete,
   handleTimelineComplete,
+  handleSequenceComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
-  canSkipCurrentQuestion,
-  skipCurrentQuestion,
-  canReturnToLastSkippedQuestion,
-  returnToLastSkippedQuestion,
-  skippedQuestionCount,
   canStartBonusReview,
   startBonusReview,
   bonusReviewActive,
-  bonusReviewMessage,
   bonusReviewStatus,
   bonusReviewLoading,
+  bonusItemLoading,
   bonusStatusLoading,
+  bonusMenuOpen,
+  bonusMenuEntries,
+  selectBonusItem,
+  returnToBonusMenu,
   reviewLoading,
   reviewError,
   submitMapAnswer,
-  submitImageAnswer,
-  submitTimelineAnswer
+  submitMediaAnswer,
+  submitTextAnswer,
+  submitTimelineAnswer,
+  submitSequenceAnswer,
+  graduateGroupedAnswer
 }) {
   const currentQuestion = questions[currentIndex];
   const reviewedCount = questions.reduce(
@@ -240,10 +322,42 @@ export default function ReviewSession({
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
     !reviewError &&
+    !bonusMenuOpen &&
     currentQuestion &&
     currentIndex < questions.length
   );
   const useCompactVisualLayout = hasActiveQuestion && isVisualQuestion(currentQuestion);
+  const showReturnToBonusMenu = bonusReviewActive && !bonusMenuOpen;
+  const headerSubtitle = `${questions.length} questions disponibles`;
+  const relearning = hasActiveQuestion && isRelearningQuestion(currentQuestion);
+  // Failing a question appends a retry to `questions`, so its length grows as
+  // the session goes. The counter denominator stays the number of distinct
+  // questions the session started with, and the relearning retries are surfaced
+  // separately instead of inflating the total.
+  const baseQuestionTotal = questions.reduce(
+    (total, question) => total + (isRelearningQuestion(question) ? 0 : 1),
+    0
+  );
+  const questionsReachedThroughCurrent = questions
+    .slice(0, currentIndex + 1)
+    .reduce(
+      (total, question) => total + (isRelearningQuestion(question) ? 0 : 1),
+      0
+    );
+  // On a relearning pass every base question has already been reached, so the
+  // counter rests at the total rather than counting past it.
+  const questionNumber = relearning
+    ? baseQuestionTotal
+    : questionsReachedThroughCurrent;
+  // Failed questions still queued behind the current one. The current card, if
+  // it is itself a retry, is left out: the RÉAPPRENTISSAGE badge already marks
+  // it, so the count reads as "still waiting" rather than double-marking it.
+  const relearningRemaining = questions.reduce(
+    (total, question, index) =>
+      total + (isRelearningQuestion(question) && index > currentIndex ? 1 : 0),
+    0
+  );
+  const showRelearningCount = hasActiveQuestion && relearningRemaining > 0;
 
   if (useCompactVisualLayout) {
     return (
@@ -300,13 +414,25 @@ export default function ReviewSession({
                 minWidth: 0
               }}
             >
-              <BonusReviewQueueControls
-                canSkipCurrentQuestion={canSkipCurrentQuestion}
-                skipCurrentQuestion={skipCurrentQuestion}
-                canReturnToLastSkippedQuestion={canReturnToLastSkippedQuestion}
-                returnToLastSkippedQuestion={returnToLastSkippedQuestion}
-                skippedQuestionCount={skippedQuestionCount}
-              />
+              {showReturnToBonusMenu && (
+                <button
+                  type="button"
+                  onClick={returnToBonusMenu}
+                  title="Revenir au menu des questions bonus"
+                  style={{
+                    background: "#1f1f1f",
+                    border: "1px solid #333",
+                    borderRadius: "9px",
+                    color: "#ccc",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    padding: "7px 10px"
+                  }}
+                >
+                  ← Menu bonus
+                </button>
+              )}
 
               {canReturnToLastQuestion && (
                 <button
@@ -361,16 +487,20 @@ export default function ReviewSession({
                 width: "100%"
               }}
             >
-              <div
-                style={{
-                  color: "#f0c36a",
-                  fontSize: "11px",
-                  fontWeight: 900,
-                  textTransform: "uppercase"
-                }}
-              >
-                Révision
-              </div>
+              {relearning ? (
+                <RelearningBadge compact />
+              ) : (
+                <div
+                  style={{
+                    color: "#f0c36a",
+                    fontSize: "11px",
+                    fontWeight: 900,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  {bonusReviewActive ? "Bonus" : "Révision"}
+                </div>
+              )}
               <div
                 style={{
                   color: "#888",
@@ -379,8 +509,11 @@ export default function ReviewSession({
                   lineHeight: 1.2
                 }}
               >
-                Question {currentIndex + 1} / {questions.length}
+                Question {questionNumber} / {baseQuestionTotal}
               </div>
+              {showRelearningCount && (
+                <RelearningCountChip count={relearningRemaining} compact />
+              )}
               {(currentQuestion.tags || []).length > 0 && (
                 <div
                   style={{
@@ -457,9 +590,13 @@ export default function ReviewSession({
               handleMapComplete={handleMapComplete}
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
+              handleSequenceComplete={handleSequenceComplete}
               submitMapAnswer={submitMapAnswer}
-              submitImageAnswer={submitImageAnswer}
+              submitMediaAnswer={submitMediaAnswer}
+              submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
+              submitSequenceAnswer={submitSequenceAnswer}
+              graduateGroupedAnswer={graduateGroupedAnswer}
               allowPartialSubmit={bonusReviewActive}
               compactVisualLayout
             />
@@ -472,7 +609,7 @@ export default function ReviewSession({
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "calc(100vh - var(--shell-top, 0px))",
         background: "#111",
         color: "#eee",
         padding: "30px 24px 80px"
@@ -486,66 +623,68 @@ export default function ReviewSession({
         }}
       >
 
-        {/* HEADER */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "28px",
-            gap: "20px"
-          }}
-        >
+        {/* HEADER — hidden while the bonus menu owns the screen */}
+        {!bonusMenuOpen && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: "28px",
+              gap: "20px"
+            }}
+          >
 
-          <div>
+            <div>
 
-            <div
-              style={{
-                color: "#666",
-                fontSize: "12px",
-                letterSpacing: "0.08em",
-                marginBottom: "8px"
-              }}
-            >
-              REVIEW SESSION
+              <div
+                style={{
+                  color: "#666",
+                  fontSize: "12px",
+                  letterSpacing: "0.08em",
+                  marginBottom: "8px"
+                }}
+              >
+                REVIEW SESSION
+              </div>
+
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "38px",
+                  lineHeight: 1,
+                  marginBottom: "12px"
+                }}
+              >
+                Révision
+              </h1>
+
+              <div
+                style={{
+                  color: "#777",
+                  fontSize: "14px"
+                }}
+              >
+                {headerSubtitle}
+              </div>
+
             </div>
 
-            <h1
+            <ReturnToMenuButton
+              onClick={() => setMode("menu")}
               style={{
-                margin: 0,
-                fontSize: "38px",
-                lineHeight: 1,
-                marginBottom: "12px"
-              }}
-            >
-              Révision
-            </h1>
-
-            <div
-              style={{
-                color: "#777",
+                background: "#1a1a1a",
+                border: "1px solid #2a2a2a",
+                color: "#bbb",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                cursor: "pointer",
                 fontSize: "14px"
               }}
-            >
-              {questions.length} questions disponibles
-            </div>
+            />
 
           </div>
-
-          <ReturnToMenuButton
-            onClick={() => setMode("menu")}
-            style={{
-              background: "#1a1a1a",
-              border: "1px solid #2a2a2a",
-              color: "#bbb",
-              padding: "10px 14px",
-              borderRadius: "10px",
-              cursor: "pointer",
-              fontSize: "14px"
-            }}
-          />
-
-        </div>
+        )}
 
         {/* LOADING */}
         {reviewLoading && (
@@ -579,8 +718,18 @@ export default function ReviewSession({
           </div>
         )}
 
+        {/* BONUS MENU */}
+        {!reviewLoading && !reviewError && bonusMenuOpen && (
+          <BonusReviewMenu
+            entries={bonusMenuEntries}
+            selectBonusItem={selectBonusItem}
+            itemLoading={bonusItemLoading}
+            setMode={setMode}
+          />
+        )}
+
         {/* EMPTY */}
-        {!reviewLoading && !reviewError && questions.length === 0 && (
+        {!reviewLoading && !reviewError && !bonusMenuOpen && questions.length === 0 && (
           <ReviewOutcomePanel
             variant="empty"
             reviewedCount={0}
@@ -589,7 +738,6 @@ export default function ReviewSession({
             canStartBonusReview={canStartBonusReview}
             startBonusReview={startBonusReview}
             bonusReviewLoading={bonusReviewLoading}
-            bonusReviewMessage={bonusReviewMessage}
             bonusReviewStatus={bonusReviewStatus}
             bonusStatusLoading={bonusStatusLoading}
           />
@@ -598,6 +746,7 @@ export default function ReviewSession({
         {/* FINISHED */}
         {!reviewLoading &&
           !reviewError &&
+          !bonusMenuOpen &&
           currentIndex >= questions.length &&
           questions.length > 0 && (
           <ReviewOutcomePanel
@@ -608,7 +757,6 @@ export default function ReviewSession({
             canStartBonusReview={canStartBonusReview}
             startBonusReview={startBonusReview}
             bonusReviewLoading={bonusReviewLoading}
-            bonusReviewMessage={bonusReviewMessage}
             bonusReviewStatus={bonusReviewStatus}
             bonusStatusLoading={bonusStatusLoading}
           />
@@ -617,6 +765,7 @@ export default function ReviewSession({
         {/* QUESTION */}
         {!reviewLoading &&
           !reviewError &&
+          !bonusMenuOpen &&
           currentQuestion &&
           currentIndex < questions.length && (
           <>
@@ -645,16 +794,34 @@ export default function ReviewSession({
                     fontSize: "14px"
                   }}
                 >
-                  Question {currentIndex + 1} / {questions.length}
+                  Question {questionNumber} / {baseQuestionTotal}
                 </div>
 
-                <BonusReviewQueueControls
-                  canSkipCurrentQuestion={canSkipCurrentQuestion}
-                  skipCurrentQuestion={skipCurrentQuestion}
-                  canReturnToLastSkippedQuestion={canReturnToLastSkippedQuestion}
-                  returnToLastSkippedQuestion={returnToLastSkippedQuestion}
-                  skippedQuestionCount={skippedQuestionCount}
-                />
+                {showRelearningCount && (
+                  <RelearningCountChip count={relearningRemaining} />
+                )}
+
+                {relearning && <RelearningBadge />}
+
+                {showReturnToBonusMenu && (
+                  <button
+                    type="button"
+                    onClick={returnToBonusMenu}
+                    title="Revenir au menu des questions bonus"
+                    style={{
+                      background: "#1f1f1f",
+                      border: "1px solid #333",
+                      color: "#ccc",
+                      padding: "7px 10px",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "650"
+                    }}
+                  >
+                    ← Menu bonus
+                  </button>
+                )}
 
                 {canReturnToLastQuestion && (
                   <button
@@ -714,9 +881,13 @@ export default function ReviewSession({
               handleMapComplete={handleMapComplete}
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
+              handleSequenceComplete={handleSequenceComplete}
               submitMapAnswer={submitMapAnswer}
-              submitImageAnswer={submitImageAnswer}
+              submitMediaAnswer={submitMediaAnswer}
+              submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
+              submitSequenceAnswer={submitSequenceAnswer}
+              graduateGroupedAnswer={graduateGroupedAnswer}
               allowPartialSubmit={bonusReviewActive}
             />
 

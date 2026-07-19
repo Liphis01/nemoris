@@ -85,7 +85,7 @@ describe("TrainingSession", () => {
         },
         {
           id: 6,
-          type_group: "image",
+          type_group: "media",
           name: "Flags",
           media: null,
           tags: ["Geo"],
@@ -98,13 +98,6 @@ describe("TrainingSession", () => {
               best_found_at: "2026-06-02T10:00:00+00:00",
               best_time_ms: 31000,
               best_time_at: "2026-06-02T10:00:00+00:00",
-              question_count: 5
-            },
-            click_prompt: {
-              best_found_percent: 50,
-              best_found_count: 3,
-              best_found_elapsed_ms: 35000,
-              best_found_at: "2026-06-02T10:00:00+00:00",
               question_count: 5
             },
             multiple_choice_image: {
@@ -244,6 +237,50 @@ describe("TrainingSession", () => {
     expect(screen.getAllByText("1:30").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("does not leak a non-default mode record into the default mode total", async () => {
+    // Reproduces the association-mode score bleeding into type_all: after
+    // recording a non-default mode the flat `training_record` carries that
+    // mode's score, but the per-mode map is authoritative and type_all has no
+    // record, so the total must be 40% (0 + 80) / 2, not 80%.
+    listTrainingScopes.mockResolvedValue({
+      groups: [
+        {
+          id: 7,
+          type_group: "text",
+          name: "Zodiaque",
+          media: null,
+          tags: ["Geo"],
+          question_count: 12,
+          training_record: {
+            best_found_percent: 80,
+            best_found_count: 10,
+            best_found_elapsed_ms: 60000,
+            best_found_at: "2026-06-02T10:00:00+00:00",
+            question_count: 12
+          },
+          training_records: {
+            match: {
+              best_found_percent: 80,
+              best_found_count: 10,
+              best_found_elapsed_ms: 60000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              question_count: 12
+            }
+          }
+        }
+      ],
+      collections: [],
+      tags: []
+    });
+
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    const zodiaqueTile = await screen.findByRole("button", { name: "Sélectionner Zodiaque" });
+
+    expect(within(zodiaqueTile).getByText("40%")).toBeInTheDocument();
+    expect(within(zodiaqueTile).queryByText("80%")).not.toBeInTheDocument();
+  });
+
   it("opens side-panel mode lists for map and image groups", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
@@ -255,8 +292,8 @@ describe("TrainingSession", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Sélectionner Flags" }));
 
-    expect(screen.getByText("Tape toutes les images dans l'ordre que tu veux.")).toBeInTheDocument();
-    expect(screen.getByText("Lis le nom, puis choisis la bonne image.")).toBeInTheDocument();
+    expect(screen.getByText("Tape tous les médias dans l'ordre que tu veux.")).toBeInTheDocument();
+    expect(screen.getByText("Lis le nom, puis choisis le bon média.")).toBeInTheDocument();
   });
 
   it("starts a selected group mode from the detail panel", async () => {
@@ -301,7 +338,7 @@ describe("TrainingSession", () => {
   it("uses the compact visual shell for active image training", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {
-        type_q: "image",
+        type_q: "media",
         name: "Flags",
         mode: "type_prompt",
         tags: ["Geo"],

@@ -1,18 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ImageReview from "./ImageReview";
-import { useImageReview } from "../hooks/useImageReview";
+import MediaReview from "./MediaReview";
+import { useMediaReview } from "../hooks/useMediaReview";
 import {
-  IMAGE_MODE_CLICK_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
   IMAGE_MODE_TYPE_PROMPT
 } from "../imageModes";
 
-vi.mock("../hooks/useImageReview", () => ({
+vi.mock("../hooks/useMediaReview", () => ({
   IMAGE_RECAP_UNANSWERED: "unanswered",
-  useImageReview: vi.fn()
+  useMediaReview: vi.fn()
 }));
 
 const noop = vi.fn();
@@ -82,7 +81,7 @@ function tileFor(container, questionId) {
   return container.querySelector(`[data-image-question-id="${questionId}"]`);
 }
 
-function mockImageReviewState({
+function mockMediaReviewState({
   mode = IMAGE_MODE_TYPE_PROMPT,
   resultMode = false,
   rowOverrides = {},
@@ -103,7 +102,7 @@ function mockImageReviewState({
     ...rowOverrides
   };
 
-  useImageReview.mockReturnValue({
+  useMediaReview.mockReturnValue({
     activeQuestionId: row.isActive ? row.item.question_id : null,
     answeredCount: row.isFound ? 1 : 0,
     choiceOptions: [],
@@ -141,9 +140,9 @@ function mockImageReviewState({
   return row;
 }
 
-function renderImageReview(props = {}) {
+function renderMediaReview(props = {}) {
   return render(
-    <ImageReview
+    <MediaReview
       group={{ name: "Images" }}
       reviewItems={[{ question_id: 1 }]}
       onComplete={noop}
@@ -153,26 +152,28 @@ function renderImageReview(props = {}) {
   );
 }
 
-function renderImageReviewWithState(initialState) {
+function renderMediaReviewWithState(initialState, extraProps = {}) {
   let hookState = initialState;
   const props = {
-    reviewItems: hookState.gridItems.map(row => row.item)
+    reviewItems: hookState.gridItems.map(row => row.item),
+    ...extraProps
   };
 
-  useImageReview.mockImplementation(() => hookState);
+  useMediaReview.mockImplementation(() => hookState);
 
-  const rendered = renderImageReview(props);
+  const rendered = renderMediaReview(props);
 
   return {
     ...rendered,
     setHookState(nextState) {
       hookState = nextState;
       rendered.rerender(
-        <ImageReview
+        <MediaReview
           group={{ name: "Images" }}
           reviewItems={props.reviewItems}
           onComplete={noop}
           submitAnswer={noop}
+          {...extraProps}
         />
       );
     }
@@ -316,7 +317,7 @@ function typePromptHookState({
 
 function imageClickHookState({
   rows,
-  mode = IMAGE_MODE_CLICK_PROMPT,
+  mode = IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   activeQuestionId = rows[0]?.item.question_id || null,
   foundQuestionIds = [],
   resolvedQuestionIds = [],
@@ -362,15 +363,15 @@ function imageClickHookState({
   };
 }
 
-describe("ImageReview answer label preview", () => {
+describe("MediaReview answer label preview", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
   it("shows the full answer on hover when the revealed label overflows", async () => {
-    const row = mockImageReviewState();
-    renderImageReview();
+    const row = mockMediaReviewState();
+    renderMediaReview();
     const label = screen.getByText(row.item.label);
 
     setElementWidth(label, { clientWidth: 80, scrollWidth: 240 });
@@ -382,8 +383,8 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not show a tooltip when the revealed label fits", async () => {
-    const row = mockImageReviewState();
-    renderImageReview();
+    const row = mockMediaReviewState();
+    renderMediaReview();
     const label = screen.getByText(row.item.label);
 
     setElementWidth(label, { clientWidth: 240, scrollWidth: 240 });
@@ -395,12 +396,12 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not reveal hidden answers even when the label would overflow", async () => {
-    const row = mockImageReviewState({
+    const row = mockMediaReviewState({
       rowOverrides: {
         isFound: false
       }
     });
-    const { container } = renderImageReview();
+    const { container } = renderMediaReview();
     const hiddenLabel = container.querySelector("[data-image-answer-label]");
 
     setElementWidth(hiddenLabel, { clientWidth: 80, scrollWidth: 240 });
@@ -413,8 +414,8 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("shows the training timer while answering image groups", () => {
-    mockImageReviewState();
-    renderImageReview({
+    mockMediaReviewState();
+    renderMediaReview({
       trainingElapsedMs: 12345,
       trainingBestTimeMs: 90000
     });
@@ -426,7 +427,7 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("shows image misses as a striped progress bar segment", () => {
-    mockImageReviewState({
+    mockMediaReviewState({
       resultMode: true,
       rowOverrides: {
         isActive: false,
@@ -440,7 +441,7 @@ describe("ImageReview answer label preview", () => {
         wrongAnsweredCount: 1
       }
     });
-    const { container } = renderImageReview();
+    const { container } = renderMediaReview();
 
     expect(container.querySelector("[data-image-progress-correct]"))
       .toHaveStyle({ width: "0%" });
@@ -453,14 +454,14 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not show a next-image control in type_all mode", () => {
-    mockImageReviewState({
+    mockMediaReviewState({
       mode: IMAGE_MODE_TYPE_ALL,
       rowOverrides: {
         isActive: false,
         isFound: false
       }
     });
-    renderImageReview();
+    renderMediaReview();
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
     expect(screen.getByText("Terminer")).toBeInTheDocument();
@@ -472,7 +473,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(2),
       imageGridRow(3)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typeAllHookState({ rows })
     );
     const shell = container.querySelector("[data-image-review-shell]");
@@ -504,8 +505,8 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(2)
     ];
 
-    useImageReview.mockReturnValue(typeAllHookState({ rows }));
-    const { container } = renderImageReview({
+    useMediaReview.mockReturnValue(typeAllHookState({ rows }));
+    const { container } = renderMediaReview({
       fillAvailableHeight: true,
       group: { name: "Flags" },
       reviewItems: rows.map(row => row.item),
@@ -544,7 +545,7 @@ describe("ImageReview answer label preview", () => {
   });
 
   it("does not show the type_prompt prompt card", () => {
-    renderImageReviewWithState(typePromptHookState({
+    renderMediaReviewWithState(typePromptHookState({
       rows: [imageGridRow(1)]
     }));
 
@@ -559,7 +560,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(1),
       imageGridRow(2)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typePromptHookState({
         rows,
         hookOverrides: {
@@ -586,7 +587,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(2),
       imageGridRow(3)
     ];
-    renderImageReviewWithState(
+    renderMediaReviewWithState(
       typePromptHookState({
         rows,
         hookOverrides: {
@@ -621,7 +622,7 @@ describe("ImageReview answer label preview", () => {
     const rows = [
       imageGridRow(1)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typePromptHookState({
         rows,
         hookOverrides: {
@@ -638,16 +639,14 @@ describe("ImageReview answer label preview", () => {
       .toBeInTheDocument();
   });
 
-  it.each([
-    IMAGE_MODE_CLICK_PROMPT,
-    IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-  ])("keeps zoom separate from image selection in %s mode", (mode) => {
+  it("keeps zoom separate from image selection in multiple_choice_image mode", () => {
+    const mode = IMAGE_MODE_MULTIPLE_CHOICE_IMAGE;
     const handleImageSelect = vi.fn();
     const rows = [
       imageGridRow(1),
       imageGridRow(2)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         mode,
@@ -676,7 +675,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
@@ -722,7 +721,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(1),
       imageGridRow(2)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typePromptHookState({
         rows,
         activeQuestionId: 2
@@ -735,7 +734,7 @@ describe("ImageReview answer label preview", () => {
     expect(passedTile).not.toHaveTextContent("Image 1");
   });
 
-  it("reveals only the target image during wrong click_prompt feedback", () => {
+  it("reveals only the target image during wrong image-choice feedback", () => {
     const rows = [
       imageGridRow(1, {
         feedbackState: "missed",
@@ -746,7 +745,7 @@ describe("ImageReview answer label preview", () => {
         feedbackState: "wrong"
       })
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         activeQuestionId: 1,
@@ -790,7 +789,7 @@ describe("ImageReview answer label preview", () => {
         handleChoiceSelect
       }
     });
-    const { container, setHookState } = renderImageReviewWithState(initialState);
+    const { container, setHookState } = renderMediaReviewWithState(initialState);
     const promptBoard = container.querySelector("[data-image-prompt-board]");
     const controlBand = container.querySelector("[data-image-control-band]");
     const promptTiles = promptBoard.querySelectorAll("[data-image-prompt-tile]");
@@ -862,13 +861,209 @@ describe("ImageReview answer label preview", () => {
         inline: "nearest"
       });
     });
+    // Unified reveal: green = correct answer, red = the wrong pick.
     expect(screen.getByText("Correct").closest("button").style.border)
-      .toContain("solid");
+      .toContain("134, 239, 172");
     expect(screen.getByText("Faux").closest("button").style.background)
       .toContain("repeating-linear-gradient");
     expect(screen.getByText("Faux").closest("button").style.border)
-      .toContain("dashed");
+      .toContain("248, 113, 113");
     expect(tileFor(container, 1)).toHaveTextContent("Image 1");
+  });
+
+  it("multiple_choice_label picks the matching option on a number-key shortcut", () => {
+    const handleChoiceSelect = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleChoiceSelect
+      }
+    }));
+
+    // Each choice shows a discoverable keycap hint.
+    expect(container.querySelectorAll("[data-image-choice-key]")).toHaveLength(4);
+
+    fireEvent.keyDown(window, { key: "3" });
+
+    expect(handleChoiceSelect).toHaveBeenCalledWith(3);
+  });
+
+  it("multiple_choice_image picks the matching tile on a number-key shortcut", () => {
+    const handleImageSelect = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleImageSelect
+      }
+    }));
+
+    expect(container.querySelectorAll("[data-image-choice-key]")).toHaveLength(4);
+
+    fireEvent.keyDown(window, { key: "2" });
+
+    expect(handleImageSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("replaces the decoys with the quality buttons after a correct pick", () => {
+    const rateChoice = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        rateChoice,
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }));
+
+    // Only the correct answer stays; the three decoy slots become Dur/Bon/Facile.
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(3);
+    // A correct pick is never "Faux".
+    expect(container.querySelector("[data-image-choice-quality='0']")).toBeNull();
+
+    fireEvent.keyDown(window, { key: "3" });
+    expect(rateChoice).toHaveBeenCalledWith(3);
+
+    fireEvent.keyDown(window, { key: "2" });
+    expect(rateChoice).toHaveBeenCalledWith(2);
+  });
+
+  it("centers the correct answer with no quality buttons in training", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }), { showQualityControls: false });
+
+    // Training has no quality buttons; the lone correct answer is centered.
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(1);
+
+    const grid = container.querySelector("[data-image-choice-grid]");
+    expect(grid.style.justifyContent).toBe("center");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(150px, 250px))");
+  });
+
+  it("centers both answers after a wrong pick in training", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: false,
+          selectedQuestionId: 2
+        }
+      }
+    }), { showQualityControls: false });
+
+    // Both the correct answer and the wrong pick stay, centered, no Continuer.
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(2);
+    expect(container.querySelector("[data-image-choice-continue]")).toBeNull();
+
+    const grid = container.querySelector("[data-image-choice-grid]");
+    expect(grid.style.justifyContent).toBe("center");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(150px, 250px))");
+  });
+
+  it("centers the image board reveal in training", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }), { showQualityControls: false });
+
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(0);
+
+    const board = container.querySelector("[data-image-choice-board]");
+    expect(board.style.placeContent).toBe("center");
+    // One surviving tile, sized like a 2x2 cell so FLIP slides it without resizing.
+    expect(board.style.gridTemplateColumns).toContain("repeat(1,");
+    expect(board.style.gridTemplateColumns).toContain("calc(50%");
+  });
+
+  it("continues past a revealed wrong choice with Enter", () => {
+    const rateChoice = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        rateChoice,
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: false,
+          selectedQuestionId: 2
+        }
+      }
+    }));
+
+    // The correct answer and your pick stay; the two freed slots become Continuer.
+    expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(2);
+    // A wrong pick is a lapse: no quality choice, just continue.
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(0);
+    expect(container.querySelector("[data-image-choice-continue]")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(rateChoice).toHaveBeenCalledWith();
+  });
+
+  it("ignores the number-key shortcut once a choice is revealed", () => {
+    const handleChoiceSelect = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleChoiceSelect,
+        interactionFeedback: { correctQuestionId: 1, isCorrect: true, selectedQuestionId: 1 }
+      }
+    }));
+
+    fireEvent.keyDown(window, { key: "3" });
+
+    expect(handleChoiceSelect).not.toHaveBeenCalled();
   });
 
   it("reveals the target and clicked wrong image during multiple_choice_image feedback", () => {
@@ -885,7 +1080,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       imageClickHookState({
         rows,
         mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -922,7 +1117,7 @@ describe("ImageReview answer label preview", () => {
         isRevealed: true
       })
     ];
-    useImageReview.mockReturnValue(
+    useMediaReview.mockReturnValue(
       typePromptHookState({
         rows,
         activeQuestionId: 2,
@@ -931,7 +1126,7 @@ describe("ImageReview answer label preview", () => {
         hookOverrides: { selectItem }
       })
     );
-    const { container } = renderImageReview({
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item),
       separateResolvedItems: true
     });
@@ -958,79 +1153,17 @@ describe("ImageReview answer label preview", () => {
     expect(selectItem).not.toHaveBeenCalled();
   });
 
-  it("puts only the resolved click_prompt target in the treated section", () => {
-    const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
-    const scrollIntoView = vi.fn();
-    const rows = [
-      imageGridRow(1, {
-        feedbackState: "missed",
-        isMissed: true,
-        isRevealed: true
-      }),
-      imageGridRow(2, {
-        feedbackState: "wrong"
-      }),
-      imageGridRow(3)
-    ];
-    useImageReview.mockReturnValue(
-      imageClickHookState({
-        rows,
-        activeQuestionId: 1,
-        resolvedQuestionIds: [1],
-        hookOverrides: {
-          feedbackTone: "incorrect",
-          interactionFeedback: {
-            correctQuestionId: 1,
-            isCorrect: false,
-            selectedQuestionId: 2
-          },
-          wrongAnsweredCount: 1
-        }
-      })
-    );
-    Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView
-    });
-
-    try {
-      const { container } = renderImageReview({
-        reviewItems: rows.map(row => row.item),
-        separateResolvedItems: true
-      });
-      const activeGrid = container.querySelector("[data-image-active-grid]");
-      const resolvedSection = container.querySelector("[data-image-resolved-section]");
-
-      expect(resolvedSection.querySelector('[data-image-question-id="1"]'))
-        .toBeInTheDocument();
-      expect(resolvedSection.querySelector('[data-image-question-id="2"]'))
-        .not.toBeInTheDocument();
-      expect(activeGrid.querySelector('[data-image-question-id="2"]'))
-        .toBeInTheDocument();
-      expect(scrollIntoView).not.toHaveBeenCalled();
-    } finally {
-      if (originalScrollIntoView) {
-        Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
-          configurable: true,
-          value: originalScrollIntoView
-        });
-      } else {
-        delete window.HTMLElement.prototype.scrollIntoView;
-      }
-    }
-  });
-
   it("keeps the full grid together in image result mode", () => {
     const rows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
       imageGridRow(2, { isLockedMissed: true, quality: 0 })
     ];
-    useImageReview.mockReturnValue({
+    useMediaReview.mockReturnValue({
       ...typeAllHookState({ rows, foundQuestionIds: [1] }),
       resultMode: true,
       wrongAnsweredCount: 1
     });
-    const { container } = renderImageReview({
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item),
       separateResolvedItems: true
     });
@@ -1067,7 +1200,7 @@ describe("ImageReview answer label preview", () => {
         quality: 0
       })
     ];
-    useImageReview.mockReturnValue(
+    useMediaReview.mockReturnValue(
       imageResultHookState({
         rows,
         hookOverrides: {
@@ -1077,7 +1210,7 @@ describe("ImageReview answer label preview", () => {
         }
       })
     );
-    const { container } = renderImageReview({
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item)
     });
 
@@ -1146,8 +1279,8 @@ describe("ImageReview answer label preview", () => {
         quality: 0
       })
     ];
-    useImageReview.mockReturnValue(imageResultHookState({ rows }));
-    const { container } = renderImageReview({
+    useMediaReview.mockReturnValue(imageResultHookState({ rows }));
+    const { container } = renderMediaReview({
       reviewItems: rows.map(row => row.item)
     });
     const preview = container.querySelector("[data-image-recap-selected-preview]");
@@ -1180,7 +1313,7 @@ describe("ImageReview answer label preview", () => {
       })
     ];
     const initialState = imageResultHookState({ rows });
-    const { setHookState } = renderImageReviewWithState(initialState);
+    const { setHookState } = renderMediaReviewWithState(initialState);
 
     expect(screen.getAllByText("15").length).toBeGreaterThan(0);
 
@@ -1213,7 +1346,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows: initialRows, foundQuestionIds: [1] })
     );
 
@@ -1253,7 +1386,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows: initialRows })
     );
 
@@ -1296,7 +1429,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(5),
       imageGridRow(6)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows: initialRows, foundQuestionIds: [1, 3, 4] })
     );
 
@@ -1333,7 +1466,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(5),
       imageGridRow(6)
     ];
-    const { container } = renderImageReviewWithState(
+    const { container } = renderMediaReviewWithState(
       typeAllHookState({ rows })
     );
     const scrollArea = container.querySelector("[data-image-grid-scroll]");
@@ -1374,7 +1507,7 @@ describe("ImageReview answer label preview", () => {
       imageGridRow(3),
       imageGridRow(4)
     ];
-    const { container, setHookState } = renderImageReviewWithState(
+    const { container, setHookState } = renderMediaReviewWithState(
       typeAllHookState({ rows, foundQuestionIds: [1] })
     );
     const input = screen.getByPlaceholderText("Tape une image...");
