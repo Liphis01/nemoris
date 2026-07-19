@@ -199,7 +199,7 @@ describe("ReviewSession", () => {
     expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
   });
 
-  it("lists remaining bonus items in the menu and selects one", () => {
+  it("starts a single bonus question on click but opens a count slider for a group", () => {
     const selectBonusItem = vi.fn();
     const textEntry = {
       key: "q:11",
@@ -214,7 +214,7 @@ describe("ReviewSession", () => {
       label: "Bonus images",
       typeLabel: "Images",
       isContainer: true,
-      itemCount: 2,
+      itemCount: 30,
       tags: []
     };
     renderReviewSession({
@@ -231,9 +231,26 @@ describe("ReviewSession", () => {
     expect(screen.getByText("Bonus text")).toBeInTheDocument();
     expect(screen.getByText("Bonus images")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Bonus images/ }));
+    // A single loose question has nothing to choose — it starts on click.
+    fireEvent.click(screen.getByRole("button", { name: /Bonus text/ }));
+    expect(selectBonusItem).toHaveBeenCalledWith(textEntry);
+    selectBonusItem.mockClear();
 
-    expect(selectBonusItem).toHaveBeenCalledWith(imagesEntry);
+    // A multi-question group opens a slider instead of starting immediately.
+    fireEvent.click(screen.getByRole("button", { name: /Bonus images/ }));
+    expect(selectBonusItem).not.toHaveBeenCalled();
+
+    const slider = screen.getByRole("slider", { name: /Bonus images/ });
+    expect(slider).toHaveAttribute("min", "1");
+    expect(slider).toHaveAttribute("max", "30");
+    // Default is min(20, available).
+    expect(screen.getByText("20 questions bonus")).toBeInTheDocument();
+
+    fireEvent.change(slider, { target: { value: "5" } });
+    expect(screen.getByText("5 questions bonus")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Commencer/ }));
+    expect(selectBonusItem).toHaveBeenCalledWith(imagesEntry, 5);
   });
 
   it("shows a completion state when no bonus items remain", () => {

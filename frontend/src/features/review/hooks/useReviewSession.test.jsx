@@ -345,6 +345,42 @@ describe("useReviewSession", () => {
     expect(result.current.questions).toEqual([bonusImages]);
   });
 
+  it("passes the chosen count when picking a bonus group", async () => {
+    const bonusImages = {
+      group_id: 8,
+      type_q: "media",
+      name: "Bonus images",
+      items: [{ question_id: 21 }]
+    };
+    getReview.mockResolvedValue([]);
+    getBonusReviewStatus.mockResolvedValue({ allowed: true });
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "group:8",
+        type_q: "media",
+        name: "Bonus images",
+        tags: [],
+        item_count: 12,
+        is_container: true
+      }
+    ]);
+    getBonusGroupItems.mockResolvedValue([bonusImages]);
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await act(async () => {
+      await result.current.startBonusReview();
+    });
+
+    await act(async () => {
+      await result.current.selectBonusItem(result.current.bonusMenuEntries[0], 5);
+    });
+
+    // The chosen count rides along so the backend samples that many at random.
+    expect(getBonusGroupItems).toHaveBeenCalledWith("group:8", 5);
+    expect(result.current.questions).toEqual([bonusImages]);
+  });
+
   it("requeues only failed image group items", async () => {
     getReview.mockResolvedValue([
       {

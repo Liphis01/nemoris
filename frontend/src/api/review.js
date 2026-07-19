@@ -77,9 +77,14 @@ export function getBonusGroups(options = {}) {
 }
 
 
-export function getBonusGroupItems(key) {
+export function getBonusGroupItems(key, count) {
   // Full review payload for one picked bonus entry (group / question / timeline).
+  // `count` caps a group to that many randomly drawn questions; omit for all.
   const params = new URLSearchParams({ key });
+
+  if (count !== undefined && count !== null) {
+    params.set("count", String(count));
+  }
 
   return requestJson(`/review/bonus_items?${params.toString()}`);
 }

@@ -182,9 +182,14 @@ def get_bonus_groups(
 
 
 @router.get("/review/bonus_items")
-def get_bonus_items(key: str, db: Session = Depends(get_db)):
-    # Full serialized review payload for a single picked bonus entry.
-    return get_bonus_group_items(db, key)
+def get_bonus_items(
+    key: str,
+    count: int | None = None,
+    db: Session = Depends(get_db)
+):
+    # Full serialized review payload for a single picked bonus entry, optionally
+    # capped to `count` questions drawn at random from the entry's pool.
+    return get_bonus_group_items(db, key, limit=count)
 
 
 @router.get("/review/bonus_status")

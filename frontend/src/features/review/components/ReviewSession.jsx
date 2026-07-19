@@ -1,7 +1,12 @@
+import { useState } from "react";
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { isRelearningQuestion } from "../relearningGrades";
 import "./ReviewSession.css";
+
+// A group with more than one available question opens the count slider; a single
+// question (loose or a group of one) has nothing to choose and starts on click.
+const DEFAULT_BONUS_COUNT = 20;
 
 function isVisualQuestion(question) {
   return (
@@ -198,6 +203,27 @@ function ReviewOutcomePanel({
 
 function BonusReviewMenu({ entries, selectBonusItem, itemLoading, setMode }) {
   const allDone = entries.length === 0;
+  const [openKey, setOpenKey] = useState(null);
+  const [counts, setCounts] = useState({});
+
+  const bonusCountFor = (entry) =>
+    counts[entry.key] ?? Math.min(DEFAULT_BONUS_COUNT, entry.itemCount);
+
+  const toggleEntry = (entry) => {
+    // Nothing to choose for a single question — start it straight away. A
+    // multi-question group opens (or closes) its count slider instead.
+    if (entry.itemCount <= 1) {
+      selectBonusItem(entry);
+      return;
+    }
+
+    setOpenKey(prev => (prev === entry.key ? null : entry.key));
+  };
+
+  const setBonusCount = (entry, value) => {
+    const clamped = Math.max(1, Math.min(entry.itemCount, Number(value) || 1));
+    setCounts(prev => ({ ...prev, [entry.key]: clamped }));
+  };
 
   return (
     <section className="bonus-menu" aria-label="Questions bonus">
@@ -239,40 +265,82 @@ function BonusReviewMenu({ entries, selectBonusItem, itemLoading, setMode }) {
         </button>
       ) : (
         <ul className="bonus-menu-list app-scrollbar">
-          {entries.map(entry => (
-            <li key={entry.key}>
-              <button
-                type="button"
-                className="bonus-menu-row"
-                onClick={() => selectBonusItem(entry)}
-                disabled={itemLoading}
-                aria-busy={itemLoading}
-              >
-                <span className="bonus-menu-row-main">
-                  <span className="bonus-menu-row-type">
-                    {entry.typeLabel}
-                    {entry.isContainer && (
-                      <span className="bonus-menu-row-count">
-                        {entry.itemCount}
-                      </span>
-                    )}
-                  </span>
-                  <span className="bonus-menu-row-label">
-                    {entry.label}
-                  </span>
-                </span>
+          {entries.map(entry => {
+            const expandable = entry.itemCount > 1;
+            const isOpen = expandable && openKey === entry.key;
+            const count = bonusCountFor(entry);
+            // WebKit can't paint a range's filled portion on its own, so drive it
+            // from the value as a percentage (Firefox uses ::-moz-range-progress).
+            const fillPercent = expandable
+              ? ((count - 1) / (entry.itemCount - 1)) * 100
+              : 0;
 
-                <span className="bonus-menu-row-meta">
-                  {(entry.tags || []).slice(0, 3).map(tag => (
-                    <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
-                  ))}
-                  <span className="bonus-menu-row-arrow" aria-hidden="true">
-                    {itemLoading ? "…" : "→"}
+            return (
+              <li key={entry.key}>
+                <button
+                  type="button"
+                  className="bonus-menu-row"
+                  onClick={() => toggleEntry(entry)}
+                  disabled={itemLoading}
+                  aria-busy={itemLoading}
+                  aria-expanded={expandable ? isOpen : undefined}
+                >
+                  <span className="bonus-menu-row-main">
+                    <span className="bonus-menu-row-type">
+                      {entry.typeLabel}
+                      {entry.isContainer && (
+                        <span className="bonus-menu-row-count">
+                          {entry.itemCount}
+                        </span>
+                      )}
+                    </span>
+                    <span className="bonus-menu-row-label">
+                      {entry.label}
+                    </span>
                   </span>
-                </span>
-              </button>
-            </li>
-          ))}
+
+                  <span className="bonus-menu-row-meta">
+                    {(entry.tags || []).slice(0, 3).map(tag => (
+                      <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
+                    ))}
+                    <span className="bonus-menu-row-arrow" aria-hidden="true">
+                      {itemLoading ? "…" : expandable ? (isOpen ? "▾" : "▸") : "→"}
+                    </span>
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="bonus-menu-picker">
+                    <div className="bonus-menu-picker-count">
+                      <strong>{bonusQuestionsLabel(count)}</strong>
+                      <span className="bonus-menu-picker-total">
+                        sur {entry.itemCount} disponibles
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      className="bonus-menu-picker-slider"
+                      style={{ "--bonus-fill": `${fillPercent}%` }}
+                      min={1}
+                      max={entry.itemCount}
+                      value={count}
+                      onChange={event => setBonusCount(entry, event.target.value)}
+                      aria-label={`Nombre de questions bonus pour ${entry.label}`}
+                    />
+                    <button
+                      type="button"
+                      className="review-outcome-button review-outcome-button-primary"
+                      onClick={() => selectBonusItem(entry, count)}
+                      disabled={itemLoading}
+                      aria-busy={itemLoading}
+                    >
+                      {itemLoading ? "Chargement…" : "Commencer →"}
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

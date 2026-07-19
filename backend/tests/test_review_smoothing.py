@@ -1728,6 +1728,43 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         # Unknown / malformed keys are ignored rather than raising.
         self.assertEqual(get_bonus_items(key="nope", db=self.db), [])
 
+    def test_bonus_items_caps_a_group_to_the_chosen_count(self):
+        text_group = self.add_group(1, type_group="text")
+
+        for question_id in range(10, 18):  # eight available questions
+            text_question = self.add_question(question_id, type_q="text")
+            text_question.group = text_group
+
+        self.db.commit()
+
+        def picked_count(payload):
+            return sum(
+                len(item["items"])
+                for item in payload
+                if item.get("type_q") == "text"
+            )
+
+        # A count caps the group to that many questions, drawn from its pool.
+        self.assertEqual(
+            picked_count(get_bonus_items(key="group:1", count=3, db=self.db)),
+            3
+        )
+
+        # A count at/above the pool size returns every available question.
+        self.assertEqual(
+            picked_count(get_bonus_items(key="group:1", count=50, db=self.db)),
+            8
+        )
+
+        # No count still returns the whole entry (backward compatible).
+        self.assertEqual(
+            picked_count(get_bonus_items(key="group:1", db=self.db)),
+            8
+        )
+
+        # A non-positive count yields nothing.
+        self.assertEqual(get_bonus_items(key="group:1", count=0, db=self.db), [])
+
     def test_bonus_review_returns_all_new_questions_without_capacity_cap(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)

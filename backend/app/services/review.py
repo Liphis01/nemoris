@@ -968,10 +968,33 @@ def get_bonus_group_entries(db, group_ids=None):
     return entries
 
 
-def get_bonus_group_items(db, key):
+def _sample_bonus_questions(questions, limit):
+    # A picked bonus entry can be capped to a chosen count, drawn at random from
+    # the entry's available (new) questions so repeat visits vary. limit=None — or
+    # a count at/above the pool size — keeps every question; a non-positive count
+    # yields nothing.
+    if limit is None:
+        return questions
+
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        return questions
+
+    if limit <= 0:
+        return []
+
+    if limit >= len(questions):
+        return questions
+
+    return random.sample(list(questions), limit)
+
+
+def get_bonus_group_items(db, key, limit=None):
     # Full serialization for a single picked bonus entry. Reuses the shared
     # review serializer so modes/contexts/projected intervals stay identical to
-    # a scheduled session, just scoped to one group / question.
+    # a scheduled session, just scoped to one group / question. `limit` caps the
+    # entry to a randomly drawn subset of its available questions.
     if not key:
         return []
 
@@ -990,6 +1013,8 @@ def get_bonus_group_items(db, key):
             return []
     except ValueError:
         return []
+
+    questions = _sample_bonus_questions(questions, limit)
 
     scheduler_tuning = load_scheduler_tuning_settings(db)
 

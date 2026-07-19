@@ -147,7 +147,7 @@ export function useReviewSession(active) {
     setCurrentIndex(prev => Math.max(0, prev - 1));
   }, [canReturnToLastQuestion, clearTextAnswerTimeout]);
 
-  const selectBonusItem = useCallback(async (entry) => {
+  const selectBonusItem = useCallback(async (entry, count) => {
     if (!entry || bonusItemLoading) return;
 
     clearTextAnswerTimeout();
@@ -156,8 +156,12 @@ export function useReviewSession(active) {
 
     try {
       // The menu only carries names/counts; fetch the picked entry's full
-      // payload (questions, media, projected intervals) on demand.
-      const chunks = await getBonusGroupItems(entry.key);
+      // payload (questions, media, projected intervals) on demand. `count` caps a
+      // group to that many random questions; omitted means the whole entry
+      // (single questions / timeline picked without a slider).
+      const chunks = count == null
+        ? await getBonusGroupItems(entry.key)
+        : await getBonusGroupItems(entry.key, count);
 
       if (!Array.isArray(chunks) || chunks.length === 0) {
         // Nothing left to review for this entry: drop it and stay in the menu.
