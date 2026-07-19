@@ -1,5 +1,7 @@
+import { getEraBands } from "../anchors";
 import {
   centerOrdinal,
+  dateToOrdinal,
   formatTimelineYear,
   formatTimelineAnswer,
   lowerOrdinal,
@@ -10,40 +12,60 @@ import {
   upperOrdinal
 } from "../timelineUtils";
 
+const eraBands = getEraBands();
+
 function percent(value, start, end) {
   return ((value - start) / Math.max(1, end - start)) * 100;
 }
 
+function clampPercent(value) {
+  return Math.min(100, Math.max(0, value));
+}
+
+// The named eras that fall inside the preview window, each as a tinted slice —
+// the same landscape the reviewer sees, so the author places the date in
+// context (is 1789 really in the Contemporaine band?) rather than on a bare line.
+function visibleEraBands(range) {
+  return eraBands
+    .map((band) => {
+      const startPercent = clampPercent(percent(band.startValue, range.start, range.end));
+      const endPercent = clampPercent(percent(band.endValue, range.start, range.end));
+
+      return {
+        id: band.id,
+        label: band.label,
+        labelColor: band.labelColor,
+        tint: band.tint,
+        left: startPercent,
+        width: endPercent - startPercent
+      };
+    })
+    .filter((band) => band.width > 1);
+}
+
+// A wide, era-scale window rather than one hugging the date. Hugging it (the old
+// ±10-year behaviour) reduced the named eras to a meaningless sliver; the point
+// of this preview is "which era does this land in, and where relative to the ones
+// around it". So the window reaches back at least to the medieval boundary (or
+// past the date if it is older) and forward to today, guaranteeing several named
+// eras are on screen with the date placed among them.
 function buildRange(timeline) {
-  const values = [
-    lowerOrdinal(timeline.start),
-    upperOrdinal(timeline.start)
-  ];
+  const values = [lowerOrdinal(timeline.start), upperOrdinal(timeline.start)];
 
   if (timeline.kind === "interval" && timeline.end) {
     values.push(lowerOrdinal(timeline.end), upperOrdinal(timeline.end));
   }
 
-  let start = Math.min(...values);
-  let end = Math.max(...values);
-  const minimumSpan = timeline.start.precision === "day"
-    ? 90
-    : timeline.start.precision === "month"
-      ? 730
-      : 3650;
-  const currentSpan = Math.max(1, end - start);
-
-  if (currentSpan < minimumSpan) {
-    const extra = minimumSpan - currentSpan;
-    start -= Math.floor(extra / 2);
-    end += Math.ceil(extra / 2);
-  }
-
-  const span = Math.max(1, end - start);
+  const dateLowYear = ordinalToDate(Math.min(...values)).year;
+  const dateHighYear = ordinalToDate(Math.max(...values)).year;
+  const currentYear = new Date().getFullYear();
+  const lowYear = Math.min(dateLowYear, 476);
+  const highYear = Math.max(dateHighYear, currentYear);
+  const pad = Math.max(60, Math.round((highYear - lowYear) * 0.05));
 
   return {
-    start: Math.max(minTimelineValue, start - Math.round(span * 0.12)),
-    end: Math.min(maxTimelineValue, end + Math.round(span * 0.12))
+    start: Math.max(minTimelineValue, dateToOrdinal(lowYear - pad, 1, 1)),
+    end: Math.min(maxTimelineValue, dateToOrdinal(highYear + pad, 12, 31))
   };
 }
 
@@ -58,6 +80,7 @@ export default function TimelineMiniPreview({ timeline }) {
   const barWidth = Math.max(2, Math.abs(endPercent - startPercent));
   const firstYear = ordinalToDate(range.start).year;
   const lastYear = ordinalToDate(range.end).year;
+  const bands = visibleEraBands(range);
 
   return (
     <div
@@ -100,7 +123,7 @@ export default function TimelineMiniPreview({ timeline }) {
             whiteSpace: "nowrap"
           }}
         >
-          {normalized.kind === "interval" ? "Period" : "Date"}
+          {normalized.kind === "interval" ? "Période" : "Date"}
         </div>
       </div>
 
@@ -110,6 +133,38 @@ export default function TimelineMiniPreview({ timeline }) {
           position: "relative"
         }}
       >
+        {bands.map((band) => (
+          <div
+            key={band.id}
+            title={band.label}
+            style={{
+              position: "absolute",
+              left: `${band.left}%`,
+              width: `${band.width}%`,
+              top: 0,
+              bottom: "16px",
+              background: band.tint,
+              borderRight: "1px solid rgba(255,255,255,0.05)",
+              overflow: "hidden"
+            }}
+          >
+            <span
+              style={{
+                color: band.labelColor,
+                fontSize: "9px",
+                fontWeight: 800,
+                letterSpacing: "0.05em",
+                opacity: 0.75,
+                padding: "3px 5px",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {band.label}
+            </span>
+          </div>
+        ))}
+
         <div
           style={{
             position: "absolute",

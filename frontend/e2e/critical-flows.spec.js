@@ -91,10 +91,12 @@ test("timeline quick input creates a normalized timeline question", async ({ pag
   await page.getByRole("button", { name: /Nouvelle question/ }).click();
   await page.getByRole("button", { name: /Événement timeline/ }).click();
   await page.getByRole("textbox", { name: "Question", exact: true }).fill("Assassinat de César");
-  await page.getByPlaceholder(/1914/).fill("44 av. J.-C.");
-  await page.getByRole("button", { name: "Appliquer" }).click();
+  // Type the magnitude, then flip the era with the pretty toggle.
+  await page.getByLabel("Date", { exact: true }).fill("44");
+  await page.getByRole("button", { name: /Basculer l'ère/ }).click();
 
-  await expect(page.getByLabel("Réponse générée")).toHaveValue("44 av. J.-C.");
+  // The live preview echoes the formatted, era-applied answer.
+  await expect(page.getByText("44 av. J.-C.", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Créer" }).click();
   await expect.poll(() => state.createdQuestions.length).toBe(1);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  EditorSection,
   ImageMediaField,
   QuestionEditorActions,
   QuestionEditorShell,
@@ -20,36 +21,6 @@ const sectionTextareaStyle = {
   resize: "vertical",
   lineHeight: 1.45
 };
-
-function EditorSection({ title, accent, children }) {
-  return (
-    <section
-      style={{
-        background: "#171717",
-        border: "1px solid #262626",
-        borderLeft: `3px solid ${accent}`,
-        borderRadius: "14px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-        padding: "18px 20px"
-      }}
-    >
-      <div
-        style={{
-          color: accent,
-          fontSize: "12px",
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase"
-        }}
-      >
-        {title}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 function normalizeDraft(draft) {
   return {
