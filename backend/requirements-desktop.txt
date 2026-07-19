@@ -1,8 +1,0 @@
-# Native-window launcher dependencies, kept out of requirements.txt so
-# server and CI installs stay unchanged.
-# 5.4, not 6.x: the 6.x Windows backend hard-crashes (native, no traceback)
-# in frozen --windowed builds; 5.x is what the PyInstaller hooks matured on.
-pywebview==5.4
-# 3.50.x is the last PyGObject series that builds against girepository-1.0,
-# which matches Ubuntu 24.04's libgirepository1.0-dev.
-PyGObject==3.50.1 ; sys_platform == "linux"
