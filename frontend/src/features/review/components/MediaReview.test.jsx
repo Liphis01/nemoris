@@ -943,6 +943,36 @@ describe("MediaReview answer label preview", () => {
     expect(rateChoice).toHaveBeenCalledWith(2);
   });
 
+  it("collapses the choice rating to a single Acquis for a relearning card", () => {
+    const rateChoice = vi.fn();
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(
+      imageClickHookState({
+        rows,
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+        activeQuestionId: 1,
+        hookOverrides: {
+          choiceOptions: rows.map(row => row.item),
+          rateChoice,
+          interactionFeedback: {
+            correctQuestionId: 1,
+            isCorrect: true,
+            selectedQuestionId: 1
+          }
+        }
+      }),
+      { group: { name: "Flags", _reviewRetryOfIndex: 0 } }
+    );
+
+    // A relearning card never re-grades, so the three grades become one "Acquis".
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(1);
+    expect(container.querySelector("[data-image-choice-quality='2']")).toBeNull();
+    expect(container.querySelector("[data-image-choice-quality='3']")).toBeNull();
+
+    fireEvent.click(container.querySelector("[data-image-choice-quality='1']"));
+    expect(rateChoice).toHaveBeenCalledWith(1);
+  });
+
   it("centers the correct answer with no quality buttons in training", () => {
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
     const { container } = renderMediaReviewWithState(imageClickHookState({
@@ -1258,6 +1288,76 @@ describe("MediaReview answer label preview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Valider" }));
     expect(sendResult).toHaveBeenCalledTimes(1);
+  });
+
+  it("collapses the recap to binary Encore/Acquis for a relearning group", () => {
+    const setFoundImageQualities = vi.fn();
+    const setQuality = vi.fn();
+    const rows = [
+      imageGridRow(1, {
+        isFound: true,
+        item: {
+          ...imageItem(1),
+          projected_intervals: { 1: 4, 2: 12, 3: 30 },
+          progress: { reps: 2, lapses: 1, interval: 12, relearning: true }
+        },
+        quality: 2
+      }),
+      imageGridRow(2, {
+        isLockedMissed: true,
+        item: {
+          ...imageItem(2),
+          projected_intervals: { 0: 0, 1: 2, 2: 8, 3: 16 },
+          progress: { relearning: true }
+        },
+        quality: 0
+      })
+    ];
+    useMediaReview.mockReturnValue(
+      imageResultHookState({
+        rows,
+        hookOverrides: { setFoundImageQualities, setQuality }
+      })
+    );
+    const { container } = renderMediaReview({
+      reviewItems: rows.map(row => row.item),
+      group: { name: "Flags", _reviewRetryOfIndex: 0 }
+    });
+
+    // Each relearning row offers only the two grades, not the four.
+    expect(container.querySelectorAll(
+      ".image-recap-row[data-image-recap-row=\"found\"] [data-image-recap-quality]"
+    )).toHaveLength(2);
+    expect(container.querySelectorAll(
+      ".image-recap-row[data-image-recap-row=\"missed\"] [data-image-recap-quality]"
+    )).toHaveLength(2);
+    expect(container.querySelector(
+      ".image-recap-row[data-image-recap-row=\"found\"] [data-image-recap-quality=\"2\"]"
+    )).toBeNull();
+
+    // A found relearning row stores quality 2 by default but highlights "Acquis" (1).
+    expect(container.querySelector(
+      ".image-recap-row[data-image-recap-row=\"found\"] [data-image-recap-quality=\"1\"]"
+    )).toHaveAttribute("aria-pressed", "true");
+    // A missed relearning row highlights "Encore" (0).
+    expect(container.querySelector(
+      ".image-recap-row[data-image-recap-row=\"missed\"] [data-image-recap-quality=\"0\"]"
+    )).toHaveAttribute("aria-pressed", "true");
+
+    // The bulk control keeps the global X (Encore) visible but unclickable,
+    // exactly like the regular recap, and only "Acquis" applies (quality 1).
+    expect(container.querySelectorAll(
+      ".image-recap-bulk-row [data-image-recap-quality]"
+    )).toHaveLength(2);
+    expect(container.querySelector(
+      ".image-recap-bulk-row [data-image-recap-quality=\"0\"]"
+    )).toBeDisabled();
+    const bulkAcquis = container.querySelector(
+      ".image-recap-bulk-row [data-image-recap-quality=\"1\"]"
+    );
+    expect(bulkAcquis).not.toBeDisabled();
+    fireEvent.click(bulkAcquis);
+    expect(setFoundImageQualities).toHaveBeenCalledWith(1);
   });
 
   it("uses the right recap table to select the large left preview", () => {

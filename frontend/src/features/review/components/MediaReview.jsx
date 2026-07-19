@@ -15,6 +15,11 @@ import {
   IMAGE_RECAP_UNANSWERED,
   useMediaReview
 } from "../hooks/useMediaReview";
+import {
+  GOT_IT_QUALITY,
+  isRelearningGroupItem,
+  relearningQualityOptions
+} from "../relearningGrades";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
 const qualityOptions = [
@@ -27,6 +32,13 @@ const qualityOptions = [
 // A correct pick is never "Faux", and dropping it leaves exactly three options —
 // which is exactly how many slots the three decoys free up.
 const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+
+// A relearning card never re-grades: FSRS is frozen for the day, so any success
+// graduates it identically. The three "how easy" grades collapse to the single
+// "Acquis" from relearningQualityOptions. See relearningGrades.js.
+const acquisOnlyOptions = relearningQualityOptions.filter(
+  option => option.value === GOT_IT_QUALITY
+);
 
 // The revealed answer keeps its own box and slides between slots (see useFlip), so
 // the slot wrapper — not the tile/button — is what FLIP moves. It rides above the
@@ -927,6 +939,18 @@ export default function MediaReview({
           ? firstQuality
           : null;
       })();
+  // Only collapse the "Images trouvées" bulk control to a single "Acquis" when
+  // every found image is relearning. A refreshed group that mixes relearning and
+  // freshly-due items keeps the graded bulk so the due items can still be graded;
+  // their relearning neighbours graduate on any success regardless.
+  const allFoundRelearning = useMemo(() => {
+    const foundRows = effectiveRecapRows.filter(row => row.isFound);
+
+    return (
+      foundRows.length > 0 &&
+      foundRows.every(row => isRelearningGroupItem(group, row.item))
+    );
+  }, [effectiveRecapRows, group]);
   const showImageRecapSections = useMemo(() => {
     const hasFoundRows = effectiveRecapRows.some(row => row.isFound);
     const hasMissedRows = effectiveRecapRows.some(row => !row.isFound);
@@ -1880,8 +1904,15 @@ export default function MediaReview({
     const correctItem = choiceOptions.find(
       option => option.question_id === correctChoiceId
     );
+    // A correct pick on a relearning card just graduates it, so the three "how
+    // easy" grades collapse to a single "Acquis" (a wrong pick already takes the
+    // "Continuer" branch above, which is the "Encore" half of the binary).
+    const ratingOptions =
+      correctItem && isRelearningGroupItem(group, correctItem)
+        ? acquisOnlyOptions
+        : choiceQualityOptions;
 
-    return choiceQualityOptions.map(option => {
+    return ratingOptions.map(option => {
       const interval = correctItem
         ? projectedIntervalForImage(correctItem, option.value)
         : null;
@@ -2199,15 +2230,23 @@ export default function MediaReview({
                     </div>
 
                     <div style={imageRecapBulkControlsStyle}>
-                      {qualityOptions.map(option => {
+                      {(allFoundRelearning ? relearningQualityOptions : qualityOptions).map(option => {
+                        // The negative grade (Faux / Encore) can't bulk-apply to
+                        // images that were found, so it stays visible but disabled
+                        // — the global X, kept exactly like the regular recap.
                         const disabled = option.value === 0;
+                        const selected = !disabled && (
+                          allFoundRelearning
+                            ? effectiveFoundBulkQuality >= GOT_IT_QUALITY
+                            : effectiveFoundBulkQuality === option.value
+                        );
 
                         return renderImageRecapQualityButton({
                           disabled,
                           option,
-                          selected: !disabled && effectiveFoundBulkQuality === option.value,
+                          selected,
                           title: disabled
-                            ? "Faux indisponible pour les images trouvées"
+                            ? `${option.title} indisponible pour les images trouvées`
                             : `Appliquer aux images trouvées : ${option.title}`,
                           onClick: () => setFoundImageQualities(option.value)
                         });
@@ -2228,11 +2267,21 @@ export default function MediaReview({
                   const selectedQuality = row.selectedQuality ?? (
                     row.isFound ? 2 : 0
                   );
+                  const rowRelearning = isRelearningGroupItem(group, row.item);
+                  const baseQualityOptions = rowRelearning
+                    ? relearningQualityOptions
+                    : qualityOptions;
+                  // A relearning grade is binary: any stored success (≥1)
+                  // highlights "Acquis", 0 highlights "Encore".
+                  const displaySelectedQuality =
+                    rowRelearning && selectedQuality !== IMAGE_RECAP_UNANSWERED
+                      ? (selectedQuality >= GOT_IT_QUALITY ? GOT_IT_QUALITY : 0)
+                      : selectedQuality;
                   const projectedInterval = row.projectedInterval ??
                     projectedIntervalForImage(row.item, selectedQuality);
                   const rowQualityOptions = row.canBeUnanswered
-                    ? [unansweredQualityOption, ...qualityOptions]
-                    : qualityOptions;
+                    ? [unansweredQualityOption, ...baseQualityOptions]
+                    : baseQualityOptions;
 
                   return (
                     <Fragment key={row.item.question_id}>
@@ -2371,7 +2420,7 @@ export default function MediaReview({
                           {rowQualityOptions.map(option =>
                             renderImageRecapQualityButton({
                               option,
-                              selected: selectedQuality === option.value,
+                              selected: displaySelectedQuality === option.value,
                               onClick: (event) => {
                                 event.stopPropagation();
                                 setQuality(row.item.question_id, option.value);

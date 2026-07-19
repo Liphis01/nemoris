@@ -1,7 +1,7 @@
 # Build And Run
 
-The app runs as a Vite/FastAPI dev pair, a production web app, or a portable
-PyInstaller folder.
+The app runs as a Vite/FastAPI dev pair, a production web app, or a native
+desktop app built with Tauri.
 
 ## Development
 
@@ -71,69 +71,56 @@ source venv/bin/activate
 python manage_data.py migrate
 ```
 
-## Linux Portable Build
+## Desktop App (Tauri)
 
-From the project root:
+The desktop app is a Tauri shell (`frontend/src-tauri`) that owns a frameless
+window and runs the FastAPI backend as a **sidecar**: on launch, Rust picks a
+free port, starts the packaged backend on it, waits for it to answer, and
+injects the URL into the frontend. Window drag, all-edge resize, and snap are
+native to Tauri — no custom title-bar code beyond the styled bar in
+`frontend/src/shared/DesktopTitleBar.jsx`.
+
+### Release build (CI)
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the
+backend sidecar (PyInstaller onefile), then `tauri-action` bundles the Windows
+NSIS installer and attaches it to the release. Keep `version` in
+`frontend/src-tauri/tauri.conf.json` in sync with the tag.
+
+### Local build / iteration
+
+Prerequisites: Node.js, Python 3.12, the Rust toolchain, and Tauri's system
+libraries (on Ubuntu: `libwebkit2gtk-4.1-dev`, `librsvg2-dev`, plus the usual
+build tools).
+
+Build the sidecar once, place it where Tauri expects it, then run:
 
 ```bash
-./package-linux.sh
+# 1. Build the backend as a single-file sidecar
+cd backend
+./venv/bin/pyinstaller --name nemoris-backend --onefile --noconfirm \
+  --add-data "questions.db:seed" run_sidecar.py
+
+# 2. Place it under the target triple Tauri resolves at runtime
+TRIPLE=$(rustc -vV | sed -n 's/host: //p')
+mkdir -p ../frontend/src-tauri/binaries
+cp dist/nemoris-backend "../frontend/src-tauri/binaries/nemoris-backend-$TRIPLE"
+
+# 3. Dev (HMR window) or a full bundle
+cd ../frontend
+npm run tauri dev      # or: npm run tauri build
 ```
 
-The script builds Vite, prepares `backend/venv`, installs PyInstaller, bundles
-`backend/run_desktop.py`, creates a data backup, and copies writable app data.
-
-Output:
-
-```bash
-backend/dist/QuizApp/
-```
-
-Run:
-
-```bash
-backend/dist/QuizApp/QuizApp
-```
-
-## Windows Portable Build
-
-Build on Windows because PyInstaller output is OS-specific.
-
-Prerequisites:
-
-- Node.js/npm
-- Python 3.12 from python.org
-- PowerShell permission to run local scripts
-
-From PowerShell:
-
-```powershell
-.\package-windows.ps1
-```
-
-If PowerShell blocks the script:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-Output:
-
-```text
-backend\dist\QuizApp\
-```
-
-Run:
-
-```powershell
-backend\dist\QuizApp\QuizApp.exe
-```
+`npm run tauri build` outputs the installer/bundle under
+`frontend/src-tauri/target/release/bundle/`.
 
 ## App Data And Tests
 
-- `backend/questions.db` is local data and is ignored by git. Portable builds
-  require it.
-- `backend/static/` contains uploaded media and is copied into portable builds
-  when present.
+- `backend/questions.db` is local dev data and is ignored by git. The desktop
+  release seeds a fresh copy from `backend/questions.csv` and bundles it in the
+  sidecar; on first launch it is copied into the user's app-data dir
+  (`%APPDATA%\Nemoris` / `~/.local/share/nemoris`), never next to the binary.
+- `backend/static/` contains uploaded media (dev). Installed apps store media
+  under the same app-data dir.
 - `backend/backups/` contains exportable backup zips and is ignored by git.
-- Export the whole `QuizApp` output folder, not only the executable.
 - Backend tests live in `backend/tests`. Install `pytest` separately if needed.

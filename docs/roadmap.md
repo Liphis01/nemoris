@@ -8,7 +8,8 @@
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
 - créer de nouveaux modes timeline (et revoir la création ?)
-- resume do a plan for the pywebview option
+- faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
+
 
 ## quick fixes
 
