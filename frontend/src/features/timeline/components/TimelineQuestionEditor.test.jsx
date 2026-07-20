@@ -70,6 +70,20 @@ describe("TimelineQuestionEditor", () => {
     expect(editor.lastTimeline().start.year).toBe(1492);
   });
 
+  it("accepts a date typed without separators and canonicalises it on blur", () => {
+    const editor = renderEditor();
+
+    const input = screen.getByLabelText("Date");
+    fireEvent.change(input, { target: { value: "14071789" } });
+
+    expect(editor.lastTimeline().start).toMatchObject({
+      year: 1789, month: 7, day: 14, precision: "day"
+    });
+
+    fireEvent.blur(input);
+    expect(input).toHaveValue("14/07/1789");
+  });
+
   it("infers day precision from a d/m/y date", () => {
     const editor = renderEditor();
 

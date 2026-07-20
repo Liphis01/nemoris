@@ -9,6 +9,7 @@ import {
 import { inputStyle } from "../../manage/components/QuestionEditorStyles";
 import {
   formatTimelineAnswer,
+  formatTypedDate,
   normalizeTimeline,
   parseTimelineInput
 } from "../timelineUtils";
@@ -154,9 +155,11 @@ export default function TimelineQuestionEditor({
   }
 
   function handleDateChange(value) {
-    setDateText(value);
+    const next = formatTypedDate(value);
 
-    const parsed = parseTimelineInput(value);
+    setDateText(next);
+
+    const parsed = parseTimelineInput(next);
 
     if (!parsed.timeline) return; // wait until it parses; surface errors on blur
 
@@ -167,9 +170,16 @@ export default function TimelineQuestionEditor({
   }
 
   function handleDateBlur() {
-    if (dateText.trim() && !parseTimelineInput(dateText).timeline) {
+    if (!dateText.trim()) return;
+
+    if (!parseTimelineInput(dateText).timeline) {
       setDateError("Format de date invalide");
+      return;
     }
+
+    // Canonicalise: a date typed without separators ("14071789") settles back to
+    // the readable "14/07/1789" once the field loses focus.
+    setDateText(formatDateInput(timeline));
   }
 
   function toggleEra() {

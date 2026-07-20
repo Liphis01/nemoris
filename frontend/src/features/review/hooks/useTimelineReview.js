@@ -3,6 +3,7 @@ import {
   buildRangeFromItems,
   coerceTimelinePrecision,
   daysInMonth,
+  gradeTimelineGuess,
   normalizeTimeline
 } from "../../timeline/timelineUtils";
 
@@ -84,6 +85,10 @@ export default function useTimelineReview({
   const [answers, setAnswers] = useState({});
   const [endpoint, setEndpoint] = useState("start");
   const [result, setResult] = useState(null);
+  // The learner's chosen quality for the revealed card (defaults to the auto
+  // grade). Held here until the card is advanced, when it is what gets recorded.
+  const [selectedQuality, setSelectedQuality] = useState(null);
+  const [pendingGuess, setPendingGuess] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [doneIds, setDoneIds] = useState(() => new Set());
@@ -159,8 +164,12 @@ export default function useTimelineReview({
     setError("");
   }, [activeId, activeTimeline?.kind, endpoint, precision, revealed]);
 
-  const validate = useCallback(async () => {
-    if (!activeItem || !activeTimeline || isSubmitting || revealed) return;
+  // Grades on the client for an instant reveal (the expected date is already in
+  // the payload). Nothing is recorded here — the scheduling happens on advance
+  // (goNext), once the learner has optionally adjusted the quality. The backend
+  // re-grades authoritatively then, so this local grade only drives the UI.
+  const validate = useCallback(() => {
+    if (!activeItem || !activeTimeline || revealed) return;
 
     if (!isComplete) {
       setError(isInterval
@@ -169,44 +178,39 @@ export default function useTimelineReview({
       return;
     }
 
-    const payload = { start: draftToDate(answer.start, precision) };
+    const guess = { start: draftToDate(answer.start, precision) };
 
     if (isInterval) {
-      payload.end = draftToDate(answer.end, precision);
+      guess.end = draftToDate(answer.end, precision);
     }
 
-    setIsSubmitting(true);
+    const graded = gradeTimelineGuess(activeTimeline, guess);
+
+    // A miss is final; only a hit can be refined, so failed ids are known now.
+    if (graded.quality === 0) {
+      failedIdsRef.current = [...failedIdsRef.current, activeItem.question_id];
+    }
+
+    const nextDone = new Set(doneIds);
+    nextDone.add(activeItem.question_id);
+    setDoneIds(nextDone);
+    setSelectedQuality(graded.quality);
+    setPendingGuess(guess);
+    setResult({
+      question_id: activeItem.question_id,
+      quality: graded.quality,
+      expected: activeTimeline,
+      guess,
+      start: graded.start,
+      end: graded.end
+    });
     setError("");
 
-    try {
-      const response = await submitAnswer({ [activeItem.question_id]: payload });
-      const graded = (response?.results || []).find(
-        entry => entry.question_id === activeItem.question_id
-      ) || null;
-
-      if (!graded) {
-        throw new Error("Réponse de correction introuvable.");
-      }
-
-      if (graded.quality === 0) {
-        failedIdsRef.current = [...failedIdsRef.current, activeItem.question_id];
-      }
-
-      const nextDone = new Set(doneIds);
-      nextDone.add(activeItem.question_id);
-      setDoneIds(nextDone);
-      setResult(graded);
-
-      // The answering phase is over the moment the last card is graded, even
-      // though its correction is still on screen.
-      if (nextDone.size >= sortedItems.length && !answeringDoneRef.current) {
-        answeringDoneRef.current = true;
-        onAnsweringComplete?.(failedIdsRef.current);
-      }
-    } catch (requestError) {
-      setError(requestError.message || "Impossible de valider cette date.");
-    } finally {
-      setIsSubmitting(false);
+    // The answering phase is over the moment the last card is graded, even
+    // though its correction is still on screen and its schedule not yet written.
+    if (nextDone.size >= sortedItems.length && !answeringDoneRef.current) {
+      answeringDoneRef.current = true;
+      onAnsweringComplete?.(failedIdsRef.current);
     }
   }, [
     activeItem,
@@ -215,18 +219,49 @@ export default function useTimelineReview({
     doneIds,
     isComplete,
     isInterval,
-    isSubmitting,
     onAnsweringComplete,
     precision,
     revealed,
-    sortedItems.length,
-    submitAnswer
+    sortedItems.length
   ]);
 
-  const goNext = useCallback(() => {
-    const nextId = orderedIds.find(id => id !== activeId && !doneIds.has(id));
+  // Only a hit is adjustable (Hard/Good/Easy); a miss stays Again.
+  const canAdjustQuality = revealed && result?.quality > 0;
+  const adjustQuality = useCallback((quality) => {
+    if (!result || result.quality === 0) return;
+
+    setSelectedQuality(Math.max(1, Math.min(3, quality)));
+  }, [result]);
+
+  // Records the card with its final quality, then advances. This is where the
+  // schedule is written — deferred to here so the learner's quality choice is
+  // included. On a network failure we stay on the reveal so it can be retried.
+  const goNext = useCallback(async () => {
+    if (!activeItem || !revealed || isSubmitting) return;
+
+    const questionId = activeItem.question_id;
+
+    if (pendingGuess) {
+      setIsSubmitting(true);
+
+      try {
+        await submitAnswer({
+          [questionId]: { ...pendingGuess, quality: selectedQuality }
+        });
+      } catch (requestError) {
+        setError(requestError.message || "Impossible d'enregistrer cette réponse.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setIsSubmitting(false);
+    }
+
+    const nextId = orderedIds.find(id => id !== questionId && !doneIds.has(id));
 
     setResult(null);
+    setSelectedQuality(null);
+    setPendingGuess(null);
     setEndpoint("start");
     setError("");
 
@@ -236,7 +271,17 @@ export default function useTimelineReview({
     }
 
     setActiveId(nextId);
-  }, [activeId, doneIds, onComplete, orderedIds]);
+  }, [
+    activeItem,
+    doneIds,
+    isSubmitting,
+    onComplete,
+    orderedIds,
+    pendingGuess,
+    revealed,
+    selectedQuality,
+    submitAnswer
+  ]);
 
   // Skip postpones: the card rotates to the back of the queue and comes round
   // again. It is not an answer, so nothing is submitted and nothing is graded.
@@ -261,8 +306,10 @@ export default function useTimelineReview({
   return {
     activeItem,
     activeTimeline,
+    adjustQuality,
     answer,
     answeredCount,
+    canAdjustQuality,
     draft,
     endpoint,
     error,
@@ -274,6 +321,7 @@ export default function useTimelineReview({
     range,
     result,
     revealed,
+    selectedQuality,
     setEndpoint,
     setParsedDate,
     setUnit,

@@ -252,6 +252,10 @@ class TimelineDateValue(BaseModel):
 class TimelineAnswerItem(BaseModel):
     start: TimelineDateValue
     end: Optional[TimelineDateValue] = None
+    # The learner's felt-difficulty on a correct answer. None means "use the
+    # auto grade from distance". The server never lets this upgrade a miss
+    # (see reconcile_timeline_quality), so it can only refine a genuine hit.
+    quality: Optional[AnswerQuality] = None
 
 
 class TimelineAnswerRequest(BaseModel):

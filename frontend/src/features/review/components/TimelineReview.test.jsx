@@ -72,16 +72,8 @@ describe("TimelineReview", () => {
     expect(screen.getByRole("button", { name: /Valider/ })).toBeDisabled();
   });
 
-  it("fills the whole cascade from a typed date and submits it at the expected precision", async () => {
-    const submitAnswer = vi.fn().mockResolvedValue({
-      results: [{
-        expected: dayItem.timeline,
-        guess: { start: { day: 14, month: 7, precision: "day", year: 1789 } },
-        quality: 2,
-        question_id: 1,
-        start: { distance: 0, unit: "days" }
-      }]
-    });
+  it("reveals on validate but only records the final quality on continue", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
 
     renderReview({ submitAnswer });
 
@@ -94,23 +86,22 @@ describe("TimelineReview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
 
+    // The reveal is client-graded; nothing is recorded until the card is advanced.
+    await screen.findByText("Exact !");
+    expect(submitAnswer).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
+
+    // 14/07/1789 is exactly the answer -> auto Good (2), sent on continue.
     await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
-      1: { start: { day: 14, month: 7, precision: "day", year: 1789 } }
+      1: { start: { day: 14, month: 7, precision: "day", year: 1789 }, quality: 2 }
     }));
   });
 
-  it("reveals the correction inline and reports the failed card on continue", async () => {
+  it("reveals the correction from a client-side grade and records the miss on continue", async () => {
     const onAnsweringComplete = vi.fn();
     const onComplete = vi.fn();
-    const submitAnswer = vi.fn().mockResolvedValue({
-      results: [{
-        expected: { kind: "point", start: { day: null, month: null, precision: "year", year: 1850 } },
-        guess: { start: { day: null, month: null, precision: "year", year: 1800 } },
-        quality: 0,
-        question_id: 9,
-        start: { distance: 50, unit: "years" }
-      }]
-    });
+    const submitAnswer = vi.fn().mockResolvedValue({});
 
     renderReview({
       onAnsweringComplete,
@@ -131,16 +122,39 @@ describe("TimelineReview", () => {
       return bar;
     });
 
-    // The gap is stated with a direction, which the backend's unsigned distance does not carry.
+    // Both the verdict and the directioned gap are computed on the client now.
     expect(feedback).toHaveAttribute("data-timeline-feedback", "wrong");
     expect(feedback).toHaveTextContent("Raté");
     expect(feedback).toHaveTextContent("1850");
     expect(feedback).toHaveTextContent("50 ans trop tôt");
+    // A miss offers no quality adjustment.
+    expect(document.querySelector("[data-timeline-quality-bar]")).toBeNull();
     expect(onAnsweringComplete).toHaveBeenCalledWith([9]);
 
     fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
 
-    expect(onComplete).toHaveBeenCalledWith([9]);
+    await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
+      9: { start: { day: null, month: null, precision: "year", year: 1800 }, quality: 0 }
+    }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith([9]));
+  });
+
+  it("lets a hit be bumped to Facile and records the chosen quality", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+
+    renderReview({ reviewItems: [yearItem(1850)], submitAnswer });
+
+    fireEvent.change(screen.getByLabelText("Saisir la date"), { target: { value: "1850" } });
+    fireEvent.keyDown(screen.getByLabelText("Saisir la date"), { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
+
+    // An exact answer auto-grades Good; the learner upgrades it to Facile.
+    fireEvent.click(await screen.findByRole("button", { name: /Facile/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
+
+    await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
+      9: { start: { day: null, month: null, precision: "year", year: 1850 }, quality: 3 }
+    }));
   });
 
   it("renders curated landmark anchors on the global track", () => {

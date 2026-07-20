@@ -65,7 +65,11 @@ from ..services.sequence_modes import (
     normalize_sequence_mode,
     sequence_mode_difficulty
 )
-from ..services.timeline import grade_timeline_answer, validate_timeline_data
+from ..services.timeline import (
+    grade_timeline_answer,
+    reconcile_timeline_quality,
+    validate_timeline_data
+)
 
 
 router = APIRouter()
@@ -628,7 +632,13 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
             )
 
         timeline = validate_timeline_data(question.data or {})
-        grading = grade_timeline_answer(timeline, guess.model_dump())
+        payload = guess.model_dump()
+        grading = grade_timeline_answer(timeline, payload)
+        # Distance grades correctness; the learner may refine a hit's difficulty.
+        final_quality = reconcile_timeline_quality(
+            grading["quality"],
+            payload.get("quality")
+        )
         progress = progress_map.get(question_id)
 
         if not progress:
@@ -636,13 +646,16 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
             db.add(progress)
             progress_map[question_id] = progress
 
-        progress_quality_pairs.append((progress, grading["quality"]))
+        progress_quality_pairs.append((progress, final_quality))
 
         results.append({
             "question_id": question_id,
-            "quality": grading["quality"],
+            "quality": final_quality,
+            "auto_quality": grading["quality"],
             "expected": timeline,
-            "guess": guess.model_dump(),
+            # The guessed date only — the learner's quality is an input, not
+            # part of what they placed on the timeline.
+            "guess": {"start": payload["start"], "end": payload.get("end")},
             "start": grading["start"],
             "end": grading["end"]
         })

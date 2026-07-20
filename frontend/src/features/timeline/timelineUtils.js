@@ -323,6 +323,120 @@ export function getFinestPrecision(...dates) {
     .sort((a, b) => precisionRank[b] - precisionRank[a])[0] || "year";
 }
 
+// Inserts the "/" separators while a date is being typed, so digits alone come
+// out as 20/04/1950.
+//
+// With a known `precision` (answering a question) the mask is re-derived from
+// the digits on every keystroke, which stays stable through backspace.
+//
+// Without one (authoring, where the format *is* the precision) it can only
+// settle at the lengths that make a complete date — 6 -> MM/YYYY, 8 ->
+// DD/MM/YYYY — otherwise a year in progress would be mangled into "17/89". It
+// also never touches input that already has separators, or that carries a dash
+// or an era, so intervals ("1914-1918") and "44 av. J.-C." are left alone.
+export function formatTypedDate(value, precision) {
+  const raw = String(value ?? "");
+
+  if (!/^[\d/]*$/.test(raw)) return raw;
+
+  const digits = raw.replace(/\D/g, "");
+
+  if (!digits) return "";
+
+  if (precision === "year") return digits.slice(0, 4);
+
+  if (precision === "month") {
+    if (digits.length <= 2) return digits;
+
+    return `${digits.slice(0, 2)}/${digits.slice(2, 6)}`;
+  }
+
+  if (precision === "day") {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  }
+
+  // Four digits or fewer is still a year in progress, so it is left bare.
+  if (digits.length <= 4) return digits;
+
+  // Past that it cannot be a year. The leading pair decides the shape: a valid
+  // month with nothing beyond a MM/YYYY worth of digits reads as a month date,
+  // anything else as a full DD/MM/YYYY.
+  const lead = Number(digits.slice(0, 2));
+
+  if (digits.length <= 6 && lead >= 1 && lead <= 12) {
+    return `${digits.slice(0, 2)}/${digits.slice(2, 6)}`;
+  }
+
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+}
+
+// Auto quality from how far a guess is from the truth. This MIRRORS the backend
+// (`_quality_from_distance` in services/timeline.py) and MUST stay in sync — the
+// server re-grades authoritatively, but the review UI grades here for an instant
+// reveal. Exact -> Good (2); within the band -> Hard (1); beyond -> Again (0).
+const timelineHardThreshold = {
+  year: 1,
+  month: 2,
+  day: 14
+};
+
+function qualityFromDistance(distance, precision) {
+  if (distance === 0) return 2;
+
+  return distance <= timelineHardThreshold[precision] ? 1 : 0;
+}
+
+function monthIndex(value) {
+  return yearToTimelineIndex(value.year) * 12 + ((value.month || 1) - 1);
+}
+
+export function gradeTimelineDate(expected, guessed) {
+  const precision = expected.precision;
+  const guess = normalizeTimelineDate({ ...guessed, precision }, precision);
+  let distance;
+  let unit;
+
+  if (precision === "year") {
+    distance = Math.abs(
+      yearToTimelineIndex(expected.year) - yearToTimelineIndex(guess.year)
+    );
+    unit = "years";
+  } else if (precision === "month") {
+    distance = Math.abs(monthIndex(expected) - monthIndex(guess));
+    unit = "months";
+  } else {
+    distance = Math.abs(lowerOrdinal(expected) - lowerOrdinal(guess));
+    unit = "days";
+  }
+
+  return {
+    quality: qualityFromDistance(distance, precision),
+    distance,
+    unit,
+    guess
+  };
+}
+
+// Client-side mirror of grade_timeline_answer: an interval is only as good as its
+// worse endpoint. Returns the same shape the backend result used to provide, so
+// the reveal can render without waiting on the network.
+export function gradeTimelineGuess(timeline, guessed) {
+  const normalized = normalizeTimeline(timeline);
+  const start = gradeTimelineDate(normalized.start, guessed.start);
+  let quality = start.quality;
+  let end = null;
+
+  if (normalized.kind === "interval") {
+    end = gradeTimelineDate(normalized.end, guessed.end);
+    quality = Math.min(quality, end.quality);
+  }
+
+  return { quality, start, end };
+}
+
 function parseDateToken(value) {
   const token = String(value || "").trim();
   const toNumber = (raw) => Number.parseInt(raw, 10);
@@ -349,6 +463,40 @@ function parseDateToken(value) {
     return normalizeTimelineDate({
       year,
       precision: "year"
+    });
+  }
+
+  // Separator-free entry so the "/" can be skipped: a run of 5-8 digits reads
+  // as MMYYYY (5-6) or DDMMYYYY (7-8), with or without leading zeros. Years are
+  // at most 4 digits, so this never collides with a bare year.
+  match = extracted.token.match(/^\d{5,8}$/);
+
+  if (match) {
+    const digits = extracted.token;
+    const year = applyEraToYear(toNumber(digits.slice(-4)), extracted.era);
+
+    if (digits.length <= 6) {
+      const month = toNumber(digits.slice(0, digits.length - 4));
+      if (!validYear(year) || !validMonth(month)) return null;
+
+      return normalizeTimelineDate({
+        month,
+        year,
+        precision: "month"
+      });
+    }
+
+    const day = toNumber(digits.slice(0, digits.length - 6));
+    const month = toNumber(digits.slice(digits.length - 6, digits.length - 4));
+    if (!validYear(year) || !validMonth(month) || !validDay(year, month, day)) {
+      return null;
+    }
+
+    return normalizeTimelineDate({
+      day,
+      month,
+      year,
+      precision: "day"
     });
   }
 

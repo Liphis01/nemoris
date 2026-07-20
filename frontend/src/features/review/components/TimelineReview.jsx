@@ -15,6 +15,7 @@ import {
   clampNumber,
   daysInMonth,
   formatTimelineDate,
+  formatTypedDate,
   lowerOrdinal,
   parseTimelineInput,
   yearToTimelineIndex
@@ -134,6 +135,15 @@ function qualityColor(quality) {
   return "#ff9aa5";
 }
 
+// Refinement offered on a hit: the auto grade is pre-selected, and the learner
+// can say it was actually Dur/Bon/Facile. Same 1/2/3 = Hard/Good/Easy scale the
+// other question types use.
+const qualityRatingOptions = [
+  { value: 1, label: "Dur", color: "#f3d36a", activeBg: "#35311f" },
+  { value: 2, label: "Bon", color: "#8fc7ff", activeBg: "#1f2f3a" },
+  { value: 3, label: "Facile", color: "#7ee2a8", activeBg: "#183a24" }
+];
+
 // The backend returns an unsigned distance; the direction is ours to work out,
 // and "3 ans trop tôt" teaches far more than "3 ans d'écart".
 function describeGap(result) {
@@ -199,8 +209,10 @@ export default function TimelineReview({
   const {
     activeItem,
     activeTimeline,
+    adjustQuality,
     answer,
     answeredCount,
+    canAdjustQuality,
     draft,
     endpoint,
     error,
@@ -212,6 +224,7 @@ export default function TimelineReview({
     range,
     result,
     revealed,
+    selectedQuality,
     setEndpoint,
     setParsedDate,
     setUnit,
@@ -317,7 +330,25 @@ export default function TimelineReview({
         return;
       }
 
-      if (revealed) return;
+      if (revealed) {
+        // On a hit, 1/2/3 refine the felt difficulty (Dur/Bon/Facile). AZERTY
+        // top-row digits need the physical-key fallback.
+        if (!canAdjustQuality) return;
+
+        const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+        const quality = ["1", "2", "3"].includes(event.key)
+          ? Number(event.key)
+          : digitMatch
+            ? Number(digitMatch[1])
+            : null;
+
+        if (quality !== null) {
+          event.preventDefault();
+          adjustQuality(quality);
+        }
+
+        return;
+      }
 
       if (event.key === "Tab" && isInterval) {
         event.preventDefault();
@@ -347,7 +378,7 @@ export default function TimelineReview({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [finestUnit, goNext, isInterval, nudge, revealed, toggleEndpoint, validate]);
+  }, [adjustQuality, canAdjustQuality, finestUnit, goNext, isInterval, nudge, revealed, toggleEndpoint, validate]);
 
   function applyQuickInput() {
     const parsed = parseTimelineInput(quickInput);
@@ -556,7 +587,7 @@ export default function TimelineReview({
             disabled={revealed}
             onBlur={() => quickInput.trim() && applyQuickInput()}
             onChange={event => {
-              setQuickInput(event.target.value);
+              setQuickInput(formatTypedDate(event.target.value, precision));
               setQuickError("");
             }}
             onKeyDown={handleQuickKeyDown}
@@ -660,6 +691,40 @@ export default function TimelineReview({
                 {describeGap(result)}
               </div>
             )}
+
+            {canAdjustQuality && (
+              <div
+                data-timeline-quality-bar
+                style={{ alignItems: "center", display: "flex", gap: "6px", marginLeft: "auto" }}
+              >
+                {qualityRatingOptions.map(option => {
+                  const active = selectedQuality === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      data-timeline-quality={option.value}
+                      data-active={active ? "true" : "false"}
+                      onClick={() => adjustQuality(option.value)}
+                      style={{
+                        background: active ? option.activeBg : "#161616",
+                        border: `1px solid ${active ? option.color : "#333"}`,
+                        borderRadius: "8px",
+                        color: active ? option.color : "#8a8a8a",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        padding: "6px 10px",
+                        transition: "background 0.14s ease, color 0.14s ease, border-color 0.14s ease"
+                      }}
+                    >
+                      {option.value} {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         {!revealed && (error || quickError) && (
@@ -688,8 +753,21 @@ export default function TimelineReview({
         }}
       >
         <div style={{ color: "#5f5f5f", fontSize: "11px", fontWeight: 700 }}>
-          <span style={keycapStyle}>↑↓</span> année · <span style={keycapStyle}>←→</span> ajuster ·{" "}
-          <span style={keycapStyle}>↵</span> valider
+          {revealed ? (
+            canAdjustQuality ? (
+              <>
+                <span style={keycapStyle}>1</span>/<span style={keycapStyle}>2</span>/
+                <span style={keycapStyle}>3</span> difficulté · <span style={keycapStyle}>↵</span> continuer
+              </>
+            ) : (
+              <><span style={keycapStyle}>↵</span> continuer</>
+            )
+          ) : (
+            <>
+              <span style={keycapStyle}>↑↓</span> année · <span style={keycapStyle}>←→</span> ajuster ·{" "}
+              <span style={keycapStyle}>↵</span> valider
+            </>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: "10px" }}>

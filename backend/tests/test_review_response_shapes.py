@@ -119,6 +119,7 @@ TIMELINE_ITEM_KEYS = {
 TIMELINE_RESULT_KEYS = {
     "question_id",
     "quality",
+    "auto_quality",
     "expected",
     "guess",
     "start",

@@ -432,3 +432,21 @@ def grade_timeline_answer(timeline, guessed):
         "start": start_result,
         "end": end_result
     }
+
+
+def reconcile_timeline_quality(auto_quality, requested):
+    """Final scheduling quality for a timeline answer.
+
+    Distance decides correctness; the learner only refines a hit. So a miss
+    (auto 0) can never be talked up, and a hit can be set to Hard/Good/Easy
+    (1/2/3) but never demoted to a miss. `requested` is the learner's felt
+    difficulty (or None to keep the auto grade). This keeps the server the
+    authority: a tampered client cannot inflate a wrong answer's interval.
+    """
+    if auto_quality == 0:
+        return 0
+
+    if requested is None:
+        return auto_quality
+
+    return max(1, min(3, int(requested)))
