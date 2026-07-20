@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
 from ..schemas import BlueprintExportRequest
-from ..services.blueprints import export_blueprint, import_blueprint
+from ..services.blueprints import export_blueprint, import_blueprint, update_blueprint
 
 
 router = APIRouter()
@@ -53,6 +53,36 @@ def import_blueprint_zip(
 
         try:
             result = import_blueprint(db, upload_path, source=file.filename)
+        except ValueError as error:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return result
+
+
+@router.post("/blueprints/update")
+def update_blueprint_zip(
+    file: UploadFile = File(...),
+    delete_removed: bool = False,
+    db: Session = Depends(get_db)
+):
+    # Safe to call twice: once with delete_removed=False to preview what
+    # would be removed while applying everything else, again with
+    # delete_removed=True once a caller/UI has confirmed the deletion.
+    with tempfile.TemporaryDirectory() as temp_name:
+        upload_path = Path(temp_name) / "update.zip"
+
+        with upload_path.open("wb") as destination:
+            while chunk := file.file.read(1024 * 1024):
+                destination.write(chunk)
+
+        try:
+            result = update_blueprint(
+                db,
+                upload_path,
+                source=file.filename,
+                delete_removed=delete_removed
+            )
         except ValueError as error:
             db.rollback()
             raise HTTPException(status_code=400, detail=str(error)) from error

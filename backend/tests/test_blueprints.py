@@ -24,9 +24,18 @@ from app.models import (
     Question,
     QuestionGroup
 )
-from app.routers.blueprints import export_group_blueprint, import_blueprint_zip
+from app.routers.blueprints import (
+    export_group_blueprint,
+    import_blueprint_zip,
+    update_blueprint_zip
+)
 from app.schemas import BlueprintExportRequest
-from app.services.blueprints import content_hash, export_blueprint, import_blueprint
+from app.services.blueprints import (
+    content_hash,
+    export_blueprint,
+    import_blueprint,
+    update_blueprint
+)
 from app.services.media import store_media_bytes
 from app.services.progress import create_initial_progress, record_answer_history
 
@@ -514,6 +523,295 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             )
 
 
+class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
+    def install_v1(self):
+        # Source: group + two questions, exported as v1 and imported into a
+        # fresh target database, simulating two separate installations.
+        source_db, source_static, group, first, second = self.build_source()
+        blueprint_dir = self.make_static_dir()
+
+        v1_zip = export_blueprint(
+            source_db,
+            group.id,
+            version=1,
+            name="Countries",
+            static_dir=source_static,
+            blueprint_dir=blueprint_dir
+        )
+
+        target_db = make_db()
+        target_static = self.make_static_dir()
+        import_blueprint(target_db, v1_zip, static_dir=target_static)
+
+        return {
+            "source_db": source_db,
+            "source_static": source_static,
+            "source_group": group,
+            "source_first": first,
+            "source_second": second,
+            "blueprint_dir": blueprint_dir,
+            "target_db": target_db,
+            "target_static": target_static
+        }
+
+    def export_v2(self, ctx, **overrides):
+        kwargs = {
+            "version": 2,
+            "name": "Countries",
+            "static_dir": ctx["source_static"],
+            "blueprint_dir": ctx["blueprint_dir"]
+        }
+        kwargs.update(overrides)
+
+        return export_blueprint(
+            ctx["source_db"], ctx["source_group"].id, **kwargs
+        )
+
+    def test_adds_new_and_updates_unchanged_items(self):
+        ctx = self.install_v1()
+
+        # Source changes: edit Q1's answer, add a brand-new Q3.
+        ctx["source_first"].answer = "A1 corrected"
+        third = Question(
+            type_q="map",
+            question="Q3",
+            answer="A3",
+            tags=[],
+            data={"code": "es"},
+            group_id=ctx["source_group"].id
+        )
+        ctx["source_db"].add(third)
+        ctx["source_db"].commit()
+
+        v2_zip = self.export_v2(ctx)
+
+        result = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+
+        self.assertEqual(result["status"], "updated")
+        self.assertEqual(result["version"], 2)
+        self.assertEqual(set(result["added"]), {third.guid})
+        self.assertIn(ctx["source_first"].guid, result["updated"])
+        self.assertEqual(result["forked"], [])
+        self.assertEqual(result["removed"], [])
+
+        updated_first = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == ctx["source_first"].guid)
+            .first()
+        )
+        self.assertEqual(updated_first.answer, "A1 corrected")
+        self.assertEqual(updated_first.blueprint_version, 2)
+
+        added_third = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == third.guid)
+            .first()
+        )
+        self.assertIsNotNone(added_third)
+        self.assertEqual(added_third.answer, "A3")
+        self.assertIsNone(
+            ctx["target_db"].query(Progress)
+            .filter(Progress.question_id == added_third.id)
+            .first()
+        )
+
+        subscription = (
+            ctx["target_db"].query(BlueprintSubscription)
+            .filter(
+                BlueprintSubscription.blueprint_guid
+                == ctx["source_group"].guid
+            )
+            .first()
+        )
+        self.assertEqual(subscription.installed_version, 2)
+        self.assertIsNotNone(subscription.updated_at)
+
+    def test_locally_edited_item_is_left_alone(self):
+        ctx = self.install_v1()
+
+        # User edits Q1 locally on the target before the update lands.
+        local_first = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == ctx["source_first"].guid)
+            .first()
+        )
+        local_first.answer = "my own answer"
+        ctx["target_db"].commit()
+
+        # Source also changes Q1 -- but since the target forked, the update
+        # must not overwrite the local edit.
+        ctx["source_first"].answer = "upstream answer"
+        ctx["source_db"].commit()
+
+        v2_zip = self.export_v2(ctx)
+        result = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+
+        self.assertEqual(result["forked"], [ctx["source_first"].guid])
+        self.assertEqual(result["updated"], [])
+
+        untouched = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == ctx["source_first"].guid)
+            .first()
+        )
+        self.assertEqual(untouched.answer, "my own answer")
+        # Forked rows keep their old bookkeeping -- never silently advanced.
+        self.assertEqual(untouched.blueprint_version, 1)
+
+    def test_forked_item_is_reported_even_if_upstream_did_not_change_it(self):
+        # Regression: a row can be locally edited in a version where
+        # upstream happens not to touch that particular item. It must still
+        # be protected (never overwritten) AND still show up in "forked" --
+        # not silently skipped just because the incoming content is
+        # byte-identical to what was last synced.
+        ctx = self.install_v1()
+
+        local_second = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == ctx["source_second"].guid)
+            .first()
+        )
+        local_second.answer = "my local edit"
+        ctx["target_db"].commit()
+
+        # Source changes Q1 only; Q2 (second) is untouched upstream.
+        ctx["source_first"].answer = "upstream change"
+        ctx["source_db"].commit()
+
+        v2_zip = self.export_v2(ctx)
+        result = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+
+        self.assertEqual(result["forked"], [ctx["source_second"].guid])
+        self.assertEqual(result["updated"], [ctx["source_first"].guid])
+
+        untouched = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == ctx["source_second"].guid)
+            .first()
+        )
+        self.assertEqual(untouched.answer, "my local edit")
+
+    def test_removed_item_is_reported_then_deleted_on_confirm(self):
+        ctx = self.install_v1()
+
+        second_guid = ctx["source_second"].guid
+        ctx["source_db"].delete(ctx["source_second"])
+        ctx["source_db"].commit()
+
+        v2_zip = self.export_v2(ctx)
+
+        preview = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+        self.assertEqual(preview["removed"], [second_guid])
+        self.assertEqual(preview["deleted"], [])
+
+        # Not deleted yet -- still present locally.
+        still_present = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == second_guid)
+            .first()
+        )
+        self.assertIsNotNone(still_present)
+
+        confirm = update_blueprint(
+            ctx["target_db"],
+            v2_zip,
+            static_dir=ctx["target_static"],
+            delete_removed=True
+        )
+        self.assertEqual(confirm["removed"], [second_guid])
+        self.assertEqual(confirm["deleted"], [second_guid])
+
+        gone = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == second_guid)
+            .first()
+        )
+        self.assertIsNone(gone)
+
+    def test_forked_group_media_and_fields_are_not_overwritten(self):
+        ctx = self.install_v1()
+
+        local_group = (
+            ctx["target_db"].query(QuestionGroup)
+            .filter(QuestionGroup.guid == ctx["source_group"].guid)
+            .first()
+        )
+        local_group.name = "My Renamed Countries"
+        ctx["target_db"].commit()
+
+        ctx["source_group"].name = "Countries v2"
+        ctx["source_db"].commit()
+
+        v2_zip = self.export_v2(ctx, name="Countries v2")
+        result = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+
+        self.assertFalse(result["group_updated"])
+
+        untouched_group = (
+            ctx["target_db"].query(QuestionGroup)
+            .filter(QuestionGroup.guid == ctx["source_group"].guid)
+            .first()
+        )
+        self.assertEqual(untouched_group.name, "My Renamed Countries")
+
+    def test_rejects_update_for_uninstalled_blueprint(self):
+        ctx = self.install_v1()
+        v2_zip = self.export_v2(ctx)
+
+        with self.assertRaises(ValueError):
+            update_blueprint(
+                make_db(), v2_zip, static_dir=self.make_static_dir()
+            )
+
+    def test_rejects_older_version_than_installed(self):
+        ctx = self.install_v1()
+
+        with self.assertRaises(ValueError):
+            update_blueprint(
+                ctx["target_db"],
+                self.export_v2(ctx, version=0),
+                static_dir=ctx["target_static"]
+            )
+
+    def test_repeated_call_with_same_version_is_idempotent(self):
+        ctx = self.install_v1()
+        ctx["source_first"].answer = "A1 corrected"
+        ctx["source_db"].commit()
+
+        v2_zip = self.export_v2(ctx)
+        first_call = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+        second_call = update_blueprint(
+            ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
+        )
+
+        self.assertEqual(first_call["updated"], [ctx["source_first"].guid])
+        # Second call: content already matches, nothing left to touch.
+        self.assertEqual(second_call["updated"], [])
+        self.assertEqual(second_call["added"], [])
+        self.assertEqual(second_call["forked"], [])
+
+        # Still exactly the two original questions -- nothing duplicated.
+        self.assertEqual(ctx["target_db"].query(Question).count(), 2)
+        updated_first = (
+            ctx["target_db"].query(Question)
+            .filter(Question.guid == ctx["source_first"].guid)
+            .first()
+        )
+        self.assertEqual(updated_first.answer, "A1 corrected")
+
+
 class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
     def test_export_endpoint_returns_zip_and_404s_on_missing_group(self):
         db, static_dir, group, first, second = self.build_source()
@@ -557,6 +855,65 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
 
         with self.assertRaises(HTTPException) as caught:
             import_blueprint_zip(file=upload, db=target_db)
+
+        self.assertEqual(caught.exception.status_code, 400)
+
+    def test_update_endpoint_round_trips_upload(self):
+        source_db, source_static, group, first, second = self.build_source()
+        blueprint_dir = self.make_static_dir()
+
+        v1_zip = export_blueprint(
+            source_db, group.id, version=1, name="Pack",
+            static_dir=source_static, blueprint_dir=blueprint_dir
+        )
+
+        target_db = make_db()
+        target_static = self.make_static_dir()
+
+        with patch.object(blueprints_service, "STATIC_DIR", target_static):
+            import_blueprint_zip(
+                file=UploadFile(
+                    file=io.BytesIO(v1_zip.read_bytes()), filename="pack.zip"
+                ),
+                db=target_db
+            )
+
+        first.answer = "corrected"
+        source_db.commit()
+        v2_zip = export_blueprint(
+            source_db, group.id, version=2, name="Pack",
+            static_dir=source_static, blueprint_dir=blueprint_dir
+        )
+
+        with patch.object(blueprints_service, "STATIC_DIR", target_static):
+            result = update_blueprint_zip(
+                file=UploadFile(
+                    file=io.BytesIO(v2_zip.read_bytes()), filename="pack.zip"
+                ),
+                db=target_db
+            )
+
+        self.assertEqual(result["status"], "updated")
+        self.assertEqual(result["updated"], [first.guid])
+
+    def test_update_endpoint_rejects_uninstalled_blueprint(self):
+        source_db, source_static, group, first, second = self.build_source()
+        v1_zip = export_blueprint(
+            source_db, group.id, version=1, name="Pack",
+            static_dir=source_static, blueprint_dir=self.make_static_dir()
+        )
+        target_db = make_db()
+        target_static = self.make_static_dir()
+
+        with patch.object(blueprints_service, "STATIC_DIR", target_static):
+            with self.assertRaises(HTTPException) as caught:
+                update_blueprint_zip(
+                    file=UploadFile(
+                        file=io.BytesIO(v1_zip.read_bytes()),
+                        filename="pack.zip"
+                    ),
+                    db=target_db
+                )
 
         self.assertEqual(caught.exception.status_code, 400)
 

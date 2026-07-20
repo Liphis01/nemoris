@@ -264,12 +264,44 @@ application server: static files + a JSON index.
         byte-identical sha256 on the far side) both round-tripped correctly
         — zero progress rows, subscription recorded, re-import correctly
         rejected. 315 backend tests pass (16 new).
-- [ ] 1.3 **Updates**: diff by GUID between installed and new version:
-      - new item → added;
-      - item untouched locally (`content_hash` identical) → updated in place;
-      - item edited locally → left alone, it has forked;
-      - item removed from the blueprint → offer deletion (progress archived);
-      - progress → never touched (keyed by the local row).
+- [x] 1.3 **Updates — done (2026-07-21).** `update_blueprint()` in
+      `services/blueprints.py`, `POST /blueprints/update?delete_removed=bool`.
+      - **Correction to the spec's literal reading**: "item untouched locally
+        → content_hash identical" compares against the *new zip's* content —
+        but fork detection must be a property of local state alone,
+        independent of what the incoming version contains. `_is_row_forked`
+        recomputes the row's current canonical hash (re-deriving media as a
+        content-addressed ref via `_resolve_media_ref`, so comparison is
+        apples-to-apples) and compares to the row's own stored
+        `content_hash` — never to the new entry.
+      - new guid in zip, absent locally → added (fresh row, guid reused,
+        no Progress — mirrors `create_question()`'s lazy creation).
+      - present both sides, unforked, content differs → updated in place,
+        `blueprint_version`/`content_hash` advance.
+      - present both sides, content identical either way → left alone
+        entirely, not even bookkeeping touched (so "updated" only ever
+        reports real changes — an early version reported every unforked row
+        as "updated" regardless of whether anything actually changed;
+        caught by a same-version-idempotency test).
+      - forked → always left alone, bookkeeping frozen at last clean sync.
+      - absent from zip, present locally → reported in `removed`, deleted
+        only when `delete_removed=True` (via the existing
+        `delete_question_dependents` pipeline — tombstoned like any other
+        deletion, no separate "archive" concept invented). Progress is
+        deleted alongside its question exactly as any normal deletion does;
+        never touched otherwise.
+      - No separate preview/apply split: `update_blueprint` is safe to call
+        repeatedly with the same zip (Terraform-apply style) — call once
+        with `delete_removed=False` to apply every safe change and see what
+        *would* be removed, call again with `True` once confirmed.
+      - **Real-data bug caught by testing against the actual "Capitales du
+        monde" group** (not just synthetic fixtures): a row locally edited
+        in a version where upstream happened not to touch that same item was
+        correctly protected from being overwritten, but silently missing
+        from the `forked` report — an efficiency shortcut checked "did
+        upstream change this" before checking fork status, when it must be
+        the other way around. Fixed; a regression test locks in the exact
+        scenario. 327 backend tests pass (11 new for 1.3).
 - [ ] 1.4 **Unsubscribe**: user choice — keep the content as a personal copy,
       or delete (with confirmation, progress archived in an auto-backup).
 - [ ] 1.5 **Catalog + UI**: remote JSON index (list, versions, sizes), a
