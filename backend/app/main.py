@@ -11,6 +11,7 @@ from .routers import (
     groups,
     maps,
     media_groups,
+    meta,
     questions,
     review,
     sequence_groups,
@@ -59,6 +60,7 @@ def create_app():
     app.include_router(sequence_groups.router)
     app.include_router(uploads.router)
     app.include_router(backup.router)
+    app.include_router(meta.router)
 
     if FRONTEND_DIST_DIR.exists():
         assets_dir = FRONTEND_DIST_DIR / "assets"

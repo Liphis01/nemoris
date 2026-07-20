@@ -67,9 +67,20 @@ alone. The revlog keeps exactly that shape, one row per entry.
 - [x] Dual-write live: `record_answer_history()` (single choke point) mirrors
       every entry into `review_log`; `db` + guid threaded through
       `apply_scheduling_batch` → `write_scheduling`.
-- [ ] Switch readers (stats, history UI, calendar,
-      `restore_progress_from_history`) over to `review_log` — staged with 0.3
-      (the restore function is the natural first reader).
+- [x] **Decision (2026-07-20): do not switch the remaining readers, do not
+      drop `Progress.history`.** Scoped the full read surface: 14 call sites
+      across `serializers.py`, `stats.py`, `routers/review.py`,
+      `services/review.py`, `fsrs_migration.py`, `scheduler_tuning.py`, and —
+      the blocker — `mode_selection.py`, `text_modes.py`, `map_modes.py`,
+      `sequence_modes.py`, `image_modes.py`. That last group reads
+      `progress.history` deep inside per-question mode-selection, called on
+      already-loaded ORM objects with **no `db` session in scope**. Switching
+      them means threading a session through five hot-path files for zero
+      functional gain: the JSON column and `review_log` are proven identical
+      (0.3's 918/918 gate) and dual-write keeps them in permanent lockstep.
+      Nothing in M1 or M2 reads through these functions — blueprints and sync
+      consume `services/revlog.py` directly. Revisit only if the column's
+      storage cost ever matters (it doesn't: JSON history is a few KB/card).
 - Note: no history-reset or Progress-deletion paths exist in the app today
   (verified); revlog rows for a deleted question would simply orphan —
   deletion semantics arrive with tombstones (0.4).
@@ -135,34 +146,48 @@ painful to retrofit.
 
 Needed for M1 (blueprint dedup) and M2 (idempotent sync).
 
-- [ ] `media_hash` column (sha256) next to the existing filename columns
-      (`Question.media`, `answer_media`, `QuestionGroup.media`). Migration:
-      hash everything under `static/`, backfill, store files as
-      `static/blobs/<sha256>.<ext>`.
-- [ ] Serve by hash OR by filename during the transition (both routes).
-- [ ] Upload: hash on receipt, dedup when the blob already exists.
-- [ ] Adapt `backups.py`: the zip follows the new layout (manifest format
-      bumps to `format: 2`, importing format 1 stays supported).
+- [x] **Design deviation (better than planned):** a `media_files` registry
+      table (path → sha256 → size, migration `0014`) instead of hash columns
+      on content rows, and **no file moves** — files keep their uuid names,
+      the registry adds identity. Normalized (one row per file, shared map
+      SVGs stay one entry), zero frontend impact, zero migration risk on
+      31 MB of media. Real DB: 689 files hashed, 9 duplicates detected.
+- [x] Serve by hash: `GET /media/blob/{sha256}` next to the existing
+      filename-based `/static/` mount.
+- [x] Upload: hash on receipt in `store_media_bytes()` (single choke point,
+      covers uploads, URL imports, media-group uploads), dedup when the
+      content already exists; deletion unregisters + writes a media
+      tombstone (guid = sha256) when the last copy goes.
+- [x] `backups.py` needs **no change**: the registry travels inside the DB
+      and the static layout is unchanged — manifest stays `format: 1`.
 
 ### 0.6 Settings namespacing
 
 `AppSetting` mixes collection-level settings (FSRS params, daily limits →
 must sync) with device-level ones (window state, volume → must never).
 
-- [ ] Migration: prefix keys `sync.` / `device.`. Real DB has exactly three
-      today: `review` → sync, `tag_hierarchy` → sync, `fsrs_v6_migration` →
-      device (migration marker, must stay local). Audit `services/settings.py`
-      for any key written only in code paths.
+- [x] **Design deviation:** a classification map in code
+      (`SYNC_SETTING_KEYS` / `DEVICE_SETTING_KEYS` in `services/settings.py`
+      + `sync_settings_payload(db)`) instead of renaming keys with prefixes —
+      same guarantee, zero migration, zero call-site churn. Classified:
+      `review`, `scheduler_tuning`, `tag_hierarchy` → sync;
+      `startup_rebalance_notice`, `fsrs_v6_migration` → device. Unknown keys
+      default to device-local (never sync what is not understood).
 
 ### 0.7 Exposed schema version
 
-- [ ] Reuse `_applied_versions()` from `migrations.py` as the protocol
-      version: `/meta/schema-version` endpoint. The sync server (M2) will
-      refuse a client that is too old rather than corrupt a collection.
+- [x] `GET /meta/schema-version` (routers/meta.py) reports
+      `code_version` / `database_version` / `pending` from the migration
+      registry. The sync server (M2) will refuse a client that is too old
+      rather than corrupt a collection.
 
-**Definition of done M0**: all migrations pass on a real database (mine), the
-replay test is green, backup export/import unchanged for the user,
-`graphify update .` current.
+**Definition of done M0 — reached 2026-07-20.** All migrations (0010-0014)
+pass on the real database; `validate-revlog` gate is 918/918; backup
+export/import unchanged; guids on all content; tombstones on every deletion
+path; media content-addressed with dedup; settings classified for sync;
+`/meta/schema-version` live. `Progress.history` intentionally kept (see 0.2
+decision above) — it is a proven-redundant cache, not a liability.
+`graphify update .` current. 297 backend tests pass.
 
 ---
 

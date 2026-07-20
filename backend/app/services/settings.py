@@ -21,6 +21,31 @@ from .map_modes import (
 REVIEW_SETTINGS_KEY = "review"
 SCHEDULER_TUNING_SETTINGS_KEY = "scheduler_tuning"
 STARTUP_REBALANCE_NOTICE_KEY = "startup_rebalance_notice"
+
+# sync-roadmap 0.6 — classification of AppSetting keys. Sync (M2) sends only
+# SYNC_SETTING_KEYS; everything else stays on the device. An unknown key is
+# treated as device-local by default: never sync what is not understood.
+SYNC_SETTING_KEYS = {
+    REVIEW_SETTINGS_KEY,
+    SCHEDULER_TUNING_SETTINGS_KEY,
+    "tag_hierarchy"
+}
+DEVICE_SETTING_KEYS = {
+    STARTUP_REBALANCE_NOTICE_KEY,
+    "fsrs_v6_migration"
+}
+
+
+def sync_settings_payload(db):
+    """The settings that travel with the collection during sync."""
+    return {
+        row.key: row.value
+        for row in (
+            db.query(AppSetting)
+            .filter(AppSetting.key.in_(SYNC_SETTING_KEYS))
+            .all()
+        )
+    }
 MIN_TYPE_PROMPT_DIFFICULTY = 1.00
 MAX_TYPE_PROMPT_DIFFICULTY = 1.35
 MIN_MULTIPLE_CHOICE_DIFFICULTY = 0.30

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Callable
@@ -31,6 +32,9 @@ class Migration:
     name: str
     run: Callable[[Connection], None]
     requires_backup: bool = False
+    # Migrations touching files under static/ receive the static dir as a
+    # second argument so tests can point them at a fixture directory.
+    needs_static_dir: bool = False
 
 
 def _table_names(connection):
@@ -457,6 +461,40 @@ def _migration_review_log_table(connection):
             )
 
 
+def _migration_media_files_registry(connection, static_dir):
+    from .models import MediaFile
+
+    Base.metadata.create_all(bind=connection, tables=[MediaFile.__table__])
+
+    # Only backfill into an empty registry so a re-entered migration cannot
+    # duplicate rows.
+    existing = connection.exec_driver_sql(
+        "SELECT COUNT(*) FROM media_files"
+    ).fetchone()[0]
+
+    if existing:
+        return
+
+    static_dir = Path(static_dir)
+
+    if not static_dir.exists():
+        return
+
+    for path in sorted(static_dir.rglob("*")):
+        if not path.is_file():
+            continue
+
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        relative = path.relative_to(static_dir).as_posix()
+        connection.exec_driver_sql(
+            """
+            INSERT INTO media_files (path, sha256, byte_size)
+            VALUES (?, ?, ?)
+            """,
+            (relative, digest, path.stat().st_size)
+        )
+
+
 def _migration_reconcile_revlog_snapshots(connection):
     # Local imports: the ORM session and services are only needed here, and
     # importing them lazily keeps migration module import light.
@@ -608,6 +646,12 @@ MIGRATIONS = [
         version="0013",
         name="tombstones_table",
         run=_migration_tombstones_table
+    ),
+    Migration(
+        version="0014",
+        name="media_files_registry",
+        run=_migration_media_files_registry,
+        needs_static_dir=True
     )
 ]
 
@@ -660,7 +704,10 @@ def run_migrations(
             if migration.version in _applied_versions(connection):
                 continue
 
-            migration.run(connection)
+            if migration.needs_static_dir:
+                migration.run(connection, static_dir)
+            else:
+                migration.run(connection)
             _record_migration(connection, migration)
             applied.append({
                 "version": migration.version,

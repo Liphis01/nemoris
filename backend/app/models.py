@@ -263,6 +263,31 @@ class Tombstone(Base):
 
 
 # =========================================================
+# MEDIA FILES
+# =========================================================
+
+class MediaFile(Base):
+    """Registry of files under static/ with their content hash (0.5).
+
+    The hash is what blueprints and sync address media by ("do you have
+    abc123?"), and what upload dedup checks. Files keep their uuid filenames
+    on disk — the registry adds identity, it does not move anything.
+    """
+
+    __tablename__ = "media_files"
+
+    id = Column(Integer, primary_key=True)
+
+    # Path relative to static/, POSIX separators — same form as media URLs.
+    path = Column(String, unique=True, nullable=False)
+
+    # Not unique: duplicate content may predate dedup; new uploads dedup.
+    sha256 = Column(String, index=True, nullable=False)
+
+    byte_size = Column(Integer)
+
+
+# =========================================================
 # APP SETTINGS
 # =========================================================
 

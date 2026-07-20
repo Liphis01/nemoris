@@ -123,8 +123,17 @@ per legacy `Progress.history` entry; dual-written since migration 0011).
   `services/tombstones.py` — `delete_question_dependents()` is the single
   choke point for questions. Sync uses these to distinguish "deleted here"
   from "not present here". Purge only after a completed full sync.
-- `manage_data.py validate-revlog` is the repeatable gate: run it before any
-  migration that drops `Progress.history`.
+- `manage_data.py validate-revlog` is the repeatable gate that proved
+  `review_log` and `Progress.history` are equivalent (918/918, 2026-07-20).
+- **`Progress.history` is intentionally kept, not a migration in progress.**
+  Dual-write guarantees permanent parity. Per-question mode-selection code
+  (`mode_selection.py`, `map_modes.py`, `sequence_modes.py`, `text_modes.py`,
+  `image_modes.py`) reads it directly on already-loaded ORM objects with no
+  `db` session in scope — switching those hot paths to query `review_log`
+  would mean threading a session through five files for no functional gain.
+  `review_log` is what blueprints/sync consume; the JSON column is what
+  request-time mode logic consumes. Do not "finish" this by ripping out
+  `history` on the assumption it was left half-done — it was not.
 
 ## Implementation Rules
 

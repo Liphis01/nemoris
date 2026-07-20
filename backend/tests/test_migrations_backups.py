@@ -253,7 +253,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
-                    "0008", "0009", "0010", "0011", "0012", "0013"
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -290,7 +290,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 13)
+            self.assertEqual(migration_count, 14)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -336,7 +336,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
-                    "0008", "0009", "0010", "0011", "0012", "0013"
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -437,7 +437,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0005", "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013"
+                    "0010", "0011", "0012", "0013", "0014"
                 ]
             )
 
@@ -512,7 +512,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013"
+                    "0010", "0011", "0012", "0013", "0014"
                 ]
             )
 
@@ -607,7 +607,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011", "0012", "0013"]
+                ["0010", "0011", "0012", "0013", "0014"]
             )
 
             guids = {}
@@ -794,7 +794,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013"]
+                ["0011", "0012", "0013", "0014"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -952,7 +952,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013"]
+                ["0011", "0012", "0013", "0014"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1045,7 +1045,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0013"]
+                ["0013", "0014"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1054,6 +1054,85 @@ class MigrationTests(unittest.TestCase):
                 ).fetchall()
 
             self.assertEqual(rows, [("question", "deleted-question-guid")])
+
+    def test_media_registry_migration_hashes_static_files(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+            static_dir = temp_dir / "static"
+
+            (static_dir / "sub").mkdir(parents=True)
+            (static_dir / "a.svg").write_bytes(b"<svg />")
+            (static_dir / "sub" / "b.svg").write_bytes(b"<svg />")
+            (static_dir / "c.txt").write_bytes(b"other")
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+                    "0008", "0009", "0010", "0011", "0012", "0013"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0014"]
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    "SELECT path, sha256, byte_size FROM media_files "
+                    "ORDER BY path"
+                ).fetchall()
+
+            self.assertEqual(
+                [row[0] for row in rows],
+                ["a.svg", "c.txt", "sub/b.svg"]
+            )
+            # Identical content hashes identically; different content differs.
+            by_path = {row[0]: row[1] for row in rows}
+            self.assertEqual(by_path["a.svg"], by_path["sub/b.svg"])
+            self.assertNotEqual(by_path["a.svg"], by_path["c.txt"])
+            self.assertEqual(rows[0][2], len(b"<svg />"))
+
+            # Re-run is a no-op.
+            second = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+            self.assertEqual(second["applied"], [])
+
+            with sqlite3.connect(database_file) as connection:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM media_files"
+                ).fetchone()[0]
+
+            self.assertEqual(count, 3)
 
 
 if __name__ == "__main__":
