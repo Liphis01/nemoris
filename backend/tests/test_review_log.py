@@ -4,13 +4,15 @@ from datetime import date
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, Question, ReviewLog
+from app.models import Base, Progress, Question, ReviewLog
 from app.services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
     create_initial_progress,
+    graduate_relearning,
     replace_latest_scheduling
 )
+from app.services.revlog import restore_progress_from_revlog
 
 
 class ReviewLogDualWriteTests(unittest.TestCase):
@@ -128,6 +130,64 @@ class ReviewLogDualWriteTests(unittest.TestCase):
         active = self.active_rows(1)
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0].data, progress.history[-1])
+
+    def test_graduation_appends_manual_row_restore_matches(self):
+        question = self.add_question(1)
+        progress = self.answer(question, 0, today=date(2026, 1, 5))
+
+        graduated = graduate_relearning(self.db, [1], today=date(2026, 1, 5))
+        self.assertEqual(len(graduated), 1)
+
+        rows = self.db.query(ReviewLog).order_by(ReviewLog.seq).all()
+        self.assertEqual(len(rows), 2)
+
+        fail_row, manual_row = rows
+
+        self.assertEqual(fail_row.quality, 0)
+        self.assertIsNone(manual_row.quality)
+        self.assertEqual(manual_row.data.get("manual"), "relearning_graduate")
+        self.assertEqual(manual_row.reviewed_on, date(2026, 1, 5))
+        self.assertEqual(manual_row.ideal_interval, progress.ideal_interval)
+
+        # The point of the manual row: restore now reproduces the graduation.
+        scratch = Progress(question_id=1)
+        restore_progress_from_revlog(self.db, scratch)
+
+        self.assertEqual(scratch.ideal_interval, progress.ideal_interval)
+        self.assertEqual(
+            scratch.ideal_next_review,
+            progress.ideal_next_review
+        )
+        self.assertEqual(scratch.last_review, progress.last_review)
+        self.assertEqual(scratch.stability, progress.stability)
+        self.assertEqual(scratch.lapses, progress.lapses)
+
+    def test_regrade_supersedes_graduation_stack(self):
+        question = self.add_question(1)
+        progress = self.answer(question, 0, today=date(2026, 1, 5))
+        graduate_relearning(self.db, [1], today=date(2026, 1, 5))
+
+        replace_latest_scheduling(
+            self.db,
+            progress,
+            2,
+            today=date(2026, 1, 5)
+        )
+
+        rows = self.db.query(ReviewLog).order_by(ReviewLog.seq).all()
+        self.assertEqual(len(rows), 3)
+
+        fail_row, manual_row, replacement = rows
+
+        # The re-grade invalidates the graded fail AND the graduation stacked
+        # on top of it.
+        self.assertEqual(fail_row.superseded_by, replacement.id)
+        self.assertEqual(manual_row.superseded_by, replacement.id)
+        self.assertIsNone(replacement.superseded_by)
+        self.assertEqual(replacement.quality, 2)
+
+        active = self.active_rows(1)
+        self.assertEqual([row.id for row in active], [replacement.id])
 
     def test_batch_answers_write_rows_with_guids(self):
         first = self.add_question(1)

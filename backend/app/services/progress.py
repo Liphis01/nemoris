@@ -114,6 +114,44 @@ def _append_review_log(db, progress, entry, question_guid=None):
     return row
 
 
+def append_manual_review_log(db, progress: Progress, marker, today=None):
+    """Record a schedule adjustment that happened outside a graded review.
+
+    Graduation ("Acquis") and reconciliation move ideal_*/interval without a
+    history entry; without a revlog row that change would be lost on
+    restore-from-revlog. The entry snapshots the stored state verbatim:
+    data["reviewed_on"] keeps last_review so restoring does not shift it,
+    while the row's reviewed_on column records the day of the adjustment.
+    Manual rows carry no quality and are skipped by replay and review counts.
+    """
+    today = today or date.today()
+    entry = {
+        "manual": marker,
+        "stability": progress.stability,
+        "difficulty": progress.difficulty,
+        "reps": progress.reps,
+        "lapses": progress.lapses,
+        "interval": progress.interval,
+        "ideal_interval": progress.ideal_interval
+    }
+
+    if progress.last_review:
+        entry["reviewed_on"] = progress.last_review.isoformat()
+
+    if progress.next_review:
+        entry["next_review"] = progress.next_review.isoformat()
+
+    if progress.ideal_next_review:
+        entry["ideal_next_review"] = progress.ideal_next_review.isoformat()
+
+    row = _append_review_log(db, progress, entry)
+
+    if row is not None:
+        row.reviewed_on = today
+
+    return row
+
+
 def record_answer_history(
     progress: Progress,
     quality: int,
@@ -310,15 +348,26 @@ def replace_latest_scheduling(
 
     # The review_log is append-only: instead of popping like the JSON history,
     # the corrected row stays and points at its replacement via superseded_by.
-    last_row = (
+    # A re-grade invalidates the graded review plus any manual adjustments
+    # stacked on top of it (e.g. a graduation), so collect the trailing manual
+    # rows down to the first graded one.
+    trailing_rows = []
+
+    for row in (
         db.query(ReviewLog)
         .filter(
             ReviewLog.question_id == progress.question_id,
             ReviewLog.superseded_by.is_(None)
         )
         .order_by(ReviewLog.seq.desc())
-        .first()
-    )
+        .all()
+    ):
+        trailing_rows.append(row)
+
+        if not (row.data or {}).get("manual"):
+            break
+
+    last_row = trailing_rows[-1] if trailing_rows else None
 
     restore_progress_from_history(progress, history[:-1], today=today)
 
@@ -331,11 +380,12 @@ def replace_latest_scheduling(
     )
 
     if last_row is not None:
+        superseded_ids = {row.id for row in trailing_rows}
         replacement = (
             db.query(ReviewLog)
             .filter(
                 ReviewLog.question_id == progress.question_id,
-                ReviewLog.id != last_row.id,
+                ReviewLog.id.notin_(superseded_ids),
                 ReviewLog.superseded_by.is_(None)
             )
             .order_by(ReviewLog.seq.desc())
@@ -344,7 +394,9 @@ def replace_latest_scheduling(
 
         if replacement is not None and replacement.seq > last_row.seq:
             db.flush()
-            last_row.superseded_by = replacement.id
+
+            for row in trailing_rows:
+                row.superseded_by = replacement.id
 
     return scheduling
 
@@ -580,6 +632,14 @@ def graduate_relearning(db, question_ids, today=None):
         progress.fsrs_card = set_fsrs_card_due_date(
             progress.fsrs_card,
             next_review
+        )
+        # Without this row the graduation's ideal_* change would be invisible
+        # to restore-from-revlog (found by the 0.3 validation gate).
+        append_manual_review_log(
+            db,
+            progress,
+            "relearning_graduate",
+            today=today
         )
         graduated.append(progress)
 

@@ -238,6 +238,31 @@ class ReviewLog(Base):
 
 
 # =========================================================
+# TOMBSTONES
+# =========================================================
+
+class Tombstone(Base):
+    """Deletion record for synced content (sync-roadmap 0.4).
+
+    Sync must distinguish "deleted here" from "not present here", otherwise a
+    deletion on one device is resurrected by the next pull from another.
+    Rows are append-only; purging happens only after a completed full sync.
+    """
+
+    __tablename__ = "tombstones"
+
+    id = Column(Integer, primary_key=True)
+
+    # question | question_group | collection
+    entity_type = Column(String, nullable=False)
+
+    guid = Column(String, nullable=False, index=True)
+
+    # UTC ISO datetime string.
+    deleted_at = Column(String, nullable=False)
+
+
+# =========================================================
 # APP SETTINGS
 # =========================================================
 

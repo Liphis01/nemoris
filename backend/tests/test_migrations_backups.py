@@ -252,8 +252,8 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
                 [
-                    "0001", "0002", "0003", "0004", "0005",
-                    "0006", "0007", "0008", "0009", "0010", "0011"
+                    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+                    "0008", "0009", "0010", "0011", "0012", "0013"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -290,7 +290,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 11)
+            self.assertEqual(migration_count, 13)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -335,8 +335,8 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
                 [
-                    "0001", "0002", "0003", "0004", "0005",
-                    "0006", "0007", "0008", "0009", "0010", "0011"
+                    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+                    "0008", "0009", "0010", "0011", "0012", "0013"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -435,7 +435,10 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0005", "0006", "0007", "0008", "0009", "0010", "0011"]
+                [
+                    "0005", "0006", "0007", "0008", "0009",
+                    "0010", "0011", "0012", "0013"
+                ]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -507,7 +510,10 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0006", "0007", "0008", "0009", "0010", "0011"]
+                [
+                    "0006", "0007", "0008", "0009",
+                    "0010", "0011", "0012", "0013"
+                ]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -601,7 +607,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011"]
+                ["0010", "0011", "0012", "0013"]
             )
 
             guids = {}
@@ -729,11 +735,25 @@ class MigrationTests(unittest.TestCase):
                     )
                     """
                 )
+                # Full modern column set: migration 0012 queries the Progress
+                # ORM against this table. Stored values match the latest
+                # entry so no reconciliation row is appended here.
                 connection.execute(
                     """
                     CREATE TABLE progress (
                         id INTEGER PRIMARY KEY,
                         question_id INTEGER,
+                        stability FLOAT,
+                        difficulty FLOAT,
+                        reps INTEGER,
+                        lapses INTEGER,
+                        interval INTEGER,
+                        ideal_interval INTEGER,
+                        last_review DATE,
+                        next_review DATE,
+                        ideal_next_review DATE,
+                        fsrs_card JSON,
+                        fsrs_version VARCHAR,
                         history JSON
                     )
                     """
@@ -743,11 +763,24 @@ class MigrationTests(unittest.TestCase):
                     "VALUES (1, 'guid-1', 'text', 'Q1')"
                 )
                 connection.executemany(
-                    "INSERT INTO progress (id, question_id, history) "
-                    "VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO progress (
+                        id, question_id, stability, difficulty, reps, lapses,
+                        interval, ideal_interval, last_review, next_review,
+                        ideal_next_review, history
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
                     [
-                        (1, 1, json.dumps(entries)),
-                        (2, 2, json.dumps([entries[0]]))
+                        (
+                            1, 1, 3.4, 5.5, 2, 1, 3, 3,
+                            "2026-01-02", "2026-01-05", "2026-01-05",
+                            json.dumps(entries)
+                        ),
+                        (
+                            2, 2, 1.2, 6.0, 1, 1, 0, 0,
+                            "2026-01-01", "2026-01-01", "2026-01-01",
+                            json.dumps([entries[0]])
+                        )
                     ]
                 )
 
@@ -761,7 +794,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011"]
+                ["0011", "0012", "0013"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -816,6 +849,211 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
 
             self.assertEqual(count, 3)
+
+    def test_reconcile_migration_appends_manual_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            entry = {
+                "reviewed_on": "2026-01-01",
+                "quality": 0,
+                "stability": 1.2,
+                "difficulty": 6.0,
+                "reps": 1,
+                "lapses": 1,
+                "interval": 0,
+                "next_review": "2026-01-01",
+                "ideal_interval": 0,
+                "ideal_next_review": "2026-01-01"
+            }
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005",
+                    "0006", "0007", "0008", "0009", "0010"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE questions (
+                        id INTEGER PRIMARY KEY,
+                        guid VARCHAR,
+                        type_q VARCHAR,
+                        question TEXT
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE progress (
+                        id INTEGER PRIMARY KEY,
+                        question_id INTEGER,
+                        stability FLOAT,
+                        difficulty FLOAT,
+                        reps INTEGER,
+                        lapses INTEGER,
+                        interval INTEGER,
+                        ideal_interval INTEGER,
+                        last_review DATE,
+                        next_review DATE,
+                        ideal_next_review DATE,
+                        fsrs_card JSON,
+                        fsrs_version VARCHAR,
+                        history JSON
+                    )
+                    """
+                )
+                connection.execute(
+                    "INSERT INTO questions (id, guid, type_q, question) "
+                    "VALUES (1, 'guid-1', 'text', 'Q1')"
+                )
+                # Stored ideal_* diverge from the entry: a historical
+                # graduation moved them without a history trace.
+                connection.execute(
+                    """
+                    INSERT INTO progress (
+                        id, question_id, stability, difficulty, reps, lapses,
+                        interval, ideal_interval, last_review, next_review,
+                        ideal_next_review, history
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        1, 1, 1.2, 6.0, 1, 1, 1, 1,
+                        "2026-01-01", "2026-01-02", "2026-01-02",
+                        json.dumps([entry])
+                    )
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0011", "0012", "0013"]
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT seq, quality, ideal_interval, ideal_next_review,
+                           data
+                    FROM review_log
+                    WHERE question_id = 1
+                    ORDER BY seq
+                    """
+                ).fetchall()
+
+            self.assertEqual(len(rows), 2)
+
+            backfilled, manual = rows
+
+            self.assertEqual(backfilled[0], 1)
+            self.assertEqual(backfilled[1], 0)
+
+            self.assertEqual(manual[0], 2)
+            self.assertIsNone(manual[1])
+            self.assertEqual(manual[2], 1)
+            self.assertEqual(manual[3], "2026-01-02")
+            self.assertEqual(
+                json.loads(manual[4]).get("manual"),
+                "reconcile_history_snapshot"
+            )
+
+    def test_tombstones_migration_backfills_orphaned_revlog_guids(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005", "0006",
+                    "0007", "0008", "0009", "0010", "0011", "0012"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    "CREATE TABLE questions (id INTEGER PRIMARY KEY)"
+                )
+                connection.execute("INSERT INTO questions (id) VALUES (1)")
+                connection.execute(
+                    """
+                    CREATE TABLE review_log (
+                        id INTEGER PRIMARY KEY,
+                        question_id INTEGER,
+                        question_guid VARCHAR,
+                        seq INTEGER
+                    )
+                    """
+                )
+                connection.executemany(
+                    "INSERT INTO review_log "
+                    "(id, question_id, question_guid, seq) "
+                    "VALUES (?, ?, ?, ?)",
+                    [
+                        (1, 99, "deleted-question-guid", 1),
+                        (2, 99, "deleted-question-guid", 2),
+                        (3, 1, "alive-guid", 1)
+                    ]
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0013"]
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    "SELECT entity_type, guid FROM tombstones"
+                ).fetchall()
+
+            self.assertEqual(rows, [("question", "deleted-question-guid")])
 
 
 if __name__ == "__main__":

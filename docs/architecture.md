@@ -113,11 +113,16 @@ per legacy `Progress.history` entry; dual-written since migration 0011).
   active `interval`/`next_review` are the local rebalancer's output — they are
   derived, re-runnable, and must never sync. Under sync, rebalancing runs
   after every pull and never before a push.
-- Writers that adjust the schedule without a review (`graduate_relearning`,
-  the rebalancer) leave no revlog row; restore therefore reproduces the
-  at-review-time state, not later local adjustments. Before readers switch to
-  the revlog, "Acquis" graduation should append a no-grade manual row
-  (Anki's revlog has the same concept) so its `ideal_*` change survives.
+- **Manual rows**: schedule adjustments made outside a graded review append a
+  no-grade snapshot row (`data["manual"]`, quality NULL) — "Acquis"
+  graduation writes one, and migration 0012 reconciled historical ones. They
+  restore like any snapshot and are skipped by replay and review counts. The
+  rebalancer stays revlog-less by design (its output is derived, local).
+- **Tombstones** (`tombstones` table, since migration 0013): every
+  question/group/collection deletion records the guid via
+  `services/tombstones.py` — `delete_question_dependents()` is the single
+  choke point for questions. Sync uses these to distinguish "deleted here"
+  from "not present here". Purge only after a completed full sync.
 - `manage_data.py validate-revlog` is the repeatable gate: run it before any
   migration that drops `Progress.history`.
 

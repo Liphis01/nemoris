@@ -8,6 +8,7 @@ from ..schemas import GroupCreate, GroupOut, GroupUpdate
 from ..services.map_zones import merge_tags
 from ..services.media import delete_unreferenced_media_file, media_points_to_same_static_file
 from ..services.questions import delete_question_dependents
+from ..services.tombstones import record_tombstone
 
 
 router = APIRouter()
@@ -186,6 +187,7 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
             synchronize_session=False
         )
 
+    record_tombstone(db, "question_group", group.guid)
     db.delete(group)
     db.commit()
 

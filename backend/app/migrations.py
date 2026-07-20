@@ -457,6 +457,84 @@ def _migration_review_log_table(connection):
             )
 
 
+def _migration_reconcile_revlog_snapshots(connection):
+    # Local imports: the ORM session and services are only needed here, and
+    # importing them lazily keeps migration module import light.
+    from sqlalchemy.orm import Session
+
+    from .models import Progress
+    from .services.progress import append_manual_review_log
+    from .services.revlog import strict_mismatch_fields
+
+    if not _table_exists(connection, "review_log"):
+        return
+
+    if not _table_exists(connection, "progress"):
+        return
+
+    # A real database that reached this point went through 0002/0005 and has
+    # the full Progress column set; hand-built legacy fixtures in tests may
+    # not, and the ORM query below needs every mapped column.
+    progress_columns = _column_names(connection, "progress")
+
+    if not {"stability", "ideal_interval", "history"} <= progress_columns:
+        return
+
+    # Schedule adjustments made outside graded reviews (historical "Acquis"
+    # graduations) predate manual revlog rows, so restore-from-revlog cannot
+    # reproduce them. Append one manual snapshot row per divergent card so the
+    # revlog becomes a faithful source of truth (validate-revlog gate → 100%).
+    session = Session(bind=connection)
+
+    for progress in session.query(Progress).all():
+        if progress.question_id is None:
+            continue
+
+        mismatched, _ = strict_mismatch_fields(session, progress)
+
+        if mismatched:
+            append_manual_review_log(
+                session,
+                progress,
+                "reconcile_history_snapshot"
+            )
+
+    session.flush()
+
+
+def _migration_tombstones_table(connection):
+    from .models import Tombstone
+
+    Base.metadata.create_all(bind=connection, tables=[Tombstone.__table__])
+
+    # Questions deleted before this table existed left orphaned revlog rows;
+    # their guids are recoverable from there, so backfill their tombstones.
+    if not _table_exists(connection, "review_log"):
+        return
+
+    if not _table_exists(connection, "questions"):
+        return
+
+    deleted_at = datetime.now(timezone.utc).isoformat()
+    orphan_guids = connection.exec_driver_sql(
+        """
+        SELECT DISTINCT question_guid
+        FROM review_log
+        WHERE question_guid IS NOT NULL
+          AND question_id NOT IN (SELECT id FROM questions)
+        """
+    ).fetchall()
+
+    for (guid,) in orphan_guids:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO tombstones (entity_type, guid, deleted_at)
+            VALUES (?, ?, ?)
+            """,
+            ("question", guid, deleted_at)
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -519,6 +597,17 @@ MIGRATIONS = [
         name="review_log_table",
         run=_migration_review_log_table,
         requires_backup=True
+    ),
+    Migration(
+        version="0012",
+        name="reconcile_revlog_snapshots",
+        run=_migration_reconcile_revlog_snapshots,
+        requires_backup=True
+    ),
+    Migration(
+        version="0013",
+        name="tombstones_table",
+        run=_migration_tombstones_table
     )
 ]
 

@@ -100,9 +100,10 @@ models.py L133-142) — with one correction to the original plan:
       property check repeatably (the gate before dropping `history`).
 - [x] Property validation on the real DB (2026-07-20): **917/918 strict
       match** on memory state + ideal_*. The single mismatch is
-      `graduate_relearning` ("Acquis"), which moves `ideal_*` without a
-      history entry — known writer; before readers switch, graduation should
-      append a no-grade manual row (like Anki's manual revlog type).
+      `graduate_relearning` ("Acquis"), which moved `ideal_*` without a
+      history entry — resolved: graduation now appends a no-grade manual row,
+      and migration 0012 reconciled historical divergence (gate now
+      **918/918**). Re-grades supersede trailing manual rows too.
       33 questions show interval/next_review drift from rebalancing —
       expected, that is the ideal/active split working.
 - [x] Forward-replay harness (`replay_memory_state`, fuzz off, recorded mode
@@ -121,8 +122,13 @@ Deleting a question on the laptop then syncing must not resurrect it from the
 desktop. Deletions have to be recorded, not just absences. Trivial now,
 painful to retrofit.
 
-- [ ] `tombstones` table: `guid`, `entity_type` (question/group/collection/
-      media), `deleted_at`. Written by every deletion path.
+- [x] `tombstones` table (migration 0013): `entity_type`, `guid`,
+      `deleted_at`. Written by every deletion path —
+      `delete_question_dependents()` is the single question choke point,
+      plus the group/collection delete endpoints and empty-group cleanup.
+      Generated collections cannot be deleted (guarded). 0013 also backfills
+      tombstones from orphaned revlog guids (none existed on the real DB).
+      Media tombstones deferred to 0.5 content-addressing.
 - [ ] Purge tombstones older than the last full sync (M2).
 
 ### 0.5 Content-addressed media

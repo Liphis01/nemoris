@@ -102,6 +102,40 @@ def _floats_close(left, right, tolerance):
         return False
 
 
+def strict_mismatch_fields(db, progress, tolerance=1e-6):
+    """Fields where restore-from-revlog diverges from the stored state.
+
+    Only the strict fields (memory state + at-review-time schedule) count;
+    interval/next_review belong to the local rebalancer. Used by validation
+    and by the reconciliation migration.
+    """
+    entries = active_review_entries(db, progress.question_id)
+    scratch = Progress(question_id=progress.question_id)
+    restore_progress_from_history(scratch, entries)
+
+    mismatched = []
+
+    for field in ("stability", "difficulty"):
+        if not _floats_close(
+            getattr(scratch, field),
+            getattr(progress, field),
+            tolerance
+        ):
+            mismatched.append(field)
+
+    for field in (
+        "reps",
+        "lapses",
+        "last_review",
+        "ideal_interval",
+        "ideal_next_review"
+    ):
+        if getattr(scratch, field) != getattr(progress, field):
+            mismatched.append(field)
+
+    return mismatched, scratch
+
+
 def validate_revlog(db, tolerance=1e-6, sample_limit=10):
     """Property check: restore-from-revlog must reproduce stored state.
 
@@ -139,29 +173,12 @@ def validate_revlog(db, tolerance=1e-6, sample_limit=10):
         report["questions"] += 1
         entries = active_review_entries(db, progress.question_id)
 
-        scratch = Progress(question_id=progress.question_id)
-        restore_progress_from_history(scratch, entries)
-
         report["restore"]["checked"] += 1
-        mismatched_fields = []
-
-        for field in ("stability", "difficulty"):
-            if not _floats_close(
-                getattr(scratch, field),
-                getattr(progress, field),
-                tolerance
-            ):
-                mismatched_fields.append(field)
-
-        for field in (
-            "reps",
-            "lapses",
-            "last_review",
-            "ideal_interval",
-            "ideal_next_review"
-        ):
-            if getattr(scratch, field) != getattr(progress, field):
-                mismatched_fields.append(field)
+        mismatched_fields, scratch = strict_mismatch_fields(
+            db,
+            progress,
+            tolerance
+        )
 
         if mismatched_fields:
             report["restore"]["mismatch_count"] += 1

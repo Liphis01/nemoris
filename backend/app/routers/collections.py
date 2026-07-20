@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, aliased, joinedload
 from ..dependencies import get_db
 from ..models import Collection, Question, QuestionGroup, question_collection
 from ..schemas import CollectionCreate, CollectionUpdate
+from ..services.tombstones import record_tombstone
 from ..services.collections import (
     generated_collection_response_fields,
     is_generated_collection,
@@ -367,6 +368,7 @@ def delete_collection(collection_id: int, db: Session = Depends(get_db)):
             detail="Generated collections cannot be deleted"
         )
 
+    record_tombstone(db, "collection", collection.guid)
     db.execute(
         question_collection.delete().where(
             question_collection.c.collection_id == collection.id
