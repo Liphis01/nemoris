@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 from typing import Callable
+import uuid
 
 from sqlalchemy.engine import Connection, Engine
 
@@ -343,6 +344,38 @@ def _migration_rename_image_type_to_media(connection):
         )
 
 
+_GUID_TABLES = ("questions", "question_groups", "collections")
+
+
+def _migration_content_guid_columns(connection):
+    # SQLite cannot add a UNIQUE column through ALTER TABLE, so the column is
+    # added plain, backfilled, then enforced by a separate unique index named
+    # like the one create_all builds for fresh databases (ix_<table>_guid).
+    for table in _GUID_TABLES:
+        if not _table_exists(connection, table):
+            continue
+
+        if "guid" not in _column_names(connection, table):
+            connection.exec_driver_sql(
+                f"ALTER TABLE {table} ADD COLUMN guid VARCHAR"
+            )
+
+        rows = connection.exec_driver_sql(
+            f"SELECT id FROM {table} WHERE guid IS NULL"
+        ).fetchall()
+
+        for (row_id,) in rows:
+            connection.exec_driver_sql(
+                f"UPDATE {table} SET guid = ? WHERE id = ?",
+                (str(uuid.uuid4()), row_id)
+            )
+
+        connection.exec_driver_sql(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS ix_{table}_guid "
+            f"ON {table} (guid)"
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -392,6 +425,12 @@ MIGRATIONS = [
         version="0009",
         name="rename_image_type_to_media",
         run=_migration_rename_image_type_to_media,
+        requires_backup=True
+    ),
+    Migration(
+        version="0010",
+        name="content_guid_columns",
+        run=_migration_content_guid_columns,
         requires_backup=True
     )
 ]

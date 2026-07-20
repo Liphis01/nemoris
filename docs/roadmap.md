@@ -1,3 +1,7 @@
+## Current focus
+
+- accounts, blueprints & sync → detailed plan in [sync-roadmap.md](sync-roadmap.md)
+
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
 - question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
@@ -20,15 +24,12 @@
 - tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
-- le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 
 ## bugs
 
 - recentrer les svg
-- empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
-- timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - les tags marchent pas bien
 - parfois on peut scroll la page alors qu'il n'y a rien en dessous

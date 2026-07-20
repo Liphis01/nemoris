@@ -2,12 +2,15 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from zipfile import ZipFile
 
 from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from app.migrations import run_migrations
+from app.models import Question
 from app.services.backups import create_backup, restore_backup
 
 
@@ -248,7 +251,10 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009"]
+                [
+                    "0001", "0002", "0003", "0004", "0005",
+                    "0006", "0007", "0008", "0009", "0010"
+                ]
             )
             self.assertIsNotNone(result["backup"])
 
@@ -284,7 +290,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 9)
+            self.assertEqual(migration_count, 10)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -328,7 +334,10 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009"]
+                [
+                    "0001", "0002", "0003", "0004", "0005",
+                    "0006", "0007", "0008", "0009", "0010"
+                ]
             )
             self.assertIsNone(result["backup"])
             self.assertIn("questions", table_names(database_file))
@@ -426,7 +435,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0005", "0006", "0007", "0008", "0009"]
+                ["0005", "0006", "0007", "0008", "0009", "0010"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -498,7 +507,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0006", "0007", "0008", "0009"]
+                ["0006", "0007", "0008", "0009", "0010"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -507,6 +516,151 @@ class MigrationTests(unittest.TestCase):
                 ).fetchall()
 
             self.assertEqual(rows, [("review",)])
+
+    def test_content_guid_migration_backfills_and_indexes(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005",
+                    "0006", "0007", "0008", "0009"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                # Legacy content tables without the guid column.
+                connection.execute(
+                    """
+                    CREATE TABLE questions (
+                        id INTEGER PRIMARY KEY,
+                        type_q VARCHAR,
+                        question TEXT,
+                        answer TEXT,
+                        media VARCHAR,
+                        answer_media VARCHAR,
+                        tags JSON,
+                        data JSON,
+                        group_id INTEGER
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE question_groups (
+                        id INTEGER PRIMARY KEY,
+                        type_group VARCHAR,
+                        name VARCHAR
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE collections (
+                        id INTEGER PRIMARY KEY,
+                        name VARCHAR UNIQUE
+                    )
+                    """
+                )
+                connection.executemany(
+                    "INSERT INTO questions (id, type_q, question) VALUES (?, ?, ?)",
+                    [(1, "text", "Q1"), (2, "map", "Q2")]
+                )
+                connection.executemany(
+                    "INSERT INTO question_groups (id, type_group, name) VALUES (?, ?, ?)",
+                    [(1, "map", "G1"), (2, "media", "G2")]
+                )
+                connection.executemany(
+                    "INSERT INTO collections (id, name) VALUES (?, ?)",
+                    [(1, "C1"), (2, "C2")]
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0010"]
+            )
+
+            guids = {}
+
+            for table in ("questions", "question_groups", "collections"):
+                self.assertIn("guid", column_names(database_file, table))
+
+                with sqlite3.connect(database_file) as connection:
+                    rows = connection.execute(
+                        f"SELECT id, guid FROM {table} ORDER BY id"
+                    ).fetchall()
+                    indexes = connection.execute(
+                        f'PRAGMA index_list("{table}")'
+                    ).fetchall()
+
+                values = [guid for _, guid in rows]
+                self.assertEqual(len(values), 2)
+                self.assertEqual(len(set(values)), 2)
+
+                for value in values:
+                    uuid.UUID(value)
+
+                unique_indexes = {
+                    row[1] for row in indexes if row[2] == 1
+                }
+                self.assertIn(f"ix_{table}_guid", unique_indexes)
+
+                guids[table] = rows
+
+            # Re-running is a no-op and keeps the backfilled guids stable.
+            second_result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(second_result["applied"], [])
+
+            for table, expected in guids.items():
+                with sqlite3.connect(database_file) as connection:
+                    rows = connection.execute(
+                        f"SELECT id, guid FROM {table} ORDER BY id"
+                    ).fetchall()
+
+                self.assertEqual(rows, expected)
+
+            # New ORM rows get a guid from the column default.
+            with Session(engine) as session:
+                question = Question(type_q="text", question="Q3")
+                session.add(question)
+                session.commit()
+                session.refresh(question)
+
+                uuid.UUID(question.guid)
+                self.assertNotIn(
+                    question.guid,
+                    [guid for _, guid in guids["questions"]]
+                )
 
 
 if __name__ == "__main__":

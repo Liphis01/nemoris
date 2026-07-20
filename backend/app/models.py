@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -33,6 +35,16 @@ class QuestionGroup(Base):
 
     id = Column(Integer, primary_key=True)
 
+    # Stable identity that survives export/import and future sync. The integer
+    # PK stays local-only; the guid is what blueprints and sync will key on.
+    guid = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4())
+    )
+
     # Runtime grouping metadata. The actual reviewable items remain Question
     # rows; this table only says how related questions should be presented.
     type_group = Column(String)
@@ -61,6 +73,15 @@ class Question(Base):
     __tablename__ = "questions"
 
     id = Column(Integer, primary_key=True)
+
+    # Stable identity for export/import/sync; see QuestionGroup.guid.
+    guid = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4())
+    )
 
     # Question rows are atomic review items. "map" means one map zone, not a
     # database-level map group.
@@ -167,6 +188,15 @@ class Collection(Base):
     __tablename__ = "collections"
 
     id = Column(Integer, primary_key=True)
+
+    # Stable identity for export/import/sync; see QuestionGroup.guid.
+    guid = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid.uuid4())
+    )
 
     name = Column(String, unique=True)
 
