@@ -9,7 +9,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from .config import BACKUP_DIR, DATABASE_FILE, STATIC_DIR
 from .database import engine as default_engine
-from .models import Base
+from .models import Base, ReviewLog
 from .scheduler import DEFAULT_CATCHUP_DAILY_TARGET
 from .services.backups import create_backup
 
@@ -376,6 +376,87 @@ def _migration_content_guid_columns(connection):
         )
 
 
+def _migration_review_log_table(connection):
+    # Create the table from the model so there is a single schema definition.
+    Base.metadata.create_all(bind=connection, tables=[ReviewLog.__table__])
+
+    # Both tables always exist on a real post-0001 database; hand-built legacy
+    # fixtures in tests may lack one of them.
+    if not _table_exists(connection, "progress"):
+        return
+
+    if not _table_exists(connection, "questions"):
+        return
+
+    # Only backfill into an empty table so a re-entered migration cannot
+    # duplicate rows.
+    existing = connection.exec_driver_sql(
+        "SELECT COUNT(*) FROM review_log"
+    ).fetchone()[0]
+
+    if existing:
+        return
+
+    rows = connection.exec_driver_sql(
+        """
+        SELECT progress.question_id, progress.history, questions.guid
+        FROM progress
+        LEFT JOIN questions ON questions.id = progress.question_id
+        WHERE progress.history IS NOT NULL
+          AND progress.question_id IS NOT NULL
+        """
+    ).fetchall()
+
+    for question_id, history_value, question_guid in rows:
+        if isinstance(history_value, str):
+            try:
+                entries = json.loads(history_value)
+            except ValueError:
+                continue
+        else:
+            entries = history_value or []
+
+        if not isinstance(entries, list):
+            continue
+
+        seq = 0
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+
+            seq += 1
+            # Promoted columns are best-effort copies for querying; the full
+            # entry in data stays authoritative. Legacy entries are date-only,
+            # so reviewed_at is NULL for migrated rows.
+            connection.exec_driver_sql(
+                """
+                INSERT INTO review_log (
+                    question_id, question_guid, seq, reviewed_on, reviewed_at,
+                    quality, stability, difficulty, reps, lapses, interval,
+                    next_review, ideal_interval, ideal_next_review,
+                    superseded_by, data
+                ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                """,
+                (
+                    question_id,
+                    question_guid,
+                    seq,
+                    entry.get("reviewed_on"),
+                    entry.get("quality"),
+                    entry.get("stability"),
+                    entry.get("difficulty"),
+                    entry.get("reps"),
+                    entry.get("lapses"),
+                    entry.get("interval"),
+                    entry.get("next_review"),
+                    entry.get("ideal_interval"),
+                    entry.get("ideal_next_review"),
+                    json.dumps(entry)
+                )
+            )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -431,6 +512,12 @@ MIGRATIONS = [
         version="0010",
         name="content_guid_columns",
         run=_migration_content_guid_columns,
+        requires_backup=True
+    ),
+    Migration(
+        version="0011",
+        name="review_log_table",
+        run=_migration_review_log_table,
         requires_backup=True
     )
 ]

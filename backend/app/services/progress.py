@@ -1,6 +1,8 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
-from ..models import Progress, Question
+from sqlalchemy import func
+
+from ..models import Progress, Question, ReviewLog
 from ..scheduler import (
     FSRS_VERSION,
     MIN_STABILITY,
@@ -68,11 +70,57 @@ def count_reviews_on_day(progresses, day):
     return count
 
 
+def _append_review_log(db, progress, entry, question_guid=None):
+    # Dual-write mirror of the history entry into the append-only review_log.
+    # Progress.history stays the source of truth until readers switch over
+    # (sync-roadmap 0.2/0.3); rows written here are snapshots, never mutated.
+    question_id = progress.question_id
+
+    if question_id is None:
+        return None
+
+    if question_guid is None:
+        question_guid = (
+            db.query(Question.guid)
+            .filter(Question.id == question_id)
+            .scalar()
+        )
+
+    last_seq = (
+        db.query(func.max(ReviewLog.seq))
+        .filter(ReviewLog.question_id == question_id)
+        .scalar()
+    ) or 0
+
+    row = ReviewLog(
+        question_id=question_id,
+        question_guid=question_guid,
+        seq=last_seq + 1,
+        reviewed_on=parse_history_date(entry.get("reviewed_on")),
+        reviewed_at=datetime.now(timezone.utc).isoformat(),
+        quality=entry.get("quality"),
+        stability=entry.get("stability"),
+        difficulty=entry.get("difficulty"),
+        reps=entry.get("reps"),
+        lapses=entry.get("lapses"),
+        interval=entry.get("interval"),
+        next_review=parse_history_date(entry.get("next_review")),
+        ideal_interval=entry.get("ideal_interval"),
+        ideal_next_review=parse_history_date(entry.get("ideal_next_review")),
+        data=dict(entry)
+    )
+    db.add(row)
+
+    return row
+
+
 def record_answer_history(
     progress: Progress,
     quality: int,
     scheduling: dict,
-    metadata=None
+    metadata=None,
+    db=None,
+    question_guid=None
 ):
     # SQLAlchemy may not detect in-place mutation on JSON columns reliably, so
     # build a fresh list before assigning it back.
@@ -129,12 +177,17 @@ def record_answer_history(
 
     progress.history = history
 
+    if db is not None:
+        _append_review_log(db, progress, entry, question_guid=question_guid)
+
 
 def write_scheduling(
     progress: Progress,
     quality: int,
     scheduling: dict,
-    metadata=None
+    metadata=None,
+    db=None,
+    question_guid=None
 ):
     ideal_interval = scheduling.get("ideal_interval", scheduling["interval"])
     ideal_next_review = scheduling.get(
@@ -157,7 +210,14 @@ def write_scheduling(
     # A frozen relearning retry leaves no trace in history, so the day keeps
     # showing exactly one fail and stats stay honest.
     if not scheduling.get("skip_history"):
-        record_answer_history(progress, quality, scheduling, metadata=metadata)
+        record_answer_history(
+            progress,
+            quality,
+            scheduling,
+            metadata=metadata,
+            db=db,
+            question_guid=question_guid
+        )
 
     return scheduling
 
@@ -248,15 +308,45 @@ def replace_latest_scheduling(
             metadata=metadata
         )
 
+    # The review_log is append-only: instead of popping like the JSON history,
+    # the corrected row stays and points at its replacement via superseded_by.
+    last_row = (
+        db.query(ReviewLog)
+        .filter(
+            ReviewLog.question_id == progress.question_id,
+            ReviewLog.superseded_by.is_(None)
+        )
+        .order_by(ReviewLog.seq.desc())
+        .first()
+    )
+
     restore_progress_from_history(progress, history[:-1], today=today)
 
-    return apply_scheduling(
+    scheduling = apply_scheduling(
         db,
         progress,
         quality,
         today=today,
         metadata=metadata
     )
+
+    if last_row is not None:
+        replacement = (
+            db.query(ReviewLog)
+            .filter(
+                ReviewLog.question_id == progress.question_id,
+                ReviewLog.id != last_row.id,
+                ReviewLog.superseded_by.is_(None)
+            )
+            .order_by(ReviewLog.seq.desc())
+            .first()
+        )
+
+        if replacement is not None and replacement.seq > last_row.seq:
+            db.flush()
+            last_row.superseded_by = replacement.id
+
+    return scheduling
 
 
 def load_daily_review_counts(db, dates, exclude_question_ids=None):
@@ -321,10 +411,11 @@ def load_question_review_metadata(db, question_ids):
     return {
         question_id: {
             "type_q": type_q,
-            "favorite": bool((data or {}).get("favorite"))
+            "favorite": bool((data or {}).get("favorite")),
+            "guid": guid
         }
-        for question_id, type_q, data in (
-            db.query(Question.id, Question.type_q, Question.data)
+        for question_id, type_q, data, guid in (
+            db.query(Question.id, Question.type_q, Question.data, Question.guid)
             .filter(Question.id.in_(question_ids))
             .all()
         )
@@ -428,7 +519,11 @@ def apply_scheduling_batch(
             progress,
             quality,
             scheduling,
-            metadata=history_metadata
+            metadata=history_metadata,
+            db=db,
+            question_guid=question_metadata.get(
+                progress.question_id, {}
+            ).get("guid")
         )
 
     return smoothed_schedules

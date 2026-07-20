@@ -9,7 +9,8 @@ from sqlalchemy import (
     ForeignKey,
     Table,
     JSON,
-    Text
+    Text,
+    UniqueConstraint
 )
 
 from sqlalchemy.orm import relationship
@@ -166,6 +167,74 @@ class Progress(Base):
         "Question",
         back_populates="progress"
     )
+
+
+# =========================================================
+# REVIEW LOG
+# =========================================================
+
+class ReviewLog(Base):
+    """Append-only log of scheduling-moving reviews, one row per history entry.
+
+    Rows are snapshots, not bare ratings: update_progress() is not purely
+    deterministic (interval fuzzing, mode factors), so each row records the
+    post-review state exactly like the legacy Progress.history entries did.
+    Rows are never updated or deleted; a re-grade appends a replacement row
+    and marks the old one via superseded_by.
+    """
+
+    __tablename__ = "review_log"
+    __table_args__ = (
+        UniqueConstraint(
+            "question_id",
+            "seq",
+            name="uq_review_log_question_seq"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    question_id = Column(
+        Integer,
+        ForeignKey("questions.id"),
+        index=True,
+        nullable=False
+    )
+
+    # Denormalized so exported/synced rows keep their identity without a join.
+    # Nullable defensively: a legacy progress row whose question is gone still
+    # migrates.
+    question_guid = Column(String, index=True, nullable=True)
+
+    # Per-question monotonic ordering. Legacy history entries are date-only,
+    # so array position (captured here) is the only same-day ordering.
+    seq = Column(Integer, nullable=False)
+
+    reviewed_on = Column(Date)
+
+    # UTC ISO datetime string; None on rows migrated from date-only history.
+    reviewed_at = Column(String, nullable=True)
+
+    quality = Column(Integer)
+    stability = Column(Float)
+    difficulty = Column(Float)
+    reps = Column(Integer)
+    lapses = Column(Integer)
+    interval = Column(Integer)
+    next_review = Column(Date)
+    ideal_interval = Column(Integer)
+    ideal_next_review = Column(Date)
+
+    # Set when a re-grade replaced this row. Append-only: never delete.
+    superseded_by = Column(
+        Integer,
+        ForeignKey("review_log.id"),
+        nullable=True
+    )
+
+    # The full history entry snapshot (fsrs_*, mode_*, favorite_*, answer
+    # metadata...), so no field of the legacy entries is ever lost.
+    data = Column(JSON, nullable=False, default=dict)
 
 
 # =========================================================

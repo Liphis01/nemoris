@@ -253,7 +253,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0001", "0002", "0003", "0004", "0005",
-                    "0006", "0007", "0008", "0009", "0010"
+                    "0006", "0007", "0008", "0009", "0010", "0011"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -290,7 +290,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 10)
+            self.assertEqual(migration_count, 11)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -336,7 +336,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0001", "0002", "0003", "0004", "0005",
-                    "0006", "0007", "0008", "0009", "0010"
+                    "0006", "0007", "0008", "0009", "0010", "0011"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -435,7 +435,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0005", "0006", "0007", "0008", "0009", "0010"]
+                ["0005", "0006", "0007", "0008", "0009", "0010", "0011"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -507,7 +507,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0006", "0007", "0008", "0009", "0010"]
+                ["0006", "0007", "0008", "0009", "0010", "0011"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -601,7 +601,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010"]
+                ["0010", "0011"]
             )
 
             guids = {}
@@ -661,6 +661,161 @@ class MigrationTests(unittest.TestCase):
                     question.guid,
                     [guid for _, guid in guids["questions"]]
                 )
+
+    def test_review_log_migration_backfills_history_entries(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            entries = [
+                {
+                    "reviewed_on": "2026-01-01",
+                    "quality": 0,
+                    "stability": 1.2,
+                    "difficulty": 6.0,
+                    "reps": 1,
+                    "lapses": 1,
+                    "interval": 0,
+                    "next_review": "2026-01-01",
+                    "ideal_interval": 0,
+                    "ideal_next_review": "2026-01-01",
+                    "fsrs_rating": 1,
+                    "mode": "typing"
+                },
+                {
+                    "reviewed_on": "2026-01-02",
+                    "quality": 2,
+                    "stability": 3.4,
+                    "difficulty": 5.5,
+                    "reps": 2,
+                    "lapses": 1,
+                    "interval": 3,
+                    "next_review": "2026-01-05",
+                    "ideal_interval": 3,
+                    "ideal_next_review": "2026-01-05"
+                }
+            ]
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005",
+                    "0006", "0007", "0008", "0009", "0010"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE questions (
+                        id INTEGER PRIMARY KEY,
+                        guid VARCHAR,
+                        type_q VARCHAR,
+                        question TEXT
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE progress (
+                        id INTEGER PRIMARY KEY,
+                        question_id INTEGER,
+                        history JSON
+                    )
+                    """
+                )
+                connection.execute(
+                    "INSERT INTO questions (id, guid, type_q, question) "
+                    "VALUES (1, 'guid-1', 'text', 'Q1')"
+                )
+                connection.executemany(
+                    "INSERT INTO progress (id, question_id, history) "
+                    "VALUES (?, ?, ?)",
+                    [
+                        (1, 1, json.dumps(entries)),
+                        (2, 2, json.dumps([entries[0]]))
+                    ]
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0011"]
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT question_id, question_guid, seq, reviewed_on,
+                           reviewed_at, quality, stability, next_review,
+                           superseded_by, data
+                    FROM review_log
+                    ORDER BY question_id, seq
+                    """
+                ).fetchall()
+
+            self.assertEqual(len(rows), 3)
+
+            first, second, orphan = rows
+
+            self.assertEqual(first[0], 1)
+            self.assertEqual(first[1], "guid-1")
+            self.assertEqual(first[2], 1)
+            self.assertEqual(first[3], "2026-01-01")
+            self.assertIsNone(first[4])
+            self.assertEqual(first[5], 0)
+            self.assertEqual(first[6], 1.2)
+            self.assertEqual(first[7], "2026-01-01")
+            self.assertIsNone(first[8])
+            self.assertEqual(json.loads(first[9]), entries[0])
+
+            self.assertEqual(second[2], 2)
+            self.assertEqual(second[5], 2)
+            self.assertEqual(json.loads(second[9]), entries[1])
+
+            # A progress row whose question is missing still migrates, with a
+            # NULL guid.
+            self.assertEqual(orphan[0], 2)
+            self.assertIsNone(orphan[1])
+            self.assertEqual(orphan[2], 1)
+
+            # Re-running is a no-op: no duplicated rows.
+            second_result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(second_result["applied"], [])
+
+            with sqlite3.connect(database_file) as connection:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM review_log"
+                ).fetchone()[0]
+
+            self.assertEqual(count, 3)
 
 
 if __name__ == "__main__":

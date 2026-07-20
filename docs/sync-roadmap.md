@@ -51,27 +51,28 @@ version, mode factors, repeat_lapse) — see `record_answer_history()` — and
 `restore_progress_from_history()` already rebuilds Progress from entries
 alone. The revlog keeps exactly that shape, one row per entry.
 
-- [ ] `review_log` table mirroring the current entry shape: `id`,
-      `question_guid`, `reviewed_on`, `seq` (per-question monotonic counter —
-      legacy entries are date-only, array order is the only same-day
-      ordering; new rows also get `reviewed_at` UTC datetime), `quality`,
-      full post-state snapshot columns/JSON, `superseded_by` (nullable).
-- [ ] **Re-grading breaks naive append-only** — `change_quality()` today pops
-      and replaces the last history entry. Model it as a correction: append
-      the new row and set `superseded_by` on the old one. Never physically
-      delete; readers filter superseded rows. (Under future merge this is the
-      "review was re-graded on another device" case, handled for free.)
-- [ ] Note: frozen relearning retries intentionally leave no history trace
-      (`skip_history`). The revlog logs scheduling-moving reviews only —
-      parity with today; stats readers must not assume every answer is a row.
-- [ ] Migration: `Progress.history` (JSON) → `review_log` rows (coverage
-      verified on the real DB: 923/923 reviewed rows have history, 5047
-      entries, zero gaps). Keep the `history` column readable for one
-      version (rollback), drop it in the next.
-- [ ] Dual-write during the transition: `record_answer_history()` is the
-      single choke point — all answer paths funnel through it.
+- [x] `review_log` table mirroring the current entry shape (migration `0011`):
+      promoted columns (`question_id`, `question_guid`, `seq`, `reviewed_on`,
+      `reviewed_at`, `quality`, stability/difficulty/reps/lapses/intervals,
+      `superseded_by`) + full entry snapshot in `data` JSON — zero loss.
+- [x] Re-grading modeled as corrections: `replace_latest_scheduling()`
+      appends the replacement row and sets `superseded_by` on the old one.
+      Never deletes; readers filter superseded rows.
+- [x] Frozen relearning retries leave no revlog row (parity with history via
+      the existing `skip_history` guard — structural, no extra code).
+- [x] Migration backfill verified on the real DB: 5085/5085 entries migrated,
+      exact JSON parity, contiguous seq, zero NULL guids. The `history`
+      column stays readable this version; drop it in a later one once
+      readers have switched.
+- [x] Dual-write live: `record_answer_history()` (single choke point) mirrors
+      every entry into `review_log`; `db` + guid threaded through
+      `apply_scheduling_batch` → `write_scheduling`.
 - [ ] Switch readers (stats, history UI, calendar,
-      `restore_progress_from_history`) over to `review_log`.
+      `restore_progress_from_history`) over to `review_log` — staged with 0.3
+      (the restore function is the natural first reader).
+- Note: no history-reset or Progress-deletion paths exist in the app today
+  (verified); revlog rows for a deleted question would simply orphan —
+  deletion semantics arrive with tombstones (0.4).
 
 ### 0.3 Restore-from-revlog + formalizing ideal/active
 
