@@ -461,6 +461,40 @@ def _migration_review_log_table(connection):
             )
 
 
+def _migration_blueprint_bookkeeping(connection):
+    from .models import BlueprintSubscription
+
+    new_columns = {
+        "blueprint_guid": "VARCHAR",
+        "blueprint_version": "INTEGER",
+        "content_hash": "VARCHAR"
+    }
+
+    for table in ("questions", "question_groups"):
+        if not _table_exists(connection, table):
+            continue
+
+        existing_columns = _column_names(connection, table)
+
+        for name, sql_type in new_columns.items():
+            if name not in existing_columns:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"
+                )
+
+        connection.exec_driver_sql(
+            f"CREATE INDEX IF NOT EXISTS ix_{table}_blueprint_guid "
+            f"ON {table} (blueprint_guid)"
+        )
+
+    # No backfill: the columns are nullable and existing rows are correctly
+    # NULL (locally authored, not blueprint-derived).
+    Base.metadata.create_all(
+        bind=connection,
+        tables=[BlueprintSubscription.__table__]
+    )
+
+
 def _migration_media_files_registry(connection, static_dir):
     from .models import MediaFile
 
@@ -652,6 +686,12 @@ MIGRATIONS = [
         name="media_files_registry",
         run=_migration_media_files_registry,
         needs_static_dir=True
+    ),
+    Migration(
+        version="0015",
+        name="blueprint_bookkeeping",
+        run=_migration_blueprint_bookkeeping,
+        requires_backup=True
     )
 ]
 

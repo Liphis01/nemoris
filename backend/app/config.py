@@ -37,4 +37,5 @@ APP_DATA_DIR = _frozen_app_data_dir() if IS_FROZEN else BACKEND_DIR
 DATABASE_FILE = APP_DATA_DIR / "questions.db"
 STATIC_DIR = APP_DATA_DIR / "static"
 BACKUP_DIR = APP_DATA_DIR / "backups"
+BLUEPRINT_DIR = APP_DATA_DIR / "blueprints"
 FRONTEND_DIST_DIR = BUNDLED_DIR / "frontend" / "dist"

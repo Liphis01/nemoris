@@ -619,14 +619,21 @@ def delete_unreferenced_media_file(db, media, static_dir: Path | None = None):
     return False
 
 
-def _unregister_media_file(db, relative_path):
-    # Keep the registry in step with the disk and leave a media tombstone so
-    # sync can propagate the deletion (the guid of a media file is its hash).
-    row = (
+def get_media_file_by_path(db, relative_path):
+    if not relative_path:
+        return None
+
+    return (
         db.query(MediaFile)
         .filter(MediaFile.path == relative_path)
         .first()
     )
+
+
+def _unregister_media_file(db, relative_path):
+    # Keep the registry in step with the disk and leave a media tombstone so
+    # sync can propagate the deletion (the guid of a media file is its hash).
+    row = get_media_file_by_path(db, relative_path)
 
     if row is None:
         return

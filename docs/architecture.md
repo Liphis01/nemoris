@@ -43,6 +43,24 @@ Related structures:
 Do not reintroduce old names such as `fichier`, and do not create persisted
 question types such as `map_group` or `timeline_group`.
 
+A `media`/`answer_media`/`QuestionGroup.media` value is one of three
+unrelated things, only the first of which is backend-owned data:
+
+- `/static/<file>` (or a full local-host static URL): a real uploaded file
+  under `STATIC_DIR`, backed by the `MediaFile` registry (0.5). Resolve via
+  `static_file_path_from_media`/`static_relative_path_from_media`.
+- an external `http(s)://` URL: hotlinked, never downloaded — used directly
+  as an `<img>`/media `src`.
+- a bare filename (e.g. `"world.svg"`): a **built-in map template shipped
+  with the frontend** (`frontend/public/maps/`, offered by
+  `MapFileInput.jsx`'s autocomplete), not user data at all — it never lives
+  under `static/`. Only seen on `QuestionGroup.media` for map groups today.
+
+Anything that touches media generically (export, sync, cleanup) must handle
+all three; treating a bare filename or an external URL as "a missing local
+file" is a bug, not a data problem — see `services/blueprints.py`'s
+`_resolve_media_ref` for the reference implementation.
+
 ## Question Types
 
 `text` is a normal prompt/answer card.

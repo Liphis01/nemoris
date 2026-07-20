@@ -213,15 +213,44 @@ application server: static files + a JSON index.
 
 ### Steps
 
-- [ ] 1.1 **Author-side export**: from a collection/group → blueprint zip.
-      Reuses GUIDs (0.1) and hash-addressed media (0.5). Progress always
-      excluded (the equivalent of Anki's "include scheduling information"
-      checkbox, permanently unchecked). Generated collections
-      (`sync_generated_hard_collection`) are derived data: excluded from
-      export, and never synced — they regenerate locally.
-- [ ] 1.2 **Import/subscribe**: copy rows with bookkeeping (D3), media dedup
-      by hash, a `blueprint_subscriptions` table (guid, installed version,
-      date) records the subscription.
+- [x] 1.1/1.2 **Export + import/subscribe — done (2026-07-20).** Backend only
+      (`services/blueprints.py`, `routers/blueprints.py`, migration `0015`).
+      Export unit is `QuestionGroup` (not `Collection` — type-homogeneous,
+      owns the shared media; Collection export is a future flatten-to-groups
+      extension, not built). Progress always excluded (Anki's "include
+      scheduling information", permanently unchecked — verified: content.json
+      never contains progress fields even when a question has reps/history).
+      Generated collections (`sync_generated_hard_collection`) never enter
+      this path since export starts from a group, not a collection.
+      - **Imported rows reuse the source `guid` verbatim**, not fresh ones —
+        required for 1.3's diff-by-guid to work with no extra column, and
+        costs nothing since guid uniqueness is per-local-file, consistent
+        with M2 excluding blueprint content from the personal sync payload.
+      - Bookkeeping (`blueprint_guid`, `blueprint_version`, `content_hash`)
+        is plain nullable columns on `Question`/`QuestionGroup`, not a side
+        table — mirrors how `guid` itself was added.
+      - `content_hash` = sha256 of a canonical field-subset dict (excludes
+        id/guid/group_id/progress; media is a content-addressed ref, never a
+        local path), independently recomputed by both sides, never trusted
+        as an exporter-supplied value.
+      - `blueprint_subscriptions` table (guid, installed_version, source,
+        subscribed_at) — no `group_id` FK, the owning group is found via
+        `QuestionGroup.guid == blueprint_guid` (guid reuse again), staying
+        forward-compatible with a future multi-entity blueprint.
+      - **Real-data finding, fixed before it shipped**: a media field is one
+        of three unrelated things — `/static/...` (real uploaded file, bundle
+        it), an external `http(s)://` URL (hotlinked, pass through), or a
+        bare filename like `"world.svg"` (a built-in map template shipped
+        with the *frontend*, `frontend/public/maps/`, never in `static/` at
+        all — pass through). Initial implementation treated the last two as
+        "missing local file" and broke on the very first real group tested
+        (`Territoires du monde`, id 1). Documented in `docs/architecture.md`.
+      - Verified against real data (scratch copies, never the live DB): a
+        252-question map group (built-in SVG, zero bundled media, 11.7 KB
+        zip) and a 12-question media group (13 real files bundled,
+        byte-identical sha256 on the far side) both round-tripped correctly
+        — zero progress rows, subscription recorded, re-import correctly
+        rejected. 315 backend tests pass (16 new).
 - [ ] 1.3 **Updates**: diff by GUID between installed and new version:
       - new item → added;
       - item untouched locally (`content_hash` identical) → updated in place;

@@ -60,6 +60,13 @@ class QuestionGroup(Base):
     # future grouped-review variant.
     data = Column(JSON, nullable=True)
 
+    # Blueprint provenance (sync-roadmap M1). NULL for locally authored
+    # groups. blueprint_guid is the pack this row came from; the row's own
+    # (reused, not freshly minted) guid is which item within that pack it is.
+    blueprint_guid = Column(String, nullable=True, index=True)
+    blueprint_version = Column(Integer, nullable=True)
+    content_hash = Column(String, nullable=True)
+
     questions = relationship(
         "Question",
         back_populates="group",
@@ -105,6 +112,11 @@ class Question(Base):
     # Type-specific data lives here. For map zones this stores data.code and
     # data.aliases so the schema stays stable as map features grow.
     data = Column(JSON, nullable=True)
+
+    # Blueprint provenance (sync-roadmap M1); see QuestionGroup.blueprint_guid.
+    blueprint_guid = Column(String, nullable=True, index=True)
+    blueprint_version = Column(Integer, nullable=True)
+    content_hash = Column(String, nullable=True)
 
     # Optional visual/grouped-review membership. Progress still belongs to this
     # individual question, not to the group.
@@ -285,6 +297,39 @@ class MediaFile(Base):
     sha256 = Column(String, index=True, nullable=False)
 
     byte_size = Column(Integer)
+
+
+# =========================================================
+# BLUEPRINT SUBSCRIPTIONS
+# =========================================================
+
+class BlueprintSubscription(Base):
+    """Tracks a locally installed blueprint (sync-roadmap M1).
+
+    No group_id FK: the imported QuestionGroup reuses the exporting
+    database's guid verbatim (see services/blueprints.py), so it always
+    equals blueprint_guid here — the owning group is found via
+    QuestionGroup.guid == blueprint_guid rather than a dedicated pointer,
+    which stays forward-compatible with a future multi-entity blueprint.
+    """
+
+    __tablename__ = "blueprint_subscriptions"
+
+    id = Column(Integer, primary_key=True)
+
+    blueprint_guid = Column(String, unique=True, nullable=False, index=True)
+
+    installed_version = Column(Integer, nullable=False)
+
+    # Denormalized manifest name, avoids a join for display.
+    name = Column(String, nullable=True)
+
+    # Imported zip's filename/path; no catalog URL yet.
+    source = Column(String, nullable=True)
+
+    # UTC ISO datetime strings.
+    subscribed_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
 
 
 # =========================================================

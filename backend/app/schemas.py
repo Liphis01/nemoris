@@ -189,6 +189,13 @@ class MediaUrlImport(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
 
 
+class BlueprintExportRequest(BaseModel):
+    version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    license: str = Field(default="", max_length=200)
+
+
 AnswerQuality = Annotated[int, Field(ge=0, le=3)]
 
 

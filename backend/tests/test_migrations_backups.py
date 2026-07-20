@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.migrations import run_migrations
-from app.models import Question
+from app.models import Base, Question, QuestionGroup
 from app.services.backups import create_backup, restore_backup
 
 
@@ -183,6 +183,76 @@ class RestoreTests(unittest.TestCase):
             # Destructive work must not run when validation fails.
             self.assertFalse(target_db.exists())
 
+    def test_export_then_import_preserves_guids_without_duplicating(self):
+        # sync-roadmap 0.1: guids must survive a real export -> import cycle,
+        # and re-importing the same backup must not create duplicate rows or
+        # duplicate guids (restore_backup swaps the whole file, so this is
+        # structurally guaranteed -- this test proves it, not just asserts it).
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            source_db = temp_dir / "source.db"
+            source_static = temp_dir / "source-static"
+            backup_dir = temp_dir / "backups"
+            source_static.mkdir()
+
+            engine = create_engine(sqlite_url(source_db))
+            Base.metadata.create_all(engine)
+
+            with Session(engine) as session:
+                group = QuestionGroup(type_group="map", name="G1")
+                session.add(group)
+                session.flush()
+                session.add_all([
+                    Question(type_q="map", question="Q1", group_id=group.id),
+                    Question(type_q="map", question="Q2", group_id=group.id)
+                ])
+                session.commit()
+
+                original_guids = sorted(
+                    row.guid for row in session.query(Question).all()
+                )
+                original_group_guid = group.guid
+
+            engine.dispose()
+
+            backup_path = create_backup(
+                database_file=source_db,
+                static_dir=source_static,
+                backup_dir=backup_dir,
+                reason="test"
+            ).path
+
+            target_db = temp_dir / "target.db"
+            target_static = temp_dir / "target-static"
+
+            for attempt in range(2):
+                restore_backup(
+                    backup_path,
+                    database_file=target_db,
+                    static_dir=target_static
+                )
+
+                target_engine = create_engine(sqlite_url(target_db))
+
+                with Session(target_engine) as session:
+                    questions = session.query(Question).all()
+                    guids = sorted(question.guid for question in questions)
+                    group_guids = [
+                        row.guid
+                        for row in session.query(QuestionGroup).all()
+                    ]
+
+                target_engine.dispose()
+
+                self.assertEqual(
+                    len(questions),
+                    2,
+                    f"attempt {attempt}: row count changed"
+                )
+                self.assertEqual(guids, original_guids)
+                self.assertEqual(len(set(guids)), 2)
+                self.assertEqual(group_guids, [original_group_guid])
+
 
 class MigrationTests(unittest.TestCase):
     def test_migrations_update_legacy_database_and_create_backup_first(self):
@@ -253,7 +323,8 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
-                    "0008", "0009", "0010", "0011", "0012", "0013", "0014"
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014",
+                    "0015"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -290,7 +361,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 14)
+            self.assertEqual(migration_count, 15)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -336,7 +407,8 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
-                    "0008", "0009", "0010", "0011", "0012", "0013", "0014"
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014",
+                    "0015"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -437,7 +509,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0005", "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013", "0014"
+                    "0010", "0011", "0012", "0013", "0014", "0015"
                 ]
             )
 
@@ -512,7 +584,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013", "0014"
+                    "0010", "0011", "0012", "0013", "0014", "0015"
                 ]
             )
 
@@ -607,7 +679,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011", "0012", "0013", "0014"]
+                ["0010", "0011", "0012", "0013", "0014", "0015"]
             )
 
             guids = {}
@@ -794,7 +866,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014"]
+                ["0011", "0012", "0013", "0014", "0015"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -952,7 +1024,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014"]
+                ["0011", "0012", "0013", "0014", "0015"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1045,7 +1117,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0013", "0014"]
+                ["0013", "0014", "0015"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1099,7 +1171,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0014"]
+                ["0014", "0015"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1133,6 +1205,99 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
 
             self.assertEqual(count, 3)
+
+    def test_blueprint_bookkeeping_migration_adds_columns_and_table(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+            static_dir = temp_dir / "static"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                # Post-0010 shape: real tables already carry guid.
+                connection.execute(
+                    """
+                    CREATE TABLE questions (
+                        id INTEGER PRIMARY KEY,
+                        guid VARCHAR,
+                        type_q VARCHAR,
+                        question TEXT
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE question_groups (
+                        id INTEGER PRIMARY KEY,
+                        guid VARCHAR,
+                        type_group VARCHAR,
+                        name VARCHAR
+                    )
+                    """
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0015"]
+            )
+
+            self.assertIn("blueprint_subscriptions", table_names(database_file))
+
+            for table in ("questions", "question_groups"):
+                columns = column_names(database_file, table)
+                self.assertIn("blueprint_guid", columns)
+                self.assertIn("blueprint_version", columns)
+                self.assertIn("content_hash", columns)
+
+            with sqlite3.connect(database_file) as connection:
+                # Nullable, no backfill: pre-existing rows stay NULL.
+                connection.execute(
+                    "INSERT INTO questions (id, guid, type_q, question) "
+                    "VALUES (1, 'q-guid', 'text', 'Q1')"
+                )
+                blueprint_guid = connection.execute(
+                    "SELECT blueprint_guid FROM questions WHERE id = 1"
+                ).fetchone()[0]
+
+            self.assertIsNone(blueprint_guid)
+
+            # Re-run is a no-op.
+            second = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+            self.assertEqual(second["applied"], [])
 
 
 if __name__ == "__main__":
