@@ -208,17 +208,13 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
                 blueprint_dir=self.make_static_dir()
             )
 
-    def test_export_passes_through_builtin_and_external_media(self):
-        # Discovered against real data: QuestionGroup.media for map groups is
-        # often a bare filename (e.g. "world.svg") referencing a built-in map
-        # asset shipped with the frontend (frontend/public/maps/), not a
-        # backend-uploaded file -- it never lives under static/. Likewise
-        # Question.media can be a hotlinked external URL. Neither should be
-        # bundled into the zip or treated as "missing".
+    def test_export_passes_through_external_media(self):
         db = make_db()
         static_dir = self.make_static_dir()
 
-        group = QuestionGroup(type_group="map", name="World", media="world.svg")
+        group = QuestionGroup(type_group="map", name="World")
+        self.write_media(static_dir, "map.svg", SVG_BYTES)
+        group.media = "/static/map.svg"
         db.add(group)
         db.flush()
         question = Question(
@@ -248,18 +244,18 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
                 if name.startswith("media/")
             ]
 
-        self.assertEqual(content["group"]["media"], {"builtin": "world.svg"})
         self.assertEqual(
             content["questions"][0]["media"],
             {"url": "https://example.com/photo.jpg"}
         )
-        # Neither is a local file -- nothing staged into media/.
-        self.assertEqual(media_members, [])
+        # External URL is never fetched -- only the group's real file is
+        # staged into media/.
+        self.assertEqual(len(media_members), 1)
 
-    def test_import_passes_through_builtin_and_external_media(self):
+    def test_import_passes_through_external_media(self):
         db = make_db()
         static_dir = self.make_static_dir()
-        group = QuestionGroup(type_group="map", name="World", media="world.svg")
+        group = QuestionGroup(type_group="map", name="World")
         db.add(group)
         db.flush()
         question = Question(
@@ -287,20 +283,34 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             target_db, zip_path, static_dir=self.make_static_dir()
         )
 
-        imported_group = (
-            target_db.query(QuestionGroup)
-            .filter(QuestionGroup.guid == group.guid)
-            .first()
-        )
         imported_question = (
             target_db.query(Question)
             .filter(Question.guid == question.guid)
             .first()
         )
-        self.assertEqual(imported_group.media, "world.svg")
         self.assertEqual(
             imported_question.media, "https://example.com/photo.jpg"
         )
+
+    def test_export_bare_filename_media_now_raises(self):
+        # Bare filenames used to mean "built-in map asset shipped with the
+        # frontend" -- that ambiguity was eliminated (migration 0016 + the
+        # map editor no longer produces them). A bare filename left over is
+        # now a genuine error, same as any other missing local file.
+        db = make_db()
+        group = QuestionGroup(type_group="map", name="World", media="world.svg")
+        db.add(group)
+        db.commit()
+
+        with self.assertRaises(ValueError):
+            export_blueprint(
+                db,
+                group.id,
+                version=1,
+                name="World",
+                static_dir=self.make_static_dir(),
+                blueprint_dir=self.make_static_dir()
+            )
 
     def test_export_unknown_group_raises(self):
         db = make_db()

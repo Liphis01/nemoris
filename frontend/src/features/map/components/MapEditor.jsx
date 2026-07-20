@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
+import { resolveMediaUrl } from "../../../shared/media";
 import {
   disabledSaveButtonStyle,
   pendingSaveDotStyle,
   pendingSaveButtonStyle
 } from "../../manage/components/QuestionEditorStyles";
-import MapFileInput from "./MapFileInput";
+import MapMediaInput from "./MapMediaInput";
 import SvgMap from "./SvgMap";
 import {
   getZoneCode,
@@ -543,12 +544,9 @@ export default function MapEditor({
               Media
             </label>
 
-            <MapFileInput
+            <MapMediaInput
               value={editableGroup.media}
-              onChange={(e) =>
-                updateGroupField("media", e.target.value)
-              }
-              placeholder="world.svg"
+              onChange={(url) => updateGroupField("media", url)}
               style={{
                 padding: "10px",
                 background: "#111",
@@ -796,7 +794,7 @@ export default function MapEditor({
             }}
           >
             <SvgMap
-              svgPath={`/maps/${editableGroup.media}`}
+              svgPath={resolveMediaUrl(editableGroup.media)}
               found={foundCodes}
               unsaved={dirtyZoneCodes}
               selected={getZoneCode(editingZone)}

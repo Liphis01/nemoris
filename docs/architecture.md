@@ -43,23 +43,34 @@ Related structures:
 Do not reintroduce old names such as `fichier`, and do not create persisted
 question types such as `map_group` or `timeline_group`.
 
-A `media`/`answer_media`/`QuestionGroup.media` value is one of three
-unrelated things, only the first of which is backend-owned data:
+A `media`/`answer_media`/`QuestionGroup.media` value is one of two things,
+only the first of which is backend-owned data:
 
 - `/static/<file>` (or a full local-host static URL): a real uploaded file
   under `STATIC_DIR`, backed by the `MediaFile` registry (0.5). Resolve via
   `static_file_path_from_media`/`static_relative_path_from_media`.
 - an external `http(s)://` URL: hotlinked, never downloaded — used directly
   as an `<img>`/media `src`.
-- a bare filename (e.g. `"world.svg"`): a **built-in map template shipped
-  with the frontend** (`frontend/public/maps/`, offered by
-  `MapFileInput.jsx`'s autocomplete), not user data at all — it never lives
-  under `static/`. Only seen on `QuestionGroup.media` for map groups today.
 
 Anything that touches media generically (export, sync, cleanup) must handle
-all three; treating a bare filename or an external URL as "a missing local
-file" is a bug, not a data problem — see `services/blueprints.py`'s
-`_resolve_media_ref` for the reference implementation.
+both; treating an external URL as "a missing local file" is a bug, not a
+data problem — see `services/blueprints.py`'s `_resolve_media_ref`.
+
+There used to be a third case: a bare filename (e.g. `"world.svg"`) meant a
+**built-in map template shipped with the frontend**
+(`frontend/public/maps/`), not user data at all, offered by an autocomplete
+picker in the map editor. That ambiguity was eliminated (2026-07-21): map
+SVGs are now ordinary uploaded media like everything else, uploaded via the
+generic `/upload` endpoint (`frontend/src/features/map/components/
+MapMediaInput.jsx`, replacing the old `MapFileInput.jsx`). Migration `0016`
+(`_migration_localize_legacy_map_media`) one-time-localized every existing
+bare reference into `STATIC_DIR` + the `MediaFile` registry, resolving the
+source bytes from `FRONTEND_DIST_DIR/maps` or `frontend/public/maps` (in
+that priority order — the app's own built UI is guaranteed to exist in any
+real deployment, dev or packaged). Do not reintroduce a bundled-asset picker
+for any media type; the media resolution code (frontend `resolveMediaUrl`,
+backend `static_relative_path_from_media`) only ever has to reason about
+the two cases above.
 
 ## Question Types
 

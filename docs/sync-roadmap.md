@@ -237,14 +237,27 @@ application server: static files + a JSON index.
         subscribed_at) — no `group_id` FK, the owning group is found via
         `QuestionGroup.guid == blueprint_guid` (guid reuse again), staying
         forward-compatible with a future multi-entity blueprint.
-      - **Real-data finding, fixed before it shipped**: a media field is one
-        of three unrelated things — `/static/...` (real uploaded file, bundle
-        it), an external `http(s)://` URL (hotlinked, pass through), or a
-        bare filename like `"world.svg"` (a built-in map template shipped
-        with the *frontend*, `frontend/public/maps/`, never in `static/` at
-        all — pass through). Initial implementation treated the last two as
-        "missing local file" and broke on the very first real group tested
-        (`Territoires du monde`, id 1). Documented in `docs/architecture.md`.
+      - **Real-data finding, patched then eliminated at the root**: a media
+        field was one of three unrelated things — `/static/...` (real
+        uploaded file, bundle it), an external `http(s)://` URL (hotlinked,
+        pass through), or a bare filename like `"world.svg"` (a built-in map
+        template shipped with the *frontend*, `frontend/public/maps/`, never
+        in `static/` at all). Initial `_resolve_media_ref` implementation
+        treated the last two as "missing local file" and broke on the first
+        real group tested (`Territoires du monde`, id 1); patched to pass
+        both through. **Follow-up (2026-07-21, user-requested): eliminated
+        the third case entirely** rather than leave it as a permanent
+        special case — migration `0016` one-time-localized every existing
+        bare map reference into real `/static/` files (3 files, 4 groups on
+        the live DB, verified byte-identical), and the map editor
+        (`MapMediaInput.jsx`, replacing `MapFileInput.jsx`) now uploads SVGs
+        through the same `/upload` endpoint as any other media, so the
+        bundled-asset picker can never produce a new bare filename.
+        `_resolve_media_ref`/`materialize` simplified back down to two cases;
+        `frontend/public/maps/` deleted. Verified live: both the map editor
+        and a real training/review session render the migrated map correctly
+        (Playwright against the real backend, not the mocked e2e driver).
+        Documented in `docs/architecture.md`.
       - Verified against real data (scratch copies, never the live DB): a
         252-question map group (built-in SVG, zero bundled media, 11.7 KB
         zip) and a 12-question media group (13 real files bundled,

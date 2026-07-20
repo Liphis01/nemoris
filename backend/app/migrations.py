@@ -4,11 +4,12 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 import uuid
 
 from sqlalchemy.engine import Connection, Engine
 
-from .config import BACKUP_DIR, DATABASE_FILE, STATIC_DIR
+from .config import BACKUP_DIR, DATABASE_FILE, FRONTEND_DIST_DIR, PROJECT_DIR, STATIC_DIR
 from .database import engine as default_engine
 from .models import Base, ReviewLog
 from .scheduler import DEFAULT_CATCHUP_DAILY_TARGET
@@ -529,6 +530,131 @@ def _migration_media_files_registry(connection, static_dir):
         )
 
 
+# sync-roadmap: a bare filename like "world.svg" on QuestionGroup.media used
+# to mean "a built-in map template shipped with the frontend"
+# (frontend/public/maps/), never backend data. That ambiguity is being
+# eliminated -- these files become ordinary uploaded media. Two candidate
+# source directories, in priority order: the built frontend (present in any
+# packaged/frozen install, since the app must ship its own UI there) and the
+# dev-mode source checkout (present when frontend/dist hasn't been built).
+# A module-level list so tests can point it at a fixture directory.
+_LEGACY_MAP_SOURCE_DIRS = [
+    FRONTEND_DIST_DIR / "maps",
+    PROJECT_DIR / "frontend" / "public" / "maps"
+]
+
+_LEGACY_MEDIA_COLUMNS = {
+    "question_groups": ("media",),
+    "questions": ("media", "answer_media")
+}
+
+
+def _is_local_static_reference(value):
+    from .services.media import static_relative_path_from_media
+
+    return static_relative_path_from_media(value) is not None
+
+
+def _is_external_url(value):
+    return urlparse(str(value)).scheme in ("http", "https")
+
+
+def _migration_localize_legacy_map_media(connection, static_dir):
+    # Needs the registry from 0014 to register localized files into.
+    if not _table_exists(connection, "media_files"):
+        return
+
+    # Any non-empty value that is neither a real /static/ file nor an
+    # external URL is a legacy bare reference (in practice: map group SVGs
+    # picked from the old bundled-asset picker).
+    bare_values = set()
+
+    for table, columns in _LEGACY_MEDIA_COLUMNS.items():
+        if not _table_exists(connection, table):
+            continue
+
+        existing_columns = _column_names(connection, table)
+
+        for column in columns:
+            if column not in existing_columns:
+                continue
+
+            rows = connection.exec_driver_sql(
+                f"SELECT DISTINCT {column} FROM {table} "
+                f"WHERE {column} IS NOT NULL AND {column} != ''"
+            ).fetchall()
+
+            for (value,) in rows:
+                if _is_local_static_reference(value):
+                    continue
+
+                if _is_external_url(value):
+                    continue
+
+                bare_values.add(value)
+
+    if not bare_values:
+        return
+
+    static_dir = Path(static_dir)
+    resolved = {}
+
+    for filename in bare_values:
+        source_bytes = None
+
+        for base in _LEGACY_MAP_SOURCE_DIRS:
+            candidate = base / filename
+
+            if candidate.is_file():
+                source_bytes = candidate.read_bytes()
+                break
+
+        # Not found anywhere: leave references to it untouched rather than
+        # fail the whole migration over one unresolvable legacy value.
+        if source_bytes is None:
+            continue
+
+        digest = hashlib.sha256(source_bytes).hexdigest()
+        extension = Path(filename).suffix.lower() or ".svg"
+        stored_name = f"{digest}{extension}"
+        stored_path = static_dir / stored_name
+
+        static_dir.mkdir(parents=True, exist_ok=True)
+
+        if not stored_path.exists():
+            stored_path.write_bytes(source_bytes)
+
+        existing = connection.exec_driver_sql(
+            "SELECT id FROM media_files WHERE path = ?",
+            (stored_name,)
+        ).fetchone()
+
+        if not existing:
+            connection.exec_driver_sql(
+                "INSERT INTO media_files (path, sha256, byte_size) "
+                "VALUES (?, ?, ?)",
+                (stored_name, digest, len(source_bytes))
+            )
+
+        resolved[filename] = f"/static/{stored_name}"
+
+    for table, columns in _LEGACY_MEDIA_COLUMNS.items():
+        if not _table_exists(connection, table):
+            continue
+
+        existing_columns = _column_names(connection, table)
+
+        for column in columns:
+            if column not in existing_columns:
+                continue
+
+            for old_value, new_value in resolved.items():
+                connection.exec_driver_sql(
+                    f"UPDATE {table} SET {column} = ? WHERE {column} = ?",
+                    (new_value, old_value)
+                )
+
+
 def _migration_reconcile_revlog_snapshots(connection):
     # Local imports: the ORM session and services are only needed here, and
     # importing them lazily keeps migration module import light.
@@ -692,6 +818,13 @@ MIGRATIONS = [
         name="blueprint_bookkeeping",
         run=_migration_blueprint_bookkeeping,
         requires_backup=True
+    ),
+    Migration(
+        version="0016",
+        name="localize_legacy_map_media",
+        run=_migration_localize_legacy_map_media,
+        requires_backup=True,
+        needs_static_dir=True
     )
 ]
 

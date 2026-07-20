@@ -72,16 +72,18 @@ def _safe_filename_slug(value):
 
 
 def _resolve_media_ref(db, value, static_dir, media_assets):
-    # A media field is one of three unrelated things, only one of which is
-    # backend-owned user data:
+    # A media field is one of two things, only one of which is backend-owned
+    # user data:
     #   - /static/<file> (or a full local-host static URL): a real uploaded
     #     file in STATIC_DIR, backed by the MediaFile registry -- bundle it.
     #   - an external http(s) URL: hotlinked, never downloaded locally --
     #     pass through, the importing app links the same URL.
-    #   - a bare filename (e.g. "world.svg"): a built-in map template shipped
-    #     with the frontend app itself (frontend/public/maps/), not user
-    #     data -- pass through, the importing app ships the same asset.
-    # Only the first case can be "missing"; the other two are never local.
+    # (A third case used to exist: a bare filename like "world.svg" meaning a
+    # built-in map template shipped with the frontend app itself. That
+    # ambiguity was eliminated -- migration 0016 localized every such
+    # reference into a real /static/ file, and the map editor no longer
+    # offers a way to create new ones. Anything that isn't a resolvable
+    # static file or an external URL is now a genuine error.)
     if not value:
         return None
 
@@ -93,7 +95,7 @@ def _resolve_media_ref(db, value, static_dir, media_assets):
         if parsed.scheme in {"http", "https"} and parsed.netloc:
             return {"url": str(value)}
 
-        return {"builtin": str(value)}
+        raise ValueError(f"Referenced media file is missing on disk: {value}")
 
     file_path = static_file_path_from_media(value, static_dir=static_dir)
 
@@ -272,10 +274,9 @@ def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=Non
             raise ValueError("Invalid blueprint: content.json is malformed")
 
         def materialize(ref):
-            # Mirrors the three cases from _resolve_media_ref: only a sha256
-            # ref has a file bundled in the archive to materialize; the other
-            # two resolve locally on the importing side without any data
-            # transfer (see _resolve_media_ref's docstring-comment).
+            # Mirrors the two cases from _resolve_media_ref: only a sha256
+            # ref has a file bundled in the archive to materialize; a url ref
+            # resolves locally on the importing side with no data transfer.
             if not ref:
                 return None
 
@@ -284,9 +285,6 @@ def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=Non
 
             if "url" in ref:
                 return ref["url"]
-
-            if "builtin" in ref:
-                return ref["builtin"]
 
             digest = ref.get("sha256")
 

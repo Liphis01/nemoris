@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SvgMap from "../../map/components/SvgMap";
+import { resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
 import { useFlip } from "../../../shared/useFlip";
@@ -967,7 +968,7 @@ export default function MapReview({
             }}
           >
             <SvgMap
-              svgPath={`/maps/${group.media}`}
+              svgPath={resolveMediaUrl(group.media)}
               found={foundCodes}
               missed={activeMissedCodes}
               dueItems={dueCodes}
@@ -1301,7 +1302,7 @@ export default function MapReview({
             <div className="map-recap-content">
               <div style={recapMapPanelStyle}>
                 <SvgMap
-                  svgPath={`/maps/${group.media}`}
+                  svgPath={resolveMediaUrl(group.media)}
                   found={foundCodes}
                   missed={missedCodes}
                   dueItems={[]}

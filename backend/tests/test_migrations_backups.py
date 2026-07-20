@@ -1,14 +1,17 @@
+import hashlib
 import json
 import sqlite3
 import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+import app.migrations as migrations_module
 from app.migrations import run_migrations
 from app.models import Base, Question, QuestionGroup
 from app.services.backups import create_backup, restore_backup
@@ -324,7 +327,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
-                    "0015"
+                    "0015", "0016"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -361,7 +364,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 15)
+            self.assertEqual(migration_count, 16)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -408,7 +411,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
-                    "0015"
+                    "0015", "0016"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -509,7 +512,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0005", "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013", "0014", "0015"
+                    "0010", "0011", "0012", "0013", "0014", "0015", "0016"
                 ]
             )
 
@@ -584,7 +587,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013", "0014", "0015"
+                    "0010", "0011", "0012", "0013", "0014", "0015", "0016"
                 ]
             )
 
@@ -679,7 +682,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011", "0012", "0013", "0014", "0015"]
+                ["0010", "0011", "0012", "0013", "0014", "0015", "0016"]
             )
 
             guids = {}
@@ -866,7 +869,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015"]
+                ["0011", "0012", "0013", "0014", "0015", "0016"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1024,7 +1027,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015"]
+                ["0011", "0012", "0013", "0014", "0015", "0016"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1117,7 +1120,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0013", "0014", "0015"]
+                ["0013", "0014", "0015", "0016"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1171,7 +1174,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0014", "0015"]
+                ["0014", "0015", "0016"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1267,7 +1270,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0015"]
+                ["0015", "0016"]
             )
 
             self.assertIn("blueprint_subscriptions", table_names(database_file))
@@ -1297,6 +1300,152 @@ class MigrationTests(unittest.TestCase):
                 static_dir=static_dir,
                 backup_dir=temp_dir / "backups"
             )
+            self.assertEqual(second["applied"], [])
+
+    def test_localize_legacy_map_media_migration(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+            static_dir = temp_dir / "static"
+            source_dir = temp_dir / "legacy-maps"
+            source_dir.mkdir()
+
+            svg_bytes = b"<svg><g /></svg>"
+            (source_dir / "world.svg").write_bytes(svg_bytes)
+            # "unknown.svg" is referenced by a row but not present anywhere
+            # in the candidate dirs -- must be left untouched, not crash.
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014",
+                    "0015"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE question_groups (
+                        id INTEGER PRIMARY KEY,
+                        type_group VARCHAR,
+                        name VARCHAR,
+                        media VARCHAR
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE questions (
+                        id INTEGER PRIMARY KEY,
+                        type_q VARCHAR,
+                        media VARCHAR,
+                        answer_media VARCHAR
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE media_files (
+                        id INTEGER PRIMARY KEY,
+                        path VARCHAR UNIQUE NOT NULL,
+                        sha256 VARCHAR NOT NULL,
+                        byte_size INTEGER
+                    )
+                    """
+                )
+                connection.executemany(
+                    "INSERT INTO question_groups (id, type_group, name, media) "
+                    "VALUES (?, ?, ?, ?)",
+                    [
+                        (1, "map", "World", "world.svg"),
+                        # Two groups sharing the same legacy file must dedup
+                        # to a single stored file / MediaFile row.
+                        (2, "map", "World again", "world.svg"),
+                        (3, "map", "Missing", "unknown.svg"),
+                        (4, "media", "Real upload", "/static/existing.png"),
+                        (5, "media", "External", "https://example.com/x.png")
+                    ]
+                )
+                connection.execute(
+                    "INSERT INTO questions (id, type_q, media, answer_media) "
+                    "VALUES (1, 'text', NULL, NULL)"
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+
+            with patch.object(
+                migrations_module,
+                "_LEGACY_MAP_SOURCE_DIRS",
+                [source_dir]
+            ):
+                result = run_migrations(
+                    target_engine=engine,
+                    database_file=database_file,
+                    static_dir=static_dir,
+                    backup_dir=temp_dir / "backups"
+                )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0016"]
+            )
+
+            digest = hashlib.sha256(svg_bytes).hexdigest()
+            stored_name = f"{digest}.svg"
+
+            with sqlite3.connect(database_file) as connection:
+                media_by_id = dict(
+                    connection.execute(
+                        "SELECT id, media FROM question_groups ORDER BY id"
+                    ).fetchall()
+                )
+                media_file_count = connection.execute(
+                    "SELECT COUNT(*) FROM media_files WHERE path = ?",
+                    (stored_name,)
+                ).fetchone()[0]
+
+            self.assertEqual(media_by_id[1], f"/static/{stored_name}")
+            self.assertEqual(media_by_id[2], f"/static/{stored_name}")
+            # Unresolvable legacy value: left exactly as-is.
+            self.assertEqual(media_by_id[3], "unknown.svg")
+            # Real upload and external URL: untouched.
+            self.assertEqual(media_by_id[4], "/static/existing.png")
+            self.assertEqual(media_by_id[5], "https://example.com/x.png")
+            # Deduped: one row, one file, despite two groups referencing it.
+            self.assertEqual(media_file_count, 1)
+            self.assertTrue((static_dir / stored_name).exists())
+            self.assertEqual(
+                (static_dir / stored_name).read_bytes(), svg_bytes
+            )
+
+            # Re-run is a no-op.
+            with patch.object(
+                migrations_module,
+                "_LEGACY_MAP_SOURCE_DIRS",
+                [source_dir]
+            ):
+                second = run_migrations(
+                    target_engine=engine,
+                    database_file=database_file,
+                    static_dir=static_dir,
+                    backup_dir=temp_dir / "backups"
+                )
             self.assertEqual(second["applied"], [])
 
 
