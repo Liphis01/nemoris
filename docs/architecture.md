@@ -92,6 +92,35 @@ Stable expectations:
   that immediately.
 - Preserve existing French UI copy unless intentionally changing text.
 
+## Review Log & Sync Rules
+
+`review_log` is the append-only record of scheduling-moving reviews (one row
+per legacy `Progress.history` entry; dual-written since migration 0011).
+
+- **Rows are snapshots, not bare ratings.** `update_progress()` is not purely
+  deterministic (interval fuzzing; historical parameter/behavior drift), so
+  each row carries the full post-review state in `data`. Restoring state =
+  taking the latest active row (`services/revlog.py`), never recomputing.
+- **Rows are never updated or deleted.** A re-grade appends a replacement row
+  and marks the old one via `superseded_by`. Readers filter superseded rows.
+- **Forward-replay is a merge tool only** (future sync M3), aimed at memory
+  state (stability/difficulty) with fuzzing off. Historical rows may not
+  replay — three known classes: pre-FSRS-v6 entries, rows recorded before the
+  repeat-lapse freeze existed, and rows recorded under older tuning mappings
+  (parameters frozen since 2026-07-20). Snapshots stay authoritative.
+- **ideal vs active schedule**: `ideal_interval`/`ideal_next_review` are the
+  at-review-time schedule — they travel with the review (sync as data). The
+  active `interval`/`next_review` are the local rebalancer's output — they are
+  derived, re-runnable, and must never sync. Under sync, rebalancing runs
+  after every pull and never before a push.
+- Writers that adjust the schedule without a review (`graduate_relearning`,
+  the rebalancer) leave no revlog row; restore therefore reproduces the
+  at-review-time state, not later local adjustments. Before readers switch to
+  the revlog, "Acquis" graduation should append a no-grade manual row
+  (Anki's revlog has the same concept) so its `ideal_*` change survives.
+- `manage_data.py validate-revlog` is the repeatable gate: run it before any
+  migration that drops `Progress.history`.
+
 ## Implementation Rules
 
 - Prefer existing hooks, serializers, services, and feature folders.

@@ -94,19 +94,26 @@ models.py L133-142) — with one correction to the original plan:
   strengthens forward-replay — recorded per-row factors remain the safety
   net, but parameter drift is no longer expected.
 
-- [ ] `restore_progress_from_revlog(question_guid) -> Progress`: port the
-      existing `restore_progress_from_history()` to read `review_log` rows.
-- [ ] Property test: for every existing question,
-      `restore_from_revlog == stored state` (float tolerance). Validates the
-      migration end-to-end on real data.
-- [ ] Forward-replay test (M3 groundwork, best-effort): re-applying
-      `update_progress` with `enable_fuzzing=False` and each row's recorded
-      quality/date/mode factors reproduces the recorded stability/difficulty
-      sequence within tolerance. If exotic rows fail, document why — the
-      snapshot restore above stays authoritative.
-- [ ] Document the rules in `docs/architecture.md`: rebalancing runs locally
-      after every sync pull, never before a push; snapshots are the source of
-      truth, forward-replay is a merge tool.
+- [x] `restore_progress_from_revlog()` in `services/revlog.py` — feeds active
+      revlog rows into the existing `restore_progress_from_history()`. First
+      real reader of the table. `manage_data.py validate-revlog` runs the
+      property check repeatably (the gate before dropping `history`).
+- [x] Property validation on the real DB (2026-07-20): **917/918 strict
+      match** on memory state + ideal_*. The single mismatch is
+      `graduate_relearning` ("Acquis"), which moves `ideal_*` without a
+      history entry — known writer; before readers switch, graduation should
+      append a no-grade manual row (like Anki's manual revlog type).
+      33 questions show interval/next_review drift from rebalancing —
+      expected, that is the ideal/active split working.
+- [x] Forward-replay harness (`replay_memory_state`, fuzz off, recorded mode
+      factors): modern rows replay to float precision; historical divergence
+      confirmed in three explained classes — (1) pre-FSRS-v6 entries
+      (296 questions), (2) same-day fail chains recorded before the
+      repeat-lapse freeze existed, (3) rows under older tuning mappings
+      (params frozen 2026-07-20). ~20% of all rows replay; going forward
+      it is deterministic. Snapshots stay authoritative; M3 refinement:
+      apply recorded penalty/reward factors directly instead of recomputing.
+- [x] Rules documented in `docs/architecture.md` ("Review Log & Sync Rules").
 
 ### 0.4 Tombstones
 
