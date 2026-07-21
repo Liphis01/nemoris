@@ -2,6 +2,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 
 from ..services.sync import (
     code_schema_version,
+    delete_account_data as delete_account_data_service,
     pull as pull_collection,
     push as push_collection,
     sign_in_request_code,
@@ -139,5 +140,20 @@ def pull():
 @router.post("/sync/sign-out")
 def sign_out():
     sign_out_account()
+
+    return _status_payload()
+
+
+@router.delete("/sync/account-data")
+def delete_account_data():
+    # Wipes this account's cloud DATA (collection + media); the underlying
+    # login identity is untouched (see services/supabase_sync_client.py —
+    # this app never holds the key needed to delete an Auth identity).
+    try:
+        delete_account_data_service(_client())
+    except SyncClientAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except (SyncClientError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
     return _status_payload()

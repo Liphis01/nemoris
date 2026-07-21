@@ -16,7 +16,12 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import shutil
 from uuid import uuid4
+
+
+class SyncNotFoundError(Exception):
+    """Raised when a requested media blob does not exist."""
 
 
 class SyncConflict(Exception):
@@ -97,9 +102,23 @@ class SyncStore:
         meta_path = self._meta_path(email)
 
         if not meta_path.exists():
-            return {"version": 0, "schema_version": None, "updated_at": None}
+            return {
+                "version": 0,
+                "schema_version": None,
+                "updated_at": None,
+                "media_hashes": []
+            }
 
-        return json.loads(meta_path.read_text(encoding="utf-8"))
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta.setdefault("media_hashes", [])
+
+        return meta
+
+    def _write_meta(self, email, meta):
+        self._meta_path(email).write_text(
+            json.dumps(meta, indent=2, sort_keys=True),
+            encoding="utf-8"
+        )
 
     def push(
         self,
@@ -111,23 +130,24 @@ class SyncStore:
         device_id=None,
         force=False
     ):
-        current = self.get_meta(email)["version"]
+        current_meta = self.get_meta(email)
+        current = current_meta["version"]
 
         if not force and int(base_version) != int(current):
             raise SyncConflict(current)
 
         new_version = current + 1
         self._zip_path(email).write_bytes(zip_bytes)
-        meta = {
+        self._write_meta(email, {
             "version": new_version,
             "schema_version": schema_version,
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "last_device_id": device_id
-        }
-        self._meta_path(email).write_text(
-            json.dumps(meta, indent=2, sort_keys=True),
-            encoding="utf-8"
-        )
+            "last_device_id": device_id,
+            # Preserved until the client's follow-up set_media_hashes() call;
+            # a push that never reaches that call just leaves the manifest
+            # stale, self-healing on the next push's diff.
+            "media_hashes": current_meta.get("media_hashes", [])
+        })
 
         return {"version": new_version}
 
@@ -142,3 +162,34 @@ class SyncStore:
             "schema_version": meta["schema_version"],
             "zip_bytes": self._zip_path(email).read_bytes()
         }
+
+    # --- media blobs (content-addressed, idempotent) -------------------------
+
+    def _media_dir(self, email):
+        path = self._account_dir(email) / "media"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def upload_media_blob(self, email, sha256, data):
+        (self._media_dir(email) / sha256).write_bytes(data)
+
+    def download_media_blob(self, email, sha256):
+        blob_path = self._media_dir(email) / sha256
+
+        if not blob_path.exists():
+            raise SyncNotFoundError(sha256)
+
+        return blob_path.read_bytes()
+
+    def set_media_hashes(self, email, hashes):
+        meta = self.get_meta(email)
+        meta["media_hashes"] = list(hashes)
+        self._write_meta(email, meta)
+
+    # --- account lifecycle ----------------------------------------------------
+
+    def delete_account_data(self, email):
+        account_dir = self._account_dir(email)
+
+        if account_dir.exists():
+            shutil.rmtree(account_dir)

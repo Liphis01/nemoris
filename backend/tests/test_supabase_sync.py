@@ -301,6 +301,76 @@ class SupabaseClientTests(unittest.TestCase):
         client = self.make(lambda m, p, r: (200, b"[]"))
         self.assertIsNone(client.pull(TOKEN))
 
+    def test_meta_defaults_media_hashes_to_empty_list(self):
+        client = self.make(lambda m, p, r: (200, b"[]"))
+        meta = client.get_meta(TOKEN)
+        self.assertEqual(meta["media_hashes"], [])
+
+    def test_upload_media_blob_puts_object_with_upsert(self):
+        def handler(method, path, request):
+            self.assertEqual(method, "POST")
+            self.assertIn("/uid-1/media/abc123", path)
+            self.assertEqual(request.headers.get("X-upsert"), "true")
+            self.assertEqual(request.data, b"bytes-here")
+            return (200, b"{}")
+
+        self.make(handler).upload_media_blob(TOKEN, "abc123", b"bytes-here")
+
+    def test_download_media_blob_returns_bytes(self):
+        def handler(method, path, request):
+            self.assertIn("/uid-1/media/abc123", path)
+            return (200, b"the-bytes")
+
+        result = self.make(handler).download_media_blob(TOKEN, "abc123")
+        self.assertEqual(result, b"the-bytes")
+
+    def test_download_media_blob_missing_raises(self):
+        client = self.make(lambda m, p, r: (404, b"{}"))
+        with self.assertRaises(SyncClientError):
+            client.download_media_blob(TOKEN, "missing")
+
+    def test_push_claims_version_with_media_hashes_in_same_patch(self):
+        def handler(method, path, request):
+            if path.startswith("/rest/v1/collections?select"):
+                return (200, json_body([{"version": 1, "media_hashes": []}]))
+            if method == "POST" and "/storage/v1/object/" in path:
+                return (200, b"{}")
+            if method == "PATCH":
+                sent = json.loads(request.data.decode("utf-8"))
+                self.assertEqual(sent["media_hashes"], ["h1", "h2"])
+                return (200, json_body([{"version": 2}]))
+            raise AssertionError(f"unexpected {method} {path}")
+
+        client = self.make(handler)
+        result = client.push(
+            TOKEN, base_version=1, schema_version="0016",
+            device_id="d", zip_bytes=b"Z", media_hashes=["h1", "h2"]
+        )
+        self.assertEqual(result, {"version": 2})
+
+    def test_delete_account_data_removes_zips_media_and_row(self):
+        deleted_paths = []
+
+        def handler(method, path, request):
+            if path.startswith("/rest/v1/collections?select"):
+                return (200, json_body([
+                    {"version": 3, "media_hashes": ["h1", "h2"]}
+                ]))
+            if method == "DELETE" and "/storage/" in path:
+                deleted_paths.append(path)
+                return (200, b"{}")
+            if method == "DELETE" and path.startswith("/rest/v1/collections?user_id"):
+                return (200, b"{}")
+            raise AssertionError(f"unexpected {method} {path}")
+
+        self.make(handler).delete_account_data(TOKEN)
+
+        joined = "|".join(deleted_paths)
+        self.assertIn("/uid-1/v3.zip", joined)
+        self.assertIn("/uid-1/v2.zip", joined)
+        self.assertIn("/uid-1/media/h1", joined)
+        self.assertIn("/uid-1/media/h2", joined)
+
 
 if __name__ == "__main__":
     unittest.main()

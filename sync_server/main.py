@@ -16,7 +16,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from .store import SyncAuthError, SyncConflict, SyncStore
+from .store import SyncAuthError, SyncConflict, SyncNotFoundError, SyncStore
 
 
 DATA_DIR = Path(
@@ -105,3 +105,44 @@ def pull_collection(authorization: str = Header(None)):
             "X-Schema-Version": result["schema_version"] or ""
         }
     )
+
+
+@app.put("/collection/media-manifest")
+def set_media_manifest(
+    payload: dict = Body(...), authorization: str = Header(None)
+):
+    email = _account(authorization)
+    store.set_media_hashes(email, payload.get("hashes") or [])
+
+    return {"status": "ok"}
+
+
+@app.put("/collection/media/{sha256}")
+async def upload_media(
+    sha256: str, request: Request, authorization: str = Header(None)
+):
+    email = _account(authorization)
+    data = await request.body()
+    store.upload_media_blob(email, sha256, data)
+
+    return {"status": "ok"}
+
+
+@app.get("/collection/media/{sha256}")
+def download_media(sha256: str, authorization: str = Header(None)):
+    email = _account(authorization)
+
+    try:
+        data = store.download_media_blob(email, sha256)
+    except SyncNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Blob not found") from error
+
+    return Response(content=data, media_type="application/octet-stream")
+
+
+@app.delete("/collection/account-data")
+def delete_account_data(authorization: str = Header(None)):
+    email = _account(authorization)
+    store.delete_account_data(email)
+
+    return {"status": "deleted"}

@@ -16,6 +16,16 @@ services/sync.py is unchanged. Differences handled here:
   lose the race), then the version is claimed atomically with a guarded PATCH
   (WHERE version = current). A lost claim never touches the winner's data.
   The previous version's zip is kept as a safety net; older ones are pruned.
+- Media (M2 2.1/2.2) syncs separately from the DB zip, by content hash:
+  `collections.media_hashes` (jsonb) is the server's known set, updated in the
+  SAME guarded PATCH as the version so it's never observably out of sync with
+  it. Blobs live at {uid}/media/{sha256} in the same bucket, uploaded/fetched
+  individually and idempotently (upsert=true) — orchestration (which hashes
+  are missing, reading/writing static/) lives in services/sync.py, this
+  adapter only moves bytes. delete_account_data() wipes the known zip
+  versions + media blobs + the collections row for this user_id — it does NOT
+  delete the underlying Supabase Auth identity (would need the service_role
+  key, which this app deliberately never holds).
 
 Everything is stdlib urllib, matching the app's outbound-HTTP posture.
 """
@@ -260,30 +270,44 @@ class SupabaseSyncClient:
     def _meta_raw(self, token):
         rows = self._json(
             "/rest/v1/collections"
-            "?select=version,schema_version,updated_at,last_device_id",
+            "?select=version,schema_version,updated_at,last_device_id,"
+            "media_hashes",
             access_token=token["access_token"]
         )
 
         if not rows:
-            return {"version": 0, "schema_version": None, "updated_at": None}
+            return {
+                "version": 0,
+                "schema_version": None,
+                "updated_at": None,
+                "media_hashes": []
+            }
 
-        return rows[0]
+        row = rows[0]
+        row.setdefault("media_hashes", [])
+
+        return row
 
     def get_meta(self, token):
         return self._authed(self._meta_raw, token)
 
     def _claim_version(
-        self, token, *, current, new_version, schema_version, device_id
+        self, token, *, current, new_version, schema_version, device_id,
+        media_hashes
     ):
         # The atomic step: either insert the first row, or a guarded UPDATE
         # (WHERE version = current). Zero/empty result = someone else won.
+        # media_hashes rides along in the SAME request, so the new version
+        # and the new media manifest become visible atomically together —
+        # no separate call, no window where they could disagree.
         fields = {
             "version": new_version,
             "schema_version": schema_version,
             # Display-only; the version counter is the source of truth, so a
             # skewed client clock here is harmless.
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "last_device_id": device_id
+            "last_device_id": device_id,
+            "media_hashes": list(media_hashes)
         }
 
         if current == 0:
@@ -366,11 +390,54 @@ class SupabaseSyncClient:
             # Best-effort cleanup only; never fail a sync over it.
             pass
 
+    # --- media blobs (content-addressed, idempotent) -------------------------
+
+    def _media_object_path(self, token, sha256):
+        return f"/storage/v1/object/{BUCKET}/{token['user_id']}/media/{sha256}"
+
+    def upload_media_blob(self, token, sha256, data):
+        def operation(tok):
+            status, _, body = self._request(
+                self._media_object_path(tok, sha256),
+                method="POST",
+                access_token=tok["access_token"],
+                body=data,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "x-upsert": "true"
+                },
+                timeout=TRANSFER_TIMEOUT
+            )
+
+            if status >= 400:
+                raise SyncClientError(
+                    _error_message(body) or f"Téléversement impossible ({status})"
+                )
+
+        return self._authed(operation, token)
+
+    def download_media_blob(self, token, sha256):
+        def operation(tok):
+            status, _, body = self._request(
+                self._media_object_path(tok, sha256),
+                access_token=tok["access_token"],
+                timeout=TRANSFER_TIMEOUT
+            )
+
+            if status >= 400:
+                raise SyncClientError(
+                    _error_message(body) or f"Média introuvable ({status})"
+                )
+
+            return body
+
+        return self._authed(operation, token)
+
     # --- protocol operations -------------------------------------------------
 
     def push(
         self, token, *, base_version, schema_version, device_id, zip_bytes,
-        force=False
+        media_hashes=(), force=False
     ):
         def operation(tok):
             current = self._meta_raw(tok)["version"]
@@ -388,7 +455,8 @@ class SupabaseSyncClient:
                 current=current,
                 new_version=new_version,
                 schema_version=schema_version,
-                device_id=device_id
+                device_id=device_id,
+                media_hashes=media_hashes
             )
 
             if not claimed:
@@ -400,6 +468,41 @@ class SupabaseSyncClient:
                 self._delete_zip(tok, new_version - 2)
 
             return {"version": new_version}
+
+        return self._authed(operation, token)
+
+    def delete_account_data(self, token):
+        def operation(tok):
+            meta = self._meta_raw(tok)
+            current = meta["version"]
+
+            # We already know exactly which objects exist (current + one
+            # previous zip version, plus every hash in our own manifest) —
+            # no Storage list-objects call needed.
+            for version in (current, current - 1):
+                if version >= 1:
+                    self._delete_zip(tok, version)
+
+            for sha256 in meta.get("media_hashes") or []:
+                try:
+                    self._request(
+                        self._media_object_path(tok, sha256),
+                        method="DELETE",
+                        access_token=tok["access_token"]
+                    )
+                except SyncClientError:
+                    pass
+
+            status, _, body = self._request(
+                f"/rest/v1/collections?user_id=eq.{tok['user_id']}",
+                method="DELETE",
+                access_token=tok["access_token"]
+            )
+
+            if status >= 400:
+                raise SyncClientError(
+                    _error_message(body) or f"Suppression impossible ({status})"
+                )
 
         return self._authed(operation, token)
 

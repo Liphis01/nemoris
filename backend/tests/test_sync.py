@@ -1,3 +1,4 @@
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -8,19 +9,20 @@ from sqlalchemy.orm import sessionmaker
 
 # The fake sync server lives at the repo root, a sibling of backend/.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from sync_server.store import SyncConflict, SyncStore  # noqa: E402
+from sync_server.store import SyncConflict, SyncNotFoundError, SyncStore  # noqa: E402
 
-from app.models import Base, Question  # noqa: E402
+from app.models import Base, MediaFile, Question  # noqa: E402
 from app.services.backups import restore_backup  # noqa: E402
 from app.services.sync import (  # noqa: E402
     code_schema_version,
+    delete_account_data,
     pull,
     push,
     sign_in_request_code,
     sign_in_verify,
     sign_out
 )
-from app.services.sync_client import SyncClientConflict  # noqa: E402
+from app.services.sync_client import SyncClientConflict, SyncClientError  # noqa: E402
 from app.services.sync_state import (  # noqa: E402
     ensure_device_id,
     is_signed_in,
@@ -49,10 +51,13 @@ class InProcessSyncClient:
     def get_meta(self, token):
         return self.store.get_meta(self.store.account_for_token(token))
 
-    def push(self, token, *, base_version, schema_version, device_id, zip_bytes, force=False):
+    def push(
+        self, token, *, base_version, schema_version, device_id, zip_bytes,
+        media_hashes=(), force=False
+    ):
         email = self.store.account_for_token(token)
         try:
-            return self.store.push(
+            result = self.store.push(
                 email,
                 base_version=base_version,
                 schema_version=schema_version,
@@ -63,15 +68,39 @@ class InProcessSyncClient:
         except SyncConflict as conflict:
             raise SyncClientConflict(conflict.server_version) from conflict
 
+        self.store.set_media_hashes(email, media_hashes)
+        return result
+
     def pull(self, token):
         return self.store.pull(self.store.account_for_token(token))
+
+    def upload_media_blob(self, token, sha256, data):
+        email = self.store.account_for_token(token)
+        self.store.upload_media_blob(email, sha256, data)
+
+    def download_media_blob(self, token, sha256):
+        email = self.store.account_for_token(token)
+        try:
+            return self.store.download_media_blob(email, sha256)
+        except SyncNotFoundError as error:
+            raise SyncClientError(str(error)) from error
+
+    def delete_account_data(self, token):
+        email = self.store.account_for_token(token)
+        self.store.delete_account_data(email)
 
 
 def restore_only_finalize(zip_path, database_file, static_dir):
     # Test finalize: apply the pulled collection to explicit paths without
     # touching the global engine (no init_database / rebalance needed to prove
-    # content converged).
-    restore_backup(zip_path, database_file=database_file, static_dir=static_dir)
+    # content converged). replace_media=False matches production (2.1): the
+    # zip is DB-only, media reconciliation happens separately in pull().
+    restore_backup(
+        zip_path,
+        database_file=database_file,
+        static_dir=static_dir,
+        replace_media=False
+    )
 
 
 class SyncStateTests(unittest.TestCase):
@@ -137,6 +166,23 @@ class SyncEngineTests(unittest.TestCase):
         session.close()
         engine.dispose()
         return values
+
+    def seed_media(self, device, filename, data):
+        device["static"].mkdir(parents=True, exist_ok=True)
+        (device["static"] / filename).write_bytes(data)
+        sha256 = hashlib.sha256(data).hexdigest()
+
+        engine = create_engine(f"sqlite:///{device['db']}")
+        session = sessionmaker(bind=engine)()
+        session.add(MediaFile(path=filename, sha256=sha256, byte_size=len(data)))
+        session.commit()
+        session.close()
+        engine.dispose()
+
+        return sha256
+
+    def email_for(self, device):
+        return self.store.account_for_token(load_sync_state(device["state"])["token"])
 
     def sign_in(self, device, email="user@example.com"):
         client = InProcessSyncClient(self.store)
@@ -293,6 +339,70 @@ class SyncEngineTests(unittest.TestCase):
 
     def test_code_schema_version_matches_latest_migration(self):
         self.assertTrue(code_schema_version())
+
+    def test_push_uploads_only_media_missing_on_server(self):
+        a = self.make_device("a")
+        self.seed(a, ["Q1"])
+        sha = self.seed_media(a, "img.svg", b"<svg>1</svg>")
+        self.sign_in(a)
+
+        uploads = []
+
+        class CountingClient(InProcessSyncClient):
+            def upload_media_blob(self, token, sha256, data):
+                uploads.append(sha256)
+                super().upload_media_blob(token, sha256, data)
+
+        client = CountingClient(self.store)
+        self.do_push(a, client)
+        self.assertEqual(uploads, [sha])
+        self.assertEqual(
+            self.store.get_meta(self.email_for(a))["media_hashes"], [sha]
+        )
+
+        uploads.clear()
+        self.do_push(a, client)  # nothing changed since last push
+        self.assertEqual(uploads, [])
+
+    def test_pull_reconciles_missing_media_without_touching_local_only_files(self):
+        a = self.make_device("a")
+        b = self.make_device("b")
+        self.seed(a, ["Q1"])
+        self.seed_media(a, "img.svg", b"<svg>from-a</svg>")
+
+        client_a = self.sign_in(a)
+        self.do_push(a, client_a)
+
+        client_b = self.sign_in(b)
+        b["static"].mkdir(parents=True, exist_ok=True)
+        (b["static"] / "local-only.txt").write_bytes(b"keep me")
+
+        self.do_pull(b, client_b)
+
+        self.assertEqual(
+            (b["static"] / "img.svg").read_bytes(), b"<svg>from-a</svg>"
+        )
+        self.assertEqual((b["static"] / "local-only.txt").read_bytes(), b"keep me")
+
+    def test_delete_account_data_wipes_server_and_signs_out(self):
+        a = self.make_device("a")
+        self.seed(a, ["Q1"])
+        self.seed_media(a, "img.svg", b"<svg/>")
+        client = self.sign_in(a)
+        self.do_push(a, client)
+        email = self.email_for(a)
+
+        result = delete_account_data(client, sync_state_path=a["state"])
+
+        self.assertFalse(is_signed_in(result))
+        self.assertEqual(self.store.get_meta(email)["version"], 0)
+
+    def test_delete_account_data_requires_sign_in(self):
+        a = self.make_device("a")
+        with self.assertRaises(ValueError):
+            delete_account_data(
+                InProcessSyncClient(self.store), sync_state_path=a["state"]
+            )
 
 
 if __name__ == "__main__":

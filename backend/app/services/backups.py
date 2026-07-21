@@ -86,7 +86,8 @@ def create_backup(
     backup_dir: Path = BACKUP_DIR,
     reason: str = "manual",
     label: str | None = None,
-    extra_manifest: dict | None = None
+    extra_manifest: dict | None = None,
+    include_media: bool = True
 ):
     backup_dir.mkdir(parents=True, exist_ok=True)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -115,7 +116,11 @@ def create_backup(
                 _write_database_snapshot(zip_file, database_file, temp_dir)
                 included.append("questions.db")
 
-            included.extend(_write_static_files(zip_file, static_dir))
+            # include_media=False produces a DB-only zip (sync's slimmed
+            # payload — media syncs separately, by content hash).
+            if include_media:
+                included.extend(_write_static_files(zip_file, static_dir))
+
             manifest["included"] = included
             zip_file.writestr(
                 "backup-manifest.json",
@@ -221,13 +226,20 @@ def restore_backup(
     zip_path: Path,
     *,
     database_file: Path = DATABASE_FILE,
-    static_dir: Path = STATIC_DIR
+    static_dir: Path = STATIC_DIR,
+    replace_media: bool = True
 ):
-    """Replace the live database and media with the contents of a backup zip.
+    """Replace the live database (and, by default, media) with a backup zip.
 
-    This is destructive: the current database file and everything under
-    ``static_dir`` are overwritten. Callers running against the live engine must
-    dispose its connection pool first so the SQLite file handle is released.
+    This is destructive: the current database file, and everything under
+    ``static_dir`` when ``replace_media`` is True, are overwritten. Callers
+    running against the live engine must dispose its connection pool first so
+    the SQLite file handle is released.
+
+    ``replace_media=False`` restores only the database and leaves
+    ``static_dir`` untouched — used by sync's DB-only pull, where a separate
+    hash-based step reconciles media afterwards instead of wiping+rewriting
+    the whole directory from a (deliberately media-less) zip.
     """
 
     zip_path = Path(zip_path)
@@ -244,16 +256,20 @@ def restore_backup(
             )
 
         # Validate media paths before any destructive write.
-        static_members = _static_members(zip_file, static_dir)
+        static_members = (
+            _static_members(zip_file, static_dir) if replace_media else []
+        )
 
         _replace_database_file(zip_file, database_file)
 
-        _clear_static_dir(static_dir)
         restored = ["questions.db"]
 
-        for name, destination in static_members:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(zip_file.read(name))
-            restored.append(name)
+        if replace_media:
+            _clear_static_dir(static_dir)
+
+            for name, destination in static_members:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(zip_file.read(name))
+                restored.append(name)
 
     return {"included": restored}

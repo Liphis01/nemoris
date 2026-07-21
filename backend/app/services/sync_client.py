@@ -105,9 +105,55 @@ class HttpSyncClient:
     def get_meta(self, token):
         return self._json_request("/collection/meta", token=token)
 
+    # --- media blobs (content-addressed, idempotent) ------------------------
+
+    def upload_media_blob(self, token, sha256, data):
+        request = Request(
+            f"{self.base}/collection/media/{sha256}",
+            data=data,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Authorization": f"Bearer {token}"
+            },
+            method="PUT"
+        )
+
+        try:
+            with urlopen(request, timeout=TRANSFER_TIMEOUT):
+                return
+        except HTTPError as error:
+            self._raise_http_error(error)
+        except (URLError, TimeoutError, ValueError) as error:
+            raise SyncClientError("Sync server unreachable") from error
+
+    def download_media_blob(self, token, sha256):
+        request = Request(
+            f"{self.base}/collection/media/{sha256}",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        try:
+            with urlopen(request, timeout=TRANSFER_TIMEOUT) as response:
+                return response.read()
+        except HTTPError as error:
+            self._raise_http_error(error)
+        except (URLError, TimeoutError, ValueError) as error:
+            raise SyncClientError("Sync server unreachable") from error
+
+    def _set_media_manifest(self, token, media_hashes):
+        self._json_request(
+            "/collection/media-manifest",
+            method="PUT",
+            token=token,
+            payload={"hashes": list(media_hashes)}
+        )
+
     # --- collection ---------------------------------------------------------
 
-    def push(self, token, *, base_version, schema_version, device_id, zip_bytes, force=False):
+    def push(
+        self, token, *, base_version, schema_version, device_id, zip_bytes,
+        media_hashes=(), force=False
+    ):
         query = urlencode({
             "base_version": base_version,
             "schema_version": schema_version,
@@ -126,11 +172,20 @@ class HttpSyncClient:
 
         try:
             with urlopen(request, timeout=TRANSFER_TIMEOUT) as response:
-                return json.loads(response.read().decode("utf-8"))
+                result = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
             self._raise_http_error(error)
         except (URLError, TimeoutError, ValueError) as error:
             raise SyncClientError("Sync server unreachable") from error
+
+        # Best-effort ordering note: the version claim above already
+        # succeeded by the time we get here, so a failure setting the
+        # manifest leaves it briefly stale — self-healing, since the next
+        # push recomputes the diff against whatever the manifest currently
+        # says and resends it.
+        self._set_media_manifest(token, media_hashes)
+
+        return result
 
     def pull(self, token):
         request = Request(
@@ -151,3 +206,8 @@ class HttpSyncClient:
             self._raise_http_error(error)
         except (URLError, TimeoutError, ValueError) as error:
             raise SyncClientError("Sync server unreachable") from error
+
+    def delete_account_data(self, token):
+        self._json_request(
+            "/collection/account-data", method="DELETE", token=token
+        )

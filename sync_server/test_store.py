@@ -2,7 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sync_server.store import SyncAuthError, SyncConflict, SyncStore
+from sync_server.store import (
+    SyncAuthError,
+    SyncConflict,
+    SyncNotFoundError,
+    SyncStore
+)
 
 
 class SyncStoreTests(unittest.TestCase):
@@ -32,7 +37,12 @@ class SyncStoreTests(unittest.TestCase):
         self.sign_in()
         self.assertEqual(
             self.store.get_meta("a@b.c"),
-            {"version": 0, "schema_version": None, "updated_at": None}
+            {
+                "version": 0,
+                "schema_version": None,
+                "updated_at": None,
+                "media_hashes": []
+            }
         )
 
     def test_first_push_accepted_and_versioned(self):
@@ -87,6 +97,63 @@ class SyncStoreTests(unittest.TestCase):
 
         self.assertIsNone(self.store.pull("x@y.z"))
         self.assertEqual(self.store.get_meta("x@y.z")["version"], 0)
+
+    def test_media_blob_round_trip(self):
+        self.sign_in()
+        self.store.upload_media_blob("a@b.c", "sha-1", b"bytes")
+        self.assertEqual(
+            self.store.download_media_blob("a@b.c", "sha-1"), b"bytes"
+        )
+
+    def test_download_missing_media_blob_raises(self):
+        self.sign_in()
+        with self.assertRaises(SyncNotFoundError):
+            self.store.download_media_blob("a@b.c", "nope")
+
+    def test_set_media_hashes_persists_alongside_meta(self):
+        self.sign_in()
+        self.store.push("a@b.c", base_version=0, schema_version="0016", zip_bytes=b"A")
+        self.store.set_media_hashes("a@b.c", ["h1", "h2"])
+
+        meta = self.store.get_meta("a@b.c")
+        self.assertEqual(meta["media_hashes"], ["h1", "h2"])
+        self.assertEqual(meta["version"], 1)  # untouched by the manifest call
+
+    def test_push_preserves_media_hashes_until_next_manifest_call(self):
+        self.sign_in()
+        self.store.push("a@b.c", base_version=0, schema_version="0016", zip_bytes=b"A")
+        self.store.set_media_hashes("a@b.c", ["h1"])
+
+        # A second push (before its own manifest call) doesn't wipe the
+        # existing manifest — self-healing, not a hard requirement.
+        self.store.push("a@b.c", base_version=1, schema_version="0016", zip_bytes=b"B")
+        self.assertEqual(self.store.get_meta("a@b.c")["media_hashes"], ["h1"])
+
+    def test_delete_account_data_removes_everything(self):
+        self.sign_in()
+        self.store.push("a@b.c", base_version=0, schema_version="0016", zip_bytes=b"A")
+        self.store.upload_media_blob("a@b.c", "sha-1", b"bytes")
+        self.store.set_media_hashes("a@b.c", ["sha-1"])
+
+        self.store.delete_account_data("a@b.c")
+
+        self.assertEqual(
+            self.store.get_meta("a@b.c"),
+            {
+                "version": 0,
+                "schema_version": None,
+                "updated_at": None,
+                "media_hashes": []
+            }
+        )
+        self.assertIsNone(self.store.pull("a@b.c"))
+        with self.assertRaises(SyncNotFoundError):
+            self.store.download_media_blob("a@b.c", "sha-1")
+
+    def test_delete_account_data_on_unused_account_is_a_no_op(self):
+        self.sign_in()
+        self.store.delete_account_data("a@b.c")  # never pushed anything
+        self.assertEqual(self.store.get_meta("a@b.c")["version"], 0)
 
 
 if __name__ == "__main__":

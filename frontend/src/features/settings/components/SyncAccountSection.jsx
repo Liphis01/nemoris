@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  deleteAccountData,
   getSyncStatus,
   requestSyncCode,
   setSyncServerUrl,
@@ -125,6 +126,25 @@ export default function SyncAccountSection() {
       await syncSignOut();
       await refresh();
     }, null);
+    setConflict(null);
+  }
+
+  async function deleteCloudData() {
+    const confirmed = window.confirm(
+      "Supprime définitivement ta collection, ses versions et ses médias du " +
+        "cloud. Cette action est irréversible — pense à exporter une " +
+        "sauvegarde d'abord (section Sauvegarde) si tu veux garder une " +
+        "copie. Ton adresse e-mail de connexion n'est pas supprimée : tu " +
+        "pourras te reconnecter, mais il n'y aura plus rien à synchroniser. " +
+        "Continuer ?"
+    );
+
+    if (!confirmed) return;
+
+    await run(async () => {
+      await deleteAccountData();
+      await refresh();
+    }, "Données cloud supprimées.");
     setConflict(null);
   }
 
@@ -308,6 +328,24 @@ export default function SyncAccountSection() {
               className="settings-secondary"
             >
               Se déconnecter
+            </button>
+          </div>
+
+          <p className="settings-help">
+            Ce qui est envoyé au cloud : tes questions, ta progression et tes
+            médias, hébergés sur Supabase. Rien n'est partagé avec d'autres
+            comptes. Supprimer les données cloud n'affecte jamais cet
+            appareil — c'est une copie, pas la source.
+          </p>
+
+          <div className="settings-actions">
+            <button
+              type="button"
+              onClick={deleteCloudData}
+              disabled={busy}
+              className="settings-secondary"
+            >
+              Supprimer mes données cloud
             </button>
           </div>
         </>

@@ -40,3 +40,7 @@ export function syncPull() {
 export function syncSignOut() {
   return requestJson("/sync/sign-out", { method: "POST" });
 }
+
+export function deleteAccountData() {
+  return requestJson("/sync/account-data", { method: "DELETE" });
+}
