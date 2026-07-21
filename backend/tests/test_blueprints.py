@@ -446,8 +446,19 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
 
         import_blueprint(target_db, zip_path, static_dir=target_static)
 
+        group_count = target_db.query(QuestionGroup).count()
+        question_count = target_db.query(Question).count()
+        subscription_count = target_db.query(BlueprintSubscription).count()
+
         with self.assertRaises(ValueError):
             import_blueprint(target_db, zip_path, static_dir=target_static)
+
+        # Rejected re-import must leave zero partial/duplicate writes.
+        self.assertEqual(target_db.query(QuestionGroup).count(), group_count)
+        self.assertEqual(target_db.query(Question).count(), question_count)
+        self.assertEqual(
+            target_db.query(BlueprintSubscription).count(), subscription_count
+        )
 
     def test_local_guid_collision_is_rejected(self):
         zip_path, source_db, group, first, second = self.export_zip()
@@ -455,10 +466,21 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         target_db.add(QuestionGroup(guid=group.guid, type_group="map", name="X"))
         target_db.commit()
 
+        group_count = target_db.query(QuestionGroup).count()
+        question_count = target_db.query(Question).count()
+        subscription_count = target_db.query(BlueprintSubscription).count()
+
         with self.assertRaises(ValueError):
             import_blueprint(
                 target_db, zip_path, static_dir=self.make_static_dir()
             )
+
+        # Rejected import must leave zero partial/duplicate writes.
+        self.assertEqual(target_db.query(QuestionGroup).count(), group_count)
+        self.assertEqual(target_db.query(Question).count(), question_count)
+        self.assertEqual(
+            target_db.query(BlueprintSubscription).count(), subscription_count
+        )
 
     def test_media_dedup_on_import_reuses_existing_file(self):
         zip_path, source_db, group, first, second = self.export_zip()

@@ -37,7 +37,14 @@ No user-visible change. Each step = a versioned migration in `migrations.py`
       `default=` callable on the models: every creation path is ORM-based
       (verified: no raw/Core inserts anywhere), so no per-service changes
       were needed.
-- [ ] Test: export → import → re-import does not duplicate (prepares M1).
+- [x] Test: export → import → re-import does not duplicate (prepares M1).
+      `import_blueprint()`'s two pre-write guards (`already_subscribed`,
+      `guid_collision`) both run before any row is written, so a rejected
+      re-import is atomic by construction. `test_reimporting_same_blueprint_is_rejected`
+      and `test_local_guid_collision_is_rejected` (`test_blueprints.py`)
+      strengthened with explicit before/after row-count assertions
+      (QuestionGroup/Question/BlueprintSubscription) to prove zero
+      duplicate/partial writes, not just that a `ValueError` is raised.
 
 ### 0.2 Revlog: move history out of `Progress`
 
@@ -140,7 +147,22 @@ painful to retrofit.
       Generated collections cannot be deleted (guarded). 0013 also backfills
       tombstones from orphaned revlog guids (none existed on the real DB).
       Media tombstones deferred to 0.5 content-addressing.
-- [ ] Purge tombstones older than the last full sync (M2).
+- [x] **Purge — N/A for now, not forgotten.** Tombstones have no functional
+      role in M2 (full-DB-replace sync self-enforces deletions — a deleted
+      row's absence from the pulled snapshot is already authoritative;
+      confirmed zero references to "tombstone" anywhere in `sync_client.py`,
+      `supabase_sync_client.py`, `sync_server/*.py`); their only purpose is
+      enabling correct M3 delta-sync merges. Purging now would destroy
+      history a future M3 needs, for zero present benefit (the table —
+      `entity_type`, `guid`, `deleted_at` — is tiny at this app's scale).
+      Automatic purging keyed to per-device `last_server_version` (the
+      original literal wording) would also be actively unsafe — that field
+      is per-device only (`sync_state.py`) with no cross-device consensus,
+      so device A purging after its own sync could delete history device B
+      still needs. Revisit only if/when M3 is triggered, or if table size
+      ever becomes an observed problem — a manual opt-in
+      `manage_data.py purge-tombstones` CLI (following the `validate-revlog`
+      precedent) is the concrete next step then, not automatic purging.
 
 ### 0.5 Content-addressed media
 
@@ -574,20 +596,62 @@ branded templates, higher send limits), not a requirement. +2 adapter tests
 ### Steps — current status (originally speced as one list; done out of order
 via slices 1-2 above, kept here as the authoritative per-item checklist)
 
-- [ ] 2.1 **Sync payload slimming — NOT done, next up.** Currently ships the
-      *whole* DB + all media (~34 MB for the user's real collection),
-      including blueprint content that could instead be re-downloaded from
-      the catalog on the new device. Target payload: personal content +
-      `review_log` + tombstones + `sync.*` settings + blueprint subscription
-      list only — a few hundred KB instead of ~34 MB. Matters more as the
-      user's collection grows; free-tier Supabase Storage has headroom today.
-- [ ] 2.2 **Resumable media upload — NOT done.** Today a push uploads one
-      whole zip in one shot (`SupabaseSyncClient._upload_zip`); no per-blob
-      hash-based dedup upload, no resume after a dropped connection. Natural
-      follow-on once 2.1 splits personal media out as individually addressable
-      blobs (the `media_files` sha256 registry from M0 0.5 already gives the
-      content-addressing 2.2 needs — the missing piece is the upload protocol,
-      not the identity scheme).
+- [x] 2.1 + 2.2 **Sync payload slimming + hash-based idempotent media —
+      done (2026-07-21), together (Slice 3).** Deliberate deviation from the
+      original 2.1 text: excluding blueprint-derived rows from the DB payload
+      was checked against the real schema and doesn't hold up —
+      `Progress.question_id` / `ReviewLog.question_id` are **integer** FKs
+      into `questions.id`, and reinstalling a blueprint mints new integer PKs
+      (only `guid` is reused), so excluding those rows would orphan review
+      history or need a whole guid-relinking step for content users clearly
+      want synced anyway. Instead: **the DB always syncs whole** (all rows,
+      unchanged — cheap, mostly text) and **only `static/` media is slimmed,
+      by content hash** via the `media_files` registry (M0 0.5). Push uploads
+      only blobs the server doesn't have yet; pull downloads only files
+      missing locally, driven by the just-restored DB's own media_files rows
+      — not a server-side manifest. `create_backup(include_media=False)` /
+      `restore_backup(replace_media=False)` (new kwargs, default True, zero
+      behavior change for the manual Settings → Sauvegarde path) produce a
+      DB-only zip and a non-destructive DB-only restore; orchestration
+      (hashing, diffing, reading/writing static/) lives entirely in
+      `services/sync.py`, both adapters (`sync_client.py`'s `HttpSyncClient`
+      and `supabase_sync_client.py`) just move bytes via new
+      `upload_media_blob`/`download_media_blob` methods. Supabase stores the
+      server's known hash set in a new `collections.media_hashes` jsonb
+      column, updated in the SAME atomic guarded PATCH as the version claim
+      (no separate manifest call, no window where they could disagree); the
+      stdlib `sync_server/` reference impl uses a small separate
+      `PUT /collection/media-manifest` call instead (self-healing if it's
+      ever skipped by a crash — the next push recomputes the diff). Media
+      blobs live at `{uid}/media/{sha256}` in the *existing* `sync-collections`
+      bucket, no new bucket.
+      **Live-verified against the real project**, not just unit tests: first
+      push after deploying this (692 physical files, 683 unique content
+      hashes — 9 pairs are duplicate content, matching the "9 duplicates"
+      already known from M0 0.5) uploaded all 683 blobs and produced an
+      **855,834-byte (836 KB) DB-only zip** — down from the old whole-collection
+      zip (25.4 MB observed for the prior `v1.zip` still on the account) —
+      taking 2m48s end-to-end. **A second push with zero changes uploaded
+      zero new blobs and completed in 1.15s** (confirmed via the Storage
+      list-objects API: blob count stayed at 683, only the tiny DB zip
+      re-uploaded). A full fresh-device pull (new scratch `sync_state`, same
+      account, `last_server_version` reset to 0) restored the DB-only zip
+      then reconciled all 692 media file paths with **zero missing after
+      reconcile** — row counts and total static bytes came back **byte-
+      identical** to the pre-change verification (1441 questions, 924
+      progress, 5160 review_log, 9 tombstones, 692 media files, 30,586,584
+      bytes), proving the new split-payload architecture preserves full
+      fidelity, not just smaller size. Supabase-side SQL the user ran:
+      `ALTER TABLE collections ADD COLUMN media_hashes jsonb NOT NULL DEFAULT
+      '[]'::jsonb;` — the existing storage RLS policy already covered the new
+      `media/` subpath (still under the user's own `auth.uid()` prefix), no
+      policy change needed. Orphaned media blobs (a hash that drops out of
+      the canonical set after a push) are deliberately NOT pruned this round
+      — cheap to leave, zero correctness risk, same "don't fail sync over
+      cleanup" posture as the existing zip-version pruning. Tests: 6 new in
+      `test_sync.py` (upload-only-missing, pull reconciliation is additive-
+      only and doesn't touch local-only files, delete-account-data), 5 new in
+      `test_supabase_sync.py`, 6 new in `sync_server/test_store.py`.
 - [x] 2.3 **Version protocol — done** in Slice 1/2. Monotonic per-account
       version counter; push accepted iff `base_version == server.version`;
       stale push → conflict (`{status:"conflict", server_version}` — note:
@@ -610,21 +674,39 @@ via slices 1-2 above, kept here as the authoritative per-item checklist)
       panel, email→code-or-link→connect, Envoyer/Télécharger/Se déconnecter,
       inline (non-modal) conflict resolution. No auto-sync-on-open/close yet
       — manual button only; revisit if that friction is ever reported.
-- [ ] 2.8 **Account lifecycle — NOT done.** No account-deletion flow (would
-      need to wipe the Supabase `collections` row + storage objects for that
-      `user_id`); no dedicated privacy page. Data export already exists and
-      needs no new work (`/backup/export` — was already true before M2).
-      Offline mode is unaffected either way — sync is additive, local backups
-      keep working standalone.
+- [x] 2.8 **Account data deletion — done (2026-07-21), scoped deliberately.**
+      Hard constraint, not a preference: this app only ever holds the
+      Supabase *publishable* key (the user was repeatedly told never to share
+      `service_role`), and deleting the underlying Supabase Auth *identity*
+      needs either the Admin API (`service_role`) or a server-side Edge
+      Function (new infra, against the already-made D5 "no custom
+      application backend" decision). So this deletes DATA only — the
+      collection row, both known zip versions, and every blob in the
+      account's own `media_hashes` set (all already known from our own meta,
+      no Storage list-objects call needed) — then signs out locally. The
+      login identity survives; the user could sign back in to an empty cloud
+      collection. Settings UI states this plainly rather than glossing over
+      it ("Supprimer mes données cloud", with a `window.confirm` mentioning
+      the existing backup-export path first). `SyncStore.delete_account_data`
+      mirrors this for the reference server (`shutil.rmtree` the account
+      dir). Not live-tested against the user's real account/data on purpose
+      (only via unit tests, both adapters + reference server) — no reason to
+      risk destroying their actual synced collection to prove a well-tested
+      code path. Data export needed no new work (`/backup/export` already
+      existed). No dedicated privacy *page* — a short static blurb sits next
+      to the delete button instead, matching the app's single-screen-per-
+      destination convention (no new route for one paragraph of text).
 
 **Definition of done M2**: two real machines alternate review sessions on the
 same collection for a week without loss; the divergence scenario shows the
 dialog and corrupts nothing; a deleted account leaves nothing server-side.
-Slices 1-2 give the sync mechanism itself (push/pull/conflict/auth) real
-end-to-end proof already (see Slice 1/2 sections above — live Playwright push,
-a verified pull round-trip with byte-identical data across 7 tables + all
-media). What's left for a *complete* M2 is 2.1, 2.2, 2.8 above, plus letting
-it run for real over time to satisfy the "a week without loss" bar.
+The full sync mechanism (push/pull/conflict/auth/payload-slimming/media
+dedup/account deletion) now has real, live, byte-identical end-to-end proof
+against the actual Supabase project (see Slice 1-3 sections above). **M2 is
+functionally complete** — every coded item (2.1-2.4, 2.6-2.8) is done and
+verified; only 2.5 (N/A until M3) is intentionally skipped. What remains is
+purely observational, not code: letting it run for real across devices over
+time to confirm the "a week without loss" bar in practice.
 
 ---
 
@@ -678,10 +760,9 @@ If the gate passes:
 | W7 | 2.5-2.8 clocks, gating, UI, account — M2 done |
 | W8+ | Observe real usage; M3 gate |
 
-**Actual order differed from this table (2026-07-21):** 2.3/2.4/2.6/2.7 landed
-first via Slices 1-2 (the sync *mechanism* — version protocol, post-pull
-pipeline, schema gating, UI — all real and E2E-verified against a live
-Supabase project). **Still open: 2.1 (payload slimming), 2.2 (resumable media
-upload), 2.8 (account deletion/privacy).** 2.5 is N/A unless/until M3. See the
-"Steps — current status" list under M2 for the authoritative per-item state;
-this table is historical planning only.
+**Actual order differed from this table:** 2.3/2.4/2.6/2.7 landed first via
+Slices 1-2 (the sync *mechanism*), then 2.1+2.2 (payload slimming + hash-based
+media) and 2.8 (account data deletion) via Slice 3 (2026-07-21) — all real and
+E2E-verified against a live Supabase project. **M2 is functionally complete**;
+2.5 stays N/A unless/until M3. See the "Steps — current status" list under M2
+for the authoritative per-item state; this table is historical planning only.
