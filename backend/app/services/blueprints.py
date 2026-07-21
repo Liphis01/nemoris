@@ -26,16 +26,19 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import joinedload
 
-from ..config import BLUEPRINT_DIR, STATIC_DIR
+from ..config import BACKUP_DIR, BLUEPRINT_DIR, DATABASE_FILE, STATIC_DIR
 from ..migrations import MIGRATIONS
 from ..models import BlueprintSubscription, Question, QuestionGroup
+from .backups import create_backup
 from .media import (
+    delete_unreferenced_media_file,
     get_media_file_by_path,
     static_file_path_from_media,
     static_relative_path_from_media,
     store_media_bytes
 )
 from .questions import delete_question_dependents
+from .tombstones import record_tombstone
 
 
 BLUEPRINT_FORMAT = 1
@@ -603,4 +606,134 @@ def update_blueprint(
         "forked": forked_guids,
         "removed": removed_guids,
         "deleted": deleted_guids
+    }
+
+
+def unsubscribe_blueprint(
+    db,
+    blueprint_guid,
+    *,
+    delete_content: bool = False,
+    static_dir: Path | None = None,
+    backup_dir: Path | None = None,
+    database_file: Path | None = None
+):
+    """Stop tracking a blueprint subscription.
+
+    delete_content=False (default, "keep as personal copy"): the group and
+    its questions stay exactly as they are, only the bookkeeping that ties
+    them to the blueprint is cleared (blueprint_guid/blueprint_version/
+    content_hash -- a locally-owned row shouldn't claim a stale blueprint
+    origin once nothing is tracking updates for it anymore). Progress and
+    everything else is untouched.
+
+    delete_content=True: deletes the group and everything in it, through the
+    same pipeline as a normal group delete (delete_question_dependents +
+    tombstones) -- scoped by group membership, not blueprint_guid, so a
+    question the user added locally into a blueprint-derived group is
+    deleted along with it too, exactly like any other group delete (this app
+    has no concept of partial-group deletion). A backup is taken first,
+    unconditionally: unsubscribing can delete a large blueprint's worth of
+    review history in one action, more than a single question delete risks.
+    """
+    static_dir = static_dir or STATIC_DIR
+    backup_dir = backup_dir or BACKUP_DIR
+    database_file = database_file or DATABASE_FILE
+
+    subscription = (
+        db.query(BlueprintSubscription)
+        .filter(BlueprintSubscription.blueprint_guid == blueprint_guid)
+        .first()
+    )
+
+    if not subscription:
+        raise ValueError("This blueprint is not installed")
+
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.guid == blueprint_guid)
+        .first()
+    )
+
+    if not delete_content:
+        questions = (
+            db.query(Question)
+            .filter(Question.blueprint_guid == blueprint_guid)
+            .all()
+        )
+
+        for question in questions:
+            question.blueprint_guid = None
+            question.blueprint_version = None
+            question.content_hash = None
+
+        if group:
+            group.blueprint_guid = None
+            group.blueprint_version = None
+            group.content_hash = None
+
+        db.delete(subscription)
+        db.commit()
+
+        return {
+            "status": "kept",
+            "blueprint_guid": blueprint_guid,
+            "kept_questions": len(questions),
+            "group_kept": group is not None
+        }
+
+    backup_result = create_backup(
+        database_file=database_file,
+        static_dir=static_dir,
+        backup_dir=backup_dir,
+        reason="unsubscribe",
+        label=group.name if group else blueprint_guid
+    )
+
+    if group:
+        question_rows = (
+            db.query(Question.id, Question.media, Question.answer_media)
+            .filter(Question.group_id == group.id)
+            .all()
+        )
+        question_ids = [row[0] for row in question_rows]
+        media_values = [row[1] for row in question_rows]
+        media_values.extend(row[2] for row in question_rows)
+        media_values.append(group.media)
+    else:
+        # Defensive: subscription exists but its group is already gone
+        # (e.g. deleted through the ordinary group-delete endpoint). Fall
+        # back to whatever still claims this blueprint's origin.
+        question_ids = [
+            question.id
+            for question in (
+                db.query(Question)
+                .filter(Question.blueprint_guid == blueprint_guid)
+                .all()
+            )
+        ]
+        media_values = []
+
+    if question_ids:
+        delete_question_dependents(db, question_ids)
+        db.query(Question).filter(
+            Question.id.in_(question_ids)
+        ).delete(synchronize_session=False)
+
+    if group:
+        record_tombstone(db, "question_group", group.guid)
+        db.delete(group)
+
+    db.delete(subscription)
+    db.commit()
+
+    for media in media_values:
+        delete_unreferenced_media_file(db, media, static_dir=static_dir)
+
+    return {
+        "status": "deleted",
+        "blueprint_guid": blueprint_guid,
+        "deleted_questions": len(question_ids),
+        "group_deleted": group is not None,
+        "backup_path": str(backup_result.path)
     }

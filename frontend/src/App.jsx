@@ -6,6 +6,7 @@ import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import Stats from "./features/stats/components/Stats";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
+import BrowseBlueprints from "./features/blueprints/components/BrowseBlueprints";
 import DesktopTitleBar from "./shared/DesktopTitleBar";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
@@ -188,6 +189,10 @@ function App() {
 
       {mode === "settings" && (
         <Settings setMode={setMode} />
+      )}
+
+      {mode === "blueprints" && (
+        <BrowseBlueprints setMode={setMode} />
       )}
     </div>
   );

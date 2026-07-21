@@ -6,11 +6,52 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
-from ..schemas import BlueprintExportRequest
-from ..services.blueprints import export_blueprint, import_blueprint, update_blueprint
+from ..models import BlueprintSubscription
+from ..schemas import BlueprintCatalogSettings, BlueprintExportRequest
+from ..services.blueprints import (
+    export_blueprint,
+    import_blueprint,
+    unsubscribe_blueprint,
+    update_blueprint
+)
+from ..services.settings import (
+    get_blueprint_catalog_settings,
+    save_blueprint_catalog_settings
+)
 
 
 router = APIRouter()
+
+
+@router.get("/blueprints")
+def list_blueprint_subscriptions(db: Session = Depends(get_db)):
+    return [
+        {
+            "blueprint_guid": subscription.blueprint_guid,
+            "installed_version": subscription.installed_version,
+            "name": subscription.name,
+            "source": subscription.source,
+            "subscribed_at": subscription.subscribed_at,
+            "updated_at": subscription.updated_at
+        }
+        for subscription in db.query(BlueprintSubscription).all()
+    ]
+
+
+@router.get("/blueprints/catalog-settings")
+def get_blueprint_catalog(db: Session = Depends(get_db)):
+    return get_blueprint_catalog_settings(db)
+
+
+@router.put("/blueprints/catalog-settings")
+def update_blueprint_catalog(
+    payload: BlueprintCatalogSettings,
+    db: Session = Depends(get_db)
+):
+    result = save_blueprint_catalog_settings(db, payload.url)
+    db.commit()
+
+    return result
 
 
 @router.post("/blueprints/{group_id}/export")
@@ -86,5 +127,22 @@ def update_blueprint_zip(
         except ValueError as error:
             db.rollback()
             raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return result
+
+
+@router.post("/blueprints/{blueprint_guid}/unsubscribe")
+def unsubscribe_blueprint_subscription(
+    blueprint_guid: str,
+    delete_content: bool = False,
+    db: Session = Depends(get_db)
+):
+    try:
+        result = unsubscribe_blueprint(
+            db, blueprint_guid, delete_content=delete_content
+        )
+    except ValueError as error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
     return result

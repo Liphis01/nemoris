@@ -2,6 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
+  getBlueprintCatalogSettings,
+  saveBlueprintCatalogSettings
+} from "../../../api/blueprints";
+import {
   getReviewSettings,
   rebalanceReviewCalendar,
   updateReviewSettings
@@ -19,6 +23,11 @@ vi.mock("../../../api/backup", () => ({
   importDatabase: vi.fn()
 }));
 
+vi.mock("../../../api/blueprints", () => ({
+  getBlueprintCatalogSettings: vi.fn(),
+  saveBlueprintCatalogSettings: vi.fn()
+}));
+
 describe("Settings", () => {
   beforeEach(() => {
     getReviewSettings.mockResolvedValue({ catchup_daily_target: 35 });
@@ -26,6 +35,8 @@ describe("Settings", () => {
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
+    getBlueprintCatalogSettings.mockResolvedValue({ url: "" });
+    saveBlueprintCatalogSettings.mockResolvedValue({ url: "" });
   });
 
   afterEach(() => {

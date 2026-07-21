@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
+  getBlueprintCatalogSettings,
+  saveBlueprintCatalogSettings
+} from "../../../api/blueprints";
+import {
   getReviewSettings,
   rebalanceReviewCalendar,
   updateReviewSettings
@@ -32,6 +36,11 @@ export default function Settings({ setMode }) {
   const [dataStatus, setDataStatus] = useState("");
   const [dataError, setDataError] = useState("");
 
+  const [catalogDraft, setCatalogDraft] = useState("");
+  const [catalogSaving, setCatalogSaving] = useState(false);
+  const [catalogStatus, setCatalogStatus] = useState("");
+  const [catalogError, setCatalogError] = useState("");
+
   useEffect(() => {
     let cancelled = false;
 
@@ -55,6 +64,24 @@ export default function Settings({ setMode }) {
           setError(settingsError.message || "Paramètres impossibles à charger.");
           setLoading(false);
         }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getBlueprintCatalogSettings()
+      .then((settings) => {
+        if (!cancelled) {
+          setCatalogDraft(settings.url || "");
+        }
+      })
+      .catch((catalogSettingsError) => {
+        console.error(catalogSettingsError);
       });
 
     return () => {
@@ -149,6 +176,25 @@ export default function Settings({ setMode }) {
       console.error(importError);
       setDataError(importError.message || "Import impossible.");
       setImporting(false);
+    }
+  }
+
+  async function saveCatalogUrl() {
+    setCatalogSaving(true);
+    setCatalogStatus("");
+    setCatalogError("");
+
+    try {
+      const settings = await saveBlueprintCatalogSettings(catalogDraft.trim());
+      setCatalogDraft(settings.url || "");
+      setCatalogStatus("Catalogue enregistré.");
+    } catch (catalogSaveError) {
+      console.error(catalogSaveError);
+      setCatalogError(
+        catalogSaveError.message || "Catalogue impossible à enregistrer."
+      );
+    } finally {
+      setCatalogSaving(false);
     }
   }
 
@@ -300,6 +346,68 @@ export default function Settings({ setMode }) {
             {dataError && (
               <div role="alert" className="settings-alert">
                 {dataError}
+              </div>
+            )}
+          </section>
+
+          <section className="settings-panel">
+            <div className="settings-section-head">
+              <span className="settings-section-icon" aria-hidden="true">
+                📦
+              </span>
+
+              <div>
+                <div className="settings-overline">Blueprints</div>
+                <h2>Catalogue</h2>
+              </div>
+            </div>
+
+            <p className="settings-help">
+              Adresse du catalogue de blueprints à parcourir depuis "Blueprints".
+            </p>
+
+            <label className="settings-field">
+              <span className="settings-label">URL du catalogue</span>
+
+              <span className="settings-control">
+                <input
+                  aria-label="URL du catalogue"
+                  type="text"
+                  placeholder="https://.../catalog.json"
+                  value={catalogDraft}
+                  disabled={catalogSaving}
+                  onChange={(event) => setCatalogDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      saveCatalogUrl();
+                    }
+                  }}
+                  className="settings-input"
+                />
+              </span>
+            </label>
+
+            <div className="settings-actions">
+              <button
+                type="button"
+                onClick={saveCatalogUrl}
+                disabled={catalogSaving}
+                aria-label="Enregistrer le catalogue"
+                className="settings-save"
+              >
+                {catalogSaving ? "Enregistrement..." : "Enregistrer"}
+              </button>
+
+              {catalogStatus && (
+                <div className="settings-status" role="status">
+                  {catalogStatus}
+                </div>
+              )}
+            </div>
+
+            {catalogError && (
+              <div role="alert" className="settings-alert">
+                {catalogError}
               </div>
             )}
           </section>

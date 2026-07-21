@@ -26,14 +26,19 @@ from app.models import (
 )
 from app.routers.blueprints import (
     export_group_blueprint,
+    get_blueprint_catalog,
     import_blueprint_zip,
+    list_blueprint_subscriptions,
+    unsubscribe_blueprint_subscription,
+    update_blueprint_catalog,
     update_blueprint_zip
 )
-from app.schemas import BlueprintExportRequest
+from app.schemas import BlueprintCatalogSettings, BlueprintExportRequest
 from app.services.blueprints import (
     content_hash,
     export_blueprint,
     import_blueprint,
+    unsubscribe_blueprint,
     update_blueprint
 )
 from app.services.media import store_media_bytes
@@ -812,6 +817,171 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertEqual(updated_first.answer, "A1 corrected")
 
 
+class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
+    def make_file_db(self):
+        # The delete_content=True path takes a real backup, which snapshots
+        # a real sqlite file -- an in-memory db has nothing to snapshot.
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        db_path = Path(temp.name) / "target.db"
+        engine = create_engine(f"sqlite:///{db_path}")
+        Base.metadata.create_all(engine)
+
+        return sessionmaker(bind=engine)(), db_path
+
+    def install_v1(self, target_db):
+        source_db, source_static, group, first, second = self.build_source()
+        blueprint_dir = self.make_static_dir()
+        target_static = self.make_static_dir()
+
+        v1_zip = export_blueprint(
+            source_db,
+            group.id,
+            version=1,
+            name="Countries",
+            static_dir=source_static,
+            blueprint_dir=blueprint_dir
+        )
+        import_blueprint(target_db, v1_zip, static_dir=target_static)
+
+        return group, first, second, target_static
+
+    def test_keep_clears_bookkeeping_and_preserves_content(self):
+        target_db = make_db()
+        group, first, second, target_static = self.install_v1(target_db)
+
+        result = unsubscribe_blueprint(
+            target_db, group.guid, delete_content=False
+        )
+
+        self.assertEqual(result["status"], "kept")
+        self.assertEqual(result["kept_questions"], 2)
+
+        self.assertIsNone(
+            target_db.query(BlueprintSubscription)
+            .filter(BlueprintSubscription.blueprint_guid == group.guid)
+            .first()
+        )
+
+        kept_group = (
+            target_db.query(QuestionGroup)
+            .filter(QuestionGroup.guid == group.guid)
+            .first()
+        )
+        self.assertIsNotNone(kept_group)
+        self.assertEqual(kept_group.name, "Countries")
+        self.assertIsNone(kept_group.blueprint_guid)
+        self.assertIsNone(kept_group.blueprint_version)
+        self.assertIsNone(kept_group.content_hash)
+
+        kept_questions = (
+            target_db.query(Question)
+            .filter(Question.group_id == kept_group.id)
+            .all()
+        )
+        self.assertEqual(len(kept_questions), 2)
+        for question in kept_questions:
+            self.assertIsNone(question.blueprint_guid)
+            self.assertIsNone(question.blueprint_version)
+            self.assertIsNone(question.content_hash)
+        self.assertEqual(
+            {question.question for question in kept_questions}, {"Q1", "Q2"}
+        )
+
+    def test_delete_removes_group_questions_progress_and_backs_up_first(self):
+        target_db, target_db_path = self.make_file_db()
+        group, first, second, target_static = self.install_v1(target_db)
+        backup_dir = self.make_static_dir()
+
+        first_local = (
+            target_db.query(Question)
+            .filter(Question.guid == first.guid)
+            .first()
+        )
+        first_local_id = first_local.id
+        progress = create_initial_progress(first_local_id, today=date(2026, 1, 1))
+        target_db.add(progress)
+        target_db.commit()
+
+        result = unsubscribe_blueprint(
+            target_db,
+            group.guid,
+            delete_content=True,
+            static_dir=target_static,
+            backup_dir=backup_dir,
+            database_file=target_db_path
+        )
+
+        self.assertEqual(result["status"], "deleted")
+        self.assertEqual(result["deleted_questions"], 2)
+        self.assertTrue(result["group_deleted"])
+        self.assertTrue(Path(result["backup_path"]).exists())
+
+        self.assertIsNone(
+            target_db.query(BlueprintSubscription)
+            .filter(BlueprintSubscription.blueprint_guid == group.guid)
+            .first()
+        )
+        self.assertIsNone(
+            target_db.query(QuestionGroup)
+            .filter(QuestionGroup.guid == group.guid)
+            .first()
+        )
+        self.assertEqual(
+            target_db.query(Question)
+            .filter(Question.guid.in_([first.guid, second.guid]))
+            .count(),
+            0
+        )
+        self.assertIsNone(
+            target_db.query(Progress)
+            .filter(Progress.question_id == first_local_id)
+            .first()
+        )
+
+    def test_delete_also_removes_locally_added_question_in_same_group(self):
+        # Deletion is scoped by group membership, matching how the ordinary
+        # group-delete endpoint behaves everywhere else in this app -- there
+        # is no partial-group-deletion concept.
+        target_db, target_db_path = self.make_file_db()
+        group, first, second, target_static = self.install_v1(target_db)
+
+        local_group = (
+            target_db.query(QuestionGroup)
+            .filter(QuestionGroup.guid == group.guid)
+            .first()
+        )
+        extra = Question(
+            type_q="map",
+            question="Locally added",
+            tags=[],
+            data={},
+            group_id=local_group.id
+        )
+        target_db.add(extra)
+        target_db.commit()
+        extra_guid = extra.guid
+
+        unsubscribe_blueprint(
+            target_db,
+            group.guid,
+            delete_content=True,
+            static_dir=target_static,
+            backup_dir=self.make_static_dir(),
+            database_file=target_db_path
+        )
+
+        self.assertIsNone(
+            target_db.query(Question)
+            .filter(Question.guid == extra_guid)
+            .first()
+        )
+
+    def test_rejects_unsubscribe_for_uninstalled_blueprint(self):
+        with self.assertRaises(ValueError):
+            unsubscribe_blueprint(make_db(), "not-a-real-guid")
+
+
 class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
     def test_export_endpoint_returns_zip_and_404s_on_missing_group(self):
         db, static_dir, group, first, second = self.build_source()
@@ -916,6 +1086,78 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
                 )
 
         self.assertEqual(caught.exception.status_code, 400)
+
+    def test_unsubscribe_endpoint_keep_mode_round_trips(self):
+        # Keep-mode never touches STATIC_DIR/BACKUP_DIR/DATABASE_FILE (no
+        # media or backup involved), so this is safe to call through the
+        # router as-is, unlike the delete path.
+        source_db, source_static, group, first, second = self.build_source()
+        blueprint_dir = self.make_static_dir()
+        v1_zip = export_blueprint(
+            source_db, group.id, version=1, name="Pack",
+            static_dir=source_static, blueprint_dir=blueprint_dir
+        )
+
+        target_db = make_db()
+        target_static = self.make_static_dir()
+
+        with patch.object(blueprints_service, "STATIC_DIR", target_static):
+            import_blueprint_zip(
+                file=UploadFile(
+                    file=io.BytesIO(v1_zip.read_bytes()), filename="pack.zip"
+                ),
+                db=target_db
+            )
+
+        result = unsubscribe_blueprint_subscription(
+            group.guid, delete_content=False, db=target_db
+        )
+
+        self.assertEqual(result["status"], "kept")
+
+    def test_unsubscribe_endpoint_rejects_uninstalled_blueprint(self):
+        with self.assertRaises(HTTPException) as caught:
+            unsubscribe_blueprint_subscription(
+                "not-a-real-guid", delete_content=False, db=make_db()
+            )
+
+        self.assertEqual(caught.exception.status_code, 400)
+
+    def test_list_endpoint_empty_and_populated(self):
+        db = make_db()
+        self.assertEqual(list_blueprint_subscriptions(db=db), [])
+
+        source_db, source_static, group, first, second = self.build_source()
+        blueprint_dir = self.make_static_dir()
+        zip_path = export_blueprint(
+            source_db, group.id, version=1, name="Pack",
+            static_dir=source_static, blueprint_dir=blueprint_dir
+        )
+        import_blueprint(db, zip_path, static_dir=self.make_static_dir())
+
+        rows = list_blueprint_subscriptions(db=db)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["blueprint_guid"], group.guid)
+        self.assertEqual(rows[0]["installed_version"], 1)
+        self.assertEqual(rows[0]["name"], "Pack")
+        self.assertIsNotNone(rows[0]["subscribed_at"])
+        self.assertIsNone(rows[0]["updated_at"])
+
+    def test_catalog_settings_endpoints_round_trip(self):
+        db = make_db()
+
+        self.assertEqual(get_blueprint_catalog(db=db), {"url": ""})
+
+        saved = update_blueprint_catalog(
+            BlueprintCatalogSettings(url="https://example.com/catalog.json"),
+            db=db
+        )
+        self.assertEqual(saved, {"url": "https://example.com/catalog.json"})
+
+        self.assertEqual(
+            get_blueprint_catalog(db=db),
+            {"url": "https://example.com/catalog.json"}
+        )
 
 
 if __name__ == "__main__":

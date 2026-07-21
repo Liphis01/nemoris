@@ -52,6 +52,7 @@
 - make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
+- faire un sytème automatique pour ajouter progressivement un groupe au schedule (ex: avoir en permanence une dizaine de questions non maîtrisées dans le schedule, et quand on en maîtrise une, en ajouter une autre du groupe)
 
 ## refactors
 

@@ -20,6 +20,7 @@ backend/webview-data/
 *.db-wal
 backend/backups/
 backend/static/
+backend/blueprints/
 
 # Env
 .env

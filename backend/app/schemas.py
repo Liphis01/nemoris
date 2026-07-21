@@ -196,6 +196,10 @@ class BlueprintExportRequest(BaseModel):
     license: str = Field(default="", max_length=200)
 
 
+class BlueprintCatalogSettings(BaseModel):
+    url: str = Field(default="", max_length=2048)
+
+
 AnswerQuality = Annotated[int, Field(ge=0, le=3)]
 
 

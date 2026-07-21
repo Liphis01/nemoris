@@ -487,6 +487,12 @@
   --accent-bg: rgba(184, 215, 232, 0.09);
 }
 
+.menu-destination-teal {
+  --accent: #5eead4;
+  --accent-border: rgba(94, 234, 212, 0.32);
+  --accent-bg: rgba(94, 234, 212, 0.1);
+}
+
 .menu-destination-icon {
   align-items: center;
   background: var(--accent-bg);

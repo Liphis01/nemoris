@@ -45,6 +45,15 @@ const destinations = [
     detail: "Paramètres",
     accent: "neutral",
     icon: "⚙"
+  },
+  {
+    mode: "blueprints",
+    eyebrow: "Catalogue",
+    title: "Blueprints",
+    description: "Parcourir et installer des packs de contenu partagés.",
+    detail: "Découvrir",
+    accent: "teal",
+    icon: "📦"
   }
 ];
 

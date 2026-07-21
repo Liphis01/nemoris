@@ -302,10 +302,82 @@ application server: static files + a JSON index.
         upstream change this" before checking fork status, when it must be
         the other way around. Fixed; a regression test locks in the exact
         scenario. 327 backend tests pass (11 new for 1.3).
-- [ ] 1.4 **Unsubscribe**: user choice — keep the content as a personal copy,
-      or delete (with confirmation, progress archived in an auto-backup).
-- [ ] 1.5 **Catalog + UI**: remote JSON index (list, versions, sizes), a
-      "Browse blueprints" screen: preview, add, "update available" badge.
+- [x] 1.4 **Unsubscribe — done (2026-07-21).** `unsubscribe_blueprint()` in
+      `services/blueprints.py`, `POST /blueprints/{blueprint_guid}/unsubscribe
+      ?delete_content=bool`.
+      - **Keep as personal copy** (default): drops the `BlueprintSubscription`
+        row only; clears `blueprint_guid`/`blueprint_version`/`content_hash`
+        on the group and its questions so a locally-owned row never claims a
+        stale blueprint origin once nothing tracks updates for it anymore.
+        Content and progress untouched.
+      - **Delete**: reuses the exact deletion pipeline `delete_group` already
+        uses (`delete_question_dependents` + tombstones + media cleanup via
+        `delete_unreferenced_media_file`) — scoped by **group membership**,
+        not `blueprint_guid`, matching how group deletion already works
+        everywhere else in this app (no partial-group-deletion concept
+        exists, so a question the user manually added into a blueprint-
+        derived group is deleted along with it too). "Progress archived"
+        from the spec text = an unconditional `create_backup()` call first
+        (reusing the same primitive as `/backup/export` and pre-migration
+        snapshots), since unsubscribing can delete far more review history
+        in one action than a single question delete risks — not a new
+        archive concept.
+      - Verified against real data (scratch copies): both modes round-
+        tripped correctly on the real "Signes astrologiques" group (12
+        questions) — keep preserved everything with bookkeeping cleared,
+        delete produced a real, opened-and-confirmed backup file and left
+        zero rows behind. 333 backend tests pass (6 new).
+- [x] 1.5 **Catalog + UI — done (2026-07-21).** New catalog JSON format
+      (`{format, blueprints: [{blueprint_guid, name, description, license,
+      version, type_group, question_count, size_bytes, download_url}]}`) —
+      `type_group`/`question_count` duplicate what's inside each zip's own
+      `content.json` on purpose, so cards render richly without downloading
+      every zip up front.
+      - **No backend "fetch a URL" capability was needed.** A catalog entry
+        is just a public static zip; the frontend fetches it into a blob and
+        POSTs that blob to the *already-existing* `/blueprints/import` /
+        `/blueprints/update` — identical to what a manual file picker
+        already did, just sourced from a URL. Zero changes to
+        `import_blueprint`/`update_blueprint`.
+      - Backend additions, precisely scoped: `GET /blueprints` (list
+        `BlueprintSubscription` rows — did not exist before, the one real
+        gap) and `GET`/`PUT /blueprints/catalog-settings` (new `AppSetting`
+        key `blueprint_catalog`, classified `DEVICE_SETTING_KEYS` — a
+        per-device preference, not sync data).
+      - New `frontend/src/features/blueprints/` — `useBrowseBlueprints`
+        (correlates catalog entries against installed subscriptions by guid
+        → not_installed / up_to_date / update_available), `BlueprintCard`,
+        `BrowseBlueprints`. `update()`'s two-phase confirm (call once,
+        preview `removed`, call again with `deleteRemoved: true`) surfaces
+        inline, no modal. New Menu destination (`teal` accent, previously
+        unclaimed at the destination level) + Settings "Catalogue" section
+        for the URL, matching the app's existing single-purpose-screen and
+        settings-panel conventions exactly — no toast library, no spinners,
+        no router, no new visual system introduced.
+      - Unsubscribe reuses the exact swipe-reveal rail pattern from
+        `QuestionCard`/`GroupCardItem`, exposing "Garder" (tap commits,
+        matching this app's existing non-modal confirmation convention) and
+        "Supprimer" (gated by `window.confirm()`, matching how this app
+        already reserves that specifically for its most destructive
+        actions).
+      - **Verified against the real running app**, not just unit tests:
+        exported a real group via the live API, served it plus a hand-built
+        catalog from a throwaway local HTTP server (had to add CORS headers
+        manually — Python's plain `http.server` doesn't send
+        `Access-Control-Allow-Origin`, and the frontend/backend/catalog-
+        server are three different origins), and drove the actual app with
+        Playwright: install, a genuine guid-collision error surfaced
+        inline, install landing correctly in Manage, keep-unsubscribe
+        (content preserved, re-import correctly re-guarded since a kept
+        row's own guid is permanent identity — confirms `unsubscribe`'s
+        "keep" design is exactly right, not just untested), and
+        delete-unsubscribe (real confirm dialog, real backup file, content
+        actually gone from Manage). One false alarm along the way: a
+        card appeared not to refresh after a delete — turned out to be the
+        test script's fixed 2s wait being shorter than the real
+        backup-before-delete round trip, not an app bug; polling confirmed
+        the live re-render (no page reload) catches up in ~2s on its own.
+        335 backend + 347 frontend tests pass (2 + 7 new).
 - [ ] 1.6 **First real blueprint: countries of the world.** Full dogfooding
       of the cycle publish → install → fix a border → publish v2 → update
       without touching progress.
