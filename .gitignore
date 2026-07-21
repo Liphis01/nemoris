@@ -37,3 +37,4 @@ sync_server/data/
 graphify-out/
 /CLAUDE.md
 .claude/settings.json
+publish/

@@ -378,9 +378,39 @@ application server: static files + a JSON index.
         backup-before-delete round trip, not an app bug; polling confirmed
         the live re-render (no page reload) catches up in ~2s on its own.
         335 backend + 347 frontend tests pass (2 + 7 new).
-- [ ] 1.6 **First real blueprint: countries of the world.** Full dogfooding
-      of the cycle publish → install → fix a border → publish v2 → update
-      without touching progress.
+- [x] 1.6 **First real blueprint: countries of the world — done (2026-07-21).**
+      Full dogfooding of publish → install, against the real public catalog:
+      - Exported the live "Territoires du monde" group via the app's own
+        `/blueprints/{id}/export` (blueprint_guid `2639a60d-4dd2-4531-9fcd-
+        433fdd159cd2`, v1, 252 questions, 72420 bytes) and authored a matching
+        `catalog.json`, staged in a gitignored `publish/` folder.
+      - User created a **public** Supabase Storage bucket named `blueprints`
+        (deliberately separate from the private `sync-collections` bucket used
+        for sync payloads) and uploaded both files.
+      - Verified both public URLs resolve with the exact expected byte sizes
+        (`catalog.json` 556 bytes, the zip 72420 bytes) — real HTTP GETs
+        against `https://<project>.supabase.co/storage/v1/object/public/
+        blueprints/...`, no auth needed since Storage RLS is bucket-public.
+      - Pointed the app's own catalog-URL setting (`PUT /blueprints/catalog-
+        settings`) at the real published `catalog.json`.
+      - **Fresh-database install proof**: built a brand-new SQLite DB from
+        `Base.metadata.create_all` (empty — asserted zero groups/questions/
+        subscriptions beforehand) in a scratch dir, downloaded the real
+        catalog.json + zip exactly as the browser would, and called the real
+        `import_blueprint()` service function against it. Result: 252
+        questions imported, the map SVG materialized correctly on disk, the
+        `BlueprintSubscription` recorded with the catalog URL as `source`.
+        This is the same code path the UI's "Installer" button drives
+        (`fetchCatalog` → `installBlueprintFromCatalog` → `POST /blueprints/
+        import`), just invoked directly against a scratch DB instead of the
+        user's own (which would correctly hit the guid-collision guard, since
+        they already own this content locally).
+      - The "fix a border → publish v2 → update without touching progress"
+        half of the cycle was already E2E-verified in 1.5 (synthetic data,
+        Playwright against the real backend) — the update/version-propagation
+        *code path* doesn't change based on which catalog serves the zip, so
+        it wasn't re-proven against the live bucket. Re-run it live if a real
+        v2 of this pack is ever published.
 - [x] 1.7 **Map licensing — settled by investigation (2026-07-21).** The
       roadmap assumed we'd need to source a public-domain map (Natural Earth).
       Turns out the map already in the app is *already* permissively licensed,
@@ -405,16 +435,12 @@ application server: static files + a JSON index.
         the honest choice); the map's MIT terms ride along inside the SVG
         itself. Disputed-territories policy is a content/editorial decision
         deferred to whoever authors the published pack, not a code concern.
-- [ ] 1.6 (blocked on **D2 hosting only** — no code left to write). The
-      content already exists ("Territoires du monde", 252 questions, MIT map);
-      export + catalog format + install/update/unsubscribe are all built and
-      E2E-verified (1.5). All that remains is publishing the zip + a
-      `catalog.json` to a real public host, which needs D2 decided and is an
-      outward-facing action to confirm with the user first.
-
-**Definition of done M1**: the countries-of-the-world blueprint installs from
-the catalog onto a fresh database, a v2 propagates cleanly onto a database
-with progress and local edits, Playwright e2e tests cover the full cycle.
+**M1 — done (2026-07-21).** Definition of done: the countries-of-the-world
+blueprint installs from the catalog onto a fresh database (proven live above,
+1.6), a v2 propagates cleanly onto a database with progress and local edits
+(proven with Playwright in 1.5), Playwright e2e tests cover the full cycle
+(1.5). All three hold. Real public host: Supabase Storage, `blueprints`
+bucket, project `apauxfgsthjmowjimcwn` — the same project used for M2 sync.
 
 ---
 
