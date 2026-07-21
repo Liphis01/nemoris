@@ -2452,6 +2452,7 @@ export default function MediaReview({
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
           borderRadius: "18px",
+          boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
           height: fillAvailableHeight ? "100%" : "calc(100dvh - 220px)",

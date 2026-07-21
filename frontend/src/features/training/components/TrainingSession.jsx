@@ -1591,7 +1591,7 @@ function ScopeSelector({
             <div className={`training-selector-body training-selector-body-${scopeType}`}>
               {scopeType === "group" ? (
                 <>
-                  <section className="training-list-column" aria-label="Liste des groupes">
+                  <section className="training-list-column app-scrollbar" aria-label="Liste des groupes">
                     <div className="training-scope-grid" aria-label="Groupes d'entrainement">
                       {groups.map(group => (
                         <GroupTile
@@ -1604,7 +1604,7 @@ function ScopeSelector({
                     </div>
                   </section>
 
-                  <div className="training-detail-column">
+                  <div className="training-detail-column app-scrollbar">
                     <GroupDetailPanel
                       group={selectedGroup}
                       startScope={startScope}
@@ -1613,7 +1613,7 @@ function ScopeSelector({
                 </>
               ) : scopeType === "collection" ? (
                 <>
-                  <section className="training-list-column" aria-label="Liste des collections">
+                  <section className="training-list-column app-scrollbar" aria-label="Liste des collections">
                     <div className="training-scope-grid" aria-label="Collections d'entrainement">
                       {collections.map(collection => (
                         <CollectionTile
@@ -1626,7 +1626,7 @@ function ScopeSelector({
                     </div>
                   </section>
 
-                  <div className="training-detail-column">
+                  <div className="training-detail-column app-scrollbar">
                     <CollectionDetailPanel
                       collection={selectedCollection}
                       onDelete={handleDeleteCollection}
@@ -1636,14 +1636,16 @@ function ScopeSelector({
                   </div>
                 </>
               ) : (
-                <div className="training-scope-grid" aria-label="Tags d'entrainement">
-                  {tags.map(tag => (
-                    <TagTile
-                      key={tag.name}
-                      startScope={startScope}
-                      tag={tag}
-                    />
-                  ))}
+                <div className="training-list-column training-list-column-full app-scrollbar">
+                  <div className="training-scope-grid" aria-label="Tags d'entrainement">
+                    {tags.map(tag => (
+                      <TagTile
+                        key={tag.name}
+                        startScope={startScope}
+                        tag={tag}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -1699,8 +1701,10 @@ export default function TrainingSession({ setMode }) {
           color: "#eee",
           display: "flex",
           flexDirection: "column",
-          height: "calc(100dvh - 48px)",
-          overflow: "hidden"
+          height: "100%",
+          minWidth: 0,
+          overflow: "hidden",
+          width: "100%"
         }}
       >
         <div
@@ -1900,12 +1904,28 @@ export default function TrainingSession({ setMode }) {
     <div
       style={{
         background: "#111",
+        boxSizing: "border-box",
         color: "#eee",
-        minHeight: "calc(100vh - var(--shell-top, 0px))",
-        padding: "30px 24px 80px"
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+        width: "100%"
       }}
     >
-      <div style={{ margin: "0 auto", maxWidth: "1050px" }}>
+      <div
+        className={session.activeScope ? "training-screen-content app-scrollbar" : "training-screen-content"}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          margin: "0 auto",
+          maxWidth: "1050px",
+          minHeight: 0,
+          overflow: session.activeScope ? "auto" : "hidden",
+          scrollbarGutter: session.activeScope ? "stable" : undefined,
+          width: "100%"
+        }}
+      >
         {!session.activeScope && (
           <ScopeSelector
             scopes={session.scopes}

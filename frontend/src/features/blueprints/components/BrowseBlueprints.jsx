@@ -17,11 +17,15 @@ export default function BrowseBlueprints({ setMode }) {
   return (
     <div
       style={{
+        boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
         gap: "20px",
+        height: "100%",
         maxWidth: "720px",
         margin: "0 auto",
+        minHeight: 0,
+        overflow: "hidden",
         width: "100%"
       }}
     >
@@ -52,99 +56,113 @@ export default function BrowseBlueprints({ setMode }) {
         <ReturnToMenuButton onClick={() => setMode("menu")} />
       </header>
 
-      {catalogUrl === null && !loading && (
-        <div
-          style={{
-            padding: "24px",
-            borderRadius: "14px",
-            border: "1px solid #262626",
-            background: "#171717",
-            textAlign: "center",
-            color: "#999"
-          }}
-        >
-          <p style={{ margin: "0 0 14px" }}>
-            Aucun catalogue configuré pour l'instant.
-          </p>
-          <button
-            type="button"
-            onClick={() => setMode("settings")}
+      <div
+        className="app-scrollbar"
+        style={{
+          display: "flex",
+          flex: "1 1 auto",
+          flexDirection: "column",
+          gap: "10px",
+          minHeight: 0,
+          overflow: "auto",
+          paddingRight: "4px",
+          scrollbarGutter: "stable"
+        }}
+      >
+        {catalogUrl === null && !loading && (
+          <div
             style={{
-              padding: "9px 16px",
-              borderRadius: "999px",
-              border: "1px solid #385544",
-              background: "#1f2d24",
-              color: "#d7f5df",
-              cursor: "pointer",
-              fontSize: "13px"
+              padding: "24px",
+              borderRadius: "14px",
+              border: "1px solid #262626",
+              background: "#171717",
+              textAlign: "center",
+              color: "#999"
             }}
           >
-            Configurer un catalogue
-          </button>
-        </div>
-      )}
+            <p style={{ margin: "0 0 14px" }}>
+              Aucun catalogue configuré pour l'instant.
+            </p>
+            <button
+              type="button"
+              onClick={() => setMode("settings")}
+              style={{
+                padding: "9px 16px",
+                borderRadius: "999px",
+                border: "1px solid #385544",
+                background: "#1f2d24",
+                color: "#d7f5df",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Configurer un catalogue
+            </button>
+          </div>
+        )}
 
-      {loading && (
-        <div style={{ color: "#888", fontSize: "13px" }}>
-          Chargement du catalogue...
-        </div>
-      )}
+        {loading && (
+          <div style={{ color: "#888", fontSize: "13px" }}>
+            Chargement du catalogue...
+          </div>
+        )}
 
-      {!loading && error && (
-        <div
-          role="alert"
-          style={{
-            padding: "12px 14px",
-            borderRadius: "10px",
-            background: "#261717",
-            border: "1px solid rgba(255,156,156,0.28)",
-            color: "#ff9c9c",
-            fontSize: "13px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "12px"
-          }}
-        >
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={reload}
+        {!loading && error && (
+          <div
+            role="alert"
             style={{
-              padding: "6px 12px",
-              borderRadius: "999px",
-              border: "1px solid #3a3a3a",
-              background: "#232323",
-              color: "#ddd",
-              cursor: "pointer",
-              fontSize: "12px",
-              flexShrink: 0
+              padding: "12px 14px",
+              borderRadius: "10px",
+              background: "#261717",
+              border: "1px solid rgba(255,156,156,0.28)",
+              color: "#ff9c9c",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px"
             }}
           >
-            Réessayer
-          </button>
-        </div>
-      )}
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={reload}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "999px",
+                border: "1px solid #3a3a3a",
+                background: "#232323",
+                color: "#ddd",
+                cursor: "pointer",
+                fontSize: "12px",
+                flexShrink: 0
+              }}
+            >
+              Réessayer
+            </button>
+          </div>
+        )}
 
-      {!loading && !error && catalogUrl && items.length === 0 && (
-        <div style={{ color: "#888", fontSize: "13px" }}>
-          Ce catalogue ne contient aucun blueprint pour le moment.
-        </div>
-      )}
+        {!loading && !error && catalogUrl && items.length === 0 && (
+          <div style={{ color: "#888", fontSize: "13px" }}>
+            Ce catalogue ne contient aucun blueprint pour le moment.
+          </div>
+        )}
 
-      {!loading && items.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          {items.map((item) => (
-            <BlueprintCard
-              key={item.entry.blueprint_guid}
-              item={item}
-              onInstall={install}
-              onUpdate={update}
-              onUnsubscribe={unsubscribe}
-            />
-          ))}
-        </div>
-      )}
+        {!loading && items.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {items.map((item) => (
+              <BlueprintCard
+                key={item.entry.blueprint_guid}
+                item={item}
+                onInstall={install}
+                onUpdate={update}
+                onUnsubscribe={unsubscribe}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

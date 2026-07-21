@@ -752,15 +752,16 @@ export default function MapReview({
         style={{
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
-            borderRadius: "18px",
-            display: "flex",
-            flexDirection: "column",
-            height: fillAvailableHeight ? "100%" : undefined,
-            minHeight: fillAvailableHeight ? 0 : undefined,
-            overflow: "hidden",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-            ...fadeInStyle
-          }}
+          borderRadius: "18px",
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          height: fillAvailableHeight ? "100%" : undefined,
+          minHeight: fillAvailableHeight ? 0 : undefined,
+          overflow: "hidden",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+          ...fadeInStyle
+        }}
       >
 
         {/* HEADER */}

@@ -437,8 +437,10 @@ export default function ReviewSession({
           color: "#eee",
           display: "flex",
           flexDirection: "column",
-          height: "calc(100dvh - 48px)",
-          overflow: "hidden"
+          height: "100%",
+          minWidth: 0,
+          overflow: "hidden",
+          width: "100%"
         }}
       >
         <div
@@ -677,17 +679,23 @@ export default function ReviewSession({
   return (
     <div
       style={{
-        minHeight: "calc(100vh - var(--shell-top, 0px))",
         background: "#111",
+        boxSizing: "border-box",
         color: "#eee",
-        padding: "30px 24px 80px"
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+        width: "100%"
       }}
     >
 
       <div
         style={{
           maxWidth: "1050px",
-          margin: "0 auto"
+          margin: "0 auto",
+          height: "100%",
+          minHeight: 0,
+          overflow: "hidden"
         }}
       >
 

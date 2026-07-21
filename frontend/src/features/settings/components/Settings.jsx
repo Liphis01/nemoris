@@ -168,7 +168,12 @@ export default function Settings({ setMode }) {
   const sync = useSyncAccount();
 
   useEffect(() => {
-    document.querySelector(".app-scrollbar")?.scrollTo({ left: 0, top: 0 });
+    const screen = document.querySelector(".settings-groups");
+
+    if (screen) {
+      screen.scrollLeft = 0;
+      screen.scrollTop = 0;
+    }
   }, []);
 
   useEffect(() => {
@@ -360,7 +365,7 @@ export default function Settings({ setMode }) {
             onExport={handleExport}
           />
 
-          <main className="settings-groups" aria-label="Paramètres">
+          <main className="settings-groups app-scrollbar" aria-label="Paramètres">
             <SyncAccountSection sync={sync} />
 
             <SettingsGroup

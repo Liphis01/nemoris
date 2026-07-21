@@ -35,22 +35,27 @@ function App() {
   const appStyle = {
     background: "#121212",
     color: "#e5e5e5",
-    minHeight: "100%",
+    minHeight: 0,
     height: "100%",
     padding: "24px",
     fontFamily: "Arial, sans-serif",
     display: "flex",
     flexDirection: "column",
-    overflow: "auto",
+    overflow: "hidden",
     boxSizing: "border-box"
   };
 
+  const routeSlotStyle = {
+    display: "flex",
+    flex: "1 1 auto",
+    minHeight: 0,
+    overflow: "hidden",
+    width: "100%"
+  };
+
   useEffect(() => {
-    // Manage is a fixed three-panel workspace, so the body scroll is disabled
-    // there and restored for review/menu/calendar screens.
-    document.body.style.overflow =
-      mode === "manage" ? "hidden" : "auto";
-  }, [mode]);
+    document.body.style.overflow = "hidden";
+  }, []);
 
   useEffect(() => {
     getStartupRebalanceNotice()
@@ -137,65 +142,67 @@ function App() {
   }
 
   return (
-    <div className="app-scrollbar" style={appStyle}>
+    <div style={appStyle}>
       <DesktopTitleBar />
       <UpdateBanner />
-      {mode === "menu" && (
-        <Menu
-          setMode={setMode}
-          startupNotice={startupNotice}
-          onDismissStartupNotice={dismissStartupNotice}
-          reviewSummary={reviewSummary}
-          reviewSummaryLoading={reviewSummaryLoading}
-          reviewSummaryError={reviewSummaryError}
-        />
-      )}
+      <div style={routeSlotStyle}>
+        {mode === "menu" && (
+          <Menu
+            setMode={setMode}
+            startupNotice={startupNotice}
+            onDismissStartupNotice={dismissStartupNotice}
+            reviewSummary={reviewSummary}
+            reviewSummaryLoading={reviewSummaryLoading}
+            reviewSummaryError={reviewSummaryError}
+          />
+        )}
 
-      {mode === "quiz" && (
-        <ReviewSession
-          setMode={setMode}
-          {...reviewSession}
-        />
-      )}
+        {mode === "quiz" && (
+          <ReviewSession
+            setMode={setMode}
+            {...reviewSession}
+          />
+        )}
 
-      {mode === "training" && (
-        <TrainingSession setMode={setMode} />
-      )}
+        {mode === "training" && (
+          <TrainingSession setMode={setMode} />
+        )}
 
-      {mode === "manage" && (
-        <Manage
-          setMode={setMode}
-          {...manageLibrary}
-          openQuestionId={manageOpenQuestionId}
-          clearOpenQuestionId={() => setManageOpenQuestionId(null)}
-          onOpenInCalendar={openQuestionInCalendar}
-        />
-      )}
+        {mode === "manage" && (
+          <Manage
+            setMode={setMode}
+            {...manageLibrary}
+            openQuestionId={manageOpenQuestionId}
+            clearOpenQuestionId={() => setManageOpenQuestionId(null)}
+            onOpenInCalendar={openQuestionInCalendar}
+          />
+        )}
 
-      {mode === "calendar" && (
-        <ReviewCalendar
-          setMode={setMode}
-          questions={manageLibrary.allQuestions}
-          onOpenQuestion={openQuestionInManage}
-          openQuestionId={calendarOpenQuestionId}
-          clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
-        />
-      )}
+        {mode === "calendar" && (
+          <ReviewCalendar
+            setMode={setMode}
+            questions={manageLibrary.allQuestions}
+            onOpenQuestion={openQuestionInManage}
+            openQuestionId={calendarOpenQuestionId}
+            clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
+          />
+        )}
 
-      {mode === "stats" && (
-        <Stats
-          setMode={setMode}
-          onOpenQuestion={openQuestionIdInManage}
-        />
-      )}
+        {mode === "stats" && (
+          <Stats
+            setMode={setMode}
+            onOpenQuestion={openQuestionIdInManage}
+          />
+        )}
 
-      {mode === "settings" && (
-        <Settings setMode={setMode} />
-      )}
+        {mode === "settings" && (
+          <Settings setMode={setMode} />
+        )}
 
-      {mode === "blueprints" && (
-        <BrowseBlueprints setMode={setMode} />
-      )}
+        {mode === "blueprints" && (
+          <BrowseBlueprints setMode={setMode} />
+        )}
+      </div>
     </div>
   );
 }

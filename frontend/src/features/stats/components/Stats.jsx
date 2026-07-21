@@ -21,11 +21,13 @@ const reviewDateFormatter = new Intl.DateTimeFormat("fr-FR", {
 });
 
 const shellStyle = {
-  minHeight: "calc(100vh - var(--shell-top, 0px))",
   background: "#111",
+  boxSizing: "border-box",
   color: "#eee",
-  padding: "30px 24px 70px",
-  boxSizing: "border-box"
+  height: "100%",
+  minHeight: 0,
+  overflow: "hidden",
+  width: "100%"
 };
 
 const panelStyle = {
@@ -719,15 +721,18 @@ export default function Stats({
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: "22px",
+          gap: "16px",
+          height: "100%",
           margin: "0 auto",
-          maxWidth: "1380px"
+          maxWidth: "1380px",
+          minHeight: 0
         }}
       >
         <div
           style={{
             alignItems: "flex-start",
             display: "flex",
+            flexShrink: 0,
             gap: "20px",
             justifyContent: "space-between"
           }}
@@ -785,102 +790,116 @@ export default function Stats({
           />
         </div>
 
-        {error && (
-          <div
-            style={{
-              background: "#2b1717",
-              border: "1px solid rgba(255, 156, 156, 0.28)",
-              borderRadius: "12px",
-              color: "#ffb3b3",
-              padding: "12px 14px"
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {isLoading && !stats ? (
-          <div
-            style={{
-              ...panelStyle,
-              alignItems: "center",
-              color: "#888",
-              display: "flex",
-              justifyContent: "center",
-              minHeight: "180px"
-            }}
-          >
-            Chargement des statistiques...
-          </div>
-        ) : stats && (
-          <>
-            <SummaryCards counts={stats.counts} />
-
+        <div
+          className="app-scrollbar"
+          style={{
+            display: "flex",
+            flex: "1 1 auto",
+            flexDirection: "column",
+            gap: "16px",
+            minHeight: 0,
+            overflow: "auto",
+            paddingRight: "4px",
+            scrollbarGutter: "stable"
+          }}
+        >
+          {error && (
             <div
               style={{
-                display: "grid",
-                gap: "16px",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))"
+                background: "#2b1717",
+                border: "1px solid rgba(255, 156, 156, 0.28)",
+                borderRadius: "12px",
+                color: "#ffb3b3",
+                padding: "12px 14px"
               }}
             >
-              <LoadChart loadByType={stats.load_by_type || []} />
-              <RetentionTable retentionByType={stats.retention_by_type || {}} />
+              {error}
             </div>
+          )}
 
+          {isLoading && !stats ? (
             <div
               style={{
-                display: "grid",
-                gap: "16px",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))"
+                ...panelStyle,
+                alignItems: "center",
+                color: "#888",
+                display: "flex",
+                justifyContent: "center",
+                minHeight: "180px"
               }}
             >
-              <QuestionList
-                label="Difficulté"
-                title="Questions difficiles"
-                questions={stats.hard_questions || []}
-                savingFavoriteIds={savingFavoriteIds}
-                onOpenQuestion={onOpenQuestion}
-                onToggleFavorite={toggleFavorite}
-              />
-              <QuestionList
-                emptyLabel="Aucun favori"
-                label="Favoris"
-                title="Questions favorites"
-                questions={stats.favorite_questions || []}
-                savingFavoriteIds={savingFavoriteIds}
-                onOpenQuestion={onOpenQuestion}
-                onToggleFavorite={toggleFavorite}
-              />
-              <QuestionList
-                emptyLabel="Pas encore de faiblesse map"
-                label="Maps"
-                title="Points faibles maps"
-                questions={stats.weak_spots?.map || []}
-                savingFavoriteIds={savingFavoriteIds}
-                onOpenQuestion={onOpenQuestion}
-                onToggleFavorite={toggleFavorite}
-              />
-              <QuestionList
-                emptyLabel="Pas encore de faiblesse timeline"
-                label="Timeline"
-                title="Points faibles timeline"
-                questions={stats.weak_spots?.timeline || []}
-                savingFavoriteIds={savingFavoriteIds}
-                onOpenQuestion={onOpenQuestion}
-                onToggleFavorite={toggleFavorite}
-              />
-              <QuestionList
-                emptyLabel="Pas encore de faiblesse image"
-                label="Images"
-                title="Points faibles images"
-                questions={stats.weak_spots?.image || []}
-                savingFavoriteIds={savingFavoriteIds}
-                onOpenQuestion={onOpenQuestion}
-                onToggleFavorite={toggleFavorite}
-              />
+              Chargement des statistiques...
             </div>
-          </>
-        )}
+          ) : stats && (
+            <>
+              <SummaryCards counts={stats.counts} />
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "16px",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))"
+                }}
+              >
+                <LoadChart loadByType={stats.load_by_type || []} />
+                <RetentionTable retentionByType={stats.retention_by_type || {}} />
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "16px",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))"
+                }}
+              >
+                <QuestionList
+                  label="Difficulté"
+                  title="Questions difficiles"
+                  questions={stats.hard_questions || []}
+                  savingFavoriteIds={savingFavoriteIds}
+                  onOpenQuestion={onOpenQuestion}
+                  onToggleFavorite={toggleFavorite}
+                />
+                <QuestionList
+                  emptyLabel="Aucun favori"
+                  label="Favoris"
+                  title="Questions favorites"
+                  questions={stats.favorite_questions || []}
+                  savingFavoriteIds={savingFavoriteIds}
+                  onOpenQuestion={onOpenQuestion}
+                  onToggleFavorite={toggleFavorite}
+                />
+                <QuestionList
+                  emptyLabel="Pas encore de faiblesse map"
+                  label="Maps"
+                  title="Points faibles maps"
+                  questions={stats.weak_spots?.map || []}
+                  savingFavoriteIds={savingFavoriteIds}
+                  onOpenQuestion={onOpenQuestion}
+                  onToggleFavorite={toggleFavorite}
+                />
+                <QuestionList
+                  emptyLabel="Pas encore de faiblesse timeline"
+                  label="Timeline"
+                  title="Points faibles timeline"
+                  questions={stats.weak_spots?.timeline || []}
+                  savingFavoriteIds={savingFavoriteIds}
+                  onOpenQuestion={onOpenQuestion}
+                  onToggleFavorite={toggleFavorite}
+                />
+                <QuestionList
+                  emptyLabel="Pas encore de faiblesse image"
+                  label="Images"
+                  title="Points faibles images"
+                  questions={stats.weak_spots?.image || []}
+                  savingFavoriteIds={savingFavoriteIds}
+                  onOpenQuestion={onOpenQuestion}
+                  onToggleFavorite={toggleFavorite}
+                />
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

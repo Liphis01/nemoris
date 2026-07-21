@@ -220,8 +220,10 @@ export default function Manage(props) {
         height: "100%",
         background: "#121212",
         color: "#eee",
+        minWidth: 0,
         overflow: "hidden",
-        position: "relative"
+        position: "relative",
+        width: "100%"
       }}
     >
       {autosaveStatus && (
