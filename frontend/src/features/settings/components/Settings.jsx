@@ -12,6 +12,7 @@ import {
 import "./Settings.css";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import SyncAccountSection from "./SyncAccountSection";
+import UpdateSection from "./UpdateSection";
 
 function normalizeTarget(value, fallback) {
   const parsed = Number(value);
@@ -414,6 +415,7 @@ export default function Settings({ setMode }) {
           </section>
 
           <SyncAccountSection />
+          <UpdateSection />
         </main>
       </div>
     </div>

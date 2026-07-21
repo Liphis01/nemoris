@@ -2,12 +2,64 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 // Holds the Python backend child so it can be killed when the app exits.
 struct BackendChild(Mutex<Option<CommandChild>>);
+
+// Shared by the normal-quit RunEvent handler and the updater's on_before_exit
+// hook: on Windows the updater calls std::process::exit() directly to hand
+// off to the new installer, bypassing RunEvent entirely, so both paths must
+// call this explicitly or the sidecar is left holding its own exe file open.
+fn kill_backend(app: &tauri::AppHandle) {
+    if let Some(child) = app.state::<BackendChild>().0.lock().unwrap().take() {
+        let _ = child.kill();
+    }
+}
+
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+    version: String,
+    notes: Option<String>,
+}
+
+#[tauri::command]
+async fn check_for_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, String> {
+    let updater = app.updater_builder().build().map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
+
+    Ok(update.map(|u| UpdateInfo {
+        version: u.version.clone(),
+        notes: u.body.clone(),
+    }))
+}
+
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    let app_for_hook = app.clone();
+    let updater = app
+        .updater_builder()
+        .on_before_exit(move || kill_backend(&app_for_hook))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    if let Some(update) = updater.check().await.map_err(|e| e.to_string())? {
+        update
+            .download_and_install(
+                |chunk_len, total| {
+                    let _ = app.emit("update://progress", (chunk_len, total));
+                },
+                || {},
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
 
 // Ask the OS for a free port by binding to :0, then release it for the
 // sidecar to claim. A tiny race exists between release and rebind, but it is
@@ -34,6 +86,9 @@ fn wait_for_backend(port: u16) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .invoke_handler(tauri::generate_handler![check_for_update, install_update])
         .manage(BackendChild(Mutex::new(None)))
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -97,11 +152,7 @@ pub fn run() {
         .expect("error while building the Tauri application")
         .run(|app, event| {
             if let RunEvent::ExitRequested { .. } = event {
-                if let Some(child) =
-                    app.state::<BackendChild>().0.lock().unwrap().take()
-                {
-                    let _ = child.kill();
-                }
+                kill_backend(app);
             }
         });
 }

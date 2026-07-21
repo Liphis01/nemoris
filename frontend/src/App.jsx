@@ -8,6 +8,7 @@ import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
 import BrowseBlueprints from "./features/blueprints/components/BrowseBlueprints";
 import DesktopTitleBar from "./shared/DesktopTitleBar";
+import UpdateBanner from "./features/update/UpdateBanner";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
@@ -138,6 +139,7 @@ function App() {
   return (
     <div className="app-scrollbar" style={appStyle}>
       <DesktopTitleBar />
+      <UpdateBanner />
       {mode === "menu" && (
         <Menu
           setMode={setMode}

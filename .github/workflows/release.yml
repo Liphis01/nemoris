@@ -55,15 +55,29 @@ jobs:
           cp backend/dist/nemoris-backend.exe \
             "frontend/src-tauri/binaries/nemoris-backend-x86_64-pc-windows-msvc.exe"
 
+      # The updater compares this against the installed app's version, so a
+      # forgotten manual bump here would silently break update detection
+      # (not just mislabel a filename, as it did before this was added).
+      - name: Sync app version with tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' frontend/src-tauri/tauri.conf.json > tmp.json
+          mv tmp.json frontend/src-tauri/tauri.conf.json
+
       # tauri-action runs the beforeBuildCommand (npm run build) then bundles
-      # the NSIS installer + MSI and uploads them to the tag's release.
+      # the NSIS installer + MSI and uploads them to the tag's release, along
+      # with the signed latest.json the updater plugin polls.
       - name: Build Tauri app and publish release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
           releaseName: "Nemoris ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
+          updaterJsonPreferNsis: true
