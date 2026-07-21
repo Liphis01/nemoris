@@ -11,6 +11,8 @@ import {
   updateReviewSettings
 } from "../../../api/review";
 import { getSyncStatus } from "../../../api/sync";
+import { checkForUpdate } from "../../../api/updater";
+import { getVersion } from "@tauri-apps/api/app";
 import Settings from "./Settings";
 
 vi.mock("../../../api/review", () => ({
@@ -39,6 +41,15 @@ vi.mock("../../../api/sync", () => ({
   syncSignOut: vi.fn()
 }));
 
+vi.mock("../../../api/updater", () => ({
+  checkForUpdate: vi.fn(),
+  installUpdate: vi.fn()
+}));
+
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn()
+}));
+
 describe("Settings", () => {
   beforeEach(() => {
     getReviewSettings.mockResolvedValue({ catchup_daily_target: 35 });
@@ -56,6 +67,8 @@ describe("Settings", () => {
       code_schema_version: "0016",
       server_meta: null
     });
+    checkForUpdate.mockResolvedValue(null);
+    getVersion.mockResolvedValue("1.2.1");
   });
 
   afterEach(() => {
