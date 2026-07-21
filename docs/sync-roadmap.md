@@ -205,8 +205,12 @@ application server: static files + a JSON index.
   → Recommendation: JSON rather than an embedded SQLite (diffable,
   inspectable, no schema-drift risk). Keep the zip+manifest shape from
   `backups.py`, reusable code.
-- **D2 — Catalog hosting**: start with GitHub Releases or Pages (free,
-  versioned). Move to R2/S3+CDN if volume justifies it.
+- **D2 — Catalog hosting: decided (2026-07-21) — Supabase Storage**, not
+  GitHub Releases/Pages as originally sketched. A public `blueprints` bucket
+  in the same Supabase project used for M2 sync (deliberately separate from
+  the private `sync-collections` bucket). Zero extra infra to stand up since
+  the project already exists for accounts; revisit only if free-tier
+  bandwidth/storage limits ever bite.
 - **D3 — Copy vs reference**: **decided — copy with bookkeeping.** Every
   copied row records `blueprint_guid`, `blueprint_version`, `content_hash`.
   This is the accounting Anki lacks, and what makes updates possible.
@@ -452,13 +456,17 @@ merging here.
 
 ### Decisions to make
 
-- **D4 — Auth**: recommendation **magic link / e-mail code** via Supabase
-  (auth + blob storage + RLS in a single managed service, zero ops). Avoid
-  web OAuth in Tauri at first: the `nemoris://` deep link is doable but
-  painful; a 6-digit code typed into the app is plenty.
-- **D5 — Server**: start with no custom application backend if possible
-  (Supabase Storage + RLS policy + a version counter in a table). Only write
-  a small FastAPI service if version logic demands it.
+- **D4 — Auth: decided (2026-07-21) — Supabase email OTP.** Accepts either
+  the 6-digit code or a pasted magic-link URL (see Slice 2 follow-up below —
+  Supabase's fixed built-in email templates forced this shape). No web OAuth,
+  no Tauri deep link.
+- **D5 — Server: decided (2026-07-21) — no custom application backend.**
+  Supabase Storage (private `sync-collections` bucket) + a `collections`
+  table (version counter) + RLS policies scoped to `auth.uid()`, driven
+  entirely through the PostgREST Data API. `sync_server/` (the stdlib
+  reference implementation) still exists and is fully tested, but is not
+  what's deployed — it's the fallback if Supabase is ever dropped, and the
+  thing a self-hosted user would run instead.
 
 **Decision (2026-07-21): build the client-side engine first, against a local
 fake server**, deferring the real cloud-backend commitment (Supabase vs
@@ -563,38 +571,60 @@ lien sans cliquer dessus"). Custom SMTP stays an optional polish (editable
 branded templates, higher send limits), not a requirement. +2 adapter tests
 (371 backend total).
 
-### Steps (original — see slice-1 status above)
+### Steps — current status (originally speced as one list; done out of order
+via slices 1-2 above, kept here as the authoritative per-item checklist)
 
-- [ ] 2.1 **Sync payload**: personal content + `review_log` + tombstones +
-      `sync.*` settings + blueprint subscription list. Unmodified blueprint
-      content is **excluded** (re-downloaded from the catalog when installing
-      on the new device). Result: a few hundred KB instead of ~34 MB.
-- [ ] 2.2 **Personal media**: upload blobs by hash ("do you have abc123?" is
-      the entire protocol), idempotent, resumable after a dropped connection.
-- [ ] 2.3 **Version protocol**: monotonic per-user counter on the server.
-      Push with a stale base version → refusal + Anki-style dialog (Upload
-      mine / Take remote). Keep the last 3 server versions (safety net).
-- [ ] 2.4 **After every pull**: `init_database()` (migrations on an older
-      database) + local rebalancing + regenerate derived collections — the
-      path already exists in `routers/backup.py`, reuse it as-is.
-- [ ] 2.5 **Clocks**: clamp client timestamps to server time at sync (a
-      device with a wrong date otherwise creates un-overwritable items "from
-      the future" — a bug Anki has, let's avoid it). Note: some answer routes
-      accept a client-supplied review date (grouped answers), so backdated
-      rows are legitimate — ordering must use (reviewed_at, seq), never
-      claimed dates alone.
-- [ ] 2.6 **Version gating**: the server stores the schema version of the
-      last push; an older client must update before syncing.
-- [ ] 2.7 **UI**: sync button (auto push/pull in the simple case), status,
-      conflict dialog, optional sync on app open/close.
-- [ ] 2.8 **Account lifecycle**: account deletion (wipes server blobs), data
-      export (already exists: `/backup/export`), minimal privacy page.
-      Offline mode stays complete — sync is additive, local backups are
-      untouched.
+- [ ] 2.1 **Sync payload slimming — NOT done, next up.** Currently ships the
+      *whole* DB + all media (~34 MB for the user's real collection),
+      including blueprint content that could instead be re-downloaded from
+      the catalog on the new device. Target payload: personal content +
+      `review_log` + tombstones + `sync.*` settings + blueprint subscription
+      list only — a few hundred KB instead of ~34 MB. Matters more as the
+      user's collection grows; free-tier Supabase Storage has headroom today.
+- [ ] 2.2 **Resumable media upload — NOT done.** Today a push uploads one
+      whole zip in one shot (`SupabaseSyncClient._upload_zip`); no per-blob
+      hash-based dedup upload, no resume after a dropped connection. Natural
+      follow-on once 2.1 splits personal media out as individually addressable
+      blobs (the `media_files` sha256 registry from M0 0.5 already gives the
+      content-addressing 2.2 needs — the missing piece is the upload protocol,
+      not the identity scheme).
+- [x] 2.3 **Version protocol — done** in Slice 1/2. Monotonic per-account
+      version counter; push accepted iff `base_version == server.version`;
+      stale push → conflict (`{status:"conflict", server_version}` — note:
+      returned as HTTP 200 with a flat body, not a 409, because the frontend's
+      `requestJson` collapses non-2xx bodies to a string — documented
+      workaround, not a bug). Supabase adapter additionally keeps the
+      previous version's zip as a safety net and prunes anything older
+      (N-2); the stdlib `sync_server/` reference impl keeps only current.
+- [x] 2.4 **Post-pull pipeline — done** in Slice 1, reusing
+      `routers/backup.py`'s exact restore → `init_database()` → rebalance →
+      regenerate-derived-collections sequence unchanged.
+- [ ] 2.5 **Clock clamping — N/A for now, not forgotten.** Whole-collection
+      version-based conflict detection has no timestamp merge step at all, so
+      client clock skew cannot corrupt sync (this was the explicit design
+      win noted in Slice 1). Only becomes relevant if/when M3 incremental
+      sync is ever built — re-read this item then, not before.
+- [x] 2.6 **Schema version gating — done** in Slice 1 (`/meta/schema-version`
+      from M0 0.7, refuses pulling a zip newer than the local code version).
+- [x] 2.7 **UI — done** in Slice 1: Settings "Compte / Synchronisation"
+      panel, email→code-or-link→connect, Envoyer/Télécharger/Se déconnecter,
+      inline (non-modal) conflict resolution. No auto-sync-on-open/close yet
+      — manual button only; revisit if that friction is ever reported.
+- [ ] 2.8 **Account lifecycle — NOT done.** No account-deletion flow (would
+      need to wipe the Supabase `collections` row + storage objects for that
+      `user_id`); no dedicated privacy page. Data export already exists and
+      needs no new work (`/backup/export` — was already true before M2).
+      Offline mode is unaffected either way — sync is additive, local backups
+      keep working standalone.
 
 **Definition of done M2**: two real machines alternate review sessions on the
 same collection for a week without loss; the divergence scenario shows the
 dialog and corrupts nothing; a deleted account leaves nothing server-side.
+Slices 1-2 give the sync mechanism itself (push/pull/conflict/auth) real
+end-to-end proof already (see Slice 1/2 sections above — live Playwright push,
+a verified pull round-trip with byte-identical data across 7 tables + all
+media). What's left for a *complete* M2 is 2.1, 2.2, 2.8 above, plus letting
+it run for real over time to satisfy the "a week without loss" bar.
 
 ---
 
@@ -647,3 +677,11 @@ If the gate passes:
 | W6 | 2.1-2.4 payload, blobs, version protocol |
 | W7 | 2.5-2.8 clocks, gating, UI, account — M2 done |
 | W8+ | Observe real usage; M3 gate |
+
+**Actual order differed from this table (2026-07-21):** 2.3/2.4/2.6/2.7 landed
+first via Slices 1-2 (the sync *mechanism* — version protocol, post-pull
+pipeline, schema gating, UI — all real and E2E-verified against a live
+Supabase project). **Still open: 2.1 (payload slimming), 2.2 (resumable media
+upload), 2.8 (account deletion/privacy).** 2.5 is N/A unless/until M3. See the
+"Steps — current status" list under M2 for the authoritative per-item state;
+this table is historical planning only.
