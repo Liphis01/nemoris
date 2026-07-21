@@ -21,6 +21,8 @@ backend/webview-data/
 backend/backups/
 backend/static/
 backend/blueprints/
+backend/sync_state.json
+sync_server/data/
 
 # Env
 .env

@@ -17,6 +17,7 @@ from .routers import (
     review,
     sequence_groups,
     stats,
+    sync,
     tags,
     text_groups,
     training,
@@ -63,6 +64,7 @@ def create_app():
     app.include_router(backup.router)
     app.include_router(meta.router)
     app.include_router(blueprints.router)
+    app.include_router(sync.router)
 
     if FRONTEND_DIST_DIR.exists():
         assets_dir = FRONTEND_DIST_DIR / "assets"

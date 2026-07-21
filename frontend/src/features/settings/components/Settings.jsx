@@ -11,6 +11,7 @@ import {
 } from "../../../api/review";
 import "./Settings.css";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import SyncAccountSection from "./SyncAccountSection";
 
 function normalizeTarget(value, fallback) {
   const parsed = Number(value);
@@ -411,6 +412,8 @@ export default function Settings({ setMode }) {
               </div>
             )}
           </section>
+
+          <SyncAccountSection />
         </main>
       </div>
     </div>

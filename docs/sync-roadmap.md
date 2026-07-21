@@ -381,9 +381,36 @@ application server: static files + a JSON index.
 - [ ] 1.6 **First real blueprint: countries of the world.** Full dogfooding
       of the cycle publish → install → fix a border → publish v2 → update
       without touching progress.
-- [ ] 1.7 **Map licensing**: settle the data source (Natural Earth = public
-      domain, recommended), policy on disputed territories, mandatory
-      `license` field in the manifest.
+- [x] 1.7 **Map licensing — settled by investigation (2026-07-21).** The
+      roadmap assumed we'd need to source a public-domain map (Natural Earth).
+      Turns out the map already in the app is *already* permissively licensed,
+      so no source swap is needed:
+      - **world.svg** and **world-capitals.svg** (behind "Territoires du
+        monde" / "Capitales du monde") are **Simplemaps.com, MIT License**
+        (`Copyright (c) 2020 Pareto Software, LLC DBA Simplemaps.com`). MIT
+        explicitly permits redistribution *provided the copyright + permission
+        notice travels with the work*. That notice is a comment block at the
+        top of the SVG, and blueprint export bundles media **byte-for-byte**
+        (`zip_file.write(file_path, ...)` in `services/blueprints.py`), so the
+        attribution is preserved automatically inside any exported pack — no
+        extra plumbing required. Verified the localized static copies
+        (migration 0016) still carry the comment intact.
+      - **france-region-departement.svg** has no embedded attribution / origin
+        is unclear — but it is NOT part of a countries-of-the-world pack, so
+        it does not gate 1.6. Flag before ever publishing a France-departments
+        pack.
+      - The manifest already carries a `license` field (implemented in 1.1).
+        For the countries pack that value describes the *authored question
+        set* (country names + ISO codes = uncopyrightable facts, so CC0 is
+        the honest choice); the map's MIT terms ride along inside the SVG
+        itself. Disputed-territories policy is a content/editorial decision
+        deferred to whoever authors the published pack, not a code concern.
+- [ ] 1.6 (blocked on **D2 hosting only** — no code left to write). The
+      content already exists ("Territoires du monde", 252 questions, MIT map);
+      export + catalog format + install/update/unsubscribe are all built and
+      E2E-verified (1.5). All that remains is publishing the zip + a
+      `catalog.json` to a real public host, which needs D2 decided and is an
+      outward-facing action to confirm with the user first.
 
 **Definition of done M1**: the countries-of-the-world blueprint installs from
 the catalog onto a fresh database, a v2 propagates cleanly onto a database
@@ -407,7 +434,55 @@ merging here.
   (Supabase Storage + RLS policy + a version counter in a table). Only write
   a small FastAPI service if version logic demands it.
 
-### Steps
+**Decision (2026-07-21): build the client-side engine first, against a local
+fake server**, deferring the real cloud-backend commitment (Supabase vs
+self-hosted). ~80% of M2 is client-side and backend-agnostic, so this makes
+fully-verifiable progress with no cloud accounts and de-risks the design.
+
+### Slice 1 — done (2026-07-21): whole-collection push/pull, verified locally
+
+The "Anki fallback" (one side wins wholesale) is built end-to-end against a
+real, minimal reference server:
+
+- **`sync_server/`** — a standalone stdlib FastAPI service (the reference
+  protocol impl; a self-hosted deployment is literally this, a managed
+  backend is an adapter to the same protocol). Per account: one collection
+  zip + a monotonic `version`. Push accepted iff `base_version ==
+  server.version` (that check is the *entire* conflict mechanism, so clock
+  skew can't corrupt anything — 2.5's clamp concern is moot for whole-
+  collection sync, an M3 issue). 9 store tests.
+- **Per-device client** (`backend/app/services/sync.py` + `sync_client.py`
+  [urllib, raw-binary zip bodies — no multipart, no new dep] + `sync_state.py`
+  + `routers/sync.py`). Push = `create_backup` → upload; pull = download →
+  the exact `routers/backup.py` restore+`init_database`+rebalance path. The
+  one global-engine step is behind an injectable `finalize` so two simulated
+  devices run against explicit paths in tests.
+- **Token storage — the real gap, solved**: `SYNC_STATE_FILE =
+  APP_DATA_DIR/sync_state.json`, a *sibling* of questions.db, so the auth
+  token never rides inside a synced/backed-up collection (`create_backup`
+  only bundles the db + static/). Plaintext/user-scoped for now; OS-keychain
+  hardening deferred to when a real backend is wired.
+- **Frontend**: `api/sync.js` + a "Compte / Synchronisation" Settings panel
+  (email→code→connect, Envoyer/Télécharger/Se déconnecter, inline conflict
+  resolution — no modal, matching app conventions).
+- **Verified three ways**: 11 backend tests incl. two-device convergence +
+  conflict + force + schema-gate; a real-HTTP-wire two-device convergence
+  (exercises urllib, which the unit tests skip); and a live Playwright UI
+  spot-check — signed in through the real app, pushed the real ~34 MB
+  collection to the running server, status showed "v1 — cloud : v1". 355
+  backend/sync_server + 351 frontend tests pass.
+
+Step status against the original 2.x list: 2.3 (version protocol) ✓, 2.4
+(post-pull migrate+rebalance) ✓ (reused as-is), 2.6 (schema gating) ✓, 2.7
+(UI + conflict) ✓. **2.1/2.2 deferred** — this slice ships the whole DB
+(incl. blueprint content + all media) rather than a slimmed payload; that
+optimization is a later slice and matters little here (most of static/ is the
+user's own media, not blueprints). **2.5** N/A for version-based conflict.
+**2.8** (account deletion / privacy) deferred. **The real cloud backend**
+(Supabase adapter or deploying `sync_server/`) is the next decision when
+ready.
+
+### Steps (original — see slice-1 status above)
 
 - [ ] 2.1 **Sync payload**: personal content + `review_log` + tombstones +
       `sync.*` settings + blueprint subscription list. Unmodified blueprint

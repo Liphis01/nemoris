@@ -10,6 +10,7 @@ import {
   rebalanceReviewCalendar,
   updateReviewSettings
 } from "../../../api/review";
+import { getSyncStatus } from "../../../api/sync";
 import Settings from "./Settings";
 
 vi.mock("../../../api/review", () => ({
@@ -28,6 +29,16 @@ vi.mock("../../../api/blueprints", () => ({
   saveBlueprintCatalogSettings: vi.fn()
 }));
 
+vi.mock("../../../api/sync", () => ({
+  getSyncStatus: vi.fn(),
+  setSyncServerUrl: vi.fn(),
+  requestSyncCode: vi.fn(),
+  verifySyncCode: vi.fn(),
+  syncPush: vi.fn(),
+  syncPull: vi.fn(),
+  syncSignOut: vi.fn()
+}));
+
 describe("Settings", () => {
   beforeEach(() => {
     getReviewSettings.mockResolvedValue({ catchup_daily_target: 35 });
@@ -37,6 +48,14 @@ describe("Settings", () => {
     importDatabase.mockResolvedValue({ status: "imported" });
     getBlueprintCatalogSettings.mockResolvedValue({ url: "" });
     saveBlueprintCatalogSettings.mockResolvedValue({ url: "" });
+    getSyncStatus.mockResolvedValue({
+      signed_in: false,
+      account_email: null,
+      server_url: "",
+      last_server_version: 0,
+      code_schema_version: "0016",
+      server_meta: null
+    });
   });
 
   afterEach(() => {
