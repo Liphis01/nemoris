@@ -14,17 +14,36 @@ from ..services.sync_client import (
     SyncClientConflict,
     SyncClientError
 )
+from ..services.supabase_sync_client import SupabaseSyncClient
 from ..services.sync_state import is_signed_in, load_sync_state, save_sync_state
 
 
 router = APIRouter()
 
 
-def _client():
+def _persist_rotated_tokens(token):
     state = load_sync_state()
+    state["token"] = token
+    save_sync_state(state)
 
+
+def _build_client(state):
+    url = state.get("server_url") or ""
+    key = state.get("server_key") or ""
+
+    # A publishable key (or a supabase.co URL) selects the Supabase adapter;
+    # otherwise it's our own reference protocol (fake/self-hosted server).
+    if key or ".supabase.co" in url:
+        return SupabaseSyncClient(
+            url, key, on_tokens_updated=_persist_rotated_tokens
+        )
+
+    return HttpSyncClient(url)
+
+
+def _client():
     try:
-        return HttpSyncClient(state.get("server_url"))
+        return _build_client(load_sync_state())
     except SyncClientError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -35,6 +54,7 @@ def _status_payload():
         "signed_in": is_signed_in(state),
         "account_email": state.get("account_email"),
         "server_url": state.get("server_url", ""),
+        "server_key": state.get("server_key", ""),
         "last_server_version": state.get("last_server_version", 0),
         "code_schema_version": code_schema_version(),
         "server_meta": None
@@ -44,9 +64,9 @@ def _status_payload():
         # Best-effort: a signed-in status still returns even if the server is
         # briefly unreachable.
         try:
-            payload["server_meta"] = HttpSyncClient(
-                payload["server_url"]
-            ).get_meta(state["token"])
+            payload["server_meta"] = _build_client(state).get_meta(
+                state["token"]
+            )
         except SyncClientError:
             payload["server_meta"] = None
 
@@ -62,6 +82,10 @@ def sync_status():
 def set_sync_server_url(payload: dict = Body(...)):
     state = load_sync_state()
     state["server_url"] = str(payload.get("url") or "").strip().rstrip("/")
+
+    if "key" in payload:
+        state["server_key"] = str(payload.get("key") or "").strip()
+
     save_sync_state(state)
 
     return _status_payload()

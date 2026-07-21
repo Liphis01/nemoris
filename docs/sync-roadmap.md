@@ -482,6 +482,61 @@ user's own media, not blueprints). **2.5** N/A for version-based conflict.
 (Supabase adapter or deploying `sync_server/`) is the next decision when
 ready.
 
+### Slice 2 — done (2026-07-21): Supabase adapter (D4+D5 decided)
+
+**User chose Supabase** (free tier, zero server maintenance) and created the
+project; only the Project URL + *publishable* key were shared (never the
+service_role secret). Setup on the Supabase side: a private `sync-collections`
+bucket, a `collections` table (user_id PK → version counter + schema_version
++ updated_at + last_device_id), RLS policies locking both the table and the
+storage folder to `auth.uid()`.
+
+`services/supabase_sync_client.py` implements the same interface as
+`HttpSyncClient`, so the engine is untouched. The differences all live in the
+adapter:
+
+- **Auth = Supabase email OTP** (their `/auth/v1/otp` + `/verify` with
+  `type: "email"`) — real magic-code e-mails replace the fake server's
+  returned-in-response code. The engine's opaque "token" is now a dict
+  `{access_token, refresh_token, user_id}`.
+- **Access tokens expire (~1h) and refresh tokens ROTATE on use** — every
+  authed op retries once through a refresh that persists the rotated pair via
+  an `on_tokens_updated` callback (wired to sync_state by the router). This
+  exposed a real engine bug, fixed + regression-tested: push/pull must
+  RE-LOAD sync_state before saving `last_server_version`, or the stale
+  in-memory copy clobbers a token rotated mid-operation (which, with
+  rotation, would lock the device out of its session).
+- **Conflict safety without a custom server**: the zip uploads to a
+  VERSIONED object name first (`{uid}/v{n}.zip` — a lost race leaves only an
+  orphan), then the version is claimed atomically via a guarded PostgREST
+  PATCH (`?version=eq.{current}`, empty result = lost). Previous version's
+  zip kept as a safety net (the roadmap's "last versions" idea), older
+  pruned best-effort.
+- Client selection: a publishable key set (or a `.supabase.co` URL) →
+  Supabase adapter; otherwise the reference protocol. `server_key` added to
+  sync_state + the Settings UI ("Clé publique (Supabase)" field). Still all
+  stdlib urllib, no new dependency.
+
+Verified: 13 adapter unit tests (fake transport: verify/refresh-rotation/
+guarded-claim/race-cleanup/prune/first-push-insert) + the rotation-persistence
+engine regression + full suites (369 backend + 351 frontend). Live probes
+against the real project (read-only, no e-mails): auth healthy, `collections`
+reachable via Data API with RLS correctly hiding rows from anon. Dev app
+pre-configured with the project URL + key. **Remaining for full E2E: the
+user's mailbox** — sign-in codes arrive by real e-mail, so the final
+two-device verification is a guided run.
+
+**Follow-up (same day): Supabase locks e-mail template editing behind custom
+SMTP** (their built-in sender ships fixed templates), so `{{ .Token }}` can't
+be added without an SMTP setup. Solved without SMTP: `verify()` now accepts
+**either the 6-digit code or the full pasted login link** — a pasted link's
+query carries the token hash + type, verified via `token_hash` (with an
+`email`-type fallback), so the flow works regardless of what the fixed
+template contains. UI hint added under the code field ("copie l'adresse du
+lien sans cliquer dessus"). Custom SMTP stays an optional polish (editable
+branded templates, higher send limits), not a requirement. +2 adapter tests
+(371 backend total).
+
 ### Steps (original — see slice-1 status above)
 
 - [ ] 2.1 **Sync payload**: personal content + `review_log` + tombstones +

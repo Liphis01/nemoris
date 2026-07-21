@@ -250,6 +250,37 @@ class SyncEngineTests(unittest.TestCase):
                 finalize=restore_only_finalize
             )
 
+    def test_push_preserves_tokens_rotated_mid_operation(self):
+        # Regression: adapters (Supabase) rotate auth tokens during a push and
+        # persist them via a callback; the engine must re-load state before
+        # saving last_server_version, or it would clobber the rotated token
+        # with its stale in-memory copy.
+        a = self.make_device("a")
+        self.seed(a, ["Q1"])
+        self.sign_in(a)
+
+        store = self.store
+        state_path = a["state"]
+
+        class RotatingClient(InProcessSyncClient):
+            def push(self, token, **kwargs):
+                result = super().push(token, **kwargs)
+                # Simulate the adapter persisting a rotated token mid-op.
+                state = load_sync_state(state_path)
+                state["token"] = {"access_token": "new", "refresh_token": "new"}
+                save_sync_state(state, state_path)
+                return result
+
+        result = self.do_push(a, RotatingClient(store))
+        self.assertEqual(result["status"], "pushed")
+
+        final = load_sync_state(state_path)
+        self.assertEqual(final["last_server_version"], 1)
+        self.assertEqual(
+            final["token"],
+            {"access_token": "new", "refresh_token": "new"}
+        )
+
     def test_sign_out_clears_token_keeps_device(self):
         a = self.make_device("a")
         self.sign_in(a)

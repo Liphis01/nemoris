@@ -110,6 +110,10 @@ def push(
         force=force
     )
 
+    # Re-load before saving: an adapter may have rotated auth tokens during
+    # the operation (persisting them via its callback), and saving the stale
+    # in-memory copy would clobber them.
+    state = load_sync_state(sync_state_path)
     state["last_server_version"] = pushed["version"]
     save_sync_state(state, sync_state_path)
 
@@ -151,6 +155,8 @@ def pull(
         zip_path.write_bytes(pulled["zip_bytes"])
         finalize(zip_path, database_file, static_dir)
 
+    # Re-load before saving (see push: adapters may rotate tokens mid-op).
+    state = load_sync_state(sync_state_path)
     state["last_server_version"] = pulled["version"]
     save_sync_state(state, sync_state_path)
 

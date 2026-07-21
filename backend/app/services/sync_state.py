@@ -15,6 +15,9 @@ from ..config import SYNC_STATE_FILE
 
 DEFAULT_STATE = {
     "server_url": "",
+    # Publishable API key (Supabase). Safe to store/expose to the local UI —
+    # security comes from RLS + the user's auth token, never from this key.
+    "server_key": "",
     "account_email": None,
     "token": None,
     "device_id": None,

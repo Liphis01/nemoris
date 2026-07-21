@@ -14,6 +14,7 @@ const DEFAULT_SERVER = "http://127.0.0.1:9000";
 export default function SyncAccountSection() {
   const [status, setStatus] = useState(null);
   const [serverDraft, setServerDraft] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [devCode, setDevCode] = useState("");
@@ -28,6 +29,7 @@ export default function SyncAccountSection() {
       const next = await getSyncStatus();
       setStatus(next);
       setServerDraft(next.server_url || DEFAULT_SERVER);
+      setKeyDraft(next.server_key || "");
     } catch (statusError) {
       setError(statusError.message || "Statut indisponible.");
     }
@@ -55,7 +57,7 @@ export default function SyncAccountSection() {
 
   async function saveServer() {
     await run(async () => {
-      await setSyncServerUrl(serverDraft.trim());
+      await setSyncServerUrl(serverDraft.trim(), keyDraft.trim());
       await refresh();
     }, "Serveur enregistré.");
   }
@@ -159,6 +161,25 @@ export default function SyncAccountSection() {
         </span>
       </label>
 
+      <label className="settings-field">
+        <span className="settings-label">Clé publique (Supabase)</span>
+        <span className="settings-control">
+          <input
+            aria-label="Clé publique (Supabase)"
+            type="text"
+            value={keyDraft}
+            disabled={busy}
+            placeholder="sb_publishable_… (vide pour serveur perso)"
+            onChange={(event) => setKeyDraft(event.target.value)}
+            onBlur={saveServer}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveServer();
+            }}
+            className="settings-input"
+          />
+        </span>
+      </label>
+
       {!signedIn && (
         <>
           {step === "email" ? (
@@ -206,8 +227,14 @@ export default function SyncAccountSection() {
                   />
                 </span>
               </label>
-              {devCode && (
+              {devCode ? (
                 <p className="settings-help">Code (dev) : {devCode}</p>
+              ) : (
+                <p className="settings-help">
+                  Colle le code à 6 chiffres reçu par e-mail — ou, si l'e-mail
+                  ne contient qu'un lien, copie l'adresse du lien (clic droit
+                  → copier le lien, sans cliquer dessus) et colle-la ici.
+                </p>
               )}
               <div className="settings-actions">
                 <button
