@@ -14,6 +14,10 @@
 - créer de nouveaux modes timeline (et revoir la création ?)
 - faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
 - il faudrait autoriser plusieurs images pour une même question pour varier
+- fermer vraiment en cliquant sur la croix/altf4
+- le mode plein écran n'est pas parfait (resize)
+- site de quiz en ligne relié
+- bouton pour envoyer un blueprint sur le serveur
 
 
 ## quick fixes

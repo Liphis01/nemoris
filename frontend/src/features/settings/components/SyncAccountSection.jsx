@@ -1,366 +1,253 @@
-import { useEffect, useState } from "react";
-import {
-  deleteAccountData,
-  getSyncStatus,
-  requestSyncCode,
-  setSyncServerUrl,
-  syncPull,
-  syncPush,
-  syncSignOut,
-  verifySyncCode
-} from "../../../api/sync";
-
-const DEFAULT_SERVER = "http://127.0.0.1:9000";
-
-export default function SyncAccountSection() {
-  const [status, setStatus] = useState(null);
-  const [serverDraft, setServerDraft] = useState("");
-  const [keyDraft, setKeyDraft] = useState("");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [devCode, setDevCode] = useState("");
-  const [step, setStep] = useState("email");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [conflict, setConflict] = useState(null);
-
-  async function refresh() {
-    try {
-      const next = await getSyncStatus();
-      setStatus(next);
-      setServerDraft(next.server_url || DEFAULT_SERVER);
-      setKeyDraft(next.server_key || "");
-    } catch (statusError) {
-      setError(statusError.message || "Statut indisponible.");
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  async function run(action, successMessage) {
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await action();
-      if (successMessage) setMessage(successMessage);
-      return result;
-    } catch (actionError) {
-      setError(actionError.message || "Action impossible.");
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveServer() {
-    await run(async () => {
-      await setSyncServerUrl(serverDraft.trim(), keyDraft.trim());
-      await refresh();
-    }, "Serveur enregistré.");
-  }
-
-  async function sendCode() {
-    const result = await run(
-      () => requestSyncCode(email.trim()),
-      "Code envoyé."
-    );
-    if (result) {
-      setStep("code");
-      // The fake/dev server returns the code so local testing is frictionless;
-      // a real server emails it and returns nothing here.
-      setDevCode(result.code || "");
-    }
-  }
-
-  async function signIn() {
-    const ok = await run(async () => {
-      await verifySyncCode(email.trim(), code.trim());
-      await refresh();
-      return true;
-    }, "Connecté.");
-    if (ok) {
-      setStep("email");
-      setCode("");
-      setDevCode("");
-    }
-  }
-
-  async function doPush(force = false) {
-    setConflict(null);
-    const result = await run(() => syncPush({ force }), null);
-    if (!result) return;
-
-    if (result.status === "conflict") {
-      setConflict(result.server_version);
-    } else {
-      setMessage(`Envoyé (v${result.version}).`);
-      await refresh();
-    }
-  }
-
-  async function doPull() {
-    const confirmed = window.confirm(
-      "Télécharger remplacera les données de cet appareil par la copie du " +
-        "cloud. Continuer ?"
-    );
-    if (!confirmed) return;
-
-    const result = await run(() => syncPull(), null);
-    if (!result) return;
-
-    if (result.status === "empty") {
-      setMessage("Aucune collection sur le cloud pour l'instant.");
-      return;
-    }
-    // The whole local DB was replaced; reload so every view refetches.
-    setMessage("Téléchargé. Rechargement...");
-    window.location.reload();
-  }
-
-  async function signOut() {
-    await run(async () => {
-      await syncSignOut();
-      await refresh();
-    }, null);
-    setConflict(null);
-  }
-
-  async function deleteCloudData() {
-    const confirmed = window.confirm(
-      "Supprime définitivement ta collection, ses versions et ses médias du " +
-        "cloud. Cette action est irréversible — pense à exporter une " +
-        "sauvegarde d'abord (section Sauvegarde) si tu veux garder une " +
-        "copie. Ton adresse e-mail de connexion n'est pas supprimée : tu " +
-        "pourras te reconnecter, mais il n'y aura plus rien à synchroniser. " +
-        "Continuer ?"
-    );
-
-    if (!confirmed) return;
-
-    await run(async () => {
-      await deleteAccountData();
-      await refresh();
-    }, "Données cloud supprimées.");
-    setConflict(null);
-  }
-
-  const signedIn = status?.signed_in;
-  const serverVersion = status?.server_meta?.version ?? 0;
-
+function SyncServerFields({ sync }) {
   return (
-    <section className="settings-panel">
-      <div className="settings-section-head">
-        <span className="settings-section-icon" aria-hidden="true">
-          ☁
-        </span>
-        <div>
-          <div className="settings-overline">Compte</div>
-          <h2>Synchronisation</h2>
-        </div>
-      </div>
-
+    <div className="settings-inline-fields">
       <label className="settings-field">
         <span className="settings-label">Serveur de sync</span>
-        <span className="settings-control">
-          <input
-            aria-label="Serveur de sync"
-            type="text"
-            value={serverDraft}
-            disabled={busy}
-            onChange={(event) => setServerDraft(event.target.value)}
-            onBlur={saveServer}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") saveServer();
-            }}
-            className="settings-input"
-          />
-        </span>
+        <input
+          aria-label="Serveur de sync"
+          type="text"
+          value={sync.serverDraft}
+          disabled={sync.busy}
+          onChange={(event) => sync.setServerDraft(event.target.value)}
+          onBlur={sync.saveServer}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") sync.saveServer();
+          }}
+          className="settings-input settings-input-wide"
+        />
       </label>
 
       <label className="settings-field">
         <span className="settings-label">Clé publique (Supabase)</span>
-        <span className="settings-control">
-          <input
-            aria-label="Clé publique (Supabase)"
-            type="text"
-            value={keyDraft}
-            disabled={busy}
-            placeholder="sb_publishable_… (vide pour serveur perso)"
-            onChange={(event) => setKeyDraft(event.target.value)}
-            onBlur={saveServer}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") saveServer();
-            }}
-            className="settings-input"
-          />
-        </span>
+        <input
+          aria-label="Clé publique (Supabase)"
+          type="text"
+          value={sync.keyDraft}
+          disabled={sync.busy}
+          placeholder="sb_publishable_... (vide pour serveur perso)"
+          onChange={(event) => sync.setKeyDraft(event.target.value)}
+          onBlur={sync.saveServer}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") sync.saveServer();
+          }}
+          className="settings-input settings-input-wide"
+        />
       </label>
+    </div>
+  );
+}
 
-      {!signedIn && (
-        <>
-          {step === "email" ? (
-            <>
-              <label className="settings-field">
-                <span className="settings-label">E-mail du compte</span>
-                <span className="settings-control">
-                  <input
-                    aria-label="E-mail du compte"
-                    type="email"
-                    value={email}
-                    disabled={busy}
-                    placeholder="vous@exemple.com"
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="settings-input"
-                  />
+export default function SyncAccountSection({ sync }) {
+  const serverVersion = sync.serverVersion;
+
+  return (
+    <section className="settings-group settings-group-sync" id="settings-sync">
+      <div className="settings-group-head">
+        <span
+          className="settings-section-icon settings-section-icon-blue"
+          aria-hidden="true"
+        >
+          ⇄
+        </span>
+
+        <div>
+          <h2>Synchronisation</h2>
+          <p>Compte, cloud et serveur</p>
+        </div>
+
+        <span
+          className={`settings-badge ${
+            sync.signedIn ? "settings-badge-success" : ""
+          }`}
+        >
+          {sync.signedIn ? "Connecté" : "Non connecté"}
+        </span>
+      </div>
+
+      <div className="settings-group-content">
+        {sync.signedIn ? (
+          <>
+            <div className="settings-row settings-row-priority">
+              <div className="settings-row-copy">
+                <strong>{sync.status.account_email}</strong>
+                <span>
+                  Dernière version synchronisée : v
+                  {sync.status.last_server_version}
+                  {serverVersion ? ` · cloud : v${serverVersion}` : ""}
                 </span>
-              </label>
-              <div className="settings-actions">
+              </div>
+
+              <div className="settings-actions settings-row-actions">
                 <button
                   type="button"
-                  onClick={sendCode}
-                  disabled={busy || !email.trim()}
+                  onClick={() => sync.doPush(false)}
+                  disabled={sync.busy}
                   className="settings-save"
                 >
-                  {busy ? "..." : "Recevoir un code"}
+                  {sync.busy ? "..." : "Envoyer"}
                 </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <label className="settings-field">
-                <span className="settings-label">Code de connexion</span>
-                <span className="settings-control">
-                  <input
-                    aria-label="Code de connexion"
-                    type="text"
-                    value={code}
-                    disabled={busy}
-                    onChange={(event) => setCode(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") signIn();
-                    }}
-                    className="settings-input"
-                  />
-                </span>
-              </label>
-              {devCode ? (
-                <p className="settings-help">Code (dev) : {devCode}</p>
-              ) : (
-                <p className="settings-help">
-                  Colle le code à 6 chiffres reçu par e-mail — ou, si l'e-mail
-                  ne contient qu'un lien, copie l'adresse du lien (clic droit
-                  → copier le lien, sans cliquer dessus) et colle-la ici.
-                </p>
-              )}
-              <div className="settings-actions">
+
                 <button
                   type="button"
-                  onClick={signIn}
-                  disabled={busy || !code.trim()}
-                  className="settings-save"
-                >
-                  {busy ? "..." : "Se connecter"}
-                </button>
-              </div>
-            </>
-          )}
-        </>
-      )}
-
-      {signedIn && (
-        <>
-          <p className="settings-help">
-            Connecté en tant que <strong>{status.account_email}</strong>.
-            Dernière version synchronisée : v{status.last_server_version}
-            {serverVersion ? ` — cloud : v${serverVersion}` : ""}.
-          </p>
-
-          {conflict != null && (
-            <div role="alert" className="settings-alert">
-              La copie cloud est plus récente (v{conflict}). Téléchargez-la
-              (écrase cet appareil) ou envoyez quand même (écrase le cloud).
-              <div className="settings-actions" style={{ marginTop: "10px" }}>
-                <button
-                  type="button"
-                  onClick={doPull}
-                  disabled={busy}
+                  onClick={sync.doPull}
+                  disabled={sync.busy}
                   className="settings-secondary"
                 >
                   Télécharger
                 </button>
+              </div>
+            </div>
+
+            {sync.conflict != null && (
+              <div role="alert" className="settings-alert">
+                La copie cloud est plus récente (v{sync.conflict}).
+                Téléchargez-la (écrase cet appareil) ou envoyez quand même
+                (écrase le cloud).
+                <div className="settings-actions settings-alert-actions">
+                  <button
+                    type="button"
+                    onClick={sync.doPull}
+                    disabled={sync.busy}
+                    className="settings-secondary"
+                  >
+                    Télécharger
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sync.doPush(true)}
+                    disabled={sync.busy}
+                    className="settings-secondary"
+                  >
+                    Envoyer quand même
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>Serveur de sync</strong>
+                <span>Configuration utilisée pour ce compte.</span>
+              </div>
+
+              <SyncServerFields sync={sync} />
+            </div>
+
+            <div className="settings-danger-zone">
+              <p>
+                Les données cloud sont une copie de tes questions, ta
+                progression et tes médias. Elles ne sont pas partagées avec
+                d'autres comptes.
+              </p>
+
+              <div className="settings-actions">
                 <button
                   type="button"
-                  onClick={() => doPush(true)}
-                  disabled={busy}
+                  onClick={sync.signOut}
+                  disabled={sync.busy}
                   className="settings-secondary"
                 >
-                  Envoyer quand même
+                  Se déconnecter
+                </button>
+
+                <button
+                  type="button"
+                  onClick={sync.deleteCloudData}
+                  disabled={sync.busy}
+                  className="settings-danger"
+                >
+                  Supprimer mes données cloud
                 </button>
               </div>
             </div>
-          )}
+          </>
+        ) : (
+          <>
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>Connexion</strong>
+                <span>Connecte ce poste pour envoyer ou télécharger le cloud.</span>
+              </div>
 
-          <div className="settings-actions">
-            <button
-              type="button"
-              onClick={() => doPush(false)}
-              disabled={busy}
-              className="settings-save"
-            >
-              {busy ? "..." : "Envoyer vers le cloud"}
-            </button>
-            <button
-              type="button"
-              onClick={doPull}
-              disabled={busy}
-              className="settings-secondary"
-            >
-              Télécharger
-            </button>
-            <button
-              type="button"
-              onClick={signOut}
-              disabled={busy}
-              className="settings-secondary"
-            >
-              Se déconnecter
-            </button>
+              {sync.step === "email" ? (
+                <div className="settings-auth-row">
+                  <input
+                    aria-label="E-mail du compte"
+                    type="email"
+                    value={sync.email}
+                    disabled={sync.busy}
+                    placeholder="vous@exemple.com"
+                    onChange={(event) => sync.setEmail(event.target.value)}
+                    className="settings-input settings-input-wide"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={sync.sendCode}
+                    disabled={sync.busy || !sync.email.trim()}
+                    className="settings-save"
+                  >
+                    {sync.busy ? "..." : "Recevoir un code"}
+                  </button>
+                </div>
+              ) : (
+                <div className="settings-auth-row">
+                  <input
+                    aria-label="Code de connexion"
+                    type="text"
+                    value={sync.code}
+                    disabled={sync.busy}
+                    onChange={(event) => sync.setCode(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") sync.signIn();
+                    }}
+                    className="settings-input settings-input-wide"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={sync.signIn}
+                    disabled={sync.busy || !sync.code.trim()}
+                    className="settings-save"
+                  >
+                    {sync.busy ? "..." : "Se connecter"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {sync.step === "code" && (
+              <p className="settings-help settings-help-compact">
+                {sync.devCode
+                  ? `Code (dev) : ${sync.devCode}`
+                  : "Colle le code à 6 chiffres reçu par e-mail, ou l'adresse du lien reçu par e-mail."}
+              </p>
+            )}
+
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>Serveur de sync</strong>
+                <span>Serveur local ou projet Supabase.</span>
+              </div>
+
+              <SyncServerFields sync={sync} />
+            </div>
+          </>
+        )}
+
+        {sync.message && (
+          <div className="settings-status" role="status">
+            {sync.message}
           </div>
+        )}
 
-          <p className="settings-help">
-            Ce qui est envoyé au cloud : tes questions, ta progression et tes
-            médias, hébergés sur Supabase. Rien n'est partagé avec d'autres
-            comptes. Supprimer les données cloud n'affecte jamais cet
-            appareil — c'est une copie, pas la source.
-          </p>
-
-          <div className="settings-actions">
-            <button
-              type="button"
-              onClick={deleteCloudData}
-              disabled={busy}
-              className="settings-secondary"
-            >
-              Supprimer mes données cloud
-            </button>
+        {sync.error && (
+          <div role="alert" className="settings-alert">
+            {sync.error}
           </div>
-        </>
-      )}
-
-      {message && (
-        <div className="settings-status" role="status">
-          {message}
-        </div>
-      )}
-      {error && (
-        <div role="alert" className="settings-alert">
-          {error}
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

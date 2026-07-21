@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
@@ -32,6 +39,7 @@ vi.mock("../../../api/blueprints", () => ({
 }));
 
 vi.mock("../../../api/sync", () => ({
+  deleteAccountData: vi.fn(),
   getSyncStatus: vi.fn(),
   setSyncServerUrl: vi.fn(),
   requestSyncCode: vi.fn(),
@@ -142,8 +150,38 @@ describe("Settings", () => {
       screen.getByRole("button", { name: "Exporter la base" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Importer la base" })
+      screen.getByRole("button", { name: "Importer" })
     ).toBeInTheDocument();
+  });
+
+  it("prioritizes sync before local backup controls", async () => {
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    const main = screen.getByRole("main", { name: "Paramètres" });
+    const syncHeading = within(main).getByRole("heading", {
+      name: "Synchronisation"
+    });
+    const dataHeading = within(main).getByRole("heading", {
+      name: "Données"
+    });
+
+    expect(
+      syncHeading.compareDocumentPosition(dataHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Envoyer vers le cloud" })
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the removed startup review setting", async () => {
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    expect(
+      screen.queryByText("Ouvrir la révision au démarrage si due")
+    ).not.toBeInTheDocument();
   });
 
   it("exports the database and reports the downloaded filename", async () => {

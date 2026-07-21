@@ -21,63 +21,72 @@ export default function UpdateSection() {
     progress?.total > 0
       ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
       : null;
+  const badge = status === "available" ? "Disponible" : "À jour";
 
   return (
-    <section className="settings-panel">
-      <div className="settings-section-head">
-        <span className="settings-section-icon" aria-hidden="true">
-          ⟳
+    <section className="settings-group" id="settings-application">
+      <div className="settings-group-head">
+        <span
+          className="settings-section-icon settings-section-icon-blue"
+          aria-hidden="true"
+        >
+          ◌
         </span>
+
         <div>
-          <div className="settings-overline">Application</div>
-          <h2>Mises à jour</h2>
+          <h2>Application</h2>
+          <p>Version et mises à jour</p>
         </div>
+
+        <span className="settings-badge">{badge}</span>
       </div>
 
-      <p className="settings-help">
-        Version actuelle : {currentVersion || "…"}
-      </p>
+      <div className="settings-group-content">
+        <div className="settings-row">
+          <div className="settings-row-copy">
+            <strong>Version actuelle {currentVersion || "..."}</strong>
+            <span>
+              {status === "available" && updateInfo
+                ? `Version ${updateInfo.version} disponible${
+                    updateInfo.notes ? ` : ${updateInfo.notes}` : ""
+                  }.`
+                : "Aucune mise à jour disponible."}
+            </span>
+          </div>
 
-      {status === "available" && updateInfo && (
-        <p className="settings-help">
-          Version {updateInfo.version} disponible
-          {updateInfo.notes ? ` — ${updateInfo.notes}` : ""}.
-        </p>
-      )}
+          {status === "available" ? (
+            <button
+              type="button"
+              onClick={install}
+              disabled={busy}
+              className="settings-save"
+            >
+              {status === "installing" ? "..." : "Mettre à jour"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => check()}
+              disabled={busy}
+              className="settings-secondary"
+            >
+              {status === "checking" ? "Vérification..." : "Vérifier"}
+            </button>
+          )}
+        </div>
 
-      {status === "installing" && (
-        <p className="settings-help">
-          Téléchargement en cours{percent != null ? ` (${percent}%)` : "..."}
-        </p>
-      )}
+        {status === "installing" && (
+          <p className="settings-help settings-help-compact">
+            Téléchargement en cours{percent != null ? ` (${percent}%)` : "..."}
+          </p>
+        )}
 
-      <div className="settings-actions">
-        {status === "available" ? (
-          <button
-            type="button"
-            onClick={install}
-            disabled={busy}
-            className="settings-save"
-          >
-            {status === "installing" ? "..." : "Redémarrer et mettre à jour"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => check()}
-            disabled={busy}
-            className="settings-save"
-          >
-            {status === "checking" ? "Vérification..." : "Vérifier les mises à jour"}
-          </button>
+        {error && (
+          <div role="alert" className="settings-alert">
+            {error}
+          </div>
         )}
       </div>
-
-      {error && (
-        <div role="alert" className="settings-alert">
-          {error}
-        </div>
-      )}
     </section>
   );
 }
