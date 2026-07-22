@@ -1,346 +1,178 @@
-import { useState } from "react";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import { formatSize } from "./blueprintFormatting";
 
-const UPDATE_TONE = {
-  background: "#3a211c",
-  borderColor: "#613025",
-  primary: "#ff9a7a"
-};
+function questionCountLabel(count) {
+  if (count === null || count === undefined) {
+    return "Questions";
+  }
 
-function formatSize(bytes) {
-  if (bytes === null || bytes === undefined) return null;
-
-  return bytes < 1024 * 1024
-    ? `${Math.round(bytes / 1024)} Ko`
-    : `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  return `${count} question${count > 1 ? "s" : ""}`;
 }
 
-export default function BlueprintCard({ item, onInstall, onUpdate, onUnsubscribe }) {
-  const [expanded, setExpanded] = useState(false);
-  const [railOpen, setRailOpen] = useState(false);
+function downloadCountLabel(count) {
+  if (count === null || count === undefined) {
+    return null;
+  }
 
+  return `${count.toLocaleString("fr-FR")} téléchargement${count > 1 ? "s" : ""}`;
+}
+
+function statusLabel(status, installedVersion) {
+  if (status === "update_available") {
+    return installedVersion ? `v${installedVersion} installée` : "Mise à jour";
+  }
+
+  if (status === "up_to_date") {
+    return installedVersion ? `Installé v${installedVersion}` : "Installé";
+  }
+
+  return "À installer";
+}
+
+function statusClassName(status) {
+  if (status === "update_available") return "blueprint-status-pill-update";
+  if (status === "not_installed") return "blueprint-status-pill-install";
+  return "";
+}
+
+function actionCopy(status, busy) {
+  if (status === "update_available") {
+    return busy ? "Mise à jour..." : "Mettre à jour";
+  }
+
+  if (status === "not_installed") {
+    return busy ? "Import..." : "Installer";
+  }
+
+  return "Installé";
+}
+
+export default function BlueprintCard({
+  density = "grid",
+  item,
+  onInstall,
+  onSelect,
+  onUpdate,
+  selected = false
+}) {
   const { entry, status, installedVersion, action } = item;
   const typeStyle = getQuestionTypeChipStyle(entry.type_group);
   const busy = Boolean(action.busy);
   const sizeLabel = formatSize(entry.size_bytes);
-  const installed = status === "up_to_date" || status === "update_available";
+  const downloadLabel = downloadCountLabel(entry.download_count);
+  const canAct = status === "not_installed" || status === "update_available";
 
-  function handleBodyClick() {
-    if (railOpen) {
-      setRailOpen(false);
-      return;
-    }
-
-    setExpanded((current) => !current);
-  }
-
-  function handleDeleteConfirm(event) {
+  function handleAction(event) {
     event.stopPropagation();
 
-    const confirmed = window.confirm(
-      `Supprimer "${entry.name}" et ses questions de votre bibliothèque ? ` +
-        "Une sauvegarde est créée automatiquement avant la suppression. Continuer ?"
-    );
-
-    if (!confirmed) return;
-
-    setRailOpen(false);
-    onUnsubscribe(entry.blueprint_guid, { deleteContent: true });
+    if (status === "not_installed") {
+      onInstall(entry);
+    } else if (status === "update_available") {
+      onUpdate(entry, { deleteRemoved: false });
+    }
   }
 
   return (
-    <div
+    <article
       data-blueprint-guid={entry.blueprint_guid}
+      data-testid={`blueprint-card-${density}-${entry.blueprint_guid}`}
+      className={`blueprint-card blueprint-card-${density}${selected ? " is-selected" : ""}`}
       style={{
-        position: "relative",
-        padding: "12px 14px",
-        border: "1px solid #262626",
-        borderRadius: "14px",
-        background: "transparent",
-        overflow: "hidden"
+        "--blueprint-type-bg": typeStyle.background,
+        "--blueprint-type-color": typeStyle.color
       }}
     >
-      {installed && (
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "0 12px",
-            transform: railOpen ? "translateX(0)" : "translateX(100%)",
-            transition: "transform 0.18s ease",
-            background: "rgba(30, 30, 30, 0.97)",
-            borderLeft: "1px solid rgba(255,255,255,0.05)",
-            zIndex: 2
-          }}
-        >
+      <button
+        type="button"
+        className="blueprint-card-body"
+        onClick={() => onSelect(item)}
+        aria-pressed={selected}
+        aria-label={`Voir ${entry.name}`}
+      >
+        <div className="blueprint-card-topline">
+          <span className="blueprint-type-chip">
+            {typeStyle.label}
+          </span>
+
+          <span className={`blueprint-status-pill ${statusClassName(status)}`}>
+            {statusLabel(status, installedVersion)}
+          </span>
+        </div>
+
+        <div>
+          <h3>{entry.name}</h3>
+          {entry.description && <p>{entry.description}</p>}
+        </div>
+
+        <div className="blueprint-card-stats" aria-label="Métadonnées">
+          <span className="blueprint-card-stat">
+            <strong>{entry.question_count ?? "—"}</strong>
+            <span>questions</span>
+          </span>
+          <span className="blueprint-card-stat">
+            <strong>v{entry.version ?? "—"}</strong>
+            <span>version</span>
+          </span>
+        </div>
+
+        <div className="blueprint-card-meta">
+          <span>{questionCountLabel(entry.question_count)}</span>
+          {sizeLabel && <span>{sizeLabel}</span>}
+          {downloadLabel && <span>{downloadLabel}</span>}
+          {entry.license && <span>{entry.license}</span>}
+        </div>
+      </button>
+
+      <div className="blueprint-card-actions">
+        {canAct ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleAction}
+            className="blueprint-card-action"
+            aria-label={`${actionCopy(status, false)} ${entry.name}`}
+          >
+            {actionCopy(status, busy)}
+          </button>
+        ) : (
+          <span className="blueprint-status-pill blueprint-status-pill-install">
+            Installé
+          </span>
+        )}
+
+        {status === "update_available" && (
+          <span className="blueprint-detail-muted">
+            v{entry.version} disponible
+          </span>
+        )}
+      </div>
+
+      {action.error && (
+        <div className="blueprint-action-error" role="alert">
+          {action.error}
+        </div>
+      )}
+
+      {action.pendingRemoval && (
+        <div className="blueprint-pending-removal">
+          <span>
+            {action.pendingRemoval.length} question
+            {action.pendingRemoval.length > 1 ? "s" : ""} retirée
+            {action.pendingRemoval.length > 1 ? "s" : ""} du pack.
+          </span>
+
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              setRailOpen(false);
-              onUnsubscribe(entry.blueprint_guid, { deleteContent: false });
+              onUpdate(entry, { deleteRemoved: true });
             }}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "999px",
-              border: "1px solid #3a3a3a",
-              background: "#232323",
-              color: "#ddd",
-              cursor: "pointer",
-              fontSize: "12px",
-              whiteSpace: "nowrap"
-            }}
+            className="blueprint-danger-button"
           >
-            Garder
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDeleteConfirm}
-            style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "999px",
-              border: "none",
-              background: "#b01d1d",
-              color: "white",
-              cursor: "pointer",
-              fontSize: "16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            🗑
+            Supprimer
           </button>
         </div>
       )}
-
-      <div
-        onClick={handleBodyClick}
-        style={{ position: "relative", zIndex: 1, cursor: "pointer" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span
-            style={{
-              fontSize: "10px",
-              fontWeight: "700",
-              padding: "2px 6px",
-              borderRadius: "999px",
-              background: typeStyle.background,
-              color: typeStyle.color,
-              flexShrink: 0
-            }}
-          >
-            {typeStyle.label}
-          </span>
-
-          <span
-            style={{
-              color: "#e5e5e5",
-              fontWeight: "600",
-              fontSize: "14px",
-              flex: 1,
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {entry.name}
-          </span>
-
-          {status === "update_available" && (
-            <span
-              title={`v${entry.version} disponible (installé : v${installedVersion})`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                height: "20px",
-                padding: "0 6px",
-                borderRadius: "999px",
-                border: `1px solid ${UPDATE_TONE.borderColor}`,
-                background: UPDATE_TONE.background,
-                color: UPDATE_TONE.primary,
-                fontSize: "10px",
-                fontWeight: "700",
-                flexShrink: 0
-              }}
-            >
-              ↑ v{entry.version}
-            </span>
-          )}
-
-          {entry.question_count != null && (
-            <span style={{ color: "#888", fontSize: "12px", flexShrink: 0 }}>
-              {entry.question_count} questions
-            </span>
-          )}
-        </div>
-
-        {expanded && (
-          <div
-            style={{
-              marginTop: "8px",
-              color: "#999",
-              fontSize: "12px",
-              lineHeight: 1.5
-            }}
-          >
-            {entry.description && (
-              <p style={{ margin: "0 0 6px" }}>{entry.description}</p>
-            )}
-
-            <div style={{ display: "flex", gap: "12px", color: "#777" }}>
-              {entry.license && <span>Licence : {entry.license}</span>}
-              {sizeLabel && <span>{sizeLabel}</span>}
-            </div>
-          </div>
-        )}
-
-        {action.error && (
-          <div
-            role="alert"
-            style={{
-              marginTop: "8px",
-              padding: "6px 10px",
-              borderRadius: "8px",
-              background: "#261717",
-              border: "1px solid rgba(255,156,156,0.28)",
-              color: "#ff9c9c",
-              fontSize: "12px"
-            }}
-          >
-            {action.error}
-          </div>
-        )}
-
-        {action.pendingRemoval && (
-          <div
-            style={{
-              marginTop: "8px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              flexWrap: "wrap"
-            }}
-          >
-            <span style={{ color: "#ffb37a", fontSize: "12px" }}>
-              {action.pendingRemoval.length} question
-              {action.pendingRemoval.length > 1 ? "s" : ""} retirée
-              {action.pendingRemoval.length > 1 ? "s" : ""} du pack — les
-              supprimer aussi ?
-            </span>
-
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onUpdate(entry, { deleteRemoved: true });
-              }}
-              style={{
-                padding: "4px 10px",
-                borderRadius: "999px",
-                border: "1px solid #613025",
-                background: "#3a211c",
-                color: "#ff9a7a",
-                fontSize: "11px",
-                cursor: "pointer"
-              }}
-            >
-              Supprimer
-            </button>
-          </div>
-        )}
-
-        <div
-          style={{
-            marginTop: "10px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px"
-          }}
-        >
-          {status === "not_installed" && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={(event) => {
-                event.stopPropagation();
-                onInstall(entry);
-              }}
-              style={{
-                padding: "8px 14px",
-                borderRadius: "999px",
-                border: "1px solid #385544",
-                background: busy ? "#202020" : "#1f2d24",
-                color: busy ? "#888" : "#d7f5df",
-                cursor: busy ? "default" : "pointer",
-                fontSize: "13px"
-              }}
-            >
-              {busy ? "Import…" : "Installer"}
-            </button>
-          )}
-
-          {status === "update_available" && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={(event) => {
-                event.stopPropagation();
-                onUpdate(entry, { deleteRemoved: false });
-              }}
-              style={{
-                padding: "8px 14px",
-                borderRadius: "999px",
-                border: "1px solid #385544",
-                background: busy ? "#202020" : "#1f2d24",
-                color: busy ? "#888" : "#d7f5df",
-                cursor: busy ? "default" : "pointer",
-                fontSize: "13px"
-              }}
-            >
-              {busy ? "Mise à jour…" : "Mettre à jour"}
-            </button>
-          )}
-
-          {status === "up_to_date" && (
-            <span style={{ color: "#7ee2a8", fontSize: "12px" }}>
-              Installé (v{installedVersion})
-            </span>
-          )}
-
-          {installed && (
-            <button
-              type="button"
-              aria-label="Options"
-              onClick={(event) => {
-                event.stopPropagation();
-                setRailOpen((open) => !open);
-              }}
-              style={{
-                marginLeft: "auto",
-                width: "28px",
-                height: "28px",
-                borderRadius: "999px",
-                border: "1px solid #2d2d2d",
-                background: "#181818",
-                color: "#888",
-                cursor: "pointer",
-                fontSize: "14px"
-              }}
-            >
-              ⋯
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </article>
   );
 }

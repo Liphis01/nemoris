@@ -86,7 +86,7 @@ function SettingsRail({
   onExport
 }) {
   return (
-    <aside className="settings-rail" aria-label="Résumé et raccourcis">
+    <aside className="settings-rail app-scrollbar" aria-label="Résumé et raccourcis">
       <div className="settings-rail-card">
         <div className="settings-overline">Sync</div>
         <strong
@@ -105,7 +105,7 @@ function SettingsRail({
         <span>questions / jour</span>
       </div>
 
-      <div className="settings-rail-card">
+      <div className="settings-rail-card settings-rail-shortcuts">
         <div className="settings-overline">Raccourcis</div>
 
         <div className="settings-rail-actions">
@@ -161,6 +161,7 @@ export default function Settings({ setMode }) {
   const [dataError, setDataError] = useState("");
 
   const [catalogDraft, setCatalogDraft] = useState("");
+  const [catalogKeyDraft, setCatalogKeyDraft] = useState("");
   const [catalogSaving, setCatalogSaving] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState("");
   const [catalogError, setCatalogError] = useState("");
@@ -213,6 +214,7 @@ export default function Settings({ setMode }) {
       .then((settings) => {
         if (!cancelled) {
           setCatalogDraft(settings.url || "");
+          setCatalogKeyDraft(settings.key || "");
         }
       })
       .catch((catalogSettingsError) => {
@@ -314,14 +316,18 @@ export default function Settings({ setMode }) {
     }
   }
 
-  async function saveCatalogUrl() {
+  async function saveCatalogSettings() {
     setCatalogSaving(true);
     setCatalogStatus("");
     setCatalogError("");
 
     try {
-      const settings = await saveBlueprintCatalogSettings(catalogDraft.trim());
+      const settings = await saveBlueprintCatalogSettings({
+        url: catalogDraft.trim(),
+        key: catalogKeyDraft.trim()
+      });
       setCatalogDraft(settings.url || "");
+      setCatalogKeyDraft(settings.key || "");
       setCatalogStatus("Catalogue enregistré.");
     } catch (catalogSaveError) {
       console.error(catalogSaveError);
@@ -505,25 +511,40 @@ export default function Settings({ setMode }) {
               accent="violet"
               title="Blueprints"
               description="Catalogue de packs partagés"
-              badge={catalogDraft.trim() ? "Configuré" : "Vide"}
+              badge={catalogDraft.trim() && catalogKeyDraft.trim() ? "Configuré" : "Vide"}
             >
-              <div className="settings-row">
+              <div className="settings-row settings-row-catalog">
                 <div className="settings-row-copy">
-                  <strong>Catalogue</strong>
-                  <span>Source utilisée par l'écran Blueprints.</span>
+                  <strong>Catalogue Supabase</strong>
+                  <span>Projet et clé publique utilisés par l'écran Blueprints.</span>
                 </div>
 
-                <div className="settings-auth-row">
+                <div className="settings-auth-row settings-catalog-row">
                   <input
-                    aria-label="URL du catalogue"
+                    aria-label="URL du projet Supabase"
                     type="text"
-                    placeholder="https://.../catalog.json"
+                    placeholder="https://...supabase.co"
                     value={catalogDraft}
                     disabled={catalogSaving}
                     onChange={(event) => setCatalogDraft(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
-                        saveCatalogUrl();
+                        saveCatalogSettings();
+                      }
+                    }}
+                    className="settings-input settings-input-wide"
+                  />
+
+                  <input
+                    aria-label="Clé publishable Supabase"
+                    type="text"
+                    placeholder="sb_publishable_..."
+                    value={catalogKeyDraft}
+                    disabled={catalogSaving}
+                    onChange={(event) => setCatalogKeyDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        saveCatalogSettings();
                       }
                     }}
                     className="settings-input settings-input-wide"
@@ -531,7 +552,7 @@ export default function Settings({ setMode }) {
 
                   <button
                     type="button"
-                    onClick={saveCatalogUrl}
+                    onClick={saveCatalogSettings}
                     disabled={catalogSaving}
                     aria-label="Enregistrer le catalogue"
                     className="settings-save"

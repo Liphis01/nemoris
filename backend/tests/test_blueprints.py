@@ -1168,17 +1168,29 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
     def test_catalog_settings_endpoints_round_trip(self):
         db = make_db()
 
-        self.assertEqual(get_blueprint_catalog(db=db), {"url": ""})
+        self.assertEqual(get_blueprint_catalog(db=db), {"url": "", "key": ""})
 
         saved = update_blueprint_catalog(
-            BlueprintCatalogSettings(url="https://example.com/catalog.json"),
+            BlueprintCatalogSettings(
+                url="https://example.supabase.co/rest/v1",
+                key="sb_publishable_test"
+            ),
             db=db
         )
-        self.assertEqual(saved, {"url": "https://example.com/catalog.json"})
+        self.assertEqual(
+            saved,
+            {
+                "url": "https://example.supabase.co/rest/v1",
+                "key": "sb_publishable_test"
+            }
+        )
 
         self.assertEqual(
             get_blueprint_catalog(db=db),
-            {"url": "https://example.com/catalog.json"}
+            {
+                "url": "https://example.supabase.co/rest/v1",
+                "key": "sb_publishable_test"
+            }
         )
 
 

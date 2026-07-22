@@ -18,6 +18,8 @@
 - le mode plein écran n'est pas parfait (resize)
 - site de quiz en ligne relié
 - bouton pour envoyer un blueprint sur le serveur
+- blueprint -> template
+- export blueprint feature
 
 
 ## quick fixes
@@ -38,6 +40,7 @@
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - les tags marchent pas bien
 - parfois on peut scroll la page alors qu'il n'y a rien en dessous
+- dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
 
 ## to do when i have more time
 

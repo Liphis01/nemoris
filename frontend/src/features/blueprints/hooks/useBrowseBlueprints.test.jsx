@@ -1,20 +1,24 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { blueprintStatus, useBrowseBlueprints } from "./useBrowseBlueprints";
 import {
-  fetchCatalog,
+  POPULAR_THEME,
+  blueprintStatus,
+  useBrowseBlueprints
+} from "./useBrowseBlueprints";
+import {
   getBlueprintCatalogSettings,
   installBlueprintFromCatalog,
   listInstalledBlueprints,
+  searchBlueprintCatalog,
   unsubscribeBlueprint,
   updateBlueprintFromCatalog
 } from "../../../api/blueprints";
 
 vi.mock("../../../api/blueprints", () => ({
-  fetchCatalog: vi.fn(),
   getBlueprintCatalogSettings: vi.fn(),
   installBlueprintFromCatalog: vi.fn(),
   listInstalledBlueprints: vi.fn(),
+  searchBlueprintCatalog: vi.fn(),
   unsubscribeBlueprint: vi.fn(),
   updateBlueprintFromCatalog: vi.fn()
 }));
@@ -56,9 +60,20 @@ describe("useBrowseBlueprints", () => {
 
   beforeEach(() => {
     getBlueprintCatalogSettings.mockResolvedValue({
-      url: "https://example.com/catalog.json"
+      url: "https://project.supabase.co",
+      key: "sb_publishable_test"
     });
-    fetchCatalog.mockResolvedValue({ blueprints: [entryA, entryB] });
+    searchBlueprintCatalog.mockResolvedValue({
+      blueprints: [entryA, entryB],
+      facets: {
+        themes: [
+          { value: POPULAR_THEME, label: "Populaires", result_count: 2 },
+          { value: "géographie", label: "Géographie", result_count: 1 }
+        ]
+      },
+      total: 2,
+      next_cursor: null
+    });
     listInstalledBlueprints.mockResolvedValue([
       { blueprint_guid: "guid-a", installed_version: 1 }
     ]);
@@ -75,8 +90,8 @@ describe("useBrowseBlueprints", () => {
     vi.clearAllMocks();
   });
 
-  it("reports no catalog configured without fetching anything else", async () => {
-    getBlueprintCatalogSettings.mockResolvedValue({ url: "" });
+  it("reports no catalog configured without searching anything else", async () => {
+    getBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
 
     const { result } = renderHook(() => useBrowseBlueprints());
 
@@ -86,10 +101,37 @@ describe("useBrowseBlueprints", () => {
 
     expect(result.current.catalogUrl).toBeNull();
     expect(result.current.items).toEqual([]);
-    expect(fetchCatalog).not.toHaveBeenCalled();
+    expect(searchBlueprintCatalog).not.toHaveBeenCalled();
+    expect(listInstalledBlueprints).not.toHaveBeenCalled();
   });
 
-  it("correlates catalog entries against installed subscriptions", async () => {
+  it("searches the catalogue with server-side filters", async () => {
+    const { result } = renderHook(() => useBrowseBlueprints({
+      search: "monde",
+      theme: "géographie",
+      type: "map",
+      status: "update_available",
+      sort: "récents",
+      limit: 24
+    }));
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2);
+    });
+
+    expect(searchBlueprintCatalog).toHaveBeenCalledWith({
+      q: "monde",
+      theme: "géographie",
+      type: "map",
+      status: "update_available",
+      sort: "récents",
+      limit: 24,
+      cursor: null
+    });
+    expect(result.current.facets.themes[1].label).toBe("Géographie");
+  });
+
+  it("correlates catalogue entries against installed subscriptions", async () => {
     const { result } = renderHook(() => useBrowseBlueprints());
 
     await waitFor(() => {
@@ -104,6 +146,44 @@ describe("useBrowseBlueprints", () => {
     expect(byGuid["guid-a"].installedVersion).toBe(1);
     expect(byGuid["guid-b"].status).toBe("not_installed");
     expect(byGuid["guid-b"].installedVersion).toBeNull();
+  });
+
+  it("loads additional pages with the returned cursor", async () => {
+    searchBlueprintCatalog
+      .mockResolvedValueOnce({
+        blueprints: [entryA],
+        facets: { themes: [] },
+        total: 2,
+        next_cursor: "24"
+      })
+      .mockResolvedValueOnce({
+        blueprints: [entryB],
+        facets: { themes: [] },
+        total: 2,
+        next_cursor: null
+      });
+
+    const { result } = renderHook(() => useBrowseBlueprints({ limit: 24 }));
+
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.loadMore();
+    });
+
+    expect(searchBlueprintCatalog).toHaveBeenLastCalledWith({
+      q: "",
+      theme: "",
+      type: "",
+      status: "all",
+      sort: "pertinence",
+      limit: 24,
+      cursor: "24"
+    });
+    expect(result.current.items.map((item) => item.entry.blueprint_guid)).toEqual([
+      "guid-a",
+      "guid-b"
+    ]);
   });
 
   it("install() downloads from the catalog and refreshes installed state", async () => {

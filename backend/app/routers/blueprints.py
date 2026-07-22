@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 from ..dependencies import get_db
 from ..models import BlueprintSubscription
 from ..schemas import BlueprintCatalogSettings, BlueprintExportRequest
+from ..services.blueprint_catalog import (
+    BlueprintCatalogError,
+    search_blueprint_catalog
+)
 from ..services.blueprints import (
     export_blueprint,
     import_blueprint,
@@ -48,10 +52,36 @@ def update_blueprint_catalog(
     payload: BlueprintCatalogSettings,
     db: Session = Depends(get_db)
 ):
-    result = save_blueprint_catalog_settings(db, payload.url)
+    result = save_blueprint_catalog_settings(db, payload.url, payload.key)
     db.commit()
 
     return result
+
+
+@router.get("/blueprints/catalog/search")
+def search_catalog_blueprints(
+    q: str = "",
+    theme: str = "",
+    type: str = "",
+    status: str = "all",
+    sort: str = "pertinence",
+    limit: int = 24,
+    cursor: str | None = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        return search_blueprint_catalog(
+            db,
+            query=q,
+            theme=theme,
+            type_group=type,
+            status=status,
+            sort=sort,
+            limit=limit,
+            cursor=cursor
+        )
+    except BlueprintCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/blueprints/{group_id}/export")

@@ -65,8 +65,8 @@ describe("Settings", () => {
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
-    getBlueprintCatalogSettings.mockResolvedValue({ url: "" });
-    saveBlueprintCatalogSettings.mockResolvedValue({ url: "" });
+    getBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    saveBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
     getSyncStatus.mockResolvedValue({
       signed_in: false,
       account_email: null,
@@ -182,6 +182,34 @@ describe("Settings", () => {
     expect(
       screen.queryByText("Ouvrir la révision au démarrage si due")
     ).not.toBeInTheDocument();
+  });
+
+  it("saves Supabase blueprint catalogue settings", async () => {
+    saveBlueprintCatalogSettings.mockResolvedValue({
+      url: "https://project.supabase.co",
+      key: "sb_publishable_test"
+    });
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    fireEvent.change(screen.getByLabelText("URL du projet Supabase"), {
+      target: { value: "https://project.supabase.co" }
+    });
+    fireEvent.change(screen.getByLabelText("Clé publishable Supabase"), {
+      target: { value: "sb_publishable_test" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enregistrer le catalogue" })
+    );
+
+    await waitFor(() => {
+      expect(saveBlueprintCatalogSettings).toHaveBeenCalledWith({
+        url: "https://project.supabase.co",
+        key: "sb_publishable_test"
+      });
+    });
+    expect(screen.getByText("Catalogue enregistré.")).toBeInTheDocument();
   });
 
   it("exports the database and reports the downloaded filename", async () => {

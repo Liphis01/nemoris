@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  fetchCatalog,
   getBlueprintCatalogSettings,
   installBlueprintFromCatalog,
   listInstalledBlueprints,
+  searchBlueprintCatalog,
   unsubscribeBlueprint as requestUnsubscribe,
   updateBlueprintFromCatalog
 } from "../../../api/blueprints";
+
+export const POPULAR_THEME = "__popular__";
+const DEFAULT_LIMIT = 24;
 
 export function blueprintStatus(entry, installed) {
   if (!installed) {
@@ -18,13 +21,37 @@ export function blueprintStatus(entry, installed) {
     : "up_to_date";
 }
 
-export function useBrowseBlueprints() {
+function dedupeEntries(entries) {
+  const byGuid = new Map();
+
+  entries.forEach((entry) => {
+    if (entry?.blueprint_guid) {
+      byGuid.set(entry.blueprint_guid, entry);
+    }
+  });
+
+  return [...byGuid.values()];
+}
+
+export function useBrowseBlueprints(filters = {}) {
+  const search = filters.search || "";
+  const theme = filters.theme || "";
+  const type = filters.type || "all";
+  const status = filters.status || "all";
+  const sort = filters.sort || "pertinence";
+  const limit = filters.limit || DEFAULT_LIMIT;
+
   const [catalogUrl, setCatalogUrl] = useState(null);
   const [entries, setEntries] = useState([]);
+  const [facets, setFacets] = useState({ themes: [] });
+  const [total, setTotal] = useState(0);
+  const [nextCursor, setNextCursor] = useState(null);
   const [installedByGuid, setInstalledByGuid] = useState({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [actionState, setActionState] = useState({});
+  const requestIdRef = useRef(0);
 
   const loadInstalled = useCallback(async () => {
     const rows = await listInstalledBlueprints();
@@ -36,38 +63,80 @@ export function useBrowseBlueprints() {
     return byGuid;
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loadPage = useCallback(async ({ append = false, cursor = null } = {}) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setNextCursor(null);
+    }
+
     setError("");
 
     try {
       const settings = await getBlueprintCatalogSettings();
-      const url = settings.url || "";
-      setCatalogUrl(url || null);
+      const configured = Boolean(settings.url && settings.key);
 
-      if (!url) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
+      setCatalogUrl(configured ? settings.url : null);
+
+      if (!configured) {
         setEntries([]);
+        setFacets({ themes: [] });
+        setTotal(0);
         setInstalledByGuid({});
         return;
       }
 
       const [catalog] = await Promise.all([
-        fetchCatalog(url),
+        searchBlueprintCatalog({
+          q: search,
+          theme,
+          type: type === "all" ? "" : type,
+          status,
+          sort,
+          limit,
+          cursor
+        }),
         loadInstalled()
       ]);
 
-      setEntries(Array.isArray(catalog.blueprints) ? catalog.blueprints : []);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
+      const blueprints = Array.isArray(catalog.blueprints)
+        ? catalog.blueprints
+        : [];
+      setEntries((previous) => (
+        append ? dedupeEntries([...previous, ...blueprints]) : blueprints
+      ));
+      setFacets(catalog.facets || { themes: [] });
+      setTotal(Number.isFinite(catalog.total) ? catalog.total : blueprints.length);
+      setNextCursor(catalog.next_cursor || null);
     } catch (loadError) {
       console.error(loadError);
-      setError(loadError.message || "Catalogue impossible à charger.");
+
+      if (requestId === requestIdRef.current) {
+        setError(loadError.message || "Catalogue impossible à charger.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [loadInstalled]);
+  }, [limit, loadInstalled, search, sort, status, theme, type]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadPage({ append: false });
+  }, [loadPage]);
 
   function patchAction(guid, patch) {
     setActionState((previous) => ({
@@ -81,7 +150,7 @@ export function useBrowseBlueprints() {
 
     try {
       await installBlueprintFromCatalog(entry);
-      await loadInstalled();
+      await loadPage({ append: false });
       patchAction(entry.blueprint_guid, { busy: false });
     } catch (installError) {
       console.error(installError);
@@ -97,7 +166,7 @@ export function useBrowseBlueprints() {
 
     try {
       const result = await updateBlueprintFromCatalog(entry, { deleteRemoved });
-      await loadInstalled();
+      await loadPage({ append: false });
 
       patchAction(entry.blueprint_guid, {
         busy: false,
@@ -118,7 +187,7 @@ export function useBrowseBlueprints() {
 
     try {
       await requestUnsubscribe(blueprintGuid, { deleteContent });
-      await loadInstalled();
+      await loadPage({ append: false });
       patchAction(blueprintGuid, { busy: false, pendingRemoval: null });
     } catch (unsubscribeError) {
       console.error(unsubscribeError);
@@ -129,7 +198,7 @@ export function useBrowseBlueprints() {
     }
   }
 
-  const items = entries.map((entry) => {
+  const items = useMemo(() => entries.map((entry) => {
     const installed = installedByGuid[entry.blueprint_guid] || null;
 
     return {
@@ -138,14 +207,23 @@ export function useBrowseBlueprints() {
       installedVersion: installed?.installed_version ?? null,
       action: actionState[entry.blueprint_guid] || {}
     };
-  });
+  }), [actionState, entries, installedByGuid]);
 
   return {
     catalogUrl,
+    facets,
     items,
     loading,
+    loadingMore,
     error,
-    reload: load,
+    total,
+    hasMore: Boolean(nextCursor),
+    reload: () => loadPage({ append: false }),
+    loadMore: () => (
+      nextCursor
+        ? loadPage({ append: true, cursor: nextCursor })
+        : Promise.resolve()
+    ),
     install,
     update,
     unsubscribe

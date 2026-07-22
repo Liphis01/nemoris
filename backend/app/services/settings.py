@@ -268,11 +268,17 @@ def get_blueprint_catalog_settings(db):
     )
     value = setting.value if setting and isinstance(setting.value, dict) else {}
 
-    return {"url": str(value.get("url", ""))}
+    return {
+        "url": str(value.get("url", "")),
+        "key": str(value.get("key", ""))
+    }
 
 
-def save_blueprint_catalog_settings(db, url):
-    normalized = {"url": str(url or "")}
+def save_blueprint_catalog_settings(db, url, key=""):
+    normalized = {
+        "url": str(url or "").strip().rstrip("/"),
+        "key": str(key or "").strip()
+    }
     setting = (
         db.query(AppSetting)
         .filter(AppSetting.key == BLUEPRINT_CATALOG_SETTINGS_KEY)
