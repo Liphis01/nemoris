@@ -319,6 +319,7 @@
   font-weight: 800;
   line-height: 1.2;
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
 }
 
 .settings-row-copy span,
@@ -326,6 +327,7 @@
   color: #9c9c9c;
   font-size: 12px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .settings-help {

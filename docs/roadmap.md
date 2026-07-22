@@ -1,6 +1,5 @@
 ## Current focus
 
-- accounts, packs & sync → detailed plan in [sync-roadmap.md](sync-roadmap.md)
 
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre

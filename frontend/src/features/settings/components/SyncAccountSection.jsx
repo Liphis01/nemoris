@@ -1,3 +1,5 @@
+import { useSyncAccount } from "./useSyncAccount";
+
 function SyncServerFields({ sync }) {
   return (
     <div className="settings-inline-fields">
@@ -37,7 +39,13 @@ function SyncServerFields({ sync }) {
   );
 }
 
-export default function SyncAccountSection({ sync }) {
+function SyncAccountSectionFromHook() {
+  const sync = useSyncAccount();
+
+  return <SyncAccountSectionView sync={sync} />;
+}
+
+function SyncAccountSectionView({ sync }) {
   const serverVersion = sync.serverVersion;
 
   return (
@@ -69,7 +77,9 @@ export default function SyncAccountSection({ sync }) {
           <>
             <div className="settings-row settings-row-priority">
               <div className="settings-row-copy">
-                <strong>{sync.status.account_email}</strong>
+                <strong>
+                  Connecté en tant que {sync.status.account_email}
+                </strong>
                 <span>
                   Dernière version synchronisée : v
                   {sync.status.last_server_version}
@@ -80,6 +90,8 @@ export default function SyncAccountSection({ sync }) {
               <div className="settings-actions settings-row-actions">
                 <button
                   type="button"
+                  aria-label="Envoyer vers le cloud"
+                  title="Envoyer vers le cloud"
                   onClick={() => sync.doPush(false)}
                   disabled={sync.busy}
                   className="settings-save"
@@ -250,4 +262,12 @@ export default function SyncAccountSection({ sync }) {
       </div>
     </section>
   );
+}
+
+export default function SyncAccountSection({ sync }) {
+  if (!sync) {
+    return <SyncAccountSectionFromHook />;
+  }
+
+  return <SyncAccountSectionView sync={sync} />;
 }
