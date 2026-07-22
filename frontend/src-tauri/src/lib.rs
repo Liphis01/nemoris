@@ -2,7 +2,10 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{
+    Emitter, Manager, RunEvent, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
+};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
@@ -82,6 +85,22 @@ fn wait_for_backend(port: u16) {
     log::warn!("backend did not answer on port {port} within timeout");
 }
 
+fn sync_window_resizable<R: Runtime>(window: &WebviewWindow<R>) {
+    let Ok(maximized) = window.is_maximized() else {
+        return;
+    };
+
+    let should_be_resizable = !maximized;
+    match window.is_resizable() {
+        Ok(current) if current == should_be_resizable => return,
+        _ => {}
+    }
+
+    if let Err(error) = window.set_resizable(should_be_resizable) {
+        log::warn!("could not update window resizable state: {error}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -132,14 +151,25 @@ pub fn run() {
             // URL to the frontend before any of its scripts run, so the API
             // layer targets the sidecar (a separate origin under Tauri).
             let backend = format!("http://127.0.0.1:{port}");
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("Nemoris")
-                .inner_size(1280.0, 850.0)
-                .min_inner_size(1024.0, 700.0)
-                .decorations(false)
-                .maximized(true)
-                .initialization_script(&format!("window.__NEMORIS_BACKEND__ = '{backend}';"))
-                .build()?;
+            let window =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("Nemoris")
+                    .inner_size(1280.0, 850.0)
+                    .min_inner_size(1024.0, 700.0)
+                    .decorations(false)
+                    .maximized(true)
+                    .initialization_script(&format!("window.__NEMORIS_BACKEND__ = '{backend}';"))
+                    .build()?;
+
+            sync_window_resizable(&window);
+            let window_for_resize_state = window.clone();
+            window.on_window_event(move |event| match event {
+                WindowEvent::Resized(_)
+                | WindowEvent::Moved(_)
+                | WindowEvent::ScaleFactorChanged { .. }
+                | WindowEvent::Focused(true) => sync_window_resizable(&window_for_resize_state),
+                _ => {}
+            });
 
             Ok(())
         })

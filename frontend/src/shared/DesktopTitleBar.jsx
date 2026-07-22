@@ -4,6 +4,17 @@ import "./DesktopTitleBar.css";
 
 const TITLEBAR_HEIGHT = "36px";
 
+async function syncResizableState(win, setMaximized) {
+  const isMaximized = await win.isMaximized();
+  setMaximized(isMaximized);
+
+  const shouldBeResizable = !isMaximized;
+  if ((await win.isResizable()) !== shouldBeResizable) {
+    await win.setResizable(shouldBeResizable);
+  }
+
+  return isMaximized;
+}
 
 // The Rust host injects window.__NEMORIS_BACKEND__ before any app script runs
 // and only ever under Tauri, so it doubles as the desktop-shell signal. In a
@@ -38,7 +49,7 @@ function DesktopTitleBar() {
     let cancelled = false;
     const win = getCurrentWindow();
 
-    const sync = () => win.isMaximized().then(setMaximized);
+    const sync = () => syncResizableState(win, setMaximized).catch(console.error);
 
     sync();
     win.onResized(() => sync()).then((fn) => {
@@ -53,10 +64,32 @@ function DesktopTitleBar() {
   }, [ready]);
 
   const minimize = useCallback(() => getCurrentWindow().minimize(), []);
-  const toggleMaximize = useCallback(
-    () => getCurrentWindow().toggleMaximize(),
-    []
-  );
+  const toggleMaximize = useCallback(() => {
+    (async () => {
+      const win = getCurrentWindow();
+      const wasMaximized = await syncResizableState(win, setMaximized);
+
+      if (wasMaximized) {
+        await win.setResizable(true);
+      }
+
+      await win.toggleMaximize();
+      await syncResizableState(win, setMaximized);
+    })().catch(console.error);
+  }, []);
+  const restoreFromDragRegionDoubleClick = useCallback(() => {
+    if (!maximized) return;
+
+    (async () => {
+      const win = getCurrentWindow();
+
+      if (await syncResizableState(win, setMaximized)) {
+        await win.setResizable(true);
+        await win.unmaximize();
+        await syncResizableState(win, setMaximized);
+      }
+    })().catch(console.error);
+  }, [maximized]);
   const close = useCallback(() => getCurrentWindow().close(), []);
 
   if (!ready) {
@@ -65,9 +98,12 @@ function DesktopTitleBar() {
 
   return (
     <header className="desktop-titlebar">
-      {/* Tauri handles dragging, double-click-maximize and (with
-          decorations:false) native all-edge resize for this region. */}
-      <div className="desktop-titlebar__drag" data-tauri-drag-region>
+      {/* Tauri handles dragging and double-click-maximize for this region. */}
+      <div
+        className="desktop-titlebar__drag"
+        data-tauri-drag-region
+        onDoubleClick={restoreFromDragRegionDoubleClick}
+      >
         <img className="desktop-titlebar__icon" src="/favicon.svg" alt="" />
         <span className="desktop-titlebar__title">Nemoris</span>
       </div>

@@ -76,9 +76,11 @@ python manage_data.py migrate
 The desktop app is a Tauri shell (`frontend/src-tauri`) that owns a frameless
 window and runs the FastAPI backend as a **sidecar**: on launch, Rust picks a
 free port, starts the packaged backend on it, waits for it to answer, and
-injects the URL into the frontend. Window drag, all-edge resize, and snap are
-native to Tauri — no custom title-bar code beyond the styled bar in
-`frontend/src/shared/DesktopTitleBar.jsx`.
+injects the URL into the frontend. Window drag, restored-window edge resize,
+and snap are native to Tauri. The host keeps maximized windows non-resizable so
+Windows does not expose resize handles at the screen edge; the styled title bar
+in `frontend/src/shared/DesktopTitleBar.jsx` mirrors that state for its custom
+controls.
 
 ### Release build (CI)
 
