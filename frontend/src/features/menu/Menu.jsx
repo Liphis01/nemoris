@@ -38,6 +38,15 @@ const destinations = [
     icon: "▥"
   },
   {
+    mode: "packs",
+    eyebrow: "Catalogue",
+    title: "Packs",
+    description: "Parcourir et installer des packs de contenu partagés.",
+    detail: "Découvrir",
+    accent: "teal",
+    icon: "◫"
+  },
+  {
     mode: "settings",
     eyebrow: "Rythme",
     title: "Réglages",
@@ -45,24 +54,7 @@ const destinations = [
     detail: "Paramètres",
     accent: "neutral",
     icon: "⚙"
-  },
-  {
-    mode: "packs",
-    eyebrow: "Catalogue",
-    title: "Packs",
-    description: "Parcourir et installer des packs de contenu partagés.",
-    detail: "Découvrir",
-    accent: "teal",
-    icon: "📦"
   }
-];
-
-const reviewTypes = [
-  { label: "Texte", accent: "violet" },
-  { label: "Map", accent: "amber" },
-  { label: "Image", accent: "green" },
-  { label: "Timeline", accent: "blue" },
-  { label: "Séquence", accent: "teal" }
 ];
 
 function DestinationButton({ item, setMode }) {
@@ -76,15 +68,8 @@ function DestinationButton({ item, setMode }) {
         {item.icon}
       </span>
 
-      <span className="menu-destination-body">
-        <span className="menu-eyebrow">{item.eyebrow}</span>
-        <strong>{item.title}</strong>
-        <span>{item.description}</span>
-      </span>
-
-      <span className="menu-destination-meta">
-        <span>{item.detail}</span>
-        <span aria-hidden="true">→</span>
+      <span className="menu-destination-label">
+        {item.title}
       </span>
     </button>
   );
@@ -114,6 +99,19 @@ function reviewDueCaption(summary, loading, error) {
   return (summary?.due_count ?? 0) === 0 ? "À jour" : "À revoir";
 }
 
+function reviewLoadWidth(summary, loading, error) {
+  if (loading || error) {
+    return "28%";
+  }
+
+  const dueCount = summary?.due_count ?? 0;
+  if (dueCount <= 0) {
+    return "6%";
+  }
+
+  return `${Math.min(100, Math.max(22, dueCount * 12))}%`;
+}
+
 export default function Menu({
   setMode,
   startupNotice,
@@ -132,21 +130,35 @@ export default function Menu({
     reviewSummaryLoading,
     reviewSummaryError
   );
+  const featuredDestination = destinations[0];
+  const reviewLoadStyle = {
+    width: reviewLoadWidth(
+      reviewSummary,
+      reviewSummaryLoading,
+      reviewSummaryError
+    )
+  };
 
   return (
     <div className="menu-screen">
       <div className="menu-shell">
         <header className="menu-topbar" aria-label="Nemoris">
-          <div className="menu-brand-row">
-            <div className="menu-brand-mark" aria-hidden="true">
-              N
+          <div>
+            <div className="menu-overline">
+              Spaced repetition system
             </div>
-            <div>
-              <div className="menu-overline">
-                Spaced repetition system
-              </div>
-              <h1>Nemoris</h1>
-            </div>
+            <h1>Nemoris</h1>
+          </div>
+
+          <div
+            className={`menu-today-pill${reviewSummaryError ? " menu-today-pill-error" : ""}`}
+            aria-label={`Aujourd'hui: ${reviewCountValue}, ${reviewCountCaption}`}
+          >
+            <strong>{reviewCountValue}</strong>
+            <span>
+              <span>Aujourd’hui</span>
+              <span>{reviewCountCaption}</span>
+            </span>
           </div>
         </header>
 
@@ -173,71 +185,94 @@ export default function Menu({
           </div>
         )}
 
-        <main className="menu-command-grid" aria-label="Actions">
-          <button
-            type="button"
-            className={`menu-review${reviewSummaryError ? " menu-review-error" : ""}`}
-            onClick={() => setMode("quiz")}
-          >
-            <span className="menu-review-content">
-              <span className="menu-review-topline">
+        <main className="menu-main" aria-label="Actions">
+          <div className="menu-primary-row">
+            <button
+              type="button"
+              className={`menu-review${reviewSummaryError ? " menu-review-error" : ""}`}
+              onClick={() => setMode("quiz")}
+            >
+              <span className="menu-review-content">
                 <span className="menu-pill menu-pill-amber">Review</span>
-              </span>
 
-              <span className="menu-review-title">Révision du jour</span>
-              <span className="menu-review-text">
-                Lance la session due avec les questions texte, maps, images, timelines et séquences.
-              </span>
-
-              <span className="menu-review-types" aria-label="Types supportés">
-                {reviewTypes.map((type) => (
-                  <span
-                    className={`menu-type-chip menu-type-${type.accent}`}
-                    key={type.label}
-                  >
-                    {type.label}
+                <span>
+                  <span className="menu-review-title">Révision du jour</span>
+                  <span className="menu-review-text">
+                    Lance la session due avec les questions texte, maps, images, timelines et séquences.
                   </span>
-                ))}
+                </span>
               </span>
-            </span>
 
-            <span className="menu-review-status" aria-hidden="true">
-              <span className="menu-review-status-label">Aujourd’hui</span>
-              <span className="menu-review-status-value">
-                {reviewCountValue}
+              <span className="menu-review-footer">
+                <span className="menu-review-count">
+                  <strong>{reviewCountValue}</strong>
+                  <span>
+                    Questions dues
+                    <br />
+                    Aujourd’hui
+                  </span>
+                </span>
+
+                <span className="menu-review-action">
+                  <span>Démarrer</span>
+                  <span className="menu-review-action-icon" aria-hidden="true">→</span>
+                </span>
               </span>
-              <span className="menu-review-status-caption">
-                {reviewCountCaption}
-              </span>
-              <span className="menu-review-status-lines">
-                <span />
-                <span />
-                <span />
-              </span>
-            </span>
+            </button>
 
-            <span className="menu-review-action">
-              <span>Démarrer</span>
-              <span className="menu-review-action-icon" aria-hidden="true">→</span>
-            </span>
-          </button>
+            <aside className="menu-context" aria-label="Résumé">
+              <section className="menu-context-card">
+                <div>
+                  <span className="menu-eyebrow">
+                    {featuredDestination.eyebrow}
+                  </span>
+                  <h2>{featuredDestination.title}</h2>
+                  <p>{featuredDestination.description}</p>
+                </div>
 
-          <section className="menu-destinations" aria-label="Espaces de travail">
-            <div className="menu-destinations-header">
-              <span className="menu-eyebrow">Espaces</span>
-              <strong>Aller vers</strong>
-            </div>
+                <button
+                  type="button"
+                  className={`menu-context-action menu-context-action-${featuredDestination.accent}`}
+                  onClick={() => setMode(featuredDestination.mode)}
+                >
+                  <span>{featuredDestination.detail}</span>
+                  <span aria-hidden="true">→</span>
+                </button>
+              </section>
 
-            <div className="menu-destination-list">
-              {destinations.map((item) => (
-                <DestinationButton
-                  item={item}
-                  key={item.mode}
-                  setMode={setMode}
-                />
-              ))}
-            </div>
-          </section>
+              <section className="menu-context-card">
+                <div>
+                  <span className="menu-eyebrow">Aujourd’hui</span>
+                  <h2>Charge de review</h2>
+                </div>
+
+                <div className="menu-load-summary">
+                  <div className="menu-load-row">
+                    <span>Due</span>
+                    <strong>{reviewCountValue}</strong>
+                  </div>
+                  <div className="menu-load-row">
+                    <span>Statut</span>
+                    <strong>{reviewCountCaption}</strong>
+                  </div>
+                </div>
+
+                <div className="menu-load-track" aria-hidden="true">
+                  <span style={reviewLoadStyle} />
+                </div>
+              </section>
+            </aside>
+          </div>
+
+          <nav className="menu-destination-dock" aria-label="Espaces de travail">
+            {destinations.map((item) => (
+              <DestinationButton
+                item={item}
+                key={item.mode}
+                setMode={setMode}
+              />
+            ))}
+          </nav>
         </main>
       </div>
     </div>

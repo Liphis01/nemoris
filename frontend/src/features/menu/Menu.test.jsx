@@ -25,8 +25,19 @@ describe("Menu", () => {
     expect(
       screen.getByRole("button", { name: /Gestionnaire/ })
     ).toBeInTheDocument();
-    expect(screen.getByText("4")).toBeInTheDocument();
-    expect(screen.getByText("À revoir")).toBeInTheDocument();
+    const workspaceButtons = screen
+      .getAllByRole("button")
+      .filter((button) => button.classList.contains("menu-destination"));
+    expect(workspaceButtons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining("Gestionnaire"),
+      expect.stringContaining("Entrainement"),
+      expect.stringContaining("Calendrier"),
+      expect.stringContaining("Statistiques"),
+      expect.stringContaining("Packs"),
+      expect.stringContaining("Réglages")
+    ]);
+    expect(screen.getAllByText("4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("À revoir").length).toBeGreaterThan(0);
   });
 
   it("shows an empty review count", () => {
@@ -39,8 +50,8 @@ describe("Menu", () => {
       />
     );
 
-    expect(screen.getByText("0")).toBeInTheDocument();
-    expect(screen.getByText("À jour")).toBeInTheDocument();
+    expect(screen.getAllByText("0").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("À jour").length).toBeGreaterThan(0);
   });
 
   it("shows the startup rebalance notice when provided", () => {
