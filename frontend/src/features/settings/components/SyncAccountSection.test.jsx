@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getSyncStatus,
   requestSyncCode,
+  setSyncPreferences,
+  syncPull,
   syncPush,
   syncSignOut,
   verifySyncCode
@@ -10,8 +12,10 @@ import {
 import SyncAccountSection from "./SyncAccountSection";
 
 vi.mock("../../../api/sync", () => ({
+  deleteAccountData: vi.fn(),
   getSyncStatus: vi.fn(),
   setSyncServerUrl: vi.fn(),
+  setSyncPreferences: vi.fn(),
   requestSyncCode: vi.fn(),
   verifySyncCode: vi.fn(),
   syncPush: vi.fn(),
@@ -24,6 +28,13 @@ const SIGNED_OUT = {
   account_email: null,
   server_url: "http://127.0.0.1:9000",
   last_server_version: 0,
+  auto_sync_enabled: false,
+  local_change_seq: 0,
+  last_synced_change_seq: 0,
+  collection_dirty: false,
+  last_auto_sync_at: null,
+  last_auto_sync_status: null,
+  last_auto_sync_error: null,
   code_schema_version: "0016",
   server_meta: null
 };
@@ -33,6 +44,13 @@ const SIGNED_IN = {
   account_email: "user@example.com",
   server_url: "http://127.0.0.1:9000",
   last_server_version: 1,
+  auto_sync_enabled: false,
+  local_change_seq: 0,
+  last_synced_change_seq: 0,
+  collection_dirty: false,
+  last_auto_sync_at: null,
+  last_auto_sync_status: null,
+  last_auto_sync_error: null,
   code_schema_version: "0016",
   server_meta: { version: 1, schema_version: "0016", updated_at: "x" }
 };
@@ -41,7 +59,12 @@ describe("SyncAccountSection", () => {
   beforeEach(() => {
     requestSyncCode.mockResolvedValue({ code: "123456" });
     verifySyncCode.mockResolvedValue({});
+    setSyncPreferences.mockResolvedValue({
+      ...SIGNED_IN,
+      auto_sync_enabled: true
+    });
     syncPush.mockResolvedValue({ status: "pushed", version: 2 });
+    syncPull.mockResolvedValue({ status: "pulled", version: 2 });
     syncSignOut.mockResolvedValue(SIGNED_OUT);
   });
 
@@ -104,6 +127,23 @@ describe("SyncAccountSection", () => {
     ).toBeInTheDocument();
     expect(
       within(alert).getByRole("button", { name: "Envoyer quand même" })
+    ).toBeInTheDocument();
+  });
+
+  it("saves the automatic sync preference", async () => {
+    getSyncStatus.mockResolvedValue(SIGNED_IN);
+    render(<SyncAccountSection />);
+
+    const toggle = await screen.findByLabelText("Synchronisation automatique");
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(setSyncPreferences).toHaveBeenCalledWith({
+        auto_sync_enabled: true
+      });
+    });
+    expect(
+      await screen.findByText("Synchronisation automatique activée.")
     ).toBeInTheDocument();
   });
 

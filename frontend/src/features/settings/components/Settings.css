@@ -374,6 +374,32 @@
   min-width: min(100%, 420px);
 }
 
+.settings-toggle {
+  align-items: center;
+  color: #dedede;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 9px;
+  justify-self: end;
+  line-height: 1.2;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.settings-toggle input {
+  accent-color: #7ee2a8;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.settings-toggle:has(input:disabled) {
+  color: #888888;
+  cursor: default;
+}
+
 .settings-auth-row {
   flex: 0 1 420px;
   justify-content: flex-end;
@@ -679,7 +705,8 @@
 .settings-save:focus-visible,
 .settings-secondary:focus-visible,
 .settings-danger:focus-visible,
-.settings-input:focus-visible {
+.settings-input:focus-visible,
+.settings-toggle input:focus-visible {
   outline: 2px solid #ffcc7a;
   outline-offset: 3px;
 }

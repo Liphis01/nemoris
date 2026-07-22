@@ -46,6 +46,13 @@ from .sync_client import (
 
 
 BUCKET = "sync-collections"
+SYNC_TABLE = "collections"
+SUPABASE_SYNC_SETUP_ERROR = (
+    "Configuration Supabase de sync incomplète : la table "
+    "public.collections est introuvable ou le cache de schéma n'est pas à "
+    "jour. Exécute docs/supabase-sync-setup.sql dans l'éditeur SQL Supabase, "
+    "puis réessaie."
+)
 
 
 def _normalize_project_url(url):
@@ -66,14 +73,34 @@ def _error_message(body):
         return None
 
     if isinstance(payload, dict):
-        return (
+        message = (
             payload.get("error_description")
             or payload.get("msg")
             or payload.get("message")
             or payload.get("error")
         )
+        code = str(payload.get("code") or "")
+
+        if _is_sync_schema_cache_error(message, code):
+            return SUPABASE_SYNC_SETUP_ERROR
+
+        return message
 
     return None
+
+
+def _is_sync_schema_cache_error(message, code):
+    message = str(message or "")
+
+    return (
+        code in {"PGRST204", "PGRST205"}
+        or "schema cache" in message.lower()
+    ) and (
+        f"public.{SYNC_TABLE}" in message
+        or f"'{SYNC_TABLE}'" in message
+        or f'"{SYNC_TABLE}"' in message
+        or "media_hashes" in message
+    )
 
 
 class SupabaseSyncClient:
@@ -269,7 +296,7 @@ class SupabaseSyncClient:
 
     def _meta_raw(self, token):
         rows = self._json(
-            "/rest/v1/collections"
+            f"/rest/v1/{SYNC_TABLE}"
             "?select=version,schema_version,updated_at,last_device_id,"
             "media_hashes",
             access_token=token["access_token"]
@@ -312,7 +339,7 @@ class SupabaseSyncClient:
 
         if current == 0:
             status, _, body = self._request(
-                "/rest/v1/collections",
+                f"/rest/v1/{SYNC_TABLE}",
                 method="POST",
                 access_token=token["access_token"],
                 payload={"user_id": token["user_id"], **fields},
@@ -330,7 +357,7 @@ class SupabaseSyncClient:
             return True
 
         status, _, body = self._request(
-            f"/rest/v1/collections?user_id=eq.{token['user_id']}"
+            f"/rest/v1/{SYNC_TABLE}?user_id=eq.{token['user_id']}"
             f"&version=eq.{current}",
             method="PATCH",
             access_token=token["access_token"],
@@ -494,7 +521,7 @@ class SupabaseSyncClient:
                     pass
 
             status, _, body = self._request(
-                f"/rest/v1/collections?user_id=eq.{tok['user_id']}",
+                f"/rest/v1/{SYNC_TABLE}?user_id=eq.{tok['user_id']}",
                 method="DELETE",
                 access_token=tok["access_token"]
             )

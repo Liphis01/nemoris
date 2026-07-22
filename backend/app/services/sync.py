@@ -21,7 +21,9 @@ owns that orchestration (hashing, diffing, reading/writing static/); adapters
 """
 
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from threading import Lock
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -30,17 +32,86 @@ from ..config import BACKUP_DIR, DATABASE_FILE, STATIC_DIR
 from ..migrations import MIGRATIONS
 from ..models import MediaFile
 from .backups import create_backup, restore_backup
-from .sync_client import SyncClientConflict, SyncClientError
+from .sync_client import SyncClientAuthError, SyncClientConflict, SyncClientError
 from .sync_state import (
+    collection_is_dirty,
     ensure_device_id,
     is_signed_in,
     load_sync_state,
+    mark_collection_clean,
+    save_auto_sync_result,
     save_sync_state
 )
 
 
+class SyncBusyError(Exception):
+    pass
+
+
+_SYNC_OPERATION_LOCK = Lock()
+
+
+@contextmanager
+def sync_operation_lock(blocking=False):
+    acquired = _SYNC_OPERATION_LOCK.acquire(blocking=blocking)
+
+    if not acquired:
+        raise SyncBusyError("Sync already running")
+
+    try:
+        yield
+    finally:
+        _SYNC_OPERATION_LOCK.release()
+
+
 def code_schema_version():
     return MIGRATIONS[-1].version
+
+
+def _server_version(meta):
+    try:
+        return int((meta or {}).get("version") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _state_version(state):
+    try:
+        return int((state or {}).get("last_server_version") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _auto_sync_result(
+    status,
+    *,
+    version=None,
+    server_version=None,
+    reason=None,
+    error=None,
+    reload_required=False,
+    sync_state_path=None
+):
+    save_auto_sync_result(status, error=error, path=sync_state_path)
+
+    payload = {"status": status}
+
+    if version is not None:
+        payload["version"] = version
+
+    if server_version is not None:
+        payload["server_version"] = server_version
+
+    if reason:
+        payload["reason"] = reason
+
+    if error:
+        payload["error"] = str(error)
+
+    if reload_required:
+        payload["reload_required"] = True
+
+    return payload
 
 
 def _local_media_files(database_file):
@@ -198,6 +269,7 @@ def push(
     state = load_sync_state(sync_state_path)
     state["last_server_version"] = pushed["version"]
     save_sync_state(state, sync_state_path)
+    mark_collection_clean(pushed["version"], sync_state_path)
 
     return {"status": "pushed", "version": pushed["version"]}
 
@@ -243,6 +315,7 @@ def pull(
     state = load_sync_state(sync_state_path)
     state["last_server_version"] = pulled["version"]
     save_sync_state(state, sync_state_path)
+    mark_collection_clean(pulled["version"], sync_state_path)
 
     return {"status": "pulled", "version": pulled["version"]}
 
@@ -256,3 +329,139 @@ def delete_account_data(client, sync_state_path=None):
     client.delete_account_data(state["token"])
 
     return sign_out(sync_state_path)
+
+
+def auto_sync(
+    client_factory,
+    *,
+    database_file=None,
+    static_dir=None,
+    backup_dir=None,
+    sync_state_path=None,
+    finalize=None
+):
+    database_file = database_file or DATABASE_FILE
+    static_dir = static_dir or STATIC_DIR
+    backup_dir = backup_dir or BACKUP_DIR
+
+    state = load_sync_state(sync_state_path)
+
+    if not state.get("auto_sync_enabled"):
+        return _auto_sync_result(
+            "skipped",
+            reason="disabled",
+            sync_state_path=sync_state_path
+        )
+
+    if not is_signed_in(state):
+        return _auto_sync_result(
+            "skipped",
+            reason="signed_out",
+            sync_state_path=sync_state_path
+        )
+
+    if not state.get("server_url"):
+        return _auto_sync_result(
+            "skipped",
+            reason="no_server",
+            sync_state_path=sync_state_path
+        )
+
+    try:
+        client = client_factory() if callable(client_factory) else client_factory
+        if client is None:
+            raise SyncClientError("No sync client configured")
+        meta = client.get_meta(state["token"])
+    except SyncClientAuthError as error:
+        return _auto_sync_result(
+            "error",
+            error=error,
+            sync_state_path=sync_state_path
+        )
+    except SyncClientError as error:
+        return _auto_sync_result(
+            "skipped",
+            reason="unreachable",
+            error=error,
+            sync_state_path=sync_state_path
+        )
+
+    # get_meta may refresh and persist rotated tokens through the adapter.
+    state = load_sync_state(sync_state_path)
+    server_version = _server_version(meta)
+    local_version = _state_version(state)
+    dirty = collection_is_dirty(state)
+
+    if dirty:
+        if server_version != local_version:
+            return _auto_sync_result(
+                "conflict",
+                server_version=server_version,
+                sync_state_path=sync_state_path
+            )
+
+        try:
+            result = push(
+                client,
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=backup_dir,
+                sync_state_path=sync_state_path
+            )
+        except SyncClientConflict as conflict:
+            return _auto_sync_result(
+                "conflict",
+                server_version=conflict.server_version,
+                sync_state_path=sync_state_path
+            )
+        except SyncClientAuthError as error:
+            return _auto_sync_result(
+                "error",
+                error=error,
+                sync_state_path=sync_state_path
+            )
+        except SyncClientError as error:
+            return _auto_sync_result(
+                "skipped",
+                reason="unreachable",
+                error=error,
+                sync_state_path=sync_state_path
+            )
+
+        save_auto_sync_result("pushed", path=sync_state_path)
+        return result
+
+    if server_version > local_version:
+        try:
+            result = pull(
+                client,
+                database_file=database_file,
+                static_dir=static_dir,
+                sync_state_path=sync_state_path,
+                finalize=finalize
+            )
+        except SyncClientAuthError as error:
+            return _auto_sync_result(
+                "error",
+                error=error,
+                sync_state_path=sync_state_path
+            )
+        except SyncClientError as error:
+            return _auto_sync_result(
+                "skipped",
+                reason="unreachable",
+                error=error,
+                sync_state_path=sync_state_path
+            )
+
+        save_auto_sync_result(result["status"], path=sync_state_path)
+        return {**result, "reload_required": result.get("status") == "pulled"}
+
+    if server_version < local_version:
+        return _auto_sync_result(
+            "conflict",
+            server_version=server_version,
+            sync_state_path=sync_state_path
+        )
+
+    return _auto_sync_result("idle", sync_state_path=sync_state_path)

@@ -39,6 +39,32 @@ function SyncServerFields({ sync }) {
   );
 }
 
+function formatAutoSyncStatus(status) {
+  const value = status?.last_auto_sync_status;
+
+  if (!value) {
+    return "Jamais exécutée";
+  }
+
+  const labels = {
+    busy: "En cours",
+    conflict: "Conflit",
+    error: "Erreur",
+    idle: "À jour",
+    pulled: "Téléchargée",
+    pushed: "Envoyée",
+    skipped: "Ignorée"
+  };
+
+  const label = labels[value] || value;
+
+  if (status?.last_auto_sync_error) {
+    return `${label} · ${status.last_auto_sync_error}`;
+  }
+
+  return label;
+}
+
 function SyncAccountSectionFromHook() {
   const sync = useSyncAccount();
 
@@ -108,6 +134,29 @@ function SyncAccountSectionView({ sync }) {
                   Télécharger
                 </button>
               </div>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>Synchronisation automatique</strong>
+                <span>
+                  {sync.status.auto_sync_enabled
+                    ? `Active · ${formatAutoSyncStatus(sync.status)}`
+                    : "Inactive"}
+                </span>
+              </div>
+
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={Boolean(sync.status.auto_sync_enabled)}
+                  disabled={sync.busy}
+                  onChange={(event) =>
+                    sync.setAutoSyncEnabled(event.target.checked)
+                  }
+                />
+                <span>Synchronisation automatique</span>
+              </label>
             </div>
 
             {sync.conflict != null && (

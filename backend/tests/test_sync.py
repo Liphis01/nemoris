@@ -14,19 +14,27 @@ from sync_server.store import SyncConflict, SyncNotFoundError, SyncStore  # noqa
 from app.models import Base, MediaFile, Question  # noqa: E402
 from app.services.backups import restore_backup  # noqa: E402
 from app.services.sync import (  # noqa: E402
+    SyncBusyError,
+    auto_sync,
     code_schema_version,
     delete_account_data,
     pull,
     push,
     sign_in_request_code,
     sign_in_verify,
-    sign_out
+    sign_out,
+    sync_operation_lock
 )
 from app.services.sync_client import SyncClientConflict, SyncClientError  # noqa: E402
 from app.services.sync_state import (  # noqa: E402
+    collection_is_dirty,
     ensure_device_id,
     is_signed_in,
     load_sync_state,
+    mark_collection_changed,
+    mark_collection_clean,
+    save_auto_sync_preferences,
+    should_mark_collection_changed,
     save_sync_state
 )
 
@@ -113,6 +121,10 @@ class SyncStateTests(unittest.TestCase):
         state = load_sync_state(self.path)
         self.assertFalse(is_signed_in(state))
         self.assertEqual(state["last_server_version"], 0)
+        self.assertFalse(state["auto_sync_enabled"])
+        self.assertEqual(state["local_change_seq"], 0)
+        self.assertEqual(state["last_synced_change_seq"], 0)
+        self.assertFalse(collection_is_dirty(state))
 
     def test_round_trip(self):
         save_sync_state(
@@ -129,6 +141,41 @@ class SyncStateTests(unittest.TestCase):
         second = ensure_device_id(self.path)
         self.assertEqual(first, second)
         self.assertTrue(first)
+
+    def test_auto_sync_preferences_are_device_local_state(self):
+        state = save_auto_sync_preferences(True, self.path)
+        self.assertTrue(state["auto_sync_enabled"])
+        self.assertTrue(load_sync_state(self.path)["auto_sync_enabled"])
+
+    def test_dirty_marker_flips_and_clean_marker_clears(self):
+        changed = mark_collection_changed("test", self.path)
+        self.assertTrue(collection_is_dirty(changed))
+        self.assertEqual(changed["local_change_seq"], 1)
+        self.assertEqual(changed["last_synced_change_seq"], 0)
+
+        clean = mark_collection_clean(7, self.path)
+        self.assertFalse(collection_is_dirty(clean))
+        self.assertEqual(clean["last_synced_change_seq"], 1)
+        self.assertEqual(clean["last_server_version"], 7)
+
+    def test_collection_mutation_allowlist(self):
+        self.assertTrue(should_mark_collection_changed("POST", "/questions", 200))
+        self.assertTrue(should_mark_collection_changed("POST", "/answer_map", 200))
+        self.assertTrue(should_mark_collection_changed("POST", "/packs/import", 200))
+        self.assertFalse(should_mark_collection_changed("POST", "/sync/push", 200))
+        self.assertFalse(
+            should_mark_collection_changed("PUT", "/packs/catalog-settings", 200)
+        )
+        self.assertFalse(
+            should_mark_collection_changed("POST", "/review/rebalance", 200)
+        )
+        self.assertFalse(should_mark_collection_changed("POST", "/questions", 400))
+
+    def test_sync_operation_lock_prevents_overlap(self):
+        with sync_operation_lock():
+            with self.assertRaises(SyncBusyError):
+                with sync_operation_lock():
+                    pass
 
 
 class SyncEngineTests(unittest.TestCase):
@@ -189,6 +236,12 @@ class SyncEngineTests(unittest.TestCase):
         code = sign_in_request_code(client, email)["code"]
         sign_in_verify(client, email, code, sync_state_path=device["state"])
         return client
+
+    def enable_auto_sync(self, device):
+        state = load_sync_state(device["state"])
+        state["server_url"] = "memory://sync"
+        state["auto_sync_enabled"] = True
+        save_sync_state(state, device["state"])
 
     def do_push(self, device, client, force=False):
         return push(
@@ -403,6 +456,80 @@ class SyncEngineTests(unittest.TestCase):
             delete_account_data(
                 InProcessSyncClient(self.store), sync_state_path=a["state"]
             )
+
+    def test_auto_sync_pushes_dirty_local_collection(self):
+        a = self.make_device("a")
+        self.seed(a, ["Q1"])
+        client = self.sign_in(a)
+        self.enable_auto_sync(a)
+        mark_collection_changed("seed", a["state"])
+
+        result = auto_sync(
+            lambda: client,
+            database_file=a["db"],
+            static_dir=a["static"],
+            backup_dir=a["backups"],
+            sync_state_path=a["state"]
+        )
+
+        self.assertEqual(result, {"status": "pushed", "version": 1})
+        state = load_sync_state(a["state"])
+        self.assertFalse(collection_is_dirty(state))
+        self.assertEqual(state["last_auto_sync_status"], "pushed")
+        self.assertEqual(self.store.get_meta(self.email_for(a))["version"], 1)
+
+    def test_auto_sync_pulls_newer_cloud_when_local_clean(self):
+        a = self.make_device("a")
+        b = self.make_device("b")
+        self.seed(a, ["Q1"])
+        client_a = self.sign_in(a)
+        self.do_push(a, client_a)
+
+        client_b = self.sign_in(b)
+        self.enable_auto_sync(b)
+
+        result = auto_sync(
+            lambda: client_b,
+            database_file=b["db"],
+            static_dir=b["static"],
+            backup_dir=b["backups"],
+            sync_state_path=b["state"],
+            finalize=restore_only_finalize
+        )
+
+        self.assertEqual(
+            result,
+            {"status": "pulled", "version": 1, "reload_required": True}
+        )
+        self.assertEqual(self.questions_in(b), {"Q1"})
+        self.assertFalse(collection_is_dirty(load_sync_state(b["state"])))
+
+    def test_auto_sync_conflicts_when_local_dirty_and_cloud_ahead(self):
+        a = self.make_device("a")
+        b = self.make_device("b")
+        self.seed(a, ["Q-A"])
+        client_a = self.sign_in(a)
+        client_b = self.sign_in(b)
+        self.do_push(a, client_a)
+        self.do_pull(b, client_b)
+        self.enable_auto_sync(b)
+
+        self.seed(a, ["Q-A2"])
+        self.do_push(a, client_a)
+        self.seed(b, ["Q-B2"])
+        mark_collection_changed("local edit", b["state"])
+
+        result = auto_sync(
+            lambda: client_b,
+            database_file=b["db"],
+            static_dir=b["static"],
+            backup_dir=b["backups"],
+            sync_state_path=b["state"],
+            finalize=restore_only_finalize
+        )
+
+        self.assertEqual(result, {"status": "conflict", "server_version": 2})
+        self.assertTrue(collection_is_dirty(load_sync_state(b["state"])))
 
 
 if __name__ == "__main__":

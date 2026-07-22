@@ -155,6 +155,23 @@ export async function mockApi(page, options = {}) {
       has_due: (options.review?.length || 0) > 0,
       ...(options.reviewSummary || {})
     },
+    syncStatus: {
+      signed_in: false,
+      account_email: null,
+      server_url: "",
+      server_key: "",
+      last_server_version: 0,
+      auto_sync_enabled: false,
+      local_change_seq: 0,
+      last_synced_change_seq: 0,
+      collection_dirty: false,
+      last_auto_sync_at: null,
+      last_auto_sync_status: null,
+      last_auto_sync_error: null,
+      code_schema_version: "0016",
+      server_meta: null,
+      ...(options.syncStatus || {})
+    },
     bonusReviewStatus: {
       allowed: true,
       bonus_question_capacity: 315,
@@ -202,6 +219,40 @@ export async function mockApi(page, options = {}) {
 
     if (method === "GET" && path === "/review/startup_notice") {
       await fulfillJson(route, null);
+      return;
+    }
+
+    if (method === "GET" && path === "/sync/status") {
+      await fulfillJson(route, state.syncStatus);
+      return;
+    }
+
+    if (method === "PUT" && path === "/sync/preferences") {
+      const payload = await requestJson(request);
+      state.syncStatus.auto_sync_enabled = Boolean(payload.auto_sync_enabled);
+      await fulfillJson(route, state.syncStatus);
+      return;
+    }
+
+    if (method === "POST" && path === "/sync/auto") {
+      await fulfillJson(route, { status: "idle" });
+      return;
+    }
+
+    if (method === "POST" && path === "/sync/push") {
+      state.syncStatus.last_server_version += 1;
+      await fulfillJson(route, {
+        status: "pushed",
+        version: state.syncStatus.last_server_version
+      });
+      return;
+    }
+
+    if (method === "POST" && path === "/sync/pull") {
+      await fulfillJson(route, {
+        status: "pulled",
+        version: state.syncStatus.server_meta?.version || 1
+      });
       return;
     }
 

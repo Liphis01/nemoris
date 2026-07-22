@@ -13,6 +13,14 @@ export function setSyncServerUrl(url, key) {
   });
 }
 
+export function setSyncPreferences(payload) {
+  return requestJson("/sync/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
 export function requestSyncCode(email) {
   return requestJson("/sync/request-code", {
     method: "POST",
@@ -35,6 +43,10 @@ export function syncPush({ force = false } = {}) {
 
 export function syncPull() {
   return requestJson("/sync/pull", { method: "POST" });
+}
+
+export function syncAuto() {
+  return requestJson("/sync/auto", { method: "POST" });
 }
 
 export function syncSignOut() {

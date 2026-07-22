@@ -231,6 +231,10 @@ class ReviewSettings(BaseModel):
     )
 
 
+class SyncPreferences(BaseModel):
+    auto_sync_enabled: bool = False
+
+
 class MapAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[MapMode] = None

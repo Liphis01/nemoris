@@ -24,6 +24,10 @@ from .routers import (
     uploads
 )
 from .services.startup import run_startup_rebalance_with_session
+from .services.sync_state import (
+    mark_collection_changed,
+    should_mark_collection_changed
+)
 
 
 def create_app():
@@ -41,6 +45,19 @@ def create_app():
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def mark_sync_dirty_after_collection_mutation(request, call_next):
+        response = await call_next(request)
+
+        if should_mark_collection_changed(
+            request.method,
+            request.url.path,
+            response.status_code
+        ):
+            mark_collection_changed(f"{request.method} {request.url.path}")
+
+        return response
 
     # Uploaded media is served from /static. The folder is created lazily so a
     # fresh checkout can run without manual setup.

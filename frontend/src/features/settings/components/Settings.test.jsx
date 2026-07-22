@@ -43,9 +43,11 @@ vi.mock("../../../api/packs", () => ({
 vi.mock("../../../api/sync", () => ({
   deleteAccountData: vi.fn(),
   getSyncStatus: vi.fn(),
+  setSyncPreferences: vi.fn(),
   setSyncServerUrl: vi.fn(),
   requestSyncCode: vi.fn(),
   verifySyncCode: vi.fn(),
+  syncAuto: vi.fn(),
   syncPush: vi.fn(),
   syncPull: vi.fn(),
   syncSignOut: vi.fn()
@@ -100,7 +102,15 @@ describe("Settings", () => {
       signed_in: false,
       account_email: null,
       server_url: "",
+      server_key: "",
       last_server_version: 0,
+      auto_sync_enabled: false,
+      local_change_seq: 0,
+      last_synced_change_seq: 0,
+      collection_dirty: false,
+      last_auto_sync_at: null,
+      last_auto_sync_status: null,
+      last_auto_sync_error: null,
       code_schema_version: "0016",
       server_meta: null
     });

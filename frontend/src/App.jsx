@@ -9,9 +9,11 @@ import TrainingSession from "./features/training/components/TrainingSession";
 import BrowsePacks from "./features/packs/components/BrowsePacks";
 import DesktopTitleBar from "./shared/DesktopTitleBar";
 import UpdateBanner from "./features/update/UpdateBanner";
+import AutoSyncBanner from "./features/sync/AutoSyncBanner";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
+import { useAutoSync } from "./features/sync/useAutoSync";
 
 
 function startupNoticeStorageKey(notice) {
@@ -31,6 +33,7 @@ function App() {
   const [reviewSummaryError, setReviewSummaryError] = useState("");
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
+  const autoSync = useAutoSync();
 
   const appStyle = {
     background: "#121212",
@@ -145,6 +148,7 @@ function App() {
     <div style={appStyle}>
       <DesktopTitleBar />
       <UpdateBanner />
+      <AutoSyncBanner {...autoSync} />
       <div style={routeSlotStyle}>
         {mode === "menu" && (
           <Menu

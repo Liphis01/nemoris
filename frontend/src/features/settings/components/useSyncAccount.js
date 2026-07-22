@@ -3,6 +3,7 @@ import {
   deleteAccountData,
   getSyncStatus,
   requestSyncCode,
+  setSyncPreferences,
   setSyncServerUrl,
   syncPull,
   syncPush,
@@ -62,6 +63,19 @@ export function useSyncAccount() {
       await setSyncServerUrl(serverDraft.trim(), keyDraft.trim());
       await refresh();
     }, "Serveur enregistré.");
+  }
+
+  async function setAutoSyncEnabled(enabled) {
+    await run(async () => {
+      const next = await setSyncPreferences({
+        auto_sync_enabled: Boolean(enabled)
+      });
+      setStatus(next);
+      setServerDraft(next.server_url || DEFAULT_SERVER);
+      setKeyDraft(next.server_key || "");
+    }, enabled
+      ? "Synchronisation automatique activée."
+      : "Synchronisation automatique désactivée.");
   }
 
   async function sendCode() {
@@ -175,6 +189,7 @@ export function useSyncAccount() {
     signedIn,
     serverVersion,
     saveServer,
+    setAutoSyncEnabled,
     sendCode,
     signIn,
     doPush,

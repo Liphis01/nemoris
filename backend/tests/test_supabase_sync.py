@@ -146,6 +146,38 @@ class SupabaseClientTests(unittest.TestCase):
         meta = client.get_meta(TOKEN)
         self.assertEqual(meta["version"], 0)
 
+    def test_missing_collections_table_reports_setup_action(self):
+        def handler(method, path, request):
+            return (404, json_body({
+                "code": "PGRST205",
+                "message": (
+                    "Could not find the table 'public.collections' in the "
+                    "schema cache"
+                )
+            }))
+
+        with self.assertRaises(SyncClientError) as caught:
+            self.make(handler).get_meta(TOKEN)
+
+        message = str(caught.exception)
+        self.assertIn("Configuration Supabase de sync incomplète", message)
+        self.assertIn("docs/supabase-sync-setup.sql", message)
+
+    def test_missing_media_hashes_column_reports_setup_action(self):
+        def handler(method, path, request):
+            return (400, json_body({
+                "code": "PGRST204",
+                "message": (
+                    "Could not find the 'media_hashes' column of "
+                    "'collections' in the schema cache"
+                )
+            }))
+
+        with self.assertRaises(SyncClientError) as caught:
+            self.make(handler).get_meta(TOKEN)
+
+        self.assertIn("docs/supabase-sync-setup.sql", str(caught.exception))
+
     def test_push_uploads_before_claim_and_bumps_version(self):
         def handler(method, path, request):
             if path.startswith("/rest/v1/collections?select"):
