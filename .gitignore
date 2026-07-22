@@ -21,6 +21,7 @@ backend/webview-data/
 backend/backups/
 backend/static/
 backend/blueprints/
+backend/packs/*.zip
 backend/sync_state.json
 sync_server/data/
 

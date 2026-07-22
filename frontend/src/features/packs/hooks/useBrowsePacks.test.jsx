@@ -198,13 +198,23 @@ describe("useBrowsePacks", () => {
     searchPackCatalog
       .mockResolvedValueOnce({
         packs: [entryA],
-        facets: { themes: [] },
+        facets: {
+          global_total: 8,
+          themes: [
+            { value: POPULAR_THEME, label: "Populaires", result_count: 8 },
+            { value: "géographie", label: "Géographie", result_count: 5 }
+          ]
+        },
         total: 2,
         next_cursor: "24"
       })
       .mockResolvedValueOnce({
         packs: [entryB],
-        facets: { themes: [] },
+        facets: {
+          themes: [
+            { value: "page-locale", label: "Page locale", result_count: 1 }
+          ]
+        },
         total: 2,
         next_cursor: null
       });
@@ -229,6 +239,10 @@ describe("useBrowsePacks", () => {
     expect(result.current.items.map((item) => item.entry.pack_guid)).toEqual([
       "guid-a",
       "guid-b"
+    ]);
+    expect(result.current.facets.themes.map((theme) => theme.value)).toEqual([
+      POPULAR_THEME,
+      "géographie"
     ]);
   });
 

@@ -87,6 +87,7 @@ class PackCatalogSearchTests(unittest.TestCase):
                     }
                 ],
                 "facets": {
+                    "global_total": 18,
                     "themes": [
                         {
                             "value": "géographie",
@@ -136,6 +137,8 @@ class PackCatalogSearchTests(unittest.TestCase):
             }
         )
         self.assertEqual(result["facets"]["themes"][0]["value"], "__popular__")
+        self.assertEqual(result["facets"]["themes"][0]["result_count"], 18)
+        self.assertEqual(result["facets"]["global_total"], 18)
         self.assertEqual(result["facets"]["themes"][1]["value"], "géographie")
 
         request, timeout = calls[0]
@@ -155,6 +158,53 @@ class PackCatalogSearchTests(unittest.TestCase):
         self.assertEqual(payload["p_limit"], 60)
         self.assertEqual(payload["p_cursor"], 24)
         self.assertEqual(payload["p_installed_versions"], {"world-map": 1})
+
+    def test_search_orders_themes_by_global_popularity(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse({
+                "packs": [],
+                "facets": {
+                    "global_total": 80,
+                    "themes": [
+                        {
+                            "value": "maths",
+                            "result_count": 50,
+                            "download_count": 10,
+                            "pinned": True
+                        },
+                        {
+                            "value": "histoire",
+                            "result_count": 3,
+                            "download_count": 900,
+                            "featured": True
+                        },
+                        {
+                            "value": "géographie",
+                            "result_count": 4,
+                            "download_count": 900
+                        }
+                    ]
+                },
+                "total": 2,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = search_catalog_packs(q="atlas", db=db)
+
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(result["facets"]["themes"][0]["value"], "__popular__")
+        self.assertEqual(result["facets"]["themes"][0]["result_count"], 80)
+        self.assertEqual(
+            [theme["value"] for theme in result["facets"]["themes"][1:]],
+            ["géographie", "histoire", "maths"]
+        )
 
     def test_popular_theme_switches_to_popular_sort(self):
         db = make_db()

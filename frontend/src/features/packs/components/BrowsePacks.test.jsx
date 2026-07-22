@@ -176,6 +176,11 @@ describe("BrowsePacks", () => {
       "aria-selected",
       "true"
     );
+    const themeButtons = within(
+      screen.getByRole("complementary", { name: "Thèmes" })
+    ).getAllByRole("button");
+    expect(themeButtons[0]).toHaveTextContent("Populaires");
+    expect(themeButtons[1]).toHaveTextContent("Géographie");
     expect(screen.getByRole("button", { name: /Géographie/ })).toBeInTheDocument();
     expect(screen.getByTestId("pack-card-row-world-map")).toBeInTheDocument();
     expect(screen.getAllByText("12").length).toBeGreaterThan(0);

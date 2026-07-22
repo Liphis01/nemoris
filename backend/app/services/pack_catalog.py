@@ -386,11 +386,21 @@ def _normalize_theme(raw):
     if not value:
         return None
 
+    result_count = raw.get("result_count")
+
+    if result_count is None:
+        result_count = raw.get("count")
+
+    download_count = raw.get("download_count")
+
+    if download_count is None:
+        download_count = 0
+
     return {
         "value": value,
         "label": str(raw.get("label") or _theme_label(value)),
-        "result_count": raw.get("result_count") or raw.get("count"),
-        "download_count": raw.get("download_count") or 0,
+        "result_count": _int_or_none(result_count),
+        "download_count": _int_or_none(download_count) or 0,
         "featured": bool(raw.get("featured")),
         "pinned": bool(raw.get("pinned"))
     }
@@ -398,16 +408,23 @@ def _normalize_theme(raw):
 
 def _theme_score(theme):
     return (
-        1 if theme.get("pinned") else 0,
-        int(theme.get("result_count") or 0),
         int(theme.get("download_count") or 0),
+        int(theme.get("result_count") or 0),
+        1 if theme.get("pinned") else 0,
         1 if theme.get("featured") else 0
     )
 
 
-def _ordered_themes(themes, total):
+def _ordered_themes(themes, total, global_total=None):
     normalized = []
     seen = set()
+    popular_count = _int_or_none(global_total)
+
+    if popular_count is None:
+        popular_count = _int_or_none(total)
+
+    if popular_count is None:
+        popular_count = 0
 
     for raw in themes:
         theme = _normalize_theme(raw)
@@ -428,12 +445,12 @@ def _ordered_themes(themes, total):
         )
     )
 
-    if total or normalized:
+    if popular_count or normalized:
         return [
             {
                 "value": POPULAR_THEME,
                 "label": "Populaires",
-                "result_count": total,
+                "result_count": popular_count,
                 "download_count": None,
                 "featured": True,
                 "pinned": True
@@ -466,15 +483,30 @@ def _normalize_response(payload, project_url):
         if entry
     ]
     facets = payload.get("facets") if isinstance(payload.get("facets"), dict) else {}
-    total = payload.get("total")
+    total = _int_or_none(payload.get("total"))
 
-    if not isinstance(total, int):
+    if total is None:
         total = len(packs)
+
+    global_total = facets.get("global_total")
+
+    if global_total is None:
+        global_total = payload.get("global_total")
+
+    global_total = _int_or_none(global_total)
+
+    if global_total is None:
+        global_total = total
 
     return {
         "packs": packs,
         "facets": {
-            "themes": _ordered_themes(facets.get("themes") or [], total)
+            "themes": _ordered_themes(
+                facets.get("themes") or [],
+                total,
+                global_total=global_total
+            ),
+            "global_total": global_total
         },
         "total": total,
         "next_cursor": (

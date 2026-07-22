@@ -33,6 +33,17 @@ function dedupeEntries(entries) {
   return [...byGuid.values()];
 }
 
+function normalizeFacets(facets) {
+  if (!facets || typeof facets !== "object") {
+    return { themes: [] };
+  }
+
+  return {
+    ...facets,
+    themes: Array.isArray(facets.themes) ? facets.themes : []
+  };
+}
+
 export function useBrowsePacks(filters = {}) {
   const search = filters.search || "";
   const theme = filters.theme || "";
@@ -117,7 +128,11 @@ export function useBrowsePacks(filters = {}) {
       setEntries((previous) => (
         append ? dedupeEntries([...previous, ...packs]) : packs
       ));
-      setFacets(catalog.facets || { themes: [] });
+      setFacets((previous) => (
+        append && previous.themes.length > 0
+          ? previous
+          : normalizeFacets(catalog.facets)
+      ));
       setTotal(Number.isFinite(catalog.total) ? catalog.total : packs.length);
       setNextCursor(catalog.next_cursor || null);
     } catch (loadError) {
