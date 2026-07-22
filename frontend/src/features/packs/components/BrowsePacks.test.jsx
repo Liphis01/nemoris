@@ -9,7 +9,16 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { exportPackGroup } from "../../../api/packs";
+import {
+  exportPackGroup,
+  getPackPublishStatus,
+  listPackPublications,
+  publishPackDraft,
+  requestPackPublishCode,
+  savePackDraft,
+  signOutPackPublisher,
+  verifyPackPublishCode
+} from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
 import {
   POPULAR_THEME,
@@ -27,7 +36,14 @@ vi.mock("../../../api/groups", () => ({
 }));
 
 vi.mock("../../../api/packs", () => ({
-  exportPackGroup: vi.fn()
+  exportPackGroup: vi.fn(),
+  getPackPublishStatus: vi.fn(),
+  listPackPublications: vi.fn(),
+  publishPackDraft: vi.fn(),
+  requestPackPublishCode: vi.fn(),
+  savePackDraft: vi.fn(),
+  signOutPackPublisher: vi.fn(),
+  verifyPackPublishCode: vi.fn()
 }));
 
 const mapEntry = {
@@ -96,6 +112,48 @@ describe("BrowsePacks", () => {
       { id: 11, name: "Groupe vide", type_group: "text", question_count: 0 }
     ]);
     exportPackGroup.mockResolvedValue("capitales-du-monde-v1.zip");
+    getPackPublishStatus.mockResolvedValue({
+      configured: true,
+      signed_in: true,
+      account_email: "author@example.com",
+      project_url: "https://project.supabase.co"
+    });
+    listPackPublications.mockResolvedValue({ publications: [] });
+    savePackDraft.mockResolvedValue({
+      status: "draft",
+      publication: {
+        pack_guid: "group-guid",
+        name: "Atlas des capitales",
+        version: 1,
+        question_count: 42,
+        size_bytes: 2048,
+        is_public: false
+      }
+    });
+    publishPackDraft.mockResolvedValue({
+      status: "published",
+      publication: {
+        pack_guid: "group-guid",
+        name: "Atlas des capitales",
+        version: 1,
+        question_count: 42,
+        size_bytes: 2048,
+        is_public: true
+      }
+    });
+    requestPackPublishCode.mockResolvedValue({});
+    verifyPackPublishCode.mockResolvedValue({
+      configured: true,
+      signed_in: true,
+      account_email: "author@example.com",
+      project_url: "https://project.supabase.co"
+    });
+    signOutPackPublisher.mockResolvedValue({
+      configured: true,
+      signed_in: false,
+      account_email: null,
+      project_url: "https://project.supabase.co"
+    });
   });
 
   afterEach(() => {
@@ -223,14 +281,14 @@ describe("BrowsePacks", () => {
     expect(hook.install).toHaveBeenCalledWith(mapEntry);
   });
 
-  it("exports a selected group from the separate exporter tab", async () => {
+  it("downloads a selected group zip from the separate exporter tab", async () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
 
     const exportButton = await screen.findByRole("button", {
-      name: "Exporter le pack"
+      name: "Télécharger ZIP"
     });
 
     await waitFor(() => expect(exportButton).toBeEnabled());
@@ -256,5 +314,76 @@ describe("BrowsePacks", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "capitales-du-monde-v1.zip"
     );
+  });
+
+  it("saves a private Supabase draft before publishing it", async () => {
+    defaultHook();
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
+
+    const draftButton = await screen.findByRole("button", {
+      name: "Enregistrer brouillon"
+    });
+
+    await waitFor(() => expect(draftButton).toBeEnabled());
+    await userEvent.clear(screen.getByRole("textbox", { name: "Titre du pack" }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Titre du pack" }),
+      "Atlas des capitales"
+    );
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Thèmes du pack" }),
+      "géographie, cartes"
+    );
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Tags du pack" }),
+      "capitales, quiz"
+    );
+    await userEvent.click(draftButton);
+
+    await waitFor(() => {
+      expect(savePackDraft).toHaveBeenCalledWith(10, {
+        version: 1,
+        name: "Atlas des capitales",
+        description: "",
+        license: "",
+        themes: ["géographie", "cartes"],
+        tags: ["capitales", "quiz"]
+      });
+    });
+
+    const publishButton = await screen.findByRole("button", { name: "Publier" });
+    await waitFor(() => expect(publishButton).toBeEnabled());
+    await userEvent.click(publishButton);
+
+    await waitFor(() => {
+      expect(publishPackDraft).toHaveBeenCalledWith("group-guid");
+    });
+  });
+
+  it("reuses the Settings sync account for publishing", async () => {
+    const setMode = vi.fn();
+    getPackPublishStatus.mockResolvedValue({
+      configured: true,
+      signed_in: true,
+      account_email: "sync@example.com",
+      auth_source: "sync",
+      project_url: "https://project.supabase.co"
+    });
+    defaultHook();
+
+    render(<BrowsePacks setMode={setMode} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
+
+    expect(
+      await screen.findByText("Connecté via Synchronisation")
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Réglages" }));
+
+    expect(setMode).toHaveBeenCalledWith("settings");
+    expect(signOutPackPublisher).not.toHaveBeenCalled();
   });
 });

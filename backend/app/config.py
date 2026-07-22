@@ -42,4 +42,7 @@ PACK_DIR = APP_DATA_DIR / "packs"
 # inside it: create_backup only bundles questions.db + static/, so an auth
 # token here never rides along in a synced/backed-up collection.
 SYNC_STATE_FILE = APP_DATA_DIR / "sync_state.json"
+# Catalogue publishing account/token/state. Kept next to sync_state.json, not
+# inside questions.db, so Supabase auth tokens never enter backups or sync.
+PACK_PUBLISH_STATE_FILE = APP_DATA_DIR / "pack_publish_state.json"
 FRONTEND_DIST_DIR = BUNDLED_DIR / "frontend" / "dist"

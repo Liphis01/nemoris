@@ -1,16 +1,28 @@
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
 from ..models import PackSubscription
-from ..schemas import PackCatalogSettings, PackExportRequest
+from ..schemas import (
+    PackCatalogSettings,
+    PackExportRequest,
+    PackPublishDraftRequest
+)
 from ..services.pack_catalog import (
+    PackCatalogAuthError,
     PackCatalogError,
     check_pack_catalog_health,
+    get_pack_publish_status,
+    list_pack_publications,
+    publish_pack_publication,
+    request_pack_publish_code,
+    save_pack_publish_draft,
+    sign_out_pack_publisher,
+    verify_pack_publish_code,
     search_pack_catalog
 )
 from ..services.packs import (
@@ -68,6 +80,61 @@ def diagnose_pack_catalog(db: Session = Depends(get_db)):
     return check_pack_catalog_health(db)
 
 
+@router.get("/blueprints/catalog/publish/status", include_in_schema=False)
+@router.get("/packs/catalog/publish/status")
+def pack_publish_status(db: Session = Depends(get_db)):
+    return get_pack_publish_status(db)
+
+
+@router.post("/blueprints/catalog/publish/request-code", include_in_schema=False)
+@router.post("/packs/catalog/publish/request-code")
+def pack_publish_request_code(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        return request_pack_publish_code(db, payload.get("email"))
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/publish/verify", include_in_schema=False)
+@router.post("/packs/catalog/publish/verify")
+def pack_publish_verify(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        return verify_pack_publish_code(
+            db,
+            payload.get("email"),
+            payload.get("code")
+        )
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/publish/sign-out", include_in_schema=False)
+@router.post("/packs/catalog/publish/sign-out")
+def pack_publish_sign_out(db: Session = Depends(get_db)):
+    sign_out_pack_publisher()
+
+    return get_pack_publish_status(db)
+
+
+@router.get("/blueprints/catalog/publish/drafts", include_in_schema=False)
+@router.get("/packs/catalog/publish/drafts")
+def pack_publish_drafts(db: Session = Depends(get_db)):
+    try:
+        return list_pack_publications(db)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.get("/blueprints/catalog/search", include_in_schema=False)
 @router.get("/packs/catalog/search")
 def search_catalog_packs(
@@ -120,6 +187,44 @@ def export_group_pack(
         media_type="application/zip",
         filename=zip_path.name
     )
+
+
+@router.post("/blueprints/{group_id}/publish/draft", include_in_schema=False)
+@router.post("/packs/{group_id}/publish/draft")
+def save_group_pack_draft(
+    group_id: int,
+    payload: PackPublishDraftRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return save_pack_publish_draft(
+            db,
+            group_id,
+            version=payload.version,
+            name=payload.name,
+            description=payload.description,
+            license=payload.license,
+            tags=payload.tags,
+            themes=payload.themes
+        )
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        status_code = 404 if str(error) == "Question group not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/publish/{pack_guid}", include_in_schema=False)
+@router.post("/packs/catalog/publish/{pack_guid}")
+def publish_group_pack(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return publish_pack_publication(db, pack_guid)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.post("/blueprints/import", include_in_schema=False)

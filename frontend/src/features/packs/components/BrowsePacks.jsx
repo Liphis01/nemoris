@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { exportPackGroup } from "../../../api/packs";
+import {
+  exportPackGroup,
+  getPackPublishStatus,
+  listPackPublications,
+  publishPackDraft,
+  requestPackPublishCode,
+  savePackDraft,
+  signOutPackPublisher,
+  verifyPackPublishCode
+} from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import {
@@ -51,6 +60,26 @@ function downloadCountLabel(count) {
   }
 
   return `${count.toLocaleString("fr-FR")} téléchargement${count > 1 ? "s" : ""}`;
+}
+
+function splitTerms(value) {
+  const seen = new Set();
+  const terms = [];
+
+  String(value || "")
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .forEach((term) => {
+      const key = term.toLocaleLowerCase("fr-FR");
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        terms.push(term);
+      }
+    });
+
+  return terms;
 }
 
 function StatePanel({ children, title }) {
@@ -455,7 +484,167 @@ function ImporterScreen({ setMode }) {
   );
 }
 
-function ExporterScreen() {
+function PublishAuthPanel({
+  authStep,
+  busy,
+  code,
+  email,
+  publishStatus,
+  setCode,
+  setEmail,
+  setMode,
+  setAuthStep,
+  onRequestCode,
+  onSignOut,
+  onVerify
+}) {
+  if (!publishStatus) {
+    return (
+      <div className="pack-publish-auth">
+        <div>
+          <strong>Connexion au catalogue</strong>
+          <span>Vérification de la session Supabase.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!publishStatus?.configured) {
+    return (
+      <div className="pack-publish-auth">
+        <div>
+          <strong>Catalogue non configuré</strong>
+          <span>Ajoute l'URL du projet et la clé publishable.</span>
+        </div>
+        <button
+          type="button"
+          className="pack-secondary-button"
+          onClick={() => setMode("settings")}
+        >
+          Paramètres
+        </button>
+      </div>
+    );
+  }
+
+  if (publishStatus?.signed_in) {
+    const usingSyncAccount = publishStatus.auth_source === "sync";
+
+    return (
+      <div className="pack-publish-auth is-signed-in">
+        <div>
+          <strong>
+            {usingSyncAccount ? "Connecté via Synchronisation" : "Connecté"}
+          </strong>
+          <span>{publishStatus.account_email}</span>
+        </div>
+        <button
+          type="button"
+          className="pack-secondary-button"
+          disabled={busy}
+          onClick={usingSyncAccount ? () => setMode("settings") : onSignOut}
+        >
+          {usingSyncAccount ? "Réglages" : "Se déconnecter"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pack-publish-auth">
+      <div>
+        <strong>Connexion Supabase</strong>
+        <span>Requise pour créer un brouillon privé.</span>
+      </div>
+
+      {authStep === "email" ? (
+        <div className="pack-publish-auth-row">
+          <input
+            aria-label="E-mail de publication"
+            type="email"
+            value={email}
+            disabled={busy}
+            placeholder="vous@exemple.com"
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <button
+            type="button"
+            className="pack-primary-button"
+            disabled={busy || !email.trim()}
+            onClick={onRequestCode}
+          >
+            Recevoir un code
+          </button>
+        </div>
+      ) : (
+        <div className="pack-publish-auth-row">
+          <input
+            aria-label="Code de publication"
+            type="text"
+            value={code}
+            disabled={busy}
+            placeholder="Code ou lien e-mail"
+            onChange={(event) => setCode(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onVerify();
+            }}
+          />
+          <button
+            type="button"
+            className="pack-primary-button"
+            disabled={busy || !code.trim()}
+            onClick={onVerify}
+          >
+            Se connecter
+          </button>
+          <button
+            type="button"
+            className="pack-secondary-button"
+            disabled={busy}
+            onClick={() => setAuthStep("email")}
+          >
+            Modifier l'e-mail
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PublicationList({ activeGuid, publications, onSelect }) {
+  return (
+    <div className="pack-publication-list">
+      {publications.map((publication) => {
+        const active = publication.pack_guid === activeGuid;
+
+        return (
+          <button
+            key={publication.pack_guid}
+            type="button"
+            className={`pack-publication-item${active ? " is-active" : ""}`}
+            onClick={() => onSelect(publication)}
+          >
+            <span>
+              {publication.is_public ? "Publié" : "Brouillon"}
+            </span>
+            <strong>{publication.name}</strong>
+            <small>
+              v{publication.version} · {questionCountLabel(publication.question_count)}
+            </small>
+          </button>
+        );
+      })}
+
+      {publications.length === 0 && (
+        <div className="pack-theme-empty">
+          Aucun brouillon enregistré sur Supabase.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExporterScreen({ setMode }) {
   const [groups, setGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [groupsError, setGroupsError] = useState("");
@@ -464,9 +653,39 @@ function ExporterScreen() {
   const [version, setVersion] = useState("1");
   const [license, setLicense] = useState("");
   const [description, setDescription] = useState("");
+  const [themesDraft, setThemesDraft] = useState("");
+  const [tagsDraft, setTagsDraft] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [exportError, setExportError] = useState("");
+  const [publishStatus, setPublishStatus] = useState(null);
+  const [publications, setPublications] = useState([]);
+  const [activePublication, setActivePublication] = useState(null);
+  const [authStep, setAuthStep] = useState("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [publishingBusy, setPublishingBusy] = useState(false);
+  const [publishMessage, setPublishMessage] = useState("");
+  const [publishError, setPublishError] = useState("");
+
+  async function refreshPublishState() {
+    const status = await getPackPublishStatus();
+    setPublishStatus(status);
+
+    if (status.account_email) {
+      setEmail(status.account_email);
+    }
+
+    if (status.signed_in) {
+      const drafts = await listPackPublications();
+      setPublications(drafts.publications || []);
+    } else {
+      setPublications([]);
+      setActivePublication(null);
+    }
+
+    return status;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -504,16 +723,56 @@ function ExporterScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    refreshPublishState()
+      .catch((error) => {
+        console.error(error);
+
+        if (!cancelled) {
+          setPublishError(error.message || "Publication indisponible.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selectedGroup = groups.find((group) => String(group.id) === selectedGroupId);
   const versionNumber = Number(version);
+  const publishPayload = {
+    version: Math.floor(versionNumber),
+    name: title.trim(),
+    description: description.trim(),
+    license: license.trim(),
+    tags: splitTerms(tagsDraft),
+    themes: splitTerms(themesDraft)
+  };
   const canExport = (
     selectedGroup &&
     !exporting &&
+    !publishingBusy &&
     title.trim() &&
     Number.isFinite(versionNumber) &&
     versionNumber >= 1 &&
     (selectedGroup.question_count || 0) > 0
   );
+  const canSaveDraft = (
+    canExport &&
+    publishStatus?.signed_in &&
+    !publishingBusy
+  );
+  const canPublish = (
+    activePublication &&
+    !activePublication.is_public &&
+    publishStatus?.signed_in &&
+    !publishingBusy
+  );
+  const activePublicationSize = activePublication
+    ? formatSize(activePublication.size_bytes)
+    : null;
 
   async function handleExport(event) {
     event.preventDefault();
@@ -539,6 +798,107 @@ function ExporterScreen() {
       setExportError(error.message || "Export impossible.");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleRequestCode() {
+    setPublishingBusy(true);
+    setPublishError("");
+    setPublishMessage("");
+
+    try {
+      await requestPackPublishCode(email.trim());
+      setAuthStep("code");
+      setPublishMessage("Code envoyé par e-mail.");
+    } catch (error) {
+      console.error(error);
+      setPublishError(error.message || "Connexion impossible.");
+    } finally {
+      setPublishingBusy(false);
+    }
+  }
+
+  async function handleVerifyCode() {
+    setPublishingBusy(true);
+    setPublishError("");
+    setPublishMessage("");
+
+    try {
+      const status = await verifyPackPublishCode(email.trim(), code.trim());
+      setPublishStatus(status);
+      setAuthStep("email");
+      setCode("");
+      setPublishMessage("Connecté au catalogue.");
+      await refreshPublishState();
+    } catch (error) {
+      console.error(error);
+      setPublishError(error.message || "Code invalide.");
+    } finally {
+      setPublishingBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setPublishingBusy(true);
+    setPublishError("");
+    setPublishMessage("");
+
+    try {
+      const status = await signOutPackPublisher();
+      setPublishStatus(status);
+      setPublications([]);
+      setActivePublication(null);
+    } catch (error) {
+      console.error(error);
+      setPublishError(error.message || "Déconnexion impossible.");
+    } finally {
+      setPublishingBusy(false);
+    }
+  }
+
+  async function handleSaveDraft() {
+    if (!canSaveDraft) {
+      return;
+    }
+
+    setPublishingBusy(true);
+    setPublishError("");
+    setPublishMessage("");
+
+    try {
+      const result = await savePackDraft(selectedGroup.id, publishPayload);
+      setActivePublication(result.publication);
+      setPublishMessage("Brouillon privé enregistré.");
+      const drafts = await listPackPublications();
+      setPublications(drafts.publications || []);
+    } catch (error) {
+      console.error(error);
+      setPublishError(error.message || "Brouillon impossible à enregistrer.");
+    } finally {
+      setPublishingBusy(false);
+    }
+  }
+
+  async function handlePublishDraft() {
+    if (!canPublish) {
+      return;
+    }
+
+    setPublishingBusy(true);
+    setPublishError("");
+    setPublishMessage("");
+
+    try {
+      const result = await publishPackDraft(activePublication.pack_guid);
+      setActivePublication(result.publication);
+      setPublishMessage("Pack publié dans le catalogue.");
+      const drafts = await listPackPublications();
+      setPublications(drafts.publications || []);
+    } catch (error) {
+      console.error(error);
+      setPublishError(error.message || "Publication impossible.");
+    } finally {
+      setPublishingBusy(false);
     }
   }
 
@@ -578,6 +938,7 @@ function ExporterScreen() {
                   onClick={() => {
                     setSelectedGroupId(String(group.id));
                     setTitle(group.name || "");
+                    setActivePublication(null);
                   }}
                   aria-pressed={active}
                 >
@@ -607,9 +968,24 @@ function ExporterScreen() {
         <div className="pack-section-head">
           <div>
             <h2>Exporter</h2>
-            <p>Archive locale ZIP</p>
+            <p>Brouillon privé puis publication</p>
           </div>
         </div>
+
+        <PublishAuthPanel
+          authStep={authStep}
+          busy={publishingBusy}
+          code={code}
+          email={email}
+          publishStatus={publishStatus}
+          setAuthStep={setAuthStep}
+          setCode={setCode}
+          setEmail={setEmail}
+          setMode={setMode}
+          onRequestCode={handleRequestCode}
+          onSignOut={handleSignOut}
+          onVerify={handleVerifyCode}
+        />
 
         <form onSubmit={handleExport}>
           <label className="pack-field">
@@ -619,7 +995,7 @@ function ExporterScreen() {
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              disabled={exporting}
+              disabled={exporting || publishingBusy}
             />
           </label>
 
@@ -632,7 +1008,7 @@ function ExporterScreen() {
                 min="1"
                 value={version}
                 onChange={(event) => setVersion(event.target.value)}
-                disabled={exporting}
+                disabled={exporting || publishingBusy}
               />
             </label>
 
@@ -644,7 +1020,7 @@ function ExporterScreen() {
                 placeholder="CC0, CC-BY..."
                 value={license}
                 onChange={(event) => setLicense(event.target.value)}
-                disabled={exporting}
+                disabled={exporting || publishingBusy}
               />
             </label>
           </div>
@@ -655,9 +1031,35 @@ function ExporterScreen() {
               aria-label="Description du pack"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              disabled={exporting}
+              disabled={exporting || publishingBusy}
             />
           </label>
+
+          <div className="pack-form-grid">
+            <label className="pack-field">
+              <span className="pack-field-label">Thèmes</span>
+              <input
+                aria-label="Thèmes du pack"
+                type="text"
+                placeholder="géographie, cartes"
+                value={themesDraft}
+                onChange={(event) => setThemesDraft(event.target.value)}
+                disabled={exporting || publishingBusy}
+              />
+            </label>
+
+            <label className="pack-field">
+              <span className="pack-field-label">Tags</span>
+              <input
+                aria-label="Tags du pack"
+                type="text"
+                placeholder="pays, capitales"
+                value={tagsDraft}
+                onChange={(event) => setTagsDraft(event.target.value)}
+                disabled={exporting || publishingBusy}
+              />
+            </label>
+          </div>
 
           {selectedGroup && (
             <div className="pack-export-preview">
@@ -666,26 +1068,83 @@ function ExporterScreen() {
             </div>
           )}
 
-          <button
-            type="submit"
-            className="pack-primary-button"
-            disabled={!canExport}
-          >
-            {exporting ? "Export..." : "Exporter le pack"}
-          </button>
+          <div className="pack-publish-actions">
+            <button
+              type="button"
+              className="pack-primary-button"
+              disabled={!canSaveDraft}
+              onClick={handleSaveDraft}
+            >
+              {publishingBusy ? "Enregistrement..." : "Enregistrer brouillon"}
+            </button>
+
+            <button
+              type="button"
+              className="pack-secondary-button"
+              disabled={!canPublish}
+              onClick={handlePublishDraft}
+            >
+              Publier
+            </button>
+
+            <button
+              type="submit"
+              className="pack-secondary-button"
+              disabled={!canExport}
+            >
+              {exporting ? "Export..." : "Télécharger ZIP"}
+            </button>
+          </div>
         </form>
 
+        {activePublication && (
+          <div className="pack-publish-current">
+            <span>
+              {activePublication.is_public ? "Publié" : "Brouillon privé"}
+            </span>
+            <strong>{activePublication.name}</strong>
+            <small>
+              v{activePublication.version}
+              {activePublicationSize ? ` · ${activePublicationSize}` : ""}
+            </small>
+          </div>
+        )}
+
         <div className="pack-export-soon">
-          Publication Supabase plus tard.
+          Le brouillon reste privé dans Supabase. Le bouton Publier le rend visible
+          dans Importer.
         </div>
 
         {exportStatus && (
           <div className="pack-status" role="status">{exportStatus}</div>
         )}
 
+        {publishMessage && (
+          <div className="pack-status" role="status">{publishMessage}</div>
+        )}
+
         {exportError && (
           <div className="pack-alert" role="alert">{exportError}</div>
         )}
+
+        {publishError && (
+          <div className="pack-alert" role="alert">{publishError}</div>
+        )}
+      </section>
+
+      <section className="pack-panel app-scrollbar" aria-label="Brouillons Supabase">
+        <div className="pack-section-head">
+          <div>
+            <h2>Brouillons</h2>
+            <p>{publications.length} élément{publications.length > 1 ? "s" : ""}</p>
+          </div>
+        </div>
+
+        <PublicationList
+          activeGuid={activePublication?.pack_guid}
+          publications={publications}
+          onSelect={setActivePublication}
+        />
       </section>
     </div>
   );
@@ -739,7 +1198,7 @@ export default function BrowsePacks({ setMode }) {
         {activeTab === "import" ? (
           <ImporterScreen setMode={setMode} />
         ) : (
-          <ExporterScreen />
+          <ExporterScreen setMode={setMode} />
         )}
       </div>
     </div>

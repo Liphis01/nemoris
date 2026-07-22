@@ -1,10 +1,25 @@
 import json
+from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
-from ..models import PackSubscription
+from sqlalchemy.orm import joinedload
+
+from ..models import PackSubscription, QuestionGroup
+from .map_zones import merge_tags
+from .pack_publish_state import (
+    is_pack_publisher_signed_in,
+    load_pack_publish_state,
+    save_pack_publish_state
+)
+from .packs import export_pack
 from .settings import get_pack_catalog_settings
+from .sync_state import (
+    is_signed_in as is_sync_signed_in,
+    load_sync_state,
+    save_sync_state
+)
 
 
 CATALOG_BUCKET = "pack-zips"
@@ -13,9 +28,15 @@ VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
 VALID_STATUSES = {"all", "not_installed", "update_available", "up_to_date"}
 MAX_LIMIT = 60
 HEALTH_SAMPLE_LIMIT = 3
+PUBLISH_TIMEOUT = 12
+PUBLISH_TRANSFER_TIMEOUT = 60
 
 
 class PackCatalogError(ValueError):
+    pass
+
+
+class PackCatalogAuthError(PackCatalogError):
     pass
 
 
@@ -572,4 +593,544 @@ def check_pack_catalog_health(db):
         "next_cursor": next_cursor,
         "checks": checks,
         "sample_packs": samples
+    }
+
+
+def _publish_config(db):
+    settings = get_pack_catalog_settings(db)
+    project_url = normalize_supabase_url(settings.get("url"))
+    key = str(settings.get("key") or "").strip()
+
+    if not project_url or not key:
+        raise PackCatalogError("Catalogue Supabase non configuré.")
+
+    return project_url, key
+
+
+def _supabase_request_headers(key, access_token=None, content_type=None):
+    headers = {"apikey": key}
+
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    elif str(key or "").startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    return headers
+
+
+def _supabase_request(
+    project_url,
+    key,
+    path,
+    *,
+    method="GET",
+    access_token=None,
+    payload=None,
+    body=None,
+    headers=None,
+    timeout=PUBLISH_TIMEOUT
+):
+    data = body
+    all_headers = _supabase_request_headers(
+        key,
+        access_token=access_token,
+        content_type="application/json" if payload is not None else None
+    )
+
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+
+    if headers:
+        all_headers.update(headers)
+
+    request = Request(
+        f"{project_url}{path}",
+        data=data,
+        headers=all_headers,
+        method=method
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return response.status, dict(response.headers), response.read()
+    except HTTPError as error:
+        return error.code, dict(error.headers), error.read()
+    except (TimeoutError, URLError, ValueError) as error:
+        raise PackCatalogError("Catalogue Supabase inaccessible.") from error
+
+
+def _decode_json_body(body):
+    if not body:
+        return {}
+
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as error:
+        raise PackCatalogError("Réponse Supabase invalide.") from error
+
+
+def _raise_supabase_status(status, body, fallback):
+    if status < 400:
+        return
+
+    raise PackCatalogError(
+        _message_from_body(body) or f"{fallback} ({status})."
+    )
+
+
+def _verify_payloads(email, value):
+    value = str(value or "").strip()
+
+    if "://" in value or "verify?" in value:
+        query = parse_qs(urlparse(value).query)
+        token_hash = (query.get("token") or [None])[0]
+        link_type = (query.get("type") or ["magiclink"])[0]
+
+        if not token_hash:
+            raise PackCatalogAuthError(
+                "Lien invalide : colle le lien complet de l'e-mail."
+            )
+
+        return [
+            {"type": link_type, "token_hash": token_hash},
+            {"type": "email", "token_hash": token_hash}
+        ]
+
+    return [{"type": "email", "email": email, "token": value}]
+
+
+def _refresh_publish_token(project_url, key, token):
+    refresh_token = (token or {}).get("refresh_token")
+
+    if not refresh_token:
+        raise PackCatalogAuthError("Session expirée : reconnecte-toi.")
+
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/auth/v1/token?grant_type=refresh_token",
+        method="POST",
+        payload={"refresh_token": refresh_token}
+    )
+
+    if status >= 400:
+        raise PackCatalogAuthError(
+            _message_from_body(body) or "Session expirée : reconnecte-toi."
+        )
+
+    data = _decode_json_body(body)
+
+    if not data.get("access_token"):
+        raise PackCatalogAuthError("Session expirée : reconnecte-toi.")
+
+    return {
+        **token,
+        "access_token": data["access_token"],
+        "refresh_token": data.get("refresh_token") or refresh_token
+    }
+
+
+def _valid_token_state(state):
+    return (
+        isinstance(state, dict)
+        and isinstance(state.get("token"), dict)
+        and bool(state["token"].get("access_token"))
+        and bool(state["token"].get("user_id"))
+    )
+
+
+def _sync_state_matches_catalog(state, project_url):
+    return (
+        is_sync_signed_in(state)
+        and _valid_token_state(state)
+        and normalize_supabase_url(state.get("server_url")) == project_url
+    )
+
+
+def _effective_publish_state(project_url, *, required=True):
+    sync_state = load_sync_state()
+
+    if _sync_state_matches_catalog(sync_state, project_url):
+        return sync_state, "sync"
+
+    publish_state = load_pack_publish_state()
+
+    if is_pack_publisher_signed_in(publish_state) and _valid_token_state(
+        publish_state
+    ):
+        return publish_state, "catalog"
+
+    if required:
+        raise PackCatalogAuthError("Connexion Supabase requise.")
+
+    return None, None
+
+
+def _save_effective_publish_state(state, source):
+    if source == "sync":
+        save_sync_state(state)
+    else:
+        save_pack_publish_state(state)
+
+
+def _authed_supabase_request(
+    db,
+    path,
+    *,
+    method="GET",
+    payload=None,
+    body=None,
+    headers=None,
+    timeout=PUBLISH_TIMEOUT
+):
+    project_url, key = _publish_config(db)
+    state, source = _effective_publish_state(project_url)
+    token = state["token"]
+
+    status, response_headers, response_body = _supabase_request(
+        project_url,
+        key,
+        path,
+        method=method,
+        access_token=token["access_token"],
+        payload=payload,
+        body=body,
+        headers=headers,
+        timeout=timeout
+    )
+
+    if status == 401:
+        token = _refresh_publish_token(project_url, key, token)
+        state["token"] = token
+        _save_effective_publish_state(state, source)
+        status, response_headers, response_body = _supabase_request(
+            project_url,
+            key,
+            path,
+            method=method,
+            access_token=token["access_token"],
+            payload=payload,
+            body=body,
+            headers=headers,
+            timeout=timeout
+        )
+
+    if status == 401:
+        raise PackCatalogAuthError(
+            _message_from_body(response_body)
+            or "Session expirée : reconnecte-toi."
+        )
+
+    return project_url, token, status, response_headers, response_body
+
+
+def _authed_json(db, path, *, method="GET", payload=None):
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        path,
+        method=method,
+        payload=payload
+    )
+    _raise_supabase_status(status, body, "Action Supabase impossible")
+
+    return _decode_json_body(body)
+
+
+def _normalize_terms(values, max_items):
+    terms = []
+    seen = set()
+
+    for raw in values or []:
+        for chunk in str(raw or "").split(","):
+            value = chunk.strip()
+            key = value.casefold()
+
+            if not value or key in seen:
+                continue
+
+            seen.add(key)
+            terms.append(value)
+
+            if len(terms) >= max_items:
+                return terms
+
+    return terms
+
+
+def _filename_slug(value):
+    slug = "".join(
+        char.lower() if char.isalnum() else "-"
+        for char in str(value or "")
+    ).strip("-")
+
+    return slug[:64] or "pack"
+
+
+def _group_publish_summary(db, group_id):
+    group = (
+        db.query(QuestionGroup)
+        .options(joinedload(QuestionGroup.questions))
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise ValueError("Question group not found")
+
+    questions = list(group.questions or [])
+    tags = merge_tags(*[
+        question.tags or []
+        for question in questions
+        if question.type_q in {"map", "media", "text"}
+    ])
+
+    return {
+        "pack_guid": group.guid,
+        "type_group": group.type_group,
+        "question_count": len(questions),
+        "tags": tags
+    }
+
+
+def _normalize_publication(row, project_url):
+    if isinstance(row, list):
+        row = row[0] if row else {}
+
+    if not isinstance(row, dict):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    storage_path = str(row.get("storage_path") or "").strip()
+
+    return {
+        "pack_guid": str(row.get("pack_guid") or ""),
+        "name": str(row.get("name") or "Pack sans titre"),
+        "description": str(row.get("description") or ""),
+        "type_group": str(row.get("type_group") or "text"),
+        "question_count": row.get("question_count"),
+        "version": row.get("version") or 1,
+        "size_bytes": row.get("size_bytes"),
+        "license": str(row.get("license") or ""),
+        "tags": row.get("tags") if isinstance(row.get("tags"), list) else [],
+        "themes": (
+            row.get("themes") if isinstance(row.get("themes"), list) else []
+        ),
+        "storage_path": storage_path,
+        "download_url": _public_storage_url(project_url, storage_path),
+        "is_public": bool(row.get("is_public")),
+        "publication_status": str(
+            row.get("publication_status")
+            or ("published" if row.get("is_public") else "draft")
+        ),
+        "published_at": row.get("published_at"),
+        "updated_at": row.get("updated_at")
+    }
+
+
+def get_pack_publish_status(db):
+    settings = get_pack_catalog_settings(db)
+    project_url = normalize_supabase_url(settings.get("url"))
+    key = str(settings.get("key") or "").strip()
+    state, source = _effective_publish_state(project_url, required=False)
+
+    return {
+        "configured": bool(project_url and key),
+        "project_url": project_url,
+        "signed_in": bool(state),
+        "account_email": state.get("account_email") if state else None,
+        "auth_source": source
+    }
+
+
+def request_pack_publish_code(db, email):
+    project_url, key = _publish_config(db)
+    clean_email = str(email or "").strip().lower()
+
+    if not clean_email:
+        raise PackCatalogAuthError("E-mail requis.")
+
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/auth/v1/otp",
+        method="POST",
+        payload={"email": clean_email, "create_user": True}
+    )
+    _raise_supabase_status(status, body, "Impossible d'envoyer le code")
+
+    return {}
+
+
+def verify_pack_publish_code(db, email, code):
+    project_url, key = _publish_config(db)
+    clean_email = str(email or "").strip().lower()
+    last_error = "Code invalide."
+
+    for payload in _verify_payloads(clean_email, code):
+        status, _, body = _supabase_request(
+            project_url,
+            key,
+            "/auth/v1/verify",
+            method="POST",
+            payload=payload
+        )
+
+        if status >= 400:
+            last_error = _message_from_body(body) or last_error
+            continue
+
+        data = _decode_json_body(body)
+        user_id = (data.get("user") or {}).get("id")
+
+        if not data.get("access_token") or not user_id:
+            raise PackCatalogAuthError("Réponse de connexion invalide.")
+
+        save_pack_publish_state({
+            "account_email": clean_email,
+            "token": {
+                "access_token": data["access_token"],
+                "refresh_token": data.get("refresh_token"),
+                "user_id": user_id
+            }
+        })
+
+        return get_pack_publish_status(db)
+
+    raise PackCatalogAuthError(last_error)
+
+
+def sign_out_pack_publisher():
+    state = load_pack_publish_state()
+    state["account_email"] = None
+    state["token"] = None
+    save_pack_publish_state(state)
+
+    return state
+
+
+def list_pack_publications(db):
+    project_url, _ = _publish_config(db)
+    state, _ = _effective_publish_state(project_url)
+    owner_id = quote(str(state["token"].get("user_id") or ""), safe="")
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/pack_catalog"
+        "?select=pack_guid,name,description,type_group,question_count,"
+        "version,size_bytes,license,tags,themes,storage_path,is_public,"
+        "publication_status,published_at,updated_at"
+        f"&owner_id=eq.{owner_id}"
+        "&order=updated_at.desc"
+        "&limit=50"
+    )
+    _raise_supabase_status(status, body, "Brouillons indisponibles")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return {
+        "publications": [
+            _normalize_publication(row, project_url)
+            for row in rows
+        ]
+    }
+
+
+def save_pack_publish_draft(
+    db,
+    group_id,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    summary = _group_publish_summary(db, group_id)
+
+    if summary["question_count"] <= 0:
+        raise ValueError("Cannot publish an empty group")
+
+    safe_version = int(version)
+    zip_path = export_pack(
+        db,
+        group_id,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license
+    )
+    zip_bytes = zip_path.read_bytes()
+    project_url, _ = _publish_config(db)
+    state, _ = _effective_publish_state(project_url)
+    token = state["token"]
+    storage_path = (
+        f"{token['user_id']}/{summary['pack_guid']}/"
+        f"v{safe_version}-{_filename_slug(name)}.zip"
+    )
+
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        f"/storage/v1/object/{CATALOG_BUCKET}/"
+        f"{quote(storage_path, safe='/')}",
+        method="POST",
+        body=zip_bytes,
+        headers={"Content-Type": "application/zip", "x-upsert": "true"},
+        timeout=PUBLISH_TRANSFER_TIMEOUT
+    )
+    _raise_supabase_status(status, body, "Téléversement du ZIP impossible")
+
+    draft_tags = _normalize_terms(
+        tags if tags else summary["tags"],
+        max_items=20
+    )
+    draft_themes = _normalize_terms(themes, max_items=12)
+    payload = {
+        "p_pack_guid": summary["pack_guid"],
+        "p_name": str(name or "").strip(),
+        "p_description": str(description or "").strip(),
+        "p_type_group": summary["type_group"],
+        "p_question_count": summary["question_count"],
+        "p_version": safe_version,
+        "p_size_bytes": len(zip_bytes),
+        "p_license": str(license or "").strip(),
+        "p_tags": draft_tags,
+        "p_themes": draft_themes,
+        "p_storage_path": storage_path
+    }
+
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/upsert_my_pack_draft",
+        method="POST",
+        payload=payload
+    )
+    _raise_supabase_status(status, body, "Brouillon impossible à enregistrer")
+
+    publication = _normalize_publication(_decode_json_body(body), project_url)
+
+    return {
+        "status": "draft",
+        "publication": publication,
+        "saved_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+def publish_pack_publication(db, pack_guid):
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/publish_my_pack",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+    _raise_supabase_status(status, body, "Publication impossible")
+
+    publication = _normalize_publication(_decode_json_body(body), project_url)
+
+    return {
+        "status": "published",
+        "publication": publication
     }

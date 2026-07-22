@@ -1,6 +1,8 @@
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 from urllib.error import HTTPError
 
@@ -8,10 +10,15 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, PackSubscription
+from app.models import Base, PackSubscription, Question, QuestionGroup
 from app.routers.packs import (
     diagnose_pack_catalog,
     search_catalog_packs
+)
+from app.services.pack_catalog import (
+    get_pack_publish_status,
+    publish_pack_publication,
+    save_pack_publish_draft
 )
 from app.services.settings import save_pack_catalog_settings
 
@@ -26,6 +33,7 @@ class FakeResponse:
     def __init__(self, payload, status=200):
         self.payload = payload
         self.status = status
+        self.headers = {}
 
     def __enter__(self):
         return self
@@ -384,6 +392,247 @@ class PackCatalogSearchTests(unittest.TestCase):
         self.assertEqual(
             result["sample_packs"][0]["download_status"],
             "ok"
+        )
+
+
+class PackCatalogPublishTests(unittest.TestCase):
+    def configure(self, db):
+        save_pack_catalog_settings(
+            db,
+            "https://project.supabase.co",
+            "sb_publishable_test"
+        )
+        group = QuestionGroup(
+            guid="group-guid",
+            type_group="map",
+            name="Capitales du monde"
+        )
+        db.add(group)
+        db.flush()
+        db.add(Question(
+            guid="question-guid",
+            type_q="map",
+            question="France",
+            answer="Paris",
+            tags=["capitales", "europe"],
+            group_id=group.id
+        ))
+        db.commit()
+
+        return group.id
+
+    def publish_state(self):
+        return {
+            "account_email": "author@example.com",
+            "token": {
+                "access_token": "access-token",
+                "refresh_token": "refresh-token",
+                "user_id": "user-123"
+            }
+        }
+
+    def empty_sync_state(self):
+        return {
+            "server_url": "",
+            "server_key": "",
+            "account_email": None,
+            "token": None
+        }
+
+    def sync_state(self):
+        return {
+            "server_url": "https://project.supabase.co/rest/v1",
+            "server_key": "sb_publishable_test",
+            "account_email": "sync@example.com",
+            "token": {
+                "access_token": "sync-access-token",
+                "refresh_token": "sync-refresh-token",
+                "user_id": "sync-user-123"
+            }
+        }
+
+    def test_status_reuses_matching_sync_account(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value={"account_email": None, "token": None}
+        ):
+            result = get_pack_publish_status(db)
+
+        self.assertTrue(result["signed_in"])
+        self.assertEqual(result["account_email"], "sync@example.com")
+        self.assertEqual(result["auth_source"], "sync")
+
+    def test_save_draft_uploads_zip_and_upserts_private_catalog_row(self):
+        db = make_db()
+        group_id = self.configure(db)
+        calls = []
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_zip:
+            temp_zip.write(b"zip-bytes")
+            temp_zip.flush()
+
+            def fake_urlopen(request, timeout):
+                calls.append((request, timeout))
+
+                if "/storage/v1/object/pack-zips/" in request.full_url:
+                    return FakeResponse({})
+
+                return FakeResponse({
+                    "pack_guid": "group-guid",
+                    "name": "Atlas des capitales",
+                    "description": "Cartes de capitales.",
+                    "type_group": "map",
+                    "question_count": 1,
+                    "version": 2,
+                    "size_bytes": 9,
+                    "license": "CC0",
+                    "tags": ["capitales"],
+                    "themes": ["géographie"],
+                    "storage_path": (
+                        "user-123/group-guid/v2-atlas-des-capitales.zip"
+                    ),
+                    "is_public": False,
+                    "publication_status": "draft"
+                })
+
+            with mock.patch(
+                "app.services.pack_catalog.load_sync_state",
+                return_value=self.empty_sync_state()
+            ), mock.patch(
+                "app.services.pack_catalog.load_pack_publish_state",
+                return_value=self.publish_state()
+            ), mock.patch(
+                "app.services.pack_catalog.export_pack",
+                return_value=Path(temp_zip.name)
+            ), mock.patch(
+                "app.services.pack_catalog.urlopen",
+                fake_urlopen
+            ):
+                result = save_pack_publish_draft(
+                    db,
+                    group_id,
+                    version=2,
+                    name="Atlas des capitales",
+                    description="Cartes de capitales.",
+                    license="CC0",
+                    tags=["capitales"],
+                    themes=["géographie"]
+                )
+
+        self.assertEqual(result["status"], "draft")
+        self.assertFalse(result["publication"]["is_public"])
+
+        storage_request, storage_timeout = calls[0]
+        self.assertEqual(storage_timeout, 60)
+        self.assertEqual(storage_request.get_method(), "POST")
+        self.assertEqual(storage_request.data, b"zip-bytes")
+        self.assertEqual(
+            storage_request.headers.get("Authorization"),
+            "Bearer access-token"
+        )
+        self.assertIn(
+            "/storage/v1/object/pack-zips/user-123/group-guid/"
+            "v2-atlas-des-capitales.zip",
+            storage_request.full_url
+        )
+
+        rpc_request, rpc_timeout = calls[1]
+        self.assertEqual(rpc_timeout, 12)
+        self.assertEqual(
+            rpc_request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/upsert_my_pack_draft"
+        )
+        payload = json.loads(rpc_request.data.decode("utf-8"))
+        self.assertEqual(payload["p_pack_guid"], "group-guid")
+        self.assertEqual(payload["p_question_count"], 1)
+        self.assertEqual(payload["p_version"], 2)
+        self.assertEqual(payload["p_size_bytes"], 9)
+        self.assertEqual(payload["p_tags"], ["capitales"])
+        self.assertEqual(payload["p_themes"], ["géographie"])
+
+    def test_publish_calls_authenticated_publish_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "pack_guid": "group-guid",
+                "name": "Atlas des capitales",
+                "version": 2,
+                "question_count": 1,
+                "storage_path": "user-123/group-guid/v2-atlas.zip",
+                "is_public": True,
+                "publication_status": "published"
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = publish_pack_publication(db, "group-guid")
+
+        self.assertEqual(result["status"], "published")
+        self.assertTrue(result["publication"]["is_public"])
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/publish_my_pack"
+        )
+        self.assertEqual(
+            request.headers.get("Authorization"),
+            "Bearer access-token"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "group-guid"}
+        )
+
+    def test_publish_uses_matching_sync_token_before_catalog_token(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "pack_guid": "group-guid",
+                "name": "Atlas des capitales",
+                "version": 2,
+                "question_count": 1,
+                "storage_path": "sync-user-123/group-guid/v2-atlas.zip",
+                "is_public": True,
+                "publication_status": "published"
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            publish_pack_publication(db, "group-guid")
+
+        self.assertEqual(
+            calls[0][0].headers.get("Authorization"),
+            "Bearer sync-access-token"
         )
 
 

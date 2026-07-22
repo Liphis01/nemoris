@@ -196,6 +196,11 @@ class PackExportRequest(BaseModel):
     license: str = Field(default="", max_length=200)
 
 
+class PackPublishDraftRequest(PackExportRequest):
+    tags: List[str] = Field(default_factory=list, max_length=20)
+    themes: List[str] = Field(default_factory=list, max_length=12)
+
+
 class PackCatalogSettings(BaseModel):
     url: str = Field(default="", max_length=2048)
     key: str = Field(default="", max_length=4096)

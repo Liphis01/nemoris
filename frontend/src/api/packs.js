@@ -41,6 +41,55 @@ export function getPackCatalogDiagnostics() {
 }
 
 
+export function getPackPublishStatus() {
+  return requestJson("/packs/catalog/publish/status");
+}
+
+
+export function requestPackPublishCode(email) {
+  return requestJson("/packs/catalog/publish/request-code", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+}
+
+
+export function verifyPackPublishCode(email, code) {
+  return requestJson("/packs/catalog/publish/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code })
+  });
+}
+
+
+export function signOutPackPublisher() {
+  return requestJson("/packs/catalog/publish/sign-out", { method: "POST" });
+}
+
+
+export function listPackPublications() {
+  return requestJson("/packs/catalog/publish/drafts");
+}
+
+
+export function savePackDraft(groupId, payload) {
+  return requestJson(`/packs/${groupId}/publish/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+
+export function publishPackDraft(packGuid) {
+  return requestJson(`/packs/catalog/publish/${packGuid}`, {
+    method: "POST"
+  });
+}
+
+
 function filenameFromDisposition(header) {
   if (!header) {
     return null;
