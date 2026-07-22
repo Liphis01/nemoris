@@ -2,7 +2,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
@@ -107,14 +107,11 @@ pub fn run() {
                 .sidecar("nemoris-backend")
                 .expect("nemoris-backend sidecar is missing from the bundle")
                 .env("QUIZ_APP_PORT", port.to_string())
+                .env("NEMORIS_PARENT_PID", std::process::id().to_string())
                 .spawn()
                 .expect("failed to spawn the backend sidecar");
 
-            app.state::<BackendChild>()
-                .0
-                .lock()
-                .unwrap()
-                .replace(child);
+            app.state::<BackendChild>().0.lock().unwrap().replace(child);
 
             // Drain the sidecar's pipes (they would block if left unread) and
             // mirror its output into the Tauri log.
@@ -141,18 +138,23 @@ pub fn run() {
                 .min_inner_size(1024.0, 700.0)
                 .decorations(false)
                 .maximized(true)
-                .initialization_script(&format!(
-                    "window.__NEMORIS_BACKEND__ = '{backend}';"
-                ))
+                .initialization_script(&format!("window.__NEMORIS_BACKEND__ = '{backend}';"))
                 .build()?;
 
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building the Tauri application")
-        .run(|app, event| {
-            if let RunEvent::ExitRequested { .. } = event {
+        .run(|app, event| match event {
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if label == "main" => {
                 kill_backend(app);
+                app.exit(0);
             }
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => kill_backend(app),
+            _ => {}
         });
 }
