@@ -332,6 +332,33 @@ class SyncEngineTests(unittest.TestCase):
         self.do_pull(b, client_b)
         self.assertEqual(self.questions_in(b), {"Q-A"})
 
+    def test_stale_push_conflicts_before_uploading_media(self):
+        a = self.make_device("a")
+        self.seed(a, ["Q-A"])
+        self.seed_media(a, "img.svg", b"<svg/>")
+        self.sign_in(a)
+
+        uploads = []
+        pushes = []
+
+        class StaleCloudClient:
+            def get_meta(self, token):
+                return {"version": 2, "media_hashes": []}
+
+            def upload_media_blob(self, token, sha256, data):
+                uploads.append(sha256)
+
+            def push(self, token, **kwargs):
+                pushes.append(kwargs)
+                raise AssertionError("push should not run after preflight conflict")
+
+        with self.assertRaises(SyncClientConflict) as caught:
+            self.do_push(a, StaleCloudClient())
+
+        self.assertEqual(caught.exception.server_version, 2)
+        self.assertEqual(uploads, [])
+        self.assertEqual(pushes, [])
+
     def test_pull_refuses_newer_schema(self):
         a = self.make_device("a")
         self.sign_in(a)

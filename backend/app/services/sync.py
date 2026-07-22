@@ -238,6 +238,12 @@ def push(
     schema = code_schema_version()
 
     meta = client.get_meta(state["token"])
+    server_version = _server_version(meta)
+    local_version = _state_version(state)
+
+    if not force and server_version != local_version:
+        raise SyncClientConflict(server_version)
+
     local_hashes = _upload_missing_media(
         client, state["token"], database_file, static_dir,
         set(meta.get("media_hashes") or [])
