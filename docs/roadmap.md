@@ -15,6 +15,10 @@
 - il faudrait autoriser plusieurs images pour une même question pour varier
 - le mode plein écran n'est pas parfait (resize)
 - site de quiz en ligne relié
+- log off
+- suppression de pack
+- autoriser les accents (et autres caractères spéciaux) dans supabase
+- il reste un dossier qui s'appelle blueprint
 
 
 ## quick fixes

@@ -433,14 +433,34 @@ function PackDetailPanel({
   );
 }
 
-function ImporterScreen({ onOpenGroup, setMode }) {
+function ImporterScreen({
+  initialPackGuid,
+  initialSearch,
+  onInitialPackHandled,
+  onOpenGroup,
+  setMode
+}) {
   const [activeTheme, setActiveTheme] = useState(POPULAR_THEME);
-  const [searchDraft, setSearchDraft] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState(initialSearch || "");
+  const [search, setSearch] = useState((initialSearch || "").trim());
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sort, setSort] = useState("pertinence");
-  const [activeGuid, setActiveGuid] = useState(null);
+  const [sort, setSort] = useState(initialPackGuid ? "populaires" : "pertinence");
+  const [activeGuid, setActiveGuid] = useState(initialPackGuid || null);
+
+  useEffect(() => {
+    if (!initialPackGuid && !initialSearch) {
+      return;
+    }
+
+    setActiveTheme(POPULAR_THEME);
+    setSearchDraft(initialSearch || "");
+    setSearch((initialSearch || "").trim());
+    setStatusFilter("all");
+    setSort("populaires");
+    setActiveGuid(initialPackGuid || null);
+    onInitialPackHandled?.();
+  }, [initialPackGuid, initialSearch, onInitialPackHandled]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1236,8 +1256,20 @@ function ExporterScreen({ setMode }) {
   );
 }
 
-export default function BrowsePacks({ setMode, onOpenGroup }) {
+export default function BrowsePacks({
+  setMode,
+  onOpenGroup,
+  initialPackGuid = null,
+  initialSearch = "",
+  onInitialPackHandled = null
+}) {
   const [activeTab, setActiveTab] = useState("import");
+
+  useEffect(() => {
+    if (initialPackGuid || initialSearch) {
+      setActiveTab("import");
+    }
+  }, [initialPackGuid, initialSearch]);
 
   return (
     <div className={`pack-screen pack-layout-dense pack-tab-${activeTab}`}>
@@ -1283,6 +1315,9 @@ export default function BrowsePacks({ setMode, onOpenGroup }) {
 
         {activeTab === "import" ? (
           <ImporterScreen
+            initialPackGuid={initialPackGuid}
+            initialSearch={initialSearch}
+            onInitialPackHandled={onInitialPackHandled}
             onOpenGroup={onOpenGroup}
             setMode={setMode}
           />

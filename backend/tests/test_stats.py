@@ -44,7 +44,8 @@ class StatsServiceTests(unittest.TestCase):
         history=None,
         reps=None,
         lapses=None,
-        difficulty=5.0
+        difficulty=5.0,
+        interval=0
     ):
         item = Question(
             id=question_id,
@@ -64,7 +65,7 @@ class StatsServiceTests(unittest.TestCase):
                 lapses=lapses if lapses is not None else sum(
                     1 for entry in history or [] if entry.get("quality") == 0
                 ),
-                interval=0,
+                interval=interval,
                 last_review=None,
                 next_review=next_review,
                 history=history or []
@@ -164,6 +165,7 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["counts"]["due_total"], 2)
         self.assertEqual(stats["counts"]["overdue"], 1)
         self.assertEqual(stats["counts"]["due_today"], 1)
+        self.assertEqual(stats["counts"]["mastered"], 0)
         self.assertEqual(stats["counts"]["by_type"]["text"]["total"], 3)
         self.assertEqual(stats["counts"]["by_type"]["timeline"]["due"], 1)
         self.assertEqual(stats["counts"]["by_type"]["media"]["total"], 0)
@@ -236,6 +238,42 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["counts"]["due_total"], 0)
         self.assertEqual(stats["counts"]["due_today"], 0)
         self.assertEqual(stats["load_by_type"][0]["total"], 0)
+
+    def test_mastered_count_uses_interval_and_reps_threshold(self):
+        today = date(2026, 1, 15)
+        self.add_question(
+            1,
+            type_q="text",
+            next_review=today + timedelta(days=90),
+            history=[history_entry(today - timedelta(days=1), 3)],
+            reps=3,
+            interval=60
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            next_review=today + timedelta(days=90),
+            history=[history_entry(today - timedelta(days=1), 3)],
+            reps=2,
+            interval=90
+        )
+        self.add_question(
+            3,
+            type_q="timeline",
+            next_review=today + timedelta(days=90),
+            history=[history_entry(today - timedelta(days=1), 3)],
+            reps=4,
+            interval=30
+        )
+        self.add_question(4, type_q="text")
+        self.db.commit()
+
+        stats = build_stats(self.db, today=today)
+
+        self.assertEqual(stats["counts"]["mastered"], 1)
+        self.assertEqual(stats["counts"]["by_type"]["text"]["mastered"], 1)
+        self.assertEqual(stats["counts"]["by_type"]["map"]["mastered"], 0)
+        self.assertEqual(stats["counts"]["by_type"]["timeline"]["mastered"], 0)
 
 
 if __name__ == "__main__":

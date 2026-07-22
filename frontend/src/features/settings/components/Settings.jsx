@@ -260,7 +260,11 @@ function CatalogDiagnosticPanel({ diagnostics, checking, error }) {
   );
 }
 
-export default function Settings({ setMode }) {
+export default function Settings({
+  setMode,
+  initialSection = null,
+  onInitialSectionHandled = null
+}) {
   const [target, setTarget] = useState(50);
   const [draft, setDraft] = useState("50");
   const [loading, setLoading] = useState(true);
@@ -293,6 +297,27 @@ export default function Settings({ setMode }) {
       screen.scrollTop = 0;
     }
   }, []);
+
+  useEffect(() => {
+    if (!initialSection) {
+      return undefined;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(initialSection);
+
+      if (target) {
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+
+      onInitialSectionHandled?.();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialSection, onInitialSectionHandled]);
 
   useEffect(() => {
     let cancelled = false;

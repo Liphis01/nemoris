@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Menu from "./features/menu/Menu";
 import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
@@ -32,6 +32,8 @@ function App() {
   const [reviewSummary, setReviewSummary] = useState(null);
   const [reviewSummaryLoading, setReviewSummaryLoading] = useState(false);
   const [reviewSummaryError, setReviewSummaryError] = useState("");
+  const [settingsScrollTarget, setSettingsScrollTarget] = useState(null);
+  const [packOpenTarget, setPackOpenTarget] = useState(null);
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
   const autoSync = useAutoSync();
@@ -159,6 +161,27 @@ function App() {
     setMode("calendar");
   }
 
+  const openSettingsSection = useCallback((sectionId) => {
+    setSettingsScrollTarget(sectionId || null);
+    setMode("settings");
+  }, []);
+
+  const clearSettingsScrollTarget = useCallback(() => {
+    setSettingsScrollTarget(null);
+  }, []);
+
+  const openPackInCatalog = useCallback((pack) => {
+    setPackOpenTarget({
+      guid: pack?.pack_guid || null,
+      search: pack?.name || ""
+    });
+    setMode("packs");
+  }, []);
+
+  const clearPackOpenTarget = useCallback(() => {
+    setPackOpenTarget(null);
+  }, []);
+
   return (
     <div style={appStyle}>
       <DesktopTitleBar />
@@ -173,6 +196,8 @@ function App() {
             reviewSummary={reviewSummary}
             reviewSummaryLoading={reviewSummaryLoading}
             reviewSummaryError={reviewSummaryError}
+            onOpenSettingsSection={openSettingsSection}
+            onOpenPack={openPackInCatalog}
           />
         )}
 
@@ -217,13 +242,20 @@ function App() {
         )}
 
         {mode === "settings" && (
-          <Settings setMode={setMode} />
+          <Settings
+            setMode={setMode}
+            initialSection={settingsScrollTarget}
+            onInitialSectionHandled={clearSettingsScrollTarget}
+          />
         )}
 
         {mode === "packs" && (
           <BrowsePacks
             setMode={setMode}
             onOpenGroup={openGroupIdInManage}
+            initialPackGuid={packOpenTarget?.guid || null}
+            initialSearch={packOpenTarget?.search || ""}
+            onInitialPackHandled={clearPackOpenTarget}
           />
         )}
       </div>

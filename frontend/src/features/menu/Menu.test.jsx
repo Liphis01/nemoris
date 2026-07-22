@@ -2,6 +2,44 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Menu from "./Menu";
 
+vi.mock("../../api/sync", () => ({
+  getSyncStatus: vi.fn(() => Promise.resolve({
+    signed_in: false,
+    account_email: null
+  }))
+}));
+
+vi.mock("../../api/stats", () => ({
+  getStats: vi.fn(() => Promise.resolve({
+    counts: {
+      total: 12,
+      mastered: 3
+    },
+    weak_spots: {
+      text: [{ id: 1 }],
+      map: []
+    }
+  }))
+}));
+
+vi.mock("../../api/packs", () => ({
+  getPackCatalogSettings: vi.fn(() => Promise.resolve({
+    url: "https://catalog.example",
+    key: "sb_publishable_test"
+  })),
+  searchPackCatalog: vi.fn(() => Promise.resolve({
+    packs: [
+      {
+        pack_guid: "pack-1",
+        name: "Capitales du monde",
+        description: "Un pack pour réviser les capitales.",
+        question_count: 50,
+        download_count: 8
+      }
+    ]
+  }))
+}));
+
 describe("Menu", () => {
   afterEach(() => {
     cleanup();
@@ -37,7 +75,11 @@ describe("Menu", () => {
       expect.stringContaining("Réglages")
     ]);
     expect(screen.getAllByText("4").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("À revoir").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: /Révision du jour: 4 questions, À revoir/
+      })
+    ).toBeInTheDocument();
   });
 
   it("shows an empty review count", () => {
@@ -51,7 +93,11 @@ describe("Menu", () => {
     );
 
     expect(screen.getAllByText("0").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("À jour").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: /Session terminée: 0 questions, À jour/
+      })
+    ).toBeInTheDocument();
   });
 
   it("shows the startup rebalance notice when provided", () => {

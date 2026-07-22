@@ -13,6 +13,8 @@ RETENTION_WINDOW_DAYS = 90
 HARD_QUESTION_LIMIT = 12
 FAVORITE_QUESTION_LIMIT = 20
 WEAK_SPOT_LIMIT = 10
+MASTERED_MIN_INTERVAL_DAYS = 60
+MASTERED_MIN_REPS = 3
 
 
 def _question_type(question):
@@ -25,7 +27,8 @@ def _empty_type_count():
         "due": 0,
         "overdue": 0,
         "due_today": 0,
-        "new": 0
+        "new": 0,
+        "mastered": 0
     }
 
 
@@ -64,6 +67,16 @@ def _history_date(entry):
 
 def _is_new(progress):
     return progress_is_new(progress)
+
+
+def _is_mastered(progress):
+    if not progress or _is_new(progress):
+        return False
+
+    return (
+        (progress.interval or 0) >= MASTERED_MIN_INTERVAL_DAYS and
+        (progress.reps or 0) >= MASTERED_MIN_REPS
+    )
 
 
 def _next_review(progress, today):
@@ -222,6 +235,7 @@ def build_stats(db, today=None):
         "overdue": 0,
         "due_today": 0,
         "new": 0,
+        "mastered": 0,
         "by_type": {type_q: _empty_type_count() for type_q in KNOWN_TYPES}
     }
     retention_by_type = {
@@ -245,6 +259,10 @@ def build_stats(db, today=None):
             counts["new"] += 1
             type_counts["new"] += 1
             continue
+
+        if _is_mastered(progress):
+            counts["mastered"] += 1
+            type_counts["mastered"] += 1
 
         if next_review <= today:
             counts["due_total"] += 1
