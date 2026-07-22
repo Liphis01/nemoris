@@ -38,14 +38,40 @@ create table if not exists public.blueprint_catalog (
   updated_at timestamptz not null default now(),
   storage_path text not null,
   is_public boolean not null default false,
-  search_vector tsvector generated always as (
-    setweight(to_tsvector('simple', coalesce(name, '')), 'A') ||
-    setweight(to_tsvector('simple', coalesce(description, '')), 'B') ||
-    setweight(to_tsvector('simple', coalesce(license, '')), 'C') ||
-    setweight(to_tsvector('simple', array_to_string(tags, ' ')), 'B') ||
-    setweight(to_tsvector('simple', array_to_string(themes, ' ')), 'B')
-  ) stored
+  search_vector tsvector not null default ''::tsvector
 );
+
+alter table public.blueprint_catalog
+  add column if not exists search_vector tsvector not null default ''::tsvector;
+
+create or replace function public.refresh_blueprint_catalog_search_vector()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.search_vector :=
+    setweight(to_tsvector('simple', coalesce(new.name, '')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(new.description, '')), 'B') ||
+    setweight(to_tsvector('simple', coalesce(new.license, '')), 'C') ||
+    setweight(to_tsvector('simple', coalesce(array_to_string(new.tags, ' '), '')), 'B') ||
+    setweight(to_tsvector('simple', coalesce(array_to_string(new.themes, ' '), '')), 'B');
+
+  return new;
+end;
+$$;
+
+drop trigger if exists blueprint_catalog_search_vector_refresh
+  on public.blueprint_catalog;
+
+create trigger blueprint_catalog_search_vector_refresh
+before insert or update of name, description, license, tags, themes
+on public.blueprint_catalog
+for each row
+execute function public.refresh_blueprint_catalog_search_vector();
+
+update public.blueprint_catalog
+set name = name
+where search_vector = ''::tsvector;
 
 create index if not exists blueprint_catalog_public_idx
   on public.blueprint_catalog (is_public, featured, download_count desc, updated_at desc);
@@ -62,7 +88,11 @@ drop policy if exists "Public blueprints are readable" on public.blueprint_catal
 create policy "Public blueprints are readable"
   on public.blueprint_catalog
   for select
+  to anon, authenticated
   using (is_public = true);
+
+grant usage on schema public to anon, authenticated;
+grant select on public.blueprint_catalog to anon, authenticated;
 
 create or replace function public.search_blueprint_catalog(
   p_query text default '',
@@ -215,6 +245,10 @@ select jsonb_build_object(
   end
 );
 $$;
+
+grant execute on function public.search_blueprint_catalog(
+  text, text, text, text, text, integer, integer, jsonb
+) to anon, authenticated;
 ```
 
 ## 3. Créer le bucket ZIP

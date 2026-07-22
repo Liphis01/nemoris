@@ -1,6 +1,6 @@
 import json
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 from ..models import BlueprintSubscription
@@ -12,6 +12,7 @@ POPULAR_THEME = "__popular__"
 VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
 VALID_STATUSES = {"all", "not_installed", "update_available", "up_to_date"}
 MAX_LIMIT = 60
+HEALTH_SAMPLE_LIMIT = 3
 
 
 class BlueprintCatalogError(ValueError):
@@ -26,6 +27,62 @@ def normalize_supabase_url(url):
             base = base[: -len(suffix)]
 
     return base.rstrip("/")
+
+
+def _catalog_check(id, label, status, detail):
+    return {
+        "id": id,
+        "label": label,
+        "status": status,
+        "detail": detail
+    }
+
+
+def _catalog_status(checks):
+    statuses = {check.get("status") for check in checks}
+
+    if "error" in statuses:
+        return "error"
+
+    if "warning" in statuses:
+        return "warning"
+
+    return "ok"
+
+
+def _key_type(key):
+    value = str(key or "").strip()
+
+    if value.startswith("sb_publishable_"):
+        return "publishable"
+
+    if value.startswith("sb_secret_"):
+        return "secret"
+
+    if value.startswith("eyJ"):
+        return "legacy_jwt"
+
+    return "unknown" if value else "missing"
+
+
+def _url_problem(raw_url, project_url):
+    raw = str(raw_url or "").strip()
+
+    if not raw:
+        return "missing", "URL du projet Supabase manquante."
+
+    parsed = urlparse(project_url)
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "invalid", "URL Supabase invalide."
+
+    if "/storage/v1/object/" in raw or raw.endswith(".json"):
+        return (
+            "storage_object",
+            "Utilise l'URL du projet, pas une URL de fichier Storage."
+        )
+
+    return None, ""
 
 
 def _message_from_body(body):
@@ -45,15 +102,25 @@ def _message_from_body(body):
     return None
 
 
+def _supabase_headers(key):
+    headers = {
+        "apikey": key,
+        "Content-Type": "application/json"
+    }
+
+    # New Supabase publishable keys are not JWTs. Sending them as a bearer
+    # token makes PostgREST try to parse them as JWTs and reject the request.
+    if str(key or "").startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+
+    return headers
+
+
 def _post_json(url, key, payload):
     request = Request(
         f"{url}/rest/v1/rpc/search_blueprint_catalog",
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json"
-        },
+        headers=_supabase_headers(key),
         method="POST"
     )
 
@@ -80,6 +147,38 @@ def _post_json(url, key, payload):
         raise BlueprintCatalogError(
             "Réponse Supabase invalide."
         ) from error
+
+
+def _probe_download_url(url):
+    if not url:
+        return "error", "URL ZIP absente."
+
+    request = Request(url, method="HEAD")
+
+    try:
+        with urlopen(request, timeout=8) as response:
+            return "ok", f"ZIP accessible ({response.status})."
+    except HTTPError as error:
+        # Some object hosts do not support HEAD. Confirm with a one-byte GET
+        # before reporting a broken ZIP.
+        if error.code in {400, 403, 405}:
+            range_request = Request(
+                url,
+                headers={"Range": "bytes=0-0"},
+                method="GET"
+            )
+
+            try:
+                with urlopen(range_request, timeout=8) as response:
+                    return "ok", f"ZIP accessible ({response.status})."
+            except HTTPError as range_error:
+                return "error", f"ZIP inaccessible ({range_error.code})."
+            except (TimeoutError, URLError, ValueError) as range_error:
+                return "error", f"ZIP inaccessible ({range_error})."
+
+        return "error", f"ZIP inaccessible ({error.code})."
+    except (TimeoutError, URLError, ValueError) as error:
+        return "error", f"ZIP inaccessible ({error})."
 
 
 def _installed_versions(db):
@@ -314,3 +413,161 @@ def search_blueprint_catalog(
 
     response = _post_json(project_url, key, payload)
     return _normalize_response(response, project_url)
+
+
+def check_blueprint_catalog_health(db):
+    settings = get_blueprint_catalog_settings(db)
+    raw_url = str(settings.get("url") or "").strip()
+    project_url = normalize_supabase_url(raw_url)
+    key = str(settings.get("key") or "").strip()
+    key_type = _key_type(key)
+    checks = []
+    blueprints = []
+    total = 0
+    next_cursor = None
+
+    problem, detail = _url_problem(raw_url, project_url)
+    if problem:
+        checks.append(_catalog_check("project_url", "URL projet", "error", detail))
+    elif ".supabase.co" not in urlparse(project_url).netloc:
+        checks.append(_catalog_check(
+            "project_url",
+            "URL projet",
+            "warning",
+            "URL valide, mais ce n'est pas un domaine Supabase standard."
+        ))
+    else:
+        checks.append(_catalog_check(
+            "project_url",
+            "URL projet",
+            "ok",
+            "URL projet Supabase valide."
+        ))
+
+    if key_type == "missing":
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "error",
+            "Clé publishable Supabase manquante."
+        ))
+    elif key_type == "secret":
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "error",
+            "Clé secrète détectée : utilise une clé publishable."
+        ))
+    elif key_type == "unknown":
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "warning",
+            "Format de clé non reconnu."
+        ))
+    else:
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "ok",
+            "Clé publique reconnue."
+        ))
+
+    if not any(check["status"] == "error" for check in checks):
+        payload = {
+            "p_query": "",
+            "p_theme": "",
+            "p_type_group": "",
+            "p_status": "all",
+            "p_sort": "populaires",
+            "p_limit": HEALTH_SAMPLE_LIMIT,
+            "p_cursor": 0,
+            "p_installed_versions": _installed_versions(db)
+        }
+
+        try:
+            response = _post_json(project_url, key, payload)
+            normalized = _normalize_response(response, project_url)
+            blueprints = normalized["blueprints"]
+            total = normalized["total"]
+            next_cursor = normalized["next_cursor"]
+            checks.append(_catalog_check(
+                "search_rpc",
+                "Recherche Supabase",
+                "ok",
+                "Fonction search_blueprint_catalog disponible."
+            ))
+        except BlueprintCatalogError as error:
+            checks.append(_catalog_check(
+                "search_rpc",
+                "Recherche Supabase",
+                "error",
+                str(error)
+            ))
+
+    if any(check["id"] == "search_rpc" and check["status"] == "ok" for check in checks):
+        if total > 0:
+            checks.append(_catalog_check(
+                "public_rows",
+                "Blueprints publics",
+                "ok",
+                f"{total} blueprint{'s' if total > 1 else ''} public{'s' if total > 1 else ''}."
+            ))
+        else:
+            checks.append(_catalog_check(
+                "public_rows",
+                "Blueprints publics",
+                "warning",
+                "Aucun blueprint public trouvé."
+            ))
+
+    samples = []
+    if blueprints:
+        download_checks = []
+
+        for entry in blueprints[:HEALTH_SAMPLE_LIMIT]:
+            download_status, download_detail = _probe_download_url(
+                entry.get("download_url")
+            )
+            download_checks.append(download_status)
+            samples.append({
+                "blueprint_guid": entry.get("blueprint_guid"),
+                "name": entry.get("name"),
+                "download_url": entry.get("download_url"),
+                "download_status": download_status,
+                "download_detail": download_detail
+            })
+
+        if "error" in download_checks:
+            checks.append(_catalog_check(
+                "zip_files",
+                "Fichiers ZIP",
+                "error",
+                "Au moins un ZIP public est inaccessible."
+            ))
+        else:
+            checks.append(_catalog_check(
+                "zip_files",
+                "Fichiers ZIP",
+                "ok",
+                f"{len(samples)} ZIP testés."
+            ))
+
+    status = _catalog_status(checks)
+    summary_by_status = {
+        "ok": "Catalogue prêt.",
+        "warning": "Catalogue utilisable, avec points à vérifier.",
+        "error": "Catalogue bloqué."
+    }
+
+    return {
+        "status": status,
+        "summary": summary_by_status[status],
+        "configured": bool(raw_url and key),
+        "project_url": project_url,
+        "key_type": key_type,
+        "total": total,
+        "next_cursor": next_cursor,
+        "checks": checks,
+        "sample_blueprints": samples
+    }

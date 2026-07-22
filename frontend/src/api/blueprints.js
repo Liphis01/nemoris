@@ -35,6 +35,12 @@ export function searchBlueprintCatalog(params = {}) {
   return requestJson(`/blueprints/catalog/search${suffix ? `?${suffix}` : ""}`);
 }
 
+
+export function getBlueprintCatalogDiagnostics() {
+  return requestJson("/blueprints/catalog/diagnostics");
+}
+
+
 function filenameFromDisposition(header) {
   if (!header) {
     return null;

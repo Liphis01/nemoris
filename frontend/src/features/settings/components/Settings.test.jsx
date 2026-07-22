@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
+  getBlueprintCatalogDiagnostics,
   getBlueprintCatalogSettings,
   saveBlueprintCatalogSettings
 } from "../../../api/blueprints";
@@ -34,6 +35,7 @@ vi.mock("../../../api/backup", () => ({
 }));
 
 vi.mock("../../../api/blueprints", () => ({
+  getBlueprintCatalogDiagnostics: vi.fn(),
   getBlueprintCatalogSettings: vi.fn(),
   saveBlueprintCatalogSettings: vi.fn()
 }));
@@ -66,6 +68,33 @@ describe("Settings", () => {
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
     getBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    getBlueprintCatalogDiagnostics.mockResolvedValue({
+      status: "ok",
+      summary: "Catalogue prêt.",
+      key_type: "publishable",
+      total: 2,
+      checks: [
+        {
+          id: "project_url",
+          label: "URL projet",
+          status: "ok",
+          detail: "URL projet Supabase valide."
+        },
+        {
+          id: "zip_files",
+          label: "Fichiers ZIP",
+          status: "ok",
+          detail: "2 ZIP testés."
+        }
+      ],
+      sample_blueprints: [
+        {
+          blueprint_guid: "world-map",
+          name: "Pays du monde",
+          download_status: "ok"
+        }
+      ]
+    });
     saveBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
     getSyncStatus.mockResolvedValue({
       signed_in: false,
@@ -209,7 +238,34 @@ describe("Settings", () => {
         key: "sb_publishable_test"
       });
     });
+    expect(getBlueprintCatalogDiagnostics).not.toHaveBeenCalled();
     expect(screen.getByText("Catalogue enregistré.")).toBeInTheDocument();
+  });
+
+  it("runs the Supabase blueprint catalogue diagnostic", async () => {
+    saveBlueprintCatalogSettings.mockResolvedValue({
+      url: "https://project.supabase.co",
+      key: "sb_publishable_test"
+    });
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    fireEvent.change(screen.getByLabelText("URL du projet Supabase"), {
+      target: { value: "https://project.supabase.co" }
+    });
+    fireEvent.change(screen.getByLabelText("Clé publishable Supabase"), {
+      target: { value: "sb_publishable_test" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tester le catalogue" }));
+
+    await waitFor(() => {
+      expect(getBlueprintCatalogDiagnostics).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText("Catalogue prêt.")).toBeInTheDocument();
+    expect(screen.getByText("2 blueprints publics")).toBeInTheDocument();
+    expect(screen.getByText("Fichiers ZIP")).toBeInTheDocument();
+    expect(screen.getByText("Pays du monde")).toBeInTheDocument();
   });
 
   it("exports the database and reports the downloaded filename", async () => {

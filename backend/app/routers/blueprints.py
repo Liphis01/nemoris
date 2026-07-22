@@ -10,6 +10,7 @@ from ..models import BlueprintSubscription
 from ..schemas import BlueprintCatalogSettings, BlueprintExportRequest
 from ..services.blueprint_catalog import (
     BlueprintCatalogError,
+    check_blueprint_catalog_health,
     search_blueprint_catalog
 )
 from ..services.blueprints import (
@@ -56,6 +57,11 @@ def update_blueprint_catalog(
     db.commit()
 
     return result
+
+
+@router.get("/blueprints/catalog/diagnostics")
+def diagnose_blueprint_catalog(db: Session = Depends(get_db)):
+    return check_blueprint_catalog_health(db)
 
 
 @router.get("/blueprints/catalog/search")

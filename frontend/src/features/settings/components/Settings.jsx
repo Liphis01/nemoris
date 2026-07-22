@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
   getBlueprintCatalogSettings,
+  getBlueprintCatalogDiagnostics,
   saveBlueprintCatalogSettings
 } from "../../../api/blueprints";
 import {
@@ -146,6 +147,119 @@ function SettingsRail({
   );
 }
 
+
+const CATALOG_DIAGNOSTIC_LABELS = {
+  ok: "Prêt",
+  warning: "À vérifier",
+  error: "Bloqué"
+};
+
+const CATALOG_KEY_LABELS = {
+  publishable: "clé publishable",
+  legacy_jwt: "clé anon",
+  secret: "clé secrète",
+  unknown: "clé inconnue",
+  missing: "clé absente"
+};
+
+function CatalogDiagnosticPanel({ diagnostics, checking, error }) {
+  if (checking) {
+    return (
+      <div className="settings-catalog-diagnostic settings-catalog-diagnostic-idle">
+        <div className="settings-catalog-diagnostic-head">
+          <div>
+            <strong>Diagnostic catalogue</strong>
+            <span>Vérification en cours...</span>
+          </div>
+          <span className="settings-catalog-health">Test</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="settings-catalog-diagnostic settings-catalog-diagnostic-error">
+        <div className="settings-catalog-diagnostic-head">
+          <div>
+            <strong>Diagnostic catalogue</strong>
+            <span>{error}</span>
+          </div>
+          <span className="settings-catalog-health">Bloqué</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!diagnostics) {
+    return (
+      <div className="settings-catalog-diagnostic settings-catalog-diagnostic-idle">
+        <div className="settings-catalog-diagnostic-head">
+          <div>
+            <strong>Diagnostic catalogue</strong>
+            <span>Non testé.</span>
+          </div>
+          <span className="settings-catalog-health">Attente</span>
+        </div>
+      </div>
+    );
+  }
+
+  const status = diagnostics.status || "warning";
+  const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
+  const samples = Array.isArray(diagnostics.sample_blueprints)
+    ? diagnostics.sample_blueprints
+    : [];
+  const total = diagnostics.total || 0;
+
+  return (
+    <div className={`settings-catalog-diagnostic settings-catalog-diagnostic-${status}`}>
+      <div className="settings-catalog-diagnostic-head">
+        <div>
+          <strong>Diagnostic catalogue</strong>
+          <span>{diagnostics.summary || "Diagnostic terminé."}</span>
+        </div>
+        <span className="settings-catalog-health">
+          {CATALOG_DIAGNOSTIC_LABELS[status] || "État"}
+        </span>
+      </div>
+
+      <div className="settings-catalog-metrics">
+        <span>
+          {total} blueprint{total > 1 ? "s" : ""} public{total > 1 ? "s" : ""}
+        </span>
+        <span>{CATALOG_KEY_LABELS[diagnostics.key_type] || "clé"}</span>
+      </div>
+
+      <div className="settings-catalog-checks">
+        {checks.map((check) => (
+          <div
+            key={check.id}
+            className={`settings-catalog-check settings-catalog-check-${check.status}`}
+          >
+            <span className="settings-catalog-dot" aria-hidden="true" />
+            <strong>{check.label}</strong>
+            <span>{check.detail}</span>
+          </div>
+        ))}
+      </div>
+
+      {samples.length > 0 && (
+        <div className="settings-catalog-samples">
+          {samples.map((sample) => (
+            <span
+              key={sample.blueprint_guid}
+              className={`settings-catalog-sample settings-catalog-sample-${sample.download_status}`}
+            >
+              {sample.name}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings({ setMode }) {
   const [target, setTarget] = useState(50);
   const [draft, setDraft] = useState("50");
@@ -165,6 +279,9 @@ export default function Settings({ setMode }) {
   const [catalogSaving, setCatalogSaving] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState("");
   const [catalogError, setCatalogError] = useState("");
+  const [catalogDiagnostics, setCatalogDiagnostics] = useState(null);
+  const [catalogChecking, setCatalogChecking] = useState(false);
+  const [catalogDiagnosticError, setCatalogDiagnosticError] = useState("");
 
   const sync = useSyncAccount();
 
@@ -316,10 +433,29 @@ export default function Settings({ setMode }) {
     }
   }
 
-  async function saveCatalogSettings() {
+  async function runCatalogDiagnostics() {
+    setCatalogChecking(true);
+    setCatalogDiagnosticError("");
+
+    try {
+      const diagnostics = await getBlueprintCatalogDiagnostics();
+      setCatalogDiagnostics(diagnostics);
+    } catch (diagnosticError) {
+      console.error(diagnosticError);
+      setCatalogDiagnostics(null);
+      setCatalogDiagnosticError(
+        diagnosticError.message || "Diagnostic impossible."
+      );
+    } finally {
+      setCatalogChecking(false);
+    }
+  }
+
+  async function saveCatalogSettings({ testAfterSave = true } = {}) {
     setCatalogSaving(true);
     setCatalogStatus("");
     setCatalogError("");
+    setCatalogDiagnosticError("");
 
     try {
       const settings = await saveBlueprintCatalogSettings({
@@ -329,6 +465,10 @@ export default function Settings({ setMode }) {
       setCatalogDraft(settings.url || "");
       setCatalogKeyDraft(settings.key || "");
       setCatalogStatus("Catalogue enregistré.");
+
+      if (testAfterSave) {
+        await runCatalogDiagnostics();
+      }
     } catch (catalogSaveError) {
       console.error(catalogSaveError);
       setCatalogError(
@@ -529,7 +669,7 @@ export default function Settings({ setMode }) {
                     onChange={(event) => setCatalogDraft(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
-                        saveCatalogSettings();
+                        saveCatalogSettings({ testAfterSave: true });
                       }
                     }}
                     className="settings-input settings-input-wide"
@@ -544,7 +684,7 @@ export default function Settings({ setMode }) {
                     onChange={(event) => setCatalogKeyDraft(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
-                        saveCatalogSettings();
+                        saveCatalogSettings({ testAfterSave: true });
                       }
                     }}
                     className="settings-input settings-input-wide"
@@ -552,15 +692,31 @@ export default function Settings({ setMode }) {
 
                   <button
                     type="button"
-                    onClick={saveCatalogSettings}
-                    disabled={catalogSaving}
+                    onClick={() => saveCatalogSettings({ testAfterSave: false })}
+                    disabled={catalogSaving || catalogChecking}
                     aria-label="Enregistrer le catalogue"
                     className="settings-save"
                   >
-                    {catalogSaving ? "..." : "OK"}
+                    {catalogSaving ? "..." : "Enregistrer"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => saveCatalogSettings({ testAfterSave: true })}
+                    disabled={catalogSaving || catalogChecking}
+                    aria-label="Tester le catalogue"
+                    className="settings-secondary"
+                  >
+                    {catalogChecking ? "Test..." : "Tester"}
                   </button>
                 </div>
               </div>
+
+              <CatalogDiagnosticPanel
+                diagnostics={catalogDiagnostics}
+                checking={catalogChecking}
+                error={catalogDiagnosticError}
+              />
 
               {catalogStatus && (
                 <div className="settings-status" role="status">

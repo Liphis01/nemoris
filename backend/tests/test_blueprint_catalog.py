@@ -1,6 +1,7 @@
 import io
 import json
 import unittest
+from unittest import mock
 from urllib.error import HTTPError
 
 from fastapi import HTTPException
@@ -8,7 +9,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Base, BlueprintSubscription
-from app.routers.blueprints import search_catalog_blueprints
+from app.routers.blueprints import (
+    diagnose_blueprint_catalog,
+    search_catalog_blueprints
+)
 from app.services.settings import save_blueprint_catalog_settings
 
 
@@ -19,8 +23,9 @@ def make_db():
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status=200):
         self.payload = payload
+        self.status = status
 
     def __enter__(self):
         return self
@@ -33,11 +38,11 @@ class FakeResponse:
 
 
 class BlueprintCatalogSearchTests(unittest.TestCase):
-    def configure(self, db):
+    def configure(self, db, key="sb_publishable_test"):
         save_blueprint_catalog_settings(
             db,
             "https://project.supabase.co/rest/v1",
-            "sb_publishable_test"
+            key
         )
         db.add(BlueprintSubscription(
             blueprint_guid="world-map",
@@ -87,7 +92,7 @@ class BlueprintCatalogSearchTests(unittest.TestCase):
                 "next_cursor": "24"
             })
 
-        with unittest.mock.patch(
+        with mock.patch(
             "app.services.blueprint_catalog.urlopen",
             fake_urlopen
         ):
@@ -118,6 +123,8 @@ class BlueprintCatalogSearchTests(unittest.TestCase):
             request.full_url,
             "https://project.supabase.co/rest/v1/rpc/search_blueprint_catalog"
         )
+        self.assertEqual(request.headers.get("Apikey"), "sb_publishable_test")
+        self.assertIsNone(request.headers.get("Authorization"))
         payload = json.loads(request.data.decode("utf-8"))
         self.assertEqual(payload["p_query"], "monde")
         self.assertEqual(payload["p_theme"], "géographie")
@@ -142,7 +149,7 @@ class BlueprintCatalogSearchTests(unittest.TestCase):
                 "next_cursor": None
             })
 
-        with unittest.mock.patch(
+        with mock.patch(
             "app.services.blueprint_catalog.urlopen",
             fake_urlopen
         ):
@@ -155,6 +162,33 @@ class BlueprintCatalogSearchTests(unittest.TestCase):
         payload = json.loads(calls[0].data.decode("utf-8"))
         self.assertEqual(payload["p_theme"], "")
         self.assertEqual(payload["p_sort"], "populaires")
+
+    def test_legacy_anon_jwt_is_sent_as_bearer_token(self):
+        db = make_db()
+        legacy_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test"
+        self.configure(db, key=legacy_key)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append(request)
+            return FakeResponse({
+                "blueprints": [],
+                "facets": {"themes": []},
+                "total": 0,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.blueprint_catalog.urlopen",
+            fake_urlopen
+        ):
+            search_catalog_blueprints(db=db)
+
+        self.assertEqual(calls[0].headers.get("Apikey"), legacy_key)
+        self.assertEqual(
+            calls[0].headers.get("Authorization"),
+            f"Bearer {legacy_key}"
+        )
 
     def test_missing_configuration_returns_http_error(self):
         db = make_db()
@@ -181,7 +215,7 @@ class BlueprintCatalogSearchTests(unittest.TestCase):
                 io.BytesIO(b'{"message":"RPC failed"}')
             )
 
-        with unittest.mock.patch(
+        with mock.patch(
             "app.services.blueprint_catalog.urlopen",
             fake_urlopen
         ):
@@ -190,6 +224,167 @@ class BlueprintCatalogSearchTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail, "RPC failed")
+
+    def test_catalog_diagnostics_reports_ready_catalogue(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if request.full_url.endswith("/rpc/search_blueprint_catalog"):
+                return FakeResponse({
+                    "blueprints": [
+                        {
+                            "blueprint_guid": "world-map",
+                            "name": "Pays du monde",
+                            "description": "Carte interactive.",
+                            "type_group": "map",
+                            "question_count": 252,
+                            "version": 2,
+                            "storage_path": "maps/world.zip"
+                        }
+                    ],
+                    "facets": {"themes": []},
+                    "total": 1,
+                    "next_cursor": None
+                })
+
+            return FakeResponse({})
+
+        with mock.patch(
+            "app.services.blueprint_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = diagnose_blueprint_catalog(db=db)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["key_type"], "publishable")
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(
+            [check["id"] for check in result["checks"]],
+            ["project_url", "api_key", "search_rpc", "public_rows", "zip_files"]
+        )
+        self.assertEqual(
+            result["sample_blueprints"][0]["download_status"],
+            "ok"
+        )
+        self.assertEqual(calls[1][0].get_method(), "HEAD")
+
+    def test_catalog_diagnostics_flags_storage_json_url(self):
+        db = make_db()
+        save_blueprint_catalog_settings(
+            db,
+            "https://project.supabase.co/storage/v1/object/public/"
+            "blueprints/catalog.json",
+            "sb_publishable_test"
+        )
+        db.commit()
+
+        with mock.patch(
+            "app.services.blueprint_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            result = diagnose_blueprint_catalog(db=db)
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["checks"][0]["id"], "project_url")
+        self.assertEqual(result["checks"][0]["status"], "error")
+
+    def test_catalog_diagnostics_flags_unreachable_zip(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            if request.full_url.endswith("/rpc/search_blueprint_catalog"):
+                return FakeResponse({
+                    "blueprints": [
+                        {
+                            "blueprint_guid": "world-map",
+                            "name": "Pays du monde",
+                            "description": "Carte interactive.",
+                            "type_group": "map",
+                            "question_count": 252,
+                            "version": 2,
+                            "storage_path": "maps/missing.zip"
+                        }
+                    ],
+                    "facets": {"themes": []},
+                    "total": 1,
+                    "next_cursor": None
+                })
+
+            raise HTTPError(
+                request.full_url,
+                404,
+                "Not Found",
+                {},
+                io.BytesIO(b"")
+            )
+
+        with mock.patch(
+            "app.services.blueprint_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = diagnose_blueprint_catalog(db=db)
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["sample_blueprints"][0]["download_status"],
+            "error"
+        )
+        self.assertEqual(result["checks"][-1]["id"], "zip_files")
+
+    def test_catalog_diagnostics_falls_back_to_range_get_for_zip_probe(self):
+        db = make_db()
+        self.configure(db)
+        methods = []
+
+        def fake_urlopen(request, timeout):
+            methods.append(request.get_method())
+
+            if request.full_url.endswith("/rpc/search_blueprint_catalog"):
+                return FakeResponse({
+                    "blueprints": [
+                        {
+                            "blueprint_guid": "world-map",
+                            "name": "Pays du monde",
+                            "description": "Carte interactive.",
+                            "type_group": "map",
+                            "question_count": 252,
+                            "version": 2,
+                            "storage_path": "maps/world.zip"
+                        }
+                    ],
+                    "facets": {"themes": []},
+                    "total": 1,
+                    "next_cursor": None
+                })
+
+            if request.get_method() == "HEAD":
+                raise HTTPError(
+                    request.full_url,
+                    405,
+                    "Method Not Allowed",
+                    {},
+                    io.BytesIO(b"")
+                )
+
+            return FakeResponse({})
+
+        with mock.patch(
+            "app.services.blueprint_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = diagnose_blueprint_catalog(db=db)
+
+        self.assertEqual(methods, ["POST", "HEAD", "GET"])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(
+            result["sample_blueprints"][0]["download_status"],
+            "ok"
+        )
 
 
 if __name__ == "__main__":
