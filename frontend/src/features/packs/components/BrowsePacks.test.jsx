@@ -70,8 +70,14 @@ const textEntry = {
   download_url: "https://example.com/bio.zip"
 };
 
-function item(entry, status = "not_installed", installedVersion = null, action = {}) {
-  return { entry, status, installedVersion, action };
+function item(
+  entry,
+  status = "not_installed",
+  installedVersion = null,
+  action = {},
+  extra = {}
+) {
+  return { entry, status, installedVersion, action, ...extra };
 }
 
 function defaultHook(overrides = {}) {
@@ -279,6 +285,48 @@ describe("BrowsePacks", () => {
     );
 
     expect(hook.install).toHaveBeenCalledWith(mapEntry);
+  });
+
+  it("shows mine and local-copy checks without install actions", () => {
+    const onOpenGroup = vi.fn();
+    const localEntry = {
+      ...mapEntry,
+      pack_guid: "my-pack",
+      name: "Mon atlas publié"
+    };
+    defaultHook({
+      items: [
+        item(localEntry, "local_copy", null, {}, {
+          hasLocalContent: true,
+          isMine: true,
+          localGroupId: 10
+        })
+      ],
+      total: 1,
+      hasMore: false
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} onOpenGroup={onOpenGroup} />);
+
+    expect(screen.getAllByText("Mon pack").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Déjà présent").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Ce pack existe déjà dans tes groupes locaux.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Installer Mon atlas publié")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Se désabonner" })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Ouvrir Mon atlas publié dans le gestionnaire"
+      })
+    );
+
+    expect(onOpenGroup).toHaveBeenCalledWith(10);
   });
 
   it("downloads a selected group zip from the separate exporter tab", async () => {

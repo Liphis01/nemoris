@@ -27,7 +27,8 @@ const STATUS_FILTERS = [
   { value: "all", label: "Tous statuts" },
   { value: "not_installed", label: "À installer" },
   { value: "update_available", label: "Mises à jour" },
-  { value: "up_to_date", label: "Installés" }
+  { value: "up_to_date", label: "À jour" },
+  { value: "local_copy", label: "Déjà présents" }
 ];
 
 const TYPE_FILTERS = [
@@ -60,6 +61,36 @@ function downloadCountLabel(count) {
   }
 
   return `${count.toLocaleString("fr-FR")} téléchargement${count > 1 ? "s" : ""}`;
+}
+
+function statusLabel(status, installedVersion) {
+  if (status === "local_copy") {
+    return "Déjà présent";
+  }
+
+  if (status === "update_available") {
+    return installedVersion ? `v${installedVersion} installée` : "Mise à jour";
+  }
+
+  if (status === "up_to_date") {
+    return installedVersion ? `À jour v${installedVersion}` : "À jour";
+  }
+
+  return "À installer";
+}
+
+function statusClassName(status) {
+  if (status === "update_available") return "pack-status-pill-update";
+  if (status === "not_installed") return "pack-status-pill-install";
+  if (status === "local_copy") return "pack-status-pill-local";
+  return "";
+}
+
+function versionCheckLabel(status) {
+  if (status === "update_available") return "Mise à jour disponible";
+  if (status === "up_to_date") return "À jour";
+  if (status === "local_copy") return "Présent localement";
+  return "Non installé";
 }
 
 function splitTerms(value) {
@@ -240,6 +271,7 @@ function CatalogueState({ catalogUrl, error, loading, reload, setMode }) {
 function PackDetailPanel({
   item,
   onInstall,
+  onOpenGroup,
   onUnsubscribe,
   onUpdate
 }) {
@@ -251,10 +283,23 @@ function PackDetailPanel({
     );
   }
 
-  const { entry, status, installedVersion, action } = item;
+  const {
+    entry,
+    status,
+    installedVersion,
+    hasLocalContent,
+    isMine,
+    localGroupId,
+    localPackVersion,
+    action
+  } = item;
   const typeStyle = getQuestionTypeChipStyle(entry.type_group);
   const sizeLabel = formatSize(entry.size_bytes);
   const downloadLabel = downloadCountLabel(entry.download_count);
+  const canUnsubscribe = (
+    status === "up_to_date" || status === "update_available"
+  );
+  const canOpenGroup = Boolean(localGroupId && onOpenGroup);
 
   return (
     <aside className="pack-detail-panel app-scrollbar" aria-label="Détail du pack">
@@ -268,8 +313,15 @@ function PackDetailPanel({
         >
           {typeStyle.label}
         </span>
-        <span className="pack-status-pill">
-          {status === "not_installed" ? "À installer" : "Installé"}
+        <span className="pack-card-pill-row">
+          {isMine && (
+            <span className="pack-status-pill pack-status-pill-owned">
+              Mon pack
+            </span>
+          )}
+          <span className={`pack-status-pill ${statusClassName(status)}`}>
+            {statusLabel(status, installedVersion)}
+          </span>
         </span>
       </div>
 
@@ -286,8 +338,20 @@ function PackDetailPanel({
           <strong>{entry.question_count ?? "—"}</strong>
         </div>
         <div className="pack-detail-stat">
-          <span>Version</span>
+          <span>Catalogue</span>
           <strong>v{entry.version ?? "—"}</strong>
+        </div>
+        <div className="pack-detail-stat">
+          <span>Statut</span>
+          <strong>{versionCheckLabel(status)}</strong>
+        </div>
+        <div className="pack-detail-stat">
+          <span>Local</span>
+          <strong>{hasLocalContent ? "Déjà présent" : "Absent"}</strong>
+        </div>
+        <div className="pack-detail-stat">
+          <span>Propriétaire</span>
+          <strong>{isMine ? "Moi" : "Autre"}</strong>
         </div>
         <div className="pack-detail-stat">
           <span>Taille</span>
@@ -303,6 +367,9 @@ function PackDetailPanel({
         <span>{questionCountLabel(entry.question_count)}</span>
         {downloadLabel && <span>{downloadLabel}</span>}
         {installedVersion && <span>v{installedVersion} installée</span>}
+        {!installedVersion && localPackVersion && (
+          <span>v{localPackVersion} locale</span>
+        )}
       </div>
 
       <div className="pack-action-row">
@@ -328,7 +395,18 @@ function PackDetailPanel({
           </button>
         )}
 
-        {status !== "not_installed" && (
+        {canOpenGroup && (
+          <button
+            type="button"
+            className="pack-secondary-button"
+            disabled={action.busy}
+            onClick={() => onOpenGroup(localGroupId)}
+          >
+            Ouvrir dans le gestionnaire ↗
+          </button>
+        )}
+
+        {canUnsubscribe && (
           <button
             type="button"
             className="pack-secondary-button"
@@ -340,6 +418,12 @@ function PackDetailPanel({
         )}
       </div>
 
+      {status === "local_copy" && (
+        <div className="pack-status">
+          Ce pack existe déjà dans tes groupes locaux.
+        </div>
+      )}
+
       {action.error && (
         <div className="pack-alert" role="alert">
           {action.error}
@@ -349,7 +433,7 @@ function PackDetailPanel({
   );
 }
 
-function ImporterScreen({ setMode }) {
+function ImporterScreen({ onOpenGroup, setMode }) {
   const [activeTheme, setActiveTheme] = useState(POPULAR_THEME);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
@@ -452,6 +536,7 @@ function ImporterScreen({ setMode }) {
                     density="row"
                     item={item}
                     onInstall={install}
+                    onOpenGroup={onOpenGroup}
                     onSelect={(nextItem) => setActiveGuid(nextItem.entry.pack_guid)}
                     onUpdate={update}
                     selected={selectedItem?.entry.pack_guid === item.entry.pack_guid}
@@ -477,6 +562,7 @@ function ImporterScreen({ setMode }) {
       <PackDetailPanel
         item={selectedItem}
         onInstall={install}
+        onOpenGroup={onOpenGroup}
         onUnsubscribe={unsubscribe}
         onUpdate={update}
       />
@@ -1150,7 +1236,7 @@ function ExporterScreen({ setMode }) {
   );
 }
 
-export default function BrowsePacks({ setMode }) {
+export default function BrowsePacks({ setMode, onOpenGroup }) {
   const [activeTab, setActiveTab] = useState("import");
 
   return (
@@ -1196,7 +1282,10 @@ export default function BrowsePacks({ setMode }) {
         </header>
 
         {activeTab === "import" ? (
-          <ImporterScreen setMode={setMode} />
+          <ImporterScreen
+            onOpenGroup={onOpenGroup}
+            setMode={setMode}
+          />
         ) : (
           <ExporterScreen setMode={setMode} />
         )}

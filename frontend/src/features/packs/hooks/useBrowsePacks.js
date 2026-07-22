@@ -11,9 +11,9 @@ import {
 export const POPULAR_THEME = "__popular__";
 const DEFAULT_LIMIT = 24;
 
-export function packStatus(entry, installed) {
+export function packStatus(entry, installed, localStatus = null) {
   if (!installed) {
-    return "not_installed";
+    return localStatus?.has_local_content ? "local_copy" : "not_installed";
   }
 
   return installed.installed_version < entry.version
@@ -199,12 +199,32 @@ export function useBrowsePacks(filters = {}) {
   }
 
   const items = useMemo(() => entries.map((entry) => {
-    const installed = installedByGuid[entry.pack_guid] || null;
+    const localStatus = entry.local_status || null;
+    const installed = (
+      installedByGuid[entry.pack_guid] ||
+      (
+        localStatus?.installed_version !== null &&
+        localStatus?.installed_version !== undefined
+          ? { installed_version: localStatus.installed_version }
+          : null
+      )
+    );
+    const statusValue = packStatus(entry, installed, localStatus);
 
     return {
       entry,
-      status: packStatus(entry, installed),
-      installedVersion: installed?.installed_version ?? null,
+      status: statusValue,
+      installedVersion:
+        installed?.installed_version ??
+        localStatus?.installed_version ??
+        null,
+      localPackVersion: localStatus?.local_pack_version ?? null,
+      localGroupId: localStatus?.local_group_id ?? null,
+      localGroupName: localStatus?.local_group_name ?? null,
+      hasLocalContent: Boolean(
+        installed || localStatus?.has_local_content
+      ),
+      isMine: Boolean(entry.is_mine || localStatus?.is_mine),
       action: actionState[entry.pack_guid] || {}
     };
   }), [actionState, entries, installedByGuid]);

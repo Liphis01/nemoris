@@ -122,6 +122,19 @@ class PackCatalogSearchTests(unittest.TestCase):
             "https://project.supabase.co/storage/v1/object/public/"
             "pack-zips/maps/world.zip"
         )
+        self.assertFalse(result["packs"][0]["is_mine"])
+        self.assertEqual(
+            result["packs"][0]["local_status"],
+            {
+                "status": "update_available",
+                "is_mine": False,
+                "has_local_content": True,
+                "installed_version": 1,
+                "local_pack_version": None,
+                "local_group_id": None,
+                "local_group_name": None
+            }
+        )
         self.assertEqual(result["facets"]["themes"][0]["value"], "__popular__")
         self.assertEqual(result["facets"]["themes"][1]["value"], "géographie")
 
@@ -170,6 +183,72 @@ class PackCatalogSearchTests(unittest.TestCase):
         payload = json.loads(calls[0].data.decode("utf-8"))
         self.assertEqual(payload["p_theme"], "")
         self.assertEqual(payload["p_sort"], "populaires")
+
+    def test_search_marks_local_authored_pack_as_mine_and_local_copy(self):
+        db = make_db()
+        self.configure(db)
+        db.add(QuestionGroup(
+            guid="my-pack",
+            type_group="text",
+            name="Mon pack local"
+        ))
+        db.commit()
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append(request)
+            return FakeResponse({
+                "packs": [
+                    {
+                        "pack_guid": "world-map",
+                        "name": "Pays du monde",
+                        "version": 2,
+                        "storage_path": "maps/world.zip"
+                    },
+                    {
+                        "pack_guid": "my-pack",
+                        "name": "Mon pack publié",
+                        "version": 3,
+                        "storage_path": "mine.zip"
+                    },
+                    {
+                        "pack_guid": "other-pack",
+                        "name": "Autre pack",
+                        "version": 1,
+                        "storage_path": "other.zip"
+                    }
+                ],
+                "facets": {"themes": []},
+                "total": 3,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = search_catalog_packs(status="local_copy", db=db)
+
+        self.assertEqual([entry["pack_guid"] for entry in result["packs"]], [
+            "my-pack"
+        ])
+        self.assertEqual(result["total"], 1)
+        self.assertIsNone(result["next_cursor"])
+        self.assertTrue(result["packs"][0]["is_mine"])
+        self.assertEqual(
+            result["packs"][0]["local_status"],
+            {
+                "status": "local_copy",
+                "is_mine": True,
+                "has_local_content": True,
+                "installed_version": None,
+                "local_pack_version": None,
+                "local_group_id": 1,
+                "local_group_name": "Mon pack local"
+            }
+        )
+        payload = json.loads(calls[0].data.decode("utf-8"))
+        self.assertEqual(payload["p_status"], "all")
 
     def test_legacy_anon_jwt_is_sent_as_bearer_token(self):
         db = make_db()

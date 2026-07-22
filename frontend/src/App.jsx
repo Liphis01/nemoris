@@ -26,6 +26,7 @@ function App() {
   // internal state through hooks, while App only coordinates cross-feature jumps.
   const [mode, setMode] = useState("menu");
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
+  const [manageOpenGroupId, setManageOpenGroupId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
   const [startupNotice, setStartupNotice] = useState(null);
   const [reviewSummary, setReviewSummary] = useState(null);
@@ -133,7 +134,21 @@ function App() {
     manageLibrary.setIsCreatingQuestion(false);
     manageLibrary.setIsCreatingGroup(false);
     manageLibrary.setSelectedItem(null);
+    setManageOpenGroupId(null);
     setManageOpenQuestionId(questionId);
+    setMode("manage");
+  }
+
+  function openGroupIdInManage(groupId) {
+    // Packs -> Manage navigation lands on the local group row and opens the
+    // normal right-hand group preview/editor once Manage has loaded groups.
+    manageLibrary.resetManageFilters();
+    manageLibrary.setViewMode("groups");
+    manageLibrary.setIsCreatingQuestion(false);
+    manageLibrary.setIsCreatingGroup(false);
+    manageLibrary.setSelectedItem(null);
+    setManageOpenQuestionId(null);
+    setManageOpenGroupId(groupId);
     setMode("manage");
   }
 
@@ -178,6 +193,8 @@ function App() {
             {...manageLibrary}
             openQuestionId={manageOpenQuestionId}
             clearOpenQuestionId={() => setManageOpenQuestionId(null)}
+            openGroupId={manageOpenGroupId}
+            clearOpenGroupId={() => setManageOpenGroupId(null)}
             onOpenInCalendar={openQuestionInCalendar}
           />
         )}
@@ -204,7 +221,10 @@ function App() {
         )}
 
         {mode === "packs" && (
-          <BrowsePacks setMode={setMode} />
+          <BrowsePacks
+            setMode={setMode}
+            onOpenGroup={openGroupIdInManage}
+          />
         )}
       </div>
     </div>

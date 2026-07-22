@@ -25,7 +25,13 @@ from .sync_state import (
 CATALOG_BUCKET = "pack-zips"
 POPULAR_THEME = "__popular__"
 VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
-VALID_STATUSES = {"all", "not_installed", "update_available", "up_to_date"}
+VALID_STATUSES = {
+    "all",
+    "not_installed",
+    "update_available",
+    "up_to_date",
+    "local_copy"
+}
 MAX_LIMIT = 60
 HEALTH_SAMPLE_LIMIT = 3
 PUBLISH_TIMEOUT = 12
@@ -210,6 +216,89 @@ def _installed_versions(db):
     }
 
 
+def _int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _local_pack_state(db):
+    subscriptions = {
+        subscription.pack_guid: {
+            "installed_version": subscription.installed_version,
+            "name": subscription.name
+        }
+        for subscription in db.query(PackSubscription).all()
+    }
+    groups = {}
+
+    for group_id, guid, pack_guid, pack_version, name in (
+        db.query(
+            QuestionGroup.id,
+            QuestionGroup.guid,
+            QuestionGroup.pack_guid,
+            QuestionGroup.pack_version,
+            QuestionGroup.name
+        )
+        .all()
+    ):
+        groups[guid] = {
+            "id": group_id,
+            "pack_guid": pack_guid,
+            "pack_version": pack_version,
+            "name": name
+        }
+
+    return subscriptions, groups
+
+
+def _annotate_local_pack_status(db, packs):
+    subscriptions, groups = _local_pack_state(db)
+
+    for entry in packs:
+        pack_guid = entry.get("pack_guid")
+        subscription = subscriptions.get(pack_guid)
+        group = groups.get(pack_guid)
+        catalog_version = _int_or_none(entry.get("version"))
+        installed_version = (
+            _int_or_none(subscription.get("installed_version"))
+            if subscription else None
+        )
+        local_pack_version = (
+            _int_or_none(group.get("pack_version"))
+            if group else None
+        )
+        status = "not_installed"
+
+        if subscription:
+            status = (
+                "update_available"
+                if (
+                    installed_version is not None
+                    and catalog_version is not None
+                    and installed_version < catalog_version
+                )
+                else "up_to_date"
+            )
+        elif group:
+            status = "local_copy"
+
+        is_mine = bool(entry.get("is_mine")) or bool(
+            group and not group.get("pack_guid")
+        )
+        entry["is_mine"] = is_mine
+        entry["local_status"] = {
+            "status": status,
+            "is_mine": is_mine,
+            "has_local_content": bool(subscription or group),
+            "installed_version": installed_version,
+            "local_pack_version": local_pack_version,
+            "local_group_id": group.get("id") if group else None,
+            "local_group_name": group.get("name") if group else None
+        }
+
+
 def _clamp_limit(limit):
     try:
         parsed = int(limit)
@@ -258,6 +347,7 @@ def _normalize_pack(row, project_url):
         "themes": row.get("themes") if isinstance(row.get("themes"), list) else [],
         "download_count": row.get("download_count"),
         "featured": bool(row.get("featured")),
+        "is_mine": bool(row.get("is_mine")),
         "published_at": row.get("published_at"),
         "updated_at": row.get("updated_at")
     }
@@ -416,6 +506,9 @@ def search_pack_catalog(
         )
 
     normalized_status = status if status in VALID_STATUSES else "all"
+    remote_status = (
+        "all" if normalized_status == "local_copy" else normalized_status
+    )
     normalized_sort = sort if sort in VALID_SORTS else "pertinence"
     normalized_theme = str(theme or "").strip()
 
@@ -427,7 +520,7 @@ def search_pack_catalog(
         "p_query": str(query or "").strip(),
         "p_theme": normalized_theme,
         "p_type_group": str(type_group or "").strip(),
-        "p_status": normalized_status,
+        "p_status": remote_status,
         "p_sort": normalized_sort,
         "p_limit": _clamp_limit(limit),
         "p_cursor": _cursor_offset(cursor),
@@ -435,7 +528,21 @@ def search_pack_catalog(
     }
 
     response = _post_json(project_url, key, payload)
-    return _normalize_response(response, project_url)
+    result = _normalize_response(response, project_url)
+    _annotate_local_pack_status(db, result["packs"])
+
+    if normalized_status in {"local_copy", "not_installed"}:
+        result["packs"] = [
+            entry
+            for entry in result["packs"]
+            if entry.get("local_status", {}).get("status") == normalized_status
+        ]
+
+        if normalized_status == "local_copy":
+            result["total"] = len(result["packs"])
+            result["next_cursor"] = None
+
+    return result
 
 
 def check_pack_catalog_health(db):

@@ -18,12 +18,16 @@ function downloadCountLabel(count) {
 }
 
 function statusLabel(status, installedVersion) {
+  if (status === "local_copy") {
+    return "Déjà présent";
+  }
+
   if (status === "update_available") {
     return installedVersion ? `v${installedVersion} installée` : "Mise à jour";
   }
 
   if (status === "up_to_date") {
-    return installedVersion ? `Installé v${installedVersion}` : "Installé";
+    return installedVersion ? `À jour v${installedVersion}` : "À jour";
   }
 
   return "À installer";
@@ -32,6 +36,7 @@ function statusLabel(status, installedVersion) {
 function statusClassName(status) {
   if (status === "update_available") return "pack-status-pill-update";
   if (status === "not_installed") return "pack-status-pill-install";
+  if (status === "local_copy") return "pack-status-pill-local";
   return "";
 }
 
@@ -51,16 +56,25 @@ export default function PackCard({
   density = "grid",
   item,
   onInstall,
+  onOpenGroup,
   onSelect,
   onUpdate,
   selected = false
 }) {
-  const { entry, status, installedVersion, action } = item;
+  const {
+    entry,
+    status,
+    installedVersion,
+    isMine,
+    localGroupId,
+    action
+  } = item;
   const typeStyle = getQuestionTypeChipStyle(entry.type_group);
   const busy = Boolean(action.busy);
   const sizeLabel = formatSize(entry.size_bytes);
   const downloadLabel = downloadCountLabel(entry.download_count);
   const canAct = status === "not_installed" || status === "update_available";
+  const canOpenGroup = Boolean(localGroupId && onOpenGroup);
 
   function handleAction(event) {
     event.stopPropagation();
@@ -94,8 +108,15 @@ export default function PackCard({
             {typeStyle.label}
           </span>
 
-          <span className={`pack-status-pill ${statusClassName(status)}`}>
-            {statusLabel(status, installedVersion)}
+          <span className="pack-card-pill-row">
+            {isMine && (
+              <span className="pack-status-pill pack-status-pill-owned">
+                Mon pack
+              </span>
+            )}
+            <span className={`pack-status-pill ${statusClassName(status)}`}>
+              {statusLabel(status, installedVersion)}
+            </span>
           </span>
         </div>
 
@@ -124,7 +145,7 @@ export default function PackCard({
       </button>
 
       <div className="pack-card-actions">
-        {canAct ? (
+        {canAct && (
           <button
             type="button"
             disabled={busy}
@@ -134,9 +155,26 @@ export default function PackCard({
           >
             {actionCopy(status, busy)}
           </button>
-        ) : (
-          <span className="pack-status-pill pack-status-pill-install">
-            Installé
+        )}
+
+        {canOpenGroup && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenGroup(localGroupId);
+            }}
+            className="pack-secondary-button pack-card-open-button"
+            aria-label={`Ouvrir ${entry.name} dans le gestionnaire`}
+          >
+            Ouvrir
+          </button>
+        )}
+
+        {!canAct && !canOpenGroup && (
+          <span className={`pack-status-pill ${statusClassName(status)}`}>
+            {statusLabel(status, installedVersion)}
           </span>
         )}
 

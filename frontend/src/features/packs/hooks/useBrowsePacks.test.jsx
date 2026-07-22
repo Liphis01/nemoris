@@ -37,6 +37,9 @@ describe("packStatus", () => {
     expect(
       packStatus(entry, { installed_version: 2 })
     ).toBe("update_available");
+    expect(
+      packStatus(entry, null, { has_local_content: true })
+    ).toBe("local_copy");
   });
 });
 
@@ -146,6 +149,49 @@ describe("useBrowsePacks", () => {
     expect(byGuid["guid-a"].installedVersion).toBe(1);
     expect(byGuid["guid-b"].status).toBe("not_installed");
     expect(byGuid["guid-b"].installedVersion).toBeNull();
+  });
+
+  it("keeps local authored packs out of the installable state", async () => {
+    searchPackCatalog.mockResolvedValue({
+      packs: [
+        {
+          pack_guid: "guid-local",
+          name: "Pack local",
+          version: 4,
+          type_group: "text",
+          question_count: 7,
+          download_url: "https://example.com/local.zip",
+          is_mine: true,
+          local_status: {
+            status: "local_copy",
+            is_mine: true,
+            has_local_content: true,
+            installed_version: null,
+            local_pack_version: null,
+            local_group_id: 10,
+            local_group_name: "Pack local"
+          }
+        }
+      ],
+      facets: { themes: [] },
+      total: 1,
+      next_cursor: null
+    });
+    listInstalledPacks.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useBrowsePacks());
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1);
+    });
+
+    expect(result.current.items[0]).toMatchObject({
+      status: "local_copy",
+      installedVersion: null,
+      localGroupId: 10,
+      hasLocalContent: true,
+      isMine: true
+    });
   });
 
   it("loads additional pages with the returned cursor", async () => {

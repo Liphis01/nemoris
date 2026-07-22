@@ -249,6 +249,15 @@
   white-space: nowrap;
 }
 
+.pack-card-pill-row {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .pack-count-pill {
   background: #202020;
   border: 1px solid #333333;
@@ -485,6 +494,18 @@
   color: #ffcc7a;
 }
 
+.pack-status-pill-local {
+  background: rgba(125, 211, 252, 0.08);
+  border-color: rgba(125, 211, 252, 0.28);
+  color: #7dd3fc;
+}
+
+.pack-status-pill-owned {
+  background: rgba(94, 234, 212, 0.1);
+  border-color: rgba(94, 234, 212, 0.3);
+  color: #5eead4;
+}
+
 .pack-card h3 {
   color: #f3f3f3;
   font-size: 18px;
@@ -559,6 +580,14 @@
   min-height: 36px;
   padding: 0 12px;
   white-space: nowrap;
+}
+
+.pack-card-open-button {
+  min-width: 86px;
+}
+
+.pack-card-row .pack-card-open-button {
+  width: 100%;
 }
 
 .pack-card-action,
