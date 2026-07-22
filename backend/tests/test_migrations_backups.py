@@ -327,7 +327,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
-                    "0015", "0016"
+                    "0015", "0016", "0017"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -364,7 +364,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 16)
+            self.assertEqual(migration_count, 17)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -411,7 +411,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
-                    "0015", "0016"
+                    "0015", "0016", "0017"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -512,7 +512,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0005", "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013", "0014", "0015", "0016"
+                    "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017"
                 ]
             )
 
@@ -587,7 +587,7 @@ class MigrationTests(unittest.TestCase):
                 [migration["version"] for migration in result["applied"]],
                 [
                     "0006", "0007", "0008", "0009",
-                    "0010", "0011", "0012", "0013", "0014", "0015", "0016"
+                    "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017"
                 ]
             )
 
@@ -682,7 +682,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011", "0012", "0013", "0014", "0015", "0016"]
+                ["0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017"]
             )
 
             guids = {}
@@ -869,7 +869,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015", "0016"]
+                ["0011", "0012", "0013", "0014", "0015", "0016", "0017"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1027,7 +1027,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015", "0016"]
+                ["0011", "0012", "0013", "0014", "0015", "0016", "0017"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1120,7 +1120,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0013", "0014", "0015", "0016"]
+                ["0013", "0014", "0015", "0016", "0017"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1174,7 +1174,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0014", "0015", "0016"]
+                ["0014", "0015", "0016", "0017"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1209,7 +1209,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(count, 3)
 
-    def test_blueprint_bookkeeping_migration_adds_columns_and_table(self):
+    def test_pack_bookkeeping_migration_adds_columns_and_table(self):
         with tempfile.TemporaryDirectory() as temp_name:
             temp_dir = Path(temp_name)
             database_file = temp_dir / "questions.db"
@@ -1270,15 +1270,15 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0015", "0016"]
+                ["0015", "0016", "0017"]
             )
 
-            self.assertIn("blueprint_subscriptions", table_names(database_file))
+            self.assertIn("pack_subscriptions", table_names(database_file))
 
             for table in ("questions", "question_groups"):
                 columns = column_names(database_file, table)
-                self.assertIn("blueprint_guid", columns)
-                self.assertIn("blueprint_version", columns)
+                self.assertIn("pack_guid", columns)
+                self.assertIn("pack_version", columns)
                 self.assertIn("content_hash", columns)
 
             with sqlite3.connect(database_file) as connection:
@@ -1287,11 +1287,11 @@ class MigrationTests(unittest.TestCase):
                     "INSERT INTO questions (id, guid, type_q, question) "
                     "VALUES (1, 'q-guid', 'text', 'Q1')"
                 )
-                blueprint_guid = connection.execute(
-                    "SELECT blueprint_guid FROM questions WHERE id = 1"
+                pack_guid = connection.execute(
+                    "SELECT pack_guid FROM questions WHERE id = 1"
                 ).fetchone()[0]
 
-            self.assertIsNone(blueprint_guid)
+            self.assertIsNone(pack_guid)
 
             # Re-run is a no-op.
             second = run_migrations(
@@ -1301,6 +1301,159 @@ class MigrationTests(unittest.TestCase):
                 backup_dir=temp_dir / "backups"
             )
             self.assertEqual(second["applied"], [])
+
+    def test_pack_terminology_migration_renames_legacy_pack_tables(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+            static_dir = temp_dir / "static"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in (
+                    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
+                    "0008", "0009", "0010", "0011", "0012", "0013", "0014",
+                    "0015", "0016"
+                ):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE questions (
+                        id INTEGER PRIMARY KEY,
+                        guid VARCHAR,
+                        blueprint_guid VARCHAR,
+                        blueprint_version INTEGER,
+                        content_hash VARCHAR
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE question_groups (
+                        id INTEGER PRIMARY KEY,
+                        guid VARCHAR,
+                        blueprint_guid VARCHAR,
+                        blueprint_version INTEGER,
+                        content_hash VARCHAR
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE blueprint_subscriptions (
+                        id INTEGER PRIMARY KEY,
+                        blueprint_guid VARCHAR UNIQUE NOT NULL,
+                        installed_version INTEGER NOT NULL,
+                        name VARCHAR,
+                        source VARCHAR,
+                        subscribed_at VARCHAR NOT NULL,
+                        updated_at VARCHAR
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE app_settings (
+                        key VARCHAR PRIMARY KEY,
+                        value JSON NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO questions (
+                        id, guid, blueprint_guid, blueprint_version, content_hash
+                    ) VALUES (1, 'q-guid', 'pack-guid', 2, 'hash-q')
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO question_groups (
+                        id, guid, blueprint_guid, blueprint_version, content_hash
+                    ) VALUES (1, 'pack-guid', 'pack-guid', 2, 'hash-g')
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO blueprint_subscriptions (
+                        id, blueprint_guid, installed_version, name, source,
+                        subscribed_at
+                    ) VALUES (
+                        1, 'pack-guid', 2, 'World', 'world.zip',
+                        '2026-07-22T10:00:00Z'
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO app_settings (key, value)
+                    VALUES ('blueprint_catalog', '{"url":"https://project.supabase.co"}')
+                    """
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            result = run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertEqual(
+                [migration["version"] for migration in result["applied"]],
+                ["0017"]
+            )
+            self.assertIn("pack_subscriptions", table_names(database_file))
+            self.assertNotIn("blueprint_subscriptions", table_names(database_file))
+
+            for table in ("questions", "question_groups", "pack_subscriptions"):
+                columns = column_names(database_file, table)
+                self.assertIn("pack_guid", columns)
+                self.assertNotIn("blueprint_guid", columns)
+
+            for table in ("questions", "question_groups"):
+                columns = column_names(database_file, table)
+                self.assertIn("pack_version", columns)
+                self.assertNotIn("blueprint_version", columns)
+
+            with sqlite3.connect(database_file) as connection:
+                question_row = connection.execute(
+                    "SELECT pack_guid, pack_version FROM questions WHERE id = 1"
+                ).fetchone()
+                subscription_row = connection.execute(
+                    """
+                    SELECT pack_guid, installed_version
+                    FROM pack_subscriptions
+                    WHERE id = 1
+                    """
+                ).fetchone()
+                setting_row = connection.execute(
+                    "SELECT value FROM app_settings WHERE key = 'pack_catalog'"
+                ).fetchone()
+                old_setting = connection.execute(
+                    "SELECT 1 FROM app_settings WHERE key = 'blueprint_catalog'"
+                ).fetchone()
+
+            self.assertEqual(question_row, ("pack-guid", 2))
+            self.assertEqual(subscription_row, ("pack-guid", 2))
+            self.assertIsNotNone(setting_row)
+            self.assertIsNone(old_setting)
 
     def test_localize_legacy_map_media_migration(self):
         with tempfile.TemporaryDirectory() as temp_name:
@@ -1403,7 +1556,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0016"]
+                ["0016", "0017"]
             )
 
             digest = hashlib.sha256(svg_bytes).hexdigest()

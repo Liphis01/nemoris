@@ -37,7 +37,7 @@ APP_DATA_DIR = _frozen_app_data_dir() if IS_FROZEN else BACKEND_DIR
 DATABASE_FILE = APP_DATA_DIR / "questions.db"
 STATIC_DIR = APP_DATA_DIR / "static"
 BACKUP_DIR = APP_DATA_DIR / "backups"
-BLUEPRINT_DIR = APP_DATA_DIR / "blueprints"
+PACK_DIR = APP_DATA_DIR / "packs"
 # Sync account/token/state (M2). Deliberately a sibling of questions.db, NOT
 # inside it: create_backup only bundles questions.db + static/, so an auth
 # token here never rides along in a synced/backed-up collection.

@@ -1,7 +1,7 @@
-# Roadmap — Accounts, Blueprints & Sync
+# Roadmap — Accounts, Packs & Sync
 
 Goal: let users work from multiple devices (Anki model: full sync + fallback
-on conflict), and publish content "blueprints" (e.g. countries of the world)
+on conflict), and publish content "packs" (e.g. countries of the world)
 that anyone can add to their own database.
 
 Guiding principle: **the local database stays single-user forever.** Only the
@@ -11,9 +11,9 @@ Overall order and why:
 
 1. **M0 — Schema foundations** first: every day with users makes these
    migrations more expensive. Zero visible change, everything else depends on it.
-2. **M1 — Blueprints** before accounts: user value with no server at all, it
+2. **M1 — Packs** before accounts: user value with no server at all, it
    forces the identifier/media machinery that sync needs anyway, and it makes
-   the sync payload small (blueprint content re-downloads from the catalog,
+   the sync payload small (pack content re-downloads from the catalog,
    it does not sync).
 3. **M2 — Accounts + full sync**: Anki's fallback mechanism (one side wins
    wholesale) is the one that handles the hard cases. We build it first.
@@ -38,12 +38,12 @@ No user-visible change. Each step = a versioned migration in `migrations.py`
       (verified: no raw/Core inserts anywhere), so no per-service changes
       were needed.
 - [x] Test: export → import → re-import does not duplicate (prepares M1).
-      `import_blueprint()`'s two pre-write guards (`already_subscribed`,
+      `import_pack()`'s two pre-write guards (`already_subscribed`,
       `guid_collision`) both run before any row is written, so a rejected
-      re-import is atomic by construction. `test_reimporting_same_blueprint_is_rejected`
-      and `test_local_guid_collision_is_rejected` (`test_blueprints.py`)
+      re-import is atomic by construction. `test_reimporting_same_pack_is_rejected`
+      and `test_local_guid_collision_is_rejected` (`test_packs.py`)
       strengthened with explicit before/after row-count assertions
-      (QuestionGroup/Question/BlueprintSubscription) to prove zero
+      (QuestionGroup/Question/PackSubscription) to prove zero
       duplicate/partial writes, not just that a `ValueError` is raised.
 
 ### 0.2 Revlog: move history out of `Progress`
@@ -85,7 +85,7 @@ alone. The revlog keeps exactly that shape, one row per entry.
       them means threading a session through five hot-path files for zero
       functional gain: the JSON column and `review_log` are proven identical
       (0.3's 918/918 gate) and dual-write keeps them in permanent lockstep.
-      Nothing in M1 or M2 reads through these functions — blueprints and sync
+      Nothing in M1 or M2 reads through these functions — packs and sync
       consume `services/revlog.py` directly. Revisit only if the column's
       storage cost ever matters (it doesn't: JSON history is a few KB/card).
 - Note: no history-reset or Progress-deletion paths exist in the app today
@@ -166,7 +166,7 @@ painful to retrofit.
 
 ### 0.5 Content-addressed media
 
-Needed for M1 (blueprint dedup) and M2 (idempotent sync).
+Needed for M1 (pack dedup) and M2 (idempotent sync).
 
 - [x] **Design deviation (better than planned):** a `media_files` registry
       table (path → sha256 → size, migration `0014`) instead of hash columns
@@ -213,14 +213,14 @@ decision above) — it is a proven-redundant cache, not a liability.
 
 ---
 
-## M1 — Blueprints (~2 weeks)
+## M1 — Packs (~2 weeks)
 
 Versioned, installable, updatable content packages. No account required, no
 application server: static files + a JSON index.
 
 ### Decisions to make (before coding)
 
-- **D1 — Package format**: zip containing `manifest.json` (blueprint guid,
+- **D1 — Package format**: zip containing `manifest.json` (pack guid,
   integer version, name, description, license, minimum schema version),
   `content.json` (questions/groups/collections with their GUIDs, **no
   progress**), and `media/<sha256>.<ext>`.
@@ -228,19 +228,19 @@ application server: static files + a JSON index.
   inspectable, no schema-drift risk). Keep the zip+manifest shape from
   `backups.py`, reusable code.
 - **D2 — Catalog hosting: decided (2026-07-21) — Supabase Storage**, not
-  GitHub Releases/Pages as originally sketched. A public `blueprints` bucket
+  GitHub Releases/Pages as originally sketched. A public `packs` bucket
   in the same Supabase project used for M2 sync (deliberately separate from
   the private `sync-collections` bucket). Zero extra infra to stand up since
   the project already exists for accounts; revisit only if free-tier
   bandwidth/storage limits ever bite.
 - **D3 — Copy vs reference**: **decided — copy with bookkeeping.** Every
-  copied row records `blueprint_guid`, `blueprint_version`, `content_hash`.
+  copied row records `pack_guid`, `pack_version`, `content_hash`.
   This is the accounting Anki lacks, and what makes updates possible.
 
 ### Steps
 
 - [x] 1.1/1.2 **Export + import/subscribe — done (2026-07-20).** Backend only
-      (`services/blueprints.py`, `routers/blueprints.py`, migration `0015`).
+      (`services/packs.py`, `routers/packs.py`, migration `0015`).
       Export unit is `QuestionGroup` (not `Collection` — type-homogeneous,
       owns the shared media; Collection export is a future flatten-to-groups
       extension, not built). Progress always excluded (Anki's "include
@@ -251,18 +251,18 @@ application server: static files + a JSON index.
       - **Imported rows reuse the source `guid` verbatim**, not fresh ones —
         required for 1.3's diff-by-guid to work with no extra column, and
         costs nothing since guid uniqueness is per-local-file, consistent
-        with M2 excluding blueprint content from the personal sync payload.
-      - Bookkeeping (`blueprint_guid`, `blueprint_version`, `content_hash`)
+        with M2 excluding pack content from the personal sync payload.
+      - Bookkeeping (`pack_guid`, `pack_version`, `content_hash`)
         is plain nullable columns on `Question`/`QuestionGroup`, not a side
         table — mirrors how `guid` itself was added.
       - `content_hash` = sha256 of a canonical field-subset dict (excludes
         id/guid/group_id/progress; media is a content-addressed ref, never a
         local path), independently recomputed by both sides, never trusted
         as an exporter-supplied value.
-      - `blueprint_subscriptions` table (guid, installed_version, source,
+      - `pack_subscriptions` table (guid, installed_version, source,
         subscribed_at) — no `group_id` FK, the owning group is found via
-        `QuestionGroup.guid == blueprint_guid` (guid reuse again), staying
-        forward-compatible with a future multi-entity blueprint.
+        `QuestionGroup.guid == pack_guid` (guid reuse again), staying
+        forward-compatible with a future multi-entity pack.
       - **Real-data finding, patched then eliminated at the root**: a media
         field was one of three unrelated things — `/static/...` (real
         uploaded file, bundle it), an external `http(s)://` URL (hotlinked,
@@ -290,8 +290,8 @@ application server: static files + a JSON index.
         byte-identical sha256 on the far side) both round-tripped correctly
         — zero progress rows, subscription recorded, re-import correctly
         rejected. 315 backend tests pass (16 new).
-- [x] 1.3 **Updates — done (2026-07-21).** `update_blueprint()` in
-      `services/blueprints.py`, `POST /blueprints/update?delete_removed=bool`.
+- [x] 1.3 **Updates — done (2026-07-21).** `update_pack()` in
+      `services/packs.py`, `POST /packs/update?delete_removed=bool`.
       - **Correction to the spec's literal reading**: "item untouched locally
         → content_hash identical" compares against the *new zip's* content —
         but fork detection must be a property of local state alone,
@@ -303,7 +303,7 @@ application server: static files + a JSON index.
       - new guid in zip, absent locally → added (fresh row, guid reused,
         no Progress — mirrors `create_question()`'s lazy creation).
       - present both sides, unforked, content differs → updated in place,
-        `blueprint_version`/`content_hash` advance.
+        `pack_version`/`content_hash` advance.
       - present both sides, content identical either way → left alone
         entirely, not even bookkeeping touched (so "updated" only ever
         reports real changes — an early version reported every unforked row
@@ -316,7 +316,7 @@ application server: static files + a JSON index.
         deletion, no separate "archive" concept invented). Progress is
         deleted alongside its question exactly as any normal deletion does;
         never touched otherwise.
-      - No separate preview/apply split: `update_blueprint` is safe to call
+      - No separate preview/apply split: `update_pack` is safe to call
         repeatedly with the same zip (Terraform-apply style) — call once
         with `delete_removed=False` to apply every safe change and see what
         *would* be removed, call again with `True` once confirmed.
@@ -328,20 +328,20 @@ application server: static files + a JSON index.
         upstream change this" before checking fork status, when it must be
         the other way around. Fixed; a regression test locks in the exact
         scenario. 327 backend tests pass (11 new for 1.3).
-- [x] 1.4 **Unsubscribe — done (2026-07-21).** `unsubscribe_blueprint()` in
-      `services/blueprints.py`, `POST /blueprints/{blueprint_guid}/unsubscribe
+- [x] 1.4 **Unsubscribe — done (2026-07-21).** `unsubscribe_pack()` in
+      `services/packs.py`, `POST /packs/{pack_guid}/unsubscribe
       ?delete_content=bool`.
-      - **Keep as personal copy** (default): drops the `BlueprintSubscription`
-        row only; clears `blueprint_guid`/`blueprint_version`/`content_hash`
+      - **Keep as personal copy** (default): drops the `PackSubscription`
+        row only; clears `pack_guid`/`pack_version`/`content_hash`
         on the group and its questions so a locally-owned row never claims a
-        stale blueprint origin once nothing tracks updates for it anymore.
+        stale pack origin once nothing tracks updates for it anymore.
         Content and progress untouched.
       - **Delete**: reuses the exact deletion pipeline `delete_group` already
         uses (`delete_question_dependents` + tombstones + media cleanup via
         `delete_unreferenced_media_file`) — scoped by **group membership**,
-        not `blueprint_guid`, matching how group deletion already works
+        not `pack_guid`, matching how group deletion already works
         everywhere else in this app (no partial-group-deletion concept
-        exists, so a question the user manually added into a blueprint-
+        exists, so a question the user manually added into a pack-
         derived group is deleted along with it too). "Progress archived"
         from the spec text = an unconditional `create_backup()` call first
         (reusing the same primitive as `/backup/export` and pre-migration
@@ -354,26 +354,26 @@ application server: static files + a JSON index.
         delete produced a real, opened-and-confirmed backup file and left
         zero rows behind. 333 backend tests pass (6 new).
 - [x] 1.5 **Catalog + UI — done (2026-07-21).** New catalog JSON format
-      (`{format, blueprints: [{blueprint_guid, name, description, license,
+      (`{format, packs: [{pack_guid, name, description, license,
       version, type_group, question_count, size_bytes, download_url}]}`) —
       `type_group`/`question_count` duplicate what's inside each zip's own
       `content.json` on purpose, so cards render richly without downloading
       every zip up front.
       - **No backend "fetch a URL" capability was needed.** A catalog entry
         is just a public static zip; the frontend fetches it into a blob and
-        POSTs that blob to the *already-existing* `/blueprints/import` /
-        `/blueprints/update` — identical to what a manual file picker
+        POSTs that blob to the *already-existing* `/packs/import` /
+        `/packs/update` — identical to what a manual file picker
         already did, just sourced from a URL. Zero changes to
-        `import_blueprint`/`update_blueprint`.
-      - Backend additions, precisely scoped: `GET /blueprints` (list
-        `BlueprintSubscription` rows — did not exist before, the one real
-        gap) and `GET`/`PUT /blueprints/catalog-settings` (new `AppSetting`
-        key `blueprint_catalog`, classified `DEVICE_SETTING_KEYS` — a
+        `import_pack`/`update_pack`.
+      - Backend additions, precisely scoped: `GET /packs` (list
+        `PackSubscription` rows — did not exist before, the one real
+        gap) and `GET`/`PUT /packs/catalog-settings` (new `AppSetting`
+        key `pack_catalog`, classified `DEVICE_SETTING_KEYS` — a
         per-device preference, not sync data).
-      - New `frontend/src/features/blueprints/` — `useBrowseBlueprints`
+      - New `frontend/src/features/packs/` — `useBrowsePacks`
         (correlates catalog entries against installed subscriptions by guid
-        → not_installed / up_to_date / update_available), `BlueprintCard`,
-        `BrowseBlueprints`. `update()`'s two-phase confirm (call once,
+        → not_installed / up_to_date / update_available), `PackCard`,
+        `BrowsePacks`. `update()`'s two-phase confirm (call once,
         preview `removed`, call again with `deleteRemoved: true`) surfaces
         inline, no modal. New Menu destination (`teal` accent, previously
         unclaimed at the destination level) + Settings "Catalogue" section
@@ -404,30 +404,30 @@ application server: static files + a JSON index.
         backup-before-delete round trip, not an app bug; polling confirmed
         the live re-render (no page reload) catches up in ~2s on its own.
         335 backend + 347 frontend tests pass (2 + 7 new).
-- [x] 1.6 **First real blueprint: countries of the world — done (2026-07-21).**
+- [x] 1.6 **First real pack: countries of the world — done (2026-07-21).**
       Full dogfooding of publish → install, against the real public catalog:
       - Exported the live "Territoires du monde" group via the app's own
-        `/blueprints/{id}/export` (blueprint_guid `2639a60d-4dd2-4531-9fcd-
+        `/packs/{id}/export` (pack_guid `2639a60d-4dd2-4531-9fcd-
         433fdd159cd2`, v1, 252 questions, 72420 bytes) and authored a matching
         `catalog.json`, staged in a gitignored `publish/` folder.
-      - User created a **public** Supabase Storage bucket named `blueprints`
+      - User created a **public** Supabase Storage bucket named `packs`
         (deliberately separate from the private `sync-collections` bucket used
         for sync payloads) and uploaded both files.
       - Verified both public URLs resolve with the exact expected byte sizes
         (`catalog.json` 556 bytes, the zip 72420 bytes) — real HTTP GETs
         against `https://<project>.supabase.co/storage/v1/object/public/
-        blueprints/...`, no auth needed since Storage RLS is bucket-public.
-      - Pointed the app's own catalog-URL setting (`PUT /blueprints/catalog-
+        packs/...`, no auth needed since Storage RLS is bucket-public.
+      - Pointed the app's own catalog-URL setting (`PUT /packs/catalog-
         settings`) at the real published `catalog.json`.
       - **Fresh-database install proof**: built a brand-new SQLite DB from
         `Base.metadata.create_all` (empty — asserted zero groups/questions/
         subscriptions beforehand) in a scratch dir, downloaded the real
         catalog.json + zip exactly as the browser would, and called the real
-        `import_blueprint()` service function against it. Result: 252
+        `import_pack()` service function against it. Result: 252
         questions imported, the map SVG materialized correctly on disk, the
-        `BlueprintSubscription` recorded with the catalog URL as `source`.
+        `PackSubscription` recorded with the catalog URL as `source`.
         This is the same code path the UI's "Installer" button drives
-        (`fetchCatalog` → `installBlueprintFromCatalog` → `POST /blueprints/
+        (`fetchCatalog` → `installPackFromCatalog` → `POST /packs/
         import`), just invoked directly against a scratch DB instead of the
         user's own (which would correctly hit the guid-collision guard, since
         they already own this content locally).
@@ -446,8 +446,8 @@ application server: static files + a JSON index.
         (`Copyright (c) 2020 Pareto Software, LLC DBA Simplemaps.com`). MIT
         explicitly permits redistribution *provided the copyright + permission
         notice travels with the work*. That notice is a comment block at the
-        top of the SVG, and blueprint export bundles media **byte-for-byte**
-        (`zip_file.write(file_path, ...)` in `services/blueprints.py`), so the
+        top of the SVG, and pack export bundles media **byte-for-byte**
+        (`zip_file.write(file_path, ...)` in `services/packs.py`), so the
         attribution is preserved automatically inside any exported pack — no
         extra plumbing required. Verified the localized static copies
         (migration 0016) still carry the comment intact.
@@ -462,10 +462,10 @@ application server: static files + a JSON index.
         itself. Disputed-territories policy is a content/editorial decision
         deferred to whoever authors the published pack, not a code concern.
 **M1 — done (2026-07-21).** Definition of done: the countries-of-the-world
-blueprint installs from the catalog onto a fresh database (proven live above,
+pack installs from the catalog onto a fresh database (proven live above,
 1.6), a v2 propagates cleanly onto a database with progress and local edits
 (proven with Playwright in 1.5), Playwright e2e tests cover the full cycle
-(1.5). All three hold. Real public host: Supabase Storage, `blueprints`
+(1.5). All three hold. Real public host: Supabase Storage, `packs`
 bucket, project `apauxfgsthjmowjimcwn` — the same project used for M2 sync.
 
 ---
@@ -531,9 +531,9 @@ real, minimal reference server:
 Step status against the original 2.x list: 2.3 (version protocol) ✓, 2.4
 (post-pull migrate+rebalance) ✓ (reused as-is), 2.6 (schema gating) ✓, 2.7
 (UI + conflict) ✓. **2.1/2.2 deferred** — this slice ships the whole DB
-(incl. blueprint content + all media) rather than a slimmed payload; that
+(incl. pack content + all media) rather than a slimmed payload; that
 optimization is a later slice and matters little here (most of static/ is the
-user's own media, not blueprints). **2.5** N/A for version-based conflict.
+user's own media, not packs). **2.5** N/A for version-based conflict.
 **2.8** (account deletion / privacy) deferred. **The real cloud backend**
 (Supabase adapter or deploying `sync_server/`) is the next decision when
 ready.
@@ -598,10 +598,10 @@ via slices 1-2 above, kept here as the authoritative per-item checklist)
 
 - [x] 2.1 + 2.2 **Sync payload slimming + hash-based idempotent media —
       done (2026-07-21), together (Slice 3).** Deliberate deviation from the
-      original 2.1 text: excluding blueprint-derived rows from the DB payload
+      original 2.1 text: excluding pack-derived rows from the DB payload
       was checked against the real schema and doesn't hold up —
       `Progress.question_id` / `ReviewLog.question_id` are **integer** FKs
-      into `questions.id`, and reinstalling a blueprint mints new integer PKs
+      into `questions.id`, and reinstalling a pack mints new integer PKs
       (only `guid` is reused), so excluding those rows would orphan review
       history or need a whole guid-relinking step for content users clearly
       want synced anyway. Instead: **the DB always syncs whole** (all rows,
@@ -755,7 +755,7 @@ If the gate passes:
 | W2 | 0.3 replay + property test, 0.4 tombstones, 0.6 settings, 0.7 version — M0 done; start 0.5 media |
 | W3 | Finish 0.5; D1-D3 settled; 1.1 export + 1.2 import |
 | W4 | 1.3 updates, 1.4 unsubscribe, 1.5 catalog+UI |
-| W5 | 1.6 countries-of-the-world blueprint + 1.7 licensing — M1 done; D4-D5 settled |
+| W5 | 1.6 countries-of-the-world pack + 1.7 licensing — M1 done; D4-D5 settled |
 | W6 | 2.1-2.4 payload, blobs, version protocol |
 | W7 | 2.5-2.8 clocks, gating, UI, account — M2 done |
 | W8+ | Observe real usage; M3 gate |

@@ -1,18 +1,18 @@
 import { requestJson, requestOk } from "./http";
 
 
-export function listInstalledBlueprints() {
-  return requestJson("/blueprints");
+export function listInstalledPacks() {
+  return requestJson("/packs");
 }
 
-export function getBlueprintCatalogSettings() {
-  return requestJson("/blueprints/catalog-settings");
+export function getPackCatalogSettings() {
+  return requestJson("/packs/catalog-settings");
 }
 
-export function saveBlueprintCatalogSettings(settings) {
+export function savePackCatalogSettings(settings) {
   const payload = typeof settings === "string" ? { url: settings } : settings;
 
-  return requestJson("/blueprints/catalog-settings", {
+  return requestJson("/packs/catalog-settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -22,7 +22,7 @@ export function saveBlueprintCatalogSettings(settings) {
   });
 }
 
-export function searchBlueprintCatalog(params = {}) {
+export function searchPackCatalog(params = {}) {
   const query = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -32,12 +32,12 @@ export function searchBlueprintCatalog(params = {}) {
   });
 
   const suffix = query.toString();
-  return requestJson(`/blueprints/catalog/search${suffix ? `?${suffix}` : ""}`);
+  return requestJson(`/packs/catalog/search${suffix ? `?${suffix}` : ""}`);
 }
 
 
-export function getBlueprintCatalogDiagnostics() {
-  return requestJson("/blueprints/catalog/diagnostics");
+export function getPackCatalogDiagnostics() {
+  return requestJson("/packs/catalog/diagnostics");
 }
 
 
@@ -66,7 +66,7 @@ function safeFilenameSlug(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  return slug || "blueprint";
+  return slug || "pack";
 }
 
 // Plain fetch, not requestJson: these hit an external catalog URL, not this
@@ -81,7 +81,7 @@ export async function fetchCatalog(url) {
   return response.json();
 }
 
-async function fetchBlueprintZipBlob(downloadUrl) {
+async function fetchPackZipBlob(downloadUrl) {
   const response = await fetch(downloadUrl);
 
   if (!response.ok) {
@@ -91,34 +91,34 @@ async function fetchBlueprintZipBlob(downloadUrl) {
   return response.blob();
 }
 
-export async function installBlueprintFromCatalog(entry) {
-  const blob = await fetchBlueprintZipBlob(entry.download_url);
+export async function installPackFromCatalog(entry) {
+  const blob = await fetchPackZipBlob(entry.download_url);
   const formData = new FormData();
-  formData.append("file", blob, `${entry.blueprint_guid}.zip`);
+  formData.append("file", blob, `${entry.pack_guid}.zip`);
 
-  return requestJson("/blueprints/import", { method: "POST", body: formData });
+  return requestJson("/packs/import", { method: "POST", body: formData });
 }
 
-export async function updateBlueprintFromCatalog(entry, { deleteRemoved = false } = {}) {
-  const blob = await fetchBlueprintZipBlob(entry.download_url);
+export async function updatePackFromCatalog(entry, { deleteRemoved = false } = {}) {
+  const blob = await fetchPackZipBlob(entry.download_url);
   const formData = new FormData();
-  formData.append("file", blob, `${entry.blueprint_guid}.zip`);
+  formData.append("file", blob, `${entry.pack_guid}.zip`);
 
   return requestJson(
-    `/blueprints/update?delete_removed=${deleteRemoved}`,
+    `/packs/update?delete_removed=${deleteRemoved}`,
     { method: "POST", body: formData }
   );
 }
 
-export function unsubscribeBlueprint(blueprintGuid, { deleteContent = false } = {}) {
+export function unsubscribePack(packGuid, { deleteContent = false } = {}) {
   return requestJson(
-    `/blueprints/${blueprintGuid}/unsubscribe?delete_content=${deleteContent}`,
+    `/packs/${packGuid}/unsubscribe?delete_content=${deleteContent}`,
     { method: "POST" }
   );
 }
 
-export async function exportBlueprintGroup(groupId, payload) {
-  const response = await requestOk(`/blueprints/${groupId}/export`, {
+export async function exportPackGroup(groupId, payload) {
+  const response = await requestOk(`/packs/${groupId}/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)

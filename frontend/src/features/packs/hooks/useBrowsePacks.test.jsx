@@ -2,47 +2,47 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   POPULAR_THEME,
-  blueprintStatus,
-  useBrowseBlueprints
-} from "./useBrowseBlueprints";
+  packStatus,
+  useBrowsePacks
+} from "./useBrowsePacks";
 import {
-  getBlueprintCatalogSettings,
-  installBlueprintFromCatalog,
-  listInstalledBlueprints,
-  searchBlueprintCatalog,
-  unsubscribeBlueprint,
-  updateBlueprintFromCatalog
-} from "../../../api/blueprints";
+  getPackCatalogSettings,
+  installPackFromCatalog,
+  listInstalledPacks,
+  searchPackCatalog,
+  unsubscribePack,
+  updatePackFromCatalog
+} from "../../../api/packs";
 
-vi.mock("../../../api/blueprints", () => ({
-  getBlueprintCatalogSettings: vi.fn(),
-  installBlueprintFromCatalog: vi.fn(),
-  listInstalledBlueprints: vi.fn(),
-  searchBlueprintCatalog: vi.fn(),
-  unsubscribeBlueprint: vi.fn(),
-  updateBlueprintFromCatalog: vi.fn()
+vi.mock("../../../api/packs", () => ({
+  getPackCatalogSettings: vi.fn(),
+  installPackFromCatalog: vi.fn(),
+  listInstalledPacks: vi.fn(),
+  searchPackCatalog: vi.fn(),
+  unsubscribePack: vi.fn(),
+  updatePackFromCatalog: vi.fn()
 }));
 
-describe("blueprintStatus", () => {
+describe("packStatus", () => {
   it("classifies not_installed, up_to_date and update_available", () => {
-    const entry = { blueprint_guid: "g1", version: 3 };
+    const entry = { pack_guid: "g1", version: 3 };
 
-    expect(blueprintStatus(entry, null)).toBe("not_installed");
+    expect(packStatus(entry, null)).toBe("not_installed");
     expect(
-      blueprintStatus(entry, { installed_version: 3 })
+      packStatus(entry, { installed_version: 3 })
     ).toBe("up_to_date");
     expect(
-      blueprintStatus(entry, { installed_version: 4 })
+      packStatus(entry, { installed_version: 4 })
     ).toBe("up_to_date");
     expect(
-      blueprintStatus(entry, { installed_version: 2 })
+      packStatus(entry, { installed_version: 2 })
     ).toBe("update_available");
   });
 });
 
-describe("useBrowseBlueprints", () => {
+describe("useBrowsePacks", () => {
   const entryA = {
-    blueprint_guid: "guid-a",
+    pack_guid: "guid-a",
     name: "Pack A",
     version: 2,
     type_group: "map",
@@ -50,7 +50,7 @@ describe("useBrowseBlueprints", () => {
     download_url: "https://example.com/a.zip"
   };
   const entryB = {
-    blueprint_guid: "guid-b",
+    pack_guid: "guid-b",
     name: "Pack B",
     version: 1,
     type_group: "media",
@@ -59,12 +59,12 @@ describe("useBrowseBlueprints", () => {
   };
 
   beforeEach(() => {
-    getBlueprintCatalogSettings.mockResolvedValue({
+    getPackCatalogSettings.mockResolvedValue({
       url: "https://project.supabase.co",
       key: "sb_publishable_test"
     });
-    searchBlueprintCatalog.mockResolvedValue({
-      blueprints: [entryA, entryB],
+    searchPackCatalog.mockResolvedValue({
+      packs: [entryA, entryB],
       facets: {
         themes: [
           { value: POPULAR_THEME, label: "Populaires", result_count: 2 },
@@ -74,15 +74,15 @@ describe("useBrowseBlueprints", () => {
       total: 2,
       next_cursor: null
     });
-    listInstalledBlueprints.mockResolvedValue([
-      { blueprint_guid: "guid-a", installed_version: 1 }
+    listInstalledPacks.mockResolvedValue([
+      { pack_guid: "guid-a", installed_version: 1 }
     ]);
-    installBlueprintFromCatalog.mockResolvedValue({ status: "imported" });
-    updateBlueprintFromCatalog.mockResolvedValue({
+    installPackFromCatalog.mockResolvedValue({ status: "imported" });
+    updatePackFromCatalog.mockResolvedValue({
       status: "updated",
       removed: []
     });
-    unsubscribeBlueprint.mockResolvedValue({ status: "kept" });
+    unsubscribePack.mockResolvedValue({ status: "kept" });
   });
 
   afterEach(() => {
@@ -91,9 +91,9 @@ describe("useBrowseBlueprints", () => {
   });
 
   it("reports no catalog configured without searching anything else", async () => {
-    getBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    getPackCatalogSettings.mockResolvedValue({ url: "", key: "" });
 
-    const { result } = renderHook(() => useBrowseBlueprints());
+    const { result } = renderHook(() => useBrowsePacks());
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -101,12 +101,12 @@ describe("useBrowseBlueprints", () => {
 
     expect(result.current.catalogUrl).toBeNull();
     expect(result.current.items).toEqual([]);
-    expect(searchBlueprintCatalog).not.toHaveBeenCalled();
-    expect(listInstalledBlueprints).not.toHaveBeenCalled();
+    expect(searchPackCatalog).not.toHaveBeenCalled();
+    expect(listInstalledPacks).not.toHaveBeenCalled();
   });
 
   it("searches the catalogue with server-side filters", async () => {
-    const { result } = renderHook(() => useBrowseBlueprints({
+    const { result } = renderHook(() => useBrowsePacks({
       search: "monde",
       theme: "géographie",
       type: "map",
@@ -119,7 +119,7 @@ describe("useBrowseBlueprints", () => {
       expect(result.current.items).toHaveLength(2);
     });
 
-    expect(searchBlueprintCatalog).toHaveBeenCalledWith({
+    expect(searchPackCatalog).toHaveBeenCalledWith({
       q: "monde",
       theme: "géographie",
       type: "map",
@@ -132,14 +132,14 @@ describe("useBrowseBlueprints", () => {
   });
 
   it("correlates catalogue entries against installed subscriptions", async () => {
-    const { result } = renderHook(() => useBrowseBlueprints());
+    const { result } = renderHook(() => useBrowsePacks());
 
     await waitFor(() => {
       expect(result.current.items).toHaveLength(2);
     });
 
     const byGuid = Object.fromEntries(
-      result.current.items.map((item) => [item.entry.blueprint_guid, item])
+      result.current.items.map((item) => [item.entry.pack_guid, item])
     );
 
     expect(byGuid["guid-a"].status).toBe("update_available");
@@ -149,21 +149,21 @@ describe("useBrowseBlueprints", () => {
   });
 
   it("loads additional pages with the returned cursor", async () => {
-    searchBlueprintCatalog
+    searchPackCatalog
       .mockResolvedValueOnce({
-        blueprints: [entryA],
+        packs: [entryA],
         facets: { themes: [] },
         total: 2,
         next_cursor: "24"
       })
       .mockResolvedValueOnce({
-        blueprints: [entryB],
+        packs: [entryB],
         facets: { themes: [] },
         total: 2,
         next_cursor: null
       });
 
-    const { result } = renderHook(() => useBrowseBlueprints({ limit: 24 }));
+    const { result } = renderHook(() => useBrowsePacks({ limit: 24 }));
 
     await waitFor(() => expect(result.current.items).toHaveLength(1));
 
@@ -171,7 +171,7 @@ describe("useBrowseBlueprints", () => {
       await result.current.loadMore();
     });
 
-    expect(searchBlueprintCatalog).toHaveBeenLastCalledWith({
+    expect(searchPackCatalog).toHaveBeenLastCalledWith({
       q: "",
       theme: "",
       type: "",
@@ -180,41 +180,41 @@ describe("useBrowseBlueprints", () => {
       limit: 24,
       cursor: "24"
     });
-    expect(result.current.items.map((item) => item.entry.blueprint_guid)).toEqual([
+    expect(result.current.items.map((item) => item.entry.pack_guid)).toEqual([
       "guid-a",
       "guid-b"
     ]);
   });
 
   it("install() downloads from the catalog and refreshes installed state", async () => {
-    const { result } = renderHook(() => useBrowseBlueprints());
+    const { result } = renderHook(() => useBrowsePacks());
 
     await waitFor(() => expect(result.current.items).toHaveLength(2));
 
-    listInstalledBlueprints.mockResolvedValue([
-      { blueprint_guid: "guid-a", installed_version: 1 },
-      { blueprint_guid: "guid-b", installed_version: 1 }
+    listInstalledPacks.mockResolvedValue([
+      { pack_guid: "guid-a", installed_version: 1 },
+      { pack_guid: "guid-b", installed_version: 1 }
     ]);
 
     await act(async () => {
       await result.current.install(entryB);
     });
 
-    expect(installBlueprintFromCatalog).toHaveBeenCalledWith(entryB);
+    expect(installPackFromCatalog).toHaveBeenCalledWith(entryB);
 
     const byGuid = Object.fromEntries(
-      result.current.items.map((item) => [item.entry.blueprint_guid, item])
+      result.current.items.map((item) => [item.entry.pack_guid, item])
     );
     expect(byGuid["guid-b"].status).toBe("up_to_date");
   });
 
   it("update() surfaces pending removals without deleting until confirmed", async () => {
-    updateBlueprintFromCatalog.mockResolvedValue({
+    updatePackFromCatalog.mockResolvedValue({
       status: "updated",
       removed: ["some-question-guid"]
     });
 
-    const { result } = renderHook(() => useBrowseBlueprints());
+    const { result } = renderHook(() => useBrowsePacks());
 
     await waitFor(() => expect(result.current.items).toHaveLength(2));
 
@@ -222,13 +222,13 @@ describe("useBrowseBlueprints", () => {
       await result.current.update(entryA, { deleteRemoved: false });
     });
 
-    expect(updateBlueprintFromCatalog).toHaveBeenCalledWith(
+    expect(updatePackFromCatalog).toHaveBeenCalledWith(
       entryA,
       { deleteRemoved: false }
     );
 
     const byGuid = Object.fromEntries(
-      result.current.items.map((item) => [item.entry.blueprint_guid, item])
+      result.current.items.map((item) => [item.entry.pack_guid, item])
     );
     expect(byGuid["guid-a"].action.pendingRemoval).toEqual([
       "some-question-guid"
@@ -236,9 +236,9 @@ describe("useBrowseBlueprints", () => {
   });
 
   it("surfaces an inline error when an action fails, without crashing", async () => {
-    installBlueprintFromCatalog.mockRejectedValue(new Error("boom"));
+    installPackFromCatalog.mockRejectedValue(new Error("boom"));
 
-    const { result } = renderHook(() => useBrowseBlueprints());
+    const { result } = renderHook(() => useBrowsePacks());
 
     await waitFor(() => expect(result.current.items).toHaveLength(2));
 
@@ -247,7 +247,7 @@ describe("useBrowseBlueprints", () => {
     });
 
     const byGuid = Object.fromEntries(
-      result.current.items.map((item) => [item.entry.blueprint_guid, item])
+      result.current.items.map((item) => [item.entry.pack_guid, item])
     );
     expect(byGuid["guid-b"].action.error).toBe("boom");
     expect(byGuid["guid-b"].action.busy).toBe(false);

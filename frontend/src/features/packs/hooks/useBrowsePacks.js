@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  getBlueprintCatalogSettings,
-  installBlueprintFromCatalog,
-  listInstalledBlueprints,
-  searchBlueprintCatalog,
-  unsubscribeBlueprint as requestUnsubscribe,
-  updateBlueprintFromCatalog
-} from "../../../api/blueprints";
+  getPackCatalogSettings,
+  installPackFromCatalog,
+  listInstalledPacks,
+  searchPackCatalog,
+  unsubscribePack as requestUnsubscribe,
+  updatePackFromCatalog
+} from "../../../api/packs";
 
 export const POPULAR_THEME = "__popular__";
 const DEFAULT_LIMIT = 24;
 
-export function blueprintStatus(entry, installed) {
+export function packStatus(entry, installed) {
   if (!installed) {
     return "not_installed";
   }
@@ -25,15 +25,15 @@ function dedupeEntries(entries) {
   const byGuid = new Map();
 
   entries.forEach((entry) => {
-    if (entry?.blueprint_guid) {
-      byGuid.set(entry.blueprint_guid, entry);
+    if (entry?.pack_guid) {
+      byGuid.set(entry.pack_guid, entry);
     }
   });
 
   return [...byGuid.values()];
 }
 
-export function useBrowseBlueprints(filters = {}) {
+export function useBrowsePacks(filters = {}) {
   const search = filters.search || "";
   const theme = filters.theme || "";
   const type = filters.type || "all";
@@ -54,10 +54,10 @@ export function useBrowseBlueprints(filters = {}) {
   const requestIdRef = useRef(0);
 
   const loadInstalled = useCallback(async () => {
-    const rows = await listInstalledBlueprints();
+    const rows = await listInstalledPacks();
     const byGuid = {};
     rows.forEach((row) => {
-      byGuid[row.blueprint_guid] = row;
+      byGuid[row.pack_guid] = row;
     });
     setInstalledByGuid(byGuid);
     return byGuid;
@@ -77,7 +77,7 @@ export function useBrowseBlueprints(filters = {}) {
     setError("");
 
     try {
-      const settings = await getBlueprintCatalogSettings();
+      const settings = await getPackCatalogSettings();
       const configured = Boolean(settings.url && settings.key);
 
       if (requestId !== requestIdRef.current) {
@@ -95,7 +95,7 @@ export function useBrowseBlueprints(filters = {}) {
       }
 
       const [catalog] = await Promise.all([
-        searchBlueprintCatalog({
+        searchPackCatalog({
           q: search,
           theme,
           type: type === "all" ? "" : type,
@@ -111,14 +111,14 @@ export function useBrowseBlueprints(filters = {}) {
         return;
       }
 
-      const blueprints = Array.isArray(catalog.blueprints)
-        ? catalog.blueprints
+      const packs = Array.isArray(catalog.packs)
+        ? catalog.packs
         : [];
       setEntries((previous) => (
-        append ? dedupeEntries([...previous, ...blueprints]) : blueprints
+        append ? dedupeEntries([...previous, ...packs]) : packs
       ));
       setFacets(catalog.facets || { themes: [] });
-      setTotal(Number.isFinite(catalog.total) ? catalog.total : blueprints.length);
+      setTotal(Number.isFinite(catalog.total) ? catalog.total : packs.length);
       setNextCursor(catalog.next_cursor || null);
     } catch (loadError) {
       console.error(loadError);
@@ -146,15 +146,15 @@ export function useBrowseBlueprints(filters = {}) {
   }
 
   async function install(entry) {
-    patchAction(entry.blueprint_guid, { busy: true, error: "" });
+    patchAction(entry.pack_guid, { busy: true, error: "" });
 
     try {
-      await installBlueprintFromCatalog(entry);
+      await installPackFromCatalog(entry);
       await loadPage({ append: false });
-      patchAction(entry.blueprint_guid, { busy: false });
+      patchAction(entry.pack_guid, { busy: false });
     } catch (installError) {
       console.error(installError);
-      patchAction(entry.blueprint_guid, {
+      patchAction(entry.pack_guid, {
         busy: false,
         error: installError.message || "Installation impossible."
       });
@@ -162,36 +162,36 @@ export function useBrowseBlueprints(filters = {}) {
   }
 
   async function update(entry, { deleteRemoved = false } = {}) {
-    patchAction(entry.blueprint_guid, { busy: true, error: "" });
+    patchAction(entry.pack_guid, { busy: true, error: "" });
 
     try {
-      const result = await updateBlueprintFromCatalog(entry, { deleteRemoved });
+      const result = await updatePackFromCatalog(entry, { deleteRemoved });
       await loadPage({ append: false });
 
-      patchAction(entry.blueprint_guid, {
+      patchAction(entry.pack_guid, {
         busy: false,
         pendingRemoval:
           !deleteRemoved && result.removed?.length ? result.removed : null
       });
     } catch (updateError) {
       console.error(updateError);
-      patchAction(entry.blueprint_guid, {
+      patchAction(entry.pack_guid, {
         busy: false,
         error: updateError.message || "Mise à jour impossible."
       });
     }
   }
 
-  async function unsubscribe(blueprintGuid, { deleteContent = false } = {}) {
-    patchAction(blueprintGuid, { busy: true, error: "" });
+  async function unsubscribe(packGuid, { deleteContent = false } = {}) {
+    patchAction(packGuid, { busy: true, error: "" });
 
     try {
-      await requestUnsubscribe(blueprintGuid, { deleteContent });
+      await requestUnsubscribe(packGuid, { deleteContent });
       await loadPage({ append: false });
-      patchAction(blueprintGuid, { busy: false, pendingRemoval: null });
+      patchAction(packGuid, { busy: false, pendingRemoval: null });
     } catch (unsubscribeError) {
       console.error(unsubscribeError);
-      patchAction(blueprintGuid, {
+      patchAction(packGuid, {
         busy: false,
         error: unsubscribeError.message || "Désabonnement impossible."
       });
@@ -199,13 +199,13 @@ export function useBrowseBlueprints(filters = {}) {
   }
 
   const items = useMemo(() => entries.map((entry) => {
-    const installed = installedByGuid[entry.blueprint_guid] || null;
+    const installed = installedByGuid[entry.pack_guid] || null;
 
     return {
       entry,
-      status: blueprintStatus(entry, installed),
+      status: packStatus(entry, installed),
       installedVersion: installed?.installed_version ?? null,
-      action: actionState[entry.blueprint_guid] || {}
+      action: actionState[entry.pack_guid] || {}
     };
   }), [actionState, entries, installedByGuid]);
 

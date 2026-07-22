@@ -21,7 +21,7 @@ from .map_modes import (
 REVIEW_SETTINGS_KEY = "review"
 SCHEDULER_TUNING_SETTINGS_KEY = "scheduler_tuning"
 STARTUP_REBALANCE_NOTICE_KEY = "startup_rebalance_notice"
-BLUEPRINT_CATALOG_SETTINGS_KEY = "blueprint_catalog"
+PACK_CATALOG_SETTINGS_KEY = "pack_catalog"
 
 # sync-roadmap 0.6 — classification of AppSetting keys. Sync (M2) sends only
 # SYNC_SETTING_KEYS; everything else stays on the device. An unknown key is
@@ -35,7 +35,7 @@ DEVICE_SETTING_KEYS = {
     STARTUP_REBALANCE_NOTICE_KEY,
     "fsrs_v6_migration",
     # A catalog URL is a per-device preference (M1 1.5), not sync data.
-    BLUEPRINT_CATALOG_SETTINGS_KEY
+    PACK_CATALOG_SETTINGS_KEY
 }
 
 
@@ -260,10 +260,10 @@ def clear_startup_rebalance_notice(db):
     )
 
 
-def get_blueprint_catalog_settings(db):
+def get_pack_catalog_settings(db):
     setting = (
         db.query(AppSetting)
-        .filter(AppSetting.key == BLUEPRINT_CATALOG_SETTINGS_KEY)
+        .filter(AppSetting.key == PACK_CATALOG_SETTINGS_KEY)
         .first()
     )
     value = setting.value if setting and isinstance(setting.value, dict) else {}
@@ -274,20 +274,20 @@ def get_blueprint_catalog_settings(db):
     }
 
 
-def save_blueprint_catalog_settings(db, url, key=""):
+def save_pack_catalog_settings(db, url, key=""):
     normalized = {
         "url": str(url or "").strip().rstrip("/"),
         "key": str(key or "").strip()
     }
     setting = (
         db.query(AppSetting)
-        .filter(AppSetting.key == BLUEPRINT_CATALOG_SETTINGS_KEY)
+        .filter(AppSetting.key == PACK_CATALOG_SETTINGS_KEY)
         .first()
     )
 
     if not setting:
         db.add(AppSetting(
-            key=BLUEPRINT_CATALOG_SETTINGS_KEY,
+            key=PACK_CATALOG_SETTINGS_KEY,
             value=normalized
         ))
     else:

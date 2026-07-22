@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
-  getBlueprintCatalogSettings,
-  getBlueprintCatalogDiagnostics,
-  saveBlueprintCatalogSettings
-} from "../../../api/blueprints";
+  getPackCatalogSettings,
+  getPackCatalogDiagnostics,
+  savePackCatalogSettings
+} from "../../../api/packs";
 import {
   getReviewSettings,
   rebalanceReviewCalendar,
@@ -207,8 +207,8 @@ function CatalogDiagnosticPanel({ diagnostics, checking, error }) {
 
   const status = diagnostics.status || "warning";
   const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
-  const samples = Array.isArray(diagnostics.sample_blueprints)
-    ? diagnostics.sample_blueprints
+  const samples = Array.isArray(diagnostics.sample_packs)
+    ? diagnostics.sample_packs
     : [];
   const total = diagnostics.total || 0;
 
@@ -226,7 +226,7 @@ function CatalogDiagnosticPanel({ diagnostics, checking, error }) {
 
       <div className="settings-catalog-metrics">
         <span>
-          {total} blueprint{total > 1 ? "s" : ""} public{total > 1 ? "s" : ""}
+          {total} pack{total !== 1 ? "s" : ""} public{total !== 1 ? "s" : ""}
         </span>
         <span>{CATALOG_KEY_LABELS[diagnostics.key_type] || "clé"}</span>
       </div>
@@ -248,7 +248,7 @@ function CatalogDiagnosticPanel({ diagnostics, checking, error }) {
         <div className="settings-catalog-samples">
           {samples.map((sample) => (
             <span
-              key={sample.blueprint_guid}
+              key={sample.pack_guid}
               className={`settings-catalog-sample settings-catalog-sample-${sample.download_status}`}
             >
               {sample.name}
@@ -327,7 +327,7 @@ export default function Settings({ setMode }) {
   useEffect(() => {
     let cancelled = false;
 
-    getBlueprintCatalogSettings()
+    getPackCatalogSettings()
       .then((settings) => {
         if (!cancelled) {
           setCatalogDraft(settings.url || "");
@@ -438,7 +438,7 @@ export default function Settings({ setMode }) {
     setCatalogDiagnosticError("");
 
     try {
-      const diagnostics = await getBlueprintCatalogDiagnostics();
+      const diagnostics = await getPackCatalogDiagnostics();
       setCatalogDiagnostics(diagnostics);
     } catch (diagnosticError) {
       console.error(diagnosticError);
@@ -458,7 +458,7 @@ export default function Settings({ setMode }) {
     setCatalogDiagnosticError("");
 
     try {
-      const settings = await saveBlueprintCatalogSettings({
+      const settings = await savePackCatalogSettings({
         url: catalogDraft.trim(),
         key: catalogKeyDraft.trim()
       });
@@ -646,17 +646,17 @@ export default function Settings({ setMode }) {
             </SettingsGroup>
 
             <SettingsGroup
-              id="settings-blueprints"
+              id="settings-packs"
               icon="▣"
               accent="violet"
-              title="Blueprints"
+              title="Packs"
               description="Catalogue de packs partagés"
               badge={catalogDraft.trim() && catalogKeyDraft.trim() ? "Configuré" : "Vide"}
             >
               <div className="settings-row settings-row-catalog">
                 <div className="settings-row-copy">
                   <strong>Catalogue Supabase</strong>
-                  <span>Projet et clé publique utilisés par l'écran Blueprints.</span>
+                  <span>Projet et clé publique utilisés par l'écran Packs.</span>
                 </div>
 
                 <div className="settings-auth-row settings-catalog-row">

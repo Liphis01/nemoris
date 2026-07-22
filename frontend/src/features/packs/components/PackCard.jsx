@@ -1,5 +1,5 @@
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
-import { formatSize } from "./blueprintFormatting";
+import { formatSize } from "./packFormatting";
 
 function questionCountLabel(count) {
   if (count === null || count === undefined) {
@@ -30,8 +30,8 @@ function statusLabel(status, installedVersion) {
 }
 
 function statusClassName(status) {
-  if (status === "update_available") return "blueprint-status-pill-update";
-  if (status === "not_installed") return "blueprint-status-pill-install";
+  if (status === "update_available") return "pack-status-pill-update";
+  if (status === "not_installed") return "pack-status-pill-install";
   return "";
 }
 
@@ -47,7 +47,7 @@ function actionCopy(status, busy) {
   return "Installé";
 }
 
-export default function BlueprintCard({
+export default function PackCard({
   density = "grid",
   item,
   onInstall,
@@ -74,27 +74,27 @@ export default function BlueprintCard({
 
   return (
     <article
-      data-blueprint-guid={entry.blueprint_guid}
-      data-testid={`blueprint-card-${density}-${entry.blueprint_guid}`}
-      className={`blueprint-card blueprint-card-${density}${selected ? " is-selected" : ""}`}
+      data-pack-guid={entry.pack_guid}
+      data-testid={`pack-card-${density}-${entry.pack_guid}`}
+      className={`pack-card pack-card-${density}${selected ? " is-selected" : ""}`}
       style={{
-        "--blueprint-type-bg": typeStyle.background,
-        "--blueprint-type-color": typeStyle.color
+        "--pack-type-bg": typeStyle.background,
+        "--pack-type-color": typeStyle.color
       }}
     >
       <button
         type="button"
-        className="blueprint-card-body"
+        className="pack-card-body"
         onClick={() => onSelect(item)}
         aria-pressed={selected}
         aria-label={`Voir ${entry.name}`}
       >
-        <div className="blueprint-card-topline">
-          <span className="blueprint-type-chip">
+        <div className="pack-card-topline">
+          <span className="pack-type-chip">
             {typeStyle.label}
           </span>
 
-          <span className={`blueprint-status-pill ${statusClassName(status)}`}>
+          <span className={`pack-status-pill ${statusClassName(status)}`}>
             {statusLabel(status, installedVersion)}
           </span>
         </div>
@@ -104,18 +104,18 @@ export default function BlueprintCard({
           {entry.description && <p>{entry.description}</p>}
         </div>
 
-        <div className="blueprint-card-stats" aria-label="Métadonnées">
-          <span className="blueprint-card-stat">
+        <div className="pack-card-stats" aria-label="Métadonnées">
+          <span className="pack-card-stat">
             <strong>{entry.question_count ?? "—"}</strong>
             <span>questions</span>
           </span>
-          <span className="blueprint-card-stat">
+          <span className="pack-card-stat">
             <strong>v{entry.version ?? "—"}</strong>
             <span>version</span>
           </span>
         </div>
 
-        <div className="blueprint-card-meta">
+        <div className="pack-card-meta">
           <span>{questionCountLabel(entry.question_count)}</span>
           {sizeLabel && <span>{sizeLabel}</span>}
           {downloadLabel && <span>{downloadLabel}</span>}
@@ -123,38 +123,38 @@ export default function BlueprintCard({
         </div>
       </button>
 
-      <div className="blueprint-card-actions">
+      <div className="pack-card-actions">
         {canAct ? (
           <button
             type="button"
             disabled={busy}
             onClick={handleAction}
-            className="blueprint-card-action"
+            className="pack-card-action"
             aria-label={`${actionCopy(status, false)} ${entry.name}`}
           >
             {actionCopy(status, busy)}
           </button>
         ) : (
-          <span className="blueprint-status-pill blueprint-status-pill-install">
+          <span className="pack-status-pill pack-status-pill-install">
             Installé
           </span>
         )}
 
         {status === "update_available" && (
-          <span className="blueprint-detail-muted">
+          <span className="pack-detail-muted">
             v{entry.version} disponible
           </span>
         )}
       </div>
 
       {action.error && (
-        <div className="blueprint-action-error" role="alert">
+        <div className="pack-action-error" role="alert">
           {action.error}
         </div>
       )}
 
       {action.pendingRemoval && (
-        <div className="blueprint-pending-removal">
+        <div className="pack-pending-removal">
           <span>
             {action.pendingRemoval.length} question
             {action.pendingRemoval.length > 1 ? "s" : ""} retirée
@@ -167,7 +167,7 @@ export default function BlueprintCard({
               event.stopPropagation();
               onUpdate(entry, { deleteRemoved: true });
             }}
-            className="blueprint-danger-button"
+            className="pack-danger-button"
           >
             Supprimer
           </button>

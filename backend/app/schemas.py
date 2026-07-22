@@ -189,14 +189,14 @@ class MediaUrlImport(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
 
 
-class BlueprintExportRequest(BaseModel):
+class PackExportRequest(BaseModel):
     version: int = Field(ge=1)
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     license: str = Field(default="", max_length=200)
 
 
-class BlueprintCatalogSettings(BaseModel):
+class PackCatalogSettings(BaseModel):
     url: str = Field(default="", max_length=2048)
     key: str = Field(default="", max_length=4096)
 

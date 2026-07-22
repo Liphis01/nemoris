@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { exportBlueprintGroup } from "../../../api/blueprints";
+import { exportPackGroup } from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import {
@@ -8,11 +8,11 @@ import {
 } from "../../../shared/questionTypes";
 import {
   POPULAR_THEME,
-  useBrowseBlueprints
-} from "../hooks/useBrowseBlueprints";
-import BlueprintCard from "./BlueprintCard";
-import { formatSize } from "./blueprintFormatting";
-import "./BrowseBlueprints.css";
+  useBrowsePacks
+} from "../hooks/useBrowsePacks";
+import PackCard from "./PackCard";
+import { formatSize } from "./packFormatting";
+import "./BrowsePacks.css";
 
 const STATUS_FILTERS = [
   { value: "all", label: "Tous statuts" },
@@ -55,7 +55,7 @@ function downloadCountLabel(count) {
 
 function StatePanel({ children, title }) {
   return (
-    <div className="blueprint-state-panel">
+    <div className="pack-state-panel">
       <strong>{title}</strong>
       {children}
     </div>
@@ -64,8 +64,8 @@ function StatePanel({ children, title }) {
 
 function FieldSelect({ label, value, options, onChange }) {
   return (
-    <label className="blueprint-toolbar-field">
-      <span className="blueprint-field-label">{label}</span>
+    <label className="pack-toolbar-field">
+      <span className="pack-field-label">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -91,12 +91,12 @@ function SearchToolbar({
   setTypeFilter
 }) {
   return (
-    <div className="blueprint-search-toolbar">
-      <label className="blueprint-toolbar-search">
-        <span className="blueprint-field-label">Recherche</span>
-        <span className="blueprint-search-symbol" aria-hidden="true">⌕</span>
+    <div className="pack-search-toolbar">
+      <label className="pack-toolbar-search">
+        <span className="pack-field-label">Recherche</span>
+        <span className="pack-search-symbol" aria-hidden="true">⌕</span>
         <input
-          aria-label="Rechercher un blueprint"
+          aria-label="Rechercher un pack"
           type="search"
           placeholder="Titre, thème, licence..."
           value={searchDraft}
@@ -128,15 +128,15 @@ function SearchToolbar({
 
 function ThemeRail({ activeTheme, loading, onSelectTheme, themes }) {
   return (
-    <aside className="blueprint-theme-panel app-scrollbar" aria-label="Thèmes">
-      <div className="blueprint-section-head">
+    <aside className="pack-theme-panel app-scrollbar" aria-label="Thèmes">
+      <div className="pack-section-head">
         <div>
           <h2>Thèmes</h2>
           <p>{themes.length} entrée{themes.length > 1 ? "s" : ""}</p>
         </div>
       </div>
 
-      <div className="blueprint-theme-list">
+      <div className="pack-theme-list">
         {themes.map((theme) => {
           const active = activeTheme === theme.value;
 
@@ -144,7 +144,7 @@ function ThemeRail({ activeTheme, loading, onSelectTheme, themes }) {
             <button
               key={theme.value}
               type="button"
-              className={`blueprint-theme-button${active ? " is-active" : ""}`}
+              className={`pack-theme-button${active ? " is-active" : ""}`}
               onClick={() => onSelectTheme(theme.value)}
               aria-pressed={active}
             >
@@ -157,7 +157,7 @@ function ThemeRail({ activeTheme, loading, onSelectTheme, themes }) {
         })}
 
         {!loading && themes.length === 0 && (
-          <div className="blueprint-theme-empty">
+          <div className="pack-theme-empty">
             Aucun thème disponible.
           </div>
         )}
@@ -181,7 +181,7 @@ function CatalogueState({ catalogUrl, error, loading, reload, setMode }) {
         <p role="alert">{error}</p>
         <button
           type="button"
-          className="blueprint-secondary-button"
+          className="pack-secondary-button"
           onClick={reload}
         >
           Réessayer
@@ -196,7 +196,7 @@ function CatalogueState({ catalogUrl, error, loading, reload, setMode }) {
         <p>Ajoute l'URL du projet et la clé publishable dans les paramètres.</p>
         <button
           type="button"
-          className="blueprint-primary-button"
+          className="pack-primary-button"
           onClick={() => setMode("settings")}
         >
           Configurer le catalogue
@@ -208,7 +208,7 @@ function CatalogueState({ catalogUrl, error, loading, reload, setMode }) {
   return null;
 }
 
-function BlueprintDetailPanel({
+function PackDetailPanel({
   item,
   onInstall,
   onUnsubscribe,
@@ -216,8 +216,8 @@ function BlueprintDetailPanel({
 }) {
   if (!item) {
     return (
-      <aside className="blueprint-detail-panel blueprint-detail-empty">
-        Sélectionne un blueprint.
+      <aside className="pack-detail-panel pack-detail-empty">
+        Sélectionne un pack.
       </aside>
     );
   }
@@ -228,18 +228,18 @@ function BlueprintDetailPanel({
   const downloadLabel = downloadCountLabel(entry.download_count);
 
   return (
-    <aside className="blueprint-detail-panel app-scrollbar" aria-label="Détail du blueprint">
-      <div className="blueprint-card-topline">
+    <aside className="pack-detail-panel app-scrollbar" aria-label="Détail du pack">
+      <div className="pack-card-topline">
         <span
-          className="blueprint-type-chip"
+          className="pack-type-chip"
           style={{
-            "--blueprint-type-bg": typeStyle.background,
-            "--blueprint-type-color": typeStyle.color
+            "--pack-type-bg": typeStyle.background,
+            "--pack-type-color": typeStyle.color
           }}
         >
           {typeStyle.label}
         </span>
-        <span className="blueprint-status-pill">
+        <span className="pack-status-pill">
           {status === "not_installed" ? "À installer" : "Installé"}
         </span>
       </div>
@@ -247,40 +247,40 @@ function BlueprintDetailPanel({
       <div>
         <h2>{entry.name}</h2>
         {entry.description && (
-          <p className="blueprint-detail-description">{entry.description}</p>
+          <p className="pack-detail-description">{entry.description}</p>
         )}
       </div>
 
-      <div className="blueprint-detail-stat-grid">
-        <div className="blueprint-detail-stat">
+      <div className="pack-detail-stat-grid">
+        <div className="pack-detail-stat">
           <span>Questions</span>
           <strong>{entry.question_count ?? "—"}</strong>
         </div>
-        <div className="blueprint-detail-stat">
+        <div className="pack-detail-stat">
           <span>Version</span>
           <strong>v{entry.version ?? "—"}</strong>
         </div>
-        <div className="blueprint-detail-stat">
+        <div className="pack-detail-stat">
           <span>Taille</span>
           <strong>{sizeLabel || "—"}</strong>
         </div>
-        <div className="blueprint-detail-stat">
+        <div className="pack-detail-stat">
           <span>Licence</span>
           <strong>{entry.license || "—"}</strong>
         </div>
       </div>
 
-      <div className="blueprint-detail-meta">
+      <div className="pack-detail-meta">
         <span>{questionCountLabel(entry.question_count)}</span>
         {downloadLabel && <span>{downloadLabel}</span>}
         {installedVersion && <span>v{installedVersion} installée</span>}
       </div>
 
-      <div className="blueprint-action-row">
+      <div className="pack-action-row">
         {status === "not_installed" && (
           <button
             type="button"
-            className="blueprint-primary-button"
+            className="pack-primary-button"
             disabled={action.busy}
             onClick={() => onInstall(entry)}
           >
@@ -291,7 +291,7 @@ function BlueprintDetailPanel({
         {status === "update_available" && (
           <button
             type="button"
-            className="blueprint-primary-button"
+            className="pack-primary-button"
             disabled={action.busy}
             onClick={() => onUpdate(entry, { deleteRemoved: false })}
           >
@@ -302,9 +302,9 @@ function BlueprintDetailPanel({
         {status !== "not_installed" && (
           <button
             type="button"
-            className="blueprint-secondary-button"
+            className="pack-secondary-button"
             disabled={action.busy}
-            onClick={() => onUnsubscribe(entry.blueprint_guid)}
+            onClick={() => onUnsubscribe(entry.pack_guid)}
           >
             Se désabonner
           </button>
@@ -312,7 +312,7 @@ function BlueprintDetailPanel({
       </div>
 
       {action.error && (
-        <div className="blueprint-alert" role="alert">
+        <div className="pack-alert" role="alert">
           {action.error}
         </div>
       )}
@@ -360,18 +360,18 @@ function ImporterScreen({ setMode }) {
     install,
     update,
     unsubscribe
-  } = useBrowseBlueprints(filters);
+  } = useBrowsePacks(filters);
 
   const themes = facets?.themes || [];
   const selectedItem = (
-    items.find((item) => item.entry.blueprint_guid === activeGuid) ||
+    items.find((item) => item.entry.pack_guid === activeGuid) ||
     items[0] ||
     null
   );
   const showStatePanel = loading || Boolean(error) || catalogUrl === null;
 
   return (
-    <div className="blueprint-import-layout">
+    <div className="pack-import-layout">
       <ThemeRail
         activeTheme={activeTheme}
         loading={loading}
@@ -379,15 +379,15 @@ function ImporterScreen({ setMode }) {
         themes={themes}
       />
 
-      <section className="blueprint-panel blueprint-results-panel app-scrollbar" aria-label="Catalogue">
-        <div className="blueprint-section-head">
+      <section className="pack-panel pack-results-panel app-scrollbar" aria-label="Catalogue">
+        <div className="pack-section-head">
           <div>
             <h2>Catalogue</h2>
             <p>
               {loading ? "Chargement" : `${items.length} sur ${total} résultat${total > 1 ? "s" : ""}`}
             </p>
           </div>
-          <span className="blueprint-count-pill">{total}</span>
+          <span className="pack-count-pill">{total}</span>
         </div>
 
         <SearchToolbar
@@ -413,19 +413,19 @@ function ImporterScreen({ setMode }) {
           <>
             {items.length === 0 ? (
               <StatePanel title="Aucun résultat">
-                <p>Aucun blueprint ne correspond à cette recherche.</p>
+                <p>Aucun pack ne correspond à cette recherche.</p>
               </StatePanel>
             ) : (
-              <div className="blueprint-dense-list">
+              <div className="pack-dense-list">
                 {items.map((item) => (
-                  <BlueprintCard
-                    key={item.entry.blueprint_guid}
+                  <PackCard
+                    key={item.entry.pack_guid}
                     density="row"
                     item={item}
                     onInstall={install}
-                    onSelect={(nextItem) => setActiveGuid(nextItem.entry.blueprint_guid)}
+                    onSelect={(nextItem) => setActiveGuid(nextItem.entry.pack_guid)}
                     onUpdate={update}
-                    selected={selectedItem?.entry.blueprint_guid === item.entry.blueprint_guid}
+                    selected={selectedItem?.entry.pack_guid === item.entry.pack_guid}
                   />
                 ))}
               </div>
@@ -434,7 +434,7 @@ function ImporterScreen({ setMode }) {
             {hasMore && (
               <button
                 type="button"
-                className="blueprint-secondary-button blueprint-load-more"
+                className="pack-secondary-button pack-load-more"
                 disabled={loadingMore}
                 onClick={loadMore}
               >
@@ -445,7 +445,7 @@ function ImporterScreen({ setMode }) {
         )}
       </section>
 
-      <BlueprintDetailPanel
+      <PackDetailPanel
         item={selectedItem}
         onInstall={install}
         onUnsubscribe={unsubscribe}
@@ -527,13 +527,13 @@ function ExporterScreen() {
     setExportError("");
 
     try {
-      const filename = await exportBlueprintGroup(selectedGroup.id, {
+      const filename = await exportPackGroup(selectedGroup.id, {
         version: Math.floor(versionNumber),
         name: title.trim(),
         description: description.trim(),
         license: license.trim()
       });
-      setExportStatus(`Blueprint exporté : ${filename}`);
+      setExportStatus(`Pack exporté : ${filename}`);
     } catch (error) {
       console.error(error);
       setExportError(error.message || "Export impossible.");
@@ -543,9 +543,9 @@ function ExporterScreen() {
   }
 
   return (
-    <div className="blueprint-export-layout">
-      <section className="blueprint-panel app-scrollbar" aria-label="Groupes exportables">
-        <div className="blueprint-section-head">
+    <div className="pack-export-layout">
+      <section className="pack-panel app-scrollbar" aria-label="Groupes exportables">
+        <div className="pack-section-head">
           <div>
             <h2>Groupes</h2>
             <p>{groups.length} groupe{groups.length > 1 ? "s" : ""}</p>
@@ -565,7 +565,7 @@ function ExporterScreen() {
         )}
 
         {!loadingGroups && !groupsError && (
-          <div className="blueprint-export-group-list">
+          <div className="pack-export-group-list">
             {groups.map((group) => {
               const active = String(group.id) === selectedGroupId;
               const typeStyle = getQuestionTypeChipStyle(group.type_group);
@@ -574,7 +574,7 @@ function ExporterScreen() {
                 <button
                   key={group.id}
                   type="button"
-                  className={`blueprint-export-group${active ? " is-active" : ""}`}
+                  className={`pack-export-group${active ? " is-active" : ""}`}
                   onClick={() => {
                     setSelectedGroupId(String(group.id));
                     setTitle(group.name || "");
@@ -584,8 +584,8 @@ function ExporterScreen() {
                   <span>{group.name}</span>
                   <small
                     style={{
-                      "--blueprint-type-bg": typeStyle.background,
-                      "--blueprint-type-color": typeStyle.color
+                      "--pack-type-bg": typeStyle.background,
+                      "--pack-type-color": typeStyle.color
                     }}
                   >
                     {typeStyle.label} · {questionCountLabel(group.question_count)}
@@ -595,7 +595,7 @@ function ExporterScreen() {
             })}
 
             {groups.length === 0 && (
-              <div className="blueprint-theme-empty">
+              <div className="pack-theme-empty">
                 Aucun groupe exportable.
               </div>
             )}
@@ -603,8 +603,8 @@ function ExporterScreen() {
         )}
       </section>
 
-      <section className="blueprint-export-panel app-scrollbar" aria-label="Exporter un blueprint">
-        <div className="blueprint-section-head">
+      <section className="pack-export-panel app-scrollbar" aria-label="Exporter un pack">
+        <div className="pack-section-head">
           <div>
             <h2>Exporter</h2>
             <p>Archive locale ZIP</p>
@@ -612,10 +612,10 @@ function ExporterScreen() {
         </div>
 
         <form onSubmit={handleExport}>
-          <label className="blueprint-field">
-            <span className="blueprint-field-label">Titre</span>
+          <label className="pack-field">
+            <span className="pack-field-label">Titre</span>
             <input
-              aria-label="Titre du blueprint"
+              aria-label="Titre du pack"
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -623,11 +623,11 @@ function ExporterScreen() {
             />
           </label>
 
-          <div className="blueprint-form-grid">
-            <label className="blueprint-field">
-              <span className="blueprint-field-label">Version</span>
+          <div className="pack-form-grid">
+            <label className="pack-field">
+              <span className="pack-field-label">Version</span>
               <input
-                aria-label="Version du blueprint"
+                aria-label="Version du pack"
                 type="number"
                 min="1"
                 value={version}
@@ -636,10 +636,10 @@ function ExporterScreen() {
               />
             </label>
 
-            <label className="blueprint-field">
-              <span className="blueprint-field-label">Licence</span>
+            <label className="pack-field">
+              <span className="pack-field-label">Licence</span>
               <input
-                aria-label="Licence du blueprint"
+                aria-label="Licence du pack"
                 type="text"
                 placeholder="CC0, CC-BY..."
                 value={license}
@@ -649,10 +649,10 @@ function ExporterScreen() {
             </label>
           </div>
 
-          <label className="blueprint-field">
-            <span className="blueprint-field-label">Description</span>
+          <label className="pack-field">
+            <span className="pack-field-label">Description</span>
             <textarea
-              aria-label="Description du blueprint"
+              aria-label="Description du pack"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               disabled={exporting}
@@ -660,7 +660,7 @@ function ExporterScreen() {
           </label>
 
           {selectedGroup && (
-            <div className="blueprint-export-preview">
+            <div className="pack-export-preview">
               <strong>{selectedGroup.name}</strong>
               <span>{questionCountLabel(selectedGroup.question_count)}</span>
             </div>
@@ -668,52 +668,52 @@ function ExporterScreen() {
 
           <button
             type="submit"
-            className="blueprint-primary-button"
+            className="pack-primary-button"
             disabled={!canExport}
           >
-            {exporting ? "Export..." : "Exporter le blueprint"}
+            {exporting ? "Export..." : "Exporter le pack"}
           </button>
         </form>
 
-        <div className="blueprint-export-soon">
+        <div className="pack-export-soon">
           Publication Supabase plus tard.
         </div>
 
         {exportStatus && (
-          <div className="blueprint-status" role="status">{exportStatus}</div>
+          <div className="pack-status" role="status">{exportStatus}</div>
         )}
 
         {exportError && (
-          <div className="blueprint-alert" role="alert">{exportError}</div>
+          <div className="pack-alert" role="alert">{exportError}</div>
         )}
       </section>
     </div>
   );
 }
 
-export default function BrowseBlueprints({ setMode }) {
+export default function BrowsePacks({ setMode }) {
   const [activeTab, setActiveTab] = useState("import");
 
   return (
-    <div className={`blueprint-screen blueprint-layout-dense blueprint-tab-${activeTab}`}>
-      <div className="blueprint-shell">
-        <header className="blueprint-header" aria-label="Blueprints">
-          <div className="blueprint-title-row">
-            <div className="blueprint-mark" aria-hidden="true">▣</div>
-            <div className="blueprint-title-block">
-              <div className="blueprint-overline">Catalogue</div>
-              <h1>Blueprints</h1>
+    <div className={`pack-screen pack-layout-dense pack-tab-${activeTab}`}>
+      <div className="pack-shell">
+        <header className="pack-header" aria-label="Packs">
+          <div className="pack-title-row">
+            <div className="pack-mark" aria-hidden="true">▣</div>
+            <div className="pack-title-block">
+              <div className="pack-overline">Catalogue</div>
+              <h1>Packs</h1>
               <p>Importer des packs et exporter un groupe local.</p>
             </div>
           </div>
 
-          <div className="blueprint-header-actions">
-            <div className="blueprint-tab-list" role="tablist" aria-label="Menus Blueprints">
+          <div className="pack-header-actions">
+            <div className="pack-tab-list" role="tablist" aria-label="Menus Packs">
               <button
                 type="button"
                 role="tab"
                 aria-selected={activeTab === "import"}
-                className={`blueprint-tab-button${activeTab === "import" ? " is-active" : ""}`}
+                className={`pack-tab-button${activeTab === "import" ? " is-active" : ""}`}
                 onClick={() => setActiveTab("import")}
               >
                 Importer
@@ -722,7 +722,7 @@ export default function BrowseBlueprints({ setMode }) {
                 type="button"
                 role="tab"
                 aria-selected={activeTab === "export"}
-                className={`blueprint-tab-button${activeTab === "export" ? " is-active" : ""}`}
+                className={`pack-tab-button${activeTab === "export" ? " is-active" : ""}`}
                 onClick={() => setActiveTab("export")}
               >
                 Exporter
@@ -731,7 +731,7 @@ export default function BrowseBlueprints({ setMode }) {
 
             <ReturnToMenuButton
               onClick={() => setMode("menu")}
-              className="blueprint-back"
+              className="pack-back"
             />
           </div>
         </header>

@@ -3,11 +3,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from ..models import BlueprintSubscription
-from .settings import get_blueprint_catalog_settings
+from ..models import PackSubscription
+from .settings import get_pack_catalog_settings
 
 
-CATALOG_BUCKET = "blueprint-zips"
+CATALOG_BUCKET = "pack-zips"
 POPULAR_THEME = "__popular__"
 VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
 VALID_STATUSES = {"all", "not_installed", "update_available", "up_to_date"}
@@ -15,7 +15,7 @@ MAX_LIMIT = 60
 HEALTH_SAMPLE_LIMIT = 3
 
 
-class BlueprintCatalogError(ValueError):
+class PackCatalogError(ValueError):
     pass
 
 
@@ -118,7 +118,7 @@ def _supabase_headers(key):
 
 def _post_json(url, key, payload):
     request = Request(
-        f"{url}/rest/v1/rpc/search_blueprint_catalog",
+        f"{url}/rest/v1/rpc/search_pack_catalog",
         data=json.dumps(payload).encode("utf-8"),
         headers=_supabase_headers(key),
         method="POST"
@@ -129,12 +129,12 @@ def _post_json(url, key, payload):
             body = response.read()
     except HTTPError as error:
         body = error.read()
-        raise BlueprintCatalogError(
+        raise PackCatalogError(
             _message_from_body(body)
             or f"Catalogue Supabase impossible à charger ({error.code})."
         ) from error
     except (TimeoutError, URLError, ValueError) as error:
-        raise BlueprintCatalogError(
+        raise PackCatalogError(
             "Catalogue Supabase inaccessible."
         ) from error
 
@@ -144,7 +144,7 @@ def _post_json(url, key, payload):
     try:
         return json.loads(body.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as error:
-        raise BlueprintCatalogError(
+        raise PackCatalogError(
             "Réponse Supabase invalide."
         ) from error
 
@@ -182,9 +182,9 @@ def _probe_download_url(url):
 
 
 def _installed_versions(db):
-    subscriptions = db.query(BlueprintSubscription).all()
+    subscriptions = db.query(PackSubscription).all()
     return {
-        subscription.blueprint_guid: subscription.installed_version
+        subscription.pack_guid: subscription.installed_version
         for subscription in subscriptions
     }
 
@@ -220,13 +220,13 @@ def _public_storage_url(project_url, storage_path):
     )
 
 
-def _normalize_blueprint(row, project_url):
+def _normalize_pack(row, project_url):
     if not isinstance(row, dict):
         return None
 
     entry = {
-        "blueprint_guid": str(row.get("blueprint_guid") or ""),
-        "name": str(row.get("name") or "Blueprint sans titre"),
+        "pack_guid": str(row.get("pack_guid") or row.get("blueprint_guid") or ""),
+        "name": str(row.get("name") or "Pack sans titre"),
         "description": str(row.get("description") or ""),
         "type_group": str(row.get("type_group") or "text"),
         "question_count": row.get("question_count"),
@@ -245,7 +245,7 @@ def _normalize_blueprint(row, project_url):
         or _public_storage_url(project_url, row.get("storage_path"))
     )
 
-    if not entry["blueprint_guid"]:
+    if not entry["pack_guid"]:
         return None
 
     return entry
@@ -338,16 +338,18 @@ def _normalize_response(payload, project_url):
         payload = payload[0] if payload else {}
 
     if not isinstance(payload, dict):
-        raise BlueprintCatalogError("Réponse Supabase invalide.")
+        raise PackCatalogError("Réponse Supabase invalide.")
 
-    rows = payload.get("blueprints")
+    rows = payload.get("packs")
+    if rows is None:
+        rows = payload.get("blueprints")
     if rows is None and isinstance(payload.get("data"), list):
         rows = payload["data"]
 
-    blueprints = [
+    packs = [
         entry
         for entry in (
-            _normalize_blueprint(row, project_url)
+            _normalize_pack(row, project_url)
             for row in (rows if isinstance(rows, list) else [])
         )
         if entry
@@ -356,10 +358,10 @@ def _normalize_response(payload, project_url):
     total = payload.get("total")
 
     if not isinstance(total, int):
-        total = len(blueprints)
+        total = len(packs)
 
     return {
-        "blueprints": blueprints,
+        "packs": packs,
         "facets": {
             "themes": _ordered_themes(facets.get("themes") or [], total)
         },
@@ -372,7 +374,7 @@ def _normalize_response(payload, project_url):
     }
 
 
-def search_blueprint_catalog(
+def search_pack_catalog(
     db,
     *,
     query="",
@@ -383,12 +385,12 @@ def search_blueprint_catalog(
     limit=24,
     cursor=None
 ):
-    settings = get_blueprint_catalog_settings(db)
+    settings = get_pack_catalog_settings(db)
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
 
     if not project_url or not key:
-        raise BlueprintCatalogError(
+        raise PackCatalogError(
             "Catalogue Supabase non configuré."
         )
 
@@ -415,14 +417,14 @@ def search_blueprint_catalog(
     return _normalize_response(response, project_url)
 
 
-def check_blueprint_catalog_health(db):
-    settings = get_blueprint_catalog_settings(db)
+def check_pack_catalog_health(db):
+    settings = get_pack_catalog_settings(db)
     raw_url = str(settings.get("url") or "").strip()
     project_url = normalize_supabase_url(raw_url)
     key = str(settings.get("key") or "").strip()
     key_type = _key_type(key)
     checks = []
-    blueprints = []
+    packs = []
     total = 0
     next_cursor = None
 
@@ -488,16 +490,16 @@ def check_blueprint_catalog_health(db):
         try:
             response = _post_json(project_url, key, payload)
             normalized = _normalize_response(response, project_url)
-            blueprints = normalized["blueprints"]
+            packs = normalized["packs"]
             total = normalized["total"]
             next_cursor = normalized["next_cursor"]
             checks.append(_catalog_check(
                 "search_rpc",
                 "Recherche Supabase",
                 "ok",
-                "Fonction search_blueprint_catalog disponible."
+                "Fonction search_pack_catalog disponible."
             ))
-        except BlueprintCatalogError as error:
+        except PackCatalogError as error:
             checks.append(_catalog_check(
                 "search_rpc",
                 "Recherche Supabase",
@@ -509,29 +511,29 @@ def check_blueprint_catalog_health(db):
         if total > 0:
             checks.append(_catalog_check(
                 "public_rows",
-                "Blueprints publics",
+                "Packs publics",
                 "ok",
-                f"{total} blueprint{'s' if total > 1 else ''} public{'s' if total > 1 else ''}."
+                f"{total} pack{'s' if total != 1 else ''} public{'s' if total != 1 else ''}."
             ))
         else:
             checks.append(_catalog_check(
                 "public_rows",
-                "Blueprints publics",
+                "Packs publics",
                 "warning",
-                "Aucun blueprint public trouvé."
+                "Aucun pack public trouvé."
             ))
 
     samples = []
-    if blueprints:
+    if packs:
         download_checks = []
 
-        for entry in blueprints[:HEALTH_SAMPLE_LIMIT]:
+        for entry in packs[:HEALTH_SAMPLE_LIMIT]:
             download_status, download_detail = _probe_download_url(
                 entry.get("download_url")
             )
             download_checks.append(download_status)
             samples.append({
-                "blueprint_guid": entry.get("blueprint_guid"),
+                "pack_guid": entry.get("pack_guid"),
                 "name": entry.get("name"),
                 "download_url": entry.get("download_url"),
                 "download_status": download_status,
@@ -569,5 +571,5 @@ def check_blueprint_catalog_health(db):
         "total": total,
         "next_cursor": next_cursor,
         "checks": checks,
-        "sample_blueprints": samples
+        "sample_packs": samples
     }

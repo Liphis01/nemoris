@@ -9,10 +9,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
-  getBlueprintCatalogDiagnostics,
-  getBlueprintCatalogSettings,
-  saveBlueprintCatalogSettings
-} from "../../../api/blueprints";
+  getPackCatalogDiagnostics,
+  getPackCatalogSettings,
+  savePackCatalogSettings
+} from "../../../api/packs";
 import {
   getReviewSettings,
   rebalanceReviewCalendar,
@@ -34,10 +34,10 @@ vi.mock("../../../api/backup", () => ({
   importDatabase: vi.fn()
 }));
 
-vi.mock("../../../api/blueprints", () => ({
-  getBlueprintCatalogDiagnostics: vi.fn(),
-  getBlueprintCatalogSettings: vi.fn(),
-  saveBlueprintCatalogSettings: vi.fn()
+vi.mock("../../../api/packs", () => ({
+  getPackCatalogDiagnostics: vi.fn(),
+  getPackCatalogSettings: vi.fn(),
+  savePackCatalogSettings: vi.fn()
 }));
 
 vi.mock("../../../api/sync", () => ({
@@ -67,8 +67,8 @@ describe("Settings", () => {
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
-    getBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
-    getBlueprintCatalogDiagnostics.mockResolvedValue({
+    getPackCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    getPackCatalogDiagnostics.mockResolvedValue({
       status: "ok",
       summary: "Catalogue prêt.",
       key_type: "publishable",
@@ -87,15 +87,15 @@ describe("Settings", () => {
           detail: "2 ZIP testés."
         }
       ],
-      sample_blueprints: [
+      sample_packs: [
         {
-          blueprint_guid: "world-map",
+          pack_guid: "world-map",
           name: "Pays du monde",
           download_status: "ok"
         }
       ]
     });
-    saveBlueprintCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    savePackCatalogSettings.mockResolvedValue({ url: "", key: "" });
     getSyncStatus.mockResolvedValue({
       signed_in: false,
       account_email: null,
@@ -213,8 +213,8 @@ describe("Settings", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("saves Supabase blueprint catalogue settings", async () => {
-    saveBlueprintCatalogSettings.mockResolvedValue({
+  it("saves Supabase pack catalogue settings", async () => {
+    savePackCatalogSettings.mockResolvedValue({
       url: "https://project.supabase.co",
       key: "sb_publishable_test"
     });
@@ -233,17 +233,17 @@ describe("Settings", () => {
     );
 
     await waitFor(() => {
-      expect(saveBlueprintCatalogSettings).toHaveBeenCalledWith({
+      expect(savePackCatalogSettings).toHaveBeenCalledWith({
         url: "https://project.supabase.co",
         key: "sb_publishable_test"
       });
     });
-    expect(getBlueprintCatalogDiagnostics).not.toHaveBeenCalled();
+    expect(getPackCatalogDiagnostics).not.toHaveBeenCalled();
     expect(screen.getByText("Catalogue enregistré.")).toBeInTheDocument();
   });
 
-  it("runs the Supabase blueprint catalogue diagnostic", async () => {
-    saveBlueprintCatalogSettings.mockResolvedValue({
+  it("runs the Supabase pack catalogue diagnostic", async () => {
+    savePackCatalogSettings.mockResolvedValue({
       url: "https://project.supabase.co",
       key: "sb_publishable_test"
     });
@@ -260,10 +260,10 @@ describe("Settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tester le catalogue" }));
 
     await waitFor(() => {
-      expect(getBlueprintCatalogDiagnostics).toHaveBeenCalledTimes(1);
+      expect(getPackCatalogDiagnostics).toHaveBeenCalledTimes(1);
     });
     expect(screen.getByText("Catalogue prêt.")).toBeInTheDocument();
-    expect(screen.getByText("2 blueprints publics")).toBeInTheDocument();
+    expect(screen.getByText("2 packs publics")).toBeInTheDocument();
     expect(screen.getByText("Fichiers ZIP")).toBeInTheDocument();
     expect(screen.getByText("Pays du monde")).toBeInTheDocument();
   });

@@ -462,12 +462,12 @@ def _migration_review_log_table(connection):
             )
 
 
-def _migration_blueprint_bookkeeping(connection):
-    from .models import BlueprintSubscription
+def _migration_pack_bookkeeping(connection):
+    from .models import PackSubscription
 
     new_columns = {
-        "blueprint_guid": "VARCHAR",
-        "blueprint_version": "INTEGER",
+        "pack_guid": "VARCHAR",
+        "pack_version": "INTEGER",
         "content_hash": "VARCHAR"
     }
 
@@ -484,16 +484,99 @@ def _migration_blueprint_bookkeeping(connection):
                 )
 
         connection.exec_driver_sql(
-            f"CREATE INDEX IF NOT EXISTS ix_{table}_blueprint_guid "
-            f"ON {table} (blueprint_guid)"
+            f"CREATE INDEX IF NOT EXISTS ix_{table}_pack_guid "
+            f"ON {table} (pack_guid)"
         )
 
     # No backfill: the columns are nullable and existing rows are correctly
-    # NULL (locally authored, not blueprint-derived).
+    # NULL (locally authored, not pack-derived).
     Base.metadata.create_all(
         bind=connection,
-        tables=[BlueprintSubscription.__table__]
+        tables=[PackSubscription.__table__]
     )
+
+
+def _rename_column_if_needed(connection, table, old_name, new_name):
+    existing_columns = _column_names(connection, table)
+
+    if new_name in existing_columns:
+        return
+
+    if old_name in existing_columns:
+        connection.exec_driver_sql(
+            f'ALTER TABLE "{table}" RENAME COLUMN "{old_name}" TO "{new_name}"'
+        )
+
+
+def _migration_pack_terminology(connection):
+    from .models import PackSubscription
+
+    for table in ("questions", "question_groups"):
+        if not _table_exists(connection, table):
+            continue
+
+        _rename_column_if_needed(connection, table, "blueprint_guid", "pack_guid")
+        _rename_column_if_needed(
+            connection, table, "blueprint_version", "pack_version"
+        )
+
+        existing_columns = _column_names(connection, table)
+        if "pack_guid" not in existing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE "{table}" ADD COLUMN pack_guid VARCHAR'
+            )
+        if "pack_version" not in existing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE "{table}" ADD COLUMN pack_version INTEGER'
+            )
+        if "content_hash" not in existing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE "{table}" ADD COLUMN content_hash VARCHAR'
+            )
+
+        connection.exec_driver_sql(
+            f"CREATE INDEX IF NOT EXISTS ix_{table}_pack_guid "
+            f"ON {table} (pack_guid)"
+        )
+
+    if (
+        _table_exists(connection, "blueprint_subscriptions")
+        and not _table_exists(connection, "pack_subscriptions")
+    ):
+        connection.exec_driver_sql(
+            'ALTER TABLE "blueprint_subscriptions" RENAME TO "pack_subscriptions"'
+        )
+
+    Base.metadata.create_all(
+        bind=connection,
+        tables=[PackSubscription.__table__]
+    )
+
+    if _table_exists(connection, "pack_subscriptions"):
+        _rename_column_if_needed(
+            connection, "pack_subscriptions", "blueprint_guid", "pack_guid"
+        )
+
+    if _table_exists(connection, "app_settings"):
+        existing_pack = connection.exec_driver_sql(
+            "SELECT 1 FROM app_settings WHERE key = 'pack_catalog'"
+        ).fetchone()
+        existing_blueprint = connection.exec_driver_sql(
+            "SELECT 1 FROM app_settings WHERE key = 'blueprint_catalog'"
+        ).fetchone()
+
+        if existing_blueprint and not existing_pack:
+            connection.exec_driver_sql(
+                """
+                UPDATE app_settings
+                SET key = 'pack_catalog'
+                WHERE key = 'blueprint_catalog'
+                """
+            )
+        elif existing_blueprint and existing_pack:
+            connection.exec_driver_sql(
+                "DELETE FROM app_settings WHERE key = 'blueprint_catalog'"
+            )
 
 
 def _migration_media_files_registry(connection, static_dir):
@@ -815,8 +898,8 @@ MIGRATIONS = [
     ),
     Migration(
         version="0015",
-        name="blueprint_bookkeeping",
-        run=_migration_blueprint_bookkeeping,
+        name="pack_bookkeeping",
+        run=_migration_pack_bookkeeping,
         requires_backup=True
     ),
     Migration(
@@ -825,6 +908,12 @@ MIGRATIONS = [
         run=_migration_localize_legacy_map_media,
         requires_backup=True,
         needs_static_dir=True
+    ),
+    Migration(
+        version="0017",
+        name="pack_terminology",
+        run=_migration_pack_terminology,
+        requires_backup=True
     )
 ]
 

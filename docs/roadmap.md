@@ -1,6 +1,6 @@
 ## Current focus
 
-- accounts, blueprints & sync → detailed plan in [sync-roadmap.md](sync-roadmap.md)
+- accounts, packs & sync → detailed plan in [sync-roadmap.md](sync-roadmap.md)
 
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
@@ -17,9 +17,9 @@
 - fermer vraiment en cliquant sur la croix/altf4
 - le mode plein écran n'est pas parfait (resize)
 - site de quiz en ligne relié
-- bouton pour envoyer un blueprint sur le serveur
-- blueprint -> template
-- export blueprint feature
+- bouton pour envoyer un pack sur le serveur
+- finaliser le vocabulaire pack dans les docs publiques
+- export pack feature
 
 
 ## quick fixes

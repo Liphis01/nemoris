@@ -67,7 +67,7 @@ def upload_image_from_url(
 
 @router.get("/media/blob/{sha256}")
 def get_media_blob(sha256: str, db: Session = Depends(get_db)):
-    # Content-addressed access: blueprints and sync fetch media by hash
+    # Content-addressed access: packs and sync fetch media by hash
     # ("do you have abc123?"); filenames stay a local detail.
     row = (
         db.query(MediaFile)

@@ -7,7 +7,7 @@ from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
 from .routers import (
     backup,
-    blueprints,
+    packs,
     collections,
     groups,
     maps,
@@ -63,7 +63,7 @@ def create_app():
     app.include_router(uploads.router)
     app.include_router(backup.router)
     app.include_router(meta.router)
-    app.include_router(blueprints.router)
+    app.include_router(packs.router)
     app.include_router(sync.router)
 
     if FRONTEND_DIST_DIR.exists():

@@ -12,7 +12,7 @@ DB/static paths in a test without touching the live engine.
 
 Media (2.1/2.2): the DB always syncs whole (it's cheap, ~6MB even at 1400+
 questions; `Progress`/`review_log` are integer-FK'd to `questions.id`, so
-excluding blueprint-derived rows would either orphan them or need a whole
+excluding pack-derived rows would either orphan them or need a whole
 guid-relinking step — not worth it). Only `static/` is slimmed, by content
 hash via the `media_files` registry (M0 0.5): push uploads blobs the server
 doesn't have yet, pull downloads only what's missing locally. This module

@@ -9,29 +9,29 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { exportBlueprintGroup } from "../../../api/blueprints";
+import { exportPackGroup } from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
 import {
   POPULAR_THEME,
-  useBrowseBlueprints
-} from "../hooks/useBrowseBlueprints";
-import BrowseBlueprints from "./BrowseBlueprints";
+  useBrowsePacks
+} from "../hooks/useBrowsePacks";
+import BrowsePacks from "./BrowsePacks";
 
-vi.mock("../hooks/useBrowseBlueprints", () => ({
+vi.mock("../hooks/useBrowsePacks", () => ({
   POPULAR_THEME: "__popular__",
-  useBrowseBlueprints: vi.fn()
+  useBrowsePacks: vi.fn()
 }));
 
 vi.mock("../../../api/groups", () => ({
   listGroups: vi.fn()
 }));
 
-vi.mock("../../../api/blueprints", () => ({
-  exportBlueprintGroup: vi.fn()
+vi.mock("../../../api/packs", () => ({
+  exportPackGroup: vi.fn()
 }));
 
 const mapEntry = {
-  blueprint_guid: "world-map",
+  pack_guid: "world-map",
   name: "Territoires du monde",
   description: "Tous les pays du monde sur une carte interactive.",
   license: "CC0",
@@ -43,7 +43,7 @@ const mapEntry = {
 };
 
 const textEntry = {
-  blueprint_guid: "biology-text",
+  pack_guid: "biology-text",
   name: "Biologie cellulaire",
   description: "Questions isolées sur les organites et la mitose.",
   license: "CC-BY",
@@ -85,17 +85,17 @@ function defaultHook(overrides = {}) {
     ...overrides
   };
 
-  useBrowseBlueprints.mockReturnValue(value);
+  useBrowsePacks.mockReturnValue(value);
   return value;
 }
 
-describe("BrowseBlueprints", () => {
+describe("BrowsePacks", () => {
   beforeEach(() => {
     listGroups.mockResolvedValue([
       { id: 10, name: "Capitales du monde", type_group: "map", question_count: 42 },
       { id: 11, name: "Groupe vide", type_group: "text", question_count: 0 }
     ]);
-    exportBlueprintGroup.mockResolvedValue("capitales-du-monde-v1.zip");
+    exportPackGroup.mockResolvedValue("capitales-du-monde-v1.zip");
   });
 
   afterEach(() => {
@@ -106,22 +106,22 @@ describe("BrowseBlueprints", () => {
 
   it("renders the dense importer with database themes", () => {
     defaultHook();
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
     expect(screen.getByRole("tab", { name: "Importer" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
     expect(screen.getByRole("button", { name: /Géographie/ })).toBeInTheDocument();
-    expect(screen.getByTestId("blueprint-card-row-world-map")).toBeInTheDocument();
+    expect(screen.getByTestId("pack-card-row-world-map")).toBeInTheDocument();
     expect(screen.getAllByText("12").length).toBeGreaterThan(0);
   });
 
   it("switches themes and sends the theme to the search hook", async () => {
     defaultHook();
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
-    expect(useBrowseBlueprints).toHaveBeenLastCalledWith(
+    expect(useBrowsePacks).toHaveBeenLastCalledWith(
       expect.objectContaining({ theme: POPULAR_THEME })
     );
 
@@ -130,7 +130,7 @@ describe("BrowseBlueprints", () => {
         .getByRole("button", { name: /Biologie/ })
     );
 
-    expect(useBrowseBlueprints).toHaveBeenLastCalledWith(
+    expect(useBrowsePacks).toHaveBeenLastCalledWith(
       expect.objectContaining({ theme: "biologie" })
     );
   });
@@ -138,10 +138,10 @@ describe("BrowseBlueprints", () => {
   it("debounces search and moves filters to the toolbar", async () => {
     vi.useFakeTimers();
     defaultHook();
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
     fireEvent.change(
-      screen.getByRole("searchbox", { name: "Rechercher un blueprint" }),
+      screen.getByRole("searchbox", { name: "Rechercher un pack" }),
       { target: { value: "atlas" } }
     );
     fireEvent.change(screen.getByLabelText("Type"), {
@@ -158,7 +158,7 @@ describe("BrowseBlueprints", () => {
       vi.advanceTimersByTime(320);
     });
 
-    expect(useBrowseBlueprints).toHaveBeenLastCalledWith(
+    expect(useBrowsePacks).toHaveBeenLastCalledWith(
       expect.objectContaining({
         search: "atlas",
         type: "map",
@@ -170,7 +170,7 @@ describe("BrowseBlueprints", () => {
 
   it("loads the next catalogue page", async () => {
     const hook = defaultHook();
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Charger plus" }));
 
@@ -186,7 +186,7 @@ describe("BrowseBlueprints", () => {
       hasMore: false
     });
 
-    render(<BrowseBlueprints setMode={setMode} />);
+    render(<BrowsePacks setMode={setMode} />);
 
     expect(screen.getByText("Catalogue Supabase non configuré")).toBeInTheDocument();
 
@@ -203,7 +203,7 @@ describe("BrowseBlueprints", () => {
       hasMore: false
     });
 
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Catalogue impossible à charger.");
 
@@ -212,9 +212,9 @@ describe("BrowseBlueprints", () => {
     expect(hook.reload).toHaveBeenCalled();
   });
 
-  it("calls install from a blueprint row action", async () => {
+  it("calls install from a pack row action", async () => {
     const hook = defaultHook();
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
     await userEvent.click(
       screen.getAllByLabelText("Installer Territoires du monde")[0]
@@ -225,28 +225,28 @@ describe("BrowseBlueprints", () => {
 
   it("exports a selected group from the separate exporter tab", async () => {
     defaultHook();
-    render(<BrowseBlueprints setMode={vi.fn()} />);
+    render(<BrowsePacks setMode={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
 
     const exportButton = await screen.findByRole("button", {
-      name: "Exporter le blueprint"
+      name: "Exporter le pack"
     });
 
     await waitFor(() => expect(exportButton).toBeEnabled());
-    await userEvent.clear(screen.getByRole("textbox", { name: "Titre du blueprint" }));
+    await userEvent.clear(screen.getByRole("textbox", { name: "Titre du pack" }));
     await userEvent.type(
-      screen.getByRole("textbox", { name: "Titre du blueprint" }),
+      screen.getByRole("textbox", { name: "Titre du pack" }),
       "Atlas des capitales"
     );
     await userEvent.type(
-      screen.getByRole("textbox", { name: "Licence du blueprint" }),
+      screen.getByRole("textbox", { name: "Licence du pack" }),
       "CC0"
     );
     await userEvent.click(exportButton);
 
     await waitFor(() => {
-      expect(exportBlueprintGroup).toHaveBeenCalledWith(10, {
+      expect(exportPackGroup).toHaveBeenCalledWith(10, {
         version: 1,
         name: "Atlas des capitales",
         description: "",

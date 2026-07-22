@@ -13,33 +13,33 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import app.services.blueprints as blueprints_service
+import app.services.packs as packs_service
 
 from app.migrations import MIGRATIONS
 from app.models import (
     Base,
-    BlueprintSubscription,
+    PackSubscription,
     MediaFile,
     Progress,
     Question,
     QuestionGroup
 )
-from app.routers.blueprints import (
-    export_group_blueprint,
-    get_blueprint_catalog,
-    import_blueprint_zip,
-    list_blueprint_subscriptions,
-    unsubscribe_blueprint_subscription,
-    update_blueprint_catalog,
-    update_blueprint_zip
+from app.routers.packs import (
+    export_group_pack,
+    get_pack_catalog,
+    import_pack_zip,
+    list_pack_subscriptions,
+    unsubscribe_pack_subscription,
+    update_pack_catalog,
+    update_pack_zip
 )
-from app.schemas import BlueprintCatalogSettings, BlueprintExportRequest
-from app.services.blueprints import (
+from app.schemas import PackCatalogSettings, PackExportRequest
+from app.services.packs import (
     content_hash,
-    export_blueprint,
-    import_blueprint,
-    unsubscribe_blueprint,
-    update_blueprint
+    export_pack,
+    import_pack,
+    unsubscribe_pack,
+    update_pack
 )
 from app.services.media import store_media_bytes
 from app.services.progress import create_initial_progress, record_answer_history
@@ -55,7 +55,7 @@ def make_db():
     return sessionmaker(bind=engine)()
 
 
-class BlueprintFixtureMixin:
+class PackFixtureMixin:
     def make_static_dir(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -106,12 +106,12 @@ class BlueprintFixtureMixin:
         return db, static_dir, group, first, second
 
 
-class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
+class ExportPackTests(PackFixtureMixin, unittest.TestCase):
     def test_export_manifest_and_content_fields(self):
         db, static_dir, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
 
-        zip_path = export_blueprint(
+        zip_path = export_pack(
             db,
             group.id,
             version=1,
@@ -119,7 +119,7 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             description="desc",
             license="CC0",
             static_dir=static_dir,
-            blueprint_dir=blueprint_dir
+            pack_dir=pack_dir
         )
 
         self.assertTrue(zip_path.exists())
@@ -130,7 +130,7 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             names = zip_file.namelist()
 
         self.assertEqual(manifest["format"], 1)
-        self.assertEqual(manifest["blueprint_guid"], group.guid)
+        self.assertEqual(manifest["pack_guid"], group.guid)
         self.assertEqual(manifest["version"], 1)
         self.assertEqual(manifest["name"], "Countries of the world")
         self.assertEqual(manifest["license"], "CC0")
@@ -172,7 +172,7 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
 
     def test_export_excludes_progress_entirely(self):
         db, static_dir, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
 
         progress = create_initial_progress(first.id, today=date(2026, 1, 1))
         db.add(progress)
@@ -191,13 +191,13 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         db.commit()
 
-        zip_path = export_blueprint(
+        zip_path = export_pack(
             db,
             group.id,
             version=1,
             name="Pack",
             static_dir=static_dir,
-            blueprint_dir=blueprint_dir
+            pack_dir=pack_dir
         )
 
         with ZipFile(zip_path) as zip_file:
@@ -213,13 +213,13 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         db.commit()
 
         with self.assertRaises(ValueError):
-            export_blueprint(
+            export_pack(
                 db,
                 group.id,
                 version=1,
                 name="Pack",
                 static_dir=static_dir,
-                blueprint_dir=self.make_static_dir()
+                pack_dir=self.make_static_dir()
             )
 
     def test_export_passes_through_external_media(self):
@@ -242,13 +242,13 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         db.add(question)
         db.commit()
 
-        zip_path = export_blueprint(
+        zip_path = export_pack(
             db,
             group.id,
             version=1,
             name="World",
             static_dir=static_dir,
-            blueprint_dir=self.make_static_dir()
+            pack_dir=self.make_static_dir()
         )
 
         with ZipFile(zip_path) as zip_file:
@@ -283,17 +283,17 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         db.add(question)
         db.commit()
 
-        zip_path = export_blueprint(
+        zip_path = export_pack(
             db,
             group.id,
             version=1,
             name="World",
             static_dir=static_dir,
-            blueprint_dir=self.make_static_dir()
+            pack_dir=self.make_static_dir()
         )
 
         target_db = make_db()
-        import_blueprint(
+        import_pack(
             target_db, zip_path, static_dir=self.make_static_dir()
         )
 
@@ -317,44 +317,44 @@ class ExportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         db.commit()
 
         with self.assertRaises(ValueError):
-            export_blueprint(
+            export_pack(
                 db,
                 group.id,
                 version=1,
                 name="World",
                 static_dir=self.make_static_dir(),
-                blueprint_dir=self.make_static_dir()
+                pack_dir=self.make_static_dir()
             )
 
     def test_export_unknown_group_raises(self):
         db = make_db()
 
         with self.assertRaises(ValueError):
-            export_blueprint(
+            export_pack(
                 db,
                 999,
                 version=1,
                 name="Pack",
                 static_dir=self.make_static_dir(),
-                blueprint_dir=self.make_static_dir()
+                pack_dir=self.make_static_dir()
             )
 
 
-class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
+class ImportPackTests(PackFixtureMixin, unittest.TestCase):
     def export_zip(self, **overrides):
         db, static_dir, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
         kwargs = {
             "version": 1,
             "name": "Countries of the world",
             "description": "desc",
             "license": "CC0",
             "static_dir": static_dir,
-            "blueprint_dir": blueprint_dir
+            "pack_dir": pack_dir
         }
         kwargs.update(overrides)
 
-        zip_path = export_blueprint(db, group.id, **kwargs)
+        zip_path = export_pack(db, group.id, **kwargs)
 
         return zip_path, db, group, first, second
 
@@ -364,12 +364,12 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         target_db = make_db()
         target_static = self.make_static_dir()
 
-        result = import_blueprint(
+        result = import_pack(
             target_db, zip_path, static_dir=target_static, source="pack.zip"
         )
 
         self.assertEqual(result["status"], "imported")
-        self.assertEqual(result["blueprint_guid"], group.guid)
+        self.assertEqual(result["pack_guid"], group.guid)
         self.assertEqual(result["questions_imported"], 2)
 
         imported_group = (
@@ -379,8 +379,8 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         self.assertIsNotNone(imported_group)
         self.assertEqual(imported_group.name, "Countries")
-        self.assertEqual(imported_group.blueprint_guid, group.guid)
-        self.assertEqual(imported_group.blueprint_version, 1)
+        self.assertEqual(imported_group.pack_guid, group.guid)
+        self.assertEqual(imported_group.pack_version, 1)
         self.assertIsNotNone(imported_group.content_hash)
         self.assertTrue(
             Path(target_static / imported_group.media.replace(
@@ -399,7 +399,7 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         imported_first = imported_questions[first.guid]
         self.assertEqual(imported_first.question, "Q1")
         self.assertEqual(imported_first.tags, ["europe"])
-        self.assertEqual(imported_first.blueprint_version, 1)
+        self.assertEqual(imported_first.pack_version, 1)
 
         # content_hash is independently reproducible from the imported row.
         recomputed = content_hash(
@@ -431,33 +431,33 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertEqual(progress_count, 0)
 
         subscription = (
-            target_db.query(BlueprintSubscription)
-            .filter(BlueprintSubscription.blueprint_guid == group.guid)
+            target_db.query(PackSubscription)
+            .filter(PackSubscription.pack_guid == group.guid)
             .first()
         )
         self.assertIsNotNone(subscription)
         self.assertEqual(subscription.installed_version, 1)
         self.assertEqual(subscription.source, "pack.zip")
 
-    def test_reimporting_same_blueprint_is_rejected(self):
+    def test_reimporting_same_pack_is_rejected(self):
         zip_path, source_db, group, first, second = self.export_zip()
         target_db = make_db()
         target_static = self.make_static_dir()
 
-        import_blueprint(target_db, zip_path, static_dir=target_static)
+        import_pack(target_db, zip_path, static_dir=target_static)
 
         group_count = target_db.query(QuestionGroup).count()
         question_count = target_db.query(Question).count()
-        subscription_count = target_db.query(BlueprintSubscription).count()
+        subscription_count = target_db.query(PackSubscription).count()
 
         with self.assertRaises(ValueError):
-            import_blueprint(target_db, zip_path, static_dir=target_static)
+            import_pack(target_db, zip_path, static_dir=target_static)
 
         # Rejected re-import must leave zero partial/duplicate writes.
         self.assertEqual(target_db.query(QuestionGroup).count(), group_count)
         self.assertEqual(target_db.query(Question).count(), question_count)
         self.assertEqual(
-            target_db.query(BlueprintSubscription).count(), subscription_count
+            target_db.query(PackSubscription).count(), subscription_count
         )
 
     def test_local_guid_collision_is_rejected(self):
@@ -468,10 +468,10 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
 
         group_count = target_db.query(QuestionGroup).count()
         question_count = target_db.query(Question).count()
-        subscription_count = target_db.query(BlueprintSubscription).count()
+        subscription_count = target_db.query(PackSubscription).count()
 
         with self.assertRaises(ValueError):
-            import_blueprint(
+            import_pack(
                 target_db, zip_path, static_dir=self.make_static_dir()
             )
 
@@ -479,7 +479,7 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertEqual(target_db.query(QuestionGroup).count(), group_count)
         self.assertEqual(target_db.query(Question).count(), question_count)
         self.assertEqual(
-            target_db.query(BlueprintSubscription).count(), subscription_count
+            target_db.query(PackSubscription).count(), subscription_count
         )
 
     def test_media_dedup_on_import_reuses_existing_file(self):
@@ -496,7 +496,7 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         before_count = target_db.query(MediaFile).count()
 
-        import_blueprint(target_db, zip_path, static_dir=target_static)
+        import_pack(target_db, zip_path, static_dir=target_static)
 
         after_count = target_db.query(MediaFile).count()
         # Only the answer.svg (a genuinely new hash) should register a new row.
@@ -507,7 +507,7 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         bogus.write_text("nope", encoding="utf-8")
 
         with self.assertRaises(ValueError):
-            import_blueprint(make_db(), bogus, static_dir=self.make_static_dir())
+            import_pack(make_db(), bogus, static_dir=self.make_static_dir())
 
     def test_rejects_missing_manifest(self):
         archive = self.make_static_dir() / "empty.zip"
@@ -516,7 +516,7 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             zip_file.writestr("content.json", "{}")
 
         with self.assertRaises(ValueError):
-            import_blueprint(
+            import_pack(
                 make_db(), archive, static_dir=self.make_static_dir()
             )
 
@@ -524,7 +524,7 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         archive = self.make_static_dir() / "future.zip"
         manifest = {
             "format": 1,
-            "blueprint_guid": "some-guid",
+            "pack_guid": "some-guid",
             "version": 1,
             "name": "Pack",
             "minimum_schema_version": "9999"
@@ -545,30 +545,30 @@ class ImportBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             zip_file.writestr("content.json", json.dumps(content))
 
         with self.assertRaises(ValueError):
-            import_blueprint(
+            import_pack(
                 make_db(), archive, static_dir=self.make_static_dir()
             )
 
 
-class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
+class UpdatePackTests(PackFixtureMixin, unittest.TestCase):
     def install_v1(self):
         # Source: group + two questions, exported as v1 and imported into a
         # fresh target database, simulating two separate installations.
         source_db, source_static, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
 
-        v1_zip = export_blueprint(
+        v1_zip = export_pack(
             source_db,
             group.id,
             version=1,
             name="Countries",
             static_dir=source_static,
-            blueprint_dir=blueprint_dir
+            pack_dir=pack_dir
         )
 
         target_db = make_db()
         target_static = self.make_static_dir()
-        import_blueprint(target_db, v1_zip, static_dir=target_static)
+        import_pack(target_db, v1_zip, static_dir=target_static)
 
         return {
             "source_db": source_db,
@@ -576,7 +576,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             "source_group": group,
             "source_first": first,
             "source_second": second,
-            "blueprint_dir": blueprint_dir,
+            "pack_dir": pack_dir,
             "target_db": target_db,
             "target_static": target_static
         }
@@ -586,11 +586,11 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             "version": 2,
             "name": "Countries",
             "static_dir": ctx["source_static"],
-            "blueprint_dir": ctx["blueprint_dir"]
+            "pack_dir": ctx["pack_dir"]
         }
         kwargs.update(overrides)
 
-        return export_blueprint(
+        return export_pack(
             ctx["source_db"], ctx["source_group"].id, **kwargs
         )
 
@@ -612,7 +612,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
 
         v2_zip = self.export_v2(ctx)
 
-        result = update_blueprint(
+        result = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
 
@@ -629,7 +629,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             .first()
         )
         self.assertEqual(updated_first.answer, "A1 corrected")
-        self.assertEqual(updated_first.blueprint_version, 2)
+        self.assertEqual(updated_first.pack_version, 2)
 
         added_third = (
             ctx["target_db"].query(Question)
@@ -645,9 +645,9 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
 
         subscription = (
-            ctx["target_db"].query(BlueprintSubscription)
+            ctx["target_db"].query(PackSubscription)
             .filter(
-                BlueprintSubscription.blueprint_guid
+                PackSubscription.pack_guid
                 == ctx["source_group"].guid
             )
             .first()
@@ -673,7 +673,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         ctx["source_db"].commit()
 
         v2_zip = self.export_v2(ctx)
-        result = update_blueprint(
+        result = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
 
@@ -687,7 +687,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         self.assertEqual(untouched.answer, "my own answer")
         # Forked rows keep their old bookkeeping -- never silently advanced.
-        self.assertEqual(untouched.blueprint_version, 1)
+        self.assertEqual(untouched.pack_version, 1)
 
     def test_forked_item_is_reported_even_if_upstream_did_not_change_it(self):
         # Regression: a row can be locally edited in a version where
@@ -710,7 +710,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         ctx["source_db"].commit()
 
         v2_zip = self.export_v2(ctx)
-        result = update_blueprint(
+        result = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
 
@@ -733,7 +733,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
 
         v2_zip = self.export_v2(ctx)
 
-        preview = update_blueprint(
+        preview = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
         self.assertEqual(preview["removed"], [second_guid])
@@ -747,7 +747,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         self.assertIsNotNone(still_present)
 
-        confirm = update_blueprint(
+        confirm = update_pack(
             ctx["target_db"],
             v2_zip,
             static_dir=ctx["target_static"],
@@ -778,7 +778,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         ctx["source_db"].commit()
 
         v2_zip = self.export_v2(ctx, name="Countries v2")
-        result = update_blueprint(
+        result = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
 
@@ -791,12 +791,12 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         self.assertEqual(untouched_group.name, "My Renamed Countries")
 
-    def test_rejects_update_for_uninstalled_blueprint(self):
+    def test_rejects_update_for_uninstalled_pack(self):
         ctx = self.install_v1()
         v2_zip = self.export_v2(ctx)
 
         with self.assertRaises(ValueError):
-            update_blueprint(
+            update_pack(
                 make_db(), v2_zip, static_dir=self.make_static_dir()
             )
 
@@ -804,7 +804,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         ctx = self.install_v1()
 
         with self.assertRaises(ValueError):
-            update_blueprint(
+            update_pack(
                 ctx["target_db"],
                 self.export_v2(ctx, version=0),
                 static_dir=ctx["target_static"]
@@ -816,10 +816,10 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         ctx["source_db"].commit()
 
         v2_zip = self.export_v2(ctx)
-        first_call = update_blueprint(
+        first_call = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
-        second_call = update_blueprint(
+        second_call = update_pack(
             ctx["target_db"], v2_zip, static_dir=ctx["target_static"]
         )
 
@@ -839,7 +839,7 @@ class UpdateBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertEqual(updated_first.answer, "A1 corrected")
 
 
-class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
+class UnsubscribePackTests(PackFixtureMixin, unittest.TestCase):
     def make_file_db(self):
         # The delete_content=True path takes a real backup, which snapshots
         # a real sqlite file -- an in-memory db has nothing to snapshot.
@@ -853,18 +853,18 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
 
     def install_v1(self, target_db):
         source_db, source_static, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
         target_static = self.make_static_dir()
 
-        v1_zip = export_blueprint(
+        v1_zip = export_pack(
             source_db,
             group.id,
             version=1,
             name="Countries",
             static_dir=source_static,
-            blueprint_dir=blueprint_dir
+            pack_dir=pack_dir
         )
-        import_blueprint(target_db, v1_zip, static_dir=target_static)
+        import_pack(target_db, v1_zip, static_dir=target_static)
 
         return group, first, second, target_static
 
@@ -872,7 +872,7 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         target_db = make_db()
         group, first, second, target_static = self.install_v1(target_db)
 
-        result = unsubscribe_blueprint(
+        result = unsubscribe_pack(
             target_db, group.guid, delete_content=False
         )
 
@@ -880,8 +880,8 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertEqual(result["kept_questions"], 2)
 
         self.assertIsNone(
-            target_db.query(BlueprintSubscription)
-            .filter(BlueprintSubscription.blueprint_guid == group.guid)
+            target_db.query(PackSubscription)
+            .filter(PackSubscription.pack_guid == group.guid)
             .first()
         )
 
@@ -892,8 +892,8 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         self.assertIsNotNone(kept_group)
         self.assertEqual(kept_group.name, "Countries")
-        self.assertIsNone(kept_group.blueprint_guid)
-        self.assertIsNone(kept_group.blueprint_version)
+        self.assertIsNone(kept_group.pack_guid)
+        self.assertIsNone(kept_group.pack_version)
         self.assertIsNone(kept_group.content_hash)
 
         kept_questions = (
@@ -903,8 +903,8 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         )
         self.assertEqual(len(kept_questions), 2)
         for question in kept_questions:
-            self.assertIsNone(question.blueprint_guid)
-            self.assertIsNone(question.blueprint_version)
+            self.assertIsNone(question.pack_guid)
+            self.assertIsNone(question.pack_version)
             self.assertIsNone(question.content_hash)
         self.assertEqual(
             {question.question for question in kept_questions}, {"Q1", "Q2"}
@@ -925,7 +925,7 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         target_db.add(progress)
         target_db.commit()
 
-        result = unsubscribe_blueprint(
+        result = unsubscribe_pack(
             target_db,
             group.guid,
             delete_content=True,
@@ -940,8 +940,8 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertTrue(Path(result["backup_path"]).exists())
 
         self.assertIsNone(
-            target_db.query(BlueprintSubscription)
-            .filter(BlueprintSubscription.blueprint_guid == group.guid)
+            target_db.query(PackSubscription)
+            .filter(PackSubscription.pack_guid == group.guid)
             .first()
         )
         self.assertIsNone(
@@ -984,7 +984,7 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
         target_db.commit()
         extra_guid = extra.guid
 
-        unsubscribe_blueprint(
+        unsubscribe_pack(
             target_db,
             group.guid,
             delete_content=True,
@@ -999,31 +999,31 @@ class UnsubscribeBlueprintTests(BlueprintFixtureMixin, unittest.TestCase):
             .first()
         )
 
-    def test_rejects_unsubscribe_for_uninstalled_blueprint(self):
+    def test_rejects_unsubscribe_for_uninstalled_pack(self):
         with self.assertRaises(ValueError):
-            unsubscribe_blueprint(make_db(), "not-a-real-guid")
+            unsubscribe_pack(make_db(), "not-a-real-guid")
 
 
-class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
+class PackRouterTests(PackFixtureMixin, unittest.TestCase):
     def test_export_endpoint_returns_zip_and_404s_on_missing_group(self):
         db, static_dir, group, first, second = self.build_source()
-        payload = BlueprintExportRequest(version=1, name="Pack")
+        payload = PackExportRequest(version=1, name="Pack")
 
         with self.assertRaises(HTTPException) as missing:
-            export_group_blueprint(999, payload, db)
+            export_group_pack(999, payload, db)
         self.assertEqual(missing.exception.status_code, 404)
 
     def test_import_endpoint_round_trips_upload(self):
         db, static_dir, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
 
-        zip_path = export_blueprint(
+        zip_path = export_pack(
             db,
             group.id,
             version=1,
             name="Pack",
             static_dir=static_dir,
-            blueprint_dir=blueprint_dir
+            pack_dir=pack_dir
         )
 
         target_db = make_db()
@@ -1036,8 +1036,8 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
         # The router doesn't take a static_dir param (by design -- it always
         # targets the live app data). Redirect it to a throwaway dir so this
         # test cannot write into the real static/ folder.
-        with patch.object(blueprints_service, "STATIC_DIR", target_static):
-            result = import_blueprint_zip(file=upload, db=target_db)
+        with patch.object(packs_service, "STATIC_DIR", target_static):
+            result = import_pack_zip(file=upload, db=target_db)
 
         self.assertEqual(result["status"], "imported")
 
@@ -1046,24 +1046,24 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
         upload = UploadFile(file=io.BytesIO(b"not a zip"), filename="junk.zip")
 
         with self.assertRaises(HTTPException) as caught:
-            import_blueprint_zip(file=upload, db=target_db)
+            import_pack_zip(file=upload, db=target_db)
 
         self.assertEqual(caught.exception.status_code, 400)
 
     def test_update_endpoint_round_trips_upload(self):
         source_db, source_static, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
+        pack_dir = self.make_static_dir()
 
-        v1_zip = export_blueprint(
+        v1_zip = export_pack(
             source_db, group.id, version=1, name="Pack",
-            static_dir=source_static, blueprint_dir=blueprint_dir
+            static_dir=source_static, pack_dir=pack_dir
         )
 
         target_db = make_db()
         target_static = self.make_static_dir()
 
-        with patch.object(blueprints_service, "STATIC_DIR", target_static):
-            import_blueprint_zip(
+        with patch.object(packs_service, "STATIC_DIR", target_static):
+            import_pack_zip(
                 file=UploadFile(
                     file=io.BytesIO(v1_zip.read_bytes()), filename="pack.zip"
                 ),
@@ -1072,13 +1072,13 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
 
         first.answer = "corrected"
         source_db.commit()
-        v2_zip = export_blueprint(
+        v2_zip = export_pack(
             source_db, group.id, version=2, name="Pack",
-            static_dir=source_static, blueprint_dir=blueprint_dir
+            static_dir=source_static, pack_dir=pack_dir
         )
 
-        with patch.object(blueprints_service, "STATIC_DIR", target_static):
-            result = update_blueprint_zip(
+        with patch.object(packs_service, "STATIC_DIR", target_static):
+            result = update_pack_zip(
                 file=UploadFile(
                     file=io.BytesIO(v2_zip.read_bytes()), filename="pack.zip"
                 ),
@@ -1088,18 +1088,18 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
         self.assertEqual(result["status"], "updated")
         self.assertEqual(result["updated"], [first.guid])
 
-    def test_update_endpoint_rejects_uninstalled_blueprint(self):
+    def test_update_endpoint_rejects_uninstalled_pack(self):
         source_db, source_static, group, first, second = self.build_source()
-        v1_zip = export_blueprint(
+        v1_zip = export_pack(
             source_db, group.id, version=1, name="Pack",
-            static_dir=source_static, blueprint_dir=self.make_static_dir()
+            static_dir=source_static, pack_dir=self.make_static_dir()
         )
         target_db = make_db()
         target_static = self.make_static_dir()
 
-        with patch.object(blueprints_service, "STATIC_DIR", target_static):
+        with patch.object(packs_service, "STATIC_DIR", target_static):
             with self.assertRaises(HTTPException) as caught:
-                update_blueprint_zip(
+                update_pack_zip(
                     file=UploadFile(
                         file=io.BytesIO(v1_zip.read_bytes()),
                         filename="pack.zip"
@@ -1114,32 +1114,32 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
         # media or backup involved), so this is safe to call through the
         # router as-is, unlike the delete path.
         source_db, source_static, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
-        v1_zip = export_blueprint(
+        pack_dir = self.make_static_dir()
+        v1_zip = export_pack(
             source_db, group.id, version=1, name="Pack",
-            static_dir=source_static, blueprint_dir=blueprint_dir
+            static_dir=source_static, pack_dir=pack_dir
         )
 
         target_db = make_db()
         target_static = self.make_static_dir()
 
-        with patch.object(blueprints_service, "STATIC_DIR", target_static):
-            import_blueprint_zip(
+        with patch.object(packs_service, "STATIC_DIR", target_static):
+            import_pack_zip(
                 file=UploadFile(
                     file=io.BytesIO(v1_zip.read_bytes()), filename="pack.zip"
                 ),
                 db=target_db
             )
 
-        result = unsubscribe_blueprint_subscription(
+        result = unsubscribe_pack_subscription(
             group.guid, delete_content=False, db=target_db
         )
 
         self.assertEqual(result["status"], "kept")
 
-    def test_unsubscribe_endpoint_rejects_uninstalled_blueprint(self):
+    def test_unsubscribe_endpoint_rejects_uninstalled_pack(self):
         with self.assertRaises(HTTPException) as caught:
-            unsubscribe_blueprint_subscription(
+            unsubscribe_pack_subscription(
                 "not-a-real-guid", delete_content=False, db=make_db()
             )
 
@@ -1147,19 +1147,19 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
 
     def test_list_endpoint_empty_and_populated(self):
         db = make_db()
-        self.assertEqual(list_blueprint_subscriptions(db=db), [])
+        self.assertEqual(list_pack_subscriptions(db=db), [])
 
         source_db, source_static, group, first, second = self.build_source()
-        blueprint_dir = self.make_static_dir()
-        zip_path = export_blueprint(
+        pack_dir = self.make_static_dir()
+        zip_path = export_pack(
             source_db, group.id, version=1, name="Pack",
-            static_dir=source_static, blueprint_dir=blueprint_dir
+            static_dir=source_static, pack_dir=pack_dir
         )
-        import_blueprint(db, zip_path, static_dir=self.make_static_dir())
+        import_pack(db, zip_path, static_dir=self.make_static_dir())
 
-        rows = list_blueprint_subscriptions(db=db)
+        rows = list_pack_subscriptions(db=db)
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["blueprint_guid"], group.guid)
+        self.assertEqual(rows[0]["pack_guid"], group.guid)
         self.assertEqual(rows[0]["installed_version"], 1)
         self.assertEqual(rows[0]["name"], "Pack")
         self.assertIsNotNone(rows[0]["subscribed_at"])
@@ -1168,10 +1168,10 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
     def test_catalog_settings_endpoints_round_trip(self):
         db = make_db()
 
-        self.assertEqual(get_blueprint_catalog(db=db), {"url": "", "key": ""})
+        self.assertEqual(get_pack_catalog(db=db), {"url": "", "key": ""})
 
-        saved = update_blueprint_catalog(
-            BlueprintCatalogSettings(
+        saved = update_pack_catalog(
+            PackCatalogSettings(
                 url="https://example.supabase.co/rest/v1",
                 key="sb_publishable_test"
             ),
@@ -1186,7 +1186,7 @@ class BlueprintRouterTests(BlueprintFixtureMixin, unittest.TestCase):
         )
 
         self.assertEqual(
-            get_blueprint_catalog(db=db),
+            get_pack_catalog(db=db),
             {
                 "url": "https://example.supabase.co/rest/v1",
                 "key": "sb_publishable_test"

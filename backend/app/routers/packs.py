@@ -6,66 +6,71 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
-from ..models import BlueprintSubscription
-from ..schemas import BlueprintCatalogSettings, BlueprintExportRequest
-from ..services.blueprint_catalog import (
-    BlueprintCatalogError,
-    check_blueprint_catalog_health,
-    search_blueprint_catalog
+from ..models import PackSubscription
+from ..schemas import PackCatalogSettings, PackExportRequest
+from ..services.pack_catalog import (
+    PackCatalogError,
+    check_pack_catalog_health,
+    search_pack_catalog
 )
-from ..services.blueprints import (
-    export_blueprint,
-    import_blueprint,
-    unsubscribe_blueprint,
-    update_blueprint
+from ..services.packs import (
+    export_pack,
+    import_pack,
+    unsubscribe_pack,
+    update_pack
 )
 from ..services.settings import (
-    get_blueprint_catalog_settings,
-    save_blueprint_catalog_settings
+    get_pack_catalog_settings,
+    save_pack_catalog_settings
 )
 
 
 router = APIRouter()
 
 
-@router.get("/blueprints")
-def list_blueprint_subscriptions(db: Session = Depends(get_db)):
+@router.get("/blueprints", include_in_schema=False)
+@router.get("/packs")
+def list_pack_subscriptions(db: Session = Depends(get_db)):
     return [
         {
-            "blueprint_guid": subscription.blueprint_guid,
+            "pack_guid": subscription.pack_guid,
             "installed_version": subscription.installed_version,
             "name": subscription.name,
             "source": subscription.source,
             "subscribed_at": subscription.subscribed_at,
             "updated_at": subscription.updated_at
         }
-        for subscription in db.query(BlueprintSubscription).all()
+        for subscription in db.query(PackSubscription).all()
     ]
 
 
-@router.get("/blueprints/catalog-settings")
-def get_blueprint_catalog(db: Session = Depends(get_db)):
-    return get_blueprint_catalog_settings(db)
+@router.get("/blueprints/catalog-settings", include_in_schema=False)
+@router.get("/packs/catalog-settings")
+def get_pack_catalog(db: Session = Depends(get_db)):
+    return get_pack_catalog_settings(db)
 
 
-@router.put("/blueprints/catalog-settings")
-def update_blueprint_catalog(
-    payload: BlueprintCatalogSettings,
+@router.put("/blueprints/catalog-settings", include_in_schema=False)
+@router.put("/packs/catalog-settings")
+def update_pack_catalog(
+    payload: PackCatalogSettings,
     db: Session = Depends(get_db)
 ):
-    result = save_blueprint_catalog_settings(db, payload.url, payload.key)
+    result = save_pack_catalog_settings(db, payload.url, payload.key)
     db.commit()
 
     return result
 
 
-@router.get("/blueprints/catalog/diagnostics")
-def diagnose_blueprint_catalog(db: Session = Depends(get_db)):
-    return check_blueprint_catalog_health(db)
+@router.get("/blueprints/catalog/diagnostics", include_in_schema=False)
+@router.get("/packs/catalog/diagnostics")
+def diagnose_pack_catalog(db: Session = Depends(get_db)):
+    return check_pack_catalog_health(db)
 
 
-@router.get("/blueprints/catalog/search")
-def search_catalog_blueprints(
+@router.get("/blueprints/catalog/search", include_in_schema=False)
+@router.get("/packs/catalog/search")
+def search_catalog_packs(
     q: str = "",
     theme: str = "",
     type: str = "",
@@ -76,7 +81,7 @@ def search_catalog_blueprints(
     db: Session = Depends(get_db)
 ):
     try:
-        return search_blueprint_catalog(
+        return search_pack_catalog(
             db,
             query=q,
             theme=theme,
@@ -86,18 +91,19 @@ def search_catalog_blueprints(
             limit=limit,
             cursor=cursor
         )
-    except BlueprintCatalogError as error:
+    except PackCatalogError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.post("/blueprints/{group_id}/export")
-def export_group_blueprint(
+@router.post("/blueprints/{group_id}/export", include_in_schema=False)
+@router.post("/packs/{group_id}/export")
+def export_group_pack(
     group_id: int,
-    payload: BlueprintExportRequest,
+    payload: PackExportRequest,
     db: Session = Depends(get_db)
 ):
     try:
-        zip_path = export_blueprint(
+        zip_path = export_pack(
             db,
             group_id,
             version=payload.version,
@@ -116,8 +122,9 @@ def export_group_blueprint(
     )
 
 
-@router.post("/blueprints/import")
-def import_blueprint_zip(
+@router.post("/blueprints/import", include_in_schema=False)
+@router.post("/packs/import")
+def import_pack_zip(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -129,7 +136,7 @@ def import_blueprint_zip(
                 destination.write(chunk)
 
         try:
-            result = import_blueprint(db, upload_path, source=file.filename)
+            result = import_pack(db, upload_path, source=file.filename)
         except ValueError as error:
             db.rollback()
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -137,8 +144,9 @@ def import_blueprint_zip(
     return result
 
 
-@router.post("/blueprints/update")
-def update_blueprint_zip(
+@router.post("/blueprints/update", include_in_schema=False)
+@router.post("/packs/update")
+def update_pack_zip(
     file: UploadFile = File(...),
     delete_removed: bool = False,
     db: Session = Depends(get_db)
@@ -154,7 +162,7 @@ def update_blueprint_zip(
                 destination.write(chunk)
 
         try:
-            result = update_blueprint(
+            result = update_pack(
                 db,
                 upload_path,
                 source=file.filename,
@@ -167,15 +175,16 @@ def update_blueprint_zip(
     return result
 
 
-@router.post("/blueprints/{blueprint_guid}/unsubscribe")
-def unsubscribe_blueprint_subscription(
-    blueprint_guid: str,
+@router.post("/blueprints/{pack_guid}/unsubscribe", include_in_schema=False)
+@router.post("/packs/{pack_guid}/unsubscribe")
+def unsubscribe_pack_subscription(
+    pack_guid: str,
     delete_content: bool = False,
     db: Session = Depends(get_db)
 ):
     try:
-        result = unsubscribe_blueprint(
-            db, blueprint_guid, delete_content=delete_content
+        result = unsubscribe_pack(
+            db, pack_guid, delete_content=delete_content
         )
     except ValueError as error:
         db.rollback()

@@ -1,6 +1,6 @@
-"""Blueprint export/import (sync-roadmap M1, slice 1.1/1.2).
+"""Pack export/import (sync-roadmap M1, slice 1.1/1.2).
 
-A blueprint is a themed QuestionGroup (e.g. "Countries of the world") packaged
+A pack is a themed QuestionGroup (e.g. "Countries of the world") packaged
 as a zip so another user can install it into their own database. Progress is
 never included — the equivalent of Anki's ".apkg" with "include scheduling
 information" unchecked.
@@ -10,10 +10,10 @@ minting a fresh one: step 1.3 (not built here) will diff "installed vs new
 version" by guid, and reusing it means that diff is just guid membership in
 the new content.json, with no extra bookkeeping column needed. This costs
 nothing — guid uniqueness is only enforced per local SQLite file, and two
-independent users importing the same blueprint each get matching guids in
-their own separate databases, consistent with the M2 sync design (blueprint
+independent users importing the same pack each get matching guids in
+their own separate databases, consistent with the M2 sync design (pack
 content is excluded from the personal-content sync payload; each device
-installs blueprints independently by blueprint_guid).
+installs packs independently by pack_guid).
 """
 
 from datetime import datetime, timezone
@@ -26,9 +26,9 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import joinedload
 
-from ..config import BACKUP_DIR, BLUEPRINT_DIR, DATABASE_FILE, STATIC_DIR
+from ..config import BACKUP_DIR, PACK_DIR, DATABASE_FILE, STATIC_DIR
 from ..migrations import MIGRATIONS
-from ..models import BlueprintSubscription, Question, QuestionGroup
+from ..models import PackSubscription, Question, QuestionGroup
 from .backups import create_backup
 from .media import (
     delete_unreferenced_media_file,
@@ -41,7 +41,7 @@ from .questions import delete_question_dependents
 from .tombstones import record_tombstone
 
 
-BLUEPRINT_FORMAT = 1
+PACK_FORMAT = 1
 
 # Fields that define whether an item "changed" for future update-diffing
 # (1.3). Deliberately excludes guid/id/group_id/anything progress-related.
@@ -117,7 +117,7 @@ def _resolve_media_ref(db, value, static_dir, media_assets):
     return {"sha256": digest}
 
 
-def export_blueprint(
+def export_pack(
     db,
     group_id,
     *,
@@ -126,10 +126,10 @@ def export_blueprint(
     description="",
     license="",
     static_dir: Path | None = None,
-    blueprint_dir: Path | None = None
+    pack_dir: Path | None = None
 ):
     static_dir = static_dir or STATIC_DIR
-    blueprint_dir = blueprint_dir or BLUEPRINT_DIR
+    pack_dir = pack_dir or PACK_DIR
 
     group = (
         db.query(QuestionGroup)
@@ -170,8 +170,8 @@ def export_blueprint(
     ]
     content = {"group": group_entry, "questions": question_entries}
     manifest = {
-        "format": BLUEPRINT_FORMAT,
-        "blueprint_guid": group.guid,
+        "format": PACK_FORMAT,
+        "pack_guid": group.guid,
         "version": version,
         "name": name,
         "description": description,
@@ -180,11 +180,11 @@ def export_blueprint(
         "created_at": datetime.now(timezone.utc).isoformat()
     }
 
-    blueprint_dir.mkdir(parents=True, exist_ok=True)
+    pack_dir.mkdir(parents=True, exist_ok=True)
     # Deterministic per (group, version): re-exporting the same version
     # overwrites, which is the desired iteration behavior for an author.
-    slug = _safe_filename_slug(name) or "blueprint"
-    zip_path = blueprint_dir / f"{slug}-{group.guid}-v{version}.zip"
+    slug = _safe_filename_slug(name) or "pack"
+    zip_path = pack_dir / f"{slug}-{group.guid}-v{version}.zip"
 
     with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zip_file:
         zip_file.writestr(
@@ -218,31 +218,33 @@ def _read_manifest_and_content(zip_file):
     manifest = _read_json_member(
         zip_file,
         "manifest.json",
-        "Invalid blueprint: manifest.json is missing"
+        "Invalid pack: manifest.json is missing"
     )
 
-    if manifest.get("format") != BLUEPRINT_FORMAT:
-        raise ValueError("Unsupported blueprint format")
+    if manifest.get("format") != PACK_FORMAT:
+        raise ValueError("Unsupported pack format")
 
-    blueprint_guid = manifest.get("blueprint_guid")
+    # Accept old archives exported before the terminology rename. New exports
+    # write pack_guid, but old blueprint_guid ZIPs should remain installable.
+    pack_guid = manifest.get("pack_guid") or manifest.get("blueprint_guid")
     version = manifest.get("version")
 
-    if not blueprint_guid or not isinstance(version, int):
-        raise ValueError("Invalid blueprint manifest")
+    if not pack_guid or not isinstance(version, int):
+        raise ValueError("Invalid pack manifest")
 
     current_schema_version = MIGRATIONS[-1].version
     minimum_schema_version = manifest.get("minimum_schema_version") or ""
 
     if minimum_schema_version > current_schema_version:
         raise ValueError(
-            "This blueprint requires a newer app version (needs schema "
+            "This pack requires a newer app version (needs schema "
             f"{minimum_schema_version}, have {current_schema_version})"
         )
 
     content = _read_json_member(
         zip_file,
         "content.json",
-        "Invalid blueprint: content.json is missing"
+        "Invalid pack: content.json is missing"
     )
     group_entry = content.get("group")
     question_entries = content.get("questions")
@@ -250,9 +252,9 @@ def _read_manifest_and_content(zip_file):
     if not isinstance(group_entry, dict) or not isinstance(
         question_entries, list
     ):
-        raise ValueError("Invalid blueprint: content.json is malformed")
+        raise ValueError("Invalid pack: content.json is malformed")
 
-    return manifest, blueprint_guid, version, group_entry, question_entries
+    return manifest, pack_guid, version, group_entry, question_entries
 
 
 def _make_materializer(zip_file, static_dir, db):
@@ -264,7 +266,7 @@ def _make_materializer(zip_file, static_dir, db):
             return None
 
         if not isinstance(ref, dict):
-            raise ValueError("Invalid blueprint: malformed media reference")
+            raise ValueError("Invalid pack: malformed media reference")
 
         if "url" in ref:
             return ref["url"]
@@ -272,7 +274,7 @@ def _make_materializer(zip_file, static_dir, db):
         digest = ref.get("sha256")
 
         if not digest:
-            raise ValueError("Invalid blueprint: malformed media reference")
+            raise ValueError("Invalid pack: malformed media reference")
 
         member_name = next(
             (
@@ -285,7 +287,7 @@ def _make_materializer(zip_file, static_dir, db):
 
         if member_name is None:
             raise ValueError(
-                f"Invalid blueprint: media {digest} is missing from the "
+                f"Invalid pack: media {digest} is missing from the "
                 "archive"
             )
 
@@ -304,7 +306,7 @@ def _make_materializer(zip_file, static_dir, db):
     return materialize
 
 
-def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=None):
+def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
     static_dir = static_dir or STATIC_DIR
     zip_path = Path(zip_path)
 
@@ -312,28 +314,28 @@ def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=Non
         raise ValueError("The provided file is not a valid .zip archive")
 
     with ZipFile(zip_path) as zip_file:
-        manifest, blueprint_guid, version, group_entry, question_entries = (
+        manifest, pack_guid, version, group_entry, question_entries = (
             _read_manifest_and_content(zip_file)
         )
 
         already_subscribed = (
-            db.query(BlueprintSubscription)
-            .filter(BlueprintSubscription.blueprint_guid == blueprint_guid)
+            db.query(PackSubscription)
+            .filter(PackSubscription.pack_guid == pack_guid)
             .first()
         )
 
         if already_subscribed:
-            raise ValueError("This blueprint is already installed")
+            raise ValueError("This pack is already installed")
 
         guid_collision = (
             db.query(QuestionGroup)
-            .filter(QuestionGroup.guid == blueprint_guid)
+            .filter(QuestionGroup.guid == pack_guid)
             .first()
         )
 
         if guid_collision:
             raise ValueError(
-                "A group with this blueprint's guid already exists locally"
+                "A group with this pack's guid already exists locally"
             )
 
         materialize = _make_materializer(zip_file, static_dir, db)
@@ -344,8 +346,8 @@ def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=Non
             name=group_entry.get("name"),
             media=materialize(group_entry.get("media")),
             data=group_entry.get("data") or {},
-            blueprint_guid=blueprint_guid,
-            blueprint_version=version,
+            pack_guid=pack_guid,
+            pack_version=version,
             content_hash=content_hash(group_entry, GROUP_HASH_FIELDS)
         )
         db.add(group)
@@ -362,15 +364,15 @@ def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=Non
                 tags=entry.get("tags") or [],
                 data=entry.get("data") or {},
                 group_id=group.id,
-                blueprint_guid=blueprint_guid,
-                blueprint_version=version,
+                pack_guid=pack_guid,
+                pack_version=version,
                 content_hash=content_hash(entry, QUESTION_HASH_FIELDS)
             ))
             # No Progress row -- mirrors create_question()'s own lazy
             # creation on first answer, needs no special-casing here.
 
-        db.add(BlueprintSubscription(
-            blueprint_guid=blueprint_guid,
+        db.add(PackSubscription(
+            pack_guid=pack_guid,
             installed_version=version,
             name=manifest.get("name"),
             source=str(source or zip_path.name),
@@ -380,7 +382,7 @@ def import_blueprint(db, zip_path, *, static_dir: Path | None = None, source=Non
 
     return {
         "status": "imported",
-        "blueprint_guid": blueprint_guid,
+        "pack_guid": pack_guid,
         "group_id": group.id,
         "version": version,
         "questions_imported": len(question_entries)
@@ -408,7 +410,7 @@ def _row_canonical_payload(db, row, fields, static_dir):
 def _is_row_forked(db, row, fields, static_dir):
     # Forked-ness is purely "did the local row change since we last touched
     # it" -- it does NOT depend on the new version's content at all. A row
-    # with no content_hash (shouldn't happen for anything blueprint-tracked)
+    # with no content_hash (shouldn't happen for anything pack-tracked)
     # or whose media went missing on disk is treated conservatively as
     # forked: never silently overwrite something we can't verify cleanly.
     if row.content_hash is None:
@@ -422,7 +424,7 @@ def _is_row_forked(db, row, fields, static_dir):
     return content_hash(payload, fields) != row.content_hash
 
 
-def update_blueprint(
+def update_pack(
     db,
     zip_path,
     *,
@@ -430,7 +432,7 @@ def update_blueprint(
     source=None,
     delete_removed: bool = False
 ):
-    """Apply a newer version of an already-installed blueprint.
+    """Apply a newer version of an already-installed pack.
 
     Safe to call repeatedly with the same zip: additions/updates are
     idempotent, and nothing is ever deleted unless delete_removed=True is
@@ -455,36 +457,36 @@ def update_blueprint(
         raise ValueError("The provided file is not a valid .zip archive")
 
     with ZipFile(zip_path) as zip_file:
-        manifest, blueprint_guid, version, group_entry, question_entries = (
+        manifest, pack_guid, version, group_entry, question_entries = (
             _read_manifest_and_content(zip_file)
         )
 
         subscription = (
-            db.query(BlueprintSubscription)
-            .filter(BlueprintSubscription.blueprint_guid == blueprint_guid)
+            db.query(PackSubscription)
+            .filter(PackSubscription.pack_guid == pack_guid)
             .first()
         )
 
         if not subscription:
             raise ValueError(
-                "This blueprint is not installed; import it first"
+                "This pack is not installed; import it first"
             )
 
         if version < subscription.installed_version:
             raise ValueError(
-                f"This blueprint zip (v{version}) is older than the "
+                f"This pack zip (v{version}) is older than the "
                 f"installed version (v{subscription.installed_version})"
             )
 
         local_group = (
             db.query(QuestionGroup)
-            .filter(QuestionGroup.guid == blueprint_guid)
+            .filter(QuestionGroup.guid == pack_guid)
             .first()
         )
 
         if not local_group:
             raise ValueError(
-                "Installed blueprint's group is missing locally"
+                "Installed pack's group is missing locally"
             )
 
         materialize = _make_materializer(zip_file, static_dir, db)
@@ -508,7 +510,7 @@ def update_blueprint(
             local_group.name = group_entry.get("name")
             local_group.media = materialize(group_entry.get("media"))
             local_group.data = group_entry.get("data") or {}
-            local_group.blueprint_version = version
+            local_group.pack_version = version
             local_group.content_hash = new_group_hash
             group_updated = True
 
@@ -516,7 +518,7 @@ def update_blueprint(
             question.guid: question
             for question in (
                 db.query(Question)
-                .filter(Question.blueprint_guid == blueprint_guid)
+                .filter(Question.pack_guid == pack_guid)
                 .all()
             )
         }
@@ -542,8 +544,8 @@ def update_blueprint(
                     tags=entry.get("tags") or [],
                     data=entry.get("data") or {},
                     group_id=local_group.id,
-                    blueprint_guid=blueprint_guid,
-                    blueprint_version=version,
+                    pack_guid=pack_guid,
+                    pack_version=version,
                     content_hash=content_hash(entry, QUESTION_HASH_FIELDS)
                 ))
                 added_guids.append(guid)
@@ -569,7 +571,7 @@ def update_blueprint(
             local.answer_media = materialize(entry.get("answer_media"))
             local.tags = entry.get("tags") or []
             local.data = entry.get("data") or {}
-            local.blueprint_version = version
+            local.pack_version = version
             local.content_hash = content_hash(entry, QUESTION_HASH_FIELDS)
             updated_guids.append(guid)
 
@@ -598,7 +600,7 @@ def update_blueprint(
 
     return {
         "status": "updated",
-        "blueprint_guid": blueprint_guid,
+        "pack_guid": pack_guid,
         "version": version,
         "group_updated": group_updated,
         "added": added_guids,
@@ -609,31 +611,31 @@ def update_blueprint(
     }
 
 
-def unsubscribe_blueprint(
+def unsubscribe_pack(
     db,
-    blueprint_guid,
+    pack_guid,
     *,
     delete_content: bool = False,
     static_dir: Path | None = None,
     backup_dir: Path | None = None,
     database_file: Path | None = None
 ):
-    """Stop tracking a blueprint subscription.
+    """Stop tracking a pack subscription.
 
     delete_content=False (default, "keep as personal copy"): the group and
     its questions stay exactly as they are, only the bookkeeping that ties
-    them to the blueprint is cleared (blueprint_guid/blueprint_version/
-    content_hash -- a locally-owned row shouldn't claim a stale blueprint
+    them to the pack is cleared (pack_guid/pack_version/
+    content_hash -- a locally-owned row shouldn't claim a stale pack
     origin once nothing is tracking updates for it anymore). Progress and
     everything else is untouched.
 
     delete_content=True: deletes the group and everything in it, through the
     same pipeline as a normal group delete (delete_question_dependents +
-    tombstones) -- scoped by group membership, not blueprint_guid, so a
-    question the user added locally into a blueprint-derived group is
+    tombstones) -- scoped by group membership, not pack_guid, so a
+    question the user added locally into a pack-derived group is
     deleted along with it too, exactly like any other group delete (this app
     has no concept of partial-group deletion). A backup is taken first,
-    unconditionally: unsubscribing can delete a large blueprint's worth of
+    unconditionally: unsubscribing can delete a large pack's worth of
     review history in one action, more than a single question delete risks.
     """
     static_dir = static_dir or STATIC_DIR
@@ -641,35 +643,35 @@ def unsubscribe_blueprint(
     database_file = database_file or DATABASE_FILE
 
     subscription = (
-        db.query(BlueprintSubscription)
-        .filter(BlueprintSubscription.blueprint_guid == blueprint_guid)
+        db.query(PackSubscription)
+        .filter(PackSubscription.pack_guid == pack_guid)
         .first()
     )
 
     if not subscription:
-        raise ValueError("This blueprint is not installed")
+        raise ValueError("This pack is not installed")
 
     group = (
         db.query(QuestionGroup)
-        .filter(QuestionGroup.guid == blueprint_guid)
+        .filter(QuestionGroup.guid == pack_guid)
         .first()
     )
 
     if not delete_content:
         questions = (
             db.query(Question)
-            .filter(Question.blueprint_guid == blueprint_guid)
+            .filter(Question.pack_guid == pack_guid)
             .all()
         )
 
         for question in questions:
-            question.blueprint_guid = None
-            question.blueprint_version = None
+            question.pack_guid = None
+            question.pack_version = None
             question.content_hash = None
 
         if group:
-            group.blueprint_guid = None
-            group.blueprint_version = None
+            group.pack_guid = None
+            group.pack_version = None
             group.content_hash = None
 
         db.delete(subscription)
@@ -677,7 +679,7 @@ def unsubscribe_blueprint(
 
         return {
             "status": "kept",
-            "blueprint_guid": blueprint_guid,
+            "pack_guid": pack_guid,
             "kept_questions": len(questions),
             "group_kept": group is not None
         }
@@ -687,7 +689,7 @@ def unsubscribe_blueprint(
         static_dir=static_dir,
         backup_dir=backup_dir,
         reason="unsubscribe",
-        label=group.name if group else blueprint_guid
+        label=group.name if group else pack_guid
     )
 
     if group:
@@ -703,12 +705,12 @@ def unsubscribe_blueprint(
     else:
         # Defensive: subscription exists but its group is already gone
         # (e.g. deleted through the ordinary group-delete endpoint). Fall
-        # back to whatever still claims this blueprint's origin.
+        # back to whatever still claims this pack's origin.
         question_ids = [
             question.id
             for question in (
                 db.query(Question)
-                .filter(Question.blueprint_guid == blueprint_guid)
+                .filter(Question.pack_guid == pack_guid)
                 .all()
             )
         ]
@@ -732,7 +734,7 @@ def unsubscribe_blueprint(
 
     return {
         "status": "deleted",
-        "blueprint_guid": blueprint_guid,
+        "pack_guid": pack_guid,
         "deleted_questions": len(question_ids),
         "group_deleted": group is not None,
         "backup_path": str(backup_result.path)

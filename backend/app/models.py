@@ -37,7 +37,7 @@ class QuestionGroup(Base):
     id = Column(Integer, primary_key=True)
 
     # Stable identity that survives export/import and future sync. The integer
-    # PK stays local-only; the guid is what blueprints and sync will key on.
+    # PK stays local-only; the guid is what packs and sync will key on.
     guid = Column(
         String,
         unique=True,
@@ -60,11 +60,11 @@ class QuestionGroup(Base):
     # future grouped-review variant.
     data = Column(JSON, nullable=True)
 
-    # Blueprint provenance (sync-roadmap M1). NULL for locally authored
-    # groups. blueprint_guid is the pack this row came from; the row's own
+    # Pack provenance (sync-roadmap M1). NULL for locally authored
+    # groups. pack_guid is the pack this row came from; the row's own
     # (reused, not freshly minted) guid is which item within that pack it is.
-    blueprint_guid = Column(String, nullable=True, index=True)
-    blueprint_version = Column(Integer, nullable=True)
+    pack_guid = Column(String, nullable=True, index=True)
+    pack_version = Column(Integer, nullable=True)
     content_hash = Column(String, nullable=True)
 
     questions = relationship(
@@ -113,9 +113,9 @@ class Question(Base):
     # data.aliases so the schema stays stable as map features grow.
     data = Column(JSON, nullable=True)
 
-    # Blueprint provenance (sync-roadmap M1); see QuestionGroup.blueprint_guid.
-    blueprint_guid = Column(String, nullable=True, index=True)
-    blueprint_version = Column(Integer, nullable=True)
+    # Pack provenance (sync-roadmap M1); see QuestionGroup.pack_guid.
+    pack_guid = Column(String, nullable=True, index=True)
+    pack_version = Column(Integer, nullable=True)
     content_hash = Column(String, nullable=True)
 
     # Optional visual/grouped-review membership. Progress still belongs to this
@@ -281,7 +281,7 @@ class Tombstone(Base):
 class MediaFile(Base):
     """Registry of files under static/ with their content hash (0.5).
 
-    The hash is what blueprints and sync address media by ("do you have
+    The hash is what packs and sync address media by ("do you have
     abc123?"), and what upload dedup checks. Files keep their uuid filenames
     on disk — the registry adds identity, it does not move anything.
     """
@@ -300,24 +300,24 @@ class MediaFile(Base):
 
 
 # =========================================================
-# BLUEPRINT SUBSCRIPTIONS
+# PACK SUBSCRIPTIONS
 # =========================================================
 
-class BlueprintSubscription(Base):
-    """Tracks a locally installed blueprint (sync-roadmap M1).
+class PackSubscription(Base):
+    """Tracks a locally installed pack (sync-roadmap M1).
 
     No group_id FK: the imported QuestionGroup reuses the exporting
-    database's guid verbatim (see services/blueprints.py), so it always
-    equals blueprint_guid here — the owning group is found via
-    QuestionGroup.guid == blueprint_guid rather than a dedicated pointer,
-    which stays forward-compatible with a future multi-entity blueprint.
+    database's guid verbatim (see services/packs.py), so it always
+    equals pack_guid here — the owning group is found via
+    QuestionGroup.guid == pack_guid rather than a dedicated pointer,
+    which stays forward-compatible with a future multi-entity pack.
     """
 
-    __tablename__ = "blueprint_subscriptions"
+    __tablename__ = "pack_subscriptions"
 
     id = Column(Integer, primary_key=True)
 
-    blueprint_guid = Column(String, unique=True, nullable=False, index=True)
+    pack_guid = Column(String, unique=True, nullable=False, index=True)
 
     installed_version = Column(Integer, nullable=False)
 
