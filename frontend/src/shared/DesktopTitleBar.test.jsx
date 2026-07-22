@@ -4,8 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const windowApi = {
   minimize: vi.fn(),
   toggleMaximize: vi.fn(),
+  unmaximize: vi.fn(),
   close: vi.fn(),
   isMaximized: vi.fn(() => Promise.resolve(true)),
+  isResizable: vi.fn(() => Promise.resolve(true)),
+  setResizable: vi.fn(() => Promise.resolve()),
   onResized: vi.fn(() => Promise.resolve(() => {}))
 };
 
@@ -35,6 +38,8 @@ describe("DesktopTitleBar", () => {
   describe("inside the Tauri shell", () => {
     beforeEach(() => {
       window.__NEMORIS_BACKEND__ = "http://127.0.0.1:1234";
+      windowApi.isMaximized.mockResolvedValue(true);
+      windowApi.isResizable.mockResolvedValue(true);
     });
 
     it("renders the bar with a native drag region and reserves --shell-top", async () => {
@@ -52,6 +57,7 @@ describe("DesktopTitleBar", () => {
       ).toBe("36px");
 
       await waitFor(() => expect(windowApi.isMaximized).toHaveBeenCalled());
+      await waitFor(() => expect(windowApi.setResizable).toHaveBeenCalledWith(false));
     });
 
     it("drives the window through the Tauri window API", async () => {
@@ -63,10 +69,23 @@ describe("DesktopTitleBar", () => {
       expect(windowApi.minimize).toHaveBeenCalled();
 
       fireEvent.click(getByLabelText("Restaurer"));
-      expect(windowApi.toggleMaximize).toHaveBeenCalled();
+      await waitFor(() => expect(windowApi.setResizable).toHaveBeenCalledWith(true));
+      await waitFor(() => expect(windowApi.toggleMaximize).toHaveBeenCalled());
 
       fireEvent.click(getByLabelText("Fermer"));
       expect(windowApi.close).toHaveBeenCalled();
+    });
+
+    it("restores a maximized non-resizable window on titlebar double-click", async () => {
+      windowApi.isResizable.mockResolvedValue(false);
+      const { container } = render(<DesktopTitleBar />);
+
+      await waitFor(() => expect(windowApi.isMaximized).toHaveBeenCalled());
+
+      fireEvent.doubleClick(container.querySelector(".desktop-titlebar__drag"));
+
+      await waitFor(() => expect(windowApi.setResizable).toHaveBeenCalledWith(true));
+      await waitFor(() => expect(windowApi.unmaximize).toHaveBeenCalled());
     });
   });
 });
