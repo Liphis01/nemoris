@@ -1,4 +1,4 @@
-import MapFileInput from "../../map/components/MapFileInput";
+import MapMediaInput from "../../map/components/MapMediaInput";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import {
@@ -43,7 +43,7 @@ export default function CreateMapGroupEditor({
         : "Ex : Drapeaux";
   const typeStyle = questionTypeChipStyles[groupDraft.type_group] || questionTypeChipStyles.map;
   const mapPreviewSrc = isMapGroup && groupDraft.media
-    ? `/maps/${groupDraft.media}`
+    ? resolveMediaUrl(groupDraft.media)
     : "";
   const coverPreviewSrc = !isMapGroup && groupDraft.media
     ? resolveMediaUrl(groupDraft.media)
@@ -89,10 +89,10 @@ export default function CreateMapGroupEditor({
         {isMapGroup ? "Fichier SVG de la carte" : "Média de couverture / URL (optionnel)"}
       </label>
       {isMapGroup ? (
-        <MapFileInput
+        <MapMediaInput
           style={stackedInputStyle}
           value={groupDraft.media}
-          onChange={(e) => setGroupDraft({ ...groupDraft, media: e.target.value })}
+          onChange={(url) => setGroupDraft({ ...groupDraft, media: url })}
         />
       ) : (
         <input

@@ -636,7 +636,7 @@ export function useReviewSession(active) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [active, current?.items, current?.type_q, showAnswer, handleTextAnswer]);
+  }, [active, current, showAnswer, handleTextAnswer]);
 
   return {
     bonusReviewActive,

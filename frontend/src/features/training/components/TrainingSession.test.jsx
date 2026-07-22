@@ -377,7 +377,7 @@ describe("TrainingSession", () => {
       imageMode: "type_prompt"
     });
     expect(shell).toHaveStyle({
-      height: "calc(100dvh - 48px)",
+      height: "100%",
       overflow: "hidden"
     });
     expect(bar).toHaveStyle({

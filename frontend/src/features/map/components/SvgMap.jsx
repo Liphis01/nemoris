@@ -172,8 +172,8 @@ export default function SvgMap({
         setTooltip(null);
         setHoveredCode(null);
 
-        // Vite serves map SVGs from public/maps. After loading, discover every
-        // data-code zone so editors can know which SVG regions are assignable.
+        // After loading, discover every data-code zone so editors can know
+        // which SVG regions are assignable.
         fetch(svgPath)
             .then((res) => res.text())
             .then((svg) => {

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SvgMap from "../../map/components/SvgMap";
+import { resolveMediaUrl } from "../../../shared/media";
 import { fadeInStyle } from "../../../shared/styles";
 import { centerListItem } from "../../../shared/scroll";
 import { useFlip } from "../../../shared/useFlip";
@@ -751,15 +752,16 @@ export default function MapReview({
         style={{
           background: "#1a1a1a",
           border: "1px solid #2a2a2a",
-            borderRadius: "18px",
-            display: "flex",
-            flexDirection: "column",
-            height: fillAvailableHeight ? "100%" : undefined,
-            minHeight: fillAvailableHeight ? 0 : undefined,
-            overflow: "hidden",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-            ...fadeInStyle
-          }}
+          borderRadius: "18px",
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          height: fillAvailableHeight ? "100%" : undefined,
+          minHeight: fillAvailableHeight ? 0 : undefined,
+          overflow: "hidden",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+          ...fadeInStyle
+        }}
       >
 
         {/* HEADER */}
@@ -967,7 +969,7 @@ export default function MapReview({
             }}
           >
             <SvgMap
-              svgPath={`/maps/${group.media}`}
+              svgPath={resolveMediaUrl(group.media)}
               found={foundCodes}
               missed={activeMissedCodes}
               dueItems={dueCodes}
@@ -1301,7 +1303,7 @@ export default function MapReview({
             <div className="map-recap-content">
               <div style={recapMapPanelStyle}>
                 <SvgMap
-                  svgPath={`/maps/${group.media}`}
+                  svgPath={resolveMediaUrl(group.media)}
                   found={foundCodes}
                   missed={missedCodes}
                   dueItems={[]}

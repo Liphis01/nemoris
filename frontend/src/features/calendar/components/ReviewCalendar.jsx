@@ -23,11 +23,6 @@ const detailDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric"
 });
 
-const shortDateFormatter = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short"
-});
-
 const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
   month: "short",
@@ -1016,6 +1011,7 @@ export default function ReviewCalendar({
     () => buildCalendarDays(visibleMonth),
     [visibleMonth]
   );
+  const monthWeekCount = Math.max(1, Math.ceil(monthDays.length / 7));
 
   const selectedDate = parseDateKey(selectedDateKey) || today;
   const selectedEvents = eventsByDate[selectedDateKey] || [];
@@ -1032,18 +1028,12 @@ export default function ReviewCalendar({
   const activeGroupTags = activeGroupRow?.tags || activeGroupRow?.group?.tags || [];
   const selectedHistoryCount = selectedHistoryEvents.length;
   const selectedScheduledCount = selectedScheduledEvents.length;
-  const overdueCount = scheduledEvents.filter(
-    (event) => event.dateKey < todayKey
-  ).length;
   const todayCount = (eventsByDate[todayKey] || []).filter(
     (event) => event.kind === "scheduled"
   ).length;
   const upcomingCount = scheduledEvents.filter(
     (event) => event.dateKey > todayKey
   ).length;
-  const nextScheduledEvent = scheduledEvents.find(
-    (event) => event.dateKey >= todayKey
-  );
   const calendarLegendTypes = useMemo(() => {
     const types = new Set(calendarTypeOrder);
 
@@ -1215,11 +1205,13 @@ export default function ReviewCalendar({
   return (
     <div
       style={{
-        minHeight: "calc(100vh - var(--shell-top, 0px))",
         background: "#111",
+        boxSizing: "border-box",
         color: "#eee",
-        padding: "30px 24px 70px",
-        boxSizing: "border-box"
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+        width: "100%"
       }}
     >
       <div
@@ -1228,7 +1220,9 @@ export default function ReviewCalendar({
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
-          gap: "22px"
+          gap: "12px",
+          height: "100%",
+          minHeight: 0
         }}
       >
         <div
@@ -1236,7 +1230,8 @@ export default function ReviewCalendar({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
-            gap: "20px"
+            flexShrink: 0,
+            gap: "16px"
           }}
         >
           <div>
@@ -1246,7 +1241,7 @@ export default function ReviewCalendar({
                 fontSize: "12px",
                 letterSpacing: "0.08em",
                 fontWeight: "700",
-                marginBottom: "8px"
+                marginBottom: "5px"
               }}
             >
               REVIEW CALENDAR
@@ -1255,9 +1250,9 @@ export default function ReviewCalendar({
             <h1
               style={{
                 margin: 0,
-                fontSize: "38px",
+                fontSize: "30px",
                 lineHeight: 1,
-                marginBottom: "12px",
+                marginBottom: 0,
                 color: "#eee",
                 fontWeight: "800"
               }}
@@ -1272,10 +1267,10 @@ export default function ReviewCalendar({
               background: "#1a1a1a",
               border: "1px solid #2a2a2a",
               color: "#bbb",
-              padding: "10px 14px",
+              padding: "8px 12px",
               borderRadius: "10px",
               cursor: "pointer",
-              fontSize: "14px"
+              fontSize: "13px"
             }}
           />
         </div>
@@ -1283,12 +1278,12 @@ export default function ReviewCalendar({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: "12px"
+            flexShrink: 0,
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: "10px"
           }}
         >
           {[
-            ["En retard", overdueCount, "#ff9c9c", "#3a1d1d"],
             ["Nouvelles", newQuestions.length, "#b69cff", "#1d1827"],
             ["Aujourd'hui", todayCount, "#ffcc7a", "#3d2b14"],
             ["À venir", upcomingCount, "#7ee2a8", "#163524"]
@@ -1298,8 +1293,8 @@ export default function ReviewCalendar({
               style={{
                 background,
                 border: `1px solid ${color}33`,
-                borderRadius: "14px",
-                padding: "14px 16px",
+                borderRadius: "10px",
+                padding: "8px 12px",
                 textAlign: "left"
               }}
             >
@@ -1309,7 +1304,7 @@ export default function ReviewCalendar({
                   fontSize: "11px",
                   fontWeight: "800",
                   letterSpacing: "0.06em",
-                  marginBottom: "6px",
+                  marginBottom: "4px",
                   textTransform: "uppercase"
                 }}
               >
@@ -1318,7 +1313,7 @@ export default function ReviewCalendar({
               <div
                 style={{
                   color: "#eee",
-                  fontSize: "24px",
+                  fontSize: "20px",
                   fontWeight: "800",
                   lineHeight: 1
                 }}
@@ -1336,7 +1331,9 @@ export default function ReviewCalendar({
               ? "minmax(0, 1fr) minmax(520px, 0.72fr)"
               : "minmax(0, 1fr) 420px",
             gap: "18px",
-            alignItems: "start"
+            alignItems: "stretch",
+            flex: "1 1 auto",
+            minHeight: 0
           }}
         >
           <div
@@ -1345,12 +1342,18 @@ export default function ReviewCalendar({
               background: "#181818",
               border: "1px solid #262626",
               borderRadius: "16px",
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              minHeight: 0,
               overflow: "hidden"
             }}
           >
             <div
               style={{
-                padding: "16px",
+                flexShrink: 0,
+                padding: "10px 12px",
                 borderBottom: "1px solid #262626",
                 display: "flex",
                 justifyContent: "space-between",
@@ -1398,6 +1401,7 @@ export default function ReviewCalendar({
             <div
               style={{
                 display: "grid",
+                flexShrink: 0,
                 gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
                 borderBottom: "1px solid #262626"
               }}
@@ -1406,7 +1410,7 @@ export default function ReviewCalendar({
                 <div
                   key={weekdayFormatter.format(date)}
                   style={{
-                    padding: "10px 12px",
+                    padding: "7px 10px",
                     color: "#777",
                     fontSize: "11px",
                     fontWeight: "800",
@@ -1423,7 +1427,11 @@ export default function ReviewCalendar({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(7, minmax(0, 1fr))"
+                flex: "1 1 auto",
+                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                gridTemplateRows: `repeat(${monthWeekCount}, minmax(0, 1fr))`,
+                minHeight: 0,
+                overflow: "hidden"
               }}
             >
               {monthDays.map((date) => {
@@ -1516,8 +1524,13 @@ export default function ReviewCalendar({
                     title={cellTitle || undefined}
                     aria-label={`${date.getDate()} ${monthFormatter.format(date)}${cellAriaDetails ? `. ${cellAriaDetails}` : ""}`}
                     style={{
-                      minHeight: "96px",
-                      padding: "10px",
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      height: "100%",
+                      minHeight: 0,
+                      overflow: "hidden",
+                      padding: "7px",
                       border: "none",
                       borderRight: "1px solid #242424",
                       borderBottom: "1px solid #242424",
@@ -1539,7 +1552,7 @@ export default function ReviewCalendar({
                         justifyContent: "space-between",
                         alignItems: "center",
                         gap: "6px",
-                        marginBottom: "10px"
+                        marginBottom: "6px"
                       }}
                     >
                       <span
@@ -1588,7 +1601,7 @@ export default function ReviewCalendar({
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: "5px"
+                        gap: "3px"
                       }}
                     >
                       {visibleTypeSummaries.map(({ type, count, ratio }) => {
@@ -1600,7 +1613,7 @@ export default function ReviewCalendar({
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: "5px",
+                              gap: "4px",
                               opacity: isCurrentMonth ? 1 : 0.42
                             }}
                           >
@@ -1695,9 +1708,10 @@ export default function ReviewCalendar({
               style={{
                 borderTop: "1px solid #262626",
                 display: "flex",
+                flexShrink: 0,
                 flexWrap: "wrap",
                 gap: "10px 14px",
-                padding: "10px 12px"
+                padding: "7px 10px"
               }}
             >
               {calendarLegendTypes.map((type) => {
@@ -2006,19 +2020,6 @@ export default function ReviewCalendar({
             )}
           </div>
         </div>
-
-        {nextScheduledEvent && (
-          <div
-            style={{
-              color: "#666",
-              fontSize: "12px",
-              textAlign: "left"
-            }}
-          >
-            Prochaine échéance :{" "}
-            {shortDateFormatter.format(parseDateKey(nextScheduledEvent.dateKey))}
-          </div>
-        )}
       </div>
     </div>
   );

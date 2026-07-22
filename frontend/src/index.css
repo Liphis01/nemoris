@@ -64,6 +64,7 @@ body,
   min-height: calc(100vh - var(--shell-top, 0px));
   min-height: calc(100svh - var(--shell-top, 0px));
   height: 100%;
+  overflow: hidden;
 }
 
 body {

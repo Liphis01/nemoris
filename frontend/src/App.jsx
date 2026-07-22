@@ -6,10 +6,14 @@ import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import Stats from "./features/stats/components/Stats";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
+import BrowsePacks from "./features/packs/components/BrowsePacks";
 import DesktopTitleBar from "./shared/DesktopTitleBar";
+import UpdateBanner from "./features/update/UpdateBanner";
+import AutoSyncBanner from "./features/sync/AutoSyncBanner";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
 import { useManageLibrary } from "./features/manage/hooks/useManageLibrary";
 import { useReviewSession } from "./features/review/hooks/useReviewSession";
+import { useAutoSync } from "./features/sync/useAutoSync";
 
 
 function startupNoticeStorageKey(notice) {
@@ -22,6 +26,7 @@ function App() {
   // internal state through hooks, while App only coordinates cross-feature jumps.
   const [mode, setMode] = useState("menu");
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
+  const [manageOpenGroupId, setManageOpenGroupId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
   const [startupNotice, setStartupNotice] = useState(null);
   const [reviewSummary, setReviewSummary] = useState(null);
@@ -29,26 +34,32 @@ function App() {
   const [reviewSummaryError, setReviewSummaryError] = useState("");
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
+  const autoSync = useAutoSync();
 
   const appStyle = {
     background: "#121212",
     color: "#e5e5e5",
-    minHeight: "100%",
+    minHeight: 0,
     height: "100%",
     padding: "24px",
     fontFamily: "Arial, sans-serif",
     display: "flex",
     flexDirection: "column",
-    overflow: "auto",
+    overflow: "hidden",
     boxSizing: "border-box"
   };
 
+  const routeSlotStyle = {
+    display: "flex",
+    flex: "1 1 auto",
+    minHeight: 0,
+    overflow: "hidden",
+    width: "100%"
+  };
+
   useEffect(() => {
-    // Manage is a fixed three-panel workspace, so the body scroll is disabled
-    // there and restored for review/menu/calendar screens.
-    document.body.style.overflow =
-      mode === "manage" ? "hidden" : "auto";
-  }, [mode]);
+    document.body.style.overflow = "hidden";
+  }, []);
 
   useEffect(() => {
     getStartupRebalanceNotice()
@@ -123,7 +134,21 @@ function App() {
     manageLibrary.setIsCreatingQuestion(false);
     manageLibrary.setIsCreatingGroup(false);
     manageLibrary.setSelectedItem(null);
+    setManageOpenGroupId(null);
     setManageOpenQuestionId(questionId);
+    setMode("manage");
+  }
+
+  function openGroupIdInManage(groupId) {
+    // Packs -> Manage navigation lands on the local group row and opens the
+    // normal right-hand group preview/editor once Manage has loaded groups.
+    manageLibrary.resetManageFilters();
+    manageLibrary.setViewMode("groups");
+    manageLibrary.setIsCreatingQuestion(false);
+    manageLibrary.setIsCreatingGroup(false);
+    manageLibrary.setSelectedItem(null);
+    setManageOpenQuestionId(null);
+    setManageOpenGroupId(groupId);
     setMode("manage");
   }
 
@@ -135,60 +160,73 @@ function App() {
   }
 
   return (
-    <div className="app-scrollbar" style={appStyle}>
+    <div style={appStyle}>
       <DesktopTitleBar />
-      {mode === "menu" && (
-        <Menu
-          setMode={setMode}
-          startupNotice={startupNotice}
-          onDismissStartupNotice={dismissStartupNotice}
-          reviewSummary={reviewSummary}
-          reviewSummaryLoading={reviewSummaryLoading}
-          reviewSummaryError={reviewSummaryError}
-        />
-      )}
+      <UpdateBanner />
+      <AutoSyncBanner {...autoSync} />
+      <div style={routeSlotStyle}>
+        {mode === "menu" && (
+          <Menu
+            setMode={setMode}
+            startupNotice={startupNotice}
+            onDismissStartupNotice={dismissStartupNotice}
+            reviewSummary={reviewSummary}
+            reviewSummaryLoading={reviewSummaryLoading}
+            reviewSummaryError={reviewSummaryError}
+          />
+        )}
 
-      {mode === "quiz" && (
-        <ReviewSession
-          setMode={setMode}
-          {...reviewSession}
-        />
-      )}
+        {mode === "quiz" && (
+          <ReviewSession
+            setMode={setMode}
+            {...reviewSession}
+          />
+        )}
 
-      {mode === "training" && (
-        <TrainingSession setMode={setMode} />
-      )}
+        {mode === "training" && (
+          <TrainingSession setMode={setMode} />
+        )}
 
-      {mode === "manage" && (
-        <Manage
-          setMode={setMode}
-          {...manageLibrary}
-          openQuestionId={manageOpenQuestionId}
-          clearOpenQuestionId={() => setManageOpenQuestionId(null)}
-          onOpenInCalendar={openQuestionInCalendar}
-        />
-      )}
+        {mode === "manage" && (
+          <Manage
+            setMode={setMode}
+            {...manageLibrary}
+            openQuestionId={manageOpenQuestionId}
+            clearOpenQuestionId={() => setManageOpenQuestionId(null)}
+            openGroupId={manageOpenGroupId}
+            clearOpenGroupId={() => setManageOpenGroupId(null)}
+            onOpenInCalendar={openQuestionInCalendar}
+          />
+        )}
 
-      {mode === "calendar" && (
-        <ReviewCalendar
-          setMode={setMode}
-          questions={manageLibrary.allQuestions}
-          onOpenQuestion={openQuestionInManage}
-          openQuestionId={calendarOpenQuestionId}
-          clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
-        />
-      )}
+        {mode === "calendar" && (
+          <ReviewCalendar
+            setMode={setMode}
+            questions={manageLibrary.allQuestions}
+            onOpenQuestion={openQuestionInManage}
+            openQuestionId={calendarOpenQuestionId}
+            clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
+          />
+        )}
 
-      {mode === "stats" && (
-        <Stats
-          setMode={setMode}
-          onOpenQuestion={openQuestionIdInManage}
-        />
-      )}
+        {mode === "stats" && (
+          <Stats
+            setMode={setMode}
+            onOpenQuestion={openQuestionIdInManage}
+          />
+        )}
 
-      {mode === "settings" && (
-        <Settings setMode={setMode} />
-      )}
+        {mode === "settings" && (
+          <Settings setMode={setMode} />
+        )}
+
+        {mode === "packs" && (
+          <BrowsePacks
+            setMode={setMode}
+            onOpenGroup={openGroupIdInManage}
+          />
+        )}
+      </div>
     </div>
   );
 }

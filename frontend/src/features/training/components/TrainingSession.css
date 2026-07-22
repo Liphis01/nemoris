@@ -6,16 +6,22 @@
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
   box-sizing: border-box;
   color: #eeeeee;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
   text-align: left;
 }
 
 .training-selector-header {
   align-items: flex-start;
   display: flex;
+  flex: 0 0 auto;
   gap: 16px;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .training-selector-title {
@@ -35,11 +41,11 @@
 
 .training-selector-title h1 {
   color: #f4f4f4;
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
-  margin: 7px 0 0;
+  margin: 5px 0 0;
 }
 
 .training-selector-back,
@@ -88,9 +94,10 @@
 .training-selector-controls {
   align-items: center;
   display: grid;
+  flex: 0 0 auto;
   gap: 12px;
   grid-template-columns: auto auto minmax(0, 1fr);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .training-segmented {
@@ -138,10 +145,12 @@
 }
 
 .training-selector-body {
-  align-items: start;
+  align-items: stretch;
   display: grid;
+  flex: 1 1 auto;
   column-gap: 26px;
   grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: 0;
   min-width: 0;
   row-gap: 14px;
 }
@@ -162,13 +171,24 @@
 }
 
 .training-list-column {
+  min-height: 0;
   min-width: 0;
+  overflow: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.training-list-column-full {
+  padding-right: 0;
 }
 
 .training-detail-column {
   border-left: 1px solid #343434;
+  min-height: 0;
   min-width: 0;
+  overflow: auto;
   padding-left: 22px;
+  scrollbar-gutter: stable;
 }
 
 .training-scope-tile {
@@ -181,9 +201,9 @@
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 92px;
+  min-height: 78px;
   overflow: hidden;
-  padding: 12px;
+  padding: 10px 12px;
   text-align: left;
   transition:
     background-color 0.15s ease,
@@ -194,7 +214,7 @@
 }
 
 .training-scope-tile-collection {
-  min-height: 92px;
+  min-height: 78px;
 }
 
 .training-scope-tile:hover {
@@ -660,9 +680,12 @@
   background: #111111;
   box-sizing: border-box;
   color: #eeeeee;
-  min-height: calc(100dvh - 48px);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: 18px;
   text-align: left;
+  width: 100%;
 }
 
 .training-composer-shell {
@@ -671,7 +694,8 @@
   gap: 14px;
   margin: 0 auto;
   max-width: 1580px;
-  min-height: calc(100dvh - 84px);
+  height: 100%;
+  min-height: 0;
 }
 
 .training-composer-savebar {
@@ -763,7 +787,6 @@
   align-content: start;
   display: grid;
   gap: 14px;
-  max-height: calc(100dvh - 170px);
   overflow: auto;
   padding: 14px;
   scrollbar-gutter: stable;
@@ -804,7 +827,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: calc(100dvh - 170px);
   overflow: auto;
   padding: 14px;
   scrollbar-gutter: stable;

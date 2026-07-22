@@ -189,6 +189,23 @@ class MediaUrlImport(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
 
 
+class PackExportRequest(BaseModel):
+    version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    license: str = Field(default="", max_length=200)
+
+
+class PackPublishDraftRequest(PackExportRequest):
+    tags: List[str] = Field(default_factory=list, max_length=20)
+    themes: List[str] = Field(default_factory=list, max_length=12)
+
+
+class PackCatalogSettings(BaseModel):
+    url: str = Field(default="", max_length=2048)
+    key: str = Field(default="", max_length=4096)
+
+
 AnswerQuality = Annotated[int, Field(ge=0, le=3)]
 
 
@@ -212,6 +229,10 @@ class ReviewSettings(BaseModel):
         ge=1,
         le=10000
     )
+
+
+class SyncPreferences(BaseModel):
+    auto_sync_enabled: bool = False
 
 
 class MapAnswerRequest(BaseModel):

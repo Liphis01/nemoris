@@ -1,3 +1,4 @@
+import hashlib
 from ipaddress import ip_address
 from pathlib import Path, PurePosixPath
 from socket import gaierror, getaddrinfo, timeout as SocketTimeout
@@ -11,7 +12,8 @@ from fastapi import HTTPException
 from sqlalchemy import or_
 
 from ..config import STATIC_DIR
-from ..models import Question, QuestionGroup
+from ..models import MediaFile, Question, QuestionGroup
+from .tombstones import record_tombstone
 
 
 IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
@@ -309,7 +311,8 @@ def store_media_bytes(
     filename: str = "",
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
-    allow_audio_video: bool = False
+    allow_audio_video: bool = False,
+    db=None
 ):
     media_kind = detect_media_kind(data, allow_audio_video=allow_audio_video)
 
@@ -329,8 +332,26 @@ def store_media_bytes(
         raise HTTPException(status_code=400, detail="Invalid upload folder")
 
     target_dir = root_dir / relative_subdir if relative_subdir else root_dir
-    target_dir.mkdir(parents=True, exist_ok=True)
     extension = safe_media_extension(filename, media_kind)
+    digest = hashlib.sha256(data).hexdigest()
+
+    # Content dedup: identical bytes already registered means the upload can
+    # reuse the existing file instead of storing a copy (sync-roadmap 0.5).
+    if db is not None:
+        existing = (
+            db.query(MediaFile)
+            .filter(MediaFile.sha256 == digest)
+            .first()
+        )
+
+        if existing and (root_dir / existing.path).exists():
+            return {
+                "url": f"{STATIC_URL_PREFIX}{existing.path}",
+                "sha256": digest,
+                "deduplicated": True
+            }
+
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     while True:
         stored_filename = f"{uuid4().hex}{extension}"
@@ -346,7 +367,15 @@ def store_media_bytes(
         else stored_filename
     )
 
-    return {"url": f"{STATIC_URL_PREFIX}{relative_url_path}"}
+    if db is not None:
+        db.add(MediaFile(
+            path=relative_url_path,
+            sha256=digest,
+            byte_size=len(data)
+        ))
+        db.commit()
+
+    return {"url": f"{STATIC_URL_PREFIX}{relative_url_path}", "sha256": digest}
 
 
 def store_uploaded_image(
@@ -354,7 +383,8 @@ def store_uploaded_image(
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
     max_bytes=IMAGE_UPLOAD_MAX_BYTES,
-    allow_audio_video: bool = False
+    allow_audio_video: bool = False,
+    db=None
 ):
     content_type = (getattr(upload_file, "content_type", "") or "").lower()
     allowed_prefixes = (
@@ -376,7 +406,8 @@ def store_uploaded_image(
         filename=upload_file.filename,
         static_dir=static_dir,
         storage_subdir=storage_subdir,
-        allow_audio_video=allow_audio_video
+        allow_audio_video=allow_audio_video,
+        db=db
     )
 
 
@@ -413,7 +444,8 @@ def store_remote_image(
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
     max_bytes=IMAGE_UPLOAD_MAX_BYTES,
-    allow_audio_video: bool = False
+    allow_audio_video: bool = False,
+    db=None
 ):
     src = str(url or "").strip()
     parsed = urlparse(src)
@@ -471,7 +503,8 @@ def store_remote_image(
         filename=filename_from_url(src),
         static_dir=static_dir,
         storage_subdir=storage_subdir,
-        allow_audio_video=allow_audio_video
+        allow_audio_video=allow_audio_video,
+        db=db
     )
 
 
@@ -580,9 +613,42 @@ def delete_unreferenced_media_file(db, media, static_dir: Path | None = None):
     if file_path and file_path.exists():
         file_path.unlink()
         prune_empty_static_parents(file_path, target_dir.resolve())
+        _unregister_media_file(db, relative_path)
         return True
 
     return False
+
+
+def get_media_file_by_path(db, relative_path):
+    if not relative_path:
+        return None
+
+    return (
+        db.query(MediaFile)
+        .filter(MediaFile.path == relative_path)
+        .first()
+    )
+
+
+def _unregister_media_file(db, relative_path):
+    # Keep the registry in step with the disk and leave a media tombstone so
+    # sync can propagate the deletion (the guid of a media file is its hash).
+    row = get_media_file_by_path(db, relative_path)
+
+    if row is None:
+        return
+
+    still_referenced = (
+        db.query(MediaFile)
+        .filter(MediaFile.sha256 == row.sha256, MediaFile.id != row.id)
+        .count()
+    )
+
+    if not still_referenced:
+        record_tombstone(db, "media", row.sha256)
+
+    db.delete(row)
+    db.commit()
 
 
 def delete_unreferenced_media_files(db, media_values, static_dir: Path | None = None):

@@ -20,6 +20,10 @@ backend/webview-data/
 *.db-wal
 backend/backups/
 backend/static/
+backend/blueprints/
+backend/packs/*.zip
+backend/sync_state.json
+sync_server/data/
 
 # Env
 .env
@@ -34,3 +38,4 @@ backend/static/
 graphify-out/
 /CLAUDE.md
 .claude/settings.json
+publish/

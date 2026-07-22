@@ -1,0 +1,1275 @@
+import json
+from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, quote, urlparse
+from urllib.request import Request, urlopen
+
+from sqlalchemy.orm import joinedload
+
+from ..models import PackSubscription, QuestionGroup
+from .map_zones import merge_tags
+from .pack_publish_state import (
+    is_pack_publisher_signed_in,
+    load_pack_publish_state,
+    save_pack_publish_state
+)
+from .packs import export_pack
+from .settings import get_pack_catalog_settings
+from .sync_state import (
+    is_signed_in as is_sync_signed_in,
+    load_sync_state,
+    save_sync_state
+)
+
+
+CATALOG_BUCKET = "pack-zips"
+POPULAR_THEME = "__popular__"
+VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
+VALID_STATUSES = {
+    "all",
+    "not_installed",
+    "update_available",
+    "up_to_date",
+    "local_copy"
+}
+MAX_LIMIT = 60
+HEALTH_SAMPLE_LIMIT = 3
+PUBLISH_TIMEOUT = 12
+PUBLISH_TRANSFER_TIMEOUT = 60
+
+
+class PackCatalogError(ValueError):
+    pass
+
+
+class PackCatalogAuthError(PackCatalogError):
+    pass
+
+
+def normalize_supabase_url(url):
+    base = str(url or "").strip().rstrip("/")
+
+    for suffix in ("/rest/v1", "/auth/v1", "/storage/v1"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+
+    return base.rstrip("/")
+
+
+def _catalog_check(id, label, status, detail):
+    return {
+        "id": id,
+        "label": label,
+        "status": status,
+        "detail": detail
+    }
+
+
+def _catalog_status(checks):
+    statuses = {check.get("status") for check in checks}
+
+    if "error" in statuses:
+        return "error"
+
+    if "warning" in statuses:
+        return "warning"
+
+    return "ok"
+
+
+def _key_type(key):
+    value = str(key or "").strip()
+
+    if value.startswith("sb_publishable_"):
+        return "publishable"
+
+    if value.startswith("sb_secret_"):
+        return "secret"
+
+    if value.startswith("eyJ"):
+        return "legacy_jwt"
+
+    return "unknown" if value else "missing"
+
+
+def _url_problem(raw_url, project_url):
+    raw = str(raw_url or "").strip()
+
+    if not raw:
+        return "missing", "URL du projet Supabase manquante."
+
+    parsed = urlparse(project_url)
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "invalid", "URL Supabase invalide."
+
+    if "/storage/v1/object/" in raw or raw.endswith(".json"):
+        return (
+            "storage_object",
+            "Utilise l'URL du projet, pas une URL de fichier Storage."
+        )
+
+    return None, ""
+
+
+def _message_from_body(body):
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+    if isinstance(payload, dict):
+        return (
+            payload.get("message")
+            or payload.get("msg")
+            or payload.get("error_description")
+            or payload.get("error")
+        )
+
+    return None
+
+
+def _supabase_headers(key):
+    headers = {
+        "apikey": key,
+        "Content-Type": "application/json"
+    }
+
+    # New Supabase publishable keys are not JWTs. Sending them as a bearer
+    # token makes PostgREST try to parse them as JWTs and reject the request.
+    if str(key or "").startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+
+    return headers
+
+
+def _post_json(url, key, payload):
+    request = Request(
+        f"{url}/rest/v1/rpc/search_pack_catalog",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=_supabase_headers(key),
+        method="POST"
+    )
+
+    try:
+        with urlopen(request, timeout=12) as response:
+            body = response.read()
+    except HTTPError as error:
+        body = error.read()
+        raise PackCatalogError(
+            _message_from_body(body)
+            or f"Catalogue Supabase impossible à charger ({error.code})."
+        ) from error
+    except (TimeoutError, URLError, ValueError) as error:
+        raise PackCatalogError(
+            "Catalogue Supabase inaccessible."
+        ) from error
+
+    if not body:
+        return {}
+
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as error:
+        raise PackCatalogError(
+            "Réponse Supabase invalide."
+        ) from error
+
+
+def _probe_download_url(url):
+    if not url:
+        return "error", "URL ZIP absente."
+
+    request = Request(url, method="HEAD")
+
+    try:
+        with urlopen(request, timeout=8) as response:
+            return "ok", f"ZIP accessible ({response.status})."
+    except HTTPError as error:
+        # Some object hosts do not support HEAD. Confirm with a one-byte GET
+        # before reporting a broken ZIP.
+        if error.code in {400, 403, 405}:
+            range_request = Request(
+                url,
+                headers={"Range": "bytes=0-0"},
+                method="GET"
+            )
+
+            try:
+                with urlopen(range_request, timeout=8) as response:
+                    return "ok", f"ZIP accessible ({response.status})."
+            except HTTPError as range_error:
+                return "error", f"ZIP inaccessible ({range_error.code})."
+            except (TimeoutError, URLError, ValueError) as range_error:
+                return "error", f"ZIP inaccessible ({range_error})."
+
+        return "error", f"ZIP inaccessible ({error.code})."
+    except (TimeoutError, URLError, ValueError) as error:
+        return "error", f"ZIP inaccessible ({error})."
+
+
+def _installed_versions(db):
+    subscriptions = db.query(PackSubscription).all()
+    return {
+        subscription.pack_guid: subscription.installed_version
+        for subscription in subscriptions
+    }
+
+
+def _int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _local_pack_state(db):
+    subscriptions = {
+        subscription.pack_guid: {
+            "installed_version": subscription.installed_version,
+            "name": subscription.name
+        }
+        for subscription in db.query(PackSubscription).all()
+    }
+    groups = {}
+
+    for group_id, guid, pack_guid, pack_version, name in (
+        db.query(
+            QuestionGroup.id,
+            QuestionGroup.guid,
+            QuestionGroup.pack_guid,
+            QuestionGroup.pack_version,
+            QuestionGroup.name
+        )
+        .all()
+    ):
+        groups[guid] = {
+            "id": group_id,
+            "pack_guid": pack_guid,
+            "pack_version": pack_version,
+            "name": name
+        }
+
+    return subscriptions, groups
+
+
+def _annotate_local_pack_status(db, packs):
+    subscriptions, groups = _local_pack_state(db)
+
+    for entry in packs:
+        pack_guid = entry.get("pack_guid")
+        subscription = subscriptions.get(pack_guid)
+        group = groups.get(pack_guid)
+        catalog_version = _int_or_none(entry.get("version"))
+        installed_version = (
+            _int_or_none(subscription.get("installed_version"))
+            if subscription else None
+        )
+        local_pack_version = (
+            _int_or_none(group.get("pack_version"))
+            if group else None
+        )
+        status = "not_installed"
+
+        if subscription:
+            status = (
+                "update_available"
+                if (
+                    installed_version is not None
+                    and catalog_version is not None
+                    and installed_version < catalog_version
+                )
+                else "up_to_date"
+            )
+        elif group:
+            status = "local_copy"
+
+        is_mine = bool(entry.get("is_mine")) or bool(
+            group and not group.get("pack_guid")
+        )
+        entry["is_mine"] = is_mine
+        entry["local_status"] = {
+            "status": status,
+            "is_mine": is_mine,
+            "has_local_content": bool(subscription or group),
+            "installed_version": installed_version,
+            "local_pack_version": local_pack_version,
+            "local_group_id": group.get("id") if group else None,
+            "local_group_name": group.get("name") if group else None
+        }
+
+
+def _clamp_limit(limit):
+    try:
+        parsed = int(limit)
+    except (TypeError, ValueError):
+        parsed = 24
+
+    return max(1, min(parsed, MAX_LIMIT))
+
+
+def _cursor_offset(cursor):
+    if cursor in (None, ""):
+        return 0
+
+    try:
+        return max(0, int(cursor))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _public_storage_url(project_url, storage_path):
+    path = str(storage_path or "").strip().lstrip("/")
+
+    if not path:
+        return ""
+
+    return (
+        f"{project_url}/storage/v1/object/public/"
+        f"{CATALOG_BUCKET}/{quote(path, safe='/')}"
+    )
+
+
+def _normalize_pack(row, project_url):
+    if not isinstance(row, dict):
+        return None
+
+    entry = {
+        "pack_guid": str(row.get("pack_guid") or row.get("blueprint_guid") or ""),
+        "name": str(row.get("name") or "Pack sans titre"),
+        "description": str(row.get("description") or ""),
+        "type_group": str(row.get("type_group") or "text"),
+        "question_count": row.get("question_count"),
+        "version": row.get("version") or 1,
+        "size_bytes": row.get("size_bytes"),
+        "license": str(row.get("license") or ""),
+        "tags": row.get("tags") if isinstance(row.get("tags"), list) else [],
+        "themes": row.get("themes") if isinstance(row.get("themes"), list) else [],
+        "download_count": row.get("download_count"),
+        "featured": bool(row.get("featured")),
+        "is_mine": bool(row.get("is_mine")),
+        "published_at": row.get("published_at"),
+        "updated_at": row.get("updated_at")
+    }
+    entry["download_url"] = (
+        str(row.get("download_url") or "").strip()
+        or _public_storage_url(project_url, row.get("storage_path"))
+    )
+
+    if not entry["pack_guid"]:
+        return None
+
+    return entry
+
+
+def _theme_label(value):
+    return str(value or "").replace("-", " ").strip().capitalize()
+
+
+def _normalize_theme(raw):
+    if isinstance(raw, str):
+        value = raw.strip()
+        return {
+            "value": value,
+            "label": _theme_label(value),
+            "result_count": None,
+            "download_count": 0,
+            "featured": False,
+            "pinned": False
+        }
+
+    if not isinstance(raw, dict):
+        return None
+
+    value = str(raw.get("value") or raw.get("theme") or "").strip()
+
+    if not value:
+        return None
+
+    result_count = raw.get("result_count")
+
+    if result_count is None:
+        result_count = raw.get("count")
+
+    download_count = raw.get("download_count")
+
+    if download_count is None:
+        download_count = 0
+
+    return {
+        "value": value,
+        "label": str(raw.get("label") or _theme_label(value)),
+        "result_count": _int_or_none(result_count),
+        "download_count": _int_or_none(download_count) or 0,
+        "featured": bool(raw.get("featured")),
+        "pinned": bool(raw.get("pinned"))
+    }
+
+
+def _theme_score(theme):
+    return (
+        int(theme.get("download_count") or 0),
+        int(theme.get("result_count") or 0),
+        1 if theme.get("pinned") else 0,
+        1 if theme.get("featured") else 0
+    )
+
+
+def _ordered_themes(themes, total, global_total=None):
+    normalized = []
+    seen = set()
+    popular_count = _int_or_none(global_total)
+
+    if popular_count is None:
+        popular_count = _int_or_none(total)
+
+    if popular_count is None:
+        popular_count = 0
+
+    for raw in themes:
+        theme = _normalize_theme(raw)
+
+        if not theme or theme["value"] in seen:
+            continue
+
+        seen.add(theme["value"])
+        normalized.append(theme)
+
+    normalized.sort(
+        key=lambda theme: (
+            -_theme_score(theme)[0],
+            -_theme_score(theme)[1],
+            -_theme_score(theme)[2],
+            -_theme_score(theme)[3],
+            theme["label"].casefold()
+        )
+    )
+
+    if popular_count or normalized:
+        return [
+            {
+                "value": POPULAR_THEME,
+                "label": "Populaires",
+                "result_count": popular_count,
+                "download_count": None,
+                "featured": True,
+                "pinned": True
+            },
+            *normalized
+        ]
+
+    return normalized
+
+
+def _normalize_response(payload, project_url):
+    if isinstance(payload, list):
+        payload = payload[0] if payload else {}
+
+    if not isinstance(payload, dict):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    rows = payload.get("packs")
+    if rows is None:
+        rows = payload.get("blueprints")
+    if rows is None and isinstance(payload.get("data"), list):
+        rows = payload["data"]
+
+    packs = [
+        entry
+        for entry in (
+            _normalize_pack(row, project_url)
+            for row in (rows if isinstance(rows, list) else [])
+        )
+        if entry
+    ]
+    facets = payload.get("facets") if isinstance(payload.get("facets"), dict) else {}
+    total = _int_or_none(payload.get("total"))
+
+    if total is None:
+        total = len(packs)
+
+    global_total = facets.get("global_total")
+
+    if global_total is None:
+        global_total = payload.get("global_total")
+
+    global_total = _int_or_none(global_total)
+
+    if global_total is None:
+        global_total = total
+
+    return {
+        "packs": packs,
+        "facets": {
+            "themes": _ordered_themes(
+                facets.get("themes") or [],
+                total,
+                global_total=global_total
+            ),
+            "global_total": global_total
+        },
+        "total": total,
+        "next_cursor": (
+            str(payload.get("next_cursor"))
+            if payload.get("next_cursor") not in (None, "")
+            else None
+        )
+    }
+
+
+def search_pack_catalog(
+    db,
+    *,
+    query="",
+    theme="",
+    type_group="",
+    status="all",
+    sort="pertinence",
+    limit=24,
+    cursor=None
+):
+    settings = get_pack_catalog_settings(db)
+    project_url = normalize_supabase_url(settings.get("url"))
+    key = str(settings.get("key") or "").strip()
+
+    if not project_url or not key:
+        raise PackCatalogError(
+            "Catalogue Supabase non configuré."
+        )
+
+    normalized_status = status if status in VALID_STATUSES else "all"
+    remote_status = (
+        "all" if normalized_status == "local_copy" else normalized_status
+    )
+    normalized_sort = sort if sort in VALID_SORTS else "pertinence"
+    normalized_theme = str(theme or "").strip()
+
+    if normalized_theme == POPULAR_THEME:
+        normalized_theme = ""
+        normalized_sort = "populaires"
+
+    payload = {
+        "p_query": str(query or "").strip(),
+        "p_theme": normalized_theme,
+        "p_type_group": str(type_group or "").strip(),
+        "p_status": remote_status,
+        "p_sort": normalized_sort,
+        "p_limit": _clamp_limit(limit),
+        "p_cursor": _cursor_offset(cursor),
+        "p_installed_versions": _installed_versions(db)
+    }
+
+    response = _post_json(project_url, key, payload)
+    result = _normalize_response(response, project_url)
+    _annotate_local_pack_status(db, result["packs"])
+
+    if normalized_status in {"local_copy", "not_installed"}:
+        result["packs"] = [
+            entry
+            for entry in result["packs"]
+            if entry.get("local_status", {}).get("status") == normalized_status
+        ]
+
+        if normalized_status == "local_copy":
+            result["total"] = len(result["packs"])
+            result["next_cursor"] = None
+
+    return result
+
+
+def check_pack_catalog_health(db):
+    settings = get_pack_catalog_settings(db)
+    raw_url = str(settings.get("url") or "").strip()
+    project_url = normalize_supabase_url(raw_url)
+    key = str(settings.get("key") or "").strip()
+    key_type = _key_type(key)
+    checks = []
+    packs = []
+    total = 0
+    next_cursor = None
+
+    problem, detail = _url_problem(raw_url, project_url)
+    if problem:
+        checks.append(_catalog_check("project_url", "URL projet", "error", detail))
+    elif ".supabase.co" not in urlparse(project_url).netloc:
+        checks.append(_catalog_check(
+            "project_url",
+            "URL projet",
+            "warning",
+            "URL valide, mais ce n'est pas un domaine Supabase standard."
+        ))
+    else:
+        checks.append(_catalog_check(
+            "project_url",
+            "URL projet",
+            "ok",
+            "URL projet Supabase valide."
+        ))
+
+    if key_type == "missing":
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "error",
+            "Clé publishable Supabase manquante."
+        ))
+    elif key_type == "secret":
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "error",
+            "Clé secrète détectée : utilise une clé publishable."
+        ))
+    elif key_type == "unknown":
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "warning",
+            "Format de clé non reconnu."
+        ))
+    else:
+        checks.append(_catalog_check(
+            "api_key",
+            "Clé publique",
+            "ok",
+            "Clé publique reconnue."
+        ))
+
+    if not any(check["status"] == "error" for check in checks):
+        payload = {
+            "p_query": "",
+            "p_theme": "",
+            "p_type_group": "",
+            "p_status": "all",
+            "p_sort": "populaires",
+            "p_limit": HEALTH_SAMPLE_LIMIT,
+            "p_cursor": 0,
+            "p_installed_versions": _installed_versions(db)
+        }
+
+        try:
+            response = _post_json(project_url, key, payload)
+            normalized = _normalize_response(response, project_url)
+            packs = normalized["packs"]
+            total = normalized["total"]
+            next_cursor = normalized["next_cursor"]
+            checks.append(_catalog_check(
+                "search_rpc",
+                "Recherche Supabase",
+                "ok",
+                "Fonction search_pack_catalog disponible."
+            ))
+        except PackCatalogError as error:
+            checks.append(_catalog_check(
+                "search_rpc",
+                "Recherche Supabase",
+                "error",
+                str(error)
+            ))
+
+    if any(check["id"] == "search_rpc" and check["status"] == "ok" for check in checks):
+        if total > 0:
+            checks.append(_catalog_check(
+                "public_rows",
+                "Packs publics",
+                "ok",
+                f"{total} pack{'s' if total != 1 else ''} public{'s' if total != 1 else ''}."
+            ))
+        else:
+            checks.append(_catalog_check(
+                "public_rows",
+                "Packs publics",
+                "warning",
+                "Aucun pack public trouvé."
+            ))
+
+    samples = []
+    if packs:
+        download_checks = []
+
+        for entry in packs[:HEALTH_SAMPLE_LIMIT]:
+            download_status, download_detail = _probe_download_url(
+                entry.get("download_url")
+            )
+            download_checks.append(download_status)
+            samples.append({
+                "pack_guid": entry.get("pack_guid"),
+                "name": entry.get("name"),
+                "download_url": entry.get("download_url"),
+                "download_status": download_status,
+                "download_detail": download_detail
+            })
+
+        if "error" in download_checks:
+            checks.append(_catalog_check(
+                "zip_files",
+                "Fichiers ZIP",
+                "error",
+                "Au moins un ZIP public est inaccessible."
+            ))
+        else:
+            checks.append(_catalog_check(
+                "zip_files",
+                "Fichiers ZIP",
+                "ok",
+                f"{len(samples)} ZIP testés."
+            ))
+
+    status = _catalog_status(checks)
+    summary_by_status = {
+        "ok": "Catalogue prêt.",
+        "warning": "Catalogue utilisable, avec points à vérifier.",
+        "error": "Catalogue bloqué."
+    }
+
+    return {
+        "status": status,
+        "summary": summary_by_status[status],
+        "configured": bool(raw_url and key),
+        "project_url": project_url,
+        "key_type": key_type,
+        "total": total,
+        "next_cursor": next_cursor,
+        "checks": checks,
+        "sample_packs": samples
+    }
+
+
+def _publish_config(db):
+    settings = get_pack_catalog_settings(db)
+    project_url = normalize_supabase_url(settings.get("url"))
+    key = str(settings.get("key") or "").strip()
+
+    if not project_url or not key:
+        raise PackCatalogError("Catalogue Supabase non configuré.")
+
+    return project_url, key
+
+
+def _supabase_request_headers(key, access_token=None, content_type=None):
+    headers = {"apikey": key}
+
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    elif str(key or "").startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    return headers
+
+
+def _supabase_request(
+    project_url,
+    key,
+    path,
+    *,
+    method="GET",
+    access_token=None,
+    payload=None,
+    body=None,
+    headers=None,
+    timeout=PUBLISH_TIMEOUT
+):
+    data = body
+    all_headers = _supabase_request_headers(
+        key,
+        access_token=access_token,
+        content_type="application/json" if payload is not None else None
+    )
+
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+
+    if headers:
+        all_headers.update(headers)
+
+    request = Request(
+        f"{project_url}{path}",
+        data=data,
+        headers=all_headers,
+        method=method
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return response.status, dict(response.headers), response.read()
+    except HTTPError as error:
+        return error.code, dict(error.headers), error.read()
+    except (TimeoutError, URLError, ValueError) as error:
+        raise PackCatalogError("Catalogue Supabase inaccessible.") from error
+
+
+def _decode_json_body(body):
+    if not body:
+        return {}
+
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as error:
+        raise PackCatalogError("Réponse Supabase invalide.") from error
+
+
+def _raise_supabase_status(status, body, fallback):
+    if status < 400:
+        return
+
+    raise PackCatalogError(
+        _message_from_body(body) or f"{fallback} ({status})."
+    )
+
+
+def _verify_payloads(email, value):
+    value = str(value or "").strip()
+
+    if "://" in value or "verify?" in value:
+        query = parse_qs(urlparse(value).query)
+        token_hash = (query.get("token") or [None])[0]
+        link_type = (query.get("type") or ["magiclink"])[0]
+
+        if not token_hash:
+            raise PackCatalogAuthError(
+                "Lien invalide : colle le lien complet de l'e-mail."
+            )
+
+        return [
+            {"type": link_type, "token_hash": token_hash},
+            {"type": "email", "token_hash": token_hash}
+        ]
+
+    return [{"type": "email", "email": email, "token": value}]
+
+
+def _refresh_publish_token(project_url, key, token):
+    refresh_token = (token or {}).get("refresh_token")
+
+    if not refresh_token:
+        raise PackCatalogAuthError("Session expirée : reconnecte-toi.")
+
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/auth/v1/token?grant_type=refresh_token",
+        method="POST",
+        payload={"refresh_token": refresh_token}
+    )
+
+    if status >= 400:
+        raise PackCatalogAuthError(
+            _message_from_body(body) or "Session expirée : reconnecte-toi."
+        )
+
+    data = _decode_json_body(body)
+
+    if not data.get("access_token"):
+        raise PackCatalogAuthError("Session expirée : reconnecte-toi.")
+
+    return {
+        **token,
+        "access_token": data["access_token"],
+        "refresh_token": data.get("refresh_token") or refresh_token
+    }
+
+
+def _valid_token_state(state):
+    return (
+        isinstance(state, dict)
+        and isinstance(state.get("token"), dict)
+        and bool(state["token"].get("access_token"))
+        and bool(state["token"].get("user_id"))
+    )
+
+
+def _sync_state_matches_catalog(state, project_url):
+    return (
+        is_sync_signed_in(state)
+        and _valid_token_state(state)
+        and normalize_supabase_url(state.get("server_url")) == project_url
+    )
+
+
+def _effective_publish_state(project_url, *, required=True):
+    sync_state = load_sync_state()
+
+    if _sync_state_matches_catalog(sync_state, project_url):
+        return sync_state, "sync"
+
+    publish_state = load_pack_publish_state()
+
+    if is_pack_publisher_signed_in(publish_state) and _valid_token_state(
+        publish_state
+    ):
+        return publish_state, "catalog"
+
+    if required:
+        raise PackCatalogAuthError("Connexion Supabase requise.")
+
+    return None, None
+
+
+def _save_effective_publish_state(state, source):
+    if source == "sync":
+        save_sync_state(state)
+    else:
+        save_pack_publish_state(state)
+
+
+def _authed_supabase_request(
+    db,
+    path,
+    *,
+    method="GET",
+    payload=None,
+    body=None,
+    headers=None,
+    timeout=PUBLISH_TIMEOUT
+):
+    project_url, key = _publish_config(db)
+    state, source = _effective_publish_state(project_url)
+    token = state["token"]
+
+    status, response_headers, response_body = _supabase_request(
+        project_url,
+        key,
+        path,
+        method=method,
+        access_token=token["access_token"],
+        payload=payload,
+        body=body,
+        headers=headers,
+        timeout=timeout
+    )
+
+    if status == 401:
+        token = _refresh_publish_token(project_url, key, token)
+        state["token"] = token
+        _save_effective_publish_state(state, source)
+        status, response_headers, response_body = _supabase_request(
+            project_url,
+            key,
+            path,
+            method=method,
+            access_token=token["access_token"],
+            payload=payload,
+            body=body,
+            headers=headers,
+            timeout=timeout
+        )
+
+    if status == 401:
+        raise PackCatalogAuthError(
+            _message_from_body(response_body)
+            or "Session expirée : reconnecte-toi."
+        )
+
+    return project_url, token, status, response_headers, response_body
+
+
+def _authed_json(db, path, *, method="GET", payload=None):
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        path,
+        method=method,
+        payload=payload
+    )
+    _raise_supabase_status(status, body, "Action Supabase impossible")
+
+    return _decode_json_body(body)
+
+
+def _normalize_terms(values, max_items):
+    terms = []
+    seen = set()
+
+    for raw in values or []:
+        for chunk in str(raw or "").split(","):
+            value = chunk.strip()
+            key = value.casefold()
+
+            if not value or key in seen:
+                continue
+
+            seen.add(key)
+            terms.append(value)
+
+            if len(terms) >= max_items:
+                return terms
+
+    return terms
+
+
+def _filename_slug(value):
+    slug = "".join(
+        char.lower() if char.isalnum() else "-"
+        for char in str(value or "")
+    ).strip("-")
+
+    return slug[:64] or "pack"
+
+
+def _group_publish_summary(db, group_id):
+    group = (
+        db.query(QuestionGroup)
+        .options(joinedload(QuestionGroup.questions))
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise ValueError("Question group not found")
+
+    questions = list(group.questions or [])
+    tags = merge_tags(*[
+        question.tags or []
+        for question in questions
+        if question.type_q in {"map", "media", "text"}
+    ])
+
+    return {
+        "pack_guid": group.guid,
+        "type_group": group.type_group,
+        "question_count": len(questions),
+        "tags": tags
+    }
+
+
+def _normalize_publication(row, project_url):
+    if isinstance(row, list):
+        row = row[0] if row else {}
+
+    if not isinstance(row, dict):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    storage_path = str(row.get("storage_path") or "").strip()
+
+    return {
+        "pack_guid": str(row.get("pack_guid") or ""),
+        "name": str(row.get("name") or "Pack sans titre"),
+        "description": str(row.get("description") or ""),
+        "type_group": str(row.get("type_group") or "text"),
+        "question_count": row.get("question_count"),
+        "version": row.get("version") or 1,
+        "size_bytes": row.get("size_bytes"),
+        "license": str(row.get("license") or ""),
+        "tags": row.get("tags") if isinstance(row.get("tags"), list) else [],
+        "themes": (
+            row.get("themes") if isinstance(row.get("themes"), list) else []
+        ),
+        "storage_path": storage_path,
+        "download_url": _public_storage_url(project_url, storage_path),
+        "is_public": bool(row.get("is_public")),
+        "publication_status": str(
+            row.get("publication_status")
+            or ("published" if row.get("is_public") else "draft")
+        ),
+        "published_at": row.get("published_at"),
+        "updated_at": row.get("updated_at")
+    }
+
+
+def get_pack_publish_status(db):
+    settings = get_pack_catalog_settings(db)
+    project_url = normalize_supabase_url(settings.get("url"))
+    key = str(settings.get("key") or "").strip()
+    state, source = _effective_publish_state(project_url, required=False)
+
+    return {
+        "configured": bool(project_url and key),
+        "project_url": project_url,
+        "signed_in": bool(state),
+        "account_email": state.get("account_email") if state else None,
+        "auth_source": source
+    }
+
+
+def request_pack_publish_code(db, email):
+    project_url, key = _publish_config(db)
+    clean_email = str(email or "").strip().lower()
+
+    if not clean_email:
+        raise PackCatalogAuthError("E-mail requis.")
+
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/auth/v1/otp",
+        method="POST",
+        payload={"email": clean_email, "create_user": True}
+    )
+    _raise_supabase_status(status, body, "Impossible d'envoyer le code")
+
+    return {}
+
+
+def verify_pack_publish_code(db, email, code):
+    project_url, key = _publish_config(db)
+    clean_email = str(email or "").strip().lower()
+    last_error = "Code invalide."
+
+    for payload in _verify_payloads(clean_email, code):
+        status, _, body = _supabase_request(
+            project_url,
+            key,
+            "/auth/v1/verify",
+            method="POST",
+            payload=payload
+        )
+
+        if status >= 400:
+            last_error = _message_from_body(body) or last_error
+            continue
+
+        data = _decode_json_body(body)
+        user_id = (data.get("user") or {}).get("id")
+
+        if not data.get("access_token") or not user_id:
+            raise PackCatalogAuthError("Réponse de connexion invalide.")
+
+        save_pack_publish_state({
+            "account_email": clean_email,
+            "token": {
+                "access_token": data["access_token"],
+                "refresh_token": data.get("refresh_token"),
+                "user_id": user_id
+            }
+        })
+
+        return get_pack_publish_status(db)
+
+    raise PackCatalogAuthError(last_error)
+
+
+def sign_out_pack_publisher():
+    state = load_pack_publish_state()
+    state["account_email"] = None
+    state["token"] = None
+    save_pack_publish_state(state)
+
+    return state
+
+
+def list_pack_publications(db):
+    project_url, _ = _publish_config(db)
+    state, _ = _effective_publish_state(project_url)
+    owner_id = quote(str(state["token"].get("user_id") or ""), safe="")
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/pack_catalog"
+        "?select=pack_guid,name,description,type_group,question_count,"
+        "version,size_bytes,license,tags,themes,storage_path,is_public,"
+        "publication_status,published_at,updated_at"
+        f"&owner_id=eq.{owner_id}"
+        "&order=updated_at.desc"
+        "&limit=50"
+    )
+    _raise_supabase_status(status, body, "Brouillons indisponibles")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return {
+        "publications": [
+            _normalize_publication(row, project_url)
+            for row in rows
+        ]
+    }
+
+
+def save_pack_publish_draft(
+    db,
+    group_id,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    summary = _group_publish_summary(db, group_id)
+
+    if summary["question_count"] <= 0:
+        raise ValueError("Cannot publish an empty group")
+
+    safe_version = int(version)
+    zip_path = export_pack(
+        db,
+        group_id,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license
+    )
+    zip_bytes = zip_path.read_bytes()
+    project_url, _ = _publish_config(db)
+    state, _ = _effective_publish_state(project_url)
+    token = state["token"]
+    storage_path = (
+        f"{token['user_id']}/{summary['pack_guid']}/"
+        f"v{safe_version}-{_filename_slug(name)}.zip"
+    )
+
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        f"/storage/v1/object/{CATALOG_BUCKET}/"
+        f"{quote(storage_path, safe='/')}",
+        method="POST",
+        body=zip_bytes,
+        headers={"Content-Type": "application/zip", "x-upsert": "true"},
+        timeout=PUBLISH_TRANSFER_TIMEOUT
+    )
+    _raise_supabase_status(status, body, "Téléversement du ZIP impossible")
+
+    draft_tags = _normalize_terms(
+        tags if tags else summary["tags"],
+        max_items=20
+    )
+    draft_themes = _normalize_terms(themes, max_items=12)
+    payload = {
+        "p_pack_guid": summary["pack_guid"],
+        "p_name": str(name or "").strip(),
+        "p_description": str(description or "").strip(),
+        "p_type_group": summary["type_group"],
+        "p_question_count": summary["question_count"],
+        "p_version": safe_version,
+        "p_size_bytes": len(zip_bytes),
+        "p_license": str(license or "").strip(),
+        "p_tags": draft_tags,
+        "p_themes": draft_themes,
+        "p_storage_path": storage_path
+    }
+
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/upsert_my_pack_draft",
+        method="POST",
+        payload=payload
+    )
+    _raise_supabase_status(status, body, "Brouillon impossible à enregistrer")
+
+    publication = _normalize_publication(_decode_json_body(body), project_url)
+
+    return {
+        "status": "draft",
+        "publication": publication,
+        "saved_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+def publish_pack_publication(db, pack_guid):
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/publish_my_pack",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+    _raise_supabase_status(status, body, "Publication impossible")
+
+    publication = _normalize_publication(_decode_json_body(body), project_url)
+
+    return {
+        "status": "published",
+        "publication": publication
+    }

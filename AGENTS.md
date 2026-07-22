@@ -46,6 +46,7 @@ persisted as questions.
 - Preserve inline/embedded edits, keyboard-friendly navigation, and autosave of pending existing-item edits before selection or mode changes.
 - Keep question/group filtering and sorting in dedicated utils; avoid duplicating that logic in components.
 - Deleting a group deletes its questions too; keep frontend caches consistent after mutations.
+- Avoid full-page scrolling and avoid making the whole route/page a single scroll container. First try minor layout compaction so the screen fits without scrolling. If content still overflows, identify the specific overflowing region (for example a list, table, result pane, sidebar, or detail panel) and put the scroll there with the existing app scrollbar styling exactly. Fixed-height screens must not clip the bottom edge: preserve complete bottom borders/radii/shadows and leave enough bottom inset so panels keep a clean shape instead of losing a few pixels.
 
 ## Map And Timeline UX
 
@@ -77,3 +78,16 @@ Since then: timeline review/editing was added; scheduling smoothing and catch-up
 rebalancing were added; Manage gained sorting/type filters/autosave/richer hover
 previews; map review gained recap/focus/hover polish; packaging docs/scripts
 were added.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

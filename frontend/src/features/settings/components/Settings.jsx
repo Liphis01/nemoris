@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { exportDatabase, importDatabase } from "../../../api/backup";
 import {
+  getPackCatalogSettings,
+  getPackCatalogDiagnostics,
+  savePackCatalogSettings
+} from "../../../api/packs";
+import {
   getReviewSettings,
   rebalanceReviewCalendar,
   updateReviewSettings
 } from "../../../api/review";
 import "./Settings.css";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import SyncAccountSection from "./SyncAccountSection";
+import UpdateSection from "./UpdateSection";
+import { useSyncAccount } from "./useSyncAccount";
 
 function normalizeTarget(value, fallback) {
   const parsed = Number(value);
@@ -16,6 +24,240 @@ function normalizeTarget(value, fallback) {
   }
 
   return Math.max(1, Math.floor(parsed));
+}
+
+function SettingsGroup({
+  children,
+  icon,
+  accent = "",
+  title,
+  description,
+  badge,
+  id
+}) {
+  return (
+    <section className="settings-group" id={id}>
+      <div className="settings-group-head">
+        <span
+          className={`settings-section-icon ${
+            accent ? `settings-section-icon-${accent}` : ""
+          }`}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+
+        <div>
+          <h2>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+
+        {badge && <span className="settings-badge">{badge}</span>}
+      </div>
+
+      <div className="settings-group-content">{children}</div>
+    </section>
+  );
+}
+
+function syncRailLabel(sync) {
+  if (!sync.status) {
+    return "Chargement";
+  }
+
+  return sync.signedIn ? "Connecté" : "Non connecté";
+}
+
+function syncRailCaption(sync) {
+  if (!sync.status) {
+    return "...";
+  }
+
+  return sync.signedIn
+    ? sync.status.account_email || "Compte connecté"
+    : "Aucun compte connecté";
+}
+
+function SettingsRail({
+  loading,
+  target,
+  sync,
+  exporting,
+  importing,
+  onExport
+}) {
+  return (
+    <aside className="settings-rail app-scrollbar" aria-label="Résumé et raccourcis">
+      <div className="settings-rail-card">
+        <div className="settings-overline">Sync</div>
+        <strong
+          className={`settings-rail-sync ${
+            sync.signedIn ? "settings-rail-sync-on" : ""
+          }`}
+        >
+          {syncRailLabel(sync)}
+        </strong>
+        <span>{syncRailCaption(sync)}</span>
+      </div>
+
+      <div className="settings-rail-card">
+        <div className="settings-overline">Objectif actif</div>
+        <strong>{loading ? "..." : target}</strong>
+        <span>questions / jour</span>
+      </div>
+
+      <div className="settings-rail-card settings-rail-shortcuts">
+        <div className="settings-overline">Raccourcis</div>
+
+        <div className="settings-rail-actions">
+          <button
+            type="button"
+            onClick={() => sync.doPush(false)}
+            disabled={!sync.signedIn || sync.busy}
+            className="settings-save"
+          >
+            {sync.busy ? "..." : "Envoyer vers le cloud"}
+          </button>
+
+          <button
+            type="button"
+            onClick={sync.doPull}
+            disabled={!sync.signedIn || sync.busy}
+            className="settings-secondary"
+          >
+            Télécharger du cloud
+          </button>
+
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={exporting || importing}
+            className="settings-secondary"
+          >
+            {exporting ? "Export..." : "Exporter la base"}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-rail-card settings-rail-note">
+        Les sauvegardes locales restent disponibles, mais la synchronisation
+        devient l'action principale.
+      </div>
+    </aside>
+  );
+}
+
+
+const CATALOG_DIAGNOSTIC_LABELS = {
+  ok: "Prêt",
+  warning: "À vérifier",
+  error: "Bloqué"
+};
+
+const CATALOG_KEY_LABELS = {
+  publishable: "clé publishable",
+  legacy_jwt: "clé anon",
+  secret: "clé secrète",
+  unknown: "clé inconnue",
+  missing: "clé absente"
+};
+
+function CatalogDiagnosticPanel({ diagnostics, checking, error }) {
+  if (checking) {
+    return (
+      <div className="settings-catalog-diagnostic settings-catalog-diagnostic-idle">
+        <div className="settings-catalog-diagnostic-head">
+          <div>
+            <strong>Diagnostic catalogue</strong>
+            <span>Vérification en cours...</span>
+          </div>
+          <span className="settings-catalog-health">Test</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="settings-catalog-diagnostic settings-catalog-diagnostic-error">
+        <div className="settings-catalog-diagnostic-head">
+          <div>
+            <strong>Diagnostic catalogue</strong>
+            <span>{error}</span>
+          </div>
+          <span className="settings-catalog-health">Bloqué</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!diagnostics) {
+    return (
+      <div className="settings-catalog-diagnostic settings-catalog-diagnostic-idle">
+        <div className="settings-catalog-diagnostic-head">
+          <div>
+            <strong>Diagnostic catalogue</strong>
+            <span>Non testé.</span>
+          </div>
+          <span className="settings-catalog-health">Attente</span>
+        </div>
+      </div>
+    );
+  }
+
+  const status = diagnostics.status || "warning";
+  const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
+  const samples = Array.isArray(diagnostics.sample_packs)
+    ? diagnostics.sample_packs
+    : [];
+  const total = diagnostics.total || 0;
+
+  return (
+    <div className={`settings-catalog-diagnostic settings-catalog-diagnostic-${status}`}>
+      <div className="settings-catalog-diagnostic-head">
+        <div>
+          <strong>Diagnostic catalogue</strong>
+          <span>{diagnostics.summary || "Diagnostic terminé."}</span>
+        </div>
+        <span className="settings-catalog-health">
+          {CATALOG_DIAGNOSTIC_LABELS[status] || "État"}
+        </span>
+      </div>
+
+      <div className="settings-catalog-metrics">
+        <span>
+          {total} pack{total !== 1 ? "s" : ""} public{total !== 1 ? "s" : ""}
+        </span>
+        <span>{CATALOG_KEY_LABELS[diagnostics.key_type] || "clé"}</span>
+      </div>
+
+      <div className="settings-catalog-checks">
+        {checks.map((check) => (
+          <div
+            key={check.id}
+            className={`settings-catalog-check settings-catalog-check-${check.status}`}
+          >
+            <span className="settings-catalog-dot" aria-hidden="true" />
+            <strong>{check.label}</strong>
+            <span>{check.detail}</span>
+          </div>
+        ))}
+      </div>
+
+      {samples.length > 0 && (
+        <div className="settings-catalog-samples">
+          {samples.map((sample) => (
+            <span
+              key={sample.pack_guid}
+              className={`settings-catalog-sample settings-catalog-sample-${sample.download_status}`}
+            >
+              {sample.name}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Settings({ setMode }) {
@@ -31,6 +273,26 @@ export default function Settings({ setMode }) {
   const [importing, setImporting] = useState(false);
   const [dataStatus, setDataStatus] = useState("");
   const [dataError, setDataError] = useState("");
+
+  const [catalogDraft, setCatalogDraft] = useState("");
+  const [catalogKeyDraft, setCatalogKeyDraft] = useState("");
+  const [catalogSaving, setCatalogSaving] = useState(false);
+  const [catalogStatus, setCatalogStatus] = useState("");
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogDiagnostics, setCatalogDiagnostics] = useState(null);
+  const [catalogChecking, setCatalogChecking] = useState(false);
+  const [catalogDiagnosticError, setCatalogDiagnosticError] = useState("");
+
+  const sync = useSyncAccount();
+
+  useEffect(() => {
+    const screen = document.querySelector(".settings-groups");
+
+    if (screen) {
+      screen.scrollLeft = 0;
+      screen.scrollTop = 0;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +317,25 @@ export default function Settings({ setMode }) {
           setError(settingsError.message || "Paramètres impossibles à charger.");
           setLoading(false);
         }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getPackCatalogSettings()
+      .then((settings) => {
+        if (!cancelled) {
+          setCatalogDraft(settings.url || "");
+          setCatalogKeyDraft(settings.key || "");
+        }
+      })
+      .catch((catalogSettingsError) => {
+        console.error(catalogSettingsError);
       });
 
     return () => {
@@ -152,14 +433,66 @@ export default function Settings({ setMode }) {
     }
   }
 
+  async function runCatalogDiagnostics() {
+    setCatalogChecking(true);
+    setCatalogDiagnosticError("");
+
+    try {
+      const diagnostics = await getPackCatalogDiagnostics();
+      setCatalogDiagnostics(diagnostics);
+    } catch (diagnosticError) {
+      console.error(diagnosticError);
+      setCatalogDiagnostics(null);
+      setCatalogDiagnosticError(
+        diagnosticError.message || "Diagnostic impossible."
+      );
+    } finally {
+      setCatalogChecking(false);
+    }
+  }
+
+  async function saveCatalogSettings({ testAfterSave = true } = {}) {
+    setCatalogSaving(true);
+    setCatalogStatus("");
+    setCatalogError("");
+    setCatalogDiagnosticError("");
+
+    try {
+      const settings = await savePackCatalogSettings({
+        url: catalogDraft.trim(),
+        key: catalogKeyDraft.trim()
+      });
+      setCatalogDraft(settings.url || "");
+      setCatalogKeyDraft(settings.key || "");
+      setCatalogStatus("Catalogue enregistré.");
+
+      if (testAfterSave) {
+        await runCatalogDiagnostics();
+      }
+    } catch (catalogSaveError) {
+      console.error(catalogSaveError);
+      setCatalogError(
+        catalogSaveError.message || "Catalogue impossible à enregistrer."
+      );
+    } finally {
+      setCatalogSaving(false);
+    }
+  }
+
   return (
     <div className="settings-screen">
       <div className="settings-shell">
         <header className="settings-header">
-          <div className="settings-title-block">
-            <div className="settings-overline">Paramètres</div>
-            <h1>Paramètres</h1>
-            <p>Rythme de révision et rééquilibrage du calendrier.</p>
+          <div className="settings-brand-row">
+            <div className="settings-brand-mark" aria-hidden="true">
+              N
+            </div>
+
+            <div className="settings-title-block">
+              <div className="settings-overline">Nemoris</div>
+              <h1>Paramètres</h1>
+              <p>Préférences, synchronisation et sauvegardes.</p>
+            </div>
           </div>
 
           <ReturnToMenuButton
@@ -168,29 +501,41 @@ export default function Settings({ setMode }) {
           />
         </header>
 
-        <main className="settings-grid">
-          <section className="settings-panel">
-            <div className="settings-section-head">
-              <span className="settings-section-icon" aria-hidden="true">
-                ↻
-              </span>
+        <div className="settings-layout">
+          <SettingsRail
+            loading={loading}
+            target={target}
+            sync={sync}
+            exporting={exporting}
+            importing={importing}
+            onExport={handleExport}
+          />
 
-              <div>
-                <div className="settings-overline">Review</div>
-                <h2>Rythme quotidien</h2>
-              </div>
-            </div>
+          <main className="settings-groups app-scrollbar" aria-label="Paramètres">
+            <SyncAccountSection sync={sync} />
 
-            {loading ? (
-              <div className="settings-loading">
-                Chargement des paramètres...
-              </div>
-            ) : (
-              <>
-                <label className="settings-field">
-                  <span className="settings-label">Objectif quotidien</span>
+            <SettingsGroup
+              id="settings-review"
+              icon="↻"
+              accent="amber"
+              title="Review"
+              description="Rythme quotidien"
+              badge={loading ? "..." : `${target} / jour`}
+            >
+              {loading ? (
+                <div className="settings-loading">
+                  Chargement des paramètres...
+                </div>
+              ) : (
+                <div className="settings-row">
+                  <div className="settings-row-copy">
+                    <strong>Objectif quotidien</strong>
+                    <span>
+                      Volume visé par le rééquilibrage du calendrier.
+                    </span>
+                  </div>
 
-                  <span className="settings-control">
+                  <div className="settings-inline-actions">
                     <input
                       aria-label="Objectif quotidien"
                       type="number"
@@ -204,106 +549,191 @@ export default function Settings({ setMode }) {
                           saveTarget();
                         }
                       }}
-                      className="settings-input"
+                      className="settings-input settings-input-number"
                     />
-                    <span className="settings-unit">questions / jour</span>
-                  </span>
-                </label>
 
-                <div className="settings-actions">
-                  <button
-                    type="button"
-                    onClick={saveTarget}
-                    disabled={saving}
-                    className="settings-save"
-                  >
-                    {saving ? "Enregistrement..." : "Enregistrer"}
-                  </button>
+                    <span className="settings-unit">/ jour</span>
 
-                  {status && (
-                    <div className="settings-status" role="status">
-                      {status}
-                    </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={saveTarget}
+                      disabled={saving}
+                      className="settings-save"
+                    >
+                      {saving ? "Enregistrement..." : "Enregistrer"}
+                    </button>
+                  </div>
                 </div>
-              </>
-            )}
+              )}
 
-            {error && (
-              <div role="alert" className="settings-alert">
-                {error}
+              {status && (
+                <div className="settings-status" role="status">
+                  {status}
+                </div>
+              )}
+
+              {error && (
+                <div role="alert" className="settings-alert">
+                  {error}
+                </div>
+              )}
+            </SettingsGroup>
+
+            <SettingsGroup
+              id="settings-data"
+              icon="⇣"
+              accent="green"
+              title="Données"
+              description="Sauvegarde complète et restauration"
+              badge="2 actions"
+            >
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>Exporter la base</strong>
+                  <span>
+                    Questions, progression et médias dans une archive ZIP.
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={exporting || importing}
+                  className="settings-secondary"
+                >
+                  {exporting ? "Export..." : "Exporter"}
+                </button>
               </div>
-            )}
-          </section>
 
-          <aside className="settings-summary" aria-label="Résumé">
-            <div className="settings-summary-card">
-              <div className="settings-overline">Objectif actif</div>
-              <strong>{loading ? "..." : target}</strong>
-              <span>questions / jour</span>
-            </div>
-          </aside>
+              <div className="settings-row settings-row-danger">
+                <div className="settings-row-copy">
+                  <strong>Importer une sauvegarde</strong>
+                  <span>
+                    Remplace toutes les données locales après confirmation.
+                  </span>
+                </div>
 
-          <section className="settings-panel">
-            <div className="settings-section-head">
-              <span className="settings-section-icon" aria-hidden="true">
-                ⤓
-              </span>
+                <button
+                  type="button"
+                  onClick={openImportPicker}
+                  disabled={exporting || importing}
+                  className="settings-danger"
+                >
+                  {importing ? "Import..." : "Importer"}
+                </button>
 
-              <div>
-                <div className="settings-overline">Données</div>
-                <h2>Sauvegarde</h2>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".zip"
+                  aria-label="Importer la base"
+                  className="settings-file-input"
+                  onChange={handleImportFile}
+                />
               </div>
-            </div>
-
-            <p className="settings-help">
-              Exportez l'intégralité de la base (questions, progression et
-              médias) dans un fichier .zip, ou restaurez une sauvegarde
-              existante. L'import remplace toutes les données actuelles.
-            </p>
-
-            <div className="settings-actions">
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={exporting || importing}
-                className="settings-save"
-              >
-                {exporting ? "Export..." : "Exporter la base"}
-              </button>
-
-              <button
-                type="button"
-                onClick={openImportPicker}
-                disabled={exporting || importing}
-                className="settings-secondary"
-              >
-                {importing ? "Import..." : "Importer la base"}
-              </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".zip"
-                aria-label="Importer la base"
-                className="settings-file-input"
-                onChange={handleImportFile}
-              />
 
               {dataStatus && (
                 <div className="settings-status" role="status">
                   {dataStatus}
                 </div>
               )}
-            </div>
 
-            {dataError && (
-              <div role="alert" className="settings-alert">
-                {dataError}
+              {dataError && (
+                <div role="alert" className="settings-alert">
+                  {dataError}
+                </div>
+              )}
+            </SettingsGroup>
+
+            <SettingsGroup
+              id="settings-packs"
+              icon="▣"
+              accent="violet"
+              title="Packs"
+              description="Catalogue de packs partagés"
+              badge={catalogDraft.trim() && catalogKeyDraft.trim() ? "Configuré" : "Vide"}
+            >
+              <div className="settings-row settings-row-catalog">
+                <div className="settings-row-copy">
+                  <strong>Catalogue Supabase</strong>
+                  <span>Projet et clé publique utilisés par l'écran Packs.</span>
+                </div>
+
+                <div className="settings-auth-row settings-catalog-row">
+                  <input
+                    aria-label="URL du projet Supabase"
+                    type="text"
+                    placeholder="https://...supabase.co"
+                    value={catalogDraft}
+                    disabled={catalogSaving}
+                    onChange={(event) => setCatalogDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        saveCatalogSettings({ testAfterSave: true });
+                      }
+                    }}
+                    className="settings-input settings-input-wide"
+                  />
+
+                  <input
+                    aria-label="Clé publishable Supabase"
+                    type="text"
+                    placeholder="sb_publishable_..."
+                    value={catalogKeyDraft}
+                    disabled={catalogSaving}
+                    onChange={(event) => setCatalogKeyDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        saveCatalogSettings({ testAfterSave: true });
+                      }
+                    }}
+                    className="settings-input settings-input-wide"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => saveCatalogSettings({ testAfterSave: false })}
+                    disabled={catalogSaving || catalogChecking}
+                    aria-label="Enregistrer le catalogue"
+                    className="settings-save"
+                  >
+                    {catalogSaving ? "..." : "Enregistrer"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => saveCatalogSettings({ testAfterSave: true })}
+                    disabled={catalogSaving || catalogChecking}
+                    aria-label="Tester le catalogue"
+                    className="settings-secondary"
+                  >
+                    {catalogChecking ? "Test..." : "Tester"}
+                  </button>
+                </div>
               </div>
-            )}
-          </section>
-        </main>
+
+              <CatalogDiagnosticPanel
+                diagnostics={catalogDiagnostics}
+                checking={catalogChecking}
+                error={catalogDiagnosticError}
+              />
+
+              {catalogStatus && (
+                <div className="settings-status" role="status">
+                  {catalogStatus}
+                </div>
+              )}
+
+              {catalogError && (
+                <div role="alert" className="settings-alert">
+                  {catalogError}
+                </div>
+              )}
+            </SettingsGroup>
+
+            <UpdateSection />
+          </main>
+        </div>
       </div>
     </div>
   );

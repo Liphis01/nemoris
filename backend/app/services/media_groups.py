@@ -82,7 +82,8 @@ def upload_media_group_media(db, group_id: int, upload_file):
         upload_file,
         storage_subdir=f"media-groups/{group.id}",
         max_bytes=MEDIA_UPLOAD_MAX_BYTES,
-        allow_audio_video=True
+        allow_audio_video=True,
+        db=db
     )
 
 
@@ -93,7 +94,8 @@ def upload_media_group_media_url(db, group_id: int, url: str):
         url,
         storage_subdir=f"media-groups/{group.id}",
         max_bytes=MEDIA_UPLOAD_MAX_BYTES,
-        allow_audio_video=True
+        allow_audio_video=True,
+        db=db
     )
 
 

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/stop-nemoris-backend.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "stop:nemoris-backend": "node scripts/stop-nemoris-backend.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "playwright test",
@@ -15,6 +17,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@xyflow/react": "^12.11.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

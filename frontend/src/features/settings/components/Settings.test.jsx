@@ -1,11 +1,26 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDatabase, importDatabase } from "../../../api/backup";
+import {
+  getPackCatalogDiagnostics,
+  getPackCatalogSettings,
+  savePackCatalogSettings
+} from "../../../api/packs";
 import {
   getReviewSettings,
   rebalanceReviewCalendar,
   updateReviewSettings
 } from "../../../api/review";
+import { getSyncStatus } from "../../../api/sync";
+import { checkForUpdate } from "../../../api/updater";
+import { getVersion } from "@tauri-apps/api/app";
 import Settings from "./Settings";
 
 vi.mock("../../../api/review", () => ({
@@ -19,6 +34,34 @@ vi.mock("../../../api/backup", () => ({
   importDatabase: vi.fn()
 }));
 
+vi.mock("../../../api/packs", () => ({
+  getPackCatalogDiagnostics: vi.fn(),
+  getPackCatalogSettings: vi.fn(),
+  savePackCatalogSettings: vi.fn()
+}));
+
+vi.mock("../../../api/sync", () => ({
+  deleteAccountData: vi.fn(),
+  getSyncStatus: vi.fn(),
+  setSyncPreferences: vi.fn(),
+  setSyncServerUrl: vi.fn(),
+  requestSyncCode: vi.fn(),
+  verifySyncCode: vi.fn(),
+  syncAuto: vi.fn(),
+  syncPush: vi.fn(),
+  syncPull: vi.fn(),
+  syncSignOut: vi.fn()
+}));
+
+vi.mock("../../../api/updater", () => ({
+  checkForUpdate: vi.fn(),
+  installUpdate: vi.fn()
+}));
+
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn()
+}));
+
 describe("Settings", () => {
   beforeEach(() => {
     getReviewSettings.mockResolvedValue({ catchup_daily_target: 35 });
@@ -26,6 +69,53 @@ describe("Settings", () => {
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
+    getPackCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    getPackCatalogDiagnostics.mockResolvedValue({
+      status: "ok",
+      summary: "Catalogue prêt.",
+      key_type: "publishable",
+      total: 2,
+      checks: [
+        {
+          id: "project_url",
+          label: "URL projet",
+          status: "ok",
+          detail: "URL projet Supabase valide."
+        },
+        {
+          id: "zip_files",
+          label: "Fichiers ZIP",
+          status: "ok",
+          detail: "2 ZIP testés."
+        }
+      ],
+      sample_packs: [
+        {
+          pack_guid: "world-map",
+          name: "Pays du monde",
+          download_status: "ok"
+        }
+      ]
+    });
+    savePackCatalogSettings.mockResolvedValue({ url: "", key: "" });
+    getSyncStatus.mockResolvedValue({
+      signed_in: false,
+      account_email: null,
+      server_url: "",
+      server_key: "",
+      last_server_version: 0,
+      auto_sync_enabled: false,
+      local_change_seq: 0,
+      last_synced_change_seq: 0,
+      collection_dirty: false,
+      last_auto_sync_at: null,
+      last_auto_sync_status: null,
+      last_auto_sync_error: null,
+      code_schema_version: "0016",
+      server_meta: null
+    });
+    checkForUpdate.mockResolvedValue(null);
+    getVersion.mockResolvedValue("1.2.1");
   });
 
   afterEach(() => {
@@ -99,8 +189,93 @@ describe("Settings", () => {
       screen.getByRole("button", { name: "Exporter la base" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Importer la base" })
+      screen.getByRole("button", { name: "Importer" })
     ).toBeInTheDocument();
+  });
+
+  it("prioritizes sync before local backup controls", async () => {
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    const main = screen.getByRole("main", { name: "Paramètres" });
+    const syncHeading = within(main).getByRole("heading", {
+      name: "Synchronisation"
+    });
+    const dataHeading = within(main).getByRole("heading", {
+      name: "Données"
+    });
+
+    expect(
+      syncHeading.compareDocumentPosition(dataHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Envoyer vers le cloud" })
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the removed startup review setting", async () => {
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    expect(
+      screen.queryByText("Ouvrir la révision au démarrage si due")
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves Supabase pack catalogue settings", async () => {
+    savePackCatalogSettings.mockResolvedValue({
+      url: "https://project.supabase.co",
+      key: "sb_publishable_test"
+    });
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    fireEvent.change(screen.getByLabelText("URL du projet Supabase"), {
+      target: { value: "https://project.supabase.co" }
+    });
+    fireEvent.change(screen.getByLabelText("Clé publishable Supabase"), {
+      target: { value: "sb_publishable_test" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enregistrer le catalogue" })
+    );
+
+    await waitFor(() => {
+      expect(savePackCatalogSettings).toHaveBeenCalledWith({
+        url: "https://project.supabase.co",
+        key: "sb_publishable_test"
+      });
+    });
+    expect(getPackCatalogDiagnostics).not.toHaveBeenCalled();
+    expect(screen.getByText("Catalogue enregistré.")).toBeInTheDocument();
+  });
+
+  it("runs the Supabase pack catalogue diagnostic", async () => {
+    savePackCatalogSettings.mockResolvedValue({
+      url: "https://project.supabase.co",
+      key: "sb_publishable_test"
+    });
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByDisplayValue("35");
+    fireEvent.change(screen.getByLabelText("URL du projet Supabase"), {
+      target: { value: "https://project.supabase.co" }
+    });
+    fireEvent.change(screen.getByLabelText("Clé publishable Supabase"), {
+      target: { value: "sb_publishable_test" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tester le catalogue" }));
+
+    await waitFor(() => {
+      expect(getPackCatalogDiagnostics).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText("Catalogue prêt.")).toBeInTheDocument();
+    expect(screen.getByText("2 packs publics")).toBeInTheDocument();
+    expect(screen.getByText("Fichiers ZIP")).toBeInTheDocument();
+    expect(screen.getByText("Pays du monde")).toBeInTheDocument();
   });
 
   it("exports the database and reports the downloaded filename", async () => {

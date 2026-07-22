@@ -111,6 +111,9 @@ cd ../frontend
 npm run tauri dev      # or: npm run tauri build
 ```
 
+`npm run build` runs `frontend/scripts/stop-nemoris-backend.mjs` first, so a
+stale packaged sidecar is stopped before Vite/Tauri rebuilds or replaces files.
+
 `npm run tauri build` outputs the installer/bundle under
 `frontend/src-tauri/target/release/bundle/`.
 

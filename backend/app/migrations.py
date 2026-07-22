@@ -1,14 +1,17 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
+import uuid
 
 from sqlalchemy.engine import Connection, Engine
 
-from .config import BACKUP_DIR, DATABASE_FILE, STATIC_DIR
+from .config import BACKUP_DIR, DATABASE_FILE, FRONTEND_DIST_DIR, PROJECT_DIR, STATIC_DIR
 from .database import engine as default_engine
-from .models import Base
+from .models import Base, ReviewLog
 from .scheduler import DEFAULT_CATCHUP_DAILY_TARGET
 from .services.backups import create_backup
 
@@ -30,6 +33,9 @@ class Migration:
     name: str
     run: Callable[[Connection], None]
     requires_backup: bool = False
+    # Migrations touching files under static/ receive the static dir as a
+    # second argument so tests can point them at a fixture directory.
+    needs_static_dir: bool = False
 
 
 def _table_names(connection):
@@ -343,6 +349,473 @@ def _migration_rename_image_type_to_media(connection):
         )
 
 
+_GUID_TABLES = ("questions", "question_groups", "collections")
+
+
+def _migration_content_guid_columns(connection):
+    # SQLite cannot add a UNIQUE column through ALTER TABLE, so the column is
+    # added plain, backfilled, then enforced by a separate unique index named
+    # like the one create_all builds for fresh databases (ix_<table>_guid).
+    for table in _GUID_TABLES:
+        if not _table_exists(connection, table):
+            continue
+
+        if "guid" not in _column_names(connection, table):
+            connection.exec_driver_sql(
+                f"ALTER TABLE {table} ADD COLUMN guid VARCHAR"
+            )
+
+        rows = connection.exec_driver_sql(
+            f"SELECT id FROM {table} WHERE guid IS NULL"
+        ).fetchall()
+
+        for (row_id,) in rows:
+            connection.exec_driver_sql(
+                f"UPDATE {table} SET guid = ? WHERE id = ?",
+                (str(uuid.uuid4()), row_id)
+            )
+
+        connection.exec_driver_sql(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS ix_{table}_guid "
+            f"ON {table} (guid)"
+        )
+
+
+def _migration_review_log_table(connection):
+    # Create the table from the model so there is a single schema definition.
+    Base.metadata.create_all(bind=connection, tables=[ReviewLog.__table__])
+
+    # Both tables always exist on a real post-0001 database; hand-built legacy
+    # fixtures in tests may lack one of them.
+    if not _table_exists(connection, "progress"):
+        return
+
+    if not _table_exists(connection, "questions"):
+        return
+
+    # Only backfill into an empty table so a re-entered migration cannot
+    # duplicate rows.
+    existing = connection.exec_driver_sql(
+        "SELECT COUNT(*) FROM review_log"
+    ).fetchone()[0]
+
+    if existing:
+        return
+
+    rows = connection.exec_driver_sql(
+        """
+        SELECT progress.question_id, progress.history, questions.guid
+        FROM progress
+        LEFT JOIN questions ON questions.id = progress.question_id
+        WHERE progress.history IS NOT NULL
+          AND progress.question_id IS NOT NULL
+        """
+    ).fetchall()
+
+    for question_id, history_value, question_guid in rows:
+        if isinstance(history_value, str):
+            try:
+                entries = json.loads(history_value)
+            except ValueError:
+                continue
+        else:
+            entries = history_value or []
+
+        if not isinstance(entries, list):
+            continue
+
+        seq = 0
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+
+            seq += 1
+            # Promoted columns are best-effort copies for querying; the full
+            # entry in data stays authoritative. Legacy entries are date-only,
+            # so reviewed_at is NULL for migrated rows.
+            connection.exec_driver_sql(
+                """
+                INSERT INTO review_log (
+                    question_id, question_guid, seq, reviewed_on, reviewed_at,
+                    quality, stability, difficulty, reps, lapses, interval,
+                    next_review, ideal_interval, ideal_next_review,
+                    superseded_by, data
+                ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                """,
+                (
+                    question_id,
+                    question_guid,
+                    seq,
+                    entry.get("reviewed_on"),
+                    entry.get("quality"),
+                    entry.get("stability"),
+                    entry.get("difficulty"),
+                    entry.get("reps"),
+                    entry.get("lapses"),
+                    entry.get("interval"),
+                    entry.get("next_review"),
+                    entry.get("ideal_interval"),
+                    entry.get("ideal_next_review"),
+                    json.dumps(entry)
+                )
+            )
+
+
+def _migration_pack_bookkeeping(connection):
+    from .models import PackSubscription
+
+    new_columns = {
+        "pack_guid": "VARCHAR",
+        "pack_version": "INTEGER",
+        "content_hash": "VARCHAR"
+    }
+
+    for table in ("questions", "question_groups"):
+        if not _table_exists(connection, table):
+            continue
+
+        existing_columns = _column_names(connection, table)
+
+        for name, sql_type in new_columns.items():
+            if name not in existing_columns:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"
+                )
+
+        connection.exec_driver_sql(
+            f"CREATE INDEX IF NOT EXISTS ix_{table}_pack_guid "
+            f"ON {table} (pack_guid)"
+        )
+
+    # No backfill: the columns are nullable and existing rows are correctly
+    # NULL (locally authored, not pack-derived).
+    Base.metadata.create_all(
+        bind=connection,
+        tables=[PackSubscription.__table__]
+    )
+
+
+def _rename_column_if_needed(connection, table, old_name, new_name):
+    existing_columns = _column_names(connection, table)
+
+    if new_name in existing_columns:
+        return
+
+    if old_name in existing_columns:
+        connection.exec_driver_sql(
+            f'ALTER TABLE "{table}" RENAME COLUMN "{old_name}" TO "{new_name}"'
+        )
+
+
+def _migration_pack_terminology(connection):
+    from .models import PackSubscription
+
+    for table in ("questions", "question_groups"):
+        if not _table_exists(connection, table):
+            continue
+
+        _rename_column_if_needed(connection, table, "blueprint_guid", "pack_guid")
+        _rename_column_if_needed(
+            connection, table, "blueprint_version", "pack_version"
+        )
+
+        existing_columns = _column_names(connection, table)
+        if "pack_guid" not in existing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE "{table}" ADD COLUMN pack_guid VARCHAR'
+            )
+        if "pack_version" not in existing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE "{table}" ADD COLUMN pack_version INTEGER'
+            )
+        if "content_hash" not in existing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE "{table}" ADD COLUMN content_hash VARCHAR'
+            )
+
+        connection.exec_driver_sql(
+            f"CREATE INDEX IF NOT EXISTS ix_{table}_pack_guid "
+            f"ON {table} (pack_guid)"
+        )
+
+    if (
+        _table_exists(connection, "blueprint_subscriptions")
+        and not _table_exists(connection, "pack_subscriptions")
+    ):
+        connection.exec_driver_sql(
+            'ALTER TABLE "blueprint_subscriptions" RENAME TO "pack_subscriptions"'
+        )
+
+    Base.metadata.create_all(
+        bind=connection,
+        tables=[PackSubscription.__table__]
+    )
+
+    if _table_exists(connection, "pack_subscriptions"):
+        _rename_column_if_needed(
+            connection, "pack_subscriptions", "blueprint_guid", "pack_guid"
+        )
+
+    if _table_exists(connection, "app_settings"):
+        existing_pack = connection.exec_driver_sql(
+            "SELECT 1 FROM app_settings WHERE key = 'pack_catalog'"
+        ).fetchone()
+        existing_blueprint = connection.exec_driver_sql(
+            "SELECT 1 FROM app_settings WHERE key = 'blueprint_catalog'"
+        ).fetchone()
+
+        if existing_blueprint and not existing_pack:
+            connection.exec_driver_sql(
+                """
+                UPDATE app_settings
+                SET key = 'pack_catalog'
+                WHERE key = 'blueprint_catalog'
+                """
+            )
+        elif existing_blueprint and existing_pack:
+            connection.exec_driver_sql(
+                "DELETE FROM app_settings WHERE key = 'blueprint_catalog'"
+            )
+
+
+def _migration_media_files_registry(connection, static_dir):
+    from .models import MediaFile
+
+    Base.metadata.create_all(bind=connection, tables=[MediaFile.__table__])
+
+    # Only backfill into an empty registry so a re-entered migration cannot
+    # duplicate rows.
+    existing = connection.exec_driver_sql(
+        "SELECT COUNT(*) FROM media_files"
+    ).fetchone()[0]
+
+    if existing:
+        return
+
+    static_dir = Path(static_dir)
+
+    if not static_dir.exists():
+        return
+
+    for path in sorted(static_dir.rglob("*")):
+        if not path.is_file():
+            continue
+
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        relative = path.relative_to(static_dir).as_posix()
+        connection.exec_driver_sql(
+            """
+            INSERT INTO media_files (path, sha256, byte_size)
+            VALUES (?, ?, ?)
+            """,
+            (relative, digest, path.stat().st_size)
+        )
+
+
+# sync-roadmap: a bare filename like "world.svg" on QuestionGroup.media used
+# to mean "a built-in map template shipped with the frontend"
+# (frontend/public/maps/), never backend data. That ambiguity is being
+# eliminated -- these files become ordinary uploaded media. Two candidate
+# source directories, in priority order: the built frontend (present in any
+# packaged/frozen install, since the app must ship its own UI there) and the
+# dev-mode source checkout (present when frontend/dist hasn't been built).
+# A module-level list so tests can point it at a fixture directory.
+_LEGACY_MAP_SOURCE_DIRS = [
+    FRONTEND_DIST_DIR / "maps",
+    PROJECT_DIR / "frontend" / "public" / "maps"
+]
+
+_LEGACY_MEDIA_COLUMNS = {
+    "question_groups": ("media",),
+    "questions": ("media", "answer_media")
+}
+
+
+def _is_local_static_reference(value):
+    from .services.media import static_relative_path_from_media
+
+    return static_relative_path_from_media(value) is not None
+
+
+def _is_external_url(value):
+    return urlparse(str(value)).scheme in ("http", "https")
+
+
+def _migration_localize_legacy_map_media(connection, static_dir):
+    # Needs the registry from 0014 to register localized files into.
+    if not _table_exists(connection, "media_files"):
+        return
+
+    # Any non-empty value that is neither a real /static/ file nor an
+    # external URL is a legacy bare reference (in practice: map group SVGs
+    # picked from the old bundled-asset picker).
+    bare_values = set()
+
+    for table, columns in _LEGACY_MEDIA_COLUMNS.items():
+        if not _table_exists(connection, table):
+            continue
+
+        existing_columns = _column_names(connection, table)
+
+        for column in columns:
+            if column not in existing_columns:
+                continue
+
+            rows = connection.exec_driver_sql(
+                f"SELECT DISTINCT {column} FROM {table} "
+                f"WHERE {column} IS NOT NULL AND {column} != ''"
+            ).fetchall()
+
+            for (value,) in rows:
+                if _is_local_static_reference(value):
+                    continue
+
+                if _is_external_url(value):
+                    continue
+
+                bare_values.add(value)
+
+    if not bare_values:
+        return
+
+    static_dir = Path(static_dir)
+    resolved = {}
+
+    for filename in bare_values:
+        source_bytes = None
+
+        for base in _LEGACY_MAP_SOURCE_DIRS:
+            candidate = base / filename
+
+            if candidate.is_file():
+                source_bytes = candidate.read_bytes()
+                break
+
+        # Not found anywhere: leave references to it untouched rather than
+        # fail the whole migration over one unresolvable legacy value.
+        if source_bytes is None:
+            continue
+
+        digest = hashlib.sha256(source_bytes).hexdigest()
+        extension = Path(filename).suffix.lower() or ".svg"
+        stored_name = f"{digest}{extension}"
+        stored_path = static_dir / stored_name
+
+        static_dir.mkdir(parents=True, exist_ok=True)
+
+        if not stored_path.exists():
+            stored_path.write_bytes(source_bytes)
+
+        existing = connection.exec_driver_sql(
+            "SELECT id FROM media_files WHERE path = ?",
+            (stored_name,)
+        ).fetchone()
+
+        if not existing:
+            connection.exec_driver_sql(
+                "INSERT INTO media_files (path, sha256, byte_size) "
+                "VALUES (?, ?, ?)",
+                (stored_name, digest, len(source_bytes))
+            )
+
+        resolved[filename] = f"/static/{stored_name}"
+
+    for table, columns in _LEGACY_MEDIA_COLUMNS.items():
+        if not _table_exists(connection, table):
+            continue
+
+        existing_columns = _column_names(connection, table)
+
+        for column in columns:
+            if column not in existing_columns:
+                continue
+
+            for old_value, new_value in resolved.items():
+                connection.exec_driver_sql(
+                    f"UPDATE {table} SET {column} = ? WHERE {column} = ?",
+                    (new_value, old_value)
+                )
+
+
+def _migration_reconcile_revlog_snapshots(connection):
+    # Local imports: the ORM session and services are only needed here, and
+    # importing them lazily keeps migration module import light.
+    from sqlalchemy.orm import Session
+
+    from .models import Progress
+    from .services.progress import append_manual_review_log
+    from .services.revlog import strict_mismatch_fields
+
+    if not _table_exists(connection, "review_log"):
+        return
+
+    if not _table_exists(connection, "progress"):
+        return
+
+    # A real database that reached this point went through 0002/0005 and has
+    # the full Progress column set; hand-built legacy fixtures in tests may
+    # not, and the ORM query below needs every mapped column.
+    progress_columns = _column_names(connection, "progress")
+
+    if not {"stability", "ideal_interval", "history"} <= progress_columns:
+        return
+
+    # Schedule adjustments made outside graded reviews (historical "Acquis"
+    # graduations) predate manual revlog rows, so restore-from-revlog cannot
+    # reproduce them. Append one manual snapshot row per divergent card so the
+    # revlog becomes a faithful source of truth (validate-revlog gate → 100%).
+    session = Session(bind=connection)
+
+    for progress in session.query(Progress).all():
+        if progress.question_id is None:
+            continue
+
+        mismatched, _ = strict_mismatch_fields(session, progress)
+
+        if mismatched:
+            append_manual_review_log(
+                session,
+                progress,
+                "reconcile_history_snapshot"
+            )
+
+    session.flush()
+
+
+def _migration_tombstones_table(connection):
+    from .models import Tombstone
+
+    Base.metadata.create_all(bind=connection, tables=[Tombstone.__table__])
+
+    # Questions deleted before this table existed left orphaned revlog rows;
+    # their guids are recoverable from there, so backfill their tombstones.
+    if not _table_exists(connection, "review_log"):
+        return
+
+    if not _table_exists(connection, "questions"):
+        return
+
+    deleted_at = datetime.now(timezone.utc).isoformat()
+    orphan_guids = connection.exec_driver_sql(
+        """
+        SELECT DISTINCT question_guid
+        FROM review_log
+        WHERE question_guid IS NOT NULL
+          AND question_id NOT IN (SELECT id FROM questions)
+        """
+    ).fetchall()
+
+    for (guid,) in orphan_guids:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO tombstones (entity_type, guid, deleted_at)
+            VALUES (?, ?, ?)
+            """,
+            ("question", guid, deleted_at)
+        )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -392,6 +865,54 @@ MIGRATIONS = [
         version="0009",
         name="rename_image_type_to_media",
         run=_migration_rename_image_type_to_media,
+        requires_backup=True
+    ),
+    Migration(
+        version="0010",
+        name="content_guid_columns",
+        run=_migration_content_guid_columns,
+        requires_backup=True
+    ),
+    Migration(
+        version="0011",
+        name="review_log_table",
+        run=_migration_review_log_table,
+        requires_backup=True
+    ),
+    Migration(
+        version="0012",
+        name="reconcile_revlog_snapshots",
+        run=_migration_reconcile_revlog_snapshots,
+        requires_backup=True
+    ),
+    Migration(
+        version="0013",
+        name="tombstones_table",
+        run=_migration_tombstones_table
+    ),
+    Migration(
+        version="0014",
+        name="media_files_registry",
+        run=_migration_media_files_registry,
+        needs_static_dir=True
+    ),
+    Migration(
+        version="0015",
+        name="pack_bookkeeping",
+        run=_migration_pack_bookkeeping,
+        requires_backup=True
+    ),
+    Migration(
+        version="0016",
+        name="localize_legacy_map_media",
+        run=_migration_localize_legacy_map_media,
+        requires_backup=True,
+        needs_static_dir=True
+    ),
+    Migration(
+        version="0017",
+        name="pack_terminology",
+        run=_migration_pack_terminology,
         requires_backup=True
     )
 ]
@@ -445,7 +966,10 @@ def run_migrations(
             if migration.version in _applied_versions(connection):
                 continue
 
-            migration.run(connection)
+            if migration.needs_static_dir:
+                migration.run(connection, static_dir)
+            else:
+                migration.run(connection)
             _record_migration(connection, migration)
             applied.append({
                 "version": migration.version,

@@ -52,8 +52,11 @@ export default function Manage(props) {
   // survives in useManageLibrary and the pending editor reappears on return.
   useEffect(() => () => abandonGroupCreationRef.current?.(), []);
   const {
+    allGroups,
     allQuestions,
+    clearOpenGroupId,
     clearOpenQuestionId,
+    openGroupId,
     openQuestionId,
     setSelectedItem,
     setViewMode
@@ -172,6 +175,22 @@ export default function Manage(props) {
     clearOpenQuestionId?.();
   }, [allQuestions, clearOpenQuestionId, openQuestionId, setSelectedItem, setViewMode]);
 
+  useEffect(() => {
+    if (!openGroupId) return;
+
+    const group = allGroups?.find(
+      (item) => String(item.id) === String(openGroupId)
+    );
+
+    if (!group) return;
+
+    setViewMode?.("groups");
+    setSelectedItem?.(group);
+    setEditingZone(null);
+    setHighlightedGroupIds([group.id]);
+    clearOpenGroupId?.();
+  }, [allGroups, clearOpenGroupId, openGroupId, setSelectedItem, setViewMode]);
+
   async function createQuestionWithHighlight(draftOverride) {
     // Wrap the shared create action with UI selection/highlight behavior for
     // this workspace.
@@ -220,8 +239,10 @@ export default function Manage(props) {
         height: "100%",
         background: "#121212",
         color: "#eee",
+        minWidth: 0,
         overflow: "hidden",
-        position: "relative"
+        position: "relative",
+        width: "100%"
       }}
     >
       {autosaveStatus && (

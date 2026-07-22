@@ -11,6 +11,7 @@ from ..models import (
 from ..serializers import serialize_manage_question
 from .media import delete_unreferenced_media_file, media_points_to_same_static_file
 from .sequence import validate_question_sequence
+from .tombstones import record_question_tombstones, record_tombstone
 from .timeline import validate_question_timeline
 
 
@@ -195,6 +196,10 @@ def delete_question_dependents(db, question_ids):
     if not question_ids:
         return
 
+    # Every question-deletion path funnels through here, so this is the single
+    # spot where deletion tombstones are recorded (while guids still exist).
+    record_question_tombstones(db, question_ids)
+
     # Relationship cascades are intentionally not enabled in the models, so
     # question-owned rows have to be removed explicitly before deleting rows
     # from questions.
@@ -242,6 +247,7 @@ def delete_question(db, question_id: int):
         )
 
         if remaining == 0:
+            record_tombstone(db, "question_group", group.guid)
             db.delete(group)
             db.commit()
             delete_unreferenced_media_file(db, group_media)

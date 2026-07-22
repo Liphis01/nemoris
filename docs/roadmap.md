@@ -1,3 +1,6 @@
+## Current focus
+
+
 ## vérifier
 - l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
 - question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
@@ -9,6 +12,9 @@
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
 - créer de nouveaux modes timeline (et revoir la création ?)
 - faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
+- il faudrait autoriser plusieurs images pour une même question pour varier
+- le mode plein écran n'est pas parfait (resize)
+- site de quiz en ligne relié
 
 
 ## quick fixes
@@ -20,18 +26,17 @@
 - tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
-- le recap d'images est légèrement moins propre que maps
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
+- mettre une ou deux stats dans les gros boutons de qualité des modes qcm
 
 ## bugs
 
 - recentrer les svg
-- empêcher la map de faire des minizooms quand j'ajoute un tag ou que je fais apparaître les inputs en bas
-- timeline sépare les zones en deux couleurs (il suffit de décaler d'une demi zone)
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - les tags marchent pas bien
 - parfois on peut scroll la page alors qu'il n'y a rien en dessous
+- dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
 
 ## to do when i have more time
 
@@ -50,6 +55,7 @@
 - make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
+- faire un sytème automatique pour ajouter progressivement un groupe au schedule (ex: avoir en permanence une dizaine de questions non maîtrisées dans le schedule, et quand on en maîtrise une, en ajouter une autre du groupe)
 
 ## refactors
 

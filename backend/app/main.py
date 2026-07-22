@@ -7,20 +7,27 @@ from .bootstrap import init_database
 from .config import FRONTEND_DIST_DIR, STATIC_DIR
 from .routers import (
     backup,
+    packs,
     collections,
     groups,
     maps,
     media_groups,
+    meta,
     questions,
     review,
     sequence_groups,
     stats,
+    sync,
     tags,
     text_groups,
     training,
     uploads
 )
 from .services.startup import run_startup_rebalance_with_session
+from .services.sync_state import (
+    mark_collection_changed,
+    should_mark_collection_changed
+)
 
 
 def create_app():
@@ -38,6 +45,19 @@ def create_app():
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def mark_sync_dirty_after_collection_mutation(request, call_next):
+        response = await call_next(request)
+
+        if should_mark_collection_changed(
+            request.method,
+            request.url.path,
+            response.status_code
+        ):
+            mark_collection_changed(f"{request.method} {request.url.path}")
+
+        return response
 
     # Uploaded media is served from /static. The folder is created lazily so a
     # fresh checkout can run without manual setup.
@@ -59,6 +79,9 @@ def create_app():
     app.include_router(sequence_groups.router)
     app.include_router(uploads.router)
     app.include_router(backup.router)
+    app.include_router(meta.router)
+    app.include_router(packs.router)
+    app.include_router(sync.router)
 
     if FRONTEND_DIST_DIR.exists():
         assets_dir = FRONTEND_DIST_DIR / "assets"

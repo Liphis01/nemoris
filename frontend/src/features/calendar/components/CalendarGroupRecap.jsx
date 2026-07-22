@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SvgMap from "../../map/components/SvgMap";
+import { resolveMediaUrl } from "../../../shared/media";
 import { centerListItem } from "../../../shared/scroll";
 
 const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -94,12 +95,6 @@ function getHistoryStats(question) {
   };
 }
 
-function groupMediaPath(media) {
-  if (!media) return null;
-  if (/^(https?:)?\/\//.test(media) || media.startsWith("/")) return media;
-  return `/maps/${media}`;
-}
-
 function getFocusedEvent(events, focusedQuestionId) {
   return events.find((event) => event.question.id === focusedQuestionId) || events[0];
 }
@@ -137,7 +132,7 @@ export default function CalendarGroupRecap({
   const focusedEvent = getFocusedEvent(row.events, focusedQuestionId);
   const focusedCode = getQuestionCode(focusedEvent?.question);
   const group = row.group || {};
-  const mapPath = groupMediaPath(group.media);
+  const mapPath = resolveMediaUrl(group.media);
   const hasMapPreview = group.type_group === "map" && mapPath;
   const groupTags = mergeTags(
     row.tags,
