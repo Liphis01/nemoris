@@ -77,10 +77,11 @@ The desktop app is a Tauri shell (`frontend/src-tauri`) that owns a frameless
 window and runs the FastAPI backend as a **sidecar**: on launch, Rust picks a
 free port, starts the packaged backend on it, waits for it to answer, and
 injects the URL into the frontend. Window drag, restored-window edge resize,
-and snap are native to Tauri. The host keeps maximized windows non-resizable so
-Windows does not expose resize handles at the screen edge; the styled title bar
-in `frontend/src/shared/DesktopTitleBar.jsx` mirrors that state for its custom
-controls.
+and snap are native to Tauri. The host keeps the active maximized window
+non-resizable so Windows does not expose resize handles at the screen edge, but
+it re-enables resizing before minimize/focus-loss transitions so taskbar restore
+stays reliable. The styled title bar in `frontend/src/shared/DesktopTitleBar.jsx`
+mirrors that state for its custom controls.
 
 ### Release build (CI)
 

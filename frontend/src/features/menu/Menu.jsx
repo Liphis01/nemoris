@@ -454,7 +454,7 @@ export default function Menu({
     reviewSummaryLoading || reviewSummaryError
       ? 90
       : reviewDueCount <= 0
-        ? 24
+        ? 0
         : Math.min(330, 72 + reviewDueCount * 18)
   );
   const reviewDialStyle = {

@@ -19,6 +19,7 @@
 - suppression de pack
 - autoriser les accents (et autres caractères spéciaux) dans supabase
 - il reste un dossier qui s'appelle blueprint
+- améliorer la connexion par email
 
 
 ## quick fixes
@@ -33,6 +34,7 @@
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 - mettre une ou deux stats dans les gros boutons de qualité des modes qcm
+- dans manage, quand la page est trop petite, il y a une scroll bar moche sur la page
 
 ## bugs
 
@@ -41,6 +43,7 @@
 - les tags marchent pas bien
 - parfois on peut scroll la page alors qu'il n'y a rien en dessous
 - dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
+- le pop up de synchronisation automatique décale toute la page vers le bas brièvement
 
 ## to do when i have more time
 
@@ -60,6 +63,7 @@
 - faire les modes en fonctions des gaps dans le calendrier ?
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 - faire un sytème automatique pour ajouter progressivement un groupe au schedule (ex: avoir en permanence une dizaine de questions non maîtrisées dans le schedule, et quand on en maîtrise une, en ajouter une autre du groupe)
+- un mode où je dois pointer sur une map le plus proche possible
 
 ## refactors
 

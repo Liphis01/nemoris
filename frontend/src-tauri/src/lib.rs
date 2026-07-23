@@ -85,20 +85,28 @@ fn wait_for_backend(port: u16) {
     log::warn!("backend did not answer on port {port} within timeout");
 }
 
+fn set_window_resizable<R: Runtime>(window: &WebviewWindow<R>, resizable: bool) {
+    match window.is_resizable() {
+        Ok(current) if current == resizable => return,
+        _ => {}
+    }
+
+    if let Err(error) = window.set_resizable(resizable) {
+        log::warn!("could not update window resizable state: {error}");
+    }
+}
+
 fn sync_window_resizable<R: Runtime>(window: &WebviewWindow<R>) {
+    if window.is_minimized().unwrap_or(false) || !window.is_focused().unwrap_or(true) {
+        set_window_resizable(window, true);
+        return;
+    }
+
     let Ok(maximized) = window.is_maximized() else {
         return;
     };
 
-    let should_be_resizable = !maximized;
-    match window.is_resizable() {
-        Ok(current) if current == should_be_resizable => return,
-        _ => {}
-    }
-
-    if let Err(error) = window.set_resizable(should_be_resizable) {
-        log::warn!("could not update window resizable state: {error}");
-    }
+    set_window_resizable(window, !maximized);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -167,7 +175,7 @@ pub fn run() {
                 WindowEvent::Resized(_)
                 | WindowEvent::Moved(_)
                 | WindowEvent::ScaleFactorChanged { .. }
-                | WindowEvent::Focused(true) => sync_window_resizable(&window_for_resize_state),
+                | WindowEvent::Focused(_) => sync_window_resizable(&window_for_resize_state),
                 _ => {}
             });
 
