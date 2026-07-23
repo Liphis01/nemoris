@@ -48,7 +48,20 @@ function App() {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    boxSizing: "border-box"
+    boxSizing: "border-box",
+    position: "relative"
+  };
+
+  const bannerOverlayStyle = {
+    position: "absolute",
+    top: "24px",
+    left: "24px",
+    right: "24px",
+    zIndex: 20,
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    pointerEvents: "none"
   };
 
   const routeSlotStyle = {
@@ -185,8 +198,10 @@ function App() {
   return (
     <div style={appStyle}>
       <DesktopTitleBar />
-      <UpdateBanner />
-      <AutoSyncBanner {...autoSync} />
+      <div style={bannerOverlayStyle}>
+        <UpdateBanner />
+        <AutoSyncBanner {...autoSync} />
+      </div>
       <div style={routeSlotStyle}>
         {mode === "menu" && (
           <Menu
