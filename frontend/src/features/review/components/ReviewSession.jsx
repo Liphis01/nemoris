@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { isRelearningQuestion } from "../relearningGrades";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import "./ReviewSession.css";
 
 // A group with more than one available question opens the count slider; a single
@@ -14,10 +15,6 @@ function isVisualQuestion(question) {
     (question?.type_q === "text" && Array.isArray(question?.items)) ||
     (question?.type_q === "sequence" && Array.isArray(question?.items))
   );
-}
-
-function reviewItemCount(question) {
-  return Array.isArray(question?.items) ? question.items.length : 1;
 }
 
 function RelearningBadge({ compact = false }) {
@@ -74,137 +71,60 @@ function RelearningCountChip({ count, compact = false }) {
   );
 }
 
-function reviewedQuestionsLabel(count) {
-  return count === 1 ? "1 question revue" : `${count} questions revues`;
-}
-
 function bonusQuestionsLabel(count) {
   return count === 1 ? "1 question bonus" : `${count} questions bonus`;
 }
 
-function availableBonusQuestionCount(status) {
-  // Every available bonus question is selectable now (capacity is informational
-  // only), so surface the full new-question count rather than the capped slot count.
-  const count = Number(
-    status?.same_group_new_count ??
-    status?.new_count ??
-    status?.same_group_bonus_question_count ??
-    status?.available_bonus_question_count
-  );
+function chunkEntries(entries, size) {
+  const rows = [];
 
-  return Number.isFinite(count) ? Math.max(0, count) : null;
+  for (let i = 0; i < entries.length; i += size) {
+    rows.push(entries.slice(i, i + size));
+  }
+
+  return rows;
 }
 
-function ReviewOutcomePanel({
-  variant,
-  reviewedCount,
+function BonusReviewMenu({
+  entries,
+  loading,
+  selectBonusItem,
+  itemLoading,
+  setMode,
   canReturnToLastQuestion,
-  returnToLastQuestion,
-  canStartBonusReview,
-  startBonusReview,
-  bonusReviewLoading,
-  bonusReviewStatus,
-  bonusStatusLoading
+  returnToLastQuestion
 }) {
-  const isFinished = variant === "finished";
-  const titleId = `review-outcome-title-${variant}`;
-  const bonusStatusLabel = bonusStatusLoading
-    ? "Analyse"
-    : canStartBonusReview
-      ? "Bonus disponible"
-      : "Aucun bonus";
-  const bonusQuestionCount = bonusStatusLoading
-    ? null
-    : availableBonusQuestionCount(bonusReviewStatus);
-  const bonusQuestionScopeLabel = bonusReviewStatus?.same_group_filter_applied
-    ? "Même groupe"
-    : "Bonus";
-
-  return (
-    <section
-      aria-labelledby={titleId}
-      className={`review-outcome review-outcome-${variant}`}
-      data-review-outcome={variant}
-    >
-      <div className="review-outcome-main">
-        <div className="review-outcome-kicker">
-          {isFinished ? "Journée bouclée" : "Planning à jour"}
-        </div>
-
-        <h2 className="review-outcome-title" id={titleId}>
-          {isFinished ? "Session terminée" : "Aucune question pour aujourd’hui"}
-        </h2>
-
-        <p className="review-outcome-copy">
-          {isFinished
-            ? "Toutes les questions ont été révisées."
-            : "Rien n’est dû pour le moment. La révision du jour est propre et tu peux garder ton rythme."}
-        </p>
-
-        <div className="review-outcome-metrics" aria-label="Résumé de la session">
-          <div className="review-outcome-metric">
-            <span>{isFinished ? reviewedQuestionsLabel(reviewedCount) : "0 question à revoir"}</span>
-            <strong>{isFinished ? "Révision" : "Aujourd’hui"}</strong>
-          </div>
-          <div className="review-outcome-metric">
-            <span>{bonusStatusLabel}</span>
-            <strong>Suite</strong>
-          </div>
-          {bonusQuestionCount !== null && (
-            <div className="review-outcome-metric">
-              <span>{bonusQuestionsLabel(bonusQuestionCount)}</span>
-              <strong>{bonusQuestionScopeLabel}</strong>
-            </div>
-          )}
-        </div>
-
-        {(canReturnToLastQuestion || canStartBonusReview) && (
-          <div className="review-outcome-actions">
-            {canReturnToLastQuestion && (
-              <button
-                className="review-outcome-button review-outcome-button-secondary"
-                type="button"
-                onClick={returnToLastQuestion}
-              >
-                Modifier la dernière réponse
-              </button>
-            )}
-
-            {canStartBonusReview && (
-              <button
-                className="review-outcome-button review-outcome-button-primary"
-                type="button"
-                onClick={startBonusReview}
-                disabled={bonusReviewLoading}
-              >
-                {bonusReviewLoading
-                  ? "Chargement des bonus..."
-                  : "Faire des questions bonus"}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="review-outcome-visual" aria-hidden="true">
-        <div className="review-outcome-symbol">
-          {isFinished ? <span className="review-outcome-check" /> : "0"}
-        </div>
-        <div className="review-outcome-lanes">
-          <span className="review-outcome-lane review-outcome-lane-violet" />
-          <span className="review-outcome-lane review-outcome-lane-amber" />
-          <span className="review-outcome-lane review-outcome-lane-green" />
-          <span className="review-outcome-lane review-outcome-lane-blue" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function BonusReviewMenu({ entries, selectBonusItem, itemLoading, setMode }) {
-  const allDone = entries.length === 0;
+  const allDone = !loading && entries.length === 0;
   const [openKey, setOpenKey] = useState(null);
   const [counts, setCounts] = useState({});
+  const [rowSize, setRowSize] = useState(1);
+  const listRef = useRef(null);
+
+  // The grid is auto-fill (see .bonus-menu-list), so its column count depends
+  // on the panel's width rather than any fixed number. Reading it back from
+  // the resolved computed style — instead of guessing a constant — lets the
+  // open card's picker break onto a full-width row right after the row it
+  // belongs to, however many cards actually share that row.
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node) return undefined;
+
+    function syncRowSize() {
+      const columns = getComputedStyle(node)
+        .gridTemplateColumns
+        .split(" ")
+        .filter(Boolean).length;
+
+      setRowSize(prev => (columns > 0 && columns !== prev ? columns : prev));
+    }
+
+    syncRowSize();
+
+    const observer = new ResizeObserver(syncRowSize);
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [loading, allDone]);
 
   const bonusCountFor = (entry) =>
     counts[entry.key] ?? Math.min(DEFAULT_BONUS_COUNT, entry.itemCount);
@@ -231,115 +151,171 @@ function BonusReviewMenu({ entries, selectBonusItem, itemLoading, setMode }) {
         <div>
           <div className="bonus-menu-kicker">Questions bonus</div>
           <h2 className="bonus-menu-title">
-            {allDone ? "Bonus terminés" : "Choisis une question à réviser"}
+            {loading
+              ? "Recherche de questions bonus"
+              : allDone
+                ? "Bonus terminés"
+                : "Choisis une question à réviser"}
           </h2>
           <p className="bonus-menu-copy">
-            {allDone
-              ? "Tu as fait toutes les questions bonus disponibles."
-              : "Sélectionne la question ou le groupe que tu veux faire. Tu reviens ici après chaque item."}
+            {loading
+              ? "Un instant, on regarde ce qu'il reste à faire."
+              : allDone
+                ? "Tu as fait toutes les questions bonus disponibles."
+                : "Sélectionne la question ou le groupe que tu veux faire. Tu reviens ici après chaque item."}
           </p>
         </div>
 
-        <ReturnToMenuButton
-          onClick={() => setMode("menu")}
-          style={{
-            background: "#1a1a1a",
-            border: "1px solid #2a2a2a",
-            borderRadius: "10px",
-            color: "#bbb",
-            cursor: "pointer",
-            flexShrink: 0,
-            fontSize: "14px",
-            padding: "10px 14px"
-          }}
-        />
+        <div style={{ alignItems: "center", display: "flex", flexShrink: 0, gap: "8px" }}>
+          {canReturnToLastQuestion && (
+            <button
+              type="button"
+              onClick={returnToLastQuestion}
+              style={{
+                background: "#1a1a1a",
+                border: "1px solid #2a2a2a",
+                borderRadius: "10px",
+                color: "#bbb",
+                cursor: "pointer",
+                fontSize: "14px",
+                padding: "10px 14px"
+              }}
+            >
+              Modifier la dernière réponse
+            </button>
+          )}
+
+          <ReturnToMenuButton
+            onClick={() => setMode("menu")}
+            style={{
+              background: "#1a1a1a",
+              border: "1px solid #2a2a2a",
+              borderRadius: "10px",
+              color: "#bbb",
+              cursor: "pointer",
+              fontSize: "14px",
+              padding: "10px 14px"
+            }}
+          />
+        </div>
       </div>
 
-      {allDone ? (
-        <button
-          type="button"
-          className="review-outcome-button review-outcome-button-primary"
-          onClick={() => setMode("menu")}
-        >
-          Retour au menu
-        </button>
+      {loading ? (
+        <p className="bonus-menu-loading">Chargement...</p>
+      ) : allDone ? (
+        <div className="bonus-menu-empty">
+          <button
+            type="button"
+            className="review-outcome-button review-outcome-button-primary"
+            onClick={() => setMode("menu")}
+          >
+            Retour au menu
+          </button>
+        </div>
       ) : (
-        <ul className="bonus-menu-list app-scrollbar">
-          {entries.map(entry => {
-            const expandable = entry.itemCount > 1;
-            const isOpen = expandable && openKey === entry.key;
-            const count = bonusCountFor(entry);
-            // WebKit can't paint a range's filled portion on its own, so drive it
-            // from the value as a percentage (Firefox uses ::-moz-range-progress).
-            const fillPercent = expandable
-              ? ((count - 1) / (entry.itemCount - 1)) * 100
-              : 0;
+        <ul className="bonus-menu-list app-scrollbar" ref={listRef}>
+          {chunkEntries(entries, rowSize).flatMap(row => {
+            const cards = row.map(entry => {
+              const expandable = entry.itemCount > 1;
+              const isOpen = expandable && openKey === entry.key;
+              const typeStyle = getQuestionTypeChipStyle(entry.typeQ);
 
-            return (
-              <li key={entry.key}>
-                <button
-                  type="button"
-                  className="bonus-menu-row"
-                  onClick={() => toggleEntry(entry)}
-                  disabled={itemLoading}
-                  aria-busy={itemLoading}
-                  aria-expanded={expandable ? isOpen : undefined}
+              return (
+                <li
+                  key={entry.key}
+                  className={`bonus-menu-card${isOpen ? " bonus-menu-card-open" : ""}`}
                 >
-                  <span className="bonus-menu-row-main">
-                    <span className="bonus-menu-row-type">
-                      {entry.typeLabel}
+                  <button
+                    type="button"
+                    className="bonus-menu-row"
+                    onClick={() => toggleEntry(entry)}
+                    disabled={itemLoading}
+                    aria-busy={itemLoading}
+                    aria-expanded={expandable ? isOpen : undefined}
+                    style={{
+                      "--bonus-type-bg": typeStyle.background,
+                      "--bonus-type-color": typeStyle.color
+                    }}
+                  >
+                    <span className="bonus-menu-row-top">
+                      <span className="bonus-menu-row-type">
+                        {entry.typeLabel}
+                      </span>
                       {entry.isContainer && (
                         <span className="bonus-menu-row-count">
                           {entry.itemCount}
                         </span>
                       )}
                     </span>
+
                     <span className="bonus-menu-row-label">
                       {entry.label}
                     </span>
-                  </span>
 
-                  <span className="bonus-menu-row-meta">
-                    {(entry.tags || []).slice(0, 3).map(tag => (
-                      <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
-                    ))}
-                    <span className="bonus-menu-row-arrow" aria-hidden="true">
-                      {itemLoading ? "…" : expandable ? (isOpen ? "▾" : "▸") : "→"}
-                    </span>
-                  </span>
-                </button>
-
-                {isOpen && (
-                  <div className="bonus-menu-picker">
-                    <div className="bonus-menu-picker-count">
-                      <strong>{bonusQuestionsLabel(count)}</strong>
-                      <span className="bonus-menu-picker-total">
-                        sur {entry.itemCount} disponibles
+                    <span className="bonus-menu-row-foot">
+                      <span className="bonus-menu-row-tags">
+                        {(entry.tags || []).slice(0, 3).map(tag => (
+                          <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
+                        ))}
                       </span>
-                    </div>
-                    <input
-                      type="range"
-                      className="bonus-menu-picker-slider"
-                      style={{ "--bonus-fill": `${fillPercent}%` }}
-                      min={1}
-                      max={entry.itemCount}
-                      value={count}
-                      onChange={event => setBonusCount(entry, event.target.value)}
-                      aria-label={`Nombre de questions bonus pour ${entry.label}`}
-                    />
-                    <button
-                      type="button"
-                      className="review-outcome-button review-outcome-button-primary"
-                      onClick={() => selectBonusItem(entry, count)}
-                      disabled={itemLoading}
-                      aria-busy={itemLoading}
-                    >
-                      {itemLoading ? "Chargement…" : "Commencer →"}
-                    </button>
-                  </div>
-                )}
-              </li>
+                      <span className="bonus-menu-row-arrow" aria-hidden="true">
+                        {itemLoading ? "…" : expandable ? (isOpen ? "▾" : "▸") : "→"}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            });
+
+            // The open card (if any) in this row gets its picker rendered as a
+            // full-width row right after it, instead of the card itself going
+            // full-width in place -- that would force grid auto-placement to
+            // bump every other card in the row down (see ReviewSession.css).
+            const openEntry = row.find(
+              entry => entry.itemCount > 1 && entry.key === openKey
             );
+
+            if (!openEntry) {
+              return cards;
+            }
+
+            const count = bonusCountFor(openEntry);
+            // WebKit can't paint a range's filled portion on its own, so drive it
+            // from the value as a percentage (Firefox uses ::-moz-range-progress).
+            const fillPercent = ((count - 1) / (openEntry.itemCount - 1)) * 100;
+
+            return [
+              ...cards,
+              <li key={`${openEntry.key}-picker`} className="bonus-menu-picker-row">
+                <div className="bonus-menu-picker">
+                  <div className="bonus-menu-picker-count">
+                    <strong>{bonusQuestionsLabel(count)}</strong>
+                    <span className="bonus-menu-picker-total">
+                      sur {openEntry.itemCount} disponibles
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    className="bonus-menu-picker-slider"
+                    style={{ "--bonus-fill": `${fillPercent}%` }}
+                    min={1}
+                    max={openEntry.itemCount}
+                    value={count}
+                    onChange={event => setBonusCount(openEntry, event.target.value)}
+                    aria-label={`Nombre de questions bonus pour ${openEntry.label}`}
+                  />
+                  <button
+                    type="button"
+                    className="review-outcome-button review-outcome-button-primary"
+                    onClick={() => selectBonusItem(openEntry, count)}
+                    disabled={itemLoading}
+                    aria-busy={itemLoading}
+                  >
+                    {itemLoading ? "Chargement…" : "Commencer →"}
+                  </button>
+                </div>
+              </li>
+            ];
           })}
         </ul>
       )}
@@ -362,10 +338,7 @@ export default function ReviewSession({
   handleSequenceComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
-  canStartBonusReview,
-  startBonusReview,
   bonusReviewActive,
-  bonusReviewStatus,
   bonusReviewLoading,
   bonusItemLoading,
   bonusStatusLoading,
@@ -373,6 +346,7 @@ export default function ReviewSession({
   bonusMenuEntries,
   selectBonusItem,
   returnToBonusMenu,
+  skipToBonusMenu,
   reviewLoading,
   reviewError,
   submitMapAnswer,
@@ -383,10 +357,6 @@ export default function ReviewSession({
   graduateGroupedAnswer
 }) {
   const currentQuestion = questions[currentIndex];
-  const reviewedCount = questions.reduce(
-    (total, question) => total + reviewItemCount(question),
-    0
-  );
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
     !reviewError &&
@@ -426,6 +396,14 @@ export default function ReviewSession({
     0
   );
   const showRelearningCount = hasActiveQuestion && relearningRemaining > 0;
+  // True once the current question and everything still queued behind it are
+  // relearning retries: the day's fresh queue is exhausted, so there's nothing
+  // left to skip by jumping to bonus early.
+  const onlyRelearningLeft = hasActiveQuestion &&
+    questions.slice(currentIndex).every(isRelearningQuestion);
+  // Only offered during the original review: once bonus is already active this
+  // would just duplicate the existing "← Menu bonus" action.
+  const showSkipToBonusMenu = onlyRelearningLeft && !bonusReviewActive;
 
   if (useCompactVisualLayout) {
     return (
@@ -501,6 +479,26 @@ export default function ReviewSession({
                   }}
                 >
                   ← Menu bonus
+                </button>
+              )}
+
+              {showSkipToBonusMenu && (
+                <button
+                  type="button"
+                  onClick={skipToBonusMenu}
+                  title="Passer directement aux questions bonus"
+                  style={{
+                    background: "#1f1f1f",
+                    border: "1px solid #333",
+                    borderRadius: "9px",
+                    color: "#ccc",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    padding: "7px 10px"
+                  }}
+                >
+                  Questions bonus →
                 </button>
               )}
 
@@ -691,6 +689,8 @@ export default function ReviewSession({
 
       <div
         style={{
+          display: "flex",
+          flexDirection: "column",
           maxWidth: "1050px",
           margin: "0 auto",
           height: "100%",
@@ -794,47 +794,18 @@ export default function ReviewSession({
           </div>
         )}
 
-        {/* BONUS MENU */}
+        {/* BONUS MENU — the only screen once the queue ends, whether nothing
+            was due today or everything just got answered. It owns its own
+            loading state, so there's no separate "session over" step first. */}
         {!reviewLoading && !reviewError && bonusMenuOpen && (
           <BonusReviewMenu
             entries={bonusMenuEntries}
+            loading={bonusStatusLoading || bonusReviewLoading}
             selectBonusItem={selectBonusItem}
             itemLoading={bonusItemLoading}
             setMode={setMode}
-          />
-        )}
-
-        {/* EMPTY */}
-        {!reviewLoading && !reviewError && !bonusMenuOpen && questions.length === 0 && (
-          <ReviewOutcomePanel
-            variant="empty"
-            reviewedCount={0}
-            canReturnToLastQuestion={false}
-            returnToLastQuestion={returnToLastQuestion}
-            canStartBonusReview={canStartBonusReview}
-            startBonusReview={startBonusReview}
-            bonusReviewLoading={bonusReviewLoading}
-            bonusReviewStatus={bonusReviewStatus}
-            bonusStatusLoading={bonusStatusLoading}
-          />
-        )}
-
-        {/* FINISHED */}
-        {!reviewLoading &&
-          !reviewError &&
-          !bonusMenuOpen &&
-          currentIndex >= questions.length &&
-          questions.length > 0 && (
-          <ReviewOutcomePanel
-            variant="finished"
-            reviewedCount={reviewedCount}
             canReturnToLastQuestion={canReturnToLastQuestion}
             returnToLastQuestion={returnToLastQuestion}
-            canStartBonusReview={canStartBonusReview}
-            startBonusReview={startBonusReview}
-            bonusReviewLoading={bonusReviewLoading}
-            bonusReviewStatus={bonusReviewStatus}
-            bonusStatusLoading={bonusStatusLoading}
           />
         )}
 
@@ -896,6 +867,26 @@ export default function ReviewSession({
                     }}
                   >
                     ← Menu bonus
+                  </button>
+                )}
+
+                {showSkipToBonusMenu && (
+                  <button
+                    type="button"
+                    onClick={skipToBonusMenu}
+                    title="Passer directement aux questions bonus"
+                    style={{
+                      background: "#1f1f1f",
+                      border: "1px solid #333",
+                      color: "#ccc",
+                      padding: "7px 10px",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "650"
+                    }}
+                  >
+                    Questions bonus →
                   </button>
                 )}
 

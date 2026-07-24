@@ -950,12 +950,6 @@ def get_bonus_group_entries(db, group_ids=None):
             entry["item_count"] += 1
             continue
 
-        if row.type_q == "timeline":
-            # Every due timeline item shares one combined review screen.
-            entry = container_entry("type:timeline", "timeline", "Timeline", [])
-            entry["item_count"] += 1
-            continue
-
         entries.append({
             "key": f"q:{row.id}",
             "type_q": row.type_q,
@@ -999,13 +993,7 @@ def get_bonus_group_items(db, key, limit=None):
         return []
 
     try:
-        if key == "type:timeline":
-            questions = [
-                question
-                for question in _new_questions(db)
-                if question.type_q == "timeline"
-            ]
-        elif key.startswith("group:"):
+        if key.startswith("group:"):
             questions = _new_questions(db, group_ids=[int(key[len("group:"):])])
         elif key.startswith("q:"):
             questions = _questions_by_ids(db, [int(key[len("q:"):])])

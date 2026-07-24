@@ -1709,6 +1709,26 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertTrue(text_groups)
         self.assertEqual(sum(len(item["items"]) for item in text_groups), 4)
 
+    def test_bonus_groups_lists_timeline_questions_individually(self):
+        # Timeline questions can't belong to a QuestionGroup, and the bonus menu
+        # used to fold every new one into a single "Timeline" bucket regardless.
+        # Each should get its own selectable entry instead, like any other loose
+        # question, keeping its own tags rather than losing them to the bucket.
+        for question_id in (10, 11):
+            timeline_question = self.add_question(question_id, type_q="timeline")
+            timeline_question.tags = ["histoire"]
+
+        self.db.commit()
+
+        by_key = {entry["key"]: entry for entry in get_bonus_groups(db=self.db)}
+
+        self.assertNotIn("type:timeline", by_key)
+        self.assertIn("q:10", by_key)
+        self.assertIn("q:11", by_key)
+        self.assertFalse(by_key["q:10"]["is_container"])
+        self.assertEqual(by_key["q:10"]["item_count"], 1)
+        self.assertEqual(by_key["q:10"]["tags"], ["histoire"])
+
     def test_bonus_items_returns_full_payload_for_one_picked_group(self):
         media_group = self.add_group(1, type_group="media")
 

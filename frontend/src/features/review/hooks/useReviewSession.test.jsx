@@ -104,7 +104,7 @@ describe("useReviewSession", () => {
       question_id: 10,
       _reviewRetryOfIndex: 0
     });
-    expect(result.current.canStartBonusReview).toBe(false);
+    expect(result.current.bonusMenuOpen).toBe(false);
   });
 
   it("keeps failed text retries on the original session date after midnight", async () => {
@@ -213,7 +213,7 @@ describe("useReviewSession", () => {
     );
   });
 
-  it("offers bonus review after scheduled text questions are correct", async () => {
+  it("opens bonus review automatically after scheduled text questions are correct", async () => {
     const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
@@ -232,12 +232,50 @@ describe("useReviewSession", () => {
     vi.useRealTimers();
 
     expect(result.current.currentIndex).toBe(1);
+    // No manual step: the bonus menu opens on its own once bonus is allowed.
     await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
   });
 
-  it("offers bonus review when scheduled review is empty", async () => {
+  it("lets the user jump to the bonus menu on demand without finishing the queue", async () => {
+    getBonusGroups.mockResolvedValue([
+      {
+        key: "q:11",
+        type_q: "text",
+        name: "Bonus",
+        tags: [],
+        item_count: 1,
+        is_container: false
+      }
+    ]);
+
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.skipToBonusMenu();
+    });
+
+    expect(result.current.bonusMenuOpen).toBe(true);
+    // The still-unfinished queue is left alone, exactly like the natural
+    // "queue ended" path, so "modifier la dernière réponse" keeps working.
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.questions).toHaveLength(1);
+
+    await waitFor(() => {
+      expect(result.current.bonusStatusLoading).toBe(false);
+    });
+
+    expect(getBonusReviewStatus).toHaveBeenCalled();
+    expect(getBonusGroups).toHaveBeenCalledWith();
+    expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
+  });
+
+  it("opens bonus review automatically when scheduled review is empty", async () => {
     getReview.mockResolvedValue([]);
     getBonusGroups.mockResolvedValue([
       {
@@ -257,22 +295,16 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions).toEqual([]);
-    await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
-    });
-    expect(result.current.bonusStatusLoading).toBe(false);
 
-    await act(async () => {
-      await result.current.startBonusReview();
+    await waitFor(() => {
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
 
     expect(getBonusReviewStatus).toHaveBeenCalled();
     // Only the lightweight selection list is loaded up front.
     expect(getBonusGroups).toHaveBeenCalledWith();
-    expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.questions).toEqual([]);
     expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
-    expect(result.current.canStartBonusReview).toBe(false);
   });
 
   it("lists every group in the bonus menu and loads a group's items only on pick", async () => {
@@ -320,19 +352,14 @@ describe("useReviewSession", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
     // Bonus is scoped to all groups, so the status is fetched without groupIds.
     expect(getBonusReviewStatus).toHaveBeenCalledWith();
 
-    await act(async () => {
-      await result.current.startBonusReview();
-    });
-
     // The menu is populated from the cheap list; no per-item payload yet.
     expect(getBonusGroups).toHaveBeenCalledWith();
     expect(getBonusGroupItems).not.toHaveBeenCalled();
-    expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.bonusMenuEntries.map(entry => entry.key)).toEqual(["group:7"]);
 
     // Picking a group fetches its full payload lazily.
@@ -368,8 +395,8 @@ describe("useReviewSession", () => {
 
     const { result } = renderHook(() => useReviewSession(true));
 
-    await act(async () => {
-      await result.current.startBonusReview();
+    await waitFor(() => {
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
 
     await act(async () => {
@@ -520,26 +547,32 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.currentIndex).toBe(1);
+    vi.useRealTimers();
 
-    let bonusPromise;
-
-    act(() => {
-      bonusPromise = result.current.startBonusReview();
+    // The bonus screen opens right away (no separate summary screen), but
+    // fetching the list is blocked until the pending text answer resolves.
+    await act(async () => {
+      await Promise.resolve();
     });
-
-    // Bonus loading is blocked until the pending text answer resolves.
     expect(getBonusGroups).not.toHaveBeenCalled();
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.bonusStatusLoading).toBe(true);
 
     await act(async () => {
       resolveAnswer({});
-      await bonusPromise;
+      await answerPromise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
 
     expect(getBonusGroups).toHaveBeenCalledWith();
-    expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual(["Bonus"]);
-    expect(result.current.currentIndex).toBe(0);
-    expect(result.current.canStartBonusReview).toBe(false);
+    // `questions`/`currentIndex` from the review that just ended are left
+    // alone (not reset to 0) so "modifier la dernière réponse" still works
+    // while the bonus menu is showing; picking an entry is what resets them.
+    expect(result.current.currentIndex).toBe(1);
   });
 
   it("opens a bonus menu and runs a picked item, then returns to the menu", async () => {
@@ -581,15 +614,10 @@ describe("useReviewSession", () => {
     const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
-    });
-
-    await act(async () => {
-      await result.current.startBonusReview();
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
 
     expect(getBonusGroups).toHaveBeenCalledWith();
-    expect(result.current.bonusMenuOpen).toBe(true);
     expect(result.current.questions).toEqual([]);
     expect(result.current.bonusMenuEntries.map(entry => entry.label)).toEqual([
       "Bonus text",
@@ -662,11 +690,7 @@ describe("useReviewSession", () => {
     const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
-    });
-
-    await act(async () => {
-      await result.current.startBonusReview();
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
 
     await act(async () => {
@@ -722,11 +746,7 @@ describe("useReviewSession", () => {
     const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
-      expect(result.current.canStartBonusReview).toBe(true);
-    });
-
-    await act(async () => {
-      await result.current.startBonusReview();
+      expect(result.current.bonusMenuOpen).toBe(true);
     });
 
     // The backend collapses the group's chunks into one menu entry.
@@ -745,7 +765,7 @@ describe("useReviewSession", () => {
     expect(result.current.questions).toEqual([chunkA, chunkB]);
   });
 
-  it("does not load the bonus menu when the status is not allowed", async () => {
+  it("shows the bonus screen without a list when the status is not allowed", async () => {
     getReview.mockResolvedValue([]);
     getBonusReviewStatus.mockResolvedValue({
       allowed: false
@@ -757,12 +777,10 @@ describe("useReviewSession", () => {
       expect(result.current.bonusStatusLoading).toBe(false);
     });
 
-    expect(result.current.canStartBonusReview).toBe(false);
-
-    await act(async () => {
-      await result.current.startBonusReview();
-    });
-
+    // The bonus screen still opens (it's the only post-review destination
+    // now), it just never fetches a list to show.
+    expect(result.current.bonusMenuOpen).toBe(true);
+    expect(result.current.bonusMenuEntries).toEqual([]);
     expect(getBonusGroups).not.toHaveBeenCalled();
   });
 });

@@ -48,7 +48,6 @@ function bonusEntryTypeLabel(typeQ, isContainer) {
   if (typeQ === "map") return "Carte";
   if (typeQ === "media") return "Médias";
   if (typeQ === "text") return "Texte";
-  if (typeQ === "timeline") return "Frise";
   if (typeQ === "sequence") return "Séquence";
 
   return "Groupe";
@@ -63,6 +62,7 @@ function buildBonusMenuEntries(entries) {
     key: entry.key,
     label: entry.name || (entry.is_container ? "Groupe" : "Question"),
     typeLabel: bonusEntryTypeLabel(entry.type_q, Boolean(entry.is_container)),
+    typeQ: entry.type_q,
     isContainer: Boolean(entry.is_container),
     itemCount: entry.item_count || 0,
     tags: entry.tags || []
@@ -121,11 +121,6 @@ export function useReviewSession(active) {
     lastQuestionIsTextLike &&
     answeredTextByIndex[lastQuestionIndex] &&
     selectedTextQuality === null
-  );
-  const canStartBonusReview = Boolean(
-    !bonusReviewStarted &&
-    currentIndex >= questions.length &&
-    bonusReviewStatus?.allowed
   );
 
   const clearTextAnswerTimeout = useCallback(() => {
@@ -360,6 +355,66 @@ export function useReviewSession(active) {
   const handleTimelineComplete = handleGroupComplete;
   const handleSequenceComplete = handleGroupComplete;
 
+  // Checks bonus eligibility and, if allowed, loads the selection list —
+  // shared by the "nothing was due today" bootstrap path and the "just
+  // answered the last question" path below, so both land on the exact same
+  // bonus screen instead of two subtly different ones. `bonusMenuOpen` flips
+  // true immediately (no separate "session over" screen renders in between);
+  // the screen itself carries its own loading state while this resolves.
+  const loadBonusMenu = useCallback(async (cancelledRef) => {
+    setBonusMenuOpen(true);
+    setBonusStatusLoading(true);
+
+    try {
+      await waitForTextAnswerRequests();
+      const status = await getBonusReviewStatus();
+
+      if (cancelledRef.current) return;
+
+      setBonusReviewStatus(status);
+      setBonusStatusLoading(false);
+
+      if (!status.allowed) {
+        setBonusReviewStarted(true);
+        return;
+      }
+
+      setBonusReviewLoading(true);
+
+      // Load only the selection list (names/counts) — every available group,
+      // no cap. Each entry's full payload is fetched lazily on pick.
+      const entries = await getBonusGroups();
+
+      if (cancelledRef.current) return;
+
+      setBonusMenuItems(entries);
+      setCompletedBonusKeys([]);
+      setActiveBonusKey(null);
+      setBonusReviewActive(true);
+      setBonusReviewStarted(true);
+    } catch (error) {
+      console.error(error);
+
+      if (!cancelledRef.current) {
+        setReviewError(error.message || "Impossible de charger les questions bonus.");
+      }
+    } finally {
+      if (!cancelledRef.current) {
+        setBonusStatusLoading(false);
+        setBonusReviewLoading(false);
+      }
+    }
+  }, [waitForTextAnswerRequests]);
+
+  // Lets the user jump straight to the bonus menu while relearning retries are
+  // still queued up, instead of grinding through them first. Reuses the same
+  // loader as the natural "queue ended" path; `questions`/`currentIndex` are
+  // deliberately left alone so "modifier la dernière réponse" keeps working,
+  // exactly like the natural path does.
+  const skipToBonusMenu = useCallback(() => {
+    loadBonusMenu({ current: false });
+  }, [loadBonusMenu]);
+
   useEffect(() => {
     if (!active) {
       clearTextAnswerTimeout();
@@ -383,7 +438,7 @@ export function useReviewSession(active) {
       return;
     }
 
-    let cancelled = false;
+    const cancelledRef = { current: false };
 
     async function loadReview() {
       setReviewLoading(true);
@@ -409,22 +464,24 @@ export function useReviewSession(active) {
 
       try {
         const data = await getReview();
-        const bonusStatus = data.length === 0
-          ? await getBonusReviewStatus()
-          : null;
 
-        if (cancelled) return;
+        if (cancelledRef.current) return;
 
         setQuestions(data);
-        setBonusReviewStatus(bonusStatus);
-        setBonusStatusLoading(false);
         setReviewLoading(false);
+
+        // Nothing due today: this is the only place that can know that
+        // *before* any question has been rendered, so it kicks off the bonus
+        // check itself rather than waiting on the "queue just ended" effect
+        // below (which deliberately ignores an empty queue — see there).
+        if (data.length === 0) {
+          await loadBonusMenu(cancelledRef);
+        }
       } catch (error) {
         console.error(error);
 
-        if (!cancelled) {
+        if (!cancelledRef.current) {
           setReviewError(error.message || "Impossible de préparer la session.");
-          setBonusStatusLoading(false);
           setReviewLoading(false);
         }
       }
@@ -433,9 +490,9 @@ export function useReviewSession(active) {
     loadReview();
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, [active, clearTextAnswerTimeout]);
+  }, [active, clearTextAnswerTimeout, loadBonusMenu]);
 
   useEffect(() => {
     return () => {
@@ -443,61 +500,37 @@ export function useReviewSession(active) {
     };
   }, [clearTextAnswerTimeout]);
 
+  // Mirrors the bootstrap check above for the "just answered the last
+  // question" moment. `questions.length === 0` is excluded on purpose: that
+  // state is indistinguishable from the pristine pre-load state on the very
+  // first render, and the bootstrap path above already owns the empty case.
   useEffect(() => {
     if (
       !active ||
       reviewLoading ||
       reviewError ||
-      bonusReviewStatus ||
       bonusReviewStarted ||
+      questions.length === 0 ||
       currentIndex < questions.length
     ) {
       return undefined;
     }
 
-    let cancelled = false;
+    const cancelledRef = { current: false };
 
-    async function loadBonusStatus() {
-      setBonusStatusLoading(true);
-
-      if (questions.length > 0) {
-        setBonusReviewStatus(null);
-      }
-
-      try {
-        await waitForTextAnswerRequests();
-        const status = await getBonusReviewStatus();
-
-        if (!cancelled) {
-          setBonusReviewStatus(status);
-        }
-      } catch (error) {
-        console.error(error);
-
-        if (!cancelled) {
-          setReviewError(error.message || "Impossible de vérifier le planning bonus.");
-        }
-      } finally {
-        if (!cancelled) {
-          setBonusStatusLoading(false);
-        }
-      }
-    }
-
-    loadBonusStatus();
+    loadBonusMenu(cancelledRef);
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
   }, [
     active,
-    bonusReviewStatus,
     bonusReviewStarted,
     currentIndex,
+    loadBonusMenu,
     questions.length,
     reviewError,
-    reviewLoading,
-    waitForTextAnswerRequests
+    reviewLoading
   ]);
 
   // When a picked bonus item (and its retries) is fully answered, mark it done
@@ -530,51 +563,6 @@ export function useReviewSession(active) {
     bonusReviewActive,
     currentIndex,
     questions.length
-  ]);
-
-  const startBonusReview = useCallback(async () => {
-    if (bonusReviewLoading || currentIndex < questions.length) return;
-
-    setBonusReviewLoading(true);
-    setReviewError("");
-
-    try {
-      await waitForTextAnswerRequests();
-      const bonusStatus = await getBonusReviewStatus();
-      setBonusReviewStatus(bonusStatus);
-
-      if (!bonusStatus.allowed) {
-        return;
-      }
-
-      // Load only the selection list (names/counts) — every available group,
-      // no cap. Each entry's full payload is fetched lazily on pick.
-      const entries = await getBonusGroups();
-
-      setBonusMenuItems(entries);
-      setCompletedBonusKeys([]);
-      setActiveBonusKey(null);
-      setQuestions([]);
-      setCurrentIndex(0);
-      setShowAnswer(false);
-      setSelectedTextQuality(null);
-      setAnsweredTextByIndex({});
-      setReturnToLastQuestionArmed(false);
-      setBonusReviewActive(true);
-      setBonusMenuOpen(true);
-      setBonusReviewStarted(true);
-      textAnswerRequestsRef.current = {};
-    } catch (error) {
-      console.error(error);
-      setReviewError(error.message || "Impossible de charger les questions bonus.");
-    } finally {
-      setBonusReviewLoading(false);
-    }
-  }, [
-    bonusReviewLoading,
-    currentIndex,
-    questions.length,
-    waitForTextAnswerRequests
   ]);
 
   useEffect(() => {
@@ -648,7 +636,7 @@ export function useReviewSession(active) {
     bonusMenuEntries,
     selectBonusItem,
     returnToBonusMenu,
-    canStartBonusReview,
+    skipToBonusMenu,
     currentIndex,
     handleImageComplete,
     handleMapComplete,
@@ -658,7 +646,6 @@ export function useReviewSession(active) {
     canReturnToLastQuestion,
     currentTextQuality: currentTextAnswer?.quality ?? null,
     returnToLastQuestion,
-    startBonusReview,
     selectedTextQuality,
     submitMediaAnswer,
     submitMapAnswer,

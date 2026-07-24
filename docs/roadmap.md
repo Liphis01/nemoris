@@ -2,32 +2,25 @@
 
 
 ## vérifier
-- l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
-- question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
 
 ## Urgent
-- ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
-- ne pas nécessairement reset les records après un edit
-- intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- créer de nouveaux modes timeline (et revoir la création ?)
-- faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
 - il faudrait autoriser plusieurs images pour une même question pour varier
-- le mode plein écran n'est pas parfait (resize)
-- site de quiz en ligne relié
 - log off
 - suppression de pack
-- autoriser les accents (et autres caractères spéciaux) dans supabase
+- autoriser les accents (et autres caractères spéciaux + latex) dans l'app et dans supabase
 - il reste un dossier qui s'appelle blueprint
 - améliorer la connexion par email
-
+- arrêter de différencier les questions texte des questions image -> question unitaire
+- bouton synchroniser depuis le menu (push pull)
+- quand on a modifié localement un groupe, proposer de reupdate le pack associé
+- setup le code par mail
 
 ## quick fixes
 
+- faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
 - ajouter le timer final dans la recap d'entrainement de maps
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
-- faire un bouton toggle pour l'era dans la preview
-- ajouter bouton annuler dans les autres types
 - tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
@@ -35,6 +28,14 @@
 - changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 - mettre une ou deux stats dans les gros boutons de qualité des modes qcm
 - dans manage, quand la page est trop petite, il y a une scroll bar moche sur la page
+- pouvoir zoomer sur les images pour les questions isolées
+- ne pas nécessairement reset les records après un edit
+- intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
+- ajouter bouton annuler dans les autres types
+- répondre faux à une question bonus n'a pas le comportement attendu
+- il ne faudrait pas être bloqué par les questions bonus ratées quand je veux retourner dans le menu bonus
+- il faudrait pouvoir naviguer les suggestions de tags avec les flèches du clavier
+- dans le menu bonus, séparer les questions timeline
 
 ## bugs
 
@@ -44,6 +45,8 @@
 - parfois on peut scroll la page alors qu'il n'y a rien en dessous
 - dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
 - le pop up de synchronisation automatique décale toute la page vers le bas brièvement
+- type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
+- en entrainement, on ne peut pas zoomer les questions isolées et les images dans les réponses ne sont pas centrées
 
 ## to do when i have more time
 
@@ -64,6 +67,9 @@
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
 - faire un sytème automatique pour ajouter progressivement un groupe au schedule (ex: avoir en permanence une dizaine de questions non maîtrisées dans le schedule, et quand on en maîtrise une, en ajouter une autre du groupe)
 - un mode où je dois pointer sur une map le plus proche possible
+- site de quiz en ligne relié
+- ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
+- créer de nouveaux modes timeline (et revoir la création ?)
 
 ## refactors
 
@@ -84,6 +90,8 @@
 - les questions ratées réapparaissent avec un mode différent (si disponible pour le type de question)
 - un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
 ----> peut aussi servir pour dessiner des drapeaux, des symboles, des logos (soit self evaluation, soit reconnaissance par l'ia)
+- organiser la section tags de training en arborescence conformément à l'arborescence des tags dans manage
+- autoriser l'italique, le gras, le souligné
 
 ## Conseils/idées issus de la littérature scientifique
 
