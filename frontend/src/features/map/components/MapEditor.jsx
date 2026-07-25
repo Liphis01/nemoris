@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
 import { resolveMediaUrl } from "../../../shared/media";
 import {
+  cancelButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   pendingSaveDotStyle,
   pendingSaveButtonStyle
@@ -43,6 +45,7 @@ export default function MapEditor({
   const saveMapEditsRef = useRef(null);
   const suppressFocusForCodeRef = useRef(null);
   const {
+    cancelChanges,
     clearDirty,
     dirtyZoneCodes,
     dirtyZoneCodesRef,
@@ -420,6 +423,20 @@ export default function MapEditor({
     }
 
     return { saved: true };
+  }
+
+  function cancelMapEdits() {
+    // Revert the group and zone list to the last saved state, then re-point the
+    // open editing panel at that zone's reverted values (or close it, if it was
+    // an unsaved temporary zone that no longer exists in the reverted list).
+    const code = getZoneCode(editingZone);
+    const revertedZones = cancelChanges();
+    setAliasInput("");
+    setEditingZone(
+      code
+        ? revertedZones.find(zone => getZoneCode(zone) === code) || null
+        : null
+    );
   }
 
   useEffect(() => {
@@ -972,7 +989,23 @@ export default function MapEditor({
               Sélectionner une zone
             </div>
           )}
-          <div style={{ marginTop: "15px" }}>
+          <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
+            <button
+              type="button"
+              disabled={!hasPendingMapChanges}
+              onClick={cancelMapEdits}
+              title={hasPendingMapChanges ? undefined : "Aucune modification à annuler"}
+              style={{
+                ...(hasPendingMapChanges
+                  ? cancelButtonStyle
+                  : disabledCancelButtonStyle),
+                flex: 1,
+                padding: "12px",
+                borderRadius: "8px"
+              }}
+            >
+              Annuler
+            </button>
             <button
               type="button"
               disabled={!hasPendingMapChanges}
@@ -982,7 +1015,7 @@ export default function MapEditor({
                 ...(hasPendingMapChanges
                   ? pendingSaveButtonStyle
                   : disabledSaveButtonStyle),
-                width: "100%",
+                flex: 1,
                 padding: "12px",
                 borderRadius: "8px"
               }}

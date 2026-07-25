@@ -235,6 +235,16 @@ export function useMapZones(group) {
     return dirtyZoneCodesRef.current.size > 0 || groupDiffersFromSaved();
   }
 
+  const cancelChanges = useCallback(() => {
+    const revertedZones = initialZonesRef.current;
+
+    setZones(revertedZones);
+    setEditableGroup(initialGroupRef.current);
+    clearAllDirty();
+
+    return revertedZones;
+  }, [clearAllDirty]);
+
   async function saveMapZones({ zonesToSave, changedZones }) {
     // Send only changed zones, but rebuild local state from the server response
     // so newly created rows get their real database ids/progress.
@@ -287,6 +297,7 @@ export function useMapZones(group) {
   }
 
   return {
+    cancelChanges,
     clearDirty,
     dirtyZoneCodes,
     dirtyZoneCodesRef,
