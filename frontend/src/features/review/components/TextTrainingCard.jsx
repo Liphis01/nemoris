@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fadeInStyle } from "../../../shared/styles";
-import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import {
+  getMediaKind,
+  mediaPoolFrom,
+  pickReviewMedia,
+  resolveMediaUrl
+} from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import {
   matchesTextTrainingAnswer,
@@ -125,7 +130,14 @@ export default function TextTrainingCard({
   const [draft, setDraft] = useState("");
   const [result, setResult] = useState("idle");
   const missedCompletionSubmittedRef = useRef(false);
-  const mediaSrc = resolveMediaUrl(q.media);
+  // One image from the question's pool for this presentation; a new card mount
+  // re-picks so successive trainings vary the picture.
+  const questionMedia = useMemo(
+    () => pickReviewMedia(q.question_id ?? q.id, mediaPoolFrom(q)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [q.question_id ?? q.id]
+  );
+  const mediaSrc = resolveMediaUrl(questionMedia);
   const typeStyle = getQuestionTypeChipStyle(q.type_q);
   const expectedAnswer = textAnswerValues(q)[0] || "";
   const missed = result === "wrong" || result === "skipped";
@@ -257,7 +269,7 @@ export default function TextTrainingCard({
         </div>
 
         <TrainingMedia
-          media={q.media}
+          media={questionMedia}
           label="image de la question"
           boxed
           style={{ marginTop: "18px" }}

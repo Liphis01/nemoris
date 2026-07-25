@@ -2,11 +2,11 @@
 
 
 ## vérifier
+- qu'il n'y a pas besoin de compte pour importer un pack
 
 ## Urgent
 - do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
 - il faudrait autoriser plusieurs images pour une même question pour varier
-- log off
 - suppression de pack
 - autoriser les accents (et autres caractères spéciaux + latex) dans l'app et dans supabase
 - il reste un dossier qui s'appelle blueprint
@@ -36,6 +36,8 @@
 - il ne faudrait pas être bloqué par les questions bonus ratées quand je veux retourner dans le menu bonus
 - il faudrait pouvoir naviguer les suggestions de tags avec les flèches du clavier
 - dans le menu bonus, séparer les questions timeline
+- bouton annuler dans le manage de groupes
+- pour les questions relearning, vérifier l'heure pour décider si on le montre en premier ou pas si on retourne dans la review et qu'il reste des questions normales
 
 ## bugs
 
@@ -70,6 +72,7 @@
 - site de quiz en ligne relié
 - ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
 - créer de nouveaux modes timeline (et revoir la création ?)
+- leaderboard des packs
 
 ## refactors
 
@@ -91,7 +94,9 @@
 - un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
 ----> peut aussi servir pour dessiner des drapeaux, des symboles, des logos (soit self evaluation, soit reconnaissance par l'ia)
 - organiser la section tags de training en arborescence conformément à l'arborescence des tags dans manage
-- autoriser l'italique, le gras, le souligné
+- autoriser l'italique, le gras, le souligné + latex
+- faire un truc cooperatif à la git pour les packs
+- quand on change de preview dans manage, garder l'état en mémoire et attendre pour enregistrer ou annuler
 
 ## Conseils/idées issus de la littérature scientifique
 

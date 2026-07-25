@@ -3,6 +3,7 @@ from .services.image_modes import (
     DEFAULT_IMAGE_MODE,
     normalize_image_mode
 )
+from .services.media_pool import read_media_pool
 from .services.map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
@@ -84,6 +85,7 @@ def serialize_manage_question(question):
         "question": question.question,
         "answer": question.answer,
         "media": question.media,
+        "media_pool": read_media_pool(question.media, question.data),
         "answer_media": question.answer_media,
         "tags": question.tags or [],
         "data": question.data or {},
@@ -130,6 +132,8 @@ def serialize_review_question_item(question):
         "answer": question.answer,
 
         "media": question.media,
+
+        "media_pool": read_media_pool(question.media, question.data),
 
         "answer_media": question.answer_media,
 
@@ -230,6 +234,8 @@ def serialize_media_review_item(
         "label": question.answer,
 
         "media": question.media,
+
+        "media_pool": read_media_pool(question.media, question.data),
 
         "tags": question.tags or [],
 

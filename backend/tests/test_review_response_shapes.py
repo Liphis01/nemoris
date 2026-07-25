@@ -55,6 +55,7 @@ TEXT_REVIEW_KEYS = {
     "question",
     "answer",
     "media",
+    "media_pool",
     "answer_media",
     "tags",
     "progress"
@@ -93,6 +94,7 @@ IMAGE_ITEM_KEYS = {
     "answer",
     "label",
     "media",
+    "media_pool",
     "tags",
     "aliases",
     "progress",

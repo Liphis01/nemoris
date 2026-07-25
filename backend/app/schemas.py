@@ -348,6 +348,11 @@ class MediaGroupItemBulkItem(BaseModel):
 
     media: Optional[str] = ""
 
+    # Ordered list of images for this item, cover first. None means "not sent"
+    # (fall back to the single `media`); an item with several images picks one at
+    # ask time so the picture cannot be rote-memorised.
+    media_pool: Optional[List[str]] = None
+
     aliases: List[str] = Field(
         default_factory=list
     )

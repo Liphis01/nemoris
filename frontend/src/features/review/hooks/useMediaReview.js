@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMediaAnswer } from "../../../api/review";
+import { mediaPoolFrom, pickReviewMedia } from "../../../shared/media";
 import { partitionRelearningQualities } from "../relearningGrades";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -56,6 +57,38 @@ function shuffled(items) {
 
 function idsFor(items) {
   return items.map(item => item.question_id);
+}
+
+
+// Choose one image per item for this presentation, keyed by question so an item
+// that appears both as a due card and as context shows the same picture.
+function buildDisplayMedia(...itemLists) {
+  const chosen = {};
+
+  for (const items of itemLists) {
+    for (const item of items || []) {
+      const questionId = item?.question_id;
+
+      if (questionId == null || questionId in chosen) continue;
+
+      chosen[questionId] = pickReviewMedia(questionId, mediaPoolFrom(item));
+    }
+  }
+
+  return chosen;
+}
+
+
+function resolveItemsMedia(items, displayMedia) {
+  if (!Array.isArray(items)) return items;
+
+  return items.map(item => {
+    if (item == null) return item;
+
+    const media = displayMedia[item.question_id];
+
+    return media && media !== item.media ? { ...item, media } : item;
+  });
 }
 
 
@@ -469,7 +502,7 @@ const initialRecapSort = {
 
 
 export function useMediaReview(
-  reviewItems,
+  reviewItemsInput,
   onComplete,
   submitAnswer = sendMediaAnswer,
   options = {}
@@ -480,14 +513,32 @@ export function useMediaReview(
   // Review grades each choice inline (reveal + quality), then auto-submits the
   // group when the last item is rated. Training keeps the legacy flash + recap.
   const inlineChoiceRating = Boolean(options.inlineChoiceRating) && isChoiceMode(mode);
-  const contextItems = options.contextItems?.length
+  const contextItemsInput = options.contextItems?.length
     ? options.contextItems
-    : reviewItems;
+    : reviewItemsInput;
   const relearningGroup = options.group;
   const graduateAnswer = options.graduateAnswer;
   const reviewKey = useMemo(
-    () => `${mode}:${idsFor(reviewItems).join("|")}`,
-    [mode, reviewItems]
+    () => `${mode}:${idsFor(reviewItemsInput).join("|")}`,
+    [mode, reviewItemsInput]
+  );
+  // Resolve the picture each pooled item shows for this presentation once per
+  // review, so the prompt, choice grid, recap, and preview stay in sync. Keyed
+  // on reviewKey: a relearning retry remounts with a new key and re-picks.
+  const displayMediaByQuestionId = useMemo(
+    () => buildDisplayMedia(reviewItemsInput, contextItemsInput),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reviewKey]
+  );
+  const reviewItems = useMemo(
+    () => resolveItemsMedia(reviewItemsInput, displayMediaByQuestionId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reviewKey, displayMediaByQuestionId]
+  );
+  const contextItems = useMemo(
+    () => resolveItemsMedia(contextItemsInput, displayMediaByQuestionId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reviewKey, displayMediaByQuestionId]
   );
   const distractorUsage = useMemo(() => ({
     reviewKey,

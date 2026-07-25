@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fadeInStyle } from "../../../shared/styles";
-import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import {
+    getMediaKind,
+    mediaPoolFrom,
+    pickReviewMedia,
+    resolveMediaUrl
+} from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import {
     GOT_IT_QUALITY,
@@ -315,7 +320,14 @@ export default function TextReviewCard({
     const answerActionsRef = useRef(null);
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
-    const hasQuestionMedia = Boolean(q.media);
+    // Pick one image from the question's pool for this presentation (stable for
+    // the card's lifetime; a new card mount re-picks, avoiding a repeat).
+    const questionMedia = useMemo(
+        () => pickReviewMedia(q.question_id ?? q.id, mediaPoolFrom(q)),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [q.question_id ?? q.id]
+    );
+    const hasQuestionMedia = Boolean(questionMedia);
     const typeStyle = getQuestionTypeChipStyle(q.type_q);
     const relearning = isRelearningQuestion(q);
     const gradeOptions = relearning ? relearningOptions : answerOptions;
@@ -417,7 +429,7 @@ export default function TextReviewCard({
 
                 {/* QUESTION MEDIA */}
                 <ReviewMedia
-                    media={q.media}
+                    media={questionMedia}
                     label="question"
                     style={{ marginTop: "18px", marginBottom: 0 }}
                 />

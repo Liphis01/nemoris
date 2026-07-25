@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   buttonStyle,
   cancelButtonStyle,
@@ -13,7 +14,11 @@ import {
   primaryButtonStyle
 } from "./QuestionEditorStyles";
 import AutocompleteInput from "../../../shared/AutocompleteInput";
-import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import {
+  getMediaKind,
+  normalizeMediaPool,
+  resolveMediaUrl
+} from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 
 const DEFAULT_MEDIA_LABELS = {
@@ -514,6 +519,746 @@ export function ImageMediaField({
         >
           {error}
         </div>
+      )}
+    </div>
+  );
+}
+
+function MediaPoolThumbnail({ media, size = 72 }) {
+  const src = resolveMediaUrl(media);
+  const kind = getMediaKind(media);
+
+  const shared = {
+    maxHeight: "100%",
+    maxWidth: "100%",
+    objectFit: "contain"
+  };
+
+  return (
+    <div
+      style={{
+        alignItems: "center",
+        background: "#101010",
+        display: "flex",
+        height: `${size}px`,
+        justifyContent: "center",
+        overflow: "hidden",
+        width: `${size}px`
+      }}
+    >
+      {kind === "audio" ? (
+        <span aria-hidden="true" style={{ fontSize: "22px" }}>🎧</span>
+      ) : kind === "video" ? (
+        <video src={src} muted playsInline preload="metadata" style={shared} />
+      ) : (
+        <img src={src} alt="" loading="lazy" decoding="async" style={shared} />
+      )}
+    </div>
+  );
+}
+
+// Multi-image field: a compact cover + "+N" trigger that opens a modal to add,
+// remove, reorder, and choose the cover. One image is picked at ask time so the
+// picture cannot be rote-memorised. Emits an ordered, de-duplicated string[].
+export function MediaPoolField({
+  pool = [],
+  onPoolChange,
+  onUploadFile,
+  onImportMediaUrl,
+  accept = "image/*",
+  labels,
+  compact = false,
+  size = 72
+}) {
+  const images = normalizeMediaPool(pool);
+  const cover = images[0] || "";
+  const extraCount = Math.max(0, images.length - 1);
+
+  const fileInputRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isImportingUrl, setIsImportingUrl] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState("");
+  const [previewMedia, setPreviewMedia] = useState(null);
+
+  const text = { ...DEFAULT_MEDIA_LABELS, ...labels };
+  const busy = isUploading || isImportingUrl;
+  const acceptedTypePrefixes = accept
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/\*$/, ""));
+
+  function fileMatchesAccept(file) {
+    if (!file?.type) return true;
+
+    return acceptedTypePrefixes.some((prefix) =>
+      prefix.endsWith("/") ? file.type.startsWith(prefix) : file.type === prefix
+    );
+  }
+
+  function commitPool(next) {
+    onPoolChange?.(normalizeMediaPool(next));
+  }
+
+  function addMedia(media) {
+    const value = String(media || "").trim();
+
+    if (!value || images.includes(value)) return;
+
+    commitPool([...images, value]);
+  }
+
+  async function uploadFiles(fileList) {
+    const files = Array.from(fileList || []).filter(fileMatchesAccept);
+
+    if (files.length === 0 || !onUploadFile) return;
+
+    setError("");
+    setIsUploading(true);
+
+    try {
+      const added = [];
+
+      for (const file of files) {
+        const result = await onUploadFile(file);
+        const media = result?.media || result?.url;
+
+        if (media) added.push(media);
+      }
+
+      if (added.length) commitPool([...images, ...added]);
+    } catch (uploadError) {
+      setError(uploadError.message || "Import impossible.");
+    } finally {
+      setIsUploading(false);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function importUrl() {
+    const url = urlInput.trim();
+
+    if (!url) return;
+
+    setError("");
+
+    if (!onImportMediaUrl) {
+      addMedia(url);
+      setUrlInput("");
+      return;
+    }
+
+    setIsImportingUrl(true);
+
+    try {
+      const result = await onImportMediaUrl(url);
+
+      addMedia(result?.media || result?.url || url);
+      setUrlInput("");
+    } catch (importError) {
+      setError(importError.message || "Import URL impossible.");
+    } finally {
+      setIsImportingUrl(false);
+    }
+  }
+
+  function removeAt(index) {
+    commitPool(images.filter((_, position) => position !== index));
+  }
+
+  function makeCover(index) {
+    if (index <= 0) return;
+
+    const next = [...images];
+    const [picked] = next.splice(index, 1);
+
+    commitPool([picked, ...next]);
+  }
+
+  function move(index, delta) {
+    const target = index + delta;
+
+    if (target < 0 || target >= images.length) return;
+
+    const next = [...images];
+    [next[index], next[target]] = [next[target], next[index]];
+    commitPool(next);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+    uploadFiles(event.dataTransfer?.files);
+  }
+
+  function handlePaste(event) {
+    // The popover is a portal: React bubbles its events through the component
+    // tree (not the DOM tree), so without this a paste here would also reach
+    // MediaGroupEditor's own paste handler and spawn a whole new row.
+    event.stopPropagation();
+
+    const files = Array.from(event.clipboardData?.files || []).filter(fileMatchesAccept);
+
+    if (files.length) {
+      event.preventDefault();
+      uploadFiles(files);
+      return;
+    }
+
+    const pastedText = event.clipboardData?.getData("text/plain")?.trim();
+
+    if (
+      pastedText &&
+      (
+        /^(https?:)?\/\//.test(pastedText) ||
+        pastedText.startsWith("/static/") ||
+        pastedText.startsWith("data:")
+      )
+    ) {
+      event.preventDefault();
+      addMedia(pastedText);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key !== "Escape") return;
+
+      if (previewMedia) {
+        setPreviewMedia(null);
+        return;
+      }
+
+      setOpen(false);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, previewMedia]);
+
+  useEffect(() => {
+    if (!open) setPreviewMedia(null);
+  }, [open]);
+
+  const ghostButtonStyle = {
+    ...buttonStyle,
+    background: "transparent",
+    border: "1px solid #333",
+    color: "#aaa",
+    fontSize: "13px",
+    padding: "9px 12px",
+    whiteSpace: "nowrap"
+  };
+  const compactPrimaryStyle = {
+    ...primaryButtonStyle,
+    opacity: !onUploadFile || busy ? 0.6 : 1,
+    padding: "9px 14px",
+    whiteSpace: "nowrap"
+  };
+  const coverBadgeStyle = {
+    background: "rgba(15, 15, 15, 0.86)",
+    border: "1px solid #3a3a3a",
+    borderRadius: "999px",
+    bottom: "4px",
+    color: "#f0c36a",
+    fontSize: "11px",
+    fontWeight: 700,
+    padding: "2px 7px",
+    pointerEvents: "none",
+    position: "absolute",
+    right: "4px"
+  };
+
+  return (
+    <div
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsDragging(false);
+        }
+      }}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+      style={compact ? {
+        border: isDragging
+          ? "1px dashed rgba(126, 226, 168, 0.75)"
+          : "1px solid transparent",
+        borderRadius: "10px",
+        display: "inline-block",
+        lineHeight: 0
+      } : {
+        border: isDragging
+          ? "1px dashed rgba(126, 226, 168, 0.75)"
+          : cover
+            ? "1px solid #2a2a2a"
+            : "1px dashed #333",
+        borderRadius: "10px",
+        background: isDragging ? "#17231b" : "#121212",
+        padding: "12px",
+        transition: "background 0.14s ease, border 0.14s ease"
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        multiple
+        onChange={(event) => uploadFiles(event.target.files)}
+        style={{ display: "none" }}
+      />
+
+      {compact ? (
+        cover ? (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            title="Gérer les images"
+            style={{
+              background: "#101010",
+              border: "1px solid #2f2f2f",
+              borderRadius: "8px",
+              cursor: "pointer",
+              display: "block",
+              overflow: "hidden",
+              padding: 0,
+              position: "relative"
+            }}
+          >
+            <MediaPoolThumbnail media={cover} size={size} />
+            {extraCount > 0 && <span style={coverBadgeStyle}>+{extraCount}</span>}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            disabled={!onUploadFile && !onImportMediaUrl}
+            title="Ajouter des images"
+            style={{
+              alignItems: "center",
+              background: "#181818",
+              border: "1px dashed #3a3a3a",
+              borderRadius: "8px",
+              color: "#888",
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              fontSize: "11px",
+              gap: "3px",
+              height: `${size}px`,
+              justifyContent: "center",
+              lineHeight: 1.1,
+              width: `${size}px`
+            }}
+          >
+            <span aria-hidden="true" style={{ fontSize: "18px" }}>＋</span>
+            {isUploading ? "Import…" : "média"}
+          </button>
+        )
+      ) : cover ? (
+        <div
+          style={{
+            alignItems: "center",
+            display: "grid",
+            gap: "14px",
+            gridTemplateColumns: "auto minmax(0, 1fr)"
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            title="Gérer les images"
+            style={{
+              background: "#101010",
+              border: "1px solid #2f2f2f",
+              borderRadius: "8px",
+              cursor: "pointer",
+              overflow: "hidden",
+              padding: 0,
+              position: "relative"
+            }}
+          >
+            <MediaPoolThumbnail media={cover} size={78} />
+            {extraCount > 0 && <span style={coverBadgeStyle}>+{extraCount}</span>}
+          </button>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: 0 }}>
+            <div style={{ color: "#aaa", fontSize: "12px" }}>
+              {images.length} image{images.length > 1 ? "s" : ""}
+              {extraCount > 0 ? " — une au hasard à la révision" : ""}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              <button type="button" onClick={() => setOpen(true)} style={compactPrimaryStyle}>
+                Gérer les images
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!onUploadFile || busy}
+                style={ghostButtonStyle}
+              >
+                {isUploading ? "Import..." : "＋ Ajouter"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!onUploadFile || busy}
+            style={compactPrimaryStyle}
+          >
+            {isUploading ? "Import..." : `＋ ${text.import}`}
+          </button>
+          <button type="button" onClick={() => setOpen(true)} style={ghostButtonStyle}>
+            Ajouter par URL
+          </button>
+          <span style={{ color: isDragging ? "#7ee2a8" : "#666", fontSize: "12px" }}>
+            {isDragging ? text.dragging : text.hint}
+          </span>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ color: "#ff9c9c", fontSize: "12px", marginTop: "9px" }}>
+          {error}
+        </div>
+      )}
+
+      {open && createPortal(
+        <>
+        <div
+          role="presentation"
+          onClick={() => setOpen(false)}
+          style={{
+            alignItems: "center",
+            background: "rgba(0, 0, 0, 0.82)",
+            display: "flex",
+            inset: "var(--shell-top, 0px) 0 0 0",
+            justifyContent: "center",
+            padding: "28px",
+            position: "fixed",
+            zIndex: 1200
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDrop={handleDrop}
+            onPaste={handlePaste}
+            style={{
+              background: "#161616",
+              border: "1px solid #333",
+              borderRadius: "14px",
+              boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+              maxHeight: "82vh",
+              padding: "20px",
+              width: "min(88vw, 640px)"
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between" }}>
+              <div style={{ color: "#eee", fontSize: "16px", fontWeight: 800 }}>
+                Médias ({images.length})
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Fermer"
+                style={{
+                  background: "#1f1f1f",
+                  border: "1px solid #3a3a3a",
+                  borderRadius: "999px",
+                  color: "#ddd",
+                  cursor: "pointer",
+                  fontSize: "18px",
+                  height: "32px",
+                  lineHeight: 1,
+                  width: "32px"
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              className="app-scrollbar"
+              style={{
+                display: "grid",
+                gap: "12px",
+                gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+                overflowY: "auto",
+                paddingRight: "4px"
+              }}
+            >
+              {images.map((media, index) => (
+                <div
+                  key={`${media}-${index}`}
+                  style={{
+                    border: index === 0 ? "1px solid #6f5520" : "1px solid #2a2a2a",
+                    borderRadius: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    padding: "8px"
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMedia(media)}
+                    aria-label="Agrandir l'image"
+                    style={{
+                      alignItems: "center",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "zoom-in",
+                      display: "flex",
+                      justifyContent: "center",
+                      padding: 0
+                    }}
+                  >
+                    <MediaPoolThumbnail media={media} size={110} />
+                  </button>
+
+                  {index === 0 ? (
+                    <div style={{ color: "#f0c36a", fontSize: "11px", fontWeight: 700, textAlign: "center" }}>
+                      ★ Couverture
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => makeCover(index)}
+                      style={{ ...ghostButtonStyle, fontSize: "12px", justifyContent: "center", padding: "6px 8px" }}
+                    >
+                      ★ Couverture
+                    </button>
+                  )}
+
+                  <div style={{ display: "flex", gap: "6px", justifyContent: "center" }}>
+                    <button
+                      type="button"
+                      onClick={() => move(index, -1)}
+                      disabled={index === 0}
+                      aria-label="Déplacer avant"
+                      style={{ ...ghostButtonStyle, opacity: index === 0 ? 0.4 : 1, padding: "6px 10px" }}
+                    >
+                      ◀
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(index, 1)}
+                      disabled={index === images.length - 1}
+                      aria-label="Déplacer après"
+                      style={{ ...ghostButtonStyle, opacity: index === images.length - 1 ? 0.4 : 1, padding: "6px 10px" }}
+                    >
+                      ▶
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeAt(index)}
+                      style={{ ...dangerButtonStyle, padding: "6px 10px" }}
+                    >
+                      Retirer
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!onUploadFile && !onImportMediaUrl}
+                title="Collez une image (Ctrl+V) ou cliquez pour en importer une"
+                style={{
+                  alignItems: "center",
+                  background: "#141414",
+                  border: "1px dashed #3a3a3a",
+                  borderRadius: "10px",
+                  color: "#888",
+                  cursor: !onUploadFile && !onImportMediaUrl ? "default" : "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  justifyContent: "center",
+                  minHeight: "110px",
+                  padding: "8px"
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: "22px" }}>＋</span>
+                <span style={{ fontSize: "12px", lineHeight: 1.3, textAlign: "center" }}>
+                  Coller (Ctrl+V)
+                </span>
+              </button>
+            </div>
+
+            <div style={{ borderTop: "1px solid #2a2a2a", display: "flex", flexWrap: "wrap", gap: "8px", paddingTop: "14px" }}>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!onUploadFile || busy}
+                style={compactPrimaryStyle}
+              >
+                {isUploading ? "Import..." : "＋ Importer"}
+              </button>
+              <input
+                value={urlInput}
+                onChange={(event) => setUrlInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    importUrl();
+                  }
+                }}
+                placeholder="https://... ou /static/fichier"
+                style={{ ...inputStyle, flex: "1 1 200px", marginBottom: 0, minWidth: "160px" }}
+              />
+              <button
+                type="button"
+                onClick={importUrl}
+                disabled={!urlInput.trim() || busy}
+                style={{ ...buttonStyle, opacity: !urlInput.trim() || busy ? 0.6 : 1, whiteSpace: "nowrap" }}
+              >
+                {isImportingUrl ? "Import URL..." : "Importer l'URL"}
+              </button>
+            </div>
+
+            {error && (
+              <div style={{ color: "#ff9c9c", fontSize: "12px" }}>
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {previewMedia && (
+          <div
+            role="presentation"
+            onClick={() => setPreviewMedia(null)}
+            style={{
+              alignItems: "center",
+              background: "rgba(0, 0, 0, 0.82)",
+              display: "flex",
+              inset: 0,
+              justifyContent: "center",
+              padding: "28px",
+              position: "fixed",
+              zIndex: 1300
+            }}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                borderRadius: "12px",
+                boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
+                boxSizing: "border-box",
+                display: "grid",
+                maxHeight: "86vh",
+                overflow: "hidden",
+                padding: "14px",
+                position: "relative",
+                width: "min(82vw, 900px)"
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewMedia(null)}
+                aria-label="Fermer l'image agrandie"
+                style={{
+                  alignItems: "center",
+                  background: "#1f1f1f",
+                  border: "1px solid #3a3a3a",
+                  borderRadius: "999px",
+                  color: "#ddd",
+                  cursor: "pointer",
+                  display: "flex",
+                  fontSize: "20px",
+                  height: "34px",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                  position: "absolute",
+                  right: "12px",
+                  top: "12px",
+                  width: "34px",
+                  zIndex: 1
+                }}
+              >
+                ×
+              </button>
+
+              {getMediaKind(previewMedia) === "audio" ? (
+                <audio
+                  src={resolveMediaUrl(previewMedia)}
+                  controls
+                  autoPlay
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    width: "100%"
+                  }}
+                />
+              ) : getMediaKind(previewMedia) === "video" ? (
+                <video
+                  src={resolveMediaUrl(previewMedia)}
+                  controls
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    height: "min(62vh, 560px)",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              ) : (
+                <img
+                  src={resolveMediaUrl(previewMedia)}
+                  alt=""
+                  style={{
+                    background: "#0d0d0d",
+                    borderRadius: "8px",
+                    display: "block",
+                    height: "min(62vh, 560px)",
+                    objectFit: "contain",
+                    width: "100%"
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        )}
+        </>,
+        document.body
       )}
     </div>
   );

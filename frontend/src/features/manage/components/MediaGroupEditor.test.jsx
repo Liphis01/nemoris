@@ -41,7 +41,8 @@ function makeImageItems(count) {
 
 function scrollEditorTo(index) {
   const scroller = screen.getByTestId("image-group-items-scroll");
-  scroller.scrollTop = index * 302;
+  // Row height (214) + gap (10) = slot height.
+  scroller.scrollTop = index * 224;
   fireEvent.scroll(scroller);
 }
 
@@ -108,7 +109,10 @@ describe("MediaGroupEditor", { timeout: 25000 }, () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThan(60);
     expect(screen.getAllByText("Réponse")).toHaveLength(rows.length);
-    expect(screen.getAllByRole("img")).toHaveLength(rows.length);
+    // One cover thumbnail per virtualised row (the rest live in the popover).
+    expect(
+      document.querySelectorAll("[data-image-group-item-row] img")
+    ).toHaveLength(rows.length);
     expect(screen.queryByDisplayValue("Country 300")).not.toBeInTheDocument();
   });
 
@@ -166,9 +170,13 @@ describe("MediaGroupEditor", { timeout: 25000 }, () => {
     const row = document.querySelector("[data-image-group-item-row]");
 
     expect(onImportMediaUrl).toHaveBeenCalledWith("https://example.com/France.png");
-    expect(screen.getByDisplayValue("/static/media-groups/7/France.png")).toBeInTheDocument();
-    expect(row).toBeInTheDocument();
-    expect(row.style.height).toBe("292px");
+    // The imported image becomes the item's cover thumbnail; managing the full
+    // pool happens in the popover opened from this compact row.
+    expect(
+      within(row).getAllByRole("button", { name: "Gérer les images" }).length
+    ).toBeGreaterThan(0);
+    expect(row.querySelector("img")).toBeTruthy();
+    expect(row.style.height).toBe("214px");
   });
 
   it("pastes copied image bytes as a new compact image row", async () => {
@@ -189,9 +197,65 @@ describe("MediaGroupEditor", { timeout: 25000 }, () => {
     const row = document.querySelector("[data-image-group-item-row]");
 
     expect(onUploadFile).toHaveBeenCalledWith(imageFile);
-    expect(screen.getByDisplayValue("/static/media-groups/7/Brazil.png")).toBeInTheDocument();
-    expect(row).toBeInTheDocument();
-    expect(row.style.height).toBe("292px");
+    expect(
+      within(row).getAllByRole("button", { name: "Gérer les images" }).length
+    ).toBeGreaterThan(0);
+    expect(row.querySelector("img")).toBeTruthy();
+    expect(row.style.height).toBe("214px");
+  });
+
+  it("pastes an image inside the pool popover without creating a new row", async () => {
+    const onUploadFile = vi.fn().mockResolvedValue({
+      url: "/static/flags/1-extra.svg"
+    });
+    const imageFile = new File(["image"], "extra.svg", { type: "image/svg+xml" });
+    await renderEditor(makeImageItems(1), { onUploadFile });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Gérer les images" })[0]);
+    await screen.findByText("Médias (1)");
+
+    const pasteTarget = screen.getByText("Coller (Ctrl+V)").closest("button");
+    fireEvent.paste(pasteTarget, {
+      clipboardData: {
+        files: [imageFile]
+      }
+    });
+
+    await screen.findByText("Médias (2)");
+
+    // A paste inside the popover is a portal event: it must not also bubble up
+    // to MediaGroupEditor's own paste handler and spawn a whole new row, and it
+    // must not double-fire the popover's own handler either.
+    expect(onUploadFile).toHaveBeenCalledTimes(1);
+    expect(document.querySelectorAll("[data-image-group-item-row]")).toHaveLength(1);
+  });
+
+  it("reverts to the last saved state when Annuler is clicked", async () => {
+    await renderEditor(makeImageItems(3));
+
+    const cancelButton = screen.getByRole("button", { name: "Annuler" });
+    expect(cancelButton).toBeDisabled();
+
+    fireEvent.change(screen.getByDisplayValue("Country 1"), {
+      target: { value: "Country 1 updated" }
+    });
+
+    const deletedRow = screen
+      .getByDisplayValue("Country 2")
+      .closest("[data-image-group-item-row]");
+    fireEvent.click(within(deletedRow).getByRole("button", { name: "Supprimer" }));
+
+    expect(screen.queryByDisplayValue("Country 1 updated")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Country 2")).not.toBeInTheDocument();
+    expect(cancelButton).not.toBeDisabled();
+
+    fireEvent.click(cancelButton);
+
+    await screen.findByDisplayValue("Country 1");
+    expect(screen.queryByDisplayValue("Country 1 updated")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Country 2")).toBeInTheDocument();
+    expect(cancelButton).toBeDisabled();
+    expect(patchMediaGroupItems).not.toHaveBeenCalled();
   });
 
   it("saves all items and deleted ids while only rendering the window", async () => {

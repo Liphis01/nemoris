@@ -13,6 +13,7 @@ from sqlalchemy import or_
 
 from ..config import STATIC_DIR
 from ..models import MediaFile, Question, QuestionGroup
+from .media_pool import question_media_refs
 from .tombstones import record_tombstone
 
 
@@ -542,20 +543,41 @@ def media_points_to_same_static_file(left, right):
     )
 
 
+def removed_media_refs(old_refs, new_refs):
+    # Which of a question's old media refs are no longer pointed at by the new
+    # set, so a replaced/removed pool image can be garbage-collected.
+    return [
+        old
+        for old in old_refs
+        if not any(
+            media_points_to_same_static_file(old, new)
+            for new in new_refs
+        )
+    ]
+
+
 def is_static_media_referenced(db, relative_path):
     if not relative_path:
         return False
 
+    # Pool images live in Question.data["media_pool"], so the scan has to reach
+    # into data too or a still-referenced pool image would be pruned.
     question_media_rows = (
-        db.query(Question.media, Question.answer_media)
-        .filter(or_(Question.media.isnot(None), Question.answer_media.isnot(None)))
+        db.query(Question.media, Question.answer_media, Question.data)
+        .filter(
+            or_(
+                Question.media.isnot(None),
+                Question.answer_media.isnot(None),
+                Question.data.isnot(None)
+            )
+        )
         .all()
     )
 
     if any(
-        static_relative_path_from_media(media) == relative_path or
-        static_relative_path_from_media(answer_media) == relative_path
-        for (media, answer_media) in question_media_rows
+        static_relative_path_from_media(ref) == relative_path
+        for (media, answer_media, data) in question_media_rows
+        for ref in question_media_refs(media, answer_media, data)
     ):
         return True
 

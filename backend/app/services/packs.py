@@ -37,6 +37,7 @@ from .media import (
     static_relative_path_from_media,
     store_media_bytes
 )
+from .media_pool import MEDIA_POOL_KEY, question_media_refs
 from .questions import delete_question_dependents
 from .tombstones import record_tombstone
 
@@ -117,6 +118,49 @@ def _resolve_media_ref(db, value, static_dir, media_assets):
     return {"sha256": digest}
 
 
+def _resolve_data_media(db, data, static_dir, media_assets):
+    # data.media_pool holds local /static paths; export and content-hashing need
+    # them as the same content-addressed refs used for media/answer_media, so a
+    # pooled question round-trips its extra images and hashes identically across
+    # machines. Other data keys pass through untouched.
+    if not isinstance(data, dict):
+        return data or {}
+
+    pool = data.get(MEDIA_POOL_KEY)
+
+    if not isinstance(pool, list) or not pool:
+        return data
+
+    return {
+        **data,
+        MEDIA_POOL_KEY: [
+            _resolve_media_ref(db, entry, static_dir, media_assets)
+            for entry in pool
+        ]
+    }
+
+
+def _materialize_data_media(data, materialize):
+    # Inverse of _resolve_data_media: turn media_pool refs back into local
+    # /static paths on import, dropping any that fail to materialize.
+    if not isinstance(data, dict):
+        return data or {}
+
+    pool = data.get(MEDIA_POOL_KEY)
+
+    if not isinstance(pool, list) or not pool:
+        return data
+
+    return {
+        **data,
+        MEDIA_POOL_KEY: [
+            materialized
+            for materialized in (materialize(ref) for ref in pool)
+            if materialized
+        ]
+    }
+
+
 def export_pack(
     db,
     group_id,
@@ -163,7 +207,9 @@ def export_pack(
                 db, question.answer_media, static_dir, media_assets
             ),
             "tags": question.tags or [],
-            "data": question.data or {}
+            "data": _resolve_data_media(
+                db, question.data or {}, static_dir, media_assets
+            )
         }
         # Ordered by id for stable diffs across re-exports.
         for question in sorted(group.questions, key=lambda item: item.id)
@@ -362,7 +408,7 @@ def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
                 media=materialize(entry.get("media")),
                 answer_media=materialize(entry.get("answer_media")),
                 tags=entry.get("tags") or [],
-                data=entry.get("data") or {},
+                data=_materialize_data_media(entry.get("data") or {}, materialize),
                 group_id=group.id,
                 pack_guid=pack_guid,
                 pack_version=version,
@@ -401,6 +447,8 @@ def _row_canonical_payload(db, row, fields, static_dir):
 
         if field in ("media", "answer_media"):
             payload[field] = _resolve_media_ref(db, value, static_dir, {})
+        elif field == "data":
+            payload[field] = _resolve_data_media(db, value or {}, static_dir, {})
         else:
             payload[field] = value
 
@@ -542,7 +590,7 @@ def update_pack(
                     media=materialize(entry.get("media")),
                     answer_media=materialize(entry.get("answer_media")),
                     tags=entry.get("tags") or [],
-                    data=entry.get("data") or {},
+                    data=_materialize_data_media(entry.get("data") or {}, materialize),
                     group_id=local_group.id,
                     pack_guid=pack_guid,
                     pack_version=version,
@@ -570,7 +618,7 @@ def update_pack(
             local.media = materialize(entry.get("media"))
             local.answer_media = materialize(entry.get("answer_media"))
             local.tags = entry.get("tags") or []
-            local.data = entry.get("data") or {}
+            local.data = _materialize_data_media(entry.get("data") or {}, materialize)
             local.pack_version = version
             local.content_hash = content_hash(entry, QUESTION_HASH_FIELDS)
             updated_guids.append(guid)
@@ -694,13 +742,21 @@ def unsubscribe_pack(
 
     if group:
         question_rows = (
-            db.query(Question.id, Question.media, Question.answer_media)
+            db.query(
+                Question.id,
+                Question.media,
+                Question.answer_media,
+                Question.data
+            )
             .filter(Question.group_id == group.id)
             .all()
         )
         question_ids = [row[0] for row in question_rows]
-        media_values = [row[1] for row in question_rows]
-        media_values.extend(row[2] for row in question_rows)
+        media_values = [
+            ref
+            for row in question_rows
+            for ref in question_media_refs(row[1], row[2], row[3])
+        ]
         media_values.append(group.media)
     else:
         # Defensive: subscription exists but its group is already gone

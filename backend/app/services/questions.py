@@ -9,7 +9,12 @@ from ..models import (
     question_collection
 )
 from ..serializers import serialize_manage_question
-from .media import delete_unreferenced_media_file, media_points_to_same_static_file
+from .media import (
+    delete_unreferenced_media_file,
+    media_points_to_same_static_file,
+    removed_media_refs
+)
+from .media_pool import read_media_pool
 from .sequence import validate_question_sequence
 from .tombstones import record_question_tombstones, record_tombstone
 from .timeline import validate_question_timeline
@@ -141,7 +146,7 @@ def get_question_for_update(db, question_id: int):
 def update_question(db, question_id: int, payload):
     question = get_question_for_update(db, question_id)
     updates = payload.model_dump(exclude_unset=True)
-    old_media = question.media
+    old_pool_refs = read_media_pool(question.media, question.data)
     old_answer_media = question.answer_media
 
     # Validate the final type/group combination, not only fields explicitly
@@ -163,11 +168,12 @@ def update_question(db, question_id: int, payload):
     db.commit()
     db.refresh(question)
 
-    if (
-        "media" in updates and
-        not media_points_to_same_static_file(old_media, question.media)
-    ):
-        delete_unreferenced_media_file(db, old_media)
+    # Cover + pool images both live in the media/data the update just wrote, so
+    # diff the whole ref set: a pool image dropped via `data` is pruned too.
+    new_pool_refs = read_media_pool(question.media, question.data)
+
+    for ref in removed_media_refs(old_pool_refs, new_pool_refs):
+        delete_unreferenced_media_file(db, ref)
 
     if (
         "answer_media" in updates and
@@ -225,7 +231,7 @@ def delete_question(db, question_id: int):
         raise HTTPException(status_code=404, detail="Question not found")
 
     group = question.group
-    question_media = question.media
+    question_media_refs = read_media_pool(question.media, question.data)
     question_answer_media = question.answer_media
     group_media = group.media if group else None
 
@@ -234,7 +240,10 @@ def delete_question(db, question_id: int):
     delete_question_dependents(db, [question.id])
     db.delete(question)
     db.commit()
-    delete_unreferenced_media_file(db, question_media)
+
+    for ref in question_media_refs:
+        delete_unreferenced_media_file(db, ref)
+
     delete_unreferenced_media_file(db, question_answer_media)
 
     if group:
