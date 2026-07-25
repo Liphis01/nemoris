@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getSyncStatus,
@@ -71,6 +71,7 @@ describe("SyncAccountSection", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("runs the sign-in flow: email -> code -> signed in", async () => {
@@ -96,6 +97,53 @@ describe("SyncAccountSection", () => {
       expect(verifySyncCode).toHaveBeenCalledWith("user@example.com", "123456");
     });
     expect(await screen.findByText(/Connecté en tant que/)).toBeInTheDocument();
+  });
+
+  it("disables resend during the cooldown and re-enables once it expires", async () => {
+    // The whole flow runs under fake timers from the start: mixing a
+    // real-timer setInterval (started before vi.useFakeTimers()) with a
+    // later vi.advanceTimersByTime() would leave the interval untouched, so
+    // real async findBy*/waitFor calls are avoided in favor of flushing
+    // microtasks through act().
+    vi.useFakeTimers();
+    getSyncStatus.mockResolvedValue(SIGNED_OUT);
+    render(<SyncAccountSection />);
+
+    await act(async () => {});
+
+    fireEvent.change(screen.getByLabelText("E-mail du compte"), {
+      target: { value: "user@example.com" }
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Recevoir un code" }));
+    });
+
+    const resendButton = screen.getByRole("button", { name: /Renvoyer/ });
+    expect(resendButton).toHaveTextContent("Renvoyer (60s)");
+    expect(resendButton).toBeDisabled();
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.getByRole("button", { name: "Renvoyer le code" })).toBeEnabled();
+  });
+
+  it("lets the user fix a mistyped email from the code step", async () => {
+    getSyncStatus.mockResolvedValue(SIGNED_OUT);
+    render(<SyncAccountSection />);
+
+    const emailInput = await screen.findByLabelText("E-mail du compte");
+    fireEvent.change(emailInput, { target: { value: "typo@exemple.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Recevoir un code" }));
+
+    await screen.findByLabelText("Code de connexion");
+    fireEvent.click(screen.getByRole("button", { name: "Changer d'adresse" }));
+
+    const fixedEmailInput = await screen.findByLabelText("E-mail du compte");
+    expect(fixedEmailInput).toHaveValue("typo@exemple.com");
+    expect(screen.queryByLabelText("Code de connexion")).not.toBeInTheDocument();
   });
 
   it("pushes and shows a success message", async () => {

@@ -279,11 +279,35 @@ function SyncAccountSectionView({ sync }) {
             </div>
 
             {sync.step === "code" && (
-              <p className="settings-help settings-help-compact">
-                {sync.devCode
-                  ? `Code (dev) : ${sync.devCode}`
-                  : "Colle le code à 6 chiffres reçu par e-mail, ou l'adresse du lien reçu par e-mail."}
-              </p>
+              <>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    onClick={sync.sendCode}
+                    disabled={sync.busy || sync.cooldownSeconds > 0}
+                    className="settings-secondary"
+                  >
+                    {sync.cooldownSeconds > 0
+                      ? `Renvoyer (${sync.cooldownSeconds}s)`
+                      : "Renvoyer le code"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={sync.changeEmail}
+                    disabled={sync.busy}
+                    className="settings-secondary"
+                  >
+                    Changer d'adresse
+                  </button>
+                </div>
+
+                <p className="settings-help settings-help-compact">
+                  {sync.devCode
+                    ? `Code (dev) : ${sync.devCode}`
+                    : "Colle le code à 6 chiffres reçu par e-mail, ou l'adresse du lien reçu par e-mail."}
+                </p>
+              </>
             )}
 
             <div className="settings-row">
