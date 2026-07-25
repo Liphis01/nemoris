@@ -152,6 +152,68 @@ describe("MediaGroupEditor", { timeout: 25000 }, () => {
     });
   });
 
+  it("filters rows by answer search and matches aliases too", async () => {
+    await renderEditor();
+
+    const searchInput = screen.getByPlaceholderText("Recherche...");
+    fireEvent.change(searchInput, { target: { value: "Country 137" } });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-image-group-item-row]")).toHaveLength(1);
+    });
+    expect(
+      within(document.querySelector("[data-image-group-item-row]")).getByDisplayValue("Country 137")
+    ).toBeInTheDocument();
+
+    // Item 300 only matches via its alias ("Alias 300"), not its answer text.
+    fireEvent.change(searchInput, { target: { value: "Alias 300" } });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-image-group-item-row]")).toHaveLength(1);
+    });
+    expect(
+      within(document.querySelector("[data-image-group-item-row]")).getByDisplayValue("Country 300")
+    ).toBeInTheDocument();
+  });
+
+  it("shows a no-results message and clears the search via the × button", async () => {
+    await renderEditor();
+
+    const searchInput = screen.getByPlaceholderText("Recherche...");
+    fireEvent.change(searchInput, { target: { value: "nonexistent-xyz" } });
+
+    await screen.findByText("Aucun résultat pour « nonexistent-xyz »");
+    expect(document.querySelectorAll("[data-image-group-item-row]")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Effacer la recherche" }));
+
+    expect(searchInput).toHaveValue("");
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll("[data-image-group-item-row]").length
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it("clears an active search when a new row is added, so it stays visible", async () => {
+    await renderEditor();
+
+    const searchInput = screen.getByPlaceholderText("Recherche...");
+    fireEvent.change(searchInput, { target: { value: "Country 137" } });
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-image-group-item-row]")).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter une ligne" }));
+
+    await waitFor(() => {
+      expect(searchInput).toHaveValue("");
+      expect(
+        document.querySelector("[data-image-group-item-id^='new-image-']")
+      ).toBeInTheDocument();
+    });
+  });
+
   it("imports a remote URL as a new compact image row", async () => {
     const onImportMediaUrl = vi.fn().mockResolvedValue({
       url: "/static/media-groups/7/France.png"

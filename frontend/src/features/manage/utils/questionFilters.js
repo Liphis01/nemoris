@@ -112,7 +112,7 @@ function matchesType(question, questionTypeFilter) {
 }
 
 
-function matchesSearch(question, search) {
+export function matchesSearch(question, search) {
   const normalizedSearch = normalizeSearchText(search);
   const directAliases = Array.isArray(question?.aliases) ? question.aliases : [];
   const dataAliases = Array.isArray(question?.data?.aliases)

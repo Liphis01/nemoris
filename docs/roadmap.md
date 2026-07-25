@@ -5,8 +5,6 @@
 - qu'il n'y a pas besoin de compte pour importer un pack
 
 ## Urgent
-- do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- il faudrait autoriser plusieurs images pour une même question pour varier
 - suppression de pack
 - autoriser les accents (et autres caractères spéciaux + latex) dans l'app et dans supabase
 - il reste un dossier qui s'appelle blueprint
@@ -73,6 +71,7 @@
 - ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
 - créer de nouveaux modes timeline (et revoir la création ?)
 - leaderboard des packs
+- commentaires et notes sur les packs
 
 ## refactors
 

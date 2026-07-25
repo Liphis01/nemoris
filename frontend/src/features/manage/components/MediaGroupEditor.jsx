@@ -13,6 +13,7 @@ import {
   pendingSaveDotStyle
 } from "./QuestionEditorStyles";
 import { normalizeMediaPool } from "../../../shared/media";
+import { matchesSearch } from "../utils/questionFilters";
 import {
   MediaPoolField,
   QuestionEditorField,
@@ -443,6 +444,7 @@ export default function MediaGroupEditor({
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [initialSignature, setInitialSignature] = useState("");
   const [aliasInputByTempId, setAliasInputByTempId] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
   const [itemsScrollTop, setItemsScrollTop] = useState(0);
   const [itemsViewportHeight, setItemsViewportHeight] = useState(
     MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT
@@ -461,13 +463,18 @@ export default function MediaGroupEditor({
     buildSignature(editableGroup, sharedTags, items, deletedItemIds)
   ), [deletedItemIds, editableGroup, items, sharedTags]);
   const hasUnsavedChanges = currentSignature !== initialSignature;
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+
+    return items.filter((item) => matchesSearch(item, searchQuery));
+  }, [items, searchQuery]);
   const selectedItemIndex = useMemo(() => {
     if (!selectedItemId) return -1;
 
-    return items.findIndex((item) => item.id === selectedItemId);
-  }, [items, selectedItemId]);
+    return filteredItems.findIndex((item) => item.id === selectedItemId);
+  }, [filteredItems, selectedItemId]);
   const visibleItemWindow = useMemo(() => {
-    if (items.length === 0) {
+    if (filteredItems.length === 0) {
       return {
         startIndex: 0,
         endIndex: 0,
@@ -489,16 +496,16 @@ export default function MediaGroupEditor({
     const visibleCount = Math.ceil(viewportHeight / MEDIA_GROUP_ROW_SLOT_HEIGHT) +
       (MEDIA_GROUP_OVERSCAN_ROWS * 2) +
       1;
-    const endIndex = Math.min(items.length, startIndex + visibleCount);
+    const endIndex = Math.min(filteredItems.length, startIndex + visibleCount);
 
     return {
       startIndex,
       endIndex,
-      items: items.slice(startIndex, endIndex),
+      items: filteredItems.slice(startIndex, endIndex),
       topSpacerHeight: startIndex * MEDIA_GROUP_ROW_SLOT_HEIGHT,
-      bottomSpacerHeight: Math.max(0, (items.length - endIndex) * MEDIA_GROUP_ROW_SLOT_HEIGHT)
+      bottomSpacerHeight: Math.max(0, (filteredItems.length - endIndex) * MEDIA_GROUP_ROW_SLOT_HEIGHT)
     };
-  }, [items, itemsScrollTop, itemsViewportHeight]);
+  }, [filteredItems, itemsScrollTop, itemsViewportHeight]);
 
   useEffect(() => {
     currentGroupRef.current = group;
@@ -632,7 +639,7 @@ export default function MediaGroupEditor({
       MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT;
     const maxScrollTop = Math.max(
       0,
-      (items.length * MEDIA_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
+      (filteredItems.length * MEDIA_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
     );
     const nextScrollTop = Math.min(
       maxScrollTop,
@@ -641,7 +648,7 @@ export default function MediaGroupEditor({
 
     scrollElement.scrollTop = nextScrollTop;
     setItemsScrollTop(nextScrollTop);
-  }, [items.length, itemsViewportHeight]);
+  }, [filteredItems.length, itemsViewportHeight]);
 
   useEffect(() => {
     if (loading || selectedItemIndex < 0) return;
@@ -652,7 +659,7 @@ export default function MediaGroupEditor({
   useEffect(() => {
     if (loading || !pendingScrollItemTempIdRef.current) return;
 
-    const targetIndex = items.findIndex(
+    const targetIndex = filteredItems.findIndex(
       item => item.tempId === pendingScrollItemTempIdRef.current
     );
 
@@ -660,7 +667,7 @@ export default function MediaGroupEditor({
 
     pendingScrollItemTempIdRef.current = null;
     scrollToItemIndex(targetIndex);
-  }, [items, loading, scrollToItemIndex]);
+  }, [filteredItems, loading, scrollToItemIndex]);
 
   const updateItem = useCallback((tempId, patch) => {
     setItems(prev =>
@@ -730,6 +737,7 @@ export default function MediaGroupEditor({
     });
 
     pendingScrollItemTempIdRef.current = nextItem.tempId;
+    setSearchQuery("");
     setItems(prev => [
       ...prev,
       nextItem
@@ -818,6 +826,7 @@ export default function MediaGroupEditor({
       }
 
       pendingScrollItemTempIdRef.current = uploadedItems[0]?.tempId || null;
+      setSearchQuery("");
       setItems(prev => [...prev, ...uploadedItems]);
     } catch (error) {
       console.error(error);
@@ -853,6 +862,7 @@ export default function MediaGroupEditor({
       });
 
       pendingScrollItemTempIdRef.current = nextItem.tempId;
+      setSearchQuery("");
       setItems(prev => [...prev, nextItem]);
       setImportUrlInput("");
     } catch (error) {
@@ -1118,6 +1128,51 @@ export default function MediaGroupEditor({
           >
             Ajouter une ligne
           </button>
+
+          <div style={{ flex: "1 1 160px", maxWidth: "240px", position: "relative" }}>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Recherche..."
+              aria-label="Rechercher dans le groupe"
+              style={{
+                ...compactHeaderInputStyle,
+                ...(searchQuery ? { paddingRight: "28px" } : null),
+                width: "100%"
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Effacer la recherche"
+                title="Effacer la recherche"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "50%",
+                  color: "#777",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  height: "20px",
+                  lineHeight: 1,
+                  position: "absolute",
+                  right: "6px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px"
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim() && (
+            <span style={{ color: "#888", fontSize: "12px" }}>
+              {filteredItems.length} / {items.length}
+            </span>
+          )}
           {saveStatus && (
             <span style={{ color: "#888", fontSize: "13px" }}>
               {saveStatus}
@@ -1145,7 +1200,26 @@ export default function MediaGroupEditor({
           </div>
         )}
 
-        {!loading && items.length > 0 && (
+        {!loading && searchQuery.trim() && filteredItems.length === 0 && (
+          <div
+            style={{
+              alignItems: "center",
+              border: "1px dashed #333",
+              borderRadius: "10px",
+              color: "#777",
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: `${MEDIA_GROUP_ROW_GAP}px`,
+              minHeight: "80px",
+              padding: "18px",
+              textAlign: "center"
+            }}
+          >
+            Aucun résultat pour « {searchQuery.trim()} »
+          </div>
+        )}
+
+        {!loading && filteredItems.length > 0 && (
           <div>
             {visibleItemWindow.topSpacerHeight > 0 && (
               <div
@@ -1156,7 +1230,7 @@ export default function MediaGroupEditor({
 
             {visibleItemWindow.items.map((item, index) => {
               const itemIndex = visibleItemWindow.startIndex + index;
-              const hasFollowingRows = itemIndex < items.length - 1;
+              const hasFollowingRows = itemIndex < filteredItems.length - 1;
 
               return (
                 <div
