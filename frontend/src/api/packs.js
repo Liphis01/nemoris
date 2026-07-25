@@ -166,6 +166,55 @@ export function unsubscribePack(packGuid, { deleteContent = false } = {}) {
   );
 }
 
+
+export function unpublishPack(packGuid) {
+  return requestJson(`/packs/catalog/publish/${packGuid}/unpublish`, {
+    method: "POST"
+  });
+}
+
+
+export function recordPackInstall(packGuid, installedVersion) {
+  return requestJson(`/packs/catalog/${packGuid}/record-install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installed_version: installedVersion })
+  });
+}
+
+
+export function backfillPackInstalls() {
+  return requestJson("/packs/catalog/backfill-installs", { method: "POST" });
+}
+
+
+export function getMyPackStatus(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/my-status`);
+}
+
+
+export function listPackComments(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/comments`);
+}
+
+
+export function addPackComment(packGuid, body) {
+  return requestJson(`/packs/catalog/${packGuid}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body })
+  });
+}
+
+
+export function ratePack(packGuid, rating) {
+  return requestJson(`/packs/catalog/${packGuid}/rating`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating })
+  });
+}
+
 export async function exportPackGroup(groupId, payload) {
   const response = await requestOk(`/packs/${groupId}/export`, {
     method: "POST",

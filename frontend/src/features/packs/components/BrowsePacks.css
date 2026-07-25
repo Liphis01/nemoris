@@ -123,7 +123,7 @@
   border: 1px solid #2d2d2d;
   border-radius: 8px;
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  grid-template-columns: repeat(3, minmax(88px, 1fr));
   padding: 3px;
 }
 
@@ -875,6 +875,109 @@
   line-height: 1.45;
   margin: 0;
   max-width: 520px;
+}
+
+.pack-manage-layout {
+  display: grid;
+  flex: 1 1 0;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pack-manage-item-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.pack-reviews {
+  border-top: 1px solid #282828;
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.pack-reviews-form {
+  display: grid;
+  gap: 10px;
+}
+
+.pack-reviews-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.pack-star-button {
+  appearance: none;
+  background: #111111;
+  border: 1px solid #303030;
+  border-radius: 6px;
+  color: #4a4a4a;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  min-height: 34px;
+  min-width: 34px;
+}
+
+.pack-star-button.is-filled {
+  border-color: rgba(255, 204, 122, 0.42);
+  color: #ffcc7a;
+}
+
+.pack-star-button:disabled {
+  cursor: default;
+}
+
+.pack-reviews-comment-form {
+  display: grid;
+  gap: 8px;
+}
+
+.pack-reviews-comment-form textarea {
+  appearance: none;
+  background: #111111;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #eeeeee;
+  font: inherit;
+  font-size: 14px;
+  min-height: 60px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.pack-comment-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pack-comment-item {
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.pack-comment-item strong {
+  color: #cfcfcf;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pack-comment-item p {
+  color: #d4d4d4;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 4px 0 0;
 }
 
 @media (max-width: 1260px) {

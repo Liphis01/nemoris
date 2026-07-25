@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   exportPackGroup,
-  getPackPublishStatus,
   listPackPublications,
   publishPackDraft,
-  requestPackPublishCode,
-  savePackDraft,
-  signOutPackPublisher,
-  verifyPackPublishCode
+  savePackDraft
 } from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
@@ -19,7 +15,11 @@ import {
   POPULAR_THEME,
   useBrowsePacks
 } from "../hooks/useBrowsePacks";
+import { usePackPublishAuth } from "../hooks/usePackPublishAuth";
 import PackCard from "./PackCard";
+import PackReviewsSection from "./PackReviewsSection";
+import PublicationsManager from "./PublicationsManager";
+import PublishAuthPanel from "./PublishAuthPanel";
 import { formatSize } from "./packFormatting";
 import "./BrowsePacks.css";
 
@@ -42,6 +42,7 @@ const TYPE_FILTERS = [
 const SORT_OPTIONS = [
   { value: "pertinence", label: "Pertinence" },
   { value: "populaires", label: "Populaires" },
+  { value: "note", label: "Mieux notés" },
   { value: "récents", label: "Récents" },
   { value: "nom", label: "Nom" },
   { value: "questions", label: "Questions" }
@@ -273,7 +274,8 @@ function PackDetailPanel({
   onInstall,
   onOpenGroup,
   onUnsubscribe,
-  onUpdate
+  onUpdate,
+  setMode
 }) {
   if (!item) {
     return (
@@ -429,6 +431,8 @@ function PackDetailPanel({
           {action.error}
         </div>
       )}
+
+      <PackReviewsSection entry={entry} setMode={setMode} />
     </aside>
   );
 }
@@ -585,134 +589,8 @@ function ImporterScreen({
         onOpenGroup={onOpenGroup}
         onUnsubscribe={unsubscribe}
         onUpdate={update}
+        setMode={setMode}
       />
-    </div>
-  );
-}
-
-function PublishAuthPanel({
-  authStep,
-  busy,
-  code,
-  email,
-  publishStatus,
-  setCode,
-  setEmail,
-  setMode,
-  setAuthStep,
-  onRequestCode,
-  onSignOut,
-  onVerify
-}) {
-  if (!publishStatus) {
-    return (
-      <div className="pack-publish-auth">
-        <div>
-          <strong>Connexion au catalogue</strong>
-          <span>Vérification de la session Supabase.</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!publishStatus?.configured) {
-    return (
-      <div className="pack-publish-auth">
-        <div>
-          <strong>Catalogue non configuré</strong>
-          <span>Ajoute l'URL du projet et la clé publishable.</span>
-        </div>
-        <button
-          type="button"
-          className="pack-secondary-button"
-          onClick={() => setMode("settings")}
-        >
-          Paramètres
-        </button>
-      </div>
-    );
-  }
-
-  if (publishStatus?.signed_in) {
-    const usingSyncAccount = publishStatus.auth_source === "sync";
-
-    return (
-      <div className="pack-publish-auth is-signed-in">
-        <div>
-          <strong>
-            {usingSyncAccount ? "Connecté via Synchronisation" : "Connecté"}
-          </strong>
-          <span>{publishStatus.account_email}</span>
-        </div>
-        <button
-          type="button"
-          className="pack-secondary-button"
-          disabled={busy}
-          onClick={usingSyncAccount ? () => setMode("settings") : onSignOut}
-        >
-          {usingSyncAccount ? "Réglages" : "Se déconnecter"}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="pack-publish-auth">
-      <div>
-        <strong>Connexion Supabase</strong>
-        <span>Requise pour créer un brouillon privé.</span>
-      </div>
-
-      {authStep === "email" ? (
-        <div className="pack-publish-auth-row">
-          <input
-            aria-label="E-mail de publication"
-            type="email"
-            value={email}
-            disabled={busy}
-            placeholder="vous@exemple.com"
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <button
-            type="button"
-            className="pack-primary-button"
-            disabled={busy || !email.trim()}
-            onClick={onRequestCode}
-          >
-            Recevoir un code
-          </button>
-        </div>
-      ) : (
-        <div className="pack-publish-auth-row">
-          <input
-            aria-label="Code de publication"
-            type="text"
-            value={code}
-            disabled={busy}
-            placeholder="Code ou lien e-mail"
-            onChange={(event) => setCode(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onVerify();
-            }}
-          />
-          <button
-            type="button"
-            className="pack-primary-button"
-            disabled={busy || !code.trim()}
-            onClick={onVerify}
-          >
-            Se connecter
-          </button>
-          <button
-            type="button"
-            className="pack-secondary-button"
-            disabled={busy}
-            onClick={() => setAuthStep("email")}
-          >
-            Modifier l'e-mail
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -764,34 +642,16 @@ function ExporterScreen({ setMode }) {
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [exportError, setExportError] = useState("");
-  const [publishStatus, setPublishStatus] = useState(null);
   const [publications, setPublications] = useState([]);
   const [activePublication, setActivePublication] = useState(null);
-  const [authStep, setAuthStep] = useState("email");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [publishingBusy, setPublishingBusy] = useState(false);
-  const [publishMessage, setPublishMessage] = useState("");
-  const [publishError, setPublishError] = useState("");
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftMessage, setDraftMessage] = useState("");
+  const [draftError, setDraftError] = useState("");
 
-  async function refreshPublishState() {
-    const status = await getPackPublishStatus();
-    setPublishStatus(status);
-
-    if (status.account_email) {
-      setEmail(status.account_email);
-    }
-
-    if (status.signed_in) {
-      const drafts = await listPackPublications();
-      setPublications(drafts.publications || []);
-    } else {
-      setPublications([]);
-      setActivePublication(null);
-    }
-
-    return status;
-  }
+  const auth = usePackPublishAuth();
+  const publishingBusy = auth.busy || draftBusy;
+  const publishMessage = draftMessage || auth.message;
+  const publishError = draftError || auth.error;
 
   useEffect(() => {
     let cancelled = false;
@@ -832,19 +692,30 @@ function ExporterScreen({ setMode }) {
   useEffect(() => {
     let cancelled = false;
 
-    refreshPublishState()
+    if (!auth.publishStatus?.signed_in) {
+      setPublications([]);
+      setActivePublication(null);
+      return undefined;
+    }
+
+    listPackPublications()
+      .then((drafts) => {
+        if (!cancelled) {
+          setPublications(drafts.publications || []);
+        }
+      })
       .catch((error) => {
         console.error(error);
 
         if (!cancelled) {
-          setPublishError(error.message || "Publication indisponible.");
+          setDraftError(error.message || "Brouillons indisponibles.");
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [auth.publishStatus?.signed_in]);
 
   const selectedGroup = groups.find((group) => String(group.id) === selectedGroupId);
   const versionNumber = Number(version);
@@ -867,13 +738,13 @@ function ExporterScreen({ setMode }) {
   );
   const canSaveDraft = (
     canExport &&
-    publishStatus?.signed_in &&
+    auth.publishStatus?.signed_in &&
     !publishingBusy
   );
   const canPublish = (
     activePublication &&
     !activePublication.is_public &&
-    publishStatus?.signed_in &&
+    auth.publishStatus?.signed_in &&
     !publishingBusy
   );
   const activePublicationSize = activePublication
@@ -907,81 +778,26 @@ function ExporterScreen({ setMode }) {
     }
   }
 
-  async function handleRequestCode() {
-    setPublishingBusy(true);
-    setPublishError("");
-    setPublishMessage("");
-
-    try {
-      await requestPackPublishCode(email.trim());
-      setAuthStep("code");
-      setPublishMessage("Code envoyé par e-mail.");
-    } catch (error) {
-      console.error(error);
-      setPublishError(error.message || "Connexion impossible.");
-    } finally {
-      setPublishingBusy(false);
-    }
-  }
-
-  async function handleVerifyCode() {
-    setPublishingBusy(true);
-    setPublishError("");
-    setPublishMessage("");
-
-    try {
-      const status = await verifyPackPublishCode(email.trim(), code.trim());
-      setPublishStatus(status);
-      setAuthStep("email");
-      setCode("");
-      setPublishMessage("Connecté au catalogue.");
-      await refreshPublishState();
-    } catch (error) {
-      console.error(error);
-      setPublishError(error.message || "Code invalide.");
-    } finally {
-      setPublishingBusy(false);
-    }
-  }
-
-  async function handleSignOut() {
-    setPublishingBusy(true);
-    setPublishError("");
-    setPublishMessage("");
-
-    try {
-      const status = await signOutPackPublisher();
-      setPublishStatus(status);
-      setPublications([]);
-      setActivePublication(null);
-    } catch (error) {
-      console.error(error);
-      setPublishError(error.message || "Déconnexion impossible.");
-    } finally {
-      setPublishingBusy(false);
-    }
-  }
-
   async function handleSaveDraft() {
     if (!canSaveDraft) {
       return;
     }
 
-    setPublishingBusy(true);
-    setPublishError("");
-    setPublishMessage("");
+    setDraftBusy(true);
+    setDraftError("");
+    setDraftMessage("");
 
     try {
       const result = await savePackDraft(selectedGroup.id, publishPayload);
       setActivePublication(result.publication);
-      setPublishMessage("Brouillon privé enregistré.");
+      setDraftMessage("Brouillon privé enregistré.");
       const drafts = await listPackPublications();
       setPublications(drafts.publications || []);
     } catch (error) {
       console.error(error);
-      setPublishError(error.message || "Brouillon impossible à enregistrer.");
+      setDraftError(error.message || "Brouillon impossible à enregistrer.");
     } finally {
-      setPublishingBusy(false);
+      setDraftBusy(false);
     }
   }
 
@@ -990,21 +806,21 @@ function ExporterScreen({ setMode }) {
       return;
     }
 
-    setPublishingBusy(true);
-    setPublishError("");
-    setPublishMessage("");
+    setDraftBusy(true);
+    setDraftError("");
+    setDraftMessage("");
 
     try {
       const result = await publishPackDraft(activePublication.pack_guid);
       setActivePublication(result.publication);
-      setPublishMessage("Pack publié dans le catalogue.");
+      setDraftMessage("Pack publié dans le catalogue.");
       const drafts = await listPackPublications();
       setPublications(drafts.publications || []);
     } catch (error) {
       console.error(error);
-      setPublishError(error.message || "Publication impossible.");
+      setDraftError(error.message || "Publication impossible.");
     } finally {
-      setPublishingBusy(false);
+      setDraftBusy(false);
     }
   }
 
@@ -1079,18 +895,18 @@ function ExporterScreen({ setMode }) {
         </div>
 
         <PublishAuthPanel
-          authStep={authStep}
-          busy={publishingBusy}
-          code={code}
-          email={email}
-          publishStatus={publishStatus}
-          setAuthStep={setAuthStep}
-          setCode={setCode}
-          setEmail={setEmail}
+          authStep={auth.authStep}
+          busy={auth.busy}
+          code={auth.code}
+          email={auth.email}
+          publishStatus={auth.publishStatus}
+          setAuthStep={auth.setAuthStep}
+          setCode={auth.setCode}
+          setEmail={auth.setEmail}
           setMode={setMode}
-          onRequestCode={handleRequestCode}
-          onSignOut={handleSignOut}
-          onVerify={handleVerifyCode}
+          onRequestCode={auth.requestCode}
+          onSignOut={auth.signOut}
+          onVerify={auth.verifyCode}
         />
 
         <form onSubmit={handleExport}>
@@ -1304,6 +1120,15 @@ export default function BrowsePacks({
               >
                 Exporter
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "manage"}
+                className={`pack-tab-button${activeTab === "manage" ? " is-active" : ""}`}
+                onClick={() => setActiveTab("manage")}
+              >
+                Gérer
+              </button>
             </div>
 
             <ReturnToMenuButton
@@ -1313,7 +1138,7 @@ export default function BrowsePacks({
           </div>
         </header>
 
-        {activeTab === "import" ? (
+        {activeTab === "import" && (
           <ImporterScreen
             initialPackGuid={initialPackGuid}
             initialSearch={initialSearch}
@@ -1321,9 +1146,9 @@ export default function BrowsePacks({
             onOpenGroup={onOpenGroup}
             setMode={setMode}
           />
-        ) : (
-          <ExporterScreen setMode={setMode} />
         )}
+        {activeTab === "export" && <ExporterScreen setMode={setMode} />}
+        {activeTab === "manage" && <PublicationsManager setMode={setMode} />}
       </div>
     </div>
   );

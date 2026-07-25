@@ -12,8 +12,20 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models import Base, PackSubscription, Question, QuestionGroup
 from app.routers.packs import (
+    add_pack_comment_route,
+    backfill_pack_installs_route,
     diagnose_pack_catalog,
-    search_catalog_packs
+    pack_comments,
+    pack_my_status,
+    rate_pack_route,
+    record_pack_install_route,
+    search_catalog_packs,
+    unpublish_group_pack
+)
+from app.schemas import (
+    PackCommentCreateRequest,
+    PackInstallRecordRequest,
+    PackRatingRequest
 )
 from app.services.pack_catalog import (
     get_pack_publish_status,
@@ -523,8 +535,66 @@ class PackCatalogSearchTests(unittest.TestCase):
             "ok"
         )
 
+    def test_search_normalizes_rating_and_comment_counts(self):
+        db = make_db()
+        self.configure(db)
 
-class PackCatalogPublishTests(unittest.TestCase):
+        def fake_urlopen(request, timeout):
+            return FakeResponse({
+                "packs": [
+                    {
+                        "pack_guid": "world-map",
+                        "name": "Pays du monde",
+                        "storage_path": "maps/world.zip",
+                        "avg_rating": 4.75,
+                        "rating_count": 8,
+                        "comment_count": 3
+                    }
+                ],
+                "facets": {"themes": []},
+                "total": 1,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = search_catalog_packs(db=db)
+
+        self.assertEqual(result["packs"][0]["avg_rating"], 4.75)
+        self.assertEqual(result["packs"][0]["rating_count"], 8)
+        self.assertEqual(result["packs"][0]["comment_count"], 3)
+
+    def test_search_forwards_note_sort_unchanged(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append(request)
+            return FakeResponse({
+                "packs": [],
+                "facets": {"themes": []},
+                "total": 0,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            search_catalog_packs(sort="note", db=db)
+
+        payload = json.loads(calls[0].data.decode("utf-8"))
+        self.assertEqual(payload["p_sort"], "note")
+
+
+class PackCatalogAuthTestCase(unittest.TestCase):
+    """Shared fixtures for tests that need an authenticated catalog
+    session -- reused by publish, unpublish, install-tracking, rating and
+    comment tests alike."""
+
     def configure(self, db):
         save_pack_catalog_settings(
             db,
@@ -580,6 +650,11 @@ class PackCatalogPublishTests(unittest.TestCase):
             }
         }
 
+    def signed_out_state(self):
+        return {"account_email": None, "token": None}
+
+
+class PackCatalogPublishTests(PackCatalogAuthTestCase):
     def test_status_reuses_matching_sync_account(self):
         db = make_db()
         self.configure(db)
@@ -763,6 +838,444 @@ class PackCatalogPublishTests(unittest.TestCase):
             calls[0][0].headers.get("Authorization"),
             "Bearer sync-access-token"
         )
+
+
+class PackCatalogUnpublishTests(PackCatalogAuthTestCase):
+    def test_unpublish_calls_authenticated_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "pack_guid": "group-guid",
+                "name": "Atlas des capitales",
+                "version": 2,
+                "question_count": 1,
+                "storage_path": "user-123/group-guid/v2-atlas.zip",
+                "is_public": False,
+                "publication_status": "unpublished"
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = unpublish_group_pack("group-guid", db=db)
+
+        self.assertEqual(result["status"], "unpublished")
+        self.assertEqual(
+            result["publication"]["publication_status"], "unpublished"
+        )
+        self.assertFalse(result["publication"]["is_public"])
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/unpublish_my_pack"
+        )
+        self.assertEqual(
+            request.headers.get("Authorization"),
+            "Bearer access-token"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "group-guid"}
+        )
+
+    def test_unpublish_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                unpublish_group_pack("group-guid", db=db)
+
+        self.assertEqual(context.exception.status_code, 401)
+
+
+class PackCatalogInstallTrackingTests(PackCatalogAuthTestCase):
+    def test_record_install_posts_authenticated_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "pack_guid": "group-guid",
+                "user_id": "user-123",
+                "installed_version": 2
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = record_pack_install_route(
+                "group-guid",
+                PackInstallRecordRequest(installed_version=2),
+                db=db
+            )
+
+        self.assertEqual(result, {"recorded": True})
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/record_pack_install"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "group-guid", "p_installed_version": 2}
+        )
+
+    def test_record_install_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                record_pack_install_route(
+                    "group-guid",
+                    PackInstallRecordRequest(installed_version=1),
+                    db=db
+                )
+
+        self.assertEqual(context.exception.status_code, 401)
+
+    def test_backfill_skips_network_call_with_no_local_subscriptions(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            result = backfill_pack_installs_route(db=db)
+
+        self.assertEqual(result, {"recorded": 0})
+
+    def test_backfill_posts_local_subscriptions_as_bulk_installs(self):
+        db = make_db()
+        self.configure(db)
+        db.add(PackSubscription(
+            pack_guid="world-map",
+            installed_version=3,
+            name="World",
+            source="world.zip",
+            subscribed_at="2026-07-22T10:00:00Z"
+        ))
+        db.commit()
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse(2)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = backfill_pack_installs_route(db=db)
+
+        self.assertEqual(result, {"recorded": 2})
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/record_pack_installs_bulk"
+        )
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(
+            payload["p_installs"],
+            [{"pack_guid": "world-map", "installed_version": 3}]
+        )
+
+
+class PackCatalogEligibilityTests(PackCatalogAuthTestCase):
+    def test_my_status_calls_authenticated_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({"is_installed": True, "my_rating": 4})
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = pack_my_status("group-guid", db=db)
+
+        self.assertEqual(result, {"is_installed": True, "my_rating": 4})
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/get_my_pack_status"
+        )
+
+    def test_my_status_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                pack_my_status("group-guid", db=db)
+
+        self.assertEqual(context.exception.status_code, 401)
+
+
+class PackCatalogCommentsTests(PackCatalogAuthTestCase):
+    def test_list_comments_sends_no_authorization_header(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse([
+                {
+                    "id": 1,
+                    "author_label": "fan@example.com",
+                    "body": "Super pack !",
+                    "created_at": "2026-07-25T10:00:00Z"
+                }
+            ])
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = pack_comments("group-guid", db=db)
+
+        self.assertEqual(len(result["comments"]), 1)
+        self.assertEqual(result["comments"][0]["body"], "Super pack !")
+        request, _ = calls[0]
+        self.assertIn("/rest/v1/pack_comments", request.full_url)
+        self.assertIn("pack_guid=eq.group-guid", request.full_url)
+        self.assertIsNone(request.headers.get("Authorization"))
+
+    def test_add_comment_calls_authenticated_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "id": 1,
+                "author_label": "author@example.com",
+                "body": "Merci pour le retour !",
+                "created_at": "2026-07-25T10:00:00Z"
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = add_pack_comment_route(
+                "group-guid",
+                PackCommentCreateRequest(body="Merci pour le retour !"),
+                db=db
+            )
+
+        self.assertEqual(result["comment"]["body"], "Merci pour le retour !")
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/add_pack_comment"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "group-guid", "p_body": "Merci pour le retour !"}
+        )
+
+    def test_add_comment_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                add_pack_comment_route(
+                    "group-guid",
+                    PackCommentCreateRequest(body="Test"),
+                    db=db
+                )
+
+        self.assertEqual(context.exception.status_code, 401)
+
+    def test_add_comment_surfaces_supabase_error(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            raise HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                {},
+                io.BytesIO(b'{"message":"not installed"}')
+            )
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            with self.assertRaises(HTTPException) as context:
+                add_pack_comment_route(
+                    "group-guid",
+                    PackCommentCreateRequest(body="Test"),
+                    db=db
+                )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail, "not installed")
+
+
+class PackCatalogRatingTests(PackCatalogAuthTestCase):
+    def test_rate_pack_calls_authenticated_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "my_rating": 5,
+                "avg_rating": 4.5,
+                "rating_count": 12
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = rate_pack_route(
+                "group-guid",
+                PackRatingRequest(rating=5),
+                db=db
+            )
+
+        self.assertEqual(
+            result,
+            {"my_rating": 5, "avg_rating": 4.5, "rating_count": 12}
+        )
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/rate_pack"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "group-guid", "p_rating": 5}
+        )
+
+    def test_rate_pack_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                rate_pack_route(
+                    "group-guid",
+                    PackRatingRequest(rating=3),
+                    db=db
+                )
+
+        self.assertEqual(context.exception.status_code, 401)
 
 
 if __name__ == "__main__":

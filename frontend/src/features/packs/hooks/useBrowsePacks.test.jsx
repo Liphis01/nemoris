@@ -9,6 +9,7 @@ import {
   getPackCatalogSettings,
   installPackFromCatalog,
   listInstalledPacks,
+  recordPackInstall,
   searchPackCatalog,
   unsubscribePack,
   updatePackFromCatalog
@@ -18,6 +19,7 @@ vi.mock("../../../api/packs", () => ({
   getPackCatalogSettings: vi.fn(),
   installPackFromCatalog: vi.fn(),
   listInstalledPacks: vi.fn(),
+  recordPackInstall: vi.fn(),
   searchPackCatalog: vi.fn(),
   unsubscribePack: vi.fn(),
   updatePackFromCatalog: vi.fn()
@@ -86,6 +88,7 @@ describe("useBrowsePacks", () => {
       removed: []
     });
     unsubscribePack.mockResolvedValue({ status: "kept" });
+    recordPackInstall.mockResolvedValue({ recorded: true });
   });
 
   afterEach(() => {
@@ -293,6 +296,41 @@ describe("useBrowsePacks", () => {
     expect(byGuid["guid-a"].action.pendingRemoval).toEqual([
       "some-question-guid"
     ]);
+  });
+
+  it("install() records the install best-effort, keyed by guid and version", async () => {
+    const { result } = renderHook(() => useBrowsePacks());
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.install(entryB);
+    });
+
+    expect(recordPackInstall).toHaveBeenCalledWith(
+      entryB.pack_guid,
+      entryB.version
+    );
+  });
+
+  it("never surfaces a failed install-record into action state or delays busy clearing", async () => {
+    recordPackInstall.mockRejectedValue(new Error("not signed in"));
+
+    const { result } = renderHook(() => useBrowsePacks());
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.install(entryB);
+    });
+
+    expect(installPackFromCatalog).toHaveBeenCalledWith(entryB);
+
+    const byGuid = Object.fromEntries(
+      result.current.items.map((item) => [item.entry.pack_guid, item])
+    );
+    expect(byGuid["guid-b"].action.busy).toBe(false);
+    expect(byGuid["guid-b"].action.error).toBe("");
   });
 
   it("surfaces an inline error when an action fails, without crashing", async () => {

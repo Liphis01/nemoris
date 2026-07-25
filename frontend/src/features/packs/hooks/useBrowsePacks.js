@@ -3,10 +3,12 @@ import {
   getPackCatalogSettings,
   installPackFromCatalog,
   listInstalledPacks,
+  recordPackInstall,
   searchPackCatalog,
   unsubscribePack as requestUnsubscribe,
   updatePackFromCatalog
 } from "../../../api/packs";
+import { useActionState } from "./useActionState";
 
 export const POPULAR_THEME = "__popular__";
 const DEFAULT_LIMIT = 24;
@@ -61,7 +63,7 @@ export function useBrowsePacks(filters = {}) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [actionState, setActionState] = useState({});
+  const [actionState, patchAction] = useActionState();
   const requestIdRef = useRef(0);
 
   const loadInstalled = useCallback(async () => {
@@ -153,11 +155,14 @@ export function useBrowsePacks(filters = {}) {
     loadPage({ append: false });
   }, [loadPage]);
 
-  function patchAction(guid, patch) {
-    setActionState((previous) => ({
-      ...previous,
-      [guid]: { ...previous[guid], ...patch }
-    }));
+  // Best-effort, never awaited: recording an install must never delay
+  // clearing `busy` or surface into `action.error`. Installing a pack has
+  // to stay account-free (docs/roadmap.md), so this silently no-ops
+  // server-side whenever the user isn't signed in.
+  function trackInstall(entry) {
+    recordPackInstall(entry.pack_guid, entry.version).catch((trackError) => {
+      console.error(trackError);
+    });
   }
 
   async function install(entry) {
@@ -165,6 +170,7 @@ export function useBrowsePacks(filters = {}) {
 
     try {
       await installPackFromCatalog(entry);
+      trackInstall(entry);
       await loadPage({ append: false });
       patchAction(entry.pack_guid, { busy: false });
     } catch (installError) {
@@ -181,6 +187,7 @@ export function useBrowsePacks(filters = {}) {
 
     try {
       const result = await updatePackFromCatalog(entry, { deleteRemoved });
+      trackInstall(entry);
       await loadPage({ append: false });
 
       patchAction(entry.pack_guid, {

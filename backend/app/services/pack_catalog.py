@@ -24,7 +24,7 @@ from .sync_state import (
 
 CATALOG_BUCKET = "pack-zips"
 POPULAR_THEME = "__popular__"
-VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
+VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions", "note"}
 VALID_STATUSES = {
     "all",
     "not_installed",
@@ -223,6 +223,13 @@ def _int_or_none(value):
         return None
 
 
+def _float_or_none(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _local_pack_state(db):
     subscriptions = {
         subscription.pack_guid: {
@@ -349,7 +356,10 @@ def _normalize_pack(row, project_url):
         "featured": bool(row.get("featured")),
         "is_mine": bool(row.get("is_mine")),
         "published_at": row.get("published_at"),
-        "updated_at": row.get("updated_at")
+        "updated_at": row.get("updated_at"),
+        "avg_rating": _float_or_none(row.get("avg_rating")),
+        "rating_count": _int_or_none(row.get("rating_count")) or 0,
+        "comment_count": _int_or_none(row.get("comment_count")) or 0
     }
     entry["download_url"] = (
         str(row.get("download_url") or "").strip()
@@ -1064,7 +1074,10 @@ def _normalize_publication(row, project_url):
             or ("published" if row.get("is_public") else "draft")
         ),
         "published_at": row.get("published_at"),
-        "updated_at": row.get("updated_at")
+        "updated_at": row.get("updated_at"),
+        "avg_rating": _float_or_none(row.get("avg_rating")),
+        "rating_count": _int_or_none(row.get("rating_count")) or 0,
+        "comment_count": _int_or_none(row.get("comment_count")) or 0
     }
 
 
@@ -1158,7 +1171,8 @@ def list_pack_publications(db):
         "/rest/v1/pack_catalog"
         "?select=pack_guid,name,description,type_group,question_count,"
         "version,size_bytes,license,tags,themes,storage_path,is_public,"
-        "publication_status,published_at,updated_at"
+        "publication_status,published_at,updated_at,avg_rating,"
+        "rating_count,comment_count"
         f"&owner_id=eq.{owner_id}"
         "&order=updated_at.desc"
         "&limit=50"
@@ -1273,3 +1287,136 @@ def publish_pack_publication(db, pack_guid):
         "status": "published",
         "publication": publication
     }
+
+
+def unpublish_pack_publication(db, pack_guid):
+    """Owner-only soft delete: the row and its storage zip are kept so the
+    creator can see/republish it later, only its catalog visibility is
+    cleared (RPC unpublish_my_pack sets is_public=false)."""
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/unpublish_my_pack",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+    _raise_supabase_status(status, body, "Dépublication impossible")
+
+    publication = _normalize_publication(_decode_json_body(body), project_url)
+
+    return {
+        "status": "unpublished",
+        "publication": publication
+    }
+
+
+def record_pack_install(db, pack_guid, *, installed_version):
+    """Best-effort by design -- the caller must not await/block on this or
+    surface its errors, since installing a pack must stay account-free
+    (only signed-in users end up with a tracked install)."""
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/record_pack_install",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_installed_version": int(installed_version or 1)
+        }
+    )
+    _raise_supabase_status(status, body, "Enregistrement de l'installation impossible")
+
+    return {"recorded": True}
+
+
+def backfill_pack_installs(db):
+    """One-shot, called right after a successful sign-in. Reads local
+    PackSubscription rows (already-known local truth) and bulk-upserts
+    them as this account's installs, so packs installed anonymously before
+    this sign-in become retroactively eligible to rate/comment."""
+    installed_versions = _installed_versions(db)
+
+    if not installed_versions:
+        return {"recorded": 0}
+
+    payload = {
+        "p_installs": [
+            {"pack_guid": guid, "installed_version": version}
+            for guid, version in installed_versions.items()
+        ]
+    }
+
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/record_pack_installs_bulk",
+        method="POST",
+        payload=payload
+    )
+    _raise_supabase_status(status, body, "Synchronisation des installations impossible")
+
+    return {"recorded": _decode_json_body(body)}
+
+
+def get_my_pack_status(db, pack_guid):
+    body = _authed_json(
+        db,
+        "/rest/v1/rpc/get_my_pack_status",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+
+    return {
+        "is_installed": bool(body.get("is_installed")),
+        "my_rating": _int_or_none(body.get("my_rating"))
+    }
+
+
+def rate_pack(db, pack_guid, rating):
+    body = _authed_json(
+        db,
+        "/rest/v1/rpc/rate_pack",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_rating": int(rating)
+        }
+    )
+
+    return {
+        "my_rating": _int_or_none(body.get("my_rating")),
+        "avg_rating": _float_or_none(body.get("avg_rating")),
+        "rating_count": _int_or_none(body.get("rating_count")) or 0
+    }
+
+
+def list_pack_comments(db, pack_guid, *, limit=50):
+    """No auth required -- same anonymous request shape as
+    search_pack_catalog, since reading the thread needs no sign-in."""
+    project_url, key = _publish_config(db)
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/rest/v1/pack_comments"
+        "?select=id,author_label,body,created_at"
+        f"&pack_guid=eq.{quote(str(pack_guid or ''))}"
+        f"&order=created_at.desc&limit={_clamp_limit(limit)}"
+    )
+    _raise_supabase_status(status, body, "Commentaires indisponibles")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return {"comments": rows}
+
+
+def add_pack_comment(db, pack_guid, body_text):
+    body = _authed_json(
+        db,
+        "/rest/v1/rpc/add_pack_comment",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_body": str(body_text or "").strip()
+        }
+    )
+
+    return {"comment": body}

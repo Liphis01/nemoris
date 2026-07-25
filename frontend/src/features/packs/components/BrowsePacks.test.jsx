@@ -10,13 +10,20 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  addPackComment,
+  backfillPackInstalls,
   exportPackGroup,
+  getMyPackStatus,
   getPackPublishStatus,
+  listPackComments,
   listPackPublications,
   publishPackDraft,
+  ratePack,
+  recordPackInstall,
   requestPackPublishCode,
   savePackDraft,
   signOutPackPublisher,
+  unpublishPack,
   verifyPackPublishCode
 } from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
@@ -36,13 +43,20 @@ vi.mock("../../../api/groups", () => ({
 }));
 
 vi.mock("../../../api/packs", () => ({
+  addPackComment: vi.fn(),
+  backfillPackInstalls: vi.fn(),
   exportPackGroup: vi.fn(),
+  getMyPackStatus: vi.fn(),
   getPackPublishStatus: vi.fn(),
+  listPackComments: vi.fn(),
   listPackPublications: vi.fn(),
   publishPackDraft: vi.fn(),
+  ratePack: vi.fn(),
+  recordPackInstall: vi.fn(),
   requestPackPublishCode: vi.fn(),
   savePackDraft: vi.fn(),
   signOutPackPublisher: vi.fn(),
+  unpublishPack: vi.fn(),
   verifyPackPublishCode: vi.fn()
 }));
 
@@ -159,6 +173,18 @@ describe("BrowsePacks", () => {
       signed_in: false,
       account_email: null,
       project_url: "https://project.supabase.co"
+    });
+    backfillPackInstalls.mockResolvedValue({ recorded: 0 });
+    recordPackInstall.mockResolvedValue({ recorded: true });
+    listPackComments.mockResolvedValue({ comments: [] });
+    getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
+    ratePack.mockResolvedValue({ my_rating: 5, avg_rating: 5, rating_count: 1 });
+    addPackComment.mockResolvedValue({
+      comment: { id: 1, author_label: "me@example.com", body: "Top !" }
+    });
+    unpublishPack.mockResolvedValue({
+      status: "unpublished",
+      publication: { pack_guid: "group-guid", publication_status: "unpublished" }
     });
   });
 
@@ -438,5 +464,49 @@ describe("BrowsePacks", () => {
 
     expect(setMode).toHaveBeenCalledWith("settings");
     expect(signOutPackPublisher).not.toHaveBeenCalled();
+  });
+
+  it("switches to the Gérer tab and renders the publications manager", async () => {
+    defaultHook();
+    listPackPublications.mockResolvedValue({
+      publications: [
+        {
+          pack_guid: "group-guid",
+          name: "Atlas des capitales",
+          version: 1,
+          question_count: 42,
+          is_public: true,
+          publication_status: "published"
+        }
+      ]
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Gérer" }));
+
+    expect(screen.getByRole("tab", { name: "Gérer" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(await screen.findByText("Atlas des capitales")).toBeInTheDocument();
+  });
+
+  it("forwards the top-rated sort option to the search hook", async () => {
+    defaultHook();
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Tri"), {
+      target: { value: "note" }
+    });
+
+    expect(useBrowsePacks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: "note" })
+    );
+    expect(
+      within(screen.getByLabelText("Tri")).getByRole("option", {
+        name: "Mieux notés"
+      })
+    ).toBeInTheDocument();
   });
 });

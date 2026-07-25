@@ -9,19 +9,29 @@ from ..dependencies import get_db
 from ..models import PackSubscription
 from ..schemas import (
     PackCatalogSettings,
+    PackCommentCreateRequest,
     PackExportRequest,
-    PackPublishDraftRequest
+    PackInstallRecordRequest,
+    PackPublishDraftRequest,
+    PackRatingRequest
 )
 from ..services.pack_catalog import (
     PackCatalogAuthError,
     PackCatalogError,
+    add_pack_comment,
+    backfill_pack_installs,
     check_pack_catalog_health,
+    get_my_pack_status,
     get_pack_publish_status,
+    list_pack_comments,
     list_pack_publications,
     publish_pack_publication,
+    rate_pack,
+    record_pack_install,
     request_pack_publish_code,
     save_pack_publish_draft,
     sign_out_pack_publisher,
+    unpublish_pack_publication,
     verify_pack_publish_code,
     search_pack_catalog
 )
@@ -296,3 +306,92 @@ def unsubscribe_pack_subscription(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     return result
+
+
+@router.post("/blueprints/catalog/publish/{pack_guid}/unpublish", include_in_schema=False)
+@router.post("/packs/catalog/publish/{pack_guid}/unpublish")
+def unpublish_group_pack(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return unpublish_pack_publication(db, pack_guid)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/{pack_guid}/record-install", include_in_schema=False)
+@router.post("/packs/catalog/{pack_guid}/record-install")
+def record_pack_install_route(
+    pack_guid: str,
+    payload: PackInstallRecordRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return record_pack_install(
+            db, pack_guid, installed_version=payload.installed_version
+        )
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/backfill-installs", include_in_schema=False)
+@router.post("/packs/catalog/backfill-installs")
+def backfill_pack_installs_route(db: Session = Depends(get_db)):
+    try:
+        return backfill_pack_installs(db)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/blueprints/catalog/{pack_guid}/my-status", include_in_schema=False)
+@router.get("/packs/catalog/{pack_guid}/my-status")
+def pack_my_status(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return get_my_pack_status(db, pack_guid)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/blueprints/catalog/{pack_guid}/comments", include_in_schema=False)
+@router.get("/packs/catalog/{pack_guid}/comments")
+def pack_comments(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return list_pack_comments(db, pack_guid)
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/{pack_guid}/comments", include_in_schema=False)
+@router.post("/packs/catalog/{pack_guid}/comments")
+def add_pack_comment_route(
+    pack_guid: str,
+    payload: PackCommentCreateRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return add_pack_comment(db, pack_guid, payload.body)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/blueprints/catalog/{pack_guid}/rating", include_in_schema=False)
+@router.post("/packs/catalog/{pack_guid}/rating")
+def rate_pack_route(
+    pack_guid: str,
+    payload: PackRatingRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return rate_pack(db, pack_guid, payload.rating)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error

@@ -206,6 +206,18 @@ class PackCatalogSettings(BaseModel):
     key: str = Field(default="", max_length=4096)
 
 
+class PackInstallRecordRequest(BaseModel):
+    installed_version: int = Field(default=1, ge=1)
+
+
+class PackRatingRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+
+
+class PackCommentCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
 AnswerQuality = Annotated[int, Field(ge=0, le=3)]
 
 
