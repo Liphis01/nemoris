@@ -855,7 +855,7 @@ class PackCatalogUnpublishTests(PackCatalogAuthTestCase):
                 "question_count": 1,
                 "storage_path": "user-123/group-guid/v2-atlas.zip",
                 "is_public": False,
-                "publication_status": "unpublished"
+                "publication_status": "archived"
             })
 
         with mock.patch(
@@ -872,7 +872,7 @@ class PackCatalogUnpublishTests(PackCatalogAuthTestCase):
 
         self.assertEqual(result["status"], "unpublished")
         self.assertEqual(
-            result["publication"]["publication_status"], "unpublished"
+            result["publication"]["publication_status"], "archived"
         )
         self.assertFalse(result["publication"]["is_public"])
         request, _ = calls[0]

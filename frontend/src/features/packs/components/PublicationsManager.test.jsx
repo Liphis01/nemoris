@@ -54,7 +54,7 @@ const unpublished = {
   version: 1,
   question_count: 5,
   is_public: false,
-  publication_status: "unpublished",
+  publication_status: "archived",
   avg_rating: 3,
   rating_count: 1,
   comment_count: 0
@@ -73,7 +73,7 @@ describe("PublicationsManager", () => {
     });
     unpublishPack.mockResolvedValue({
       status: "unpublished",
-      publication: { ...published, is_public: false, publication_status: "unpublished" }
+      publication: { ...published, is_public: false, publication_status: "archived" }
     });
     publishPackDraft.mockResolvedValue({
       status: "published",

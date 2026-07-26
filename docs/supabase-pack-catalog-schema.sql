@@ -5,20 +5,20 @@
 -- Settings -> Catalogue. The app uses only the publishable key at
 -- runtime, so it cannot create these objects itself.
 --
--- BEFORE RUNNING: this repo has no schema file for the pre-existing
--- `pack_catalog` table or its `search_pack_catalog` / `publish_my_pack`
--- RPCs (they predate this file and were created by hand). Confirm the
--- assumptions below against the live project first:
---   \d public.pack_catalog                          -- confirm pack_guid is
---                                                        the unique key and
---                                                        the owner_id column
---                                                        name/type (assumed
---                                                        uuid here)
---   select pg_get_functiondef('public.search_pack_catalog'::regprocedure);
---   select pg_get_functiondef('public.publish_my_pack'::regprocedure);
--- In particular, confirm whether search_pack_catalog already filters on
--- is_public = true (if so, unpublishing via is_public=false works for free
--- and section 4's note can be skipped) or filters on something else.
+-- Verified against the live project on 2026-07-26 (pack_catalog predates
+-- this file and was created by hand, so nothing here could be assumed
+-- blind):
+--   - pack_guid has its own UNIQUE constraint (pack_catalog_pack_guid_key),
+--     independent of the id bigint primary key -- safe as an FK target.
+--   - owner_id is uuid, FK to auth.users(id) -- matches what's used below.
+--   - publication_status has a CHECK constraint limiting it to
+--     draft/published/archived. There is NO 'unpublished' value -- this
+--     file uses 'archived' for that state instead (section 4).
+--   - search_pack_catalog's WHERE clause filters only on is_public = true,
+--     nothing on publication_status -- so unpublish_my_pack clearing
+--     is_public is sufficient on its own, no extra filter needed here.
+-- Section 5 has the exact CREATE OR REPLACE diff for search_pack_catalog
+-- based on its real body as pulled from the live project.
 
 begin;
 
@@ -229,21 +229,52 @@ create policy pack_comments_insert_own_if_installed
 -- 4. New RPCs
 -- =========================================================
 
--- Owner-only soft delete. Mirrors publish_my_pack's owner-scoped update
--- shape. Row + storage zip are kept; the pack drops out of public search
--- via is_public=false (confirm search_pack_catalog actually filters on
--- this column -- see header note).
-create or replace function public.unpublish_my_pack(p_pack_guid text)
-returns public.pack_catalog
-language sql
-as $$
+-- Owner-only soft delete. Row + storage zip are kept; the pack drops out
+-- of public search via is_public=false (confirmed: search_pack_catalog's
+-- WHERE clause only checks is_public, so this alone is enough -- see
+-- section 5). Uses 'archived', not a new 'unpublished' value:
+-- pack_catalog already has a check constraint restricting
+-- publication_status to draft/published/archived, and 'archived' already
+-- means exactly this.
+--
+-- SECURITY DEFINER + manual owner_id/auth.uid() check, exactly mirroring
+-- publish_my_pack's real body (pulled from the live project) -- NOT a
+-- style choice. pack_catalog has no direct UPDATE access granted to the
+-- `authenticated` role; every write goes through an owner-checking
+-- SECURITY DEFINER function like this one. A plain SECURITY INVOKER
+-- version (the default) would silently update zero rows every time,
+-- since the calling role can't touch the row directly.
+drop function if exists public.unpublish_my_pack(text);
+
+create or replace function public.unpublish_my_pack(p_pack_guid text default ''::text)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.pack_catalog;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
   update public.pack_catalog
   set is_public = false,
-      publication_status = 'unpublished',
-      updated_at = timezone('utc', now())
-  where pack_guid = p_pack_guid and owner_id = auth.uid()
-  returning *;
-$$;
+      publication_status = 'archived',
+      updated_at = now()
+  where pack_guid = nullif(trim(p_pack_guid), '')
+    and owner_id = v_uid
+  returning * into v_row;
+
+  if v_row.id is null then
+    raise exception 'Pack introuvable pour ce compte.';
+  end if;
+
+  return to_jsonb(v_row);
+end;
+$function$;
 
 create or replace function public.record_pack_install(
   p_pack_guid text,
@@ -349,30 +380,171 @@ grant execute on function public.rate_pack(text, smallint) to authenticated;
 grant execute on function public.add_pack_comment(text, text) to authenticated;
 
 -- =========================================================
--- 5. Changes needed to the EXISTING search_pack_catalog RPC
+-- 5. Replaces the EXISTING search_pack_catalog RPC
 -- =========================================================
--- search_pack_catalog predates this file and its current body is not
--- known here -- it must be edited in place against its real definition
--- (pg_get_functiondef, per the header note), not blindly replaced. Apply
--- these as a diff:
---
---   1. Add avg_rating, rating_count, comment_count to the per-row JSON it
---      returns -- trivial now that they're plain columns on pack_catalog.
---   2. Add a 'note' branch to whatever CASE p_sort / ORDER BY construct it
---      uses today, e.g.:
---        when 'note' then order by pc.avg_rating desc nulls last,
---                                   pc.rating_count desc,
---                                   pc.updated_at desc
---   3. Exclusion of unpublished packs from public results is very likely
---      already free if the WHERE clause filters on is_public = true (see
---      header note) -- only add an explicit
---        and publication_status = 'published'
---      filter if the live function turns out to filter on something else.
+-- This is the real function body as pulled from the live project via
+-- `select pg_get_functiondef(oid) from pg_proc where proname =
+-- 'search_pack_catalog';`, with exactly two changes from the original:
+--   1. avg_rating, rating_count, comment_count added to the per-row JSON
+--      (they flow through for free from section 2's new columns, since
+--      every CTE here selects b.*/filtered.* rather than naming columns).
+--   2. A 'note' branch added to the ORDER BY inside the `ordered` CTE.
+-- No change was needed to exclude archived/unpublished packs -- the WHERE
+-- clause already filters on is_public = true only (confirmed against the
+-- live body below), and unpublish_my_pack already clears that flag.
 --
 -- Known, deliberate limitation: this is a plain average, so one 5-star
 -- rating can outrank a pack with hundreds of 4.9-average ratings. A
 -- Bayesian/Wilson-score smoothed sort would fix this but is a separate,
 -- later concern -- not implemented here.
+
+create or replace function public.search_pack_catalog(p_query text DEFAULT ''::text, p_theme text DEFAULT ''::text, p_type_group text DEFAULT ''::text, p_status text DEFAULT 'all'::text, p_sort text DEFAULT 'pertinence'::text, p_limit integer DEFAULT 24, p_cursor integer DEFAULT 0, p_installed_versions jsonb DEFAULT '{}'::jsonb)
+ returns jsonb
+ language sql
+ stable
+as $function$
+with params as (
+  select
+    nullif(trim(coalesce(p_query, '')), '') as query_text,
+    nullif(trim(coalesce(p_theme, '')), '') as theme_text,
+    nullif(trim(coalesce(p_type_group, '')), '') as type_text,
+    coalesce(nullif(p_status, ''), 'all') as status_text,
+    coalesce(nullif(p_sort, ''), 'pertinence') as sort_text,
+    greatest(1, least(coalesce(p_limit, 24), 60)) as page_limit,
+    greatest(0, coalesce(p_cursor, 0)) as page_offset,
+    coalesce(p_installed_versions, '{}'::jsonb) as installed
+),
+base as (
+  select
+    b.*,
+    case
+      when params.installed ? b.pack_guid
+        then (params.installed ->> b.pack_guid)::integer
+      else null
+    end as installed_version,
+    case
+      when params.installed ? b.pack_guid
+        and (params.installed ->> b.pack_guid)::integer < b.version
+        then 'update_available'
+      when params.installed ? b.pack_guid
+        then 'up_to_date'
+      else 'not_installed'
+    end as install_status,
+    case
+      when params.query_text is null then 0
+      else ts_rank(b.search_vector, websearch_to_tsquery('simple', params.query_text))
+    end as rank
+  from public.pack_catalog b
+  cross join params
+  where b.is_public = true
+    and (
+      params.query_text is null
+      or b.search_vector @@ websearch_to_tsquery('simple', params.query_text)
+    )
+    and (params.theme_text is null or b.themes @> array[params.theme_text])
+    and (params.type_text is null or b.type_group = params.type_text)
+),
+filtered as (
+  select base.*
+  from base
+  cross join params
+  where params.status_text = 'all'
+     or base.install_status = params.status_text
+),
+ordered as (
+  select
+    sorted.*,
+    row_number() over () as page_order
+  from (
+    select filtered.*
+    from filtered
+    cross join params
+    order by
+      case when params.sort_text = 'pertinence' then filtered.rank end desc nulls last,
+      case when params.sort_text = 'populaires' then filtered.featured end desc,
+      case when params.sort_text = 'populaires' then filtered.download_count end desc,
+      case when params.sort_text = 'note' then filtered.avg_rating end desc nulls last,
+      case when params.sort_text = 'note' then filtered.rating_count end desc nulls last,
+      case when params.sort_text = 'récents' then filtered.updated_at end desc,
+      case when params.sort_text = 'nom' then lower(filtered.name) end asc,
+      case when params.sort_text = 'questions' then filtered.question_count end desc,
+      filtered.featured desc,
+      filtered.download_count desc,
+      lower(filtered.name) asc
+    limit (select page_limit + 1 from params)
+    offset (select page_offset from params)
+  ) sorted
+),
+page as (
+  select *
+  from ordered
+  where page_order <= (select page_limit from params)
+),
+theme_rows as (
+  select
+    unnest(themes) as theme,
+    count(*) as result_count,
+    sum(download_count) as download_count,
+    bool_or(featured) as featured,
+    bool_or(pinned) as pinned
+  from filtered
+  group by theme
+)
+select jsonb_build_object(
+  'packs',
+  coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'pack_guid', pack_guid,
+        'name', name,
+        'description', description,
+        'type_group', type_group,
+        'question_count', question_count,
+        'version', version,
+        'size_bytes', size_bytes,
+        'license', license,
+        'tags', tags,
+        'themes', themes,
+        'download_count', download_count,
+        'featured', featured,
+        'published_at', published_at,
+        'updated_at', updated_at,
+        'storage_path', storage_path,
+        'avg_rating', avg_rating,
+        'rating_count', rating_count,
+        'comment_count', comment_count
+      )
+      order by page_order
+    )
+    from page
+  ), '[]'::jsonb),
+  'facets',
+  jsonb_build_object(
+    'themes',
+    coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'value', theme,
+          'label', initcap(replace(theme, '-', ' ')),
+          'result_count', result_count,
+          'download_count', download_count,
+          'featured', featured,
+          'pinned', pinned
+        )
+        order by pinned desc, result_count desc, download_count desc, theme asc
+      )
+      from theme_rows
+    ), '[]'::jsonb)
+  ),
+  'total', (select count(*) from filtered),
+  'next_cursor',
+  case
+    when (select count(*) from ordered) > (select page_limit from params)
+      then ((select page_offset from params) + (select page_limit from params))::text
+    else null
+  end
+);
+$function$;
 
 select pg_notify('pgrst', 'reload schema');
 

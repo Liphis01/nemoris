@@ -184,7 +184,7 @@ describe("BrowsePacks", () => {
     });
     unpublishPack.mockResolvedValue({
       status: "unpublished",
-      publication: { pack_guid: "group-guid", publication_status: "unpublished" }
+      publication: { pack_guid: "group-guid", publication_status: "archived" }
     });
   });
 

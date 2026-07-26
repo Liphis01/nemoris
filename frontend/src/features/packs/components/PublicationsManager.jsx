@@ -6,13 +6,13 @@ import { formatRatingLabel } from "./packFormatting";
 import PublishAuthPanel from "./PublishAuthPanel";
 
 function statusLabel(publication) {
-  if (publication.publication_status === "unpublished") return "Dépublié";
+  if (publication.publication_status === "archived") return "Dépublié";
   if (publication.is_public) return "Publié";
   return "Brouillon";
 }
 
 function statusClassName(publication) {
-  if (publication.publication_status === "unpublished") return "pack-status-pill-update";
+  if (publication.publication_status === "archived") return "pack-status-pill-update";
   if (publication.is_public) return "pack-status-pill-install";
   return "";
 }
@@ -138,7 +138,7 @@ export default function PublicationsManager({ setMode }) {
               );
               const canPublish = (
                 publication.publication_status === "draft" ||
-                publication.publication_status === "unpublished"
+                publication.publication_status === "archived"
               );
 
               return (
