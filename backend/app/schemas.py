@@ -218,6 +218,12 @@ class PackCommentCreateRequest(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
 
+class ProfileUpdateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=20)
+    avatar_emoji: str = Field(min_length=1, max_length=16)
+    avatar_color: str = Field(min_length=1, max_length=20)
+
+
 AnswerQuality = Annotated[int, Field(ge=0, le=3)]
 
 

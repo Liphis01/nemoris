@@ -1,24 +1,22 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Menu from "./Menu";
-
-vi.mock("../../api/sync", () => ({
-  getSyncStatus: vi.fn(() => Promise.resolve({
-    signed_in: false,
-    account_email: null
-  }))
-}));
+import { getProfile } from "../../api/profile";
 
 vi.mock("../../api/stats", () => ({
   getStats: vi.fn(() => Promise.resolve({
     counts: {
       total: 12,
       mastered: 3
-    },
-    weak_spots: {
-      text: [{ id: 1 }],
-      map: []
     }
+  }))
+}));
+
+vi.mock("../../api/profile", () => ({
+  getProfile: vi.fn(() => Promise.resolve({
+    signed_in: false,
+    account_email: null,
+    profile: null
   }))
 }));
 
@@ -70,7 +68,7 @@ describe("Menu", () => {
       expect.stringContaining("Gestionnaire"),
       expect.stringContaining("Entrainement"),
       expect.stringContaining("Calendrier"),
-      expect.stringContaining("Statistiques"),
+      expect.stringContaining("Profil"),
       expect.stringContaining("Packs"),
       expect.stringContaining("Réglages")
     ]);
@@ -98,6 +96,44 @@ describe("Menu", () => {
         name: /Session terminée: 0 questions, À jour/
       })
     ).toBeInTheDocument();
+  });
+
+  it("shows the signed-in user's username and avatar in the account chip, not their email", async () => {
+    getProfile.mockResolvedValueOnce({
+      signed_in: true,
+      account_email: "louis@example.com",
+      profile: { username: "Louis", avatar_emoji: "🦉", avatar_color: "teal" }
+    });
+
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 4, has_due: true }}
+      />
+    );
+
+    expect(await screen.findByText("Louis")).toBeInTheDocument();
+    expect(screen.queryByText("louis@example.com")).not.toBeInTheDocument();
+  });
+
+  it("navigates to the profile screen when the account chip is clicked", async () => {
+    const setMode = vi.fn();
+
+    render(
+      <Menu
+        setMode={setMode}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 0, has_due: false }}
+      />
+    );
+
+    const chip = await screen.findByRole("button", { name: "Ouvrir le profil" });
+    fireEvent.click(chip);
+
+    await waitFor(() => expect(setMode).toHaveBeenCalledWith("profile"));
   });
 
   it("shows the startup rebalance notice when provided", () => {

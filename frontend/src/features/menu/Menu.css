@@ -59,81 +59,52 @@
   margin: 6px 0 0;
 }
 
-.menu-sync-card {
+.menu-account-chip {
   align-items: center;
   background: #1b1b1b;
   border: 1px solid #303030;
   border-radius: 8px;
+  cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
   gap: 10px;
   min-height: 48px;
   min-width: 0;
   padding: 6px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.menu-sync-card-on {
-  border-color: rgba(126, 226, 168, 0.32);
+.menu-account-chip:hover {
+  background: #202020;
+  border-color: #444444;
 }
 
-.menu-sync-card-error {
-  border-color: rgba(255, 156, 156, 0.35);
-}
-
-.menu-sync-mark {
-  align-items: center;
-  background: rgba(143, 199, 255, 0.1);
-  border: 1px solid rgba(143, 199, 255, 0.24);
-  border-radius: 8px;
-  color: #8fc7ff;
-  display: inline-flex;
-  flex: 0 0 auto;
-  font-size: 15px;
-  height: 34px;
-  justify-content: center;
-  line-height: 1;
-  width: 34px;
-}
-
-.menu-sync-card-on .menu-sync-mark {
-  background: rgba(126, 226, 168, 0.1);
-  border-color: rgba(126, 226, 168, 0.28);
-  color: #7ee2a8;
-}
-
-.menu-sync-card-error .menu-sync-mark {
-  background: rgba(255, 156, 156, 0.1);
-  border-color: rgba(255, 156, 156, 0.28);
-  color: #ff9c9c;
-}
-
-.menu-sync-copy {
+.menu-account-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.menu-sync-copy strong {
+.menu-account-copy strong {
   color: #ffffff;
   font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.menu-sync-copy span {
-  color: #a7a7a7;
-  display: block;
-  font-size: 12px;
-  line-height: 1.2;
-  max-width: 230px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.menu-sync-button {
+.menu-account-copy span {
+  color: #a7a7a7;
+  display: block;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.menu-account-button {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   background: #232323;
@@ -150,7 +121,7 @@
   text-transform: uppercase;
 }
 
-.menu-sync-button:hover {
+.menu-account-button:hover {
   background: #2a2a2a;
   border-color: #4a4a4a;
 }
@@ -189,9 +160,11 @@
 .menu-review,
 .menu-context-action,
 .menu-pack-card-clickable,
+.menu-profile-card-clickable,
 .menu-pack-arrow,
 .menu-pack-dot,
-.menu-sync-button,
+.menu-account-chip,
+.menu-account-button,
 .menu-destination {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
@@ -246,6 +219,7 @@
 .menu-review,
 .menu-context-action,
 .menu-pack-card-clickable,
+.menu-profile-card-clickable,
 .menu-pack-arrow,
 .menu-pack-dot,
 .menu-destination {
@@ -260,6 +234,7 @@
 
 .menu-review:hover,
 .menu-pack-card-clickable:hover,
+.menu-profile-card-clickable:hover,
 .menu-context-action:hover,
 .menu-destination:hover {
   border-color: #444444;
@@ -269,10 +244,12 @@
 
 .menu-review:focus-visible,
 .menu-pack-card-clickable:focus-visible,
+.menu-profile-card-clickable:focus-visible,
 .menu-context-action:focus-visible,
 .menu-pack-arrow:focus-visible,
 .menu-pack-dot:focus-visible,
-.menu-sync-button:focus-visible,
+.menu-account-chip:focus-visible,
+.menu-account-button:focus-visible,
 .menu-destination:focus-visible,
 .menu-notice-close:focus-visible {
   outline: 2px solid #ffcc7a;
@@ -756,17 +733,69 @@
   width: 100%;
 }
 
-.menu-stats-card {
-  gap: 20px;
+.menu-profile-card {
+  gap: 16px;
   justify-content: center;
 }
 
-.menu-stats-card h2 {
-  margin-top: 8px;
+.menu-profile-card-clickable {
+  text-align: left;
+  width: 100%;
 }
 
-.menu-stats-card-error {
+.menu-profile-card-error {
   border-color: rgba(255, 156, 156, 0.35);
+}
+
+.menu-account-avatar {
+  align-items: center;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 18px;
+  height: 36px;
+  justify-content: center;
+  line-height: 1;
+  width: 36px;
+}
+
+.menu-account-avatar-violet {
+  --accent: #b69cff;
+  --accent-border: rgba(182, 156, 255, 0.32);
+  --accent-bg: rgba(182, 156, 255, 0.1);
+}
+
+.menu-account-avatar-amber {
+  --accent: #ffcc7a;
+  --accent-border: rgba(255, 204, 122, 0.32);
+  --accent-bg: rgba(255, 204, 122, 0.1);
+}
+
+.menu-account-avatar-green {
+  --accent: #7ee2a8;
+  --accent-border: rgba(126, 226, 168, 0.32);
+  --accent-bg: rgba(126, 226, 168, 0.1);
+}
+
+.menu-account-avatar-blue {
+  --accent: #8fc7ff;
+  --accent-border: rgba(143, 199, 255, 0.32);
+  --accent-bg: rgba(143, 199, 255, 0.1);
+}
+
+.menu-account-avatar-teal {
+  --accent: #5eead4;
+  --accent-border: rgba(94, 234, 212, 0.32);
+  --accent-bg: rgba(94, 234, 212, 0.1);
+}
+
+.menu-account-avatar-neutral {
+  --accent: #b8d7e8;
+  --accent-border: rgba(184, 215, 232, 0.32);
+  --accent-bg: rgba(184, 215, 232, 0.09);
 }
 
 .menu-stats-grid {
@@ -774,6 +803,10 @@
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
+}
+
+.menu-stats-grid-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .menu-stat-tile {
@@ -947,12 +980,12 @@
     font-size: 30px;
   }
 
-  .menu-sync-card {
+  .menu-account-chip {
     align-self: stretch;
     justify-content: space-between;
   }
 
-  .menu-sync-copy span {
+  .menu-account-copy strong {
     max-width: none;
   }
 

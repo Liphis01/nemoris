@@ -13,6 +13,7 @@ from .routers import (
     maps,
     media_groups,
     meta,
+    profile,
     questions,
     review,
     sequence_groups,
@@ -81,6 +82,7 @@ def create_app():
     app.include_router(backup.router)
     app.include_router(meta.router)
     app.include_router(packs.router)
+    app.include_router(profile.router)
     app.include_router(sync.router)
 
     if FRONTEND_DIST_DIR.exists():

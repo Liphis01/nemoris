@@ -137,6 +137,15 @@ function defaultStats(questions) {
   };
 }
 
+function markQuestionsAnswered(state, count) {
+  // The real backend recomputes due_count from the DB on every /review/summary
+  // call; this mock has no such source of truth, so newly-answered questions
+  // (first pass, not a revise) must explicitly bring the count down or the
+  // menu never reports the session as complete after returning from review.
+  state.reviewSummary.due_count = Math.max(0, (state.reviewSummary.due_count || 0) - count);
+  state.reviewSummary.has_due = state.reviewSummary.due_count > 0;
+}
+
 export async function mockApi(page, options = {}) {
   const state = {
     answerRequests: [],
@@ -172,6 +181,8 @@ export async function mockApi(page, options = {}) {
       server_meta: null,
       ...(options.syncStatus || {})
     },
+    profile: clone(options.profile ?? null),
+    profileUpdates: [],
     bonusReviewStatus: {
       allowed: true,
       bonus_question_capacity: 315,
@@ -256,6 +267,27 @@ export async function mockApi(page, options = {}) {
       return;
     }
 
+    if (method === "GET" && path === "/profile") {
+      await fulfillJson(route, {
+        signed_in: state.syncStatus.signed_in,
+        account_email: state.syncStatus.account_email,
+        profile: state.profile
+      });
+      return;
+    }
+
+    if (method === "PUT" && path === "/profile") {
+      const payload = await requestJson(request);
+      state.profile = { ...payload, updated_at: new Date().toISOString() };
+      state.profileUpdates.push(payload);
+      await fulfillJson(route, {
+        signed_in: state.syncStatus.signed_in,
+        account_email: state.syncStatus.account_email,
+        profile: state.profile
+      });
+      return;
+    }
+
     if (method === "GET" && path === "/review/summary") {
       await fulfillJson(route, state.reviewSummary);
       return;
@@ -308,6 +340,7 @@ export async function mockApi(page, options = {}) {
 
     if (method === "POST" && path === "/answer") {
       state.answerRequests.push(await requestJson(request));
+      markQuestionsAnswered(state, 1);
       await fulfillJson(route, {});
       return;
     }
@@ -322,7 +355,10 @@ export async function mockApi(page, options = {}) {
     }
 
     if (method === "POST" && path === "/answer_map") {
-      state.mapAnswerRequests.push(await requestJson(request));
+      const payload = await requestJson(request);
+
+      state.mapAnswerRequests.push(payload);
+      markQuestionsAnswered(state, Object.keys(payload.items || {}).length || 1);
       await fulfillJson(route, {});
       return;
     }
@@ -331,6 +367,7 @@ export async function mockApi(page, options = {}) {
       const payload = await requestJson(request);
       const results = state.timelineResults || defaultTimelineResults(payload);
 
+      markQuestionsAnswered(state, Object.keys(payload.items || {}).length || 1);
       await fulfillJson(route, { results });
       return;
     }

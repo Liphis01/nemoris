@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPackCatalogSettings, searchPackCatalog } from "../../api/packs";
+import { getProfile } from "../../api/profile";
 import { getStats } from "../../api/stats";
-import { getSyncStatus } from "../../api/sync";
 import "./Menu.css";
 
 const PACK_CAROUSEL_MS = 7000;
@@ -36,13 +36,13 @@ const destinations = [
     icon: "▦"
   },
   {
-    mode: "stats",
-    eyebrow: "Analyse",
-    title: "Statistiques",
-    description: "Rétention, favoris, charge et points faibles.",
-    detail: "Suivi global",
+    mode: "profile",
+    eyebrow: "Identité",
+    title: "Profil",
+    description: "Pseudo, avatar et résumé de ta progression.",
+    detail: "Compte",
     accent: "blue",
-    icon: "▥"
+    icon: "☺"
   },
   {
     mode: "packs",
@@ -136,42 +136,27 @@ function packDownloadLabel(count) {
   return `${formatNumber(count)} téléchargement${count > 1 ? "s" : ""}`;
 }
 
-function syncLabel(status, loading, error) {
-  if (loading) {
-    return "Vérification";
-  }
-
-  if (error) {
-    return "Indisponible";
-  }
-
-  return status?.signed_in ? "Connecté" : "Non connecté";
-}
-
-function syncCaption(status, loading, error) {
-  if (loading) {
-    return "Cloud";
-  }
-
-  if (error) {
-    return "Sync";
-  }
-
-  return status?.signed_in
-    ? status.account_email || "Compte connecté"
-    : "Aucun compte";
-}
-
-function MenuSyncStatus({
-  error,
+function MenuAccountChip({
   loading,
   onOpenSettingsSection,
+  profile,
   setMode,
-  status
+  signedIn
 }) {
-  const signedIn = Boolean(status?.signed_in);
+  const label = loading
+    ? "Chargement"
+    : signedIn
+      ? (profile?.username || "Pseudo à choisir")
+      : "Non connecté";
+  const caption = loading ? "..." : signedIn ? "Connecté" : "Aucun compte";
 
-  function openSyncSettings() {
+  function openProfile() {
+    setMode("profile");
+  }
+
+  function openSignIn(event) {
+    event.stopPropagation();
+
     if (onOpenSettingsSection) {
       onOpenSettingsSection("settings-sync");
       return;
@@ -182,21 +167,47 @@ function MenuSyncStatus({
 
   return (
     <div
-      className={`menu-sync-card${signedIn ? " menu-sync-card-on" : ""}${error ? " menu-sync-card-error" : ""}`}
-      aria-label={`Synchronisation: ${syncLabel(status, loading, error)}, ${syncCaption(status, loading, error)}`}
-    >
-      <span className="menu-sync-mark" aria-hidden="true">⇄</span>
+      role="button"
+      tabIndex={0}
+      className={`menu-account-chip${signedIn ? " menu-account-chip-on" : ""}`}
+      onClick={openProfile}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
 
-      <span className="menu-sync-copy">
-        <strong>{syncLabel(status, loading, error)}</strong>
-        <span>{syncCaption(status, loading, error)}</span>
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openProfile();
+        }
+      }}
+      aria-label={`Ouvrir le profil${signedIn ? ` de ${label}` : ""}`}
+    >
+      {loading ? (
+        <span className="menu-account-avatar menu-account-avatar-neutral" aria-hidden="true">…</span>
+      ) : signedIn ? (
+        <span
+          className={`menu-account-avatar menu-account-avatar-${profile?.avatar_color || "neutral"}`}
+          aria-hidden="true"
+        >
+          {profile?.avatar_emoji || "🙂"}
+        </span>
+      ) : (
+        <span className="menu-account-avatar menu-account-avatar-neutral" aria-hidden="true">
+          ?
+        </span>
+      )}
+
+      <span className="menu-account-copy">
+        <strong>{label}</strong>
+        <span>{caption}</span>
       </span>
 
-      {!signedIn && (
+      {!loading && !signedIn && (
         <button
           type="button"
-          className="menu-sync-button"
-          onClick={openSyncSettings}
+          className="menu-account-button"
+          onClick={openSignIn}
         >
           Se connecter
         </button>
@@ -354,12 +365,8 @@ function MenuPackCarousel({
   );
 }
 
-function MenuStatsCard({ loading, error, stats }) {
+function MenuProgressCard({ error, loading, setMode, stats }) {
   const counts = stats?.counts || {};
-  const weakSpotCount = Object.values(stats?.weak_spots || {}).reduce(
-    (total, items) => total + (Array.isArray(items) ? items.length : 0),
-    0
-  );
   const metrics = [
     {
       label: "Questions",
@@ -368,21 +375,37 @@ function MenuStatsCard({ loading, error, stats }) {
     {
       label: "Maîtrisées",
       value: loading ? "..." : formatNumber(counts.mastered ?? 0)
-    },
-    {
-      label: "Points faibles",
-      value: loading ? "..." : formatNumber(weakSpotCount)
     }
   ];
 
+  function openProfile() {
+    setMode("profile");
+  }
+
   return (
-    <section className={`menu-context-card menu-stats-card${error ? " menu-stats-card-error" : ""}`}>
+    <section
+      role="button"
+      tabIndex={0}
+      className={`menu-context-card menu-profile-card menu-profile-card-clickable${error ? " menu-profile-card-error" : ""}`}
+      onClick={openProfile}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openProfile();
+        }
+      }}
+      aria-label="Voir la progression"
+    >
       <div>
         <span className="menu-eyebrow">Progression</span>
-        <h2>Statistiques</h2>
+        <h2>Profil</h2>
       </div>
 
-      <div className="menu-stats-grid">
+      <div className="menu-stats-grid menu-stats-grid-compact">
         {metrics.map((metric) => (
           <div className="menu-stat-tile" key={metric.label}>
             <strong>{metric.value}</strong>
@@ -410,12 +433,11 @@ export default function Menu({
   onOpenSettingsSection = null,
   onOpenPack = null
 }) {
-  const [syncStatus, setSyncStatus] = useState(null);
-  const [syncLoading, setSyncLoading] = useState(true);
-  const [syncError, setSyncError] = useState("");
   const [menuStats, setMenuStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState("");
+  const [menuProfile, setMenuProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [popularPacks, setPopularPacks] = useState([]);
   const [packsLoading, setPacksLoading] = useState(true);
   const [packsError, setPacksError] = useState("");
@@ -469,36 +491,6 @@ export default function Menu({
   useEffect(() => {
     let cancelled = false;
 
-    setSyncLoading(true);
-    setSyncError("");
-
-    getSyncStatus()
-      .then((status) => {
-        if (cancelled) return;
-
-        setSyncStatus(status);
-      })
-      .catch((error) => {
-        console.error(error);
-
-        if (!cancelled) {
-          setSyncError(error.message || "Statut sync indisponible.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSyncLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
     setStatsLoading(true);
     setStatsError("");
 
@@ -518,6 +510,31 @@ export default function Menu({
       .finally(() => {
         if (!cancelled) {
           setStatsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setProfileLoading(true);
+
+    getProfile()
+      .then((profile) => {
+        if (cancelled) return;
+
+        setMenuProfile(profile);
+      })
+      .catch((error) => {
+        console.error(error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setProfileLoading(false);
         }
       });
 
@@ -606,12 +623,12 @@ export default function Menu({
             <h1>Nemoris</h1>
           </div>
 
-          <MenuSyncStatus
-            error={syncError}
-            loading={syncLoading}
+          <MenuAccountChip
+            loading={profileLoading}
             onOpenSettingsSection={onOpenSettingsSection}
+            profile={menuProfile?.profile}
             setMode={setMode}
-            status={syncStatus}
+            signedIn={Boolean(menuProfile?.signed_in)}
           />
         </header>
 
@@ -702,9 +719,10 @@ export default function Menu({
                 setMode={setMode}
               />
 
-              <MenuStatsCard
+              <MenuProgressCard
                 error={statsError}
                 loading={statsLoading}
+                setMode={setMode}
                 stats={menuStats}
               />
             </aside>

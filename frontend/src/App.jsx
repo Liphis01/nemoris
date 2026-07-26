@@ -3,7 +3,7 @@ import Menu from "./features/menu/Menu";
 import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
 import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
-import Stats from "./features/stats/components/Stats";
+import Profile from "./features/profile/components/Profile";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
 import BrowsePacks from "./features/packs/components/BrowsePacks";
@@ -249,10 +249,10 @@ function App() {
           />
         )}
 
-        {mode === "stats" && (
-          <Stats
+        {mode === "profile" && (
+          <Profile
             setMode={setMode}
-            onOpenQuestion={openQuestionIdInManage}
+            onOpenSettingsSection={openSettingsSection}
           />
         )}
 
