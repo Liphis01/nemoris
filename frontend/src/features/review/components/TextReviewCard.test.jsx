@@ -84,6 +84,20 @@ describe("TextReviewCard media preview", () => {
             });
         });
     });
+
+    it("renders LaTeX in text prompts and answers", () => {
+        const { container } = renderTextReviewCard({
+            q: {
+                ...baseQuestion,
+                question: "Formule \\(E = mc^2\\)",
+                answer: "$$a^2 + b^2 = c^2$$"
+            },
+            showAnswer: true
+        });
+
+        expect(container.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(2);
+        expect(container.querySelector(".katex-display")).toBeInTheDocument();
+    });
 });
 
 describe("TextReviewCard relearning", () => {

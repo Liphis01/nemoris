@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fadeInStyle } from "../../../shared/styles";
+import RichText from "../../../shared/RichText";
 import {
     getMediaKind,
     mediaPoolFrom,
@@ -424,7 +425,7 @@ export default function TextReviewCard({
                         marginBottom: hasQuestionMedia ? "24px" : "0"
                     }}
                 >
-                    {q.question}
+                    <RichText>{q.question}</RichText>
                 </div>
 
                 {/* QUESTION MEDIA */}
@@ -489,7 +490,7 @@ export default function TextReviewCard({
                                 marginBottom: q.answer_media ? "20px" : "34px"
                             }}
                         >
-                            {q.answer}
+                            <RichText>{q.answer}</RichText>
                         </div>
 
                         <ReviewMedia media={q.answer_media} label="réponse" />

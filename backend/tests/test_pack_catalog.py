@@ -705,8 +705,8 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
 
                 return FakeResponse({
                     "pack_guid": "group-guid",
-                    "name": "Atlas des capitales",
-                    "description": "Cartes de capitales.",
+                    "name": "États et géographie",
+                    "description": "Cartes de capitales françaises.",
                     "type_group": "map",
                     "question_count": 1,
                     "version": 2,
@@ -715,7 +715,7 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
                     "tags": ["capitales"],
                     "themes": ["géographie"],
                     "storage_path": (
-                        "user-123/group-guid/v2-atlas-des-capitales.zip"
+                        "user-123/group-guid/v2-états-et-géographie.zip"
                     ),
                     "is_public": False,
                     "publication_status": "draft"
@@ -738,8 +738,8 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
                     db,
                     group_id,
                     version=2,
-                    name="Atlas des capitales",
-                    description="Cartes de capitales.",
+                    name="États et géographie",
+                    description="Cartes de capitales françaises.",
                     license="CC0",
                     tags=["capitales"],
                     themes=["géographie"]
@@ -762,7 +762,7 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         )
         self.assertIn(
             "/storage/v1/object/pack-zips/user-123/group-guid/"
-            "v2-atlas-des-capitales.zip",
+            "v2-%C3%A9tats-et-g%C3%A9ographie.zip",
             storage_request.full_url
         )
 
@@ -777,6 +777,11 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         self.assertEqual(payload["p_question_count"], 1)
         self.assertEqual(payload["p_version"], 2)
         self.assertEqual(payload["p_size_bytes"], 9)
+        self.assertEqual(payload["p_name"], "États et géographie")
+        self.assertEqual(
+            payload["p_description"],
+            "Cartes de capitales françaises."
+        )
         self.assertEqual(payload["p_tags"], ["capitales"])
         self.assertEqual(payload["p_themes"], ["géographie"])
 

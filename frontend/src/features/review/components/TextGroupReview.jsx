@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import RichText from "../../../shared/RichText";
 import { normalizeTextMode, TEXT_MODE_MATCH } from "../textModes";
 import {
   GOT_IT_QUALITY,
@@ -416,10 +417,10 @@ export default function TextGroupReview({
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ color: "#eee", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.question}
+                    <RichText>{item.question}</RichText>
                   </div>
                   <div style={{ color: "#8fc7ff", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.answer}
+                    <RichText>{item.answer}</RichText>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "5px" }}>
@@ -594,7 +595,7 @@ export default function TextGroupReview({
                       transition: "opacity 60ms ease, box-shadow 60ms ease"
                     }}
                   >
-                    {item.question}
+                    <RichText>{item.question}</RichText>
                   </button>
                 );
               })}
@@ -629,7 +630,7 @@ export default function TextGroupReview({
                       transition: "opacity 60ms ease, box-shadow 60ms ease"
                     }}
                   >
-                    {item.answer}
+                    <RichText>{item.answer}</RichText>
                   </button>
                 );
               })}
@@ -680,11 +681,11 @@ export default function TextGroupReview({
                   whiteSpace: "nowrap"
                 }}
               >
-                {item.question}
+                <RichText>{item.question}</RichText>
               </div>
               {found ? (
                 <div style={{ color: "#7ee2a8", fontWeight: 700 }}>
-                  {item.answer}
+                  <RichText>{item.answer}</RichText>
                 </div>
               ) : (
                 <input

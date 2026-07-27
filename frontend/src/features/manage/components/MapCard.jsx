@@ -2,6 +2,7 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import RichText from "../../../shared/RichText";
 
 export default function MapCard({
   q,
@@ -172,7 +173,9 @@ export default function MapCard({
               padding: "0 4px"
             }}
           >
-            {q.answer || "Unnamed zone"}
+            <RichText compact style={{ whiteSpace: "inherit" }}>
+              {q.answer || "Unnamed zone"}
+            </RichText>
           </div>
 
           <FavoriteToggleButton
@@ -193,7 +196,9 @@ export default function MapCard({
             paddingLeft: "2px"
           }}
         >
-          {q.group?.name || "Map group"}
+          <RichText compact style={{ whiteSpace: "inherit" }}>
+            {q.group?.name || "Map group"}
+          </RichText>
         </div>
 
         {/* BOTTOM */}

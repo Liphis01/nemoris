@@ -2,6 +2,7 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import RichText from "../../../shared/RichText";
 
 export default function QuestionCard({
   q,
@@ -172,7 +173,7 @@ export default function QuestionCard({
               flex: 1
             }}
           >
-            {q.question}
+            <RichText compact style={{ whiteSpace: "inherit" }}>{q.question}</RichText>
           </div>
 
           {q.media && (
@@ -211,7 +212,7 @@ export default function QuestionCard({
             paddingLeft: "2px"
           }}
         >
-          {q.answer || "—"}
+          <RichText compact style={{ whiteSpace: "inherit" }}>{q.answer || "—"}</RichText>
         </div>
 
         {/* BOTTOM */}

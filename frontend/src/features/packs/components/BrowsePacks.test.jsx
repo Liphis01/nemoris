@@ -391,7 +391,7 @@ describe("BrowsePacks", () => {
     await userEvent.clear(screen.getByRole("textbox", { name: "Titre du pack" }));
     await userEvent.type(
       screen.getByRole("textbox", { name: "Titre du pack" }),
-      "Atlas des capitales"
+      "États et géographie"
     );
     await userEvent.type(
       screen.getByRole("textbox", { name: "Thèmes du pack" }),
@@ -408,7 +408,7 @@ describe("BrowsePacks", () => {
         { groupId: 10 },
         {
           version: 1,
-          name: "Atlas des capitales",
+          name: "États et géographie",
           description: "",
           license: "",
           themes: ["géographie", "cartes"],

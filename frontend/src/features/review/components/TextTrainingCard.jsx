@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fadeInStyle } from "../../../shared/styles";
+import RichText from "../../../shared/RichText";
 import {
   getMediaKind,
   mediaPoolFrom,
@@ -265,7 +266,7 @@ export default function TextTrainingCard({
             marginBottom: mediaSrc ? "24px" : "0"
           }}
         >
-          {q.question}
+          <RichText>{q.question}</RichText>
         </div>
 
         <TrainingMedia
@@ -324,7 +325,7 @@ export default function TextTrainingCard({
               }}
             >
               <strong style={{ color: "#ffcc7a" }}>{statusCopy}</strong>
-              <span>{expectedAnswer}</span>
+              <RichText as="span">{expectedAnswer}</RichText>
               <TrainingMedia
                 media={q.answer_media}
                 label="image de la réponse"

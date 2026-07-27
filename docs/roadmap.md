@@ -9,7 +9,6 @@
 - suppression de pack
 - autoriser les accents (et autres caractères spéciaux + latex) dans l'app et dans supabase
 - il reste un dossier qui s'appelle blueprint
-- améliorer la connexion par email
 - arrêter de différencier les questions texte des questions image -> question unitaire
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
