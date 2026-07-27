@@ -135,8 +135,7 @@
 .pack-card-action,
 .pack-card-body,
 .pack-export-group,
-.pack-publication-item,
-.pack-source-summary {
+.pack-publication-item {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   border-radius: 8px;
@@ -626,8 +625,7 @@
 .pack-danger-button:not(:disabled):hover,
 .pack-theme-button:hover,
 .pack-export-group:hover,
-.pack-publication-item:hover,
-.pack-source-summary:hover {
+.pack-publication-item:hover {
   border-color: #444444;
   transform: translateY(-1px);
 }
@@ -791,6 +789,80 @@
   font-weight: 800;
   min-height: 26px;
   padding: 0 10px;
+}
+
+.pack-release-preview {
+  background: #111111;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.pack-release-preview-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.pack-release-preview-head strong {
+  color: #f1f1f1;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.pack-release-preview-head span,
+.pack-release-preview p {
+  color: #9d9d9d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.pack-release-diff-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pack-release-diff-stat {
+  background: #171717;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.pack-release-diff-stat span {
+  color: #858585;
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.pack-release-diff-stat strong {
+  color: #f1f1f1;
+  display: block;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  margin-top: 8px;
+}
+
+.pack-release-warning {
+  background: rgba(255, 204, 122, 0.08);
+  border: 1px solid rgba(255, 204, 122, 0.26);
+  border-radius: 8px;
+  color: #ffcc7a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 8px 10px;
 }
 
 .pack-export-group {
@@ -1140,7 +1212,8 @@
   }
 
   .pack-search-toolbar,
-  .pack-detail-stat-grid {
+  .pack-detail-stat-grid,
+  .pack-release-diff-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

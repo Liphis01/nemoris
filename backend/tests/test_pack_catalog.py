@@ -36,9 +36,11 @@ from app.schemas import (
 from app.services.pack_catalog import (
     _annotate_publication_sources,
     get_pack_publish_status,
+    preview_pack_release,
     publish_pack_publication,
     save_pack_publish_draft
 )
+from app.services.packs import export_pack
 from app.services.settings import save_pack_catalog_settings
 
 
@@ -61,6 +63,9 @@ class FakeResponse:
         return False
 
     def read(self):
+        if isinstance(self.payload, bytes):
+            return self.payload
+
         return json.dumps(self.payload).encode("utf-8")
 
 
@@ -691,6 +696,9 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
             def fake_urlopen(request, timeout):
                 calls.append((request, timeout))
 
+                if "/rest/v1/pack_catalog?select=" in request.full_url:
+                    return FakeResponse([])
+
                 if "/storage/v1/object/pack-zips/" in request.full_url:
                     return FakeResponse({})
 
@@ -739,7 +747,11 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         self.assertEqual(result["status"], "draft")
         self.assertFalse(result["publication"]["is_public"])
 
-        storage_request, storage_timeout = calls[0]
+        lookup_request, lookup_timeout = calls[0]
+        self.assertEqual(lookup_timeout, 12)
+        self.assertIn("/rest/v1/pack_catalog?select=", lookup_request.full_url)
+
+        storage_request, storage_timeout = calls[1]
         self.assertEqual(storage_timeout, 60)
         self.assertEqual(storage_request.get_method(), "POST")
         self.assertEqual(storage_request.data, b"zip-bytes")
@@ -753,7 +765,7 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
             storage_request.full_url
         )
 
-        rpc_request, rpc_timeout = calls[1]
+        rpc_request, rpc_timeout = calls[2]
         self.assertEqual(rpc_timeout, 12)
         self.assertEqual(
             rpc_request.full_url,
@@ -766,6 +778,135 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         self.assertEqual(payload["p_size_bytes"], 9)
         self.assertEqual(payload["p_tags"], ["capitales"])
         self.assertEqual(payload["p_themes"], ["géographie"])
+
+    def test_preview_release_compares_published_zip_with_local_source(self):
+        db = make_db()
+        group_id = self.configure(db)
+        calls = []
+
+        with tempfile.TemporaryDirectory() as temp_name:
+            old_zip = export_pack(
+                db,
+                group_id,
+                version=1,
+                name="Atlas des capitales",
+                pack_dir=Path(temp_name)
+            )
+            old_zip_bytes = old_zip.read_bytes()
+
+        question = (
+            db.query(Question)
+            .filter(Question.guid == "question-guid")
+            .first()
+        )
+        question.answer = "Paris corrigé"
+        db.add(Question(
+            guid="second-question-guid",
+            type_q="map",
+            question="Espagne",
+            answer="Madrid",
+            tags=["capitales", "europe"],
+            group_id=group_id
+        ))
+        db.commit()
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if "/rest/v1/pack_catalog?select=" in request.full_url:
+                return FakeResponse([{
+                    "pack_guid": "group-guid",
+                    "name": "Atlas des capitales",
+                    "description": "Cartes de capitales.",
+                    "type_group": "map",
+                    "question_count": 1,
+                    "version": 1,
+                    "size_bytes": len(old_zip_bytes),
+                    "license": "CC0",
+                    "tags": ["capitales"],
+                    "themes": ["géographie"],
+                    "storage_path": "user-123/group-guid/v1-atlas.zip",
+                    "is_public": True,
+                    "publication_status": "published"
+                }])
+
+            if "/storage/v1/object/pack-zips/" in request.full_url:
+                return FakeResponse(old_zip_bytes)
+
+            return FakeResponse({})
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = preview_pack_release(
+                db,
+                "group-guid",
+                version=2,
+                name="Atlas des capitales",
+                description="Cartes de capitales enrichies.",
+                license="CC0",
+                tags=["capitales"],
+                themes=["géographie"]
+            )
+
+        self.assertEqual(result["status"], "preview")
+        self.assertEqual(result["published_version"], 1)
+        self.assertEqual(result["next_version"], 2)
+        self.assertEqual(result["question_count"], {"published": 1, "next": 2})
+        self.assertEqual(result["questions"]["added"], ["second-question-guid"])
+        self.assertEqual(result["questions"]["edited"], ["question-guid"])
+        self.assertEqual(result["questions"]["removed"], [])
+        self.assertEqual(result["metadata_changed"], ["description"])
+        self.assertFalse(result["unchanged"])
+        self.assertIn("/rest/v1/pack_catalog?select=", calls[0][0].full_url)
+        self.assertIn("/storage/v1/object/pack-zips/", calls[1][0].full_url)
+
+    def test_save_draft_rejects_same_version_for_public_pack(self):
+        db = make_db()
+        group_id = self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse([{
+                "pack_guid": "group-guid",
+                "name": "Atlas des capitales",
+                "version": 2,
+                "question_count": 1,
+                "storage_path": "user-123/group-guid/v2-atlas.zip",
+                "is_public": True,
+                "publication_status": "published"
+            }])
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ), self.assertRaisesRegex(
+            ValueError,
+            "version doit être supérieure"
+        ):
+            save_pack_publish_draft(
+                db,
+                group_id,
+                version=2,
+                name="Atlas des capitales"
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertIn("/rest/v1/pack_catalog?select=", calls[0][0].full_url)
 
     def test_publish_calls_authenticated_publish_rpc(self):
         db = make_db()

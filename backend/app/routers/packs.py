@@ -24,6 +24,7 @@ from ..services.pack_catalog import (
     list_pack_comments,
     list_pack_publications,
     publish_pack_publication,
+    preview_pack_release,
     rate_pack,
     record_pack_install,
     request_pack_publish_code,
@@ -231,6 +232,31 @@ def publish_group_pack(pack_guid: str, db: Session = Depends(get_db)):
     except PackCatalogAuthError as error:
         raise HTTPException(status_code=401, detail=str(error)) from error
     except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/catalog/publish/{pack_guid}/release-preview")
+def preview_pack_publication_release(
+    pack_guid: str,
+    payload: PackPublishDraftRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return preview_pack_release(
+            db,
+            pack_guid,
+            version=payload.version,
+            name=payload.name,
+            description=payload.description,
+            license=payload.license,
+            tags=payload.tags,
+            themes=payload.themes
+        )
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 

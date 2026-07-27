@@ -2,18 +2,30 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PublicationsManager from "./PublicationsManager";
+import { listCollections } from "../../../api/collections";
+import { listGroups } from "../../../api/groups";
 import {
   getMyPackStatus,
   listPackComments,
   backfillPackInstalls,
   getPackPublishStatus,
   listPackPublications,
+  previewPackRelease,
+  publishPack,
   publishPackDraft,
   requestPackPublishCode,
   signOutPackPublisher,
   unpublishPack,
   verifyPackPublishCode
 } from "../../../api/packs";
+
+vi.mock("../../../api/collections", () => ({
+  listCollections: vi.fn()
+}));
+
+vi.mock("../../../api/groups", () => ({
+  listGroups: vi.fn()
+}));
 
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
@@ -23,6 +35,8 @@ vi.mock("../../../api/packs", () => ({
   backfillPackInstalls: vi.fn(),
   getPackPublishStatus: vi.fn(),
   listPackPublications: vi.fn(),
+  previewPackRelease: vi.fn(),
+  publishPack: vi.fn(),
   publishPackDraft: vi.fn(),
   requestPackPublishCode: vi.fn(),
   signOutPackPublisher: vi.fn(),
@@ -76,6 +90,27 @@ describe("PublicationsManager", () => {
     });
     listPackPublications.mockResolvedValue({
       publications: [draft, published, unpublished]
+    });
+    listGroups.mockResolvedValue([]);
+    listCollections.mockResolvedValue([]);
+    previewPackRelease.mockResolvedValue({
+      status: "preview",
+      published_version: 3,
+      next_version: 4,
+      question_count: { published: 252, next: 253 },
+      groups: { added: [], edited: [], removed: [], unchanged: 1 },
+      questions: {
+        added: ["new-question-guid"],
+        edited: ["edited-question-guid"],
+        removed: [],
+        unchanged: 251
+      },
+      metadata_changed: ["description"],
+      unchanged: false
+    });
+    publishPack.mockResolvedValue({
+      status: "published",
+      publication: { ...published, version: 4, question_count: 253 }
     });
     unpublishPack.mockResolvedValue({
       status: "unpublished",
@@ -186,6 +221,86 @@ describe("PublicationsManager", () => {
     );
 
     expect(onOpenGroup).toHaveBeenCalledWith(42);
+  });
+
+  it("publishes a new version from a prefilled release preview", async () => {
+    listPackPublications.mockResolvedValue({
+      publications: [
+        {
+          ...published,
+          pack_guid: "published-guid",
+          description: "Ancienne description.",
+          license: "CC0",
+          tags: ["géographie"],
+          themes: ["cartes"],
+          source: { kind: "group", id: 42, name: "Territoires du monde" },
+          orphaned: false
+        }
+      ]
+    });
+    listGroups.mockResolvedValue([
+      {
+        id: 42,
+        name: "Territoires du monde",
+        type_group: "map",
+        question_count: 253
+      }
+    ]);
+
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Publier une nouvelle version" })
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Nouvelle version" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Titre du pack")).toHaveValue("Territoires du monde");
+    expect(screen.getByLabelText("Version du pack")).toHaveValue(4);
+    expect(screen.getByLabelText("Licence du pack")).toHaveValue("CC0");
+    expect(screen.getByLabelText("Thèmes du pack")).toHaveValue("cartes");
+    expect(screen.getByLabelText("Tags du pack")).toHaveValue("géographie");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Prévisualiser la version" })
+      ).toBeEnabled();
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Prévisualiser la version" })
+    );
+
+    await waitFor(() => {
+      expect(previewPackRelease).toHaveBeenCalledWith(
+        "published-guid",
+        expect.objectContaining({
+          version: 4,
+          name: "Territoires du monde",
+          description: "Ancienne description.",
+          license: "CC0",
+          tags: ["géographie"],
+          themes: ["cartes"]
+        })
+      );
+    });
+    expect(await screen.findByText("Métadonnées : description")).toBeInTheDocument();
+    expect(screen.getByText("Questions ajoutées")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Publier la version v4" })
+    );
+
+    await waitFor(() => {
+      expect(publishPack).toHaveBeenCalledWith(
+        { groupId: 42 },
+        expect.objectContaining({
+          version: 4,
+          name: "Territoires du monde"
+        })
+      );
+    });
   });
 
   it("warns when the pack outlived its local source", async () => {

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { listGroups } from "../../../api/groups";
 import { listCollections } from "../../../api/collections";
-import { publishPack, publishPackDraft, listPackPublications, unpublishPack } from "../../../api/packs";
+import {
+  previewPackRelease,
+  publishPack,
+  publishPackDraft,
+  listPackPublications,
+  unpublishPack
+} from "../../../api/packs";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { usePackPublishAuth } from "../hooks/usePackPublishAuth";
 import { useActionState } from "../hooks/useActionState";
@@ -31,6 +37,95 @@ function matchesSearch(name, term) {
   );
 }
 
+
+function termsToDraft(values) {
+  return Array.isArray(values) ? values.join(", ") : "";
+}
+
+
+function nextReleaseVersion(publication) {
+  const currentVersion = Number(publication?.version);
+  return String(Number.isFinite(currentVersion) ? Math.floor(currentVersion) + 1 : 1);
+}
+
+
+function releasePayloadKey(payload) {
+  return JSON.stringify({
+    version: payload.version,
+    name: payload.name,
+    description: payload.description,
+    license: payload.license,
+    tags: payload.tags,
+    themes: payload.themes
+  });
+}
+
+
+function diffCount(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+
+function ReleaseDiffPreview({ preview }) {
+  if (!preview) return null;
+
+  const metadataLabels = {
+    name: "titre",
+    description: "description",
+    license: "licence",
+    tags: "tags",
+    themes: "thèmes"
+  };
+  const metadataChanged = Array.isArray(preview.metadata_changed)
+    ? preview.metadata_changed
+    : [];
+  const metadataText = metadataChanged.length
+    ? metadataChanged.map((field) => metadataLabels[field] || field).join(", ")
+    : "aucun";
+
+  return (
+    <div className="pack-release-preview" role="status">
+      <div className="pack-release-preview-head">
+        <strong>v{preview.published_version} → v{preview.next_version}</strong>
+        <span>
+          {preview.question_count?.published ?? "—"} → {preview.question_count?.next ?? "—"} questions
+        </span>
+      </div>
+
+      <div className="pack-release-diff-grid">
+        <div className="pack-release-diff-stat">
+          <span>Questions ajoutées</span>
+          <strong>{diffCount(preview.questions?.added)}</strong>
+        </div>
+        <div className="pack-release-diff-stat">
+          <span>Questions modifiées</span>
+          <strong>{diffCount(preview.questions?.edited)}</strong>
+        </div>
+        <div className="pack-release-diff-stat">
+          <span>Questions retirées</span>
+          <strong>{diffCount(preview.questions?.removed)}</strong>
+        </div>
+        <div className="pack-release-diff-stat">
+          <span>Groupes modifiés</span>
+          <strong>
+            {diffCount(preview.groups?.added) +
+              diffCount(preview.groups?.edited) +
+              diffCount(preview.groups?.removed)}
+          </strong>
+        </div>
+      </div>
+
+      <p>Métadonnées : {metadataText}</p>
+
+      {preview.unchanged && (
+        <div className="pack-release-warning">
+          Aucun changement détecté pour cette version.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Two steps, not one shared pane: picking a source and filling in metadata
 // are different tasks that both want the full width, and at a few hundred
 // groups a picker sharing space with the form would either force endless
@@ -38,27 +133,39 @@ function matchesSearch(name, term) {
 // one group or playlist (never a mix -- a pack ships a whole group or a
 // playlist's selection, which may itself span several groups and types);
 // step 2 owns the pane to itself for the metadata fields.
-function PublishForm({ auth, onPublished }) {
-  const [step, setStep] = useState("select");
+function PublishForm({ auth, basePublication = null, onCancelRelease, onPublished }) {
+  const releaseMode = Boolean(basePublication);
+  const releaseSourceKind = basePublication?.source?.kind === "playlist" ? "playlist" : "group";
+  const releaseSourceId = basePublication?.source?.id ? String(basePublication.source.id) : "";
+  const [step, setStep] = useState(releaseMode ? "form" : "select");
   const [groups, setGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [groupsError, setGroupsError] = useState("");
-  const [selectedGroupId, setSelectedGroupId] = useState("");
-  const [sourceKind, setSourceKind] = useState("group");
+  const [selectedGroupId, setSelectedGroupId] = useState(
+    releaseMode && releaseSourceKind === "group" ? releaseSourceId : ""
+  );
+  const [sourceKind, setSourceKind] = useState(releaseSourceKind);
   const [playlists, setPlaylists] = useState([]);
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(
+    releaseMode && releaseSourceKind === "playlist" ? releaseSourceId : ""
+  );
   const [sourceSearch, setSourceSearch] = useState("");
-  const [title, setTitle] = useState("");
-  const [version, setVersion] = useState("1");
-  const [license, setLicense] = useState("");
-  const [description, setDescription] = useState("");
-  const [themesDraft, setThemesDraft] = useState("");
-  const [tagsDraft, setTagsDraft] = useState("");
+  const [title, setTitle] = useState(basePublication?.name || "");
+  const [version, setVersion] = useState(
+    releaseMode ? nextReleaseVersion(basePublication) : "1"
+  );
+  const [license, setLicense] = useState(basePublication?.license || "");
+  const [description, setDescription] = useState(basePublication?.description || "");
+  const [themesDraft, setThemesDraft] = useState(termsToDraft(basePublication?.themes));
+  const [tagsDraft, setTagsDraft] = useState(termsToDraft(basePublication?.tags));
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftError, setDraftError] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState("");
 
-  const publishingBusy = auth.busy || draftBusy;
-  const publishError = draftError || auth.error;
+  const publishingBusy = auth.busy || draftBusy || previewBusy;
+  const publishError = previewError || draftError || auth.error;
 
   useEffect(() => {
     let cancelled = false;
@@ -122,12 +229,16 @@ function PublishForm({ auth, onPublished }) {
     tags: splitTerms(tagsDraft),
     themes: splitTerms(themesDraft)
   };
+  const currentPublicationVersion = Number(basePublication?.version || 0);
+  const previewKey = releasePayloadKey(publishPayload);
+  const previewReady = releaseMode && preview?.payloadKey === previewKey;
   const canPublish = (
     selectedSource &&
     !publishingBusy &&
     title.trim() &&
     Number.isFinite(versionNumber) &&
     versionNumber >= 1 &&
+    (!releaseMode || versionNumber > currentPublicationVersion) &&
     (selectedSource.question_count || 0) > 0 &&
     // A generated playlist is derived from your review history, so it is not
     // yours to hand to someone else.
@@ -147,8 +258,31 @@ function PublishForm({ auth, onPublished }) {
     setStep("form");
   }
 
+  async function handlePreview() {
+    if (!releaseMode || !canPublish) {
+      return;
+    }
+
+    setPreviewBusy(true);
+    setPreviewError("");
+    setPreview(null);
+
+    try {
+      const result = await previewPackRelease(
+        basePublication.pack_guid,
+        publishPayload
+      );
+      setPreview({ ...result, payloadKey: previewKey });
+    } catch (error) {
+      console.error(error);
+      setPreviewError(error.message || "Prévisualisation impossible.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
   async function handlePublish() {
-    if (!canPublish) {
+    if (!canPublish || (releaseMode && !previewReady)) {
       return;
     }
 
@@ -316,35 +450,48 @@ function PublishForm({ auth, onPublished }) {
     : null;
 
   return (
-    <section className="pack-export-panel app-scrollbar" aria-label="Nouveau pack">
+    <section
+      className="pack-export-panel app-scrollbar"
+      aria-label={releaseMode ? "Nouvelle version" : "Nouveau pack"}
+    >
       <div className="pack-section-head">
         <div>
-          <h2>Nouveau pack</h2>
+          <h2>{releaseMode ? "Nouvelle version" : "Nouveau pack"}</h2>
           <p>
-            {sourceKind === "playlist"
-              ? "Mettre une playlist dans le catalogue"
-              : "Mettre un groupe dans le catalogue"}
+            {releaseMode
+              ? `Préparer v${publishPayload.version} pour le catalogue`
+              : (
+                sourceKind === "playlist"
+                  ? "Mettre une playlist dans le catalogue"
+                  : "Mettre un groupe dans le catalogue"
+              )}
           </p>
         </div>
       </div>
 
-      <button
-        type="button"
-        className="pack-source-summary"
-        onClick={() => setStep("select")}
-      >
+      <div className="pack-source-summary">
         <span className="pack-source-summary-text">
           <span className="pack-field-label">Source</span>
           <span>
-            <strong>{selectedSource?.name}</strong>
+            <strong>{selectedSource?.name || basePublication?.source?.name || "Source introuvable"}</strong>
             {sourceTypeStyle ? ` · ${sourceTypeStyle.label}` : ""}
             {" · "}
             {questionCountLabel(selectedSource?.question_count)}
             {sourceKind === "playlist" ? " · playlist" : ""}
           </span>
         </span>
-        <span className="pack-source-summary-change">Changer →</span>
-      </button>
+        {releaseMode ? (
+          <span className="pack-source-summary-change">Source liée</span>
+        ) : (
+          <button
+            type="button"
+            className="pack-inline-link"
+            onClick={() => setStep("select")}
+          >
+            Changer →
+          </button>
+        )}
+      </div>
 
       <div className="pack-publish-form">
         <label className="pack-field">
@@ -420,15 +567,54 @@ function PublishForm({ auth, onPublished }) {
           </label>
         </div>
 
+        {releaseMode && versionNumber <= currentPublicationVersion && (
+          <div className="pack-alert" role="alert">
+            Choisis une version supérieure à v{basePublication.version}.
+          </div>
+        )}
+
+        {releaseMode && (
+          <ReleaseDiffPreview preview={previewReady ? preview : null} />
+        )}
+
         <div className="pack-publish-actions">
-          <button
-            type="button"
-            className="pack-primary-button"
-            disabled={!canPublish}
-            onClick={handlePublish}
-          >
-            {publishingBusy ? "Publication..." : "Publier"}
-          </button>
+          {releaseMode ? (
+            <>
+              <button
+                type="button"
+                className="pack-secondary-button"
+                disabled={!canPublish}
+                onClick={handlePreview}
+              >
+                {previewBusy ? "Prévisualisation..." : "Prévisualiser la version"}
+              </button>
+              <button
+                type="button"
+                className="pack-primary-button"
+                disabled={!canPublish || !previewReady}
+                onClick={handlePublish}
+              >
+                {draftBusy ? "Publication..." : `Publier la version v${publishPayload.version}`}
+              </button>
+              <button
+                type="button"
+                className="pack-secondary-button"
+                disabled={publishingBusy}
+                onClick={onCancelRelease}
+              >
+                Annuler
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="pack-primary-button"
+              disabled={!canPublish}
+              onClick={handlePublish}
+            >
+              {publishingBusy ? "Publication..." : "Publier"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -442,11 +628,24 @@ function PublishForm({ auth, onPublished }) {
 // The dashboard for one already-published pack: stats, where it came from,
 // and the ratings/comments a creator could not read anywhere else before
 // this screen existed.
-function PackDetail({ action, onOpenGroup, onPublish, onUnpublish, publication, setMode }) {
+function PackDetail({
+  action,
+  onOpenGroup,
+  onPublish,
+  onStartRelease,
+  onUnpublish,
+  publication,
+  setMode
+}) {
   const ratingLabel = formatRatingLabel(publication.avg_rating, publication.rating_count);
   const canRepublish = (
     publication.publication_status === "draft" ||
     publication.publication_status === "archived"
+  );
+  const canStartRelease = (
+    publication.is_public &&
+    !publication.orphaned &&
+    publication.source?.id
   );
 
   return (
@@ -513,6 +712,17 @@ function PackDetail({ action, onOpenGroup, onPublish, onUnpublish, publication, 
       ) : null}
 
       <div className="pack-action-row">
+        {canStartRelease && (
+          <button
+            type="button"
+            className="pack-primary-button"
+            disabled={action.busy}
+            onClick={() => onStartRelease(publication)}
+          >
+            Publier une nouvelle version
+          </button>
+        )}
+
         {publication.is_public && (
           <button
             type="button"
@@ -560,6 +770,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
   // slow or stale refresh would strand the user on a blank "new pack" form
   // with no confirmation that anything happened.
   const [justPublished, setJustPublished] = useState(null);
+  const [releaseBase, setReleaseBase] = useState(null);
 
   const loadPublications = useCallback(async () => {
     // publishStatus is null until the session check resolves -- that is
@@ -646,8 +857,14 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
     // below fills in rating/comment/source once the authoritative row
     // exists, without leaving the user staring at an empty form meanwhile.
     setJustPublished(publication);
+    setReleaseBase(null);
     setSelectedKey(publication.pack_guid);
     loadPublications();
+  }
+
+  function handleStartRelease(publication) {
+    setReleaseBase(publication);
+    setSelectedKey(NEW_PACK_KEY);
   }
 
   const selectedPublication = (
@@ -668,7 +885,10 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
         <button
           type="button"
           className={`pack-rail-new${selectedKey === NEW_PACK_KEY ? " is-active" : ""}`}
-          onClick={() => setSelectedKey(NEW_PACK_KEY)}
+          onClick={() => {
+            setReleaseBase(null);
+            setSelectedKey(NEW_PACK_KEY);
+          }}
         >
           + Nouveau pack
         </button>
@@ -740,12 +960,22 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
       </section>
 
       {selectedKey === NEW_PACK_KEY || !selectedPublication ? (
-        <PublishForm auth={auth} onPublished={handlePublished} />
+        <PublishForm
+          key={releaseBase?.pack_guid || "new"}
+          auth={auth}
+          basePublication={releaseBase}
+          onCancelRelease={() => {
+            setReleaseBase(null);
+            setSelectedKey(releaseBase?.pack_guid || null);
+          }}
+          onPublished={handlePublished}
+        />
       ) : (
         <PackDetail
           action={actionState[selectedPublication.pack_guid] || {}}
           onOpenGroup={onOpenGroup}
           onPublish={handlePublish}
+          onStartRelease={handleStartRelease}
           onUnpublish={handleUnpublish}
           publication={selectedPublication}
           setMode={setMode}

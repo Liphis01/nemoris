@@ -1,8 +1,12 @@
+import io
 import json
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
+from zipfile import BadZipFile, ZipFile
 
 from sqlalchemy.orm import joinedload
 
@@ -13,7 +17,14 @@ from .pack_publish_state import (
     load_pack_publish_state,
     save_pack_publish_state
 )
-from .packs import export_pack, export_playlist_pack
+from .packs import (
+    GROUP_HASH_FIELDS,
+    QUESTION_HASH_FIELDS,
+    _read_manifest_and_content,
+    content_hash,
+    export_pack,
+    export_playlist_pack
+)
 from .settings import get_pack_catalog_settings
 from .sync_state import (
     is_signed_in as is_sync_signed_in,
@@ -1173,6 +1184,213 @@ def _normalize_publication(row, project_url):
     }
 
 
+def _owned_publication_select_path(pack_guid, owner_id):
+    return (
+        "/rest/v1/pack_catalog"
+        "?select=pack_guid,name,description,type_group,question_count,"
+        "version,size_bytes,license,tags,themes,storage_path,is_public,"
+        "publication_status,published_at,updated_at,avg_rating,"
+        "rating_count,comment_count"
+        f"&pack_guid=eq.{quote(str(pack_guid or '').strip(), safe='')}"
+        f"&owner_id=eq.{quote(str(owner_id or '').strip(), safe='')}"
+        "&limit=1"
+    )
+
+
+def _get_owned_publication(db, pack_guid, *, required=False):
+    clean_guid = str(pack_guid or "").strip()
+
+    if not clean_guid:
+        raise PackCatalogError("Pack introuvable.")
+
+    project_url, _ = _publish_config(db)
+    state, _ = _effective_publish_state(project_url)
+    owner_id = state["token"].get("user_id")
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        _owned_publication_select_path(clean_guid, owner_id)
+    )
+    _raise_supabase_status(status, body, "Publication introuvable")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    if not rows:
+        if required:
+            raise PackCatalogError("Publication introuvable.")
+
+        return None
+
+    return _normalize_publication(rows[0], project_url)
+
+
+def _validate_public_release_version(db, pack_guid, version):
+    publication = _get_owned_publication(db, pack_guid)
+    current_version = _int_or_none(
+        publication.get("version") if publication else None
+    )
+
+    if (
+        publication
+        and publication.get("is_public")
+        and current_version is not None
+        and int(version) <= current_version
+    ):
+        raise PackCatalogError(
+            "La nouvelle version doit être supérieure à la version publiée."
+        )
+
+    return publication
+
+
+def _local_publication_source(db, pack_guid):
+    group = (
+        db.query(QuestionGroup)
+        .options(joinedload(QuestionGroup.questions))
+        .filter(QuestionGroup.guid == pack_guid)
+        .first()
+    )
+
+    if group:
+        return {
+            "kind": "group",
+            "id": group.id,
+            "name": group.name,
+            "question_count": len(group.questions or [])
+        }
+
+    collection = (
+        db.query(Collection)
+        .options(joinedload(Collection.questions).joinedload(Question.group))
+        .filter(Collection.guid == pack_guid)
+        .first()
+    )
+
+    if collection:
+        question_count = len([
+            question
+            for question in (collection.questions or [])
+            if question.group is not None
+        ])
+
+        return {
+            "kind": "playlist",
+            "id": collection.id,
+            "name": collection.name,
+            "question_count": question_count
+        }
+
+    raise PackCatalogError(
+        "Source supprimée localement : impossible de préparer cette version."
+    )
+
+
+def _pack_content_from_zip_bytes(zip_bytes):
+    try:
+        with ZipFile(io.BytesIO(zip_bytes)) as zip_file:
+            _, _, version, group_entries, question_entries = (
+                _read_manifest_and_content(zip_file)
+            )
+    except (BadZipFile, ValueError) as error:
+        raise PackCatalogError("ZIP publié impossible à lire.") from error
+
+    return {
+        "version": version,
+        "groups": group_entries,
+        "questions": question_entries
+    }
+
+
+def _publication_zip_bytes(db, publication):
+    storage_path = str(publication.get("storage_path") or "").strip()
+
+    if not storage_path:
+        raise PackCatalogError("ZIP publié introuvable.")
+
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        f"/storage/v1/object/{CATALOG_BUCKET}/"
+        f"{quote(storage_path, safe='/')}",
+        timeout=PUBLISH_TRANSFER_TIMEOUT
+    )
+    _raise_supabase_status(
+        status, body, "Téléchargement du ZIP publié impossible"
+    )
+
+    return body
+
+
+def _diff_entries(previous_entries, next_entries, fields):
+    previous = {
+        entry.get("guid"): content_hash(entry, fields)
+        for entry in previous_entries
+        if entry.get("guid")
+    }
+    next_values = {
+        entry.get("guid"): content_hash(entry, fields)
+        for entry in next_entries
+        if entry.get("guid")
+    }
+    previous_guids = set(previous)
+    next_guids = set(next_values)
+    shared = previous_guids & next_guids
+
+    return {
+        "added": sorted(next_guids - previous_guids),
+        "edited": sorted(
+            guid for guid in shared if previous[guid] != next_values[guid]
+        ),
+        "removed": sorted(previous_guids - next_guids),
+        "unchanged": len([
+            guid for guid in shared if previous[guid] == next_values[guid]
+        ])
+    }
+
+
+def _metadata_changes(publication, *, name, description, license, tags, themes):
+    comparisons = {
+        "name": (
+            str(publication.get("name") or "").strip(),
+            str(name or "").strip()
+        ),
+        "description": (
+            str(publication.get("description") or "").strip(),
+            str(description or "").strip()
+        ),
+        "license": (
+            str(publication.get("license") or "").strip(),
+            str(license or "").strip()
+        ),
+        "tags": (
+            publication.get("tags") or [],
+            _normalize_terms(tags, max_items=20)
+        ),
+        "themes": (
+            publication.get("themes") or [],
+            _normalize_terms(themes, max_items=12)
+        )
+    }
+
+    return [
+        field
+        for field, (previous, next_value) in comparisons.items()
+        if previous != next_value
+    ]
+
+
+def _has_release_changes(diff):
+    return bool(
+        diff["questions"]["added"]
+        or diff["questions"]["edited"]
+        or diff["questions"]["removed"]
+        or diff["groups"]["added"]
+        or diff["groups"]["edited"]
+        or diff["groups"]["removed"]
+        or diff["metadata_changed"]
+    )
+
+
 def get_pack_publish_status(db):
     settings = get_pack_catalog_settings(db)
     project_url = normalize_supabase_url(settings.get("url"))
@@ -1283,6 +1501,97 @@ def list_pack_publications(db):
     }
 
 
+def preview_pack_release(
+    db,
+    pack_guid,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    safe_version = int(version)
+    publication = _get_owned_publication(db, pack_guid, required=True)
+    current_version = _int_or_none(publication.get("version")) or 1
+
+    if publication.get("is_public") and safe_version <= current_version:
+        raise PackCatalogError(
+            "La nouvelle version doit être supérieure à la version publiée."
+        )
+
+    source = _local_publication_source(db, publication["pack_guid"])
+    previous_content = _pack_content_from_zip_bytes(
+        _publication_zip_bytes(db, publication)
+    )
+
+    with tempfile.TemporaryDirectory() as temp_name:
+        pack_dir = Path(temp_name)
+
+        if source["kind"] == "playlist":
+            next_zip = export_playlist_pack(
+                db,
+                source["id"],
+                version=safe_version,
+                name=name,
+                description=description,
+                license=license,
+                pack_dir=pack_dir
+            )
+        else:
+            next_zip = export_pack(
+                db,
+                source["id"],
+                version=safe_version,
+                name=name,
+                description=description,
+                license=license,
+                pack_dir=pack_dir
+            )
+
+        next_content = _pack_content_from_zip_bytes(next_zip.read_bytes())
+
+    diff = {
+        "questions": _diff_entries(
+            previous_content["questions"],
+            next_content["questions"],
+            QUESTION_HASH_FIELDS
+        ),
+        "groups": _diff_entries(
+            previous_content["groups"],
+            next_content["groups"],
+            GROUP_HASH_FIELDS
+        ),
+        "metadata_changed": _metadata_changes(
+            publication,
+            name=name,
+            description=description,
+            license=license,
+            tags=tags,
+            themes=themes
+        )
+    }
+
+    return {
+        "status": "preview",
+        "pack_guid": publication["pack_guid"],
+        "source": source,
+        "published_version": current_version,
+        "next_version": safe_version,
+        "question_count": {
+            "published": len(previous_content["questions"]),
+            "next": len(next_content["questions"])
+        },
+        "group_count": {
+            "published": len(previous_content["groups"]),
+            "next": len(next_content["groups"])
+        },
+        **diff,
+        "unchanged": not _has_release_changes(diff)
+    }
+
+
 def save_pack_publish_draft(
     db,
     group_id,
@@ -1300,6 +1609,9 @@ def save_pack_publish_draft(
         raise ValueError("Cannot publish an empty group")
 
     safe_version = int(version)
+    _validate_public_release_version(
+        db, summary["pack_guid"], safe_version
+    )
     zip_path = export_pack(
         db,
         group_id,
@@ -1344,6 +1656,9 @@ def save_playlist_publish_draft(
         raise ValueError("Cannot publish an empty playlist")
 
     safe_version = int(version)
+    _validate_public_release_version(
+        db, summary["pack_guid"], safe_version
+    )
     zip_path = export_playlist_pack(
         db,
         collection_id,

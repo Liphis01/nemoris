@@ -99,6 +99,15 @@ export function publishPackDraft(packGuid) {
 }
 
 
+export function previewPackRelease(packGuid, payload) {
+  return requestJson(`/packs/catalog/publish/${packGuid}/release-preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+
 /**
  * Upload the pack and make it public in one step.
  *
@@ -211,4 +220,3 @@ export function ratePack(packGuid, rating) {
     body: JSON.stringify({ rating })
   });
 }
-
