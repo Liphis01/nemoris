@@ -36,7 +36,9 @@ const styles = {
     gap: 18,
     padding: 18,
     height: "100%",
+    minHeight: 0,
     overflowY: "auto",
+    scrollbarGutter: "stable",
     color: "#e6e6e6"
   },
   label: {
@@ -310,7 +312,7 @@ export default function PlaylistBuilder({
   const clauseCounts = preview?.clause_counts || [];
 
   return (
-    <div style={styles.root}>
+    <div className="app-scrollbar" style={styles.root}>
       {/* One shared datalist: ids must be unique, so it cannot live per row. */}
       <datalist id="playlist-builder-tags">
         {availableTags.map((tag) => (

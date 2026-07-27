@@ -54,7 +54,7 @@ export default function CreateMapGroupEditor({
   );
 
   return (
-    <div style={panelStyle}>
+    <div className="app-scrollbar" style={panelStyle}>
       <div style={{ marginBottom: "22px", color: "#888" }}>
         Nouveau groupe
       </div>

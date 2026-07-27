@@ -293,6 +293,7 @@ export default function ManageSidebar({
       style={{
         width: "100%",
         height: "100%",
+        minHeight: 0,
         borderRight: "1px solid #262626",
         background: "#151515",
         display: "flex",
@@ -308,6 +309,7 @@ export default function ManageSidebar({
           borderBottom: "1px solid #262626",
           display: "flex",
           flexDirection: "column",
+          flexShrink: 0,
           gap: "14px"
         }}
       >
@@ -473,12 +475,17 @@ export default function ManageSidebar({
 
       {/* FILTERS */}
       <div
+        className="app-scrollbar"
         style={{
           padding: "18px",
           borderBottom: "1px solid #262626",
           display: "flex",
           flexDirection: "column",
-          gap: "12px"
+          flex: "1 1 auto",
+          gap: "12px",
+          minHeight: 0,
+          overflowY: "auto",
+          scrollbarGutter: "stable"
         }}
       >
 

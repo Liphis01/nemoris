@@ -61,7 +61,7 @@ export function QuestionEditorShell({
   children
 }) {
   return (
-    <div style={panelStyle}>
+    <div className="app-scrollbar" style={panelStyle}>
       <div
         style={{
           display: "flex",

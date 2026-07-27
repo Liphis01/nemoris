@@ -239,6 +239,7 @@ export default function Manage(props) {
         height: "100%",
         background: "#121212",
         color: "#eee",
+        minHeight: 0,
         minWidth: 0,
         overflow: "hidden",
         position: "relative",

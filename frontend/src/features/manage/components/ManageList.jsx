@@ -602,6 +602,7 @@ export default function ManageList({
     <div
       style={{
         height: "100%",
+        minHeight: 0,
         overflow: "hidden",
         background: "#111",
         display: "flex",

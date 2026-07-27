@@ -2,16 +2,12 @@
 
 
 ## vérifier
-- qu'il n'y a pas besoin de compte pour importer un pack
-- qu'on peut bien intégrer à la review tous les membres d'un pack individuellement
 
 ## Urgent
-- suppression de pack
-- autoriser les accents (et autres caractères spéciaux + latex) dans l'app et dans supabase
 - il reste un dossier qui s'appelle blueprint
-- arrêter de différencier les questions texte des questions image -> question unitaire
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
+- demander conseil pour le truc des questions bonus
 
 
 ## quick fixes
@@ -25,7 +21,6 @@
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 - mettre une ou deux stats dans les gros boutons de qualité des modes qcm
-- dans manage, quand la page est trop petite, il y a une scroll bar moche sur la page
 - pouvoir zoomer sur les images pour les questions isolées
 - ne pas nécessairement reset les records après un edit
 - intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
