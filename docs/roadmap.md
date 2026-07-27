@@ -3,6 +3,7 @@
 
 ## vérifier
 - qu'il n'y a pas besoin de compte pour importer un pack
+- qu'on peut bien intégrer à la review tous les membres d'un pack individuellement
 
 ## Urgent
 - suppression de pack

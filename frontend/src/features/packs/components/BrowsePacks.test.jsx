@@ -376,7 +376,7 @@ describe("BrowsePacks", () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Publier" }));
 
     // Step 1: pick a source. Step 2 (the form) only appears after that.
     await userEvent.click(
@@ -430,7 +430,7 @@ describe("BrowsePacks", () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Publier" }));
     await userEvent.click(await screen.findByRole("tab", { name: "Playlist" }));
 
     await userEvent.click(
@@ -450,7 +450,7 @@ describe("BrowsePacks", () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Publier" }));
     await userEvent.click(await screen.findByRole("tab", { name: "Playlist" }));
 
     // "Questions difficiles" is derived from the user's own review history,
@@ -464,7 +464,7 @@ describe("BrowsePacks", () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Publier" }));
     await userEvent.click(
       await screen.findByRole("button", { name: /Capitales du monde/ })
     );
@@ -477,7 +477,7 @@ describe("BrowsePacks", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("reuses the Settings sync account for publishing", async () => {
+  it("reuses the Settings sync account for publishing without showing an auth panel", async () => {
     const setMode = vi.fn();
     getPackPublishStatus.mockResolvedValue({
       configured: true,
@@ -490,16 +490,17 @@ describe("BrowsePacks", () => {
 
     render(<BrowsePacks setMode={setMode} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Publier" }));
 
-    expect(
-      await screen.findByText("Connecté via Synchronisation")
-    ).toBeInTheDocument();
+    // Already signed in via the Settings sync account -- there is nothing to
+    // do here, so no "Connecté via Synchronisation" status panel is shown.
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Capitales du monde/ })
+    );
+    await screen.findByRole("button", { name: "Publier" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Réglages" }));
-
-    expect(setMode).toHaveBeenCalledWith("settings");
-    expect(signOutPackPublisher).not.toHaveBeenCalled();
+    expect(screen.queryByText("Connecté via Synchronisation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connexion Supabase")).not.toBeInTheDocument();
   });
 
   it("switches to the Gérer tab and renders the publications manager", async () => {
@@ -519,9 +520,9 @@ describe("BrowsePacks", () => {
 
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Publier" }));
 
-    expect(screen.getByRole("tab", { name: "Mes packs" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Publier" })).toHaveAttribute(
       "aria-selected",
       "true"
     );

@@ -6,7 +6,7 @@ import PublishAuthPanel from "./PublishAuthPanel";
 
 const STAR_VALUES = [1, 2, 3, 4, 5];
 
-export default function PackReviewsSection({ entry, setMode }) {
+export default function PackReviewsSection({ entry, setMode, isOwner = false }) {
   const auth = usePackPublishAuth();
   const signedIn = Boolean(auth.publishStatus?.signed_in);
   const {
@@ -30,7 +30,12 @@ export default function PackReviewsSection({ entry, setMode }) {
   });
   const [commentDraft, setCommentDraft] = useState("");
 
-  const canReview = signedIn && Boolean(myStatus?.is_installed);
+  const isInstalled = Boolean(myStatus?.is_installed);
+  // Rating your own pack would inflate the public average shown in Découvrir,
+  // so only an installer can rate -- but commenting has no such downside, and
+  // requiring the creator to install their own pack first made no sense.
+  const canRate = signedIn && !isOwner && isInstalled;
+  const canComment = signedIn && (isOwner || isInstalled);
   const ratingLabel = formatRatingLabel(aggregate?.avg_rating, aggregate?.rating_count);
 
   function handleSubmitComment(event) {
@@ -76,56 +81,64 @@ export default function PackReviewsSection({ entry, setMode }) {
         />
       )}
 
-      {signedIn && !myStatus?.is_installed && (
+      {signedIn && !isOwner && !isInstalled && (
         <div className="pack-theme-empty">
           Installe ce pack pour le noter et laisser un commentaire.
         </div>
       )}
 
-      {canReview && (
+      {(canRate || canComment) && (
         <div className="pack-reviews-form">
-          <div className="pack-reviews-stars" role="radiogroup" aria-label="Ta note">
-            {STAR_VALUES.map((value) => (
-              <button
-                key={value}
-                type="button"
-                disabled={ratingBusy}
-                aria-pressed={myStatus?.my_rating === value}
-                className={`pack-star-button${
-                  myStatus?.my_rating && value <= myStatus.my_rating
-                    ? " is-filled"
-                    : ""
-                }`}
-                onClick={() => submitRating(value)}
-              >
-                ★
-              </button>
-            ))}
-          </div>
+          {canRate && (
+            <>
+              <div className="pack-reviews-stars" role="radiogroup" aria-label="Ta note">
+                {STAR_VALUES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={ratingBusy}
+                    aria-pressed={myStatus?.my_rating === value}
+                    className={`pack-star-button${
+                      myStatus?.my_rating && value <= myStatus.my_rating
+                        ? " is-filled"
+                        : ""
+                    }`}
+                    onClick={() => submitRating(value)}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
 
-          {ratingError && (
-            <div className="pack-alert" role="alert">{ratingError}</div>
+              {ratingError && (
+                <div className="pack-alert" role="alert">{ratingError}</div>
+              )}
+            </>
           )}
 
-          <form className="pack-reviews-comment-form" onSubmit={handleSubmitComment}>
-            <textarea
-              aria-label="Ton commentaire"
-              value={commentDraft}
-              disabled={commentBusy}
-              placeholder="Un avis pour le créateur..."
-              onChange={(event) => setCommentDraft(event.target.value)}
-            />
-            <button
-              type="submit"
-              className="pack-secondary-button"
-              disabled={commentBusy || !commentDraft.trim()}
-            >
-              {commentBusy ? "Envoi..." : "Commenter"}
-            </button>
-          </form>
+          {canComment && (
+            <>
+              <form className="pack-reviews-comment-form" onSubmit={handleSubmitComment}>
+                <textarea
+                  aria-label="Ton commentaire"
+                  value={commentDraft}
+                  disabled={commentBusy}
+                  placeholder="Un avis pour le créateur..."
+                  onChange={(event) => setCommentDraft(event.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="pack-secondary-button"
+                  disabled={commentBusy || !commentDraft.trim()}
+                >
+                  {commentBusy ? "Envoi..." : "Commenter"}
+                </button>
+              </form>
 
-          {commentSubmitError && (
-            <div className="pack-alert" role="alert">{commentSubmitError}</div>
+              {commentSubmitError && (
+                <div className="pack-alert" role="alert">{commentSubmitError}</div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -146,10 +159,6 @@ export default function PackReviewsSection({ entry, setMode }) {
               <p>{comment.body}</p>
             </li>
           ))}
-
-          {comments.length === 0 && (
-            <li className="pack-theme-empty">Aucun commentaire pour l'instant.</li>
-          )}
         </ul>
       )}
     </section>

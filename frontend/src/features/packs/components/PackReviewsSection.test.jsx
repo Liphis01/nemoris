@@ -116,4 +116,48 @@ describe("PackReviewsSection", () => {
     });
     expect(textarea).toHaveValue("");
   });
+
+  it("lets a pack owner comment on their own pack without installing it, but not rate it", async () => {
+    getPackPublishStatus.mockResolvedValue({
+      configured: true,
+      signed_in: true,
+      account_email: "author@example.com",
+      project_url: "https://project.supabase.co"
+    });
+    getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
+    addPackComment.mockResolvedValue({
+      comment: { id: 1, author_label: "author@example.com", body: "Merci pour vos retours !" }
+    });
+
+    render(<PackReviewsSection entry={entry} setMode={vi.fn()} isOwner />);
+
+    const textarea = await screen.findByLabelText("Ton commentaire");
+    expect(
+      screen.queryByText("Installe ce pack pour le noter et laisser un commentaire.")
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: "★" })).toHaveLength(0);
+
+    await userEvent.type(textarea, "Merci pour vos retours !");
+    await userEvent.click(screen.getByRole("button", { name: "Commenter" }));
+
+    await waitFor(() => {
+      expect(addPackComment).toHaveBeenCalledWith("world-map", "Merci pour vos retours !");
+    });
+  });
+
+  it("renders an empty comment section with no placeholder text when there are no comments", async () => {
+    getPackPublishStatus.mockResolvedValue({
+      configured: true,
+      signed_in: false,
+      account_email: null,
+      project_url: "https://project.supabase.co"
+    });
+
+    render(<PackReviewsSection entry={entry} setMode={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(listPackComments).toHaveBeenCalled();
+    });
+    expect(screen.queryByText(/Aucun commentaire/)).not.toBeInTheDocument();
+  });
 });

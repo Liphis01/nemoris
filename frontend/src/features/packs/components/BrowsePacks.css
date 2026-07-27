@@ -135,7 +135,8 @@
 .pack-card-action,
 .pack-card-body,
 .pack-export-group,
-.pack-publication-item {
+.pack-publication-item,
+.pack-source-summary {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   border-radius: 8px;
@@ -625,7 +626,8 @@
 .pack-danger-button:not(:disabled):hover,
 .pack-theme-button:hover,
 .pack-export-group:hover,
-.pack-publication-item:hover {
+.pack-publication-item:hover,
+.pack-source-summary:hover {
   border-color: #444444;
   transform: translateY(-1px);
 }
@@ -687,7 +689,7 @@
 
 .pack-detail-stat span,
 .pack-export-preview span,
-.pack-publication-item span {
+.pack-publication-item span:not(.pack-status-pill) {
   color: #858585;
   display: block;
   font-size: 11px;
@@ -752,11 +754,43 @@
   flex-wrap: wrap;
   gap: 10px;
   justify-content: space-between;
-  padding: 11px 13px;
+  min-height: 52px;
+  padding: 9px 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.pack-source-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pack-source-summary-text > span:last-child {
+  color: #d4d4d4;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pack-source-summary strong {
   color: #f1f1f1;
+}
+
+.pack-source-summary-change {
+  align-items: center;
+  background: rgba(94, 234, 212, 0.1);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 999px;
+  color: #5eead4;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 26px;
+  padding: 0 10px;
 }
 
 .pack-export-group {
@@ -906,6 +940,26 @@
 
 .pack-manage-layout .pack-export-group-list {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+/* The rail's title and "+ Nouveau pack" button stay put; only the pack
+   list below them scrolls. */
+.pack-rail-panel {
+  overflow-y: hidden;
+}
+
+.pack-rail-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 -16px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px;
+  scrollbar-gutter: stable;
 }
 
 .pack-rail-new {

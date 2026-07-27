@@ -328,22 +328,23 @@ function PublishForm({ auth, onPublished }) {
         </div>
       </div>
 
-      <div className="pack-source-summary">
-        <span>
-          Source : <strong>{selectedSource?.name}</strong>
-          {sourceTypeStyle ? ` · ${sourceTypeStyle.label}` : ""}
-          {" · "}
-          {questionCountLabel(selectedSource?.question_count)}
-          {sourceKind === "playlist" ? " · playlist" : ""}
+      <button
+        type="button"
+        className="pack-source-summary"
+        onClick={() => setStep("select")}
+      >
+        <span className="pack-source-summary-text">
+          <span className="pack-field-label">Source</span>
+          <span>
+            <strong>{selectedSource?.name}</strong>
+            {sourceTypeStyle ? ` · ${sourceTypeStyle.label}` : ""}
+            {" · "}
+            {questionCountLabel(selectedSource?.question_count)}
+            {sourceKind === "playlist" ? " · playlist" : ""}
+          </span>
         </span>
-        <button
-          type="button"
-          className="pack-inline-link"
-          onClick={() => setStep("select")}
-        >
-          Changer
-        </button>
-      </div>
+        <span className="pack-source-summary-change">Changer →</span>
+      </button>
 
       <div className="pack-publish-form">
         <label className="pack-field">
@@ -539,7 +540,7 @@ function PackDetail({ action, onOpenGroup, onPublish, onUnpublish, publication, 
         <div className="pack-alert" role="alert">{action.error}</div>
       )}
 
-      <PackReviewsSection entry={publication} setMode={setMode} />
+      <PackReviewsSection entry={publication} setMode={setMode} isOwner />
     </section>
   );
 }
@@ -656,28 +657,13 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
 
   return (
     <div className="pack-manage-layout">
-      <section className="pack-panel app-scrollbar" aria-label="Mes packs">
+      <section className="pack-panel pack-rail-panel" aria-label="Mes packs">
         <div className="pack-section-head">
           <div>
             <h2>Mes packs</h2>
             <p>{publications.length} élément{publications.length > 1 ? "s" : ""}</p>
           </div>
         </div>
-
-        <PublishAuthPanel
-          authStep={auth.authStep}
-          busy={auth.busy}
-          code={auth.code}
-          email={auth.email}
-          publishStatus={auth.publishStatus}
-          setAuthStep={auth.setAuthStep}
-          setCode={auth.setCode}
-          setEmail={auth.setEmail}
-          setMode={setMode}
-          onRequestCode={auth.requestCode}
-          onSignOut={auth.signOut}
-          onVerify={auth.verifyCode}
-        />
 
         <button
           type="button"
@@ -687,51 +673,70 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
           + Nouveau pack
         </button>
 
-        {loading && (
-          <div className="pack-status" role="status">Chargement des packs...</div>
-        )}
+        <div className="pack-rail-scroll app-scrollbar">
+          {!auth.publishStatus?.signed_in && (
+            <PublishAuthPanel
+              authStep={auth.authStep}
+              busy={auth.busy}
+              code={auth.code}
+              email={auth.email}
+              publishStatus={auth.publishStatus}
+              setAuthStep={auth.setAuthStep}
+              setCode={auth.setCode}
+              setEmail={auth.setEmail}
+              setMode={setMode}
+              onRequestCode={auth.requestCode}
+              onSignOut={auth.signOut}
+              onVerify={auth.verifyCode}
+            />
+          )}
 
-        {!loading && error && (
-          <div className="pack-alert" role="alert">{error}</div>
-        )}
+          {loading && (
+            <div className="pack-status" role="status">Chargement des packs...</div>
+          )}
 
-        {!loading && !error && auth.publishStatus?.signed_in && publications.length === 0 && (
-          <div className="pack-theme-empty">
-            Aucun pack publié pour l'instant.
-          </div>
-        )}
+          {!loading && error && (
+            <div className="pack-alert" role="alert">{error}</div>
+          )}
 
-        {!loading && !error && publications.length > 0 && (
-          <div className="pack-publication-list">
-            {publications.map((publication) => {
-              const ratingLabel = formatRatingLabel(
-                publication.avg_rating,
-                publication.rating_count
-              );
-              const active = publication.pack_guid === selectedKey;
+          {!loading && !error && auth.publishStatus?.signed_in && publications.length === 0 && (
+            <div className="pack-theme-empty">
+              Aucun pack publié pour l'instant.
+            </div>
+          )}
 
-              return (
-                <button
-                  key={publication.pack_guid}
-                  type="button"
-                  className={`pack-publication-item${active ? " is-active" : ""}`}
-                  aria-pressed={active}
-                  onClick={() => setSelectedKey(publication.pack_guid)}
-                >
-                  <span className={`pack-status-pill ${statusClassName(publication)}`}>
-                    {statusLabel(publication)}
-                  </span>
-                  <strong>{publication.name}</strong>
-                  <small>
-                    v{publication.version} · {questionCountLabel(publication.question_count)}
-                    {ratingLabel ? ` · ${ratingLabel}` : ""}
-                    {publication.orphaned ? " · ⚠ source supprimée" : ""}
-                  </small>
-                </button>
-              );
-            })}
-          </div>
-        )}
+          {!loading && !error && publications.length > 0 && (
+            <div className="pack-publication-list">
+              {publications.map((publication) => {
+                const ratingLabel = formatRatingLabel(
+                  publication.avg_rating,
+                  publication.rating_count
+                );
+                const active = publication.pack_guid === selectedKey;
+
+                return (
+                  <button
+                    key={publication.pack_guid}
+                    type="button"
+                    className={`pack-publication-item${active ? " is-active" : ""}`}
+                    aria-pressed={active}
+                    onClick={() => setSelectedKey(publication.pack_guid)}
+                  >
+                    <span className={`pack-status-pill ${statusClassName(publication)}`}>
+                      {statusLabel(publication)}
+                    </span>
+                    <strong>{publication.name}</strong>
+                    <small>
+                      v{publication.version} · {questionCountLabel(publication.question_count)}
+                      {ratingLabel ? ` · ${ratingLabel}` : ""}
+                      {publication.orphaned ? " · ⚠ source supprimée" : ""}
+                    </small>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
 
       {selectedKey === NEW_PACK_KEY || !selectedPublication ? (

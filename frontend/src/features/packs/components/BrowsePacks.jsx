@@ -609,7 +609,7 @@ export default function BrowsePacks({
                 className={`pack-tab-button${activeTab === "manage" ? " is-active" : ""}`}
                 onClick={() => setActiveTab("manage")}
               >
-                Mes packs
+                Publier
               </button>
             </div>
 

@@ -210,7 +210,11 @@ create policy pack_comments_select_all
   to anon, authenticated
   using (true);
 
--- Posting requires the same "signed in AND installed" gate as ratings.
+-- Posting requires "signed in AND (installed OR the pack's own creator)".
+-- A creator has no reason to install their own pack first just to leave
+-- themselves a comment. Rating is unchanged (installers only) since a
+-- creator rating their own pack would inflate the public average shown
+-- in Découvrir.
 -- No update/delete policy: editing/removing a posted comment is out of
 -- scope (no moderation tooling yet).
 create policy pack_comments_insert_own_if_installed
@@ -219,9 +223,15 @@ create policy pack_comments_insert_own_if_installed
   to authenticated
   with check (
     auth.uid() = user_id
-    and exists (
-      select 1 from public.pack_installs pi
-      where pi.pack_guid = pack_comments.pack_guid and pi.user_id = auth.uid()
+    and (
+      exists (
+        select 1 from public.pack_installs pi
+        where pi.pack_guid = pack_comments.pack_guid and pi.user_id = auth.uid()
+      )
+      or exists (
+        select 1 from public.pack_catalog pc
+        where pc.pack_guid = pack_comments.pack_guid and pc.owner_id = auth.uid()
+      )
     )
   );
 
