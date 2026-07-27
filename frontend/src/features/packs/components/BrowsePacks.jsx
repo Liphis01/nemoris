@@ -1,26 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  exportPackGroup,
-  listPackPublications,
-  publishPackDraft,
-  savePackDraft
-} from "../../../api/packs";
-import { listGroups } from "../../../api/groups";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import {
-  getQuestionTypeChipStyle,
-  questionTypeChipStyles
+  getPackTypeChipStyle,
+  packTypeChipStyles
 } from "../../../shared/questionTypes";
 import {
   POPULAR_THEME,
   useBrowsePacks
 } from "../hooks/useBrowsePacks";
-import { usePackPublishAuth } from "../hooks/usePackPublishAuth";
 import PackCard from "./PackCard";
 import PackReviewsSection from "./PackReviewsSection";
 import PublicationsManager from "./PublicationsManager";
-import PublishAuthPanel from "./PublishAuthPanel";
-import { formatSize } from "./packFormatting";
+import { formatSize, questionCountLabel } from "./packFormatting";
 import "./BrowsePacks.css";
 
 const STATUS_FILTERS = [
@@ -33,7 +24,7 @@ const STATUS_FILTERS = [
 
 const TYPE_FILTERS = [
   { value: "all", label: "Tous types" },
-  ...Object.entries(questionTypeChipStyles).map(([value, style]) => ({
+  ...Object.entries(packTypeChipStyles).map(([value, style]) => ({
     value,
     label: style.label
   }))
@@ -47,14 +38,6 @@ const SORT_OPTIONS = [
   { value: "nom", label: "Nom" },
   { value: "questions", label: "Questions" }
 ];
-
-function questionCountLabel(count) {
-  if (count === null || count === undefined) {
-    return "questions";
-  }
-
-  return `${count} question${count > 1 ? "s" : ""}`;
-}
 
 function downloadCountLabel(count) {
   if (count === null || count === undefined) {
@@ -92,26 +75,6 @@ function versionCheckLabel(status) {
   if (status === "up_to_date") return "À jour";
   if (status === "local_copy") return "Présent localement";
   return "Non installé";
-}
-
-function splitTerms(value) {
-  const seen = new Set();
-  const terms = [];
-
-  String(value || "")
-    .split(",")
-    .map((term) => term.trim())
-    .filter(Boolean)
-    .forEach((term) => {
-      const key = term.toLocaleLowerCase("fr-FR");
-
-      if (!seen.has(key)) {
-        seen.add(key);
-        terms.push(term);
-      }
-    });
-
-  return terms;
 }
 
 function StatePanel({ children, title }) {
@@ -295,7 +258,7 @@ function PackDetailPanel({
     localPackVersion,
     action
   } = item;
-  const typeStyle = getQuestionTypeChipStyle(entry.type_group);
+  const typeStyle = getPackTypeChipStyle(entry.type_group);
   const sizeLabel = formatSize(entry.size_bytes);
   const downloadLabel = downloadCountLabel(entry.download_count);
   const canUnsubscribe = (
@@ -595,483 +558,6 @@ function ImporterScreen({
   );
 }
 
-function PublicationList({ activeGuid, publications, onSelect }) {
-  return (
-    <div className="pack-publication-list">
-      {publications.map((publication) => {
-        const active = publication.pack_guid === activeGuid;
-
-        return (
-          <button
-            key={publication.pack_guid}
-            type="button"
-            className={`pack-publication-item${active ? " is-active" : ""}`}
-            onClick={() => onSelect(publication)}
-          >
-            <span>
-              {publication.is_public ? "Publié" : "Brouillon"}
-            </span>
-            <strong>{publication.name}</strong>
-            <small>
-              v{publication.version} · {questionCountLabel(publication.question_count)}
-            </small>
-          </button>
-        );
-      })}
-
-      {publications.length === 0 && (
-        <div className="pack-theme-empty">
-          Aucun brouillon enregistré sur Supabase.
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ExporterScreen({ setMode }) {
-  const [groups, setGroups] = useState([]);
-  const [loadingGroups, setLoadingGroups] = useState(true);
-  const [groupsError, setGroupsError] = useState("");
-  const [selectedGroupId, setSelectedGroupId] = useState("");
-  const [title, setTitle] = useState("");
-  const [version, setVersion] = useState("1");
-  const [license, setLicense] = useState("");
-  const [description, setDescription] = useState("");
-  const [themesDraft, setThemesDraft] = useState("");
-  const [tagsDraft, setTagsDraft] = useState("");
-  const [exporting, setExporting] = useState(false);
-  const [exportStatus, setExportStatus] = useState("");
-  const [exportError, setExportError] = useState("");
-  const [publications, setPublications] = useState([]);
-  const [activePublication, setActivePublication] = useState(null);
-  const [draftBusy, setDraftBusy] = useState(false);
-  const [draftMessage, setDraftMessage] = useState("");
-  const [draftError, setDraftError] = useState("");
-
-  const auth = usePackPublishAuth();
-  const publishingBusy = auth.busy || draftBusy;
-  const publishMessage = draftMessage || auth.message;
-  const publishError = draftError || auth.error;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setLoadingGroups(true);
-    setGroupsError("");
-
-    listGroups()
-      .then((rows) => {
-        if (cancelled) return;
-
-        const nextGroups = Array.isArray(rows) ? rows : [];
-        setGroups(nextGroups);
-
-        if (nextGroups.length) {
-          setSelectedGroupId(String(nextGroups[0].id));
-          setTitle(nextGroups[0].name || "");
-        }
-      })
-      .catch((error) => {
-        console.error(error);
-
-        if (!cancelled) {
-          setGroupsError(error.message || "Groupes impossibles à charger.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingGroups(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!auth.publishStatus?.signed_in) {
-      setPublications([]);
-      setActivePublication(null);
-      return undefined;
-    }
-
-    listPackPublications()
-      .then((drafts) => {
-        if (!cancelled) {
-          setPublications(drafts.publications || []);
-        }
-      })
-      .catch((error) => {
-        console.error(error);
-
-        if (!cancelled) {
-          setDraftError(error.message || "Brouillons indisponibles.");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [auth.publishStatus?.signed_in]);
-
-  const selectedGroup = groups.find((group) => String(group.id) === selectedGroupId);
-  const versionNumber = Number(version);
-  const publishPayload = {
-    version: Math.floor(versionNumber),
-    name: title.trim(),
-    description: description.trim(),
-    license: license.trim(),
-    tags: splitTerms(tagsDraft),
-    themes: splitTerms(themesDraft)
-  };
-  const canExport = (
-    selectedGroup &&
-    !exporting &&
-    !publishingBusy &&
-    title.trim() &&
-    Number.isFinite(versionNumber) &&
-    versionNumber >= 1 &&
-    (selectedGroup.question_count || 0) > 0
-  );
-  const canSaveDraft = (
-    canExport &&
-    auth.publishStatus?.signed_in &&
-    !publishingBusy
-  );
-  const canPublish = (
-    activePublication &&
-    !activePublication.is_public &&
-    auth.publishStatus?.signed_in &&
-    !publishingBusy
-  );
-  const activePublicationSize = activePublication
-    ? formatSize(activePublication.size_bytes)
-    : null;
-
-  async function handleExport(event) {
-    event.preventDefault();
-
-    if (!canExport) {
-      return;
-    }
-
-    setExporting(true);
-    setExportStatus("");
-    setExportError("");
-
-    try {
-      const filename = await exportPackGroup(selectedGroup.id, {
-        version: Math.floor(versionNumber),
-        name: title.trim(),
-        description: description.trim(),
-        license: license.trim()
-      });
-      setExportStatus(`Pack exporté : ${filename}`);
-    } catch (error) {
-      console.error(error);
-      setExportError(error.message || "Export impossible.");
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  async function handleSaveDraft() {
-    if (!canSaveDraft) {
-      return;
-    }
-
-    setDraftBusy(true);
-    setDraftError("");
-    setDraftMessage("");
-
-    try {
-      const result = await savePackDraft(selectedGroup.id, publishPayload);
-      setActivePublication(result.publication);
-      setDraftMessage("Brouillon privé enregistré.");
-      const drafts = await listPackPublications();
-      setPublications(drafts.publications || []);
-    } catch (error) {
-      console.error(error);
-      setDraftError(error.message || "Brouillon impossible à enregistrer.");
-    } finally {
-      setDraftBusy(false);
-    }
-  }
-
-  async function handlePublishDraft() {
-    if (!canPublish) {
-      return;
-    }
-
-    setDraftBusy(true);
-    setDraftError("");
-    setDraftMessage("");
-
-    try {
-      const result = await publishPackDraft(activePublication.pack_guid);
-      setActivePublication(result.publication);
-      setDraftMessage("Pack publié dans le catalogue.");
-      const drafts = await listPackPublications();
-      setPublications(drafts.publications || []);
-    } catch (error) {
-      console.error(error);
-      setDraftError(error.message || "Publication impossible.");
-    } finally {
-      setDraftBusy(false);
-    }
-  }
-
-  return (
-    <div className="pack-export-layout">
-      <section className="pack-panel app-scrollbar" aria-label="Groupes exportables">
-        <div className="pack-section-head">
-          <div>
-            <h2>Groupes</h2>
-            <p>{groups.length} groupe{groups.length > 1 ? "s" : ""}</p>
-          </div>
-        </div>
-
-        {loadingGroups && (
-          <StatePanel title="Chargement">
-            <p>Groupes locaux en cours de chargement.</p>
-          </StatePanel>
-        )}
-
-        {!loadingGroups && groupsError && (
-          <StatePanel title="Groupes indisponibles">
-            <p role="alert">{groupsError}</p>
-          </StatePanel>
-        )}
-
-        {!loadingGroups && !groupsError && (
-          <div className="pack-export-group-list">
-            {groups.map((group) => {
-              const active = String(group.id) === selectedGroupId;
-              const typeStyle = getQuestionTypeChipStyle(group.type_group);
-
-              return (
-                <button
-                  key={group.id}
-                  type="button"
-                  className={`pack-export-group${active ? " is-active" : ""}`}
-                  onClick={() => {
-                    setSelectedGroupId(String(group.id));
-                    setTitle(group.name || "");
-                    setActivePublication(null);
-                  }}
-                  aria-pressed={active}
-                >
-                  <span>{group.name}</span>
-                  <small
-                    style={{
-                      "--pack-type-bg": typeStyle.background,
-                      "--pack-type-color": typeStyle.color
-                    }}
-                  >
-                    {typeStyle.label} · {questionCountLabel(group.question_count)}
-                  </small>
-                </button>
-              );
-            })}
-
-            {groups.length === 0 && (
-              <div className="pack-theme-empty">
-                Aucun groupe exportable.
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="pack-export-panel app-scrollbar" aria-label="Exporter un pack">
-        <div className="pack-section-head">
-          <div>
-            <h2>Exporter</h2>
-            <p>Brouillon privé puis publication</p>
-          </div>
-        </div>
-
-        <PublishAuthPanel
-          authStep={auth.authStep}
-          busy={auth.busy}
-          code={auth.code}
-          email={auth.email}
-          publishStatus={auth.publishStatus}
-          setAuthStep={auth.setAuthStep}
-          setCode={auth.setCode}
-          setEmail={auth.setEmail}
-          setMode={setMode}
-          onRequestCode={auth.requestCode}
-          onSignOut={auth.signOut}
-          onVerify={auth.verifyCode}
-        />
-
-        <form onSubmit={handleExport}>
-          <label className="pack-field">
-            <span className="pack-field-label">Titre</span>
-            <input
-              aria-label="Titre du pack"
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              disabled={exporting || publishingBusy}
-            />
-          </label>
-
-          <div className="pack-form-grid">
-            <label className="pack-field">
-              <span className="pack-field-label">Version</span>
-              <input
-                aria-label="Version du pack"
-                type="number"
-                min="1"
-                value={version}
-                onChange={(event) => setVersion(event.target.value)}
-                disabled={exporting || publishingBusy}
-              />
-            </label>
-
-            <label className="pack-field">
-              <span className="pack-field-label">Licence</span>
-              <input
-                aria-label="Licence du pack"
-                type="text"
-                placeholder="CC0, CC-BY..."
-                value={license}
-                onChange={(event) => setLicense(event.target.value)}
-                disabled={exporting || publishingBusy}
-              />
-            </label>
-          </div>
-
-          <label className="pack-field">
-            <span className="pack-field-label">Description</span>
-            <textarea
-              aria-label="Description du pack"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              disabled={exporting || publishingBusy}
-            />
-          </label>
-
-          <div className="pack-form-grid">
-            <label className="pack-field">
-              <span className="pack-field-label">Thèmes</span>
-              <input
-                aria-label="Thèmes du pack"
-                type="text"
-                placeholder="géographie, cartes"
-                value={themesDraft}
-                onChange={(event) => setThemesDraft(event.target.value)}
-                disabled={exporting || publishingBusy}
-              />
-            </label>
-
-            <label className="pack-field">
-              <span className="pack-field-label">Tags</span>
-              <input
-                aria-label="Tags du pack"
-                type="text"
-                placeholder="pays, capitales"
-                value={tagsDraft}
-                onChange={(event) => setTagsDraft(event.target.value)}
-                disabled={exporting || publishingBusy}
-              />
-            </label>
-          </div>
-
-          {selectedGroup && (
-            <div className="pack-export-preview">
-              <strong>{selectedGroup.name}</strong>
-              <span>{questionCountLabel(selectedGroup.question_count)}</span>
-            </div>
-          )}
-
-          <div className="pack-publish-actions">
-            <button
-              type="button"
-              className="pack-primary-button"
-              disabled={!canSaveDraft}
-              onClick={handleSaveDraft}
-            >
-              {publishingBusy ? "Enregistrement..." : "Enregistrer brouillon"}
-            </button>
-
-            <button
-              type="button"
-              className="pack-secondary-button"
-              disabled={!canPublish}
-              onClick={handlePublishDraft}
-            >
-              Publier
-            </button>
-
-            <button
-              type="submit"
-              className="pack-secondary-button"
-              disabled={!canExport}
-            >
-              {exporting ? "Export..." : "Télécharger ZIP"}
-            </button>
-          </div>
-        </form>
-
-        {activePublication && (
-          <div className="pack-publish-current">
-            <span>
-              {activePublication.is_public ? "Publié" : "Brouillon privé"}
-            </span>
-            <strong>{activePublication.name}</strong>
-            <small>
-              v{activePublication.version}
-              {activePublicationSize ? ` · ${activePublicationSize}` : ""}
-            </small>
-          </div>
-        )}
-
-        <div className="pack-export-soon">
-          Le brouillon reste privé dans Supabase. Le bouton Publier le rend visible
-          dans Importer.
-        </div>
-
-        {exportStatus && (
-          <div className="pack-status" role="status">{exportStatus}</div>
-        )}
-
-        {publishMessage && (
-          <div className="pack-status" role="status">{publishMessage}</div>
-        )}
-
-        {exportError && (
-          <div className="pack-alert" role="alert">{exportError}</div>
-        )}
-
-        {publishError && (
-          <div className="pack-alert" role="alert">{publishError}</div>
-        )}
-      </section>
-
-      <section className="pack-panel app-scrollbar" aria-label="Brouillons Supabase">
-        <div className="pack-section-head">
-          <div>
-            <h2>Brouillons</h2>
-            <p>{publications.length} élément{publications.length > 1 ? "s" : ""}</p>
-          </div>
-        </div>
-
-        <PublicationList
-          activeGuid={activePublication?.pack_guid}
-          publications={publications}
-          onSelect={setActivePublication}
-        />
-      </section>
-    </div>
-  );
-}
-
 export default function BrowsePacks({
   setMode,
   onOpenGroup,
@@ -1096,11 +582,16 @@ export default function BrowsePacks({
             <div className="pack-title-block">
               <div className="pack-overline">Catalogue</div>
               <h1>Packs</h1>
-              <p>Importer des packs et exporter un groupe local.</p>
+              <p>Découvrir des packs partagés et publier les tiens.</p>
             </div>
           </div>
 
           <div className="pack-header-actions">
+            {/*
+              Two tabs, not three: publishing and managing what you published
+              are the same job, and the old split put a "Publier" button in
+              both places.
+            */}
             <div className="pack-tab-list" role="tablist" aria-label="Menus Packs">
               <button
                 type="button"
@@ -1109,16 +600,7 @@ export default function BrowsePacks({
                 className={`pack-tab-button${activeTab === "import" ? " is-active" : ""}`}
                 onClick={() => setActiveTab("import")}
               >
-                Importer
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "export"}
-                className={`pack-tab-button${activeTab === "export" ? " is-active" : ""}`}
-                onClick={() => setActiveTab("export")}
-              >
-                Exporter
+                Découvrir
               </button>
               <button
                 type="button"
@@ -1127,7 +609,7 @@ export default function BrowsePacks({
                 className={`pack-tab-button${activeTab === "manage" ? " is-active" : ""}`}
                 onClick={() => setActiveTab("manage")}
               >
-                Gérer
+                Mes packs
               </button>
             </div>
 
@@ -1147,8 +629,9 @@ export default function BrowsePacks({
             setMode={setMode}
           />
         )}
-        {activeTab === "export" && <ExporterScreen setMode={setMode} />}
-        {activeTab === "manage" && <PublicationsManager setMode={setMode} />}
+        {activeTab === "manage" && (
+          <PublicationsManager setMode={setMode} onOpenGroup={onOpenGroup} />
+        )}
       </div>
     </div>
   );

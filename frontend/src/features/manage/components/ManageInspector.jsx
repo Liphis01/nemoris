@@ -4,6 +4,7 @@ import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
 import MediaGroupEditor from "./MediaGroupEditor";
 import TextGroupEditor from "./TextGroupEditor";
 import SequenceGroupEditor from "./SequenceGroupEditor";
+import PlaylistBuilder from "./PlaylistBuilder";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
 import { getQuestionEditorAdapter } from "./questionEditorAdapters";
@@ -33,6 +34,10 @@ export default function ManageInspector({
   uploadQuestionMedia,
   uploadMediaGroupMedia,
   importMediaGroupMediaUrl,
+  isCreatingPlaylist,
+  setIsCreatingPlaylist,
+  loadAllPlaylists,
+  deletePlaylist,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -165,6 +170,34 @@ export default function ManageInspector({
     };
   }
 
+  // Playlists have their own editor and share none of the group/question
+  // draft machinery, so they branch before any of it.
+  if (isCreatingPlaylist || selectedItem?.isPlaylist) {
+    const editing = selectedItem?.isPlaylist ? selectedItem : null;
+
+    return (
+      <PlaylistBuilder
+        key={editing?.id || "new-playlist"}
+        playlist={editing}
+        groups={allGroups}
+        availableTags={availableTags}
+        onSaved={async (saved) => {
+          await loadAllPlaylists?.();
+          setIsCreatingPlaylist?.(false);
+          setSelectedItem?.({ ...saved, isPlaylist: true });
+        }}
+        onCancel={() => {
+          setIsCreatingPlaylist?.(false);
+          setSelectedItem?.(null);
+        }}
+        onDelete={async (target) => {
+          await deletePlaylist?.(target.id);
+          setSelectedItem?.(null);
+        }}
+      />
+    );
+  }
+
   if (mode === "createGroup") {
     if (!groupDraft.type_group) {
       return (
@@ -290,7 +323,7 @@ export default function ManageInspector({
           fontSize: "18px"
         }}
       >
-        Sélectionner une question ou un groupe
+        Sélectionner une question, un groupe ou une playlist
       </div>
     );
   }
@@ -330,7 +363,7 @@ export default function ManageInspector({
             fontSize: "18px"
           }}
         >
-          Sélectionner une question ou un groupe
+          Sélectionner une question, un groupe ou une playlist
         </div>
       );
     }
@@ -446,7 +479,7 @@ export default function ManageInspector({
             fontSize: "18px"
           }}
         >
-          Sélectionner une question ou un groupe
+          Sélectionner une question, un groupe ou une playlist
         </div>
       );
     }
@@ -560,7 +593,7 @@ export default function ManageInspector({
             fontSize: "18px"
           }}
         >
-          Sélectionner une question ou un groupe
+          Sélectionner une question, un groupe ou une playlist
         </div>
       );
     }

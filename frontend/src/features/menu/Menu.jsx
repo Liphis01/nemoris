@@ -12,7 +12,7 @@ const destinations = [
     mode: "manage",
     eyebrow: "Bibliothèque",
     title: "Gestionnaire",
-    description: "Questions, tags, groupes, collections et maps.",
+    description: "Questions, tags, groupes, playlists et maps.",
     detail: "Édition rapide",
     accent: "violet",
     icon: "✎"
@@ -21,7 +21,7 @@ const destinations = [
     mode: "training",
     eyebrow: "Libre",
     title: "Entrainement",
-    description: "Pratiquer un groupe, une collection ou un tag sans modifier le planning.",
+    description: "Pratiquer un groupe, une playlist ou un tag sans modifier le planning.",
     detail: "Records",
     accent: "amber",
     icon: "◎"

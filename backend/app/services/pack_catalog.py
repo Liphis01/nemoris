@@ -6,14 +6,14 @@ from urllib.request import Request, urlopen
 
 from sqlalchemy.orm import joinedload
 
-from ..models import PackSubscription, QuestionGroup
+from ..models import Collection, PackSubscription, Question, QuestionGroup
 from .map_zones import merge_tags
 from .pack_publish_state import (
     is_pack_publisher_signed_in,
     load_pack_publish_state,
     save_pack_publish_state
 )
-from .packs import export_pack
+from .packs import export_pack, export_playlist_pack
 from .settings import get_pack_catalog_settings
 from .sync_state import (
     is_signed_in as is_sync_signed_in,
@@ -258,6 +258,57 @@ def _local_pack_state(db):
         }
 
     return subscriptions, groups
+
+
+def _annotate_publication_sources(db, publications):
+    """Link each published pack back to the local content it came from.
+
+    Deliberately separate from _annotate_local_pack_status: that answers "have
+    I installed this pack", which is a different question from "does the group
+    or playlist I published from still exist". Deleting the source locally
+    never touches the catalog row, so a published pack can outlive it and stay
+    installable by everyone else -- the dashboard has to be able to say so.
+    """
+    guids = [
+        entry.get("pack_guid")
+        for entry in publications
+        if entry.get("pack_guid")
+    ]
+
+    if not guids:
+        return publications
+
+    groups = {
+        guid: {"id": group_id, "name": name}
+        for group_id, guid, name in (
+            db.query(QuestionGroup.id, QuestionGroup.guid, QuestionGroup.name)
+            .filter(QuestionGroup.guid.in_(guids))
+            .all()
+        )
+    }
+    collections = {
+        guid: {"id": collection_id, "name": name}
+        for collection_id, guid, name in (
+            db.query(Collection.id, Collection.guid, Collection.name)
+            .filter(Collection.guid.in_(guids))
+            .all()
+        )
+    }
+
+    for entry in publications:
+        pack_guid = entry.get("pack_guid")
+        group = groups.get(pack_guid)
+        collection = collections.get(pack_guid)
+        source = group or collection
+
+        entry["source"] = {
+            "kind": "group" if group else ("playlist" if collection else None),
+            "id": source["id"] if source else None,
+            "name": source["name"] if source else None
+        }
+        entry["orphaned"] = source is None
+
+    return publications
 
 
 def _annotate_local_pack_status(db, packs):
@@ -1040,7 +1091,48 @@ def _group_publish_summary(db, group_id):
         "pack_guid": group.guid,
         "type_group": group.type_group,
         "question_count": len(questions),
-        "tags": tags
+        "tags": tags,
+        "source_kind": "group",
+        "group_count": 1
+    }
+
+
+def _collection_publish_summary(db, collection_id):
+    collection = (
+        db.query(Collection)
+        .options(joinedload(Collection.questions).joinedload(Question.group))
+        .filter(Collection.id == collection_id)
+        .first()
+    )
+
+    if not collection:
+        raise ValueError("Playlist not found")
+
+    # An ungrouped question carries no presentation context, so it cannot
+    # travel in a pack -- same rule the exporter applies.
+    questions = [
+        question
+        for question in (collection.questions or [])
+        if question.group is not None
+    ]
+    source_types = {question.group.type_group for question in questions}
+    tags = merge_tags(*[
+        question.tags or []
+        for question in questions
+        if question.type_q in {"map", "media", "text"}
+    ])
+
+    return {
+        "pack_guid": collection.guid,
+        # "mixed" rather than the dominant type: a part-map playlist
+        # advertised as MAP would misdescribe what installers receive.
+        "type_group": (
+            next(iter(source_types)) if len(source_types) == 1 else "mixed"
+        ),
+        "question_count": len(questions),
+        "tags": tags,
+        "source_kind": "playlist",
+        "group_count": len({question.group.id for question in questions})
     }
 
 
@@ -1184,10 +1276,10 @@ def list_pack_publications(db):
         raise PackCatalogError("Réponse Supabase invalide.")
 
     return {
-        "publications": [
+        "publications": _annotate_publication_sources(db, [
             _normalize_publication(row, project_url)
             for row in rows
-        ]
+        ])
     }
 
 
@@ -1216,6 +1308,77 @@ def save_pack_publish_draft(
         description=description,
         license=license
     )
+
+    return _upload_publish_draft(
+        db,
+        summary,
+        zip_path,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license,
+        tags=tags,
+        themes=themes
+    )
+
+
+def save_playlist_publish_draft(
+    db,
+    collection_id,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    """Publish a playlist as a multi-group pack.
+
+    Same upload/RPC path as a group; only the source and the resulting
+    pack_guid (the playlist's own guid) differ.
+    """
+    summary = _collection_publish_summary(db, collection_id)
+
+    if summary["question_count"] <= 0:
+        raise ValueError("Cannot publish an empty playlist")
+
+    safe_version = int(version)
+    zip_path = export_playlist_pack(
+        db,
+        collection_id,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license
+    )
+
+    return _upload_publish_draft(
+        db,
+        summary,
+        zip_path,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license,
+        tags=tags,
+        themes=themes
+    )
+
+
+def _upload_publish_draft(
+    db,
+    summary,
+    zip_path,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    safe_version = int(version)
     zip_bytes = zip_path.read_bytes()
     project_url, _ = _publish_config(db)
     state, _ = _effective_publish_state(project_url)

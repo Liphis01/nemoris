@@ -4,11 +4,19 @@ from sqlalchemy.orm import Session, aliased, joinedload
 
 from ..dependencies import get_db
 from ..models import Collection, Question, QuestionGroup, question_collection
-from ..schemas import CollectionCreate, CollectionUpdate
+from ..schemas import CollectionCreate, CollectionPreview, CollectionUpdate
 from ..services.tombstones import record_tombstone
 from ..services.collections import (
+    EXCLUDED_FIELD,
+    PINNED_FIELD,
+    RULES_FIELD,
+    clause_match_count,
+    collection_data,
     generated_collection_response_fields,
     is_generated_collection,
+    resolve_playlist_data,
+    sync_all_collection_memberships,
+    sync_collection_membership,
     sync_generated_hard_collection
 )
 
@@ -22,11 +30,17 @@ def _collection_response(collection):
         for question in (collection.questions or [])
         if question.id is not None
     )
+    data = collection_data(collection)
 
     return {
         "id": collection.id,
         "name": collection.name,
-        "data": collection.data or {},
+        "data": data,
+        # The rule and its manual overrides are what the builder edits;
+        # question_ids is the resolved result of applying them.
+        "rules": data.get(RULES_FIELD) or {"match": "any", "clauses": []},
+        "pinned_question_ids": data.get(PINNED_FIELD) or [],
+        "excluded_question_ids": data.get(EXCLUDED_FIELD) or [],
         "question_ids": question_ids,
         "question_count": len(question_ids),
         **generated_collection_response_fields(collection)
@@ -234,17 +248,72 @@ def get_collection_question_candidates(
     }
 
 
+@router.post("/collections/preview")
+def preview_collection(
+    payload: CollectionPreview,
+    db: Session = Depends(get_db)
+):
+    """Resolve a rule that has not been saved.
+
+    Declared before /collections/{collection_id} so "preview" is not parsed
+    as an id.
+    """
+    rules = payload.rules.model_dump() if payload.rules is not None else {}
+    questions = resolve_playlist_data(db, {
+        RULES_FIELD: rules,
+        PINNED_FIELD: _dedupe_question_ids(payload.question_ids),
+        EXCLUDED_FIELD: _dedupe_question_ids(payload.excluded_question_ids)
+    })
+    by_type = {}
+    by_group = set()
+
+    for question in questions:
+        by_type[question.type_q] = by_type.get(question.type_q, 0) + 1
+
+        if question.group_id is not None:
+            by_group.add(question.group_id)
+
+    return {
+        "total": len(questions),
+        "group_count": len(by_group),
+        "type_counts": by_type,
+        # Per-rule contribution, in the order the builder shows them.
+        "clause_counts": [
+            clause_match_count(db, clause)
+            for clause in (rules.get("clauses") or [])
+        ],
+        "items": [
+            _question_candidate_response(question)
+            for question in questions[:payload.limit]
+        ]
+    }
+
+
 @router.post("/collections")
 def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
     name = _clean_collection_name(data.name)
     _ensure_unique_collection_name(db, name)
 
+    pinned = _dedupe_question_ids(data.question_ids)
+    # Existence check only -- membership itself is resolved below, so a
+    # pinned id that no longer exists is a 404 rather than a silent drop.
+    _questions_for_ids(db, pinned)
+
     collection = Collection(
         name=name,
-        data={},
-        questions=_questions_for_ids(db, data.question_ids)
+        data={
+            RULES_FIELD: (
+                data.rules.model_dump() if data.rules is not None
+                else {"match": "any", "clauses": []}
+            ),
+            PINNED_FIELD: pinned,
+            EXCLUDED_FIELD: _dedupe_question_ids(data.excluded_question_ids)
+        },
+        questions=[]
     )
     db.add(collection)
+    db.flush()
+    sync_collection_membership(db, collection)
     db.commit()
     db.refresh(collection)
     return _collection_response(collection)
@@ -253,6 +322,9 @@ def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
 @router.get("/collections")
 def get_collections(db: Session = Depends(get_db)):
     sync_generated_hard_collection(db)
+    # Rules are live: a question tagged since the last visit joins its
+    # playlist here, without anyone re-opening the builder.
+    sync_all_collection_memberships(db)
 
     return [
         _collection_response(collection)
@@ -281,6 +353,8 @@ def get_collection_questions(collection_id: int, db: Session = Depends(get_db)):
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
+    sync_collection_membership(db, collection, commit=True)
+
     questions = sorted(
         collection.questions or [],
         key=lambda question: question.id or 0
@@ -305,6 +379,8 @@ def get_collection(collection_id: int, db: Session = Depends(get_db)):
 
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    sync_collection_membership(db, collection, commit=True)
 
     return _collection_response(collection)
 
@@ -340,9 +416,25 @@ def update_collection(
         _ensure_unique_collection_name(db, name, collection_id=collection.id)
         collection.name = name
 
-    if "question_ids" in updates:
-        collection.questions = _questions_for_ids(db, updates["question_ids"])
+    data = collection_data(collection)
 
+    if "rules" in updates:
+        data[RULES_FIELD] = updates["rules"] or {"match": "any", "clauses": []}
+
+    if "question_ids" in updates:
+        pinned = _dedupe_question_ids(updates["question_ids"])
+        _questions_for_ids(db, pinned)
+        data[PINNED_FIELD] = pinned
+
+    if "excluded_question_ids" in updates:
+        data[EXCLUDED_FIELD] = _dedupe_question_ids(
+            updates["excluded_question_ids"]
+        )
+
+    # Reassigned rather than mutated in place: SQLAlchemy only notices a
+    # JSON column changed when the attribute itself is set.
+    collection.data = data
+    sync_collection_membership(db, collection)
     db.commit()
     db.refresh(collection)
 

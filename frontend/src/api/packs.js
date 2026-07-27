@@ -1,4 +1,4 @@
-import { requestJson, requestOk } from "./http";
+import { requestJson } from "./http";
 
 
 export function listInstalledPacks() {
@@ -83,6 +83,15 @@ export function savePackDraft(groupId, payload) {
 }
 
 
+export function savePlaylistDraft(collectionId, payload) {
+  return requestJson(`/packs/playlists/${collectionId}/publish/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+
 export function publishPackDraft(packGuid) {
   return requestJson(`/packs/catalog/publish/${packGuid}`, {
     method: "POST"
@@ -90,33 +99,21 @@ export function publishPackDraft(packGuid) {
 }
 
 
-function filenameFromDisposition(header) {
-  if (!header) {
-    return null;
-  }
+/**
+ * Upload the pack and make it public in one step.
+ *
+ * There is no user-facing draft state: nothing happens between saving and
+ * publishing (no review, no moderation), and unpublishing is already a
+ * one-click reversible undo, so a separate "brouillon" step bought nothing.
+ */
+export async function publishPack(source, payload) {
+  const draft = source.collectionId
+    ? await savePlaylistDraft(source.collectionId, payload)
+    : await savePackDraft(source.groupId, payload);
 
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-
-  if (!match) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
+  return publishPackDraft(draft.publication.pack_guid);
 }
 
-function safeFilenameSlug(value) {
-  const slug = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return slug || "pack";
-}
 
 // Plain fetch, not requestJson: these hit an external catalog URL, not this
 // app's own backend, so apiUrl()'s base-URL prefixing must not apply.
@@ -215,26 +212,3 @@ export function ratePack(packGuid, rating) {
   });
 }
 
-export async function exportPackGroup(groupId, payload) {
-  const response = await requestOk(`/packs/${groupId}/export`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const blob = await response.blob();
-  const fallback = `${safeFilenameSlug(payload?.name)}-v${payload?.version || 1}.zip`;
-  const filename =
-    filenameFromDisposition(response.headers.get("Content-Disposition")) ||
-    fallback;
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-
-  return filename;
-}

@@ -2,7 +2,6 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
@@ -10,7 +9,6 @@ from ..models import PackSubscription
 from ..schemas import (
     PackCatalogSettings,
     PackCommentCreateRequest,
-    PackExportRequest,
     PackInstallRecordRequest,
     PackPublishDraftRequest,
     PackRatingRequest
@@ -30,13 +28,13 @@ from ..services.pack_catalog import (
     record_pack_install,
     request_pack_publish_code,
     save_pack_publish_draft,
+    save_playlist_publish_draft,
     sign_out_pack_publisher,
     unpublish_pack_publication,
     verify_pack_publish_code,
     search_pack_catalog
 )
 from ..services.packs import (
-    export_pack,
     import_pack,
     unsubscribe_pack,
     update_pack
@@ -172,33 +170,6 @@ def search_catalog_packs(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@router.post("/blueprints/{group_id}/export", include_in_schema=False)
-@router.post("/packs/{group_id}/export")
-def export_group_pack(
-    group_id: int,
-    payload: PackExportRequest,
-    db: Session = Depends(get_db)
-):
-    try:
-        zip_path = export_pack(
-            db,
-            group_id,
-            version=payload.version,
-            name=payload.name,
-            description=payload.description,
-            license=payload.license
-        )
-    except ValueError as error:
-        status_code = 404 if str(error) == "Question group not found" else 400
-        raise HTTPException(status_code=status_code, detail=str(error)) from error
-
-    return FileResponse(
-        zip_path,
-        media_type="application/zip",
-        filename=zip_path.name
-    )
-
-
 @router.post("/blueprints/{group_id}/publish/draft", include_in_schema=False)
 @router.post("/packs/{group_id}/publish/draft")
 def save_group_pack_draft(
@@ -223,6 +194,32 @@ def save_group_pack_draft(
         raise HTTPException(status_code=400, detail=str(error)) from error
     except ValueError as error:
         status_code = 404 if str(error) == "Question group not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/packs/playlists/{collection_id}/publish/draft")
+def save_playlist_pack_draft(
+    collection_id: int,
+    payload: PackPublishDraftRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return save_playlist_publish_draft(
+            db,
+            collection_id,
+            version=payload.version,
+            name=payload.name,
+            description=payload.description,
+            license=payload.license,
+            tags=payload.tags,
+            themes=payload.themes
+        )
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        status_code = 404 if str(error) == "Playlist not found" else 400
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 

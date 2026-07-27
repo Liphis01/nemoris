@@ -10,7 +10,13 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, PackSubscription, Question, QuestionGroup
+from app.models import (
+    Base,
+    Collection,
+    PackSubscription,
+    Question,
+    QuestionGroup
+)
 from app.routers.packs import (
     add_pack_comment_route,
     backfill_pack_installs_route,
@@ -28,6 +34,7 @@ from app.schemas import (
     PackRatingRequest
 )
 from app.services.pack_catalog import (
+    _annotate_publication_sources,
     get_pack_publish_status,
     publish_pack_publication,
     save_pack_publish_draft
@@ -1276,6 +1283,52 @@ class PackCatalogRatingTests(PackCatalogAuthTestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 401)
+
+
+class PublicationSourceTests(unittest.TestCase):
+    """A published pack can outlive the content it was made from."""
+
+    def setUp(self):
+        self.db = make_db()
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_links_a_pack_back_to_its_group_or_playlist(self):
+        group = QuestionGroup(type_group="map", name="Drapeaux du monde")
+        playlist = Collection(name="Drapeaux mix", data={}, questions=[])
+        self.db.add_all([group, playlist])
+        self.db.commit()
+
+        publications = _annotate_publication_sources(self.db, [
+            {"pack_guid": group.guid},
+            {"pack_guid": playlist.guid}
+        ])
+
+        self.assertEqual(publications[0]["source"], {
+            "kind": "group",
+            "id": group.id,
+            "name": "Drapeaux du monde"
+        })
+        self.assertFalse(publications[0]["orphaned"])
+
+        self.assertEqual(publications[1]["source"], {
+            "kind": "playlist",
+            "id": playlist.id,
+            "name": "Drapeaux mix"
+        })
+        self.assertFalse(publications[1]["orphaned"])
+
+    def test_flags_a_pack_whose_local_source_was_deleted(self):
+        # Deleting a group locally never touches the catalog row, so the pack
+        # stays public and installable with nothing left to rebuild it from.
+        publications = _annotate_publication_sources(self.db, [
+            {"pack_guid": "guid-of-a-deleted-group"}
+        ])
+
+        self.assertTrue(publications[0]["orphaned"])
+        self.assertIsNone(publications[0]["source"]["kind"])
+        self.assertIsNone(publications[0]["source"]["id"])
 
 
 if __name__ == "__main__":

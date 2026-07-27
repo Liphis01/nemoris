@@ -1,8 +1,10 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PublicationsManager from "./PublicationsManager";
 import {
+  getMyPackStatus,
+  listPackComments,
   backfillPackInstalls,
   getPackPublishStatus,
   listPackPublications,
@@ -14,6 +16,10 @@ import {
 } from "../../../api/packs";
 
 vi.mock("../../../api/packs", () => ({
+  addPackComment: vi.fn(),
+  getMyPackStatus: vi.fn(),
+  listPackComments: vi.fn(),
+  ratePack: vi.fn(),
   backfillPackInstalls: vi.fn(),
   getPackPublishStatus: vi.fn(),
   listPackPublications: vi.fn(),
@@ -83,6 +89,11 @@ describe("PublicationsManager", () => {
     verifyPackPublishCode.mockResolvedValue({ signed_in: true });
     signOutPackPublisher.mockResolvedValue({ signed_in: false });
     backfillPackInstalls.mockResolvedValue({ recorded: 0 });
+    // The selected pack's reviews now render immediately (no more "Voir les
+    // retours" gate), so every test mounts PackReviewsSection and needs
+    // these to resolve, not just the tests that assert on review content.
+    getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
+    listPackComments.mockResolvedValue({ comments: [] });
   });
 
   afterEach(() => {
@@ -94,8 +105,10 @@ describe("PublicationsManager", () => {
   it("renders all three status pills including Dépublié", async () => {
     render(<PublicationsManager setMode={vi.fn()} />);
 
+    // The default-selected pack's name renders both in its rail row and in
+    // the detail header, so there are two matches once loaded.
     await waitFor(() => {
-      expect(screen.getByText("Brouillon capitales")).toBeInTheDocument();
+      expect(screen.getAllByText("Brouillon capitales").length).toBeGreaterThan(0);
     });
 
     const items = screen.getAllByText(/Brouillon|Publié|Dépublié/);
@@ -108,16 +121,12 @@ describe("PublicationsManager", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<PublicationsManager setMode={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Territoires du monde")).toBeInTheDocument();
-    });
-
-    const publishedRow = screen.getByText("Territoires du monde").closest(
-      ".pack-publication-item"
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Territoires du monde/ })
     );
 
     await userEvent.click(
-      within(publishedRow).getByRole("button", { name: "Dépublier" })
+      await screen.findByRole("button", { name: "Dépublier" })
     );
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
@@ -130,16 +139,12 @@ describe("PublicationsManager", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<PublicationsManager setMode={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Territoires du monde")).toBeInTheDocument();
-    });
-
-    const publishedRow = screen.getByText("Territoires du monde").closest(
-      ".pack-publication-item"
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Territoires du monde/ })
     );
 
     await userEvent.click(
-      within(publishedRow).getByRole("button", { name: "Dépublier" })
+      await screen.findByRole("button", { name: "Dépublier" })
     );
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
@@ -149,20 +154,73 @@ describe("PublicationsManager", () => {
   it("Publier republishes a draft or unpublished row", async () => {
     render(<PublicationsManager setMode={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Ancien pack")).toBeInTheDocument();
-    });
-
-    const unpublishedRow = screen.getByText("Ancien pack").closest(
-      ".pack-publication-item"
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Ancien pack/ })
     );
 
     await userEvent.click(
-      within(unpublishedRow).getByRole("button", { name: "Publier" })
+      await screen.findByRole("button", { name: "Publier" })
     );
 
     await waitFor(() => {
       expect(publishPackDraft).toHaveBeenCalledWith("unpublished-guid");
     });
+  });
+
+  it("links a pack back to the local content it was published from", async () => {
+    listPackPublications.mockResolvedValue({
+      publications: [
+        {
+          ...published,
+          source: { kind: "group", id: 42, name: "Drapeaux du monde" },
+          orphaned: false
+        }
+      ]
+    });
+    const onOpenGroup = vi.fn();
+
+    render(<PublicationsManager setMode={vi.fn()} onOpenGroup={onOpenGroup} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Drapeaux du monde" })
+    );
+
+    expect(onOpenGroup).toHaveBeenCalledWith(42);
+  });
+
+  it("warns when the pack outlived its local source", async () => {
+    listPackPublications.mockResolvedValue({
+      publications: [
+        {
+          ...published,
+          source: { kind: null, id: null, name: null },
+          orphaned: true
+        }
+      ]
+    });
+
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    // The catalog row survives a local delete, so the pack stays public with
+    // no way to publish a new version of it.
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      /Source supprimée localement/
+    );
+  });
+
+  it("lets the creator read feedback on their own pack", async () => {
+    listPackPublications.mockResolvedValue({ publications: [published] });
+    listPackComments.mockResolvedValue({
+      comments: [
+        { id: 1, author_label: "lecteur@example.com", body: "Très utile !" }
+      ]
+    });
+    getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
+
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    // A single publication is selected by default, so its reviews are
+    // already visible -- no extra click to reveal them.
+    expect(await screen.findByText("Très utile !")).toBeInTheDocument();
   });
 });

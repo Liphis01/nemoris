@@ -29,3 +29,20 @@ export const questionTypeChipStyles = {
 export function getQuestionTypeChipStyle(type) {
   return questionTypeChipStyles[type] || questionTypeChipStyles.text;
 }
+
+// A pack can span several question types (a playlist mixing a map group with
+// text questions); a single question never can. "mixed" lives here rather
+// than in questionTypeChipStyles because that map is enumerated to build the
+// group-creation chooser, which must not offer it as a group type.
+export const packTypeChipStyles = {
+  ...questionTypeChipStyles,
+  mixed: {
+    label: "MIXTE",
+    background: "#3a2542",
+    color: "#e2a9f3"
+  }
+};
+
+export function getPackTypeChipStyle(type) {
+  return packTypeChipStyles[type] || packTypeChipStyles.text;
+}

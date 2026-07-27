@@ -11,3 +11,31 @@ export function formatRatingLabel(avgRating, ratingCount) {
 
   return `★ ${avgRating.toFixed(1)} (${ratingCount})`;
 }
+
+export function questionCountLabel(count) {
+  if (count === null || count === undefined) {
+    return "questions";
+  }
+
+  return `${count} question${count > 1 ? "s" : ""}`;
+}
+
+export function splitTerms(value) {
+  const seen = new Set();
+  const terms = [];
+
+  String(value || "")
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .forEach((term) => {
+      const key = term.toLocaleLowerCase("fr-FR");
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        terms.push(term);
+      }
+    });
+
+  return terms;
+}

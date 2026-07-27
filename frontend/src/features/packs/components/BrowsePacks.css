@@ -122,8 +122,7 @@
   background: #111111;
   border: 1px solid #2d2d2d;
   border-radius: 8px;
-  display: inline-grid;
-  grid-template-columns: repeat(3, minmax(88px, 1fr));
+  display: inline-flex;
   padding: 3px;
 }
 
@@ -155,6 +154,7 @@
   background: transparent;
   border: 0;
   color: #a8a8a8;
+  flex: 1 1 88px;
   font-size: 13px;
   font-weight: 900;
   min-height: 34px;
@@ -175,22 +175,14 @@
   padding: 0 13px;
 }
 
-.pack-import-layout,
-.pack-export-layout {
+.pack-import-layout {
   align-items: stretch;
   display: grid;
   flex: 1 1 0;
   gap: 16px;
+  grid-template-columns: 248px minmax(0, 1fr) 360px;
   min-height: 0;
   overflow: hidden;
-}
-
-.pack-import-layout {
-  grid-template-columns: 248px minmax(0, 1fr) 360px;
-}
-
-.pack-export-layout {
-  grid-template-columns: 320px minmax(420px, 1fr) 320px;
 }
 
 .pack-panel,
@@ -685,8 +677,7 @@
 }
 
 .pack-detail-stat,
-.pack-export-preview,
-.pack-publish-current {
+.pack-export-preview {
   background: #111111;
   border: 1px solid #282828;
   border-radius: 8px;
@@ -696,7 +687,6 @@
 
 .pack-detail-stat span,
 .pack-export-preview span,
-.pack-publish-current span,
 .pack-publication-item span {
   color: #858585;
   display: block;
@@ -708,7 +698,6 @@
 
 .pack-detail-stat strong,
 .pack-export-preview strong,
-.pack-publish-current strong,
 .pack-publication-item strong {
   color: #f1f1f1;
   display: block;
@@ -741,10 +730,33 @@
   padding: 9px 11px;
 }
 
+/* This targeted a <form> element that the markup never used, so the fields
+   it wraps had no gap at all and sat flush against each other. */
+.pack-publish-form {
+  display: grid;
+  gap: 18px;
+}
+
 .pack-form-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.pack-source-summary {
+  align-items: center;
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 11px 13px;
+}
+
+.pack-source-summary strong {
+  color: #f1f1f1;
 }
 
 .pack-export-group {
@@ -754,9 +766,7 @@
   padding: 11px;
 }
 
-.pack-export-group small,
-.pack-publication-item small,
-.pack-publish-current small {
+.pack-export-group small {
   background: var(--pack-type-bg, #163b63);
   border-radius: 999px;
   color: var(--pack-type-color, #5eb6ff);
@@ -764,6 +774,15 @@
   font-weight: 800;
   line-height: 1;
   padding: 6px 8px;
+}
+
+/* Rail rows carry facts, not badges: a solid colour pill on every row would
+   drown out the one thing that should stand out per row, the pack name. */
+.pack-publication-item small {
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .pack-publish-auth {
@@ -818,11 +837,6 @@
   justify-content: flex-start;
 }
 
-.pack-publish-current {
-  border-color: rgba(94, 234, 212, 0.22);
-  padding: 11px;
-}
-
 .pack-publication-item {
   align-items: flex-start;
   flex-direction: column;
@@ -830,10 +844,6 @@
   min-height: 86px;
   padding: 12px;
   text-align: left;
-}
-
-.pack-publication-item span {
-  color: #5eead4;
 }
 
 .pack-publication-item strong {
@@ -878,11 +888,49 @@
 }
 
 .pack-manage-layout {
+  align-items: stretch;
   display: grid;
   flex: 1 1 0;
   gap: 16px;
+  grid-template-columns: 360px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+}
+
+/* Rail rows have no nested action buttons anymore -- those live in the
+   detail pane for whichever pack is selected -- so let them size to a
+   single compact card instead of the old fixed min-height. */
+.pack-manage-layout .pack-publication-item {
+  min-height: 0;
+}
+
+.pack-manage-layout .pack-export-group-list {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.pack-rail-new {
+  align-items: center;
+  background: rgba(94, 234, 212, 0.08);
+  border: 1px dashed rgba(94, 234, 212, 0.4);
+  border-radius: 8px;
+  color: #5eead4;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 40px;
+  width: 100%;
+}
+
+.pack-rail-new:hover {
+  background: rgba(94, 234, 212, 0.13);
+  border-color: rgba(94, 234, 212, 0.7);
+}
+
+.pack-rail-new.is-active {
+  background: rgba(94, 234, 212, 0.16);
+  border-style: solid;
 }
 
 .pack-manage-item-actions {
@@ -1026,12 +1074,8 @@
   }
 
   .pack-import-layout,
-  .pack-export-layout {
+  .pack-manage-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .pack-export-layout {
-    grid-template-rows: 76px minmax(0, 1fr) 76px;
   }
 
   .pack-panel,
@@ -1071,4 +1115,19 @@
   .pack-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Creator dashboard: source link and the orphaned-pack warning. */
+.pack-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #8ecbff;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.pack-inline-link:hover {
+  color: #b9dfff;
 }

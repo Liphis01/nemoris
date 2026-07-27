@@ -13,7 +13,8 @@ export default function QuestionCard({
   onDeleteOpen,
   closeDelete,
   deleteQuestion,
-  onToggleFavorite
+  onToggleFavorite,
+  playlistNames = []
 }) {
   const cardBackground = selected
     ? "#252525"
@@ -264,6 +265,33 @@ export default function QuestionCard({
                 }}
               >
                 +{q.tags.length - 3}
+              </div>
+            )}
+
+            {/*
+              A question sits in exactly one group but any number of playlists.
+              Showing both together is what makes that asymmetry legible --
+              it teaches the difference better than any label could.
+            */}
+            {playlistNames.length > 0 && (
+              <div
+                title={`Playlists : ${playlistNames.join(", ")}`}
+                style={{
+                  maxWidth: "130px",
+                  padding: "1px 6px",
+                  borderRadius: "999px",
+                  background: "#123a33",
+                  color: "#7fe3c4",
+                  fontSize: "10px",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  flexShrink: 0
+                }}
+              >
+                🎧 {playlistNames.length === 1
+                  ? playlistNames[0]
+                  : `${playlistNames.length} playlists`}
               </div>
             )}
           </div>

@@ -1,4 +1,4 @@
-import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import { getPackTypeChipStyle } from "../../../shared/questionTypes";
 import { formatRatingLabel, formatSize } from "./packFormatting";
 
 function questionCountLabel(count) {
@@ -69,7 +69,7 @@ export default function PackCard({
     localGroupId,
     action
   } = item;
-  const typeStyle = getQuestionTypeChipStyle(entry.type_group);
+  const typeStyle = getPackTypeChipStyle(entry.type_group);
   const busy = Boolean(action.busy);
   const sizeLabel = formatSize(entry.size_bytes);
   const downloadLabel = downloadCountLabel(entry.download_count);

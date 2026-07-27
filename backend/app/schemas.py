@@ -476,6 +476,41 @@ class SequenceGroupItemsBulkUpdate(BaseModel):
     )
 
 
+class CollectionRuleClause(BaseModel):
+    """One clause of a playlist rule, e.g. "tag = drapeaux".
+
+    Only the field matching `kind` is read; the rest stay None. Keeping them
+    on one flat model avoids a discriminated union for what the UI edits as a
+    single row.
+    """
+
+    kind: Literal["group", "tag", "type", "difficulty"]
+
+    group_id: Optional[int] = None
+    tag: Optional[str] = None
+    type_q: Optional[str] = None
+    gte: Optional[float] = None
+
+
+class CollectionRules(BaseModel):
+
+    match: Literal["any", "all"] = "any"
+
+    clauses: List[CollectionRuleClause] = Field(default_factory=list)
+
+
+class CollectionPreview(BaseModel):
+    """Resolve a rule without saving it, so the builder can show live counts."""
+
+    rules: Optional[CollectionRules] = None
+
+    question_ids: List[int] = Field(default_factory=list)
+
+    excluded_question_ids: List[int] = Field(default_factory=list)
+
+    limit: int = Field(default=40, ge=1, le=200)
+
+
 class CollectionCreate(BaseModel):
 
     name: str = Field(
@@ -483,7 +518,13 @@ class CollectionCreate(BaseModel):
         max_length=100
     )
 
+    # Manually pinned questions. With rules in play these are additions on
+    # top of what the rules already match, not the whole membership.
     question_ids: List[int] = Field(default_factory=list)
+
+    rules: Optional[CollectionRules] = None
+
+    excluded_question_ids: List[int] = Field(default_factory=list)
 
 
 class CollectionUpdate(BaseModel):
@@ -495,6 +536,10 @@ class CollectionUpdate(BaseModel):
     )
 
     question_ids: Optional[List[int]] = None
+
+    rules: Optional[CollectionRules] = None
+
+    excluded_question_ids: Optional[List[int]] = None
 
 
 class TagPosition(BaseModel):

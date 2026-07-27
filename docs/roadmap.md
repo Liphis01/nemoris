@@ -12,8 +12,8 @@
 - arrêter de différencier les questions texte des questions image -> question unitaire
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
-- bug menu bonus vide
-i
+
+
 ## quick fixes
 
 - faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
@@ -47,6 +47,7 @@ i
 - le pop up de synchronisation automatique décale toute la page vers le bas brièvement
 - type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
 - en entrainement, on ne peut pas zoomer les questions isolées et les images dans les réponses ne sont pas centrées
+- bug menu bonus vide
 
 ## to do when i have more time
 
@@ -71,7 +72,9 @@ i
 - ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
 - créer de nouveaux modes timeline (et revoir la création ?)
 - leaderboard des packs
-- commentaires et notes sur les packs
+- suivre des amis
+- faire des packs publics/amis only/privés
+- challenge des amis sur des packs
 
 ## refactors
 
@@ -96,6 +99,8 @@ i
 - autoriser l'italique, le gras, le souligné + latex
 - faire un truc cooperatif à la git pour les packs
 - quand on change de preview dans manage, garder l'état en mémoire et attendre pour enregistrer ou annuler
+- régler le problème que quand on importe un pack, on n'a pas forcément envie de tout travailler et pour l'instant le seul moyen c'est de supprimer des questions
+
 
 ## Conseils/idées issus de la littérature scientifique
 

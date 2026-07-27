@@ -12,21 +12,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addPackComment,
   backfillPackInstalls,
-  exportPackGroup,
   getMyPackStatus,
   getPackPublishStatus,
   listPackComments,
   listPackPublications,
+  publishPack,
   publishPackDraft,
   ratePack,
   recordPackInstall,
   requestPackPublishCode,
-  savePackDraft,
   signOutPackPublisher,
   unpublishPack,
   verifyPackPublishCode
 } from "../../../api/packs";
 import { listGroups } from "../../../api/groups";
+import { listCollections } from "../../../api/collections";
 import {
   POPULAR_THEME,
   useBrowsePacks
@@ -42,19 +42,23 @@ vi.mock("../../../api/groups", () => ({
   listGroups: vi.fn()
 }));
 
+vi.mock("../../../api/collections", () => ({
+  listCollections: vi.fn()
+}));
+
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
   backfillPackInstalls: vi.fn(),
-  exportPackGroup: vi.fn(),
   getMyPackStatus: vi.fn(),
   getPackPublishStatus: vi.fn(),
   listPackComments: vi.fn(),
   listPackPublications: vi.fn(),
+  publishPack: vi.fn(),
   publishPackDraft: vi.fn(),
   ratePack: vi.fn(),
   recordPackInstall: vi.fn(),
   requestPackPublishCode: vi.fn(),
-  savePackDraft: vi.fn(),
+  savePlaylistDraft: vi.fn(),
   signOutPackPublisher: vi.fn(),
   unpublishPack: vi.fn(),
   verifyPackPublishCode: vi.fn()
@@ -131,7 +135,15 @@ describe("BrowsePacks", () => {
       { id: 10, name: "Capitales du monde", type_group: "map", question_count: 42 },
       { id: 11, name: "Groupe vide", type_group: "text", question_count: 0 }
     ]);
-    exportPackGroup.mockResolvedValue("capitales-du-monde-v1.zip");
+    listCollections.mockResolvedValue([
+      { id: 4, name: "Drapeaux mix", question_count: 12, generated: false },
+      {
+        id: 5,
+        name: "Questions difficiles",
+        question_count: 3,
+        generated: true
+      }
+    ]);
     getPackPublishStatus.mockResolvedValue({
       configured: true,
       signed_in: true,
@@ -139,15 +151,15 @@ describe("BrowsePacks", () => {
       project_url: "https://project.supabase.co"
     });
     listPackPublications.mockResolvedValue({ publications: [] });
-    savePackDraft.mockResolvedValue({
-      status: "draft",
+    publishPack.mockResolvedValue({
+      status: "published",
       publication: {
         pack_guid: "group-guid",
         name: "Atlas des capitales",
         version: 1,
         question_count: 42,
         size_bytes: 2048,
-        is_public: false
+        is_public: true
       }
     });
     publishPackDraft.mockResolvedValue({
@@ -198,7 +210,7 @@ describe("BrowsePacks", () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    expect(screen.getByRole("tab", { name: "Importer" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Découvrir" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
@@ -360,52 +372,22 @@ describe("BrowsePacks", () => {
     expect(onOpenGroup).toHaveBeenCalledWith(10);
   });
 
-  it("downloads a selected group zip from the separate exporter tab", async () => {
+  it("publishes a group in a single click, with no draft step", async () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
 
-    const exportButton = await screen.findByRole("button", {
-      name: "Télécharger ZIP"
+    // Step 1: pick a source. Step 2 (the form) only appears after that.
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Capitales du monde/ })
+    );
+
+    const publishButton = await screen.findByRole("button", {
+      name: "Publier"
     });
 
-    await waitFor(() => expect(exportButton).toBeEnabled());
-    await userEvent.clear(screen.getByRole("textbox", { name: "Titre du pack" }));
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Titre du pack" }),
-      "Atlas des capitales"
-    );
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Licence du pack" }),
-      "CC0"
-    );
-    await userEvent.click(exportButton);
-
-    await waitFor(() => {
-      expect(exportPackGroup).toHaveBeenCalledWith(10, {
-        version: 1,
-        name: "Atlas des capitales",
-        description: "",
-        license: "CC0"
-      });
-    });
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "capitales-du-monde-v1.zip"
-    );
-  });
-
-  it("saves a private Supabase draft before publishing it", async () => {
-    defaultHook();
-    render(<BrowsePacks setMode={vi.fn()} />);
-
-    await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
-
-    const draftButton = await screen.findByRole("button", {
-      name: "Enregistrer brouillon"
-    });
-
-    await waitFor(() => expect(draftButton).toBeEnabled());
+    await waitFor(() => expect(publishButton).toBeEnabled());
     await userEvent.clear(screen.getByRole("textbox", { name: "Titre du pack" }));
     await userEvent.type(
       screen.getByRole("textbox", { name: "Titre du pack" }),
@@ -419,26 +401,80 @@ describe("BrowsePacks", () => {
       screen.getByRole("textbox", { name: "Tags du pack" }),
       "capitales, quiz"
     );
-    await userEvent.click(draftButton);
-
-    await waitFor(() => {
-      expect(savePackDraft).toHaveBeenCalledWith(10, {
-        version: 1,
-        name: "Atlas des capitales",
-        description: "",
-        license: "",
-        themes: ["géographie", "cartes"],
-        tags: ["capitales", "quiz"]
-      });
-    });
-
-    const publishButton = await screen.findByRole("button", { name: "Publier" });
-    await waitFor(() => expect(publishButton).toBeEnabled());
     await userEvent.click(publishButton);
 
     await waitFor(() => {
-      expect(publishPackDraft).toHaveBeenCalledWith("group-guid");
+      expect(publishPack).toHaveBeenCalledWith(
+        { groupId: 10 },
+        {
+          version: 1,
+          name: "Atlas des capitales",
+          description: "",
+          license: "",
+          themes: ["géographie", "cartes"],
+          tags: ["capitales", "quiz"]
+        }
+      );
     });
+
+    // The pack goes straight to public: no "Brouillon" state is ever shown.
+    // Confirmation is landing on the fresh pack's own dashboard, not a banner.
+    expect(screen.queryByText("Brouillon privé")).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Atlas des capitales" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Publié")).toBeInTheDocument();
+  });
+
+  it("publishes a playlist as a multi-group pack", async () => {
+    defaultHook();
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Playlist" }));
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Drapeaux mix/ })
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Publier" }));
+
+    await waitFor(() => {
+      expect(publishPack).toHaveBeenCalledWith(
+        { collectionId: 4 },
+        expect.objectContaining({ name: "Drapeaux mix" })
+      );
+    });
+  });
+
+  it("refuses to publish a generated playlist", async () => {
+    defaultHook();
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Playlist" }));
+
+    // "Questions difficiles" is derived from the user's own review history,
+    // so it is not theirs to hand to someone else.
+    expect(
+      await screen.findByRole("button", { name: /Questions difficiles/ })
+    ).toBeDisabled();
+  });
+
+  it("does not offer a local ZIP download", async () => {
+    defaultHook();
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Capitales du monde/ })
+    );
+    await screen.findByRole("button", { name: "Publier" });
+
+    // The zip had no way back in -- nothing in the app could import a
+    // manually obtained file -- so the button is gone.
+    expect(
+      screen.queryByRole("button", { name: "Télécharger ZIP" })
+    ).not.toBeInTheDocument();
   });
 
   it("reuses the Settings sync account for publishing", async () => {
@@ -454,7 +490,7 @@ describe("BrowsePacks", () => {
 
     render(<BrowsePacks setMode={setMode} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Exporter" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
 
     expect(
       await screen.findByText("Connecté via Synchronisation")
@@ -483,13 +519,17 @@ describe("BrowsePacks", () => {
 
     render(<BrowsePacks setMode={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Gérer" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Mes packs" }));
 
-    expect(screen.getByRole("tab", { name: "Gérer" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Mes packs" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    expect(await screen.findByText("Atlas des capitales")).toBeInTheDocument();
+    // The single publication is auto-selected, so its detail heading shows
+    // alongside its rail row -- assert on the heading specifically.
+    expect(
+      await screen.findByRole("heading", { name: "Atlas des capitales" })
+    ).toBeInTheDocument();
   });
 
   it("forwards the top-rated sort option to the search hook", async () => {

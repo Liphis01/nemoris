@@ -7,14 +7,6 @@ import {
   recordCollectionTrainingAttempt,
   recordGroupTrainingAttempt
 } from "../../../api/training";
-import {
-  createCollection,
-  deleteCollection,
-  getCollection,
-  listCollectionQuestionCandidates,
-  listCollectionQuestions,
-  updateCollection
-} from "../../../api/collections";
 import TrainingSession from "./TrainingSession";
 
 vi.mock("../../../api/training", () => ({
@@ -23,15 +15,6 @@ vi.mock("../../../api/training", () => ({
   listTrainingScopes: vi.fn(),
   recordCollectionTrainingAttempt: vi.fn(),
   recordGroupTrainingAttempt: vi.fn()
-}));
-
-vi.mock("../../../api/collections", () => ({
-  createCollection: vi.fn(),
-  deleteCollection: vi.fn(),
-  getCollection: vi.fn(),
-  listCollectionQuestionCandidates: vi.fn(),
-  listCollectionQuestions: vi.fn(),
-  updateCollection: vi.fn()
 }));
 
 
@@ -149,71 +132,6 @@ describe("TrainingSession", () => {
     gradeTrainingTimeline.mockResolvedValue({ status: "ok", results: [] });
     recordGroupTrainingAttempt.mockResolvedValue({});
     recordCollectionTrainingAttempt.mockResolvedValue({});
-    listCollectionQuestionCandidates.mockResolvedValue({
-      items: [
-        {
-          id: 1,
-          type_q: "text",
-          group_id: null,
-          title: "Capitale de la France",
-          question: "Capitale de la France",
-          answer_preview: "Paris",
-          tags: ["Geo"],
-          has_media: false,
-          group: null
-        },
-        {
-          id: 2,
-          type_q: "map",
-          group_id: 5,
-          title: "France",
-          question: "Zone",
-          answer_preview: "France",
-          tags: ["Geo"],
-          has_media: false,
-          group: {
-            id: 5,
-            name: "Europe",
-            type_group: "map"
-          }
-        }
-      ],
-      total: 2,
-      limit: 50,
-      offset: 0
-    });
-    listCollectionQuestions.mockResolvedValue([
-      {
-        id: 1,
-        type_q: "text",
-        group_id: null,
-        title: "Capitale de la France",
-        question: "Capitale de la France",
-        answer_preview: "Paris",
-        tags: ["Geo"],
-        has_media: false,
-        group: null
-      }
-    ]);
-    getCollection.mockResolvedValue({
-      id: 9,
-      name: "Capitales",
-      question_ids: [1],
-      question_count: 1
-    });
-    createCollection.mockResolvedValue({
-      id: 10,
-      name: "Nouveau",
-      question_ids: [1],
-      question_count: 1
-    });
-    updateCollection.mockResolvedValue({
-      id: 9,
-      name: "Capitales bis",
-      question_ids: [1, 2],
-      question_count: 2
-    });
-    deleteCollection.mockResolvedValue({ status: "deleted" });
   });
 
   afterEach(() => {
@@ -425,7 +343,7 @@ describe("TrainingSession", () => {
   it("shows collections and starts selected collection training", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Collections" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Playlists" }));
     fireEvent.click(screen.getByRole("button", { name: "Sélectionner Capitales" }));
 
     expect(screen.getByRole("heading", { name: "Capitales" })).toBeInTheDocument();
@@ -444,7 +362,7 @@ describe("TrainingSession", () => {
   it("marks generated collections as automatic and read-only", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Collections" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Playlists" }));
     fireEvent.click(screen.getByRole("button", {
       name: "Sélectionner Questions difficiles"
     }));
@@ -471,107 +389,4 @@ describe("TrainingSession", () => {
     });
   });
 
-  it("creates and updates collections from the full-screen composer", async () => {
-    render(<TrainingSession setMode={vi.fn()} />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Collections" }));
-    fireEvent.click(screen.getByRole("button", { name: "Nouvelle collection" }));
-
-    expect(await screen.findByRole("heading", { name: "Nouvelle collection" }))
-      .toBeInTheDocument();
-    await waitFor(() => {
-      expect(listCollectionQuestionCandidates).toHaveBeenCalledWith(
-        expect.objectContaining({
-          limit: 50,
-          offset: 0,
-          sort: "recent"
-        }),
-        expect.any(Object)
-      );
-    });
-
-    fireEvent.change(await screen.findByLabelText("Nom de la collection"), {
-      target: { value: "Nouveau" }
-    });
-    expect(screen.queryByLabelText("Sélectionner Capitale de la France"))
-      .not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Déplier Sans groupe" }));
-    fireEvent.click(await screen.findByLabelText("Sélectionner Capitale de la France"));
-
-    const availableQuestions = screen.getByLabelText("Questions disponibles");
-    const visibleEuropeSection = within(availableQuestions)
-      .getByText("Europe")
-      .closest("section");
-    fireEvent.click(within(visibleEuropeSection).getByRole("button", {
-      name: "Ajouter le groupe visible"
-    }));
-    const tray = screen.getByLabelText("Questions sélectionnées");
-    const trayEuropeSection = within(tray).getByText("Europe").closest("section");
-    fireEvent.click(within(trayEuropeSection).getByRole("button", {
-      name: "Retirer le groupe"
-    }));
-
-    fireEvent.click(screen.getByRole("button", { name: /Enregistrer/ }));
-
-    await waitFor(() => {
-      expect(createCollection).toHaveBeenCalledWith({
-        name: "Nouveau",
-        question_ids: [1]
-      });
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Collections" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sélectionner Capitales" }));
-    fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
-
-    await waitFor(() => {
-      expect(getCollection).toHaveBeenCalledWith(9);
-    });
-    expect(listCollectionQuestions).toHaveBeenCalledWith(9);
-
-    fireEvent.change(screen.getByLabelText("Nom de la collection"), {
-      target: { value: "Capitales bis" }
-    });
-    fireEvent.change(screen.getByLabelText("Rechercher une question"), {
-      target: { value: "France" }
-    });
-    await waitFor(() => {
-      expect(listCollectionQuestionCandidates).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          search: "France"
-        }),
-        expect.any(Object)
-      );
-    });
-    // The active search filter auto-expands the "Europe" section, so the
-    // "Sélectionner France" control is already revealed without a manual expand.
-    fireEvent.click(await screen.findByLabelText("Sélectionner France"));
-    fireEvent.click(screen.getByRole("button", { name: /Enregistrer/ }));
-
-    await waitFor(() => {
-      expect(updateCollection).toHaveBeenCalledWith(9, {
-        name: "Capitales bis",
-        question_ids: [1, 2]
-      });
-    });
-  });
-
-  it("deletes collections from the detail panel", async () => {
-    const confirmSpy = vi
-      .spyOn(window, "confirm")
-      .mockReturnValue(true);
-
-    render(<TrainingSession setMode={vi.fn()} />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Collections" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sélectionner Capitales" }));
-    fireEvent.click(screen.getByRole("button", { name: "Supprimer" }));
-
-    await waitFor(() => {
-      expect(deleteCollection).toHaveBeenCalledWith(9);
-    });
-    expect(confirmSpy).toHaveBeenCalled();
-
-    confirmSpy.mockRestore();
-  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import QuestionCard from "./QuestionCard";
 import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
@@ -26,6 +26,8 @@ export default function ManageList({
   isCreatingGroup,
   resetGroupDraft,
   setIsCreatingGroup,
+  allPlaylists = [],
+  setIsCreatingPlaylist,
   questionScrollRequest = null,
   requestManageTransition,
   updateQuestion,
@@ -119,7 +121,30 @@ export default function ManageList({
   const items =
     viewMode === "questions"
       ? filteredQuestions
-      : filteredGroups;
+      : viewMode === "playlists"
+        ? allPlaylists
+        : filteredGroups;
+
+  // Derived client-side: every playlist already ships its resolved
+  // question_ids, so no extra request and no change to the question payload.
+  const playlistNamesByQuestionId = useMemo(() => {
+    const index = new Map();
+
+    (allPlaylists || []).forEach((playlist) => {
+      (playlist.question_ids || []).forEach((questionId) => {
+        const names = index.get(questionId);
+
+        if (names) {
+          names.push(playlist.name);
+          return;
+        }
+
+        index.set(questionId, [playlist.name]);
+      });
+    });
+
+    return index;
+  }, [allPlaylists]);
 
   const visibleRows =
     viewMode === "questions"
@@ -436,6 +461,7 @@ export default function ManageList({
         <QuestionCard
           {...sharedProps}
           q={q}
+          playlistNames={playlistNamesByQuestionId.get(q.id) || []}
           onClick={() => {
             runManageTransition(() => selectQuestion(q));
           }}
@@ -609,7 +635,9 @@ export default function ManageList({
           >
             {viewMode === "questions"
               ? "QUESTIONS"
-              : "GROUPS"}
+              : viewMode === "playlists"
+                ? "PLAYLISTS"
+                : "GROUPS"}
           </div>
 
           <div
@@ -641,6 +669,59 @@ export default function ManageList({
       >
 
         {viewMode === "questions" && renderQuestionRows()}
+
+        {viewMode === "playlists" && (allPlaylists || []).map((playlist) => (
+          <div
+            key={playlist.id}
+            onClick={() => {
+              runManageTransition(() => {
+                closeQuestionCreation();
+                closeGroupCreation();
+                setIsCreatingPlaylist?.(false);
+                // isPlaylist marks which editor the inspector should open;
+                // playlists and groups both have id + name otherwise.
+                setSelectedItem({ ...playlist, isPlaylist: true });
+              });
+            }}
+            style={{
+              padding: "12px 14px",
+              marginBottom: "8px",
+              borderRadius: "12px",
+              cursor: "pointer",
+              border: `1px solid ${
+                selectedItem?.isPlaylist && selectedItem.id === playlist.id
+                  ? "#1f5348"
+                  : "#242424"
+              }`,
+              background:
+                selectedItem?.isPlaylist && selectedItem.id === playlist.id
+                  ? "#123a33"
+                  : "#161616"
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontWeight: 700,
+              color: "#e6e6e6"
+            }}>
+              <span aria-hidden="true">🎧</span>
+              <span>{playlist.name}</span>
+            </div>
+
+            <div style={{ marginTop: 4, fontSize: 12, color: "#8a8a8a" }}>
+              {playlist.question_count} question
+              {playlist.question_count > 1 ? "s" : ""}
+              {(playlist.rules?.clauses || []).length > 0
+                ? ` · ${playlist.rules.clauses.length} règle${
+                  playlist.rules.clauses.length > 1 ? "s" : ""
+                }`
+                : " · manuelle"}
+              {playlist.generated ? " · auto" : ""}
+            </div>
+          </div>
+        ))}
 
         {viewMode === "groups" && filteredGroups.map((group) => (
 
@@ -703,7 +784,9 @@ export default function ManageList({
               padding: "30px"
             }}
           >
-            Aucun élément
+            {viewMode === "playlists"
+              ? "Aucune playlist. Une playlist pioche des questions dans plusieurs groupes selon une règle."
+              : "Aucun élément"}
           </div>
         )}
 

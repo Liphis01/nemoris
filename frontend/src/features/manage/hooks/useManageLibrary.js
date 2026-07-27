@@ -17,6 +17,10 @@ import {
   importMediaGroupMediaUrl as importMediaGroupMediaUrlRequest,
   uploadMediaGroupMedia as uploadMediaGroupMediaRequest
 } from "../../../api/mediaGroups";
+import {
+  deleteCollection,
+  listCollections
+} from "../../../api/collections";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
@@ -100,9 +104,11 @@ export function useManageLibrary(mode) {
   const [groupHasMediaOnly, setGroupHasMediaOnly] = useState(false);
   const [groupSortField, setGroupSortField] = useState("id");
   const [groupSortOrder, setGroupSortOrder] = useState("asc");
+  const [allPlaylists, setAllPlaylists] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [viewMode, setViewMode] = useState("questions");
   const [questionDraft, setQuestionDraft] = useState(() => createInitialQuestionDraft());
   const [groupDraft, setGroupDraft] = useState(initialGroupDraft);
@@ -117,6 +123,14 @@ export function useManageLibrary(mode) {
   const loadAllGroups = useCallback(async () => {
     const data = await listGroups();
     setAllGroups(data);
+    return data;
+  }, []);
+
+  const loadAllPlaylists = useCallback(async () => {
+    // Playlists are rules, so the server re-resolves membership on read --
+    // question_count here is always current, never a stale snapshot.
+    const data = await listCollections();
+    setAllPlaylists(data);
     return data;
   }, []);
 
@@ -139,9 +153,10 @@ export function useManageLibrary(mode) {
 
       if (mode === "manage") {
         loadAllGroups().catch(console.error);
+        loadAllPlaylists().catch(console.error);
       }
     }
-  }, [loadAllGroups, loadAllQuestions, mode]);
+  }, [loadAllGroups, loadAllPlaylists, loadAllQuestions, mode]);
 
   function resetQuestionDraft() {
     setQuestionDraft(createInitialQuestionDraft());
@@ -222,6 +237,25 @@ export function useManageLibrary(mode) {
     } catch (error) {
       alert(error.message || "Impossible de supprimer le groupe.");
     }
+  }
+
+  async function deletePlaylist(id) {
+    try {
+      await deleteCollection(id);
+      setAllPlaylists(prev => prev.filter(playlist => playlist.id !== id));
+      setSelectedItem(prev => (
+        prev?.isPlaylist && prev.id === id ? null : prev
+      ));
+    } catch (error) {
+      alert(error.message || "Impossible de supprimer la playlist.");
+    }
+  }
+
+  function startCreatePlaylist() {
+    setIsCreatingPlaylist(true);
+    setIsCreatingQuestion(false);
+    setIsCreatingGroup(false);
+    setSelectedItem(null);
   }
 
   async function createQuestion(draftOverride) {
@@ -454,8 +488,15 @@ export function useManageLibrary(mode) {
 
   return {
     allGroups,
+    allPlaylists,
     allQuestions,
     createGroup,
+    deletePlaylist,
+    isCreatingPlaylist,
+    loadAllPlaylists,
+    setAllPlaylists,
+    setIsCreatingPlaylist,
+    startCreatePlaylist,
     createQuestion,
     deleteGroup,
     removeQuestionMedia,
