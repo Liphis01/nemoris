@@ -180,6 +180,13 @@ export function unpublishPack(packGuid) {
 }
 
 
+export function deletePackPublication(packGuid) {
+  return requestJson(`/packs/catalog/publish/${packGuid}`, {
+    method: "DELETE"
+  });
+}
+
+
 export function recordPackInstall(packGuid, installedVersion) {
   return requestJson(`/packs/catalog/${packGuid}/record-install`, {
     method: "POST",

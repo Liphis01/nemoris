@@ -5,6 +5,7 @@ import PublicationsManager from "./PublicationsManager";
 import { listCollections } from "../../../api/collections";
 import { listGroups } from "../../../api/groups";
 import {
+  deletePackPublication,
   getMyPackStatus,
   listPackComments,
   backfillPackInstalls,
@@ -29,6 +30,7 @@ vi.mock("../../../api/groups", () => ({
 
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
+  deletePackPublication: vi.fn(),
   getMyPackStatus: vi.fn(),
   listPackComments: vi.fn(),
   ratePack: vi.fn(),
@@ -120,6 +122,11 @@ describe("PublicationsManager", () => {
       status: "published",
       publication: { ...draft, is_public: true, publication_status: "published" }
     });
+    deletePackPublication.mockResolvedValue({
+      status: "deleted",
+      pack_guid: "unpublished-guid",
+      zip_deleted: true
+    });
     requestPackPublishCode.mockResolvedValue({});
     verifyPackPublishCode.mockResolvedValue({ signed_in: true });
     signOutPackPublisher.mockResolvedValue({ signed_in: false });
@@ -137,7 +144,7 @@ describe("PublicationsManager", () => {
     vi.clearAllMocks();
   });
 
-  it("renders all three status pills including Dépublié", async () => {
+  it("keeps depublished packs out of the default rail but available in archives", async () => {
     render(<PublicationsManager setMode={vi.fn()} />);
 
     // The default-selected pack's name renders both in its rail row and in
@@ -146,10 +153,22 @@ describe("PublicationsManager", () => {
       expect(screen.getAllByText("Brouillon capitales").length).toBeGreaterThan(0);
     });
 
-    const items = screen.getAllByText(/Brouillon|Publié|Dépublié/);
-    expect(items.map((node) => node.textContent)).toEqual(
-      expect.arrayContaining(["Brouillon", "Publié", "Dépublié"])
+    expect(
+      screen.getByRole("button", { name: /Territoires du monde/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Ancien pack/ })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Dépublié")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("tab", { name: /Dépubliés 1/ })
     );
+
+    expect(
+      await screen.findByRole("button", { name: /Ancien pack/ })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Dépublié").length).toBeGreaterThan(0);
   });
 
   it("unpublishing is gated by window.confirm and calls unpublishPack when accepted", async () => {
@@ -186,8 +205,63 @@ describe("PublicationsManager", () => {
     expect(unpublishPack).not.toHaveBeenCalled();
   });
 
+  it("permanently deletes an archived pack after confirmation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    listPackPublications
+      .mockResolvedValueOnce({ publications: [draft, published, unpublished] })
+      .mockResolvedValueOnce({ publications: [draft, published] });
+
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    await userEvent.click(
+      await screen.findByRole("tab", { name: /Dépubliés 1/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Ancien pack/ })
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Supprimer définitivement" })
+    );
+
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(deletePackPublication).toHaveBeenCalledWith("unpublished-guid");
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /Ancien pack/ })
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("tab", { name: /Actifs 2/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  it("does not permanently delete when confirmation is declined", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    await userEvent.click(
+      await screen.findByRole("tab", { name: /Dépubliés 1/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Ancien pack/ })
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Supprimer définitivement" })
+    );
+
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(deletePackPublication).not.toHaveBeenCalled();
+  });
+
   it("Publier republishes a draft or unpublished row", async () => {
     render(<PublicationsManager setMode={vi.fn()} />);
+
+    await userEvent.click(
+      await screen.findByRole("tab", { name: /Dépubliés 1/ })
+    );
 
     await userEvent.click(
       await screen.findByRole("button", { name: /Ancien pack/ })

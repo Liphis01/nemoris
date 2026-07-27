@@ -1,5 +1,5 @@
--- Supabase setup for the pack catalog: unpublishing, install tracking,
--- ratings, and comments.
+-- Supabase setup for the pack catalog: unpublishing, permanent deletion,
+-- install tracking, ratings, and comments.
 --
 -- Run this once in the Supabase SQL editor for the project configured in
 -- Settings -> Catalogue. The app uses only the publishable key at
@@ -255,6 +255,7 @@ create policy pack_comments_insert_own_if_installed
 -- version (the default) would silently update zero rows every time,
 -- since the calling role can't touch the row directly.
 drop function if exists public.unpublish_my_pack(text);
+drop function if exists public.delete_my_pack(text);
 
 create or replace function public.unpublish_my_pack(p_pack_guid text default ''::text)
 returns jsonb
@@ -280,6 +281,35 @@ begin
 
   if v_row.id is null then
     raise exception 'Pack introuvable pour ce compte.';
+  end if;
+
+  return to_jsonb(v_row);
+end;
+$function$;
+
+create or replace function public.delete_my_pack(p_pack_guid text default ''::text)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.pack_catalog;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  delete from public.pack_catalog
+  where pack_guid = nullif(trim(p_pack_guid), '')
+    and owner_id = v_uid
+    and is_public = false
+    and publication_status = 'archived'
+  returning * into v_row;
+
+  if v_row.id is null then
+    raise exception 'Pack dépublié introuvable pour ce compte.';
   end if;
 
   return to_jsonb(v_row);
@@ -383,6 +413,7 @@ as $$
 $$;
 
 grant execute on function public.unpublish_my_pack(text) to authenticated;
+grant execute on function public.delete_my_pack(text) to authenticated;
 grant execute on function public.record_pack_install(text, integer) to authenticated;
 grant execute on function public.record_pack_installs_bulk(jsonb) to authenticated;
 grant execute on function public.get_my_pack_status(text) to authenticated;

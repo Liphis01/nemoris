@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { listGroups } from "../../../api/groups";
 import { listCollections } from "../../../api/collections";
 import {
+  deletePackPublication,
   previewPackRelease,
   publishPack,
   publishPackDraft,
@@ -16,6 +17,10 @@ import PackReviewsSection from "./PackReviewsSection";
 import PublishAuthPanel from "./PublishAuthPanel";
 
 const NEW_PACK_KEY = "new";
+
+function isArchivedPublication(publication) {
+  return publication.publication_status === "archived";
+}
 
 function statusLabel(publication) {
   if (publication.publication_status === "archived") return "Dépublié";
@@ -641,6 +646,7 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
 function PackDetail({
   action,
   onOpenGroup,
+  onDelete,
   onPublish,
   onStartRelease,
   onUnpublish,
@@ -650,6 +656,9 @@ function PackDetail({
   const ratingLabel = formatRatingLabel(publication.avg_rating, publication.rating_count);
   const canRepublish = (
     publication.publication_status === "draft" ||
+    publication.publication_status === "archived"
+  );
+  const canDeletePermanent = (
     publication.publication_status === "archived"
   );
   const canStartRelease = (
@@ -758,6 +767,17 @@ function PackDetail({
             {action.busy ? "..." : "Publier"}
           </button>
         )}
+
+        {canDeletePermanent && (
+          <button
+            type="button"
+            className="pack-danger-button"
+            disabled={action.busy}
+            onClick={() => onDelete(publication)}
+          >
+            {action.busy ? "..." : "Supprimer définitivement"}
+          </button>
+        )}
       </div>
 
       {action.error && (
@@ -779,6 +799,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
   // NEW_PACK_KEY. Once set, only explicit clicks (or a fresh publish) move
   // it -- a background reload must never yank the user off what they picked.
   const [selectedKey, setSelectedKey] = useState(null);
+  const [publicationView, setPublicationView] = useState("active");
   // Optimistic stand-in for a pack that was just published, shown until the
   // authoritative row for it shows up in `publications`. Without this, a
   // slow or stale refresh would strand the user on a blank "new pack" form
@@ -786,7 +807,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
   const [justPublished, setJustPublished] = useState(null);
   const [releaseBase, setReleaseBase] = useState(null);
 
-  const loadPublications = useCallback(async () => {
+  const loadPublications = useCallback(async (fallbackPublication = null) => {
     // publishStatus is null until the session check resolves -- that is
     // "unknown yet", not "signed out". Treating it as signed-out here used
     // to lock the default selection to "new" a render before the real
@@ -807,9 +828,29 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
     try {
       const drafts = await listPackPublications();
       const next = drafts.publications || [];
+      const firstActive = next.find(
+        (publication) => !isArchivedPublication(publication)
+      );
+      const firstArchived = next.find(isArchivedPublication);
+      const fallbackGuid = fallbackPublication?.pack_guid || null;
       setPublications(next);
-      setSelectedKey((previous) => (
-        previous ?? (next.length > 0 ? next[0].pack_guid : NEW_PACK_KEY)
+      setSelectedKey((previous) => {
+        const hasPrevious = previous && (
+          previous === NEW_PACK_KEY ||
+          next.some((publication) => publication.pack_guid === previous)
+        );
+
+        if (fallbackGuid) return fallbackGuid;
+        if (hasPrevious) return previous;
+
+        return firstActive?.pack_guid || firstArchived?.pack_guid || NEW_PACK_KEY;
+      });
+      setPublicationView((previous) => (
+        previous === "archived" && !firstArchived && firstActive
+          ? "active"
+          : previous === "active" && !firstActive && firstArchived
+          ? "archived"
+          : previous
       ));
     } catch (loadError) {
       console.error(loadError);
@@ -837,6 +878,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
 
     try {
       await unpublishPack(publication.pack_guid);
+      setPublicationView("archived");
       await loadPublications();
       patchAction(publication.pack_guid, { busy: false });
     } catch (unpublishError) {
@@ -853,6 +895,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
 
     try {
       await publishPackDraft(publication.pack_guid);
+      setPublicationView("active");
       await loadPublications();
       patchAction(publication.pack_guid, { busy: false });
     } catch (publishError) {
@@ -860,6 +903,32 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
       patchAction(publication.pack_guid, {
         busy: false,
         error: publishError.message || "Publication impossible."
+      });
+    }
+  }
+
+  async function handleDelete(publication) {
+    const confirmed = window.confirm(
+      `Supprimer définitivement « ${publication.name} » ? ` +
+      "Cette action efface le pack du catalogue et ne peut pas être annulée."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    patchAction(publication.pack_guid, { busy: true, error: "" });
+
+    try {
+      await deletePackPublication(publication.pack_guid);
+      setSelectedKey(null);
+      await loadPublications();
+      patchAction(publication.pack_guid, { busy: false });
+    } catch (deleteError) {
+      console.error(deleteError);
+      patchAction(publication.pack_guid, {
+        busy: false,
+        error: deleteError.message || "Suppression impossible."
       });
     }
   }
@@ -873,7 +942,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
     setJustPublished(publication);
     setReleaseBase(null);
     setSelectedKey(publication.pack_guid);
-    loadPublications();
+    loadPublications(publication);
   }
 
   function handleStartRelease(publication) {
@@ -885,6 +954,37 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
     publications.find((publication) => publication.pack_guid === selectedKey) ||
     (justPublished?.pack_guid === selectedKey ? justPublished : undefined)
   );
+  const activePublications = publications.filter(
+    (publication) => !isArchivedPublication(publication)
+  );
+  const archivedPublications = publications.filter(isArchivedPublication);
+  const visiblePublications = publicationView === "archived"
+    ? archivedPublications
+    : activePublications;
+  const visibleEmptyText = publicationView === "archived"
+    ? "Aucun pack dépublié."
+    : "Aucun pack actif.";
+
+  function selectPublicationView(nextView) {
+    const nextList = nextView === "archived"
+      ? archivedPublications
+      : activePublications;
+
+    setPublicationView(nextView);
+    setSelectedKey((previous) => {
+      if (previous === NEW_PACK_KEY && nextView === "active") {
+        return previous;
+      }
+
+      if (nextList.some((publication) => publication.pack_guid === previous)) {
+        return previous;
+      }
+
+      return nextList[0]?.pack_guid || (
+        nextView === "active" ? NEW_PACK_KEY : previous
+      );
+    });
+  }
 
   return (
     <div className="pack-manage-layout">
@@ -892,7 +992,12 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
         <div className="pack-section-head">
           <div>
             <h2>Mes packs</h2>
-            <p>{publications.length} élément{publications.length > 1 ? "s" : ""}</p>
+            <p>
+              {activePublications.length} actif{activePublications.length > 1 ? "s" : ""}
+              {archivedPublications.length > 0
+                ? ` · ${archivedPublications.length} dépublié${archivedPublications.length > 1 ? "s" : ""}`
+                : ""}
+            </p>
           </div>
         </div>
 
@@ -906,6 +1011,28 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
         >
           + Nouveau pack
         </button>
+
+        <div className="pack-rail-filter" role="tablist" aria-label="Filtrer mes packs">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={publicationView === "active"}
+            className={publicationView === "active" ? "is-active" : ""}
+            onClick={() => selectPublicationView("active")}
+          >
+            Actifs <span>{activePublications.length}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={publicationView === "archived"}
+            className={publicationView === "archived" ? "is-active" : ""}
+            disabled={archivedPublications.length === 0}
+            onClick={() => selectPublicationView("archived")}
+          >
+            Dépubliés <span>{archivedPublications.length}</span>
+          </button>
+        </div>
 
         <div className="pack-rail-scroll app-scrollbar">
           {!auth.publishStatus?.signed_in && (
@@ -939,9 +1066,15 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
             </div>
           )}
 
-          {!loading && !error && publications.length > 0 && (
+          {!loading && !error && publications.length > 0 && visiblePublications.length === 0 && (
+            <div className="pack-theme-empty">
+              {visibleEmptyText}
+            </div>
+          )}
+
+          {!loading && !error && visiblePublications.length > 0 && (
             <div className="pack-publication-list">
-              {publications.map((publication) => {
+              {visiblePublications.map((publication) => {
                 const ratingLabel = formatRatingLabel(
                   publication.avg_rating,
                   publication.rating_count
@@ -987,6 +1120,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
       ) : (
         <PackDetail
           action={actionState[selectedPublication.pack_guid] || {}}
+          onDelete={handleDelete}
           onOpenGroup={onOpenGroup}
           onPublish={handlePublish}
           onStartRelease={handleStartRelease}

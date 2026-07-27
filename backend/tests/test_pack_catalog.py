@@ -20,6 +20,7 @@ from app.models import (
 from app.routers.packs import (
     add_pack_comment_route,
     backfill_pack_installs_route,
+    delete_group_pack_publication,
     diagnose_pack_catalog,
     pack_comments,
     pack_my_status,
@@ -1055,6 +1056,106 @@ class PackCatalogUnpublishTests(PackCatalogAuthTestCase):
                 unpublish_group_pack("group-guid", db=db)
 
         self.assertEqual(context.exception.status_code, 401)
+
+
+class PackCatalogDeletePublicationTests(PackCatalogAuthTestCase):
+    def test_delete_archived_pack_removes_row_then_storage_zip(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+        archived_row = {
+            "pack_guid": "group-guid",
+            "name": "Atlas des capitales",
+            "version": 2,
+            "question_count": 1,
+            "storage_path": "user-123/group-guid/v2-atlas.zip",
+            "is_public": False,
+            "publication_status": "archived"
+        }
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if "/rest/v1/pack_catalog?select=" in request.full_url:
+                return FakeResponse([archived_row])
+
+            if request.full_url.endswith("/rest/v1/rpc/delete_my_pack"):
+                return FakeResponse(archived_row)
+
+            if "/storage/v1/object/pack-zips/" in request.full_url:
+                return FakeResponse({})
+
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = delete_group_pack_publication("group-guid", db=db)
+
+        self.assertEqual(
+            result,
+            {
+                "status": "deleted",
+                "pack_guid": "group-guid",
+                "zip_deleted": True
+            }
+        )
+        self.assertIn("/rest/v1/pack_catalog?select=", calls[0][0].full_url)
+        self.assertEqual(calls[1][0].get_method(), "POST")
+        self.assertEqual(
+            calls[1][0].full_url,
+            "https://project.supabase.co/rest/v1/rpc/delete_my_pack"
+        )
+        self.assertEqual(
+            json.loads(calls[1][0].data.decode("utf-8")),
+            {"p_pack_guid": "group-guid"}
+        )
+        self.assertEqual(calls[2][0].get_method(), "DELETE")
+        self.assertEqual(calls[2][1], 60)
+        self.assertIn(
+            "/storage/v1/object/pack-zips/user-123/group-guid/v2-atlas.zip",
+            calls[2][0].full_url
+        )
+
+    def test_delete_requires_archived_pack(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse([{
+                "pack_guid": "group-guid",
+                "name": "Atlas des capitales",
+                "version": 2,
+                "question_count": 1,
+                "storage_path": "user-123/group-guid/v2-atlas.zip",
+                "is_public": True,
+                "publication_status": "published"
+            }])
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            with self.assertRaises(HTTPException) as context:
+                delete_group_pack_publication("group-guid", db=db)
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(len(calls), 1)
 
 
 class PackCatalogInstallTrackingTests(PackCatalogAuthTestCase):

@@ -132,6 +132,7 @@
 .pack-primary-button,
 .pack-secondary-button,
 .pack-danger-button,
+.pack-rail-filter button,
 .pack-card-action,
 .pack-card-body,
 .pack-export-group,
@@ -443,6 +444,7 @@
 .pack-primary-button:focus-visible,
 .pack-secondary-button:focus-visible,
 .pack-danger-button:focus-visible,
+.pack-rail-filter button:focus-visible,
 .pack-card-action:focus-visible,
 .pack-back:focus-visible,
 .pack-toolbar-search input:focus-visible,
@@ -1076,6 +1078,7 @@
   border: 1px dashed rgba(94, 234, 212, 0.4);
   border-radius: 8px;
   color: #5eead4;
+  cursor: pointer;
   display: flex;
   flex: 0 0 auto;
   font-size: 13px;
@@ -1093,6 +1096,47 @@
 .pack-rail-new.is-active {
   background: rgba(94, 234, 212, 0.16);
   border-style: solid;
+}
+
+.pack-rail-filter {
+  background: #111111;
+  border: 1px solid #2d2d2d;
+  border-radius: 8px;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 3px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+}
+
+.pack-rail-filter button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #9d9d9d;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 6px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.pack-rail-filter button.is-active {
+  background: rgba(94, 234, 212, 0.12);
+  color: #5eead4;
+}
+
+.pack-rail-filter button:disabled {
+  color: #5f5f5f;
+  cursor: default;
+}
+
+.pack-rail-filter span {
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.74;
 }
 
 .pack-manage-item-actions {

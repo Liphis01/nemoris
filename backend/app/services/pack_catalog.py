@@ -1787,6 +1787,45 @@ def unpublish_pack_publication(db, pack_guid):
     }
 
 
+def delete_pack_publication(db, pack_guid):
+    """Owner-only hard delete for already-archived catalog rows."""
+    publication = _get_owned_publication(db, pack_guid, required=True)
+
+    if publication.get("publication_status") != "archived":
+        raise PackCatalogError(
+            "Dépublie ce pack avant de le supprimer définitivement."
+        )
+
+    storage_path = str(publication.get("storage_path") or "").strip()
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/delete_my_pack",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+    _raise_supabase_status(status, body, "Suppression impossible")
+    deleted_publication = _normalize_publication(
+        _decode_json_body(body), project_url
+    )
+    zip_deleted = False
+
+    if storage_path:
+        _, _, storage_status, _, _ = _authed_supabase_request(
+            db,
+            f"/storage/v1/object/{CATALOG_BUCKET}/"
+            f"{quote(storage_path, safe='/')}",
+            method="DELETE",
+            timeout=PUBLISH_TRANSFER_TIMEOUT
+        )
+        zip_deleted = storage_status < 400 or storage_status == 404
+
+    return {
+        "status": "deleted",
+        "pack_guid": deleted_publication["pack_guid"],
+        "zip_deleted": zip_deleted
+    }
+
+
 def record_pack_install(db, pack_guid, *, installed_version):
     """Best-effort by design -- the caller must not await/block on this or
     surface its errors, since installing a pack must stay account-free

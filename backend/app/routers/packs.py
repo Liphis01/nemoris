@@ -19,6 +19,7 @@ from ..services.pack_catalog import (
     add_pack_comment,
     backfill_pack_installs,
     check_pack_catalog_health,
+    delete_pack_publication,
     get_my_pack_status,
     get_pack_publish_status,
     list_pack_comments,
@@ -336,6 +337,17 @@ def unsubscribe_pack_subscription(
 def unpublish_group_pack(pack_guid: str, db: Session = Depends(get_db)):
     try:
         return unpublish_pack_publication(db, pack_guid)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.delete("/blueprints/catalog/publish/{pack_guid}", include_in_schema=False)
+@router.delete("/packs/catalog/publish/{pack_guid}")
+def delete_group_pack_publication(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return delete_pack_publication(db, pack_guid)
     except PackCatalogAuthError as error:
         raise HTTPException(status_code=401, detail=str(error)) from error
     except PackCatalogError as error:
