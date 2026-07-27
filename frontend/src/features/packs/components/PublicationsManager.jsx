@@ -469,29 +469,39 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
         </div>
       </div>
 
-      <div className="pack-source-summary">
-        <span className="pack-source-summary-text">
-          <span className="pack-field-label">Source</span>
-          <span>
-            <strong>{selectedSource?.name || basePublication?.source?.name || "Source introuvable"}</strong>
-            {sourceTypeStyle ? ` · ${sourceTypeStyle.label}` : ""}
-            {" · "}
-            {questionCountLabel(selectedSource?.question_count)}
-            {sourceKind === "playlist" ? " · playlist" : ""}
+      {releaseMode ? (
+        <div className="pack-source-summary pack-source-summary-static">
+          <span className="pack-source-summary-text">
+            <span className="pack-field-label">Source</span>
+            <span>
+              <strong>{selectedSource?.name || basePublication?.source?.name || "Source introuvable"}</strong>
+              {sourceTypeStyle ? ` · ${sourceTypeStyle.label}` : ""}
+              {" · "}
+              {questionCountLabel(selectedSource?.question_count)}
+              {sourceKind === "playlist" ? " · playlist" : ""}
+            </span>
           </span>
-        </span>
-        {releaseMode ? (
-          <span className="pack-source-summary-change">Source liée</span>
-        ) : (
-          <button
-            type="button"
-            className="pack-inline-link"
-            onClick={() => setStep("select")}
-          >
-            Changer →
-          </button>
-        )}
-      </div>
+          <span className="pack-source-summary-change is-static">Source liée</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="pack-source-summary"
+          onClick={() => setStep("select")}
+        >
+          <span className="pack-source-summary-text">
+            <span className="pack-field-label">Source</span>
+            <span>
+              <strong>{selectedSource?.name}</strong>
+              {sourceTypeStyle ? ` · ${sourceTypeStyle.label}` : ""}
+              {" · "}
+              {questionCountLabel(selectedSource?.question_count)}
+              {sourceKind === "playlist" ? " · playlist" : ""}
+            </span>
+          </span>
+          <span className="pack-source-summary-change">Changer →</span>
+        </button>
+      )}
 
       <div className="pack-publish-form">
         <label className="pack-field">
@@ -690,25 +700,29 @@ function PackDetail({
           peux plus en publier de nouvelle version.
         </div>
       ) : publication.source?.name ? (
-        <div className="pack-detail-meta">
-          <span>
-            Source :{" "}
-            {publication.source.kind === "group" && onOpenGroup ? (
-              <button
-                type="button"
-                className="pack-inline-link"
-                onClick={() => onOpenGroup(publication.source.id)}
-              >
-                {publication.source.name}
-              </button>
-            ) : (
+        publication.source.kind === "group" && onOpenGroup ? (
+          <button
+            type="button"
+            className="pack-source-summary"
+            onClick={() => onOpenGroup(publication.source.id)}
+          >
+            <span className="pack-source-summary-text">
+              <span className="pack-field-label">Source</span>
+              <span><strong>{publication.source.name}</strong></span>
+            </span>
+            <span className="pack-source-summary-change">Ouvrir →</span>
+          </button>
+        ) : (
+          <div className="pack-source-summary pack-source-summary-static">
+            <span className="pack-source-summary-text">
+              <span className="pack-field-label">Source</span>
               <span>
-                {publication.source.name}
+                <strong>{publication.source.name}</strong>
                 {publication.source.kind === "playlist" ? " (playlist)" : ""}
               </span>
-            )}
-          </span>
-        </div>
+            </span>
+          </div>
+        )
       ) : null}
 
       <div className="pack-action-row">

@@ -135,7 +135,8 @@
 .pack-card-action,
 .pack-card-body,
 .pack-export-group,
-.pack-publication-item {
+.pack-publication-item,
+.pack-source-summary {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   border-radius: 8px;
@@ -582,18 +583,32 @@
   width: 100%;
 }
 
-.pack-card-action,
-.pack-primary-button {
+.pack-card-action {
   background: #1f2d24;
   border: 1px solid #385544;
   color: #d7f5df;
 }
 
-.pack-screen .pack-card-action:not(:disabled),
-.pack-screen .pack-primary-button:not(:disabled) {
+/* The one action on this screen that actually ships a pack -- give it the
+   full accent color instead of the same muted tint as every other button,
+   so it reads as the obvious next step rather than one option among many. */
+.pack-primary-button {
+  background: #5eead4;
+  border: 1px solid #5eead4;
+  color: #06231e;
+  font-weight: 900;
+}
+
+.pack-screen .pack-card-action:not(:disabled) {
   background-color: #1f2d24 !important;
   border-color: #385544 !important;
   color: #d7f5df !important;
+}
+
+.pack-screen .pack-primary-button:not(:disabled) {
+  background-color: #5eead4 !important;
+  border-color: #5eead4 !important;
+  color: #06231e !important;
 }
 
 .pack-secondary-button {
@@ -619,13 +634,19 @@
   transform: none;
 }
 
+.pack-screen .pack-primary-button:not(:disabled):hover {
+  background-color: #85f2e0 !important;
+  border-color: #85f2e0 !important;
+}
+
 .pack-card-action:not(:disabled):hover,
 .pack-primary-button:not(:disabled):hover,
 .pack-secondary-button:not(:disabled):hover,
 .pack-danger-button:not(:disabled):hover,
 .pack-theme-button:hover,
 .pack-export-group:hover,
-.pack-publication-item:hover {
+.pack-publication-item:hover,
+.pack-source-summary:hover {
   border-color: #444444;
   transform: translateY(-1px);
 }
@@ -777,6 +798,15 @@
   color: #f1f1f1;
 }
 
+.pack-source-summary.pack-source-summary-static {
+  cursor: default;
+}
+
+.pack-source-summary.pack-source-summary-static:hover {
+  border-color: #282828;
+  transform: none;
+}
+
 .pack-source-summary-change {
   align-items: center;
   background: rgba(94, 234, 212, 0.1);
@@ -789,6 +819,12 @@
   font-weight: 800;
   min-height: 26px;
   padding: 0 10px;
+}
+
+.pack-source-summary-change.is-static {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: #cbd5e1;
 }
 
 .pack-release-preview {

@@ -217,7 +217,7 @@ describe("PublicationsManager", () => {
     render(<PublicationsManager setMode={vi.fn()} onOpenGroup={onOpenGroup} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Drapeaux du monde" })
+      await screen.findByRole("button", { name: /Drapeaux du monde/ })
     );
 
     expect(onOpenGroup).toHaveBeenCalledWith(42);
