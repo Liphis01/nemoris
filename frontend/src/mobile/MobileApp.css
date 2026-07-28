@@ -1,0 +1,254 @@
+.mobile-app-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #111315;
+  color: #f3f4f6;
+  font-family: Arial, system-ui, sans-serif;
+  text-align: left;
+}
+
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: calc(14px + env(safe-area-inset-top)) 18px 12px;
+  border-bottom: 1px solid #2b3036;
+  background: #171a1f;
+}
+
+.mobile-brand,
+.mobile-subtitle {
+  display: block;
+}
+
+.mobile-brand {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.mobile-subtitle {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+.mobile-clean,
+.mobile-dirty {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mobile-clean {
+  background: #123529;
+  color: #86efac;
+}
+
+.mobile-dirty {
+  background: #3a2711;
+  color: #fbbf24;
+}
+
+.mobile-screen-slot {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.mobile-panel,
+.mobile-review-screen {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mobile-panel h1,
+.mobile-card h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.18;
+}
+
+.mobile-card,
+.mobile-panel {
+  border: 1px solid #2b3036;
+  border-radius: 8px;
+  background: #181c22;
+  padding: 18px;
+}
+
+.mobile-card {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  min-height: 260px;
+  text-align: center;
+}
+
+.mobile-review-count {
+  color: #a7b0bd;
+  font-size: 13px;
+  text-align: center;
+}
+
+.mobile-review-media {
+  max-width: 100%;
+  max-height: 38vh;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #0f1115;
+}
+
+.mobile-answer {
+  border-top: 1px solid #2b3036;
+  padding-top: 16px;
+  color: #e5e7eb;
+  font-size: 18px;
+}
+
+.mobile-primary-button,
+.mobile-quality-button,
+.mobile-tabbar button {
+  min-height: 44px;
+  border: 1px solid #3a414b;
+  border-radius: 8px;
+  background: #232a33;
+  color: #f3f4f6;
+  font: inherit;
+  font-weight: 700;
+}
+
+.mobile-primary-button {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+.mobile-primary-button:disabled,
+.mobile-quality-button:disabled,
+.mobile-tabbar button:disabled {
+  opacity: 0.55;
+}
+
+.mobile-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mobile-quality-button:nth-child(1) {
+  background: #442020;
+  border-color: #7f1d1d;
+}
+
+.mobile-quality-button:nth-child(2) {
+  background: #463418;
+  border-color: #92400e;
+}
+
+.mobile-quality-button:nth-child(3) {
+  background: #173529;
+  border-color: #047857;
+}
+
+.mobile-quality-button:nth-child(4) {
+  background: #1d3260;
+  border-color: #2563eb;
+}
+
+.mobile-status-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.mobile-status-grid span,
+.mobile-note {
+  color: #a7b0bd;
+}
+
+.mobile-status-grid strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.mobile-form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.mobile-field {
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-field span {
+  color: #a7b0bd;
+  font-size: 13px;
+}
+
+.mobile-field input {
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid #3a414b;
+  border-radius: 8px;
+  background: #101317;
+  color: #f3f4f6;
+  font: inherit;
+  padding: 0 12px;
+}
+
+.mobile-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mobile-conflict-box,
+.mobile-media-missing {
+  border: 1px solid #92400e;
+  border-radius: 8px;
+  background: #261c11;
+  color: #fed7aa;
+  padding: 12px;
+}
+
+.mobile-error {
+  color: #fca5a5;
+}
+
+.mobile-success {
+  color: #86efac;
+}
+
+.mobile-empty {
+  justify-content: center;
+}
+
+.mobile-tabbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid #2b3036;
+  background: #171a1f;
+}
+
+.mobile-tabbar button {
+  font-size: 13px;
+  color: #a7b0bd;
+}
+
+.mobile-tabbar button.active {
+  border-color: #60a5fa;
+  color: #f3f4f6;
+  background: #213248;
+}
