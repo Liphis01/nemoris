@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { exportDatabase, importDatabase } from "../../../api/backup";
-import {
-  getPackCatalogSettings,
-  getPackCatalogDiagnostics,
-  savePackCatalogSettings
-} from "../../../api/packs";
+import { getPackCatalogDiagnostics } from "../../../api/packs";
 import {
   getReviewSettings,
   rebalanceReviewCalendar,
@@ -278,11 +274,6 @@ export default function Settings({
   const [dataStatus, setDataStatus] = useState("");
   const [dataError, setDataError] = useState("");
 
-  const [catalogDraft, setCatalogDraft] = useState("");
-  const [catalogKeyDraft, setCatalogKeyDraft] = useState("");
-  const [catalogSaving, setCatalogSaving] = useState(false);
-  const [catalogStatus, setCatalogStatus] = useState("");
-  const [catalogError, setCatalogError] = useState("");
   const [catalogDiagnostics, setCatalogDiagnostics] = useState(null);
   const [catalogChecking, setCatalogChecking] = useState(false);
   const [catalogDiagnosticError, setCatalogDiagnosticError] = useState("");
@@ -342,25 +333,6 @@ export default function Settings({
           setError(settingsError.message || "Paramètres impossibles à charger.");
           setLoading(false);
         }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getPackCatalogSettings()
-      .then((settings) => {
-        if (!cancelled) {
-          setCatalogDraft(settings.url || "");
-          setCatalogKeyDraft(settings.key || "");
-        }
-      })
-      .catch((catalogSettingsError) => {
-        console.error(catalogSettingsError);
       });
 
     return () => {
@@ -473,34 +445,6 @@ export default function Settings({
       );
     } finally {
       setCatalogChecking(false);
-    }
-  }
-
-  async function saveCatalogSettings({ testAfterSave = true } = {}) {
-    setCatalogSaving(true);
-    setCatalogStatus("");
-    setCatalogError("");
-    setCatalogDiagnosticError("");
-
-    try {
-      const settings = await savePackCatalogSettings({
-        url: catalogDraft.trim(),
-        key: catalogKeyDraft.trim()
-      });
-      setCatalogDraft(settings.url || "");
-      setCatalogKeyDraft(settings.key || "");
-      setCatalogStatus("Catalogue enregistré.");
-
-      if (testAfterSave) {
-        await runCatalogDiagnostics();
-      }
-    } catch (catalogSaveError) {
-      console.error(catalogSaveError);
-      setCatalogError(
-        catalogSaveError.message || "Catalogue impossible à enregistrer."
-      );
-    } finally {
-      setCatalogSaving(false);
     }
   }
 
@@ -676,59 +620,21 @@ export default function Settings({
               accent="violet"
               title="Packs"
               description="Catalogue de packs partagés"
-              badge={catalogDraft.trim() && catalogKeyDraft.trim() ? "Configuré" : "Vide"}
             >
               <div className="settings-row settings-row-catalog">
                 <div className="settings-row-copy">
-                  <strong>Catalogue Supabase</strong>
-                  <span>Projet et clé publique utilisés par l'écran Packs.</span>
+                  <strong>Catalogue Nemoris</strong>
+                  <span>
+                    Le catalogue utilisé par l'écran Packs. Lance un test si
+                    les packs ne se chargent pas.
+                  </span>
                 </div>
 
-                <div className="settings-auth-row settings-catalog-row">
-                  <input
-                    aria-label="URL du projet Supabase"
-                    type="text"
-                    placeholder="https://...supabase.co"
-                    value={catalogDraft}
-                    disabled={catalogSaving}
-                    onChange={(event) => setCatalogDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        saveCatalogSettings({ testAfterSave: true });
-                      }
-                    }}
-                    className="settings-input settings-input-wide"
-                  />
-
-                  <input
-                    aria-label="Clé publishable Supabase"
-                    type="text"
-                    placeholder="sb_publishable_..."
-                    value={catalogKeyDraft}
-                    disabled={catalogSaving}
-                    onChange={(event) => setCatalogKeyDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        saveCatalogSettings({ testAfterSave: true });
-                      }
-                    }}
-                    className="settings-input settings-input-wide"
-                  />
-
+                <div className="settings-actions settings-row-actions">
                   <button
                     type="button"
-                    onClick={() => saveCatalogSettings({ testAfterSave: false })}
-                    disabled={catalogSaving || catalogChecking}
-                    aria-label="Enregistrer le catalogue"
-                    className="settings-save"
-                  >
-                    {catalogSaving ? "..." : "Enregistrer"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => saveCatalogSettings({ testAfterSave: true })}
-                    disabled={catalogSaving || catalogChecking}
+                    onClick={runCatalogDiagnostics}
+                    disabled={catalogChecking}
                     aria-label="Tester le catalogue"
                     className="settings-secondary"
                   >
@@ -742,18 +648,6 @@ export default function Settings({
                 checking={catalogChecking}
                 error={catalogDiagnosticError}
               />
-
-              {catalogStatus && (
-                <div className="settings-status" role="status">
-                  {catalogStatus}
-                </div>
-              )}
-
-              {catalogError && (
-                <div role="alert" className="settings-alert">
-                  {catalogError}
-                </div>
-              )}
             </SettingsGroup>
 
             <UpdateSection />

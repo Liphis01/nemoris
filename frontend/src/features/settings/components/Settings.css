@@ -367,13 +367,6 @@
   justify-content: flex-end;
 }
 
-.settings-inline-fields {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(190px, 1fr) minmax(190px, 1fr);
-  min-width: min(100%, 420px);
-}
-
 .settings-toggle {
   align-items: center;
   color: #dedede;
@@ -408,14 +401,6 @@
 .settings-row-catalog {
   align-items: stretch;
   grid-template-columns: 1fr;
-}
-
-.settings-catalog-row {
-  display: grid;
-  flex: initial;
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.85fr) auto auto;
-  justify-self: stretch;
-  width: 100%;
 }
 
 .settings-catalog-diagnostic {
@@ -833,21 +818,12 @@
     grid-template-columns: 1fr;
   }
 
-  .settings-inline-fields {
-    grid-template-columns: 1fr;
-    min-width: 0;
-  }
-
   .settings-auth-row,
   .settings-inline-actions,
   .settings-actions {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
-  }
-
-  .settings-catalog-row {
-    grid-template-columns: 1fr;
   }
 
   .settings-row-actions {

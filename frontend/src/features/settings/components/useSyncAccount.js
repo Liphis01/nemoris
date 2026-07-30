@@ -4,14 +4,12 @@ import {
   getSyncStatus,
   requestSyncCode,
   setSyncPreferences,
-  setSyncServerUrl,
   syncPull,
   syncPush,
   syncSignOut,
   verifySyncCode
 } from "../../../api/sync";
 
-const DEFAULT_SERVER = "http://127.0.0.1:9000";
 // Supabase's default minimum gap between two OTP requests for the same
 // email; matched here so the UI stops the user from hitting the server's
 // own rate limit instead of just showing its error after the fact.
@@ -19,8 +17,6 @@ const RESEND_COOLDOWN_MS = 60_000;
 
 export function useSyncAccount() {
   const [status, setStatus] = useState(null);
-  const [serverDraft, setServerDraft] = useState("");
-  const [keyDraft, setKeyDraft] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [devCode, setDevCode] = useState("");
@@ -57,8 +53,6 @@ export function useSyncAccount() {
     try {
       const next = await getSyncStatus();
       setStatus(next);
-      setServerDraft(next.server_url || DEFAULT_SERVER);
-      setKeyDraft(next.server_key || "");
     } catch (statusError) {
       setError(statusError.message || "Statut indisponible.");
     }
@@ -85,21 +79,12 @@ export function useSyncAccount() {
     }
   }
 
-  async function saveServer() {
-    await run(async () => {
-      await setSyncServerUrl(serverDraft.trim(), keyDraft.trim());
-      await refresh();
-    }, "Serveur enregistré.");
-  }
-
   async function setAutoSyncEnabled(enabled) {
     await run(async () => {
       const next = await setSyncPreferences({
         auto_sync_enabled: Boolean(enabled)
       });
       setStatus(next);
-      setServerDraft(next.server_url || DEFAULT_SERVER);
-      setKeyDraft(next.server_key || "");
     }, enabled
       ? "Synchronisation automatique activée."
       : "Synchronisation automatique désactivée.");
@@ -208,10 +193,6 @@ export function useSyncAccount() {
 
   return {
     status,
-    serverDraft,
-    setServerDraft,
-    keyDraft,
-    setKeyDraft,
     email,
     setEmail,
     code,
@@ -225,7 +206,6 @@ export function useSyncAccount() {
     cooldownSeconds,
     signedIn,
     serverVersion,
-    saveServer,
     setAutoSyncEnabled,
     sendCode,
     changeEmail,

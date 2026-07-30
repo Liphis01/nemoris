@@ -7,7 +7,6 @@ import {
 } from "./services/mobileApi";
 import { resolveMobileMediaUrl } from "./services/mobileFileStore";
 import {
-  configureMobileSyncServer,
   pullMobileCollection,
   pushMobileCollection,
   requestMobileSyncCode,
@@ -160,8 +159,6 @@ function formatMediaStatus(status) {
 }
 
 function SyncScreen({ status, onStatusChange }) {
-  const [serverUrl, setServerUrl] = useState("");
-  const [serverKey, setServerKey] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState("");
@@ -169,10 +166,8 @@ function SyncScreen({ status, onStatusChange }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setServerUrl(status?.server_url || "");
-    setServerKey(status?.server_key || "");
     setEmail(status?.account_email || "");
-  }, [status?.account_email, status?.server_key, status?.server_url]);
+  }, [status?.account_email]);
 
   async function runAction(label, operation, successMessage) {
     setBusy(label);
@@ -194,41 +189,9 @@ function SyncScreen({ status, onStatusChange }) {
     }
   }
 
-  async function saveServerSettings() {
-    await configureMobileSyncServer(serverUrl, serverKey);
-  }
-
   return (
     <section className="mobile-panel">
       <h1>Sync</h1>
-      <div className="mobile-form-grid">
-        <label className="mobile-field">
-          <span>Supabase URL</span>
-          <input
-            value={serverUrl}
-            onChange={(event) => setServerUrl(event.target.value)}
-            autoCapitalize="none"
-            inputMode="url"
-            spellCheck={false}
-          />
-        </label>
-        <label className="mobile-field">
-          <span>Publishable key</span>
-          <input
-            value={serverKey}
-            onChange={(event) => setServerKey(event.target.value)}
-            autoCapitalize="none"
-            spellCheck={false}
-          />
-        </label>
-        <button
-          className="mobile-primary-button"
-          disabled={Boolean(busy)}
-          onClick={() => runAction("save", saveServerSettings, "Sync server saved.")}
-        >
-          Save Server
-        </button>
-      </div>
       <div className="mobile-form-grid">
         <label className="mobile-field">
           <span>Email</span>
@@ -245,10 +208,7 @@ function SyncScreen({ status, onStatusChange }) {
           disabled={Boolean(busy)}
           onClick={() => runAction(
             "code",
-            async () => {
-              await saveServerSettings();
-              return requestMobileSyncCode(email);
-            },
+            () => requestMobileSyncCode(email),
             "Verification code sent."
           )}
         >
@@ -269,7 +229,6 @@ function SyncScreen({ status, onStatusChange }) {
           onClick={() => runAction(
             "verify",
             async () => {
-              await saveServerSettings();
               await verifyMobileSyncCode(email, code);
               setCode("");
             },

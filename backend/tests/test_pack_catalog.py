@@ -42,7 +42,24 @@ from app.services.pack_catalog import (
     save_pack_publish_draft
 )
 from app.services.packs import export_pack
-from app.services.settings import save_pack_catalog_settings
+from app.services import settings as settings_module
+
+
+def use_catalog(
+    test,
+    url="https://project.supabase.co/rest/v1",
+    key="sb_publishable_test"
+):
+    """Point the bundled catalogue at a fake project for one test.
+
+    The catalogue project ships in config (config.CLOUD_URL/CLOUD_KEY) rather
+    than being stored per device, so tests swap the constants instead of
+    writing a settings row.
+    """
+    for name, value in (("CLOUD_URL", url), ("CLOUD_KEY", key)):
+        patcher = mock.patch.object(settings_module, name, value)
+        patcher.start()
+        test.addCleanup(patcher.stop)
 
 
 def make_db():
@@ -72,11 +89,7 @@ class FakeResponse:
 
 class PackCatalogSearchTests(unittest.TestCase):
     def configure(self, db, key="sb_publishable_test"):
-        save_pack_catalog_settings(
-            db,
-            "https://project.supabase.co/rest/v1",
-            key
-        )
+        use_catalog(self, key=key)
         db.add(PackSubscription(
             pack_guid="world-map",
             installed_version=1,
@@ -353,7 +366,10 @@ class PackCatalogSearchTests(unittest.TestCase):
         )
 
     def test_missing_configuration_returns_http_error(self):
+        # Only reachable when a self-hoster blanks NEMORIS_SUPABASE_URL/_KEY:
+        # the shipped build always has a catalogue project.
         db = make_db()
+        use_catalog(self, url="", key="")
 
         with self.assertRaises(HTTPException) as context:
             search_catalog_packs(db=db)
@@ -436,11 +452,10 @@ class PackCatalogSearchTests(unittest.TestCase):
 
     def test_catalog_diagnostics_flags_storage_json_url(self):
         db = make_db()
-        save_pack_catalog_settings(
-            db,
-            "https://project.supabase.co/storage/v1/object/public/"
-            "packs/catalog.json",
-            "sb_publishable_test"
+        use_catalog(
+            self,
+            url="https://project.supabase.co/storage/v1/object/public/"
+                "packs/catalog.json"
         )
         db.commit()
 
@@ -609,11 +624,7 @@ class PackCatalogAuthTestCase(unittest.TestCase):
     comment tests alike."""
 
     def configure(self, db):
-        save_pack_catalog_settings(
-            db,
-            "https://project.supabase.co",
-            "sb_publishable_test"
-        )
+        use_catalog(self, url="https://project.supabase.co")
         group = QuestionGroup(
             guid="group-guid",
             type_group="map",

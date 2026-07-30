@@ -20,7 +20,7 @@ import json
 import re
 from uuid import uuid4
 
-from ..config import SYNC_STATE_FILE
+from ..config import CLOUD_KEY, CLOUD_URL, SYNC_STATE_FILE
 
 try:
     import keyring
@@ -86,10 +86,12 @@ def _token_delete(path):
 
 
 DEFAULT_STATE = {
-    "server_url": "",
-    # Publishable API key (Supabase). Safe to store/expose to the local UI —
-    # security comes from RLS + the user's auth token, never from this key.
-    "server_key": "",
+    # The bundled cloud project (config.CLOUD_URL/CLOUD_KEY). Users never type
+    # these: there is one Nemoris cloud, and the key is publishable — security
+    # comes from RLS + the user's auth token, never from this key. Self-hosters
+    # point the whole app elsewhere through NEMORIS_SUPABASE_URL/_KEY.
+    "server_url": CLOUD_URL,
+    "server_key": CLOUD_KEY,
     "account_email": None,
     "token": None,
     "device_id": None,
@@ -169,6 +171,13 @@ def load_sync_state(path=None):
 
     state = dict(DEFAULT_STATE)
     state.update({key: stored[key] for key in DEFAULT_STATE if key in stored})
+
+    # Installs written before the cloud project was bundled stored an empty
+    # server; adopt the bundled one rather than staying unconfigured. The pair
+    # is atomic: a state file that names a server keeps its own key too.
+    if not state.get("server_url"):
+        state["server_url"] = CLOUD_URL
+        state["server_key"] = CLOUD_KEY
 
     if not state.get("token"):
         keyring_token = _token_get(path)

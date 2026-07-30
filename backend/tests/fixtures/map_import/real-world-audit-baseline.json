@@ -383,8 +383,7 @@
       "target_pass": false,
       "target_reason_codes": [
         "target.workflow_mismatch",
-        "target.zone_count_mismatch",
-        "target.ontology_mismatch"
+        "target.zone_count_mismatch"
       ],
       "target_workflow": "selectable",
       "target_zone_count": 101
@@ -1249,7 +1248,7 @@
         "svg.unsupported_elements_removed"
       ],
       "identity": "commons-us-states",
-      "interpretation_sha256": "276c5a1a0a525398fa5b80764d140c25d326c19de27334abee3c3ce10f848c5a",
+      "interpretation_sha256": "d7cae07c81bbbe238ae44d131b70e3f353f81502c7051072c468c6650685bdf1",
       "interpretation_zone_counts": [
         51
       ],
@@ -1266,12 +1265,12 @@
         }
       ],
       "repairability_available": true,
-      "route": "automatic",
+      "route": "assisted",
       "sha256": "2279580797b53481b29fc168145129db926c21f91d4bc6d82c04e9801bdf932f",
-      "target_actual_workflow": "automatic",
+      "target_actual_workflow": "selectable",
       "target_pass": true,
       "target_reason_codes": [],
-      "target_workflow": "automatic",
+      "target_workflow": "selectable",
       "target_zone_count": 51
     },
     {

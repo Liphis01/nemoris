@@ -33,9 +33,9 @@
       "source_url": "https://commons.wikimedia.org/wiki/File:Blank_US_Map_(states_only).svg",
       "download_url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Blank_US_Map_%28states_only%29.svg",
       "license": "CC0-1.0",
-      "target_workflow": "automatic",
+      "target_workflow": "selectable",
       "target_zone_count": 51,
-      "expected_ontology": "us-states-dc-51"
+      "expected_ontology": "generic"
     },
     {
       "id": "commons-germany-states",
@@ -251,7 +251,7 @@
       "license": "CC BY-SA 4.0",
       "target_workflow": "selectable",
       "target_zone_count": 101,
-      "expected_ontology": "fr-departments-101"
+      "expected_ontology": "generic"
     },
     {
       "id": "commons-finland-regions",

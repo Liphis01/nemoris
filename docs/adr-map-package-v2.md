@@ -109,18 +109,24 @@ automatic, assisted, or manual; an assisted draft can become committable after
 its complete interpretation is selected. The compiled package remains schema
 2 with canonicalizer version 1.
 
-Verified offline ontologies cover ISO alpha-2 entities and capitals, 50 US
-states plus DC, and the 101 French departments. Verified matches seed new
-question answers and aliases. Source-title proposals remain blank on commit
-unless they validate against the selected ontology. Upgrades never replace
-existing question content or progress.
+Verified offline ontologies cover ISO alpha-2 entities and their capitals, and
+nothing else. Both are closed, standardised domains that apply to any world
+map. Per-country subdivision lists are deliberately excluded: a handful of
+hardcoded ones would be an arbitrary sample of thousands of possible subjects,
+and the generic detectors already read zone names from the source SVG. If
+subdivisions are ever needed, the only defensible form is one standard dataset
+covering every country (ISO 3166-2), not a list per country.
+
+Verified matches seed new question answers and aliases. Source-title proposals
+remain blank on commit unless they validate against the selected ontology.
+Upgrades never replace existing question content or progress.
 
 The country snapshot is pinned through `countryinfo==1.0.1` (MIT), with French
-territory labels from `Babel==2.18.0`/CLDR (BSD-3-Clause). The state codes are
-reviewed against the U.S. Census national FIPS list, and the département codes
-against the current INSEE COG. Small reviewed overrides cover JetPunk's `XK`
-selector and capital-name/multi-capital cases. These resources are local at
-runtime; the packaged sidecar explicitly collects CountryInfo's data files.
+territory labels from `Babel==2.18.0`/CLDR (BSD-3-Clause). Small reviewed
+overrides cover JetPunk's `XK` selector and capital-name/multi-capital cases.
+One nameless set of 51 U.S. subdivision codes is kept purely to detect their
+collision with ISO country codes. These resources are local at runtime; the
+packaged sidecar explicitly collects CountryInfo's data files.
 
 ## Draft and transaction boundary
 

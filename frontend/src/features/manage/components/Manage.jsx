@@ -1,7 +1,7 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManageInspector from "./ManageInspector";
-import MapRepairWorkspace from "./MapRepairWorkspace";
+import MapImportWorkspace from "./MapImportWorkspace";
 import TagNetworkModal from "./TagNetworkModal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,7 +33,8 @@ export default function Manage(props) {
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState(null);
   const [tagTreeOpen, setTagTreeOpen] = useState(false);
-  const [mapRepairWorkspace, setMapRepairWorkspace] = useState(null);
+  // One full-width import workspace, opened in "result" or "repair" mode.
+  const [mapImportWorkspace, setMapImportWorkspace] = useState(null);
   const pendingSaveHandlerRef = useRef(null);
   const transitionInProgressRef = useRef(false);
   const autosaveTimeoutRef = useRef(null);
@@ -255,15 +256,17 @@ export default function Manage(props) {
     props.setSelectedItem?.(group);
     setEditingZone(null);
     setHighlightedGroupIds([group.id]);
-    setMapRepairWorkspace(null);
+    setMapImportWorkspace(null);
   }
 
-  if (mapRepairWorkspace) {
+  if (mapImportWorkspace) {
     return (
-      <MapRepairWorkspace
-        initialDraft={mapRepairWorkspace.draft}
-        groupName={mapRepairWorkspace.groupName}
-        onExit={() => setMapRepairWorkspace(null)}
+      <MapImportWorkspace
+        key={`${mapImportWorkspace.draft?.draft_id}-${mapImportWorkspace.mode}`}
+        initialMode={mapImportWorkspace.mode}
+        draft={mapImportWorkspace.draft}
+        name={mapImportWorkspace.name}
+        onExit={() => setMapImportWorkspace(null)}
         onImported={finishMapImport}
       />
     );
@@ -356,8 +359,8 @@ export default function Manage(props) {
         registerPendingSaveHandler={registerPendingSaveHandler}
         requestManageTransition={requestManageTransition}
         requestQuestionScroll={requestQuestionScroll}
-        onOpenMapRepair={(draft, groupName) => {
-          setMapRepairWorkspace({ draft, groupName });
+        onOpenMapImport={(mode, draft, name) => {
+          setMapImportWorkspace({ mode, draft, name });
         }}
       />
 

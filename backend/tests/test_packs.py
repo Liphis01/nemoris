@@ -26,14 +26,11 @@ from app.models import (
     QuestionGroup
 )
 from app.routers.packs import (
-    get_pack_catalog,
     import_pack_zip,
     list_pack_subscriptions,
     unsubscribe_pack_subscription,
-    update_pack_catalog,
     update_pack_zip
 )
-from app.schemas import PackCatalogSettings
 from app.services.packs import (
     content_hash,
     export_pack,
@@ -1218,34 +1215,6 @@ class PackRouterTests(PackFixtureMixin, unittest.TestCase):
         self.assertEqual(rows[0]["name"], "Pack")
         self.assertIsNotNone(rows[0]["subscribed_at"])
         self.assertIsNone(rows[0]["updated_at"])
-
-    def test_catalog_settings_endpoints_round_trip(self):
-        db = make_db()
-
-        self.assertEqual(get_pack_catalog(db=db), {"url": "", "key": ""})
-
-        saved = update_pack_catalog(
-            PackCatalogSettings(
-                url="https://example.supabase.co/rest/v1",
-                key="sb_publishable_test"
-            ),
-            db=db
-        )
-        self.assertEqual(
-            saved,
-            {
-                "url": "https://example.supabase.co/rest/v1",
-                "key": "sb_publishable_test"
-            }
-        )
-
-        self.assertEqual(
-            get_pack_catalog(db=db),
-            {
-                "url": "https://example.supabase.co/rest/v1",
-                "key": "sb_publishable_test"
-            }
-        )
 
 
 def rewrite_as_format_1(source_zip, dest_zip):

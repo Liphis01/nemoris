@@ -21,10 +21,6 @@ vi.mock("../../api/profile", () => ({
 }));
 
 vi.mock("../../api/packs", () => ({
-  getPackCatalogSettings: vi.fn(() => Promise.resolve({
-    url: "https://catalog.example",
-    key: "sb_publishable_test"
-  })),
   searchPackCatalog: vi.fn(() => Promise.resolve({
     packs: [
       {

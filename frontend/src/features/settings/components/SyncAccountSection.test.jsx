@@ -14,7 +14,6 @@ import SyncAccountSection from "./SyncAccountSection";
 vi.mock("../../../api/sync", () => ({
   deleteAccountData: vi.fn(),
   getSyncStatus: vi.fn(),
-  setSyncServerUrl: vi.fn(),
   setSyncPreferences: vi.fn(),
   requestSyncCode: vi.fn(),
   verifySyncCode: vi.fn(),

@@ -5,23 +5,6 @@ export function listInstalledPacks() {
   return requestJson("/packs");
 }
 
-export function getPackCatalogSettings() {
-  return requestJson("/packs/catalog-settings");
-}
-
-export function savePackCatalogSettings(settings) {
-  const payload = typeof settings === "string" ? { url: settings } : settings;
-
-  return requestJson("/packs/catalog-settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      url: payload?.url || "",
-      key: payload?.key || ""
-    })
-  });
-}
-
 export function searchPackCatalog(params = {}) {
   const query = new URLSearchParams();
 

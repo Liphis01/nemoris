@@ -190,11 +190,11 @@ function ThemeRail({ activeTheme, loading, onSelectTheme, themes }) {
   );
 }
 
-function CatalogueState({ catalogUrl, error, loading, reload, setMode }) {
+function CatalogueState({ error, loading, reload }) {
   if (loading) {
     return (
       <StatePanel title="Chargement du catalogue">
-        <p>Recherche dans le catalogue Supabase.</p>
+        <p>Recherche dans le catalogue.</p>
       </StatePanel>
     );
   }
@@ -209,21 +209,6 @@ function CatalogueState({ catalogUrl, error, loading, reload, setMode }) {
           onClick={reload}
         >
           Réessayer
-        </button>
-      </StatePanel>
-    );
-  }
-
-  if (catalogUrl === null) {
-    return (
-      <StatePanel title="Catalogue Supabase non configuré">
-        <p>Ajoute l'URL du projet et la clé publishable dans les paramètres.</p>
-        <button
-          type="button"
-          className="pack-primary-button"
-          onClick={() => setMode("settings")}
-        >
-          Configurer le catalogue
         </button>
       </StatePanel>
     );
@@ -447,7 +432,6 @@ function ImporterScreen({
   }), [activeTheme, search, sort, statusFilter, typeFilter]);
 
   const {
-    catalogUrl,
     facets,
     items,
     loading,
@@ -468,7 +452,7 @@ function ImporterScreen({
     items[0] ||
     null
   );
-  const showStatePanel = loading || Boolean(error) || catalogUrl === null;
+  const showStatePanel = loading || Boolean(error);
 
   return (
     <div className="pack-import-layout">
@@ -503,11 +487,9 @@ function ImporterScreen({
 
         {showStatePanel ? (
           <CatalogueState
-            catalogUrl={catalogUrl}
             error={error}
             loading={loading}
             reload={reload}
-            setMode={setMode}
           />
         ) : (
           <>

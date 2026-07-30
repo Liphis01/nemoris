@@ -6,7 +6,6 @@ import {
   useBrowsePacks
 } from "./useBrowsePacks";
 import {
-  getPackCatalogSettings,
   installPackFromCatalog,
   listInstalledPacks,
   recordPackInstall,
@@ -16,7 +15,6 @@ import {
 } from "../../../api/packs";
 
 vi.mock("../../../api/packs", () => ({
-  getPackCatalogSettings: vi.fn(),
   installPackFromCatalog: vi.fn(),
   listInstalledPacks: vi.fn(),
   recordPackInstall: vi.fn(),
@@ -64,10 +62,6 @@ describe("useBrowsePacks", () => {
   };
 
   beforeEach(() => {
-    getPackCatalogSettings.mockResolvedValue({
-      url: "https://project.supabase.co",
-      key: "sb_publishable_test"
-    });
     searchPackCatalog.mockResolvedValue({
       packs: [entryA, entryB],
       facets: {
@@ -94,21 +88,6 @@ describe("useBrowsePacks", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-  });
-
-  it("reports no catalog configured without searching anything else", async () => {
-    getPackCatalogSettings.mockResolvedValue({ url: "", key: "" });
-
-    const { result } = renderHook(() => useBrowsePacks());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.catalogUrl).toBeNull();
-    expect(result.current.items).toEqual([]);
-    expect(searchPackCatalog).not.toHaveBeenCalled();
-    expect(listInstalledPacks).not.toHaveBeenCalled();
   });
 
   it("searches the catalogue with server-side filters", async () => {

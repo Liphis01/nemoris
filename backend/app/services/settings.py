@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from ..config import CLOUD_KEY, CLOUD_URL
 from ..models import AppSetting
 from ..scheduler import (
     DEFAULT_CATCHUP_DAILY_TARGET,
@@ -34,7 +35,8 @@ SYNC_SETTING_KEYS = {
 DEVICE_SETTING_KEYS = {
     STARTUP_REBALANCE_NOTICE_KEY,
     "fsrs_v6_migration",
-    # A catalog URL is a per-device preference (M1 1.5), not sync data.
+    # Legacy rows from when the catalogue URL was typed in per device. The
+    # catalogue now ships with the app; these must still never be synced.
     PACK_CATALOG_SETTINGS_KEY
 }
 
@@ -260,37 +262,12 @@ def clear_startup_rebalance_notice(db):
     )
 
 
-def get_pack_catalog_settings(db):
-    setting = (
-        db.query(AppSetting)
-        .filter(AppSetting.key == PACK_CATALOG_SETTINGS_KEY)
-        .first()
-    )
-    value = setting.value if setting and isinstance(setting.value, dict) else {}
+def get_pack_catalog_settings():
+    """The catalogue's Supabase project — bundled, not user-configured.
 
-    return {
-        "url": str(value.get("url", "")),
-        "key": str(value.get("key", ""))
-    }
-
-
-def save_pack_catalog_settings(db, url, key=""):
-    normalized = {
-        "url": str(url or "").strip().rstrip("/"),
-        "key": str(key or "").strip()
-    }
-    setting = (
-        db.query(AppSetting)
-        .filter(AppSetting.key == PACK_CATALOG_SETTINGS_KEY)
-        .first()
-    )
-
-    if not setting:
-        db.add(AppSetting(
-            key=PACK_CATALOG_SETTINGS_KEY,
-            value=normalized
-        ))
-    else:
-        setting.value = normalized
-
-    return normalized
+    A pack catalogue is only meaningful as one shared service: pointing a
+    device at its own project would just show an empty catalogue with nobody
+    to publish to. So this reads config, which self-hosters override through
+    NEMORIS_SUPABASE_URL/_KEY.
+    """
+    return {"url": CLOUD_URL, "key": CLOUD_KEY}

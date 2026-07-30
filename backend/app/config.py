@@ -47,3 +47,17 @@ SYNC_STATE_FILE = APP_DATA_DIR / "sync_state.json"
 # inside questions.db, so Supabase auth tokens never enter backups or sync.
 PACK_PUBLISH_STATE_FILE = APP_DATA_DIR / "pack_publish_state.json"
 FRONTEND_DIST_DIR = BUNDLED_DIR / "frontend" / "dist"
+
+# The Nemoris cloud. Sync and the pack catalogue are one shared Supabase
+# project: there is exactly one correct value for these, so they ship with the
+# app instead of being typed in by every user. CLOUD_KEY is a *publishable*
+# key — safety comes from RLS plus the user's auth token, never from keeping
+# it secret — so bundling it is safe by design.
+# Self-hosters (see sync_server/) override both through the environment; an
+# empty CLOUD_KEY selects the reference protocol instead of the Supabase one.
+CLOUD_URL = os.environ.get(
+    "NEMORIS_SUPABASE_URL", "https://apauxfgsthjmowjimcwn.supabase.co"
+).strip().rstrip("/")
+CLOUD_KEY = os.environ.get(
+    "NEMORIS_SUPABASE_KEY", "sb_publishable_MMicstgbU4UpPCHYJvTSZQ_FP2gTkFh"
+).strip()

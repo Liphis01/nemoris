@@ -56,7 +56,7 @@ export default function ManageInspector({
   registerPendingSaveHandler,
   requestManageTransition,
   requestQuestionScroll,
-  onOpenMapRepair,
+  onOpenMapImport,
   availableTags = []
 }) {
   const {
@@ -266,21 +266,11 @@ export default function ManageInspector({
       <CreateMapGroupEditor
         groupDraft={groupDraft}
         onCancel={cancelCreateGroup}
-        onImported={async ({ group, zones }) => {
-          setAllGroups(prev => [...prev, group]);
-          setAllQuestions?.(prev => [
-            ...prev,
-            ...zones.map(zone => ({
-              ...zone,
-              group_id: group.id,
-              group
-            }))
-          ]);
-          cancelCreateGroup();
-          setSelectedItem(group);
+        onAnalyzed={(draft, name) => {
+          onOpenMapImport?.("result", draft, name);
         }}
-        onOpenRepair={(draft, groupName) => {
-          onOpenMapRepair?.(draft, groupName);
+        onOpenRepair={(draft, name) => {
+          onOpenMapImport?.("repair", draft, name);
         }}
         setGroupDraft={setGroupDraft}
       />

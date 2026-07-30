@@ -600,7 +600,7 @@ def search_pack_catalog(
     limit=24,
     cursor=None
 ):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
 
@@ -650,7 +650,7 @@ def search_pack_catalog(
 
 
 def check_pack_catalog_health(db):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     raw_url = str(settings.get("url") or "").strip()
     project_url = normalize_supabase_url(raw_url)
     key = str(settings.get("key") or "").strip()
@@ -808,7 +808,7 @@ def check_pack_catalog_health(db):
 
 
 def _publish_config(db):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
 
@@ -1392,7 +1392,7 @@ def _has_release_changes(diff):
 
 
 def get_pack_publish_status(db):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
     state, source = _effective_publish_state(project_url, required=False)

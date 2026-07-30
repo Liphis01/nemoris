@@ -100,7 +100,6 @@ function item(
 
 function defaultHook(overrides = {}) {
   const value = {
-    catalogUrl: "https://project.supabase.co",
     facets: {
       themes: [
         { value: POPULAR_THEME, label: "Populaires", result_count: 12 },
@@ -282,24 +281,6 @@ describe("BrowsePacks", () => {
     await userEvent.click(screen.getByRole("button", { name: "Charger plus" }));
 
     expect(hook.loadMore).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows the no-catalogue state and routes to settings", async () => {
-    const setMode = vi.fn();
-    defaultHook({
-      catalogUrl: null,
-      items: [],
-      total: 0,
-      hasMore: false
-    });
-
-    render(<BrowsePacks setMode={setMode} />);
-
-    expect(screen.getByText("Catalogue Supabase non configuré")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Configurer le catalogue" }));
-
-    expect(setMode).toHaveBeenCalledWith("settings");
   });
 
   it("surfaces catalogue errors and retries loading", async () => {

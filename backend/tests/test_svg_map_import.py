@@ -42,9 +42,10 @@ from app.services.svg_maps.repair import (
     initialize_repair,
 )
 from app.services.svg_maps.ontologies import (
+    AMBIGUOUS_SUBDIVISION_CODES,
     COUNTRIES,
-    FR_DEPARTMENTS,
-    US_STATES,
+    ONTOLOGY_OPTIONS,
+    ontology_matches_code,
     proposal_for,
 )
 from app.services.training import get_training_items
@@ -540,14 +541,17 @@ class SvgInterpretationTests(unittest.TestCase):
             [("WEST", 2), ("EAST", 1)],
         )
 
-    def test_complete_lowercase_state_layer_is_not_misread_as_countries(self):
-        state_codes = [code for code in US_STATES if code != "DC"]
+    def test_complete_lowercase_subdivision_layer_is_not_misread_as_countries(self):
+        # Half of these codes are also ISO country codes. Detecting the whole
+        # layer as a partial country map would be a dangerous false positive:
+        # the import would look clean while silently dropping 25 zones.
+        codes = [code for code in sorted(AMBIGUOUS_SUBDIVISION_CODES) if code != "DC"]
         shapes = "".join(
             (
                 f'<rect class="state {code.lower()}" '
                 f'x="{position}" y="0" width="1" height="1"/>'
             )
-            for position, code in enumerate([*state_codes, "DC"])
+            for position, code in enumerate([*codes, "DC"])
         )
         source = (
             f'<svg xmlns="http://www.w3.org/2000/svg">{shapes}</svg>'
@@ -555,14 +559,13 @@ class SvgInterpretationTests(unittest.TestCase):
 
         result = analyze_svg(source)
 
-        self.assertEqual(result.route, "automatic")
-        self.assertEqual(len(result.interpretations), 1)
-        self.assertEqual(
-            result.interpretations[0].ontology, "us-states-dc-51"
+        self.assertNotIn(
+            "iso3166-alpha2",
+            [item.ontology for item in result.interpretations],
         )
-        self.assertEqual(result.summary.zone_count, 51)
-        self.assertEqual(result.zones[0].code, "AL")
-        self.assertTrue(all(zone.proposal_verified for zone in result.zones))
+        self.assertTrue(all(
+            item.zone_count != 26 for item in result.interpretations
+        ))
 
     def test_partial_state_code_coincidences_remain_generic(self):
         source = b"""
@@ -577,92 +580,76 @@ class SvgInterpretationTests(unittest.TestCase):
         result = analyze_svg(source)
 
         self.assertTrue(result.interpretations)
-        self.assertNotIn(
-            "us-states-50",
-            [item.ontology for item in result.interpretations],
-        )
+        self.assertTrue(all(
+            item.ontology == "generic" for item in result.interpretations
+        ))
 
     def test_versioned_ontologies_cover_required_sets(self):
         self.assertGreaterEqual(len(COUNTRIES), 249)
-        self.assertEqual(len(US_STATES), 51)
-        self.assertEqual(len(FR_DEPARTMENTS), 101)
         france = proposal_for("iso3166-alpha2", "fr")
-        department = proposal_for("fr-departments-101", "2A")
         grouped_capitals = proposal_for("country-capitals", "za-c")
         numbered_without_title = proposal_for("country-capitals", "za-c1")
         numbered_with_title = proposal_for(
             "country-capitals", "za-c1", ["Bloemfontein"]
         )
         self.assertEqual(france.answer, "France")
-        self.assertEqual(department.answer, "Corse-du-Sud")
         self.assertIn("Bloemfontein", grouped_capitals.aliases)
         self.assertFalse(numbered_without_title.verified)
         self.assertEqual(numbered_with_title.answer, "Bloemfontein")
         self.assertTrue(all(
-            proposal_for("fr-departments-101", code).verified
-            for code in FR_DEPARTMENTS
-        ))
-        self.assertTrue(all(
-            proposal_for("us-states-dc-51", code).verified
-            for code in US_STATES
+            proposal_for("iso3166-alpha2", code.lower()).verified
+            for code in COUNTRIES
         ))
 
-    def test_full_state_and_department_code_sets_compile_with_expected_ontology(self):
-        state_codes = [code for code in US_STATES if code != "DC"]
+    def test_only_global_referentials_remain_selectable(self):
+        # Per-country subdivision lists are not a bounded domain: hardcoding a
+        # few of them is arbitrary, and the generic detectors already read zone
+        # names from the SVG's own titles.
+        self.assertEqual(
+            [option.id for option in ONTOLOGY_OPTIONS],
+            ["auto", "generic", "iso3166-alpha2", "country-capitals"],
+        )
+        self.assertFalse(ontology_matches_code("iso3166-alpha2", "2A"))
+        self.assertFalse(ontology_matches_code("generic", "TX"))
 
-        def svg_for(codes):
+    def test_subdivision_code_sets_still_compile_without_a_referential(self):
+        codes = [code for code in sorted(AMBIGUOUS_SUBDIVISION_CODES) if code != "DC"]
+
+        def svg_for(values):
             shapes = "".join(
                 (
                     f'<rect id="{code}" x="{position}" y="0" '
                     f'width="1" height="1"/>'
                 )
-                for position, code in enumerate(codes)
+                for position, code in enumerate(values)
             )
             return (
                 f'<svg xmlns="http://www.w3.org/2000/svg">{shapes}</svg>'
             ).encode()
 
-        states_50 = analyze_svg(svg_for(state_codes))
-        states_51 = analyze_svg(svg_for([*state_codes, "DC"]))
-        departments = analyze_svg(
-            svg_for(FR_DEPARTMENTS), ontology="fr-departments-101"
-        )
-        self.assertEqual(states_50.interpretations[0].ontology, "us-states-50")
-        self.assertEqual(states_50.summary.zone_count, 50)
-        self.assertEqual(
-            states_51.interpretations[0].ontology, "us-states-dc-51"
-        )
-        self.assertEqual(states_51.summary.zone_count, 51)
-        self.assertEqual(departments.summary.zone_count, 101)
-        self.assertEqual(departments.interpretations[0].verified_label_count, 101)
+        fifty = analyze_svg(svg_for(codes))
+        fifty_one = analyze_svg(svg_for([*codes, "DC"]))
 
-    def test_explicit_department_ontology_accepts_group_code_prefixes(self):
-        source = b"""
-        <svg xmlns="http://www.w3.org/2000/svg">
-          <g id="FR-01"><path d="M0 0H10V10H0Z"/></g>
-          <g id="dep-2A"><path d="M10 0H20V10H10Z"/></g>
-        </svg>
-        """
-        result = analyze_svg(source, ontology="fr-departments-101")
-        self.assertEqual(result.route, "automatic")
-        self.assertEqual(
-            [(zone.code, zone.proposed_answer) for zone in result.zones],
-            [("FR-01", "Ain"), ("dep-2A", "Corse-du-Sud")],
-        )
+        self.assertEqual(fifty.summary.zone_count, 50)
+        self.assertEqual(fifty_one.summary.zone_count, 51)
+        self.assertTrue(all(
+            item.ontology == "generic"
+            for item in fifty.interpretations + fifty_one.interpretations
+        ))
 
     def test_explicit_ontology_can_promote_css_used_semantic_classes(self):
         source = b"""
         <svg xmlns="http://www.w3.org/2000/svg">
-          <style>.FR-01,.dep-2A { fill: #ddd; }</style>
-          <path class="FR-01" d="M0 0H10V10H0Z"/>
-          <path class="dep-2A" d="M10 0H20V10H10Z"/>
+          <style>.fr,.de { fill: #ddd; }</style>
+          <path class="fr" d="M0 0H10V10H0Z"/>
+          <path class="de" d="M10 0H20V10H10Z"/>
         </svg>
         """
-        result = analyze_svg(source, ontology="fr-departments-101")
+        result = analyze_svg(source, ontology="iso3166-alpha2")
         self.assertEqual(result.route, "automatic")
         self.assertEqual(
             [zone.proposed_answer for zone in result.zones],
-            ["Ain", "Corse-du-Sud"],
+            ["France", "Allemagne"],
         )
 
     def test_partial_data_codes_expose_alternative_interpretations_and_coverage(self):

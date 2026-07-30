@@ -107,8 +107,6 @@ export async function mobileSyncStatus() {
   return {
     signed_in: Boolean(state.accountEmail && token),
     account_email: state.accountEmail,
-    server_url: state.serverUrl,
-    server_key: state.serverKey,
     last_server_version: state.lastServerVersion,
     collection_dirty: collectionIsDirty(state),
     last_sync_status: state.lastSyncStatus,
@@ -116,15 +114,6 @@ export async function mobileSyncStatus() {
     last_media_status: state.lastMediaStatus,
     conflict_server_version: state.conflictServerVersion
   };
-}
-
-export async function configureMobileSyncServer(serverUrl: string, serverKey: string) {
-  const state = await loadMobileState();
-  return saveMobileState({
-    ...state,
-    serverUrl: String(serverUrl || "").trim().replace(/\/+$/, ""),
-    serverKey: String(serverKey || "").trim()
-  });
 }
 
 export async function requestMobileSyncCode(email: string) {

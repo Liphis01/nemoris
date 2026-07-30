@@ -291,11 +291,6 @@ class PackPublishDraftRequest(PackExportRequest):
     themes: List[str] = Field(default_factory=list, max_length=12)
 
 
-class PackCatalogSettings(BaseModel):
-    url: str = Field(default="", max_length=2048)
-    key: str = Field(default="", max_length=4096)
-
-
 class PackInstallRecordRequest(BaseModel):
     installed_version: int = Field(default=1, ge=1)
 

@@ -164,9 +164,6 @@ class SyncStateTests(unittest.TestCase):
         self.assertTrue(should_mark_collection_changed("POST", "/packs/import", 200))
         self.assertFalse(should_mark_collection_changed("POST", "/sync/push", 200))
         self.assertFalse(
-            should_mark_collection_changed("PUT", "/packs/catalog-settings", 200)
-        )
-        self.assertFalse(
             should_mark_collection_changed("POST", "/review/rebalance", 200)
         )
         self.assertFalse(should_mark_collection_changed("POST", "/questions", 400))

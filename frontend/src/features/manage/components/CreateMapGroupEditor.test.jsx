@@ -1,106 +1,40 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  commitMapImport,
   createMapImportFromFile,
+  createMapImportFromUrl,
   getMapImport,
-  listMapImports,
-  patchMapImport
+  listMapImports
 } from "../../../api/maps";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
 
 vi.mock("../../../api/maps", () => ({
   cancelMapImport: vi.fn().mockResolvedValue({ status: "cancelled" }),
-  commitMapImport: vi.fn(),
   createMapImportFromFile: vi.fn(),
   createMapImportFromUrl: vi.fn(),
   getMapImport: vi.fn(),
-  listMapImports: vi.fn(),
-  patchMapImport: vi.fn()
+  listMapImports: vi.fn()
 }));
 
-vi.mock("../../map/components/SvgMap", () => ({
-  default: ({ onSelect }) => (
-    <button type="button" onClick={() => onSelect("fr-c")}>
-      Aperçu interactif
-    </button>
-  )
-}));
+function svgFile(name = "carte.svg") {
+  return new File(["<svg/>"], name, { type: "image/svg+xml" });
+}
 
-const interpretations = [
-  {
-    id: "i-countries",
-    title: "Pays et territoires",
-    adapter: "jetpunk-id-class-v1",
-    ontology: "iso3166-alpha2",
-    strength: "strong",
-    automatic_eligible: true,
-    selectable: true,
-    zone_count: 2,
-    shape_count: 2,
-    unassigned_shape_count: 2,
-    verified_label_count: 2,
-    reason_codes: ["jetpunk.country_selectors"]
-  },
-  {
-    id: "i-capitals",
-    title: "Capitales — un marqueur par identifiant",
-    adapter: "jetpunk-id-class-v1",
-    ontology: "country-capitals",
-    strength: "strong",
-    automatic_eligible: false,
-    selectable: true,
-    zone_count: 2,
-    shape_count: 2,
-    unassigned_shape_count: 2,
-    verified_label_count: 2,
-    reason_codes: ["jetpunk.capital_ids"]
-  }
-];
+function analyzedDraft(overrides = {}) {
+  return { draft_id: "draft-1", route: "automatic", can_commit: true, ...overrides };
+}
 
-function draft(overrides = {}) {
-  return {
-    draft_id: "draft-1",
-    status: "analyzed",
-    route: "assisted",
-    preview_url: "/map-imports/draft-1/preview.svg",
-    preview_manifest: {
-      schema_version: 2,
-      zones: [
-        {
-          code: "fr",
-          shape_ids: ["s000001"],
-          hit_shape_ids: [],
-          source_keys: ["id:fr"]
-        }
-      ]
-    },
-    summary: {
-      zone_count: 2,
-      multipart_zone_count: 0,
-      hit_shape_count: 0,
-      removed_text_count: 0
-    },
-    interpretations,
-    selection_required: true,
-    selected_interpretation_id: null,
-    zones: [
-      {
-        code: "fr",
-        shape_ids: ["s000001"],
-        hit_shape_ids: [],
-        source_keys: ["id:fr"],
-        proposed_answer: "France",
-        proposed_aliases: [],
-        proposal_verified: true,
-        evidence: [{ kind: "ontology", value: "fr", strength: "strong" }]
-      }
-    ],
-    diagnostics: [],
-    acknowledgements: [],
-    can_commit: false,
-    ...overrides
-  };
+function renderPanel(props = {}) {
+  return render(
+    <CreateMapGroupEditor
+      groupDraft={{ name: "", type_group: "map" }}
+      setGroupDraft={vi.fn()}
+      onCancel={vi.fn()}
+      onAnalyzed={vi.fn()}
+      onOpenRepair={vi.fn()}
+      {...props}
+    />
+  );
 }
 
 describe("CreateMapGroupEditor", () => {
@@ -111,126 +45,127 @@ describe("CreateMapGroupEditor", () => {
 
   afterEach(cleanup);
 
-  it("chooses a detected layer, inspects evidence, and commits it", async () => {
-    createMapImportFromFile.mockResolvedValue(draft());
-    patchMapImport.mockResolvedValue(draft({
-      selection_required: false,
-      selected_interpretation_id: "i-capitals",
-      can_commit: true,
-      zones: [
-        {
-          code: "fr-c",
-          shape_ids: ["s000001"],
-          hit_shape_ids: [],
-          source_keys: ["id:fr-c"],
-          proposed_answer: "Paris",
-          proposed_aliases: [],
-          proposal_verified: true,
-          evidence: [
-            { kind: "ontology", value: "fr-c", strength: "strong" }
-          ]
-        },
-        {
-          code: "de-c",
-          shape_ids: ["s000002"],
-          hit_shape_ids: [],
-          source_keys: ["id:de-c"],
-          proposed_answer: "Berlin",
-          proposed_aliases: [],
-          proposal_verified: true,
-          evidence: [
-            { kind: "ontology", value: "de-c", strength: "strong" }
-          ]
-        }
-      ]
-    }));
-    commitMapImport.mockResolvedValue({ group: { id: 7 }, zones: [] });
-    const onImported = vi.fn();
+  it("analyses a chosen file immediately with an inferred name", async () => {
+    createMapImportFromFile.mockResolvedValue(analyzedDraft());
+    const onAnalyzed = vi.fn();
+    const setGroupDraft = vi.fn();
+    renderPanel({ onAnalyzed, setGroupDraft });
 
-    render(
-      <CreateMapGroupEditor
-        groupDraft={{ name: "Capitales", type_group: "map" }}
-        setGroupDraft={vi.fn()}
-        onCancel={vi.fn()}
-        onImported={onImported}
-      />
-    );
-
-    fireEvent.change(screen.getByLabelText("Type de carte"), {
-      target: { value: "country-capitals" }
-    });
     fireEvent.change(screen.getByLabelText("Fichier SVG"), {
-      target: {
-        files: [new File(["<svg/>"], "map.svg", { type: "image/svg+xml" })]
-      }
+      target: { files: [svgFile("departements_francais-2024.svg")] }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Analyser la carte" }));
 
     await waitFor(() => {
       expect(createMapImportFromFile).toHaveBeenCalledWith(
         expect.any(File),
-        expect.objectContaining({ ontology: "country-capitals" })
+        {
+          expectedZoneCount: null,
+          ontology: "auto",
+          name: "Departements francais 2024"
+        }
       );
     });
-    expect(await screen.findByText("Pays et territoires")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("radio", {
-      name: /Capitales — un marqueur par identifiant/
-    }));
-    await waitFor(() => {
-      expect(patchMapImport).toHaveBeenCalledWith("draft-1", {
-        selected_interpretation_id: "i-capitals"
-      });
-    });
-    expect(await screen.findByText("Paris")).toBeInTheDocument();
-    expect(screen.getByText("nom vérifié")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", {
-      name: "Importer et ouvrir l’éditeur"
-    }));
-    await waitFor(() => {
-      expect(commitMapImport).toHaveBeenCalledWith("draft-1", "Capitales");
-      expect(onImported).toHaveBeenCalledWith({ group: { id: 7 }, zones: [] });
-    });
-  });
-
-  it("opens an assisted draft in the structural repair workspace", async () => {
-    createMapImportFromFile.mockResolvedValue(draft({
-      repair_available: false
-    }));
-    const onOpenRepair = vi.fn();
-
-    render(
-      <CreateMapGroupEditor
-        groupDraft={{ name: "Carte à réparer", type_group: "map" }}
-        setGroupDraft={vi.fn()}
-        onCancel={vi.fn()}
-        onImported={vi.fn()}
-        onOpenRepair={onOpenRepair}
-      />
+    expect(setGroupDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Departements francais 2024" })
     );
-
-    fireEvent.change(screen.getByLabelText("Fichier SVG"), {
-      target: {
-        files: [new File(["<svg/>"], "map.svg", { type: "image/svg+xml" })]
-      }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Analyser la carte" }));
-    await screen.findByRole("button", { name: "Corriger la structure" });
-
-    fireEvent.click(screen.getByRole("button", {
-      name: "Corriger la structure"
-    }));
-    expect(onOpenRepair).toHaveBeenCalledWith(
+    expect(onAnalyzed).toHaveBeenCalledWith(
       expect.objectContaining({ draft_id: "draft-1" }),
-      "Carte à réparer"
+      "Departements francais 2024"
     );
   });
 
-  it("lists and resumes a device-local repair draft", async () => {
+  it("does not ask for a name and hides detection options by default", async () => {
+    renderPanel();
+    await waitFor(() => expect(listMapImports).toHaveBeenCalled());
+
+    expect(screen.queryByText("Nom du groupe")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Type de carte")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Nombre de zones attendu")
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Options de détection" }));
+    expect(screen.getByLabelText("Type de carte")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nombre de zones attendu")).toBeInTheDocument();
+  });
+
+  it("analyses a dropped file", async () => {
+    createMapImportFromFile.mockResolvedValue(analyzedDraft());
+    const onAnalyzed = vi.fn();
+    renderPanel({ onAnalyzed });
+
+    fireEvent.drop(
+      screen.getByRole("button", { name: /Déposez un fichier SVG ici/ }),
+      { dataTransfer: { files: [svgFile("espagne.svg")] } }
+    );
+
+    await waitFor(() => {
+      expect(createMapImportFromFile).toHaveBeenCalledWith(
+        expect.any(File),
+        expect.objectContaining({ name: "Espagne" })
+      );
+      expect(onAnalyzed).toHaveBeenCalled();
+    });
+  });
+
+  it("imports from a link behind an explicit action", async () => {
+    createMapImportFromUrl.mockResolvedValue(analyzedDraft());
+    const onAnalyzed = vi.fn();
+    renderPanel({ onAnalyzed });
+
+    fireEvent.click(screen.getByRole("button", { name: "Importer depuis un lien" }));
+    fireEvent.change(screen.getByLabelText("Lien vers un fichier SVG"), {
+      target: { value: "https://example.test/maps/colombia-departments.svg" }
+    });
+    expect(createMapImportFromUrl).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Importer ce lien" }));
+    await waitFor(() => {
+      expect(createMapImportFromUrl).toHaveBeenCalledWith(
+        "https://example.test/maps/colombia-departments.svg",
+        expect.objectContaining({ name: "Colombia departments" })
+      );
+      expect(onAnalyzed).toHaveBeenCalled();
+    });
+  });
+
+  it("passes advanced detection settings to the analysis", async () => {
+    createMapImportFromFile.mockResolvedValue(analyzedDraft());
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Options de détection" }));
+    fireEvent.change(screen.getByLabelText("Type de carte"), {
+      target: { value: "generic" }
+    });
+    fireEvent.change(screen.getByLabelText("Nombre de zones attendu"), {
+      target: { value: "42" }
+    });
+    fireEvent.change(screen.getByLabelText("Fichier SVG"), {
+      target: { files: [svgFile("capitales.svg")] }
+    });
+
+    await waitFor(() => {
+      expect(createMapImportFromFile).toHaveBeenCalledWith(
+        expect.any(File),
+        { expectedZoneCount: 42, ontology: "generic", name: "Capitales" }
+      );
+    });
+  });
+
+  it("offers only the two structural detection modes", async () => {
+    renderPanel();
+    await waitFor(() => expect(listMapImports).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Options de détection" }));
+    expect(
+      [...screen.getByLabelText("Type de carte").options].map(item => item.value)
+    ).toEqual(["auto", "generic"]);
+  });
+
+  it("keeps drafts behind a compact resume entry and reopens repair state", async () => {
     listMapImports.mockResolvedValue({
       drafts: [{
-        draft_id: "draft-1",
+        draft_id: "draft-9",
         name: "Colombie",
         updated_at: new Date().toISOString(),
         repair_available: true,
@@ -239,33 +174,41 @@ describe("CreateMapGroupEditor", () => {
         can_commit: false
       }]
     });
-    getMapImport.mockResolvedValue(draft({ repair_available: true }));
+    getMapImport.mockResolvedValue(analyzedDraft({ draft_id: "draft-9" }));
     const onOpenRepair = vi.fn();
-    const setGroupDraft = vi.fn();
-    render(
-      <CreateMapGroupEditor
-        groupDraft={{ name: "", type_group: "map" }}
-        setGroupDraft={setGroupDraft}
-        onCancel={vi.fn()}
-        onImported={vi.fn()}
-        onOpenRepair={onOpenRepair}
-      />
-    );
+    renderPanel({ onOpenRepair });
 
-    expect(await screen.findByText("Colombie")).toBeInTheDocument();
-    expect(screen.getByText(/34 zones · 1 blocage/)).toBeInTheDocument();
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /Colombie/ })[0]
-    );
+    const resume = await screen.findByRole("button", {
+      name: "Reprendre un import (1)"
+    });
+    expect(screen.queryByText("Colombie")).not.toBeInTheDocument();
+
+    fireEvent.click(resume);
+    expect(screen.getByText("Colombie")).toBeInTheDocument();
+    expect(
+      screen.getByText(/correction en cours · 34 zones/)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Colombie/ })[0]);
     await waitFor(() => {
-      expect(getMapImport).toHaveBeenCalledWith("draft-1");
-      expect(setGroupDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Colombie" })
-      );
+      expect(getMapImport).toHaveBeenCalledWith("draft-9");
       expect(onOpenRepair).toHaveBeenCalledWith(
-        expect.objectContaining({ draft_id: "draft-1" }),
+        expect.objectContaining({ draft_id: "draft-9" }),
         "Colombie"
       );
     });
+  });
+
+  it("reports an analysis failure without leaving the panel", async () => {
+    createMapImportFromFile.mockRejectedValue(new Error("SVG illisible"));
+    const onAnalyzed = vi.fn();
+    renderPanel({ onAnalyzed });
+
+    fireEvent.change(screen.getByLabelText("Fichier SVG"), {
+      target: { files: [svgFile()] }
+    });
+
+    expect(await screen.findByText("SVG illisible")).toBeInTheDocument();
+    expect(onAnalyzed).not.toHaveBeenCalled();
   });
 });

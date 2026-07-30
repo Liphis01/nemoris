@@ -33,8 +33,8 @@ from .contracts import (
     MapZoneV2,
 )
 from .ontologies import (
+    AMBIGUOUS_SUBDIVISION_CODES,
     ONTOLOGY_OPTIONS,
-    US_STATES,
     infer_ontology,
     ontology_matches_code,
     proposal_for,
@@ -1223,18 +1223,21 @@ def _detect_jetpunk(inventory, deadline_at=None):
     }
     selector_values = ids | classes
     results = []
-    state_selectors = defaultdict(set)
+    # Half of these codes are also ISO alpha-2 country codes, so a complete
+    # lowercase subdivision layer would otherwise detect as a partial country
+    # layer. Recognising the collision is the only thing this set is for.
+    subdivision_selectors = defaultdict(set)
     for value in selector_values:
-        if STATE_ID_RE.fullmatch(value) and value in US_STATES:
-            state_selectors[value].add(value)
+        if STATE_ID_RE.fullmatch(value) and value in AMBIGUOUS_SUBDIVISION_CODES:
+            subdivision_selectors[value].add(value)
         elif (
             re.fullmatch(r"[a-z]{2}", value)
-            and value.upper() in US_STATES
+            and value.upper() in AMBIGUOUS_SUBDIVISION_CODES
         ):
-            state_selectors[value.upper()].add(value)
-    has_complete_lowercase_state_layer = (
+            subdivision_selectors[value.upper()].add(value)
+    has_complete_lowercase_subdivision_layer = (
         len({
-            code for code, selectors in state_selectors.items()
+            code for code, selectors in subdivision_selectors.items()
             if code != "DC" and any(value.islower() for value in selectors)
         }) == 50
     )
@@ -1253,7 +1256,7 @@ def _detect_jetpunk(inventory, deadline_at=None):
     }
     country_keys = (
         []
-        if has_complete_lowercase_state_layer
+        if has_complete_lowercase_subdivision_layer
         else sorted(set(countries) | aux_countries)
     )
     capitals = sorted({
@@ -1336,92 +1339,12 @@ def _detect_jetpunk(inventory, deadline_at=None):
             if item.ontology == "country-capitals"
         }:
             results.append(interpretation)
-    state_codes = sorted(state_selectors)
-    state_codes_without_dc = [
-        code for code in state_codes if code != "DC"
-    ]
-    state_options = []
-    if len(state_codes_without_dc) == 50:
-        if "DC" in state_codes:
-            state_options.append((
-                state_codes,
-                "us-states-dc-51",
-                "États des États-Unis et D.C.",
-                True,
-            ))
-        else:
-            state_options.append((
-                state_codes_without_dc,
-                "us-states-50",
-                "États des États-Unis",
-                True,
-            ))
-    for states, ontology, title, automatic_eligible in state_options:
-        reasons = ["jetpunk.us_state_ids", "selector.id_class_union"]
-        if not automatic_eligible:
-            reasons.append("detect.incomplete_or_ambiguous_ontology")
-        interpretation = _selector_interpretation(
-            inventory,
-            keys=states,
-            title=title,
-            adapter="jetpunk-id-class-v1",
-            ontology=ontology,
-            reason_codes=reasons,
-            selector_keys_by_code={
-                code: state_selectors[code] for code in states
-            },
-            automatic_eligible=automatic_eligible,
-            deadline_at=deadline_at,
-        )
-        if interpretation:
-            results.append(interpretation)
     return results
 
 
 def _detect_explicit_ontology(inventory, ontology, deadline_at=None):
     if ontology in {"auto", "generic"}:
         return []
-    if ontology in {"us-states-50", "us-states-dc-51"}:
-        selectors = defaultdict(set)
-        for value in {
-            *inventory.source_ids.values(),
-            *(
-                class_name
-                for classes in inventory.source_classes.values()
-                for class_name in classes
-            ),
-        }:
-            if STATE_ID_RE.fullmatch(value) and value in US_STATES:
-                selectors[value].add(value)
-            elif (
-                re.fullmatch(r"[a-z]{2}", value)
-                and value.upper() in US_STATES
-            ):
-                selectors[value.upper()].add(value)
-        if ontology == "us-states-50":
-            selectors.pop("DC", None)
-            required_count = 50
-        else:
-            required_count = 51
-        keys = sorted(selectors)
-        if not keys:
-            return []
-        interpretation = _selector_interpretation(
-            inventory,
-            keys=keys,
-            title=next(
-                option.label
-                for option in ONTOLOGY_OPTIONS
-                if option.id == ontology
-            ),
-            adapter="jetpunk-id-class-v1",
-            ontology=ontology,
-            reason_codes=["ontology.explicit", "selector.id_class_union"],
-            selector_keys_by_code=selectors,
-            automatic_eligible=len(keys) == required_count,
-            deadline_at=deadline_at,
-        )
-        return [interpretation] if interpretation else []
     keys = sorted({
         source_id
         for source_id in inventory.source_ids.values()
@@ -1447,10 +1370,7 @@ def _detect_explicit_ontology(inventory, ontology, deadline_at=None):
         ),
         adapter=(
             "jetpunk-id-class-v1"
-            if ontology in {
-                "iso3166-alpha2", "country-capitals",
-                "us-states-50", "us-states-dc-51",
-            }
+            if ontology in {"iso3166-alpha2", "country-capitals"}
             else "generic-svg-v1"
         ),
         ontology=ontology,

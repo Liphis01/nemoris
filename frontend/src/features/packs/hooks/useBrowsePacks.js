@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  getPackCatalogSettings,
   installPackFromCatalog,
   listInstalledPacks,
   recordPackInstall,
@@ -54,7 +53,6 @@ export function useBrowsePacks(filters = {}) {
   const sort = filters.sort || "pertinence";
   const limit = filters.limit || DEFAULT_LIMIT;
 
-  const [catalogUrl, setCatalogUrl] = useState(null);
   const [entries, setEntries] = useState([]);
   const [facets, setFacets] = useState({ themes: [] });
   const [total, setTotal] = useState(0);
@@ -90,23 +88,6 @@ export function useBrowsePacks(filters = {}) {
     setError("");
 
     try {
-      const settings = await getPackCatalogSettings();
-      const configured = Boolean(settings.url && settings.key);
-
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
-
-      setCatalogUrl(configured ? settings.url : null);
-
-      if (!configured) {
-        setEntries([]);
-        setFacets({ themes: [] });
-        setTotal(0);
-        setInstalledByGuid({});
-        return;
-      }
-
       const [catalog] = await Promise.all([
         searchPackCatalog({
           q: search,
@@ -252,7 +233,6 @@ export function useBrowsePacks(filters = {}) {
   }), [actionState, entries, installedByGuid]);
 
   return {
-    catalogUrl,
     facets,
     items,
     loading,

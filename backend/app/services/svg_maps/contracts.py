@@ -18,9 +18,6 @@ MapImportOntology = Literal[
     "generic",
     "iso3166-alpha2",
     "country-capitals",
-    "us-states-50",
-    "us-states-dc-51",
-    "fr-departments-101",
 ]
 MapRepairRole = Literal["unresolved", "decoration", "label", "excluded"]
 

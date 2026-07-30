@@ -23,24 +23,6 @@ export default function PublishAuthPanel({
     );
   }
 
-  if (!publishStatus?.configured) {
-    return (
-      <div className="pack-publish-auth">
-        <div>
-          <strong>Catalogue non configuré</strong>
-          <span>Ajoute l'URL du projet et la clé publishable.</span>
-        </div>
-        <button
-          type="button"
-          className="pack-secondary-button"
-          onClick={() => setMode("settings")}
-        >
-          Paramètres
-        </button>
-      </div>
-    );
-  }
-
   if (publishStatus?.signed_in) {
     const usingSyncAccount = publishStatus.auth_source === "sync";
 

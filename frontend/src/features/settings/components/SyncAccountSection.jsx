@@ -1,44 +1,5 @@
 import { useSyncAccount } from "./useSyncAccount";
 
-function SyncServerFields({ sync }) {
-  return (
-    <div className="settings-inline-fields">
-      <label className="settings-field">
-        <span className="settings-label">Serveur de sync</span>
-        <input
-          aria-label="Serveur de sync"
-          type="text"
-          value={sync.serverDraft}
-          disabled={sync.busy}
-          onChange={(event) => sync.setServerDraft(event.target.value)}
-          onBlur={sync.saveServer}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") sync.saveServer();
-          }}
-          className="settings-input settings-input-wide"
-        />
-      </label>
-
-      <label className="settings-field">
-        <span className="settings-label">Clé publique (Supabase)</span>
-        <input
-          aria-label="Clé publique (Supabase)"
-          type="text"
-          value={sync.keyDraft}
-          disabled={sync.busy}
-          placeholder="sb_publishable_... (vide pour serveur perso)"
-          onChange={(event) => sync.setKeyDraft(event.target.value)}
-          onBlur={sync.saveServer}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") sync.saveServer();
-          }}
-          className="settings-input settings-input-wide"
-        />
-      </label>
-    </div>
-  );
-}
-
 function formatAutoSyncStatus(status) {
   const value = status?.last_auto_sync_status;
 
@@ -186,15 +147,6 @@ function SyncAccountSectionView({ sync }) {
               </div>
             )}
 
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>Serveur de sync</strong>
-                <span>Configuration utilisée pour ce compte.</span>
-              </div>
-
-              <SyncServerFields sync={sync} />
-            </div>
-
             <div className="settings-danger-zone">
               <p>
                 Les données cloud sont une copie de tes questions, ta
@@ -309,15 +261,6 @@ function SyncAccountSectionView({ sync }) {
                 </p>
               </>
             )}
-
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>Serveur de sync</strong>
-                <span>Serveur local ou projet Supabase.</span>
-              </div>
-
-              <SyncServerFields sync={sync} />
-            </div>
           </>
         )}
 

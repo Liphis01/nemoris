@@ -1,12 +1,14 @@
 import { Preferences } from "@capacitor/preferences";
 import { SecureStorage } from "@aparajita/capacitor-secure-storage";
+import { CLOUD_KEY, CLOUD_URL } from "../../shared/cloud";
 
 const STATE_KEY = "nemoris-mobile-state";
 const TOKEN_KEY = "nemoris-sync-token";
 
 export const DEFAULT_MOBILE_STATE = {
-  serverUrl: "",
-  serverKey: "",
+  // The bundled cloud project — never typed in by the user. See shared/cloud.
+  serverUrl: CLOUD_URL,
+  serverKey: CLOUD_KEY,
   accountEmail: null,
   deviceId: null,
   lastServerVersion: 0,
@@ -29,7 +31,16 @@ export async function loadMobileState() {
   const result = await Preferences.get({ key: STATE_KEY });
   if (!result.value) return { ...DEFAULT_MOBILE_STATE };
   try {
-    return { ...DEFAULT_MOBILE_STATE, ...JSON.parse(result.value) };
+    const stored = { ...DEFAULT_MOBILE_STATE, ...JSON.parse(result.value) };
+
+    // Installs written before the cloud project was bundled stored an empty
+    // server; adopt the bundled one rather than staying unconfigured.
+    if (!stored.serverUrl) {
+      stored.serverUrl = CLOUD_URL;
+      stored.serverKey = CLOUD_KEY;
+    }
+
+    return stored;
   } catch {
     return { ...DEFAULT_MOBILE_STATE };
   }

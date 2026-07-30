@@ -22,8 +22,12 @@ class SvgCorpusManifestTests(unittest.TestCase):
         self.assertGreaterEqual(
             len({case["category"] for case in cases}), 3
         )
+        # No real-world case targets the automatic workflow any more. The only
+        # one that did was the U.S. map, and it reached it through a hardcoded
+        # 51-state referential rather than through anything readable in the
+        # file. Automatic remains covered by the synthetic data-code corpus.
         self.assertTrue(
-            {"automatic", "selectable", "manual"}.issubset({
+            {"selectable", "manual"}.issubset({
                 case["target_workflow"] for case in cases
             })
         )

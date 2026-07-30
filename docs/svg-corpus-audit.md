@@ -54,16 +54,18 @@ The current target passes are Austria (9 states), Canada (13 provinces and
 territories), Finland (19 regions), Norway (15 counties), Russia (83 federal
 subjects in this historical map), South Africa (9 provinces), Sweden
 (21 counties), Turkey (81 provinces), and the United States (50 states plus
-D.C.). The U.S. map imports automatically; the other eight expose an exact
-assisted interpretation.
+D.C.). All nine expose an exact assisted interpretation, and none of them
+needs a per-country referential: their zone names come from the source SVG.
 
 The baseline caught and now prevents four dangerous false automatic imports.
 Canada’s 53 land-part IDs are grouped through its 13 parent/class selectors;
 Finland’s two misleading Inkscape IDs no longer hide its 19-shape layer;
 five Russian codes that coincide with U.S. postal codes no longer beat its
 83-zone nested layer; and lowercase U.S. state classes are no longer mistaken
-for 26 ISO country selectors. No incorrect real-world candidate in the frozen
-corpus currently routes automatically.
+for 26 ISO country selectors — the last of these is the sole reason the
+importer still knows that 51-code set, which carries no names and is not a
+selectable referential. No real-world candidate in the frozen corpus currently
+routes automatically.
 
 Most other failures are over- or under-detection of decorative objects,
 borders, label paths, or nested layers. France exceeds the current path-data

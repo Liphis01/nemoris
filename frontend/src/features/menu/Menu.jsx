@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getPackCatalogSettings, searchPackCatalog } from "../../api/packs";
+import { searchPackCatalog } from "../../api/packs";
 import { getProfile } from "../../api/profile";
 import { getStats } from "../../api/stats";
 import "./Menu.css";
@@ -549,29 +549,18 @@ export default function Menu({
     setPacksLoading(true);
     setPacksError("");
 
-    getPackCatalogSettings()
-      .then((settings) => {
-        if (!settings.url || !settings.key) {
-          return { packs: [], configured: false };
-        }
-
-        return searchPackCatalog({
-          sort: "populaires",
-          status: "all",
-          limit: POPULAR_PACK_LIMIT
-        }).then((catalog) => ({ ...catalog, configured: true }));
-      })
+    searchPackCatalog({
+      sort: "populaires",
+      status: "all",
+      limit: POPULAR_PACK_LIMIT
+    })
       .then((catalog) => {
         if (cancelled) return;
 
         const packs = Array.isArray(catalog?.packs) ? catalog.packs : [];
         setPopularPacks(packs);
         setActivePackIndex(0);
-        setPacksError(
-          catalog?.configured === false
-            ? "Catalogue Supabase non configuré."
-            : ""
-        );
+        setPacksError("");
       })
       .catch((error) => {
         console.error(error);

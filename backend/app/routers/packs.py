@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from ..dependencies import get_db
 from ..models import PackSubscription
 from ..schemas import (
-    PackCatalogSettings,
     PackCommentCreateRequest,
     PackInstallRecordRequest,
     PackPublishDraftRequest,
@@ -41,10 +40,6 @@ from ..services.packs import (
     unsubscribe_pack,
     update_pack
 )
-from ..services.settings import (
-    get_pack_catalog_settings,
-    save_pack_catalog_settings
-)
 
 
 router = APIRouter()
@@ -64,24 +59,6 @@ def list_pack_subscriptions(db: Session = Depends(get_db)):
         }
         for subscription in db.query(PackSubscription).all()
     ]
-
-
-@router.get("/blueprints/catalog-settings", include_in_schema=False)
-@router.get("/packs/catalog-settings")
-def get_pack_catalog(db: Session = Depends(get_db)):
-    return get_pack_catalog_settings(db)
-
-
-@router.put("/blueprints/catalog-settings", include_in_schema=False)
-@router.put("/packs/catalog-settings")
-def update_pack_catalog(
-    payload: PackCatalogSettings,
-    db: Session = Depends(get_db)
-):
-    result = save_pack_catalog_settings(db, payload.url, payload.key)
-    db.commit()
-
-    return result
 
 
 @router.get("/blueprints/catalog/diagnostics", include_in_schema=False)

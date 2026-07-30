@@ -8,11 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDatabase, importDatabase } from "../../../api/backup";
-import {
-  getPackCatalogDiagnostics,
-  getPackCatalogSettings,
-  savePackCatalogSettings
-} from "../../../api/packs";
+import { getPackCatalogDiagnostics } from "../../../api/packs";
 import {
   getReviewSettings,
   rebalanceReviewCalendar,
@@ -35,16 +31,13 @@ vi.mock("../../../api/backup", () => ({
 }));
 
 vi.mock("../../../api/packs", () => ({
-  getPackCatalogDiagnostics: vi.fn(),
-  getPackCatalogSettings: vi.fn(),
-  savePackCatalogSettings: vi.fn()
+  getPackCatalogDiagnostics: vi.fn()
 }));
 
 vi.mock("../../../api/sync", () => ({
   deleteAccountData: vi.fn(),
   getSyncStatus: vi.fn(),
   setSyncPreferences: vi.fn(),
-  setSyncServerUrl: vi.fn(),
   requestSyncCode: vi.fn(),
   verifySyncCode: vi.fn(),
   syncAuto: vi.fn(),
@@ -69,7 +62,6 @@ describe("Settings", () => {
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
-    getPackCatalogSettings.mockResolvedValue({ url: "", key: "" });
     getPackCatalogDiagnostics.mockResolvedValue({
       status: "ok",
       summary: "Catalogue prêt.",
@@ -97,12 +89,10 @@ describe("Settings", () => {
         }
       ]
     });
-    savePackCatalogSettings.mockResolvedValue({ url: "", key: "" });
     getSyncStatus.mockResolvedValue({
       signed_in: false,
       account_email: null,
-      server_url: "",
-      server_key: "",
+      server_url: "https://project.supabase.co",
       last_server_version: 0,
       auto_sync_enabled: false,
       local_change_seq: 0,
@@ -223,50 +213,22 @@ describe("Settings", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("saves Supabase pack catalogue settings", async () => {
-    savePackCatalogSettings.mockResolvedValue({
-      url: "https://project.supabase.co",
-      key: "sb_publishable_test"
-    });
-
+  it("does not offer to configure the catalogue project", async () => {
     render(<Settings setMode={vi.fn()} />);
 
     await screen.findByDisplayValue("35");
-    fireEvent.change(screen.getByLabelText("URL du projet Supabase"), {
-      target: { value: "https://project.supabase.co" }
-    });
-    fireEvent.change(screen.getByLabelText("Clé publishable Supabase"), {
-      target: { value: "sb_publishable_test" }
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enregistrer le catalogue" })
-    );
-
-    await waitFor(() => {
-      expect(savePackCatalogSettings).toHaveBeenCalledWith({
-        url: "https://project.supabase.co",
-        key: "sb_publishable_test"
-      });
-    });
-    expect(getPackCatalogDiagnostics).not.toHaveBeenCalled();
-    expect(screen.getByText("Catalogue enregistré.")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("URL du projet Supabase")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Clé publishable Supabase")
+    ).not.toBeInTheDocument();
   });
 
-  it("runs the Supabase pack catalogue diagnostic", async () => {
-    savePackCatalogSettings.mockResolvedValue({
-      url: "https://project.supabase.co",
-      key: "sb_publishable_test"
-    });
-
+  it("runs the pack catalogue diagnostic", async () => {
     render(<Settings setMode={vi.fn()} />);
 
     await screen.findByDisplayValue("35");
-    fireEvent.change(screen.getByLabelText("URL du projet Supabase"), {
-      target: { value: "https://project.supabase.co" }
-    });
-    fireEvent.change(screen.getByLabelText("Clé publishable Supabase"), {
-      target: { value: "sb_publishable_test" }
-    });
     fireEvent.click(screen.getByRole("button", { name: "Tester le catalogue" }));
 
     await waitFor(() => {
