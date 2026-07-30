@@ -8,6 +8,56 @@ function normalizeCode(code) {
     return code?.trim() || "";
 }
 
+function setSvgStyle(element, property, value) {
+    if (element.style) {
+        element.style[property] = value;
+        return;
+    }
+
+    // XML nodes imported by jsdom do not receive SVGElement.style, while real
+    // browsers do. Attribute fallback keeps the DOMParser/importNode path
+    // testable without reverting to HTML-string insertion.
+    const cssName = property.replace(/[A-Z]/g, match => `-${match.toLowerCase()}`);
+    const declarations = new Map(
+        String(element.getAttribute("style") || "")
+            .split(";")
+            .map(part => part.split(":"))
+            .filter(parts => parts.length >= 2)
+            .map(([name, ...rest]) => [name.trim(), rest.join(":").trim()])
+    );
+    declarations.set(cssName, value);
+    element.setAttribute(
+        "style",
+        [...declarations].map(([name, cssValue]) => `${name}: ${cssValue}`).join("; ")
+    );
+}
+
+function adoptSvgNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.nodeValue || "");
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+    // Recreate imported XML elements in the live document's SVG namespace.
+    // This makes them full SVGElement instances in jsdom as well as browsers.
+    const adopted = document.createElementNS(
+        node.namespaceURI || "http://www.w3.org/2000/svg",
+        node.localName
+    );
+    [...node.attributes].forEach(attribute => {
+        adopted.setAttributeNS(
+            attribute.namespaceURI,
+            attribute.name,
+            attribute.value
+        );
+    });
+    [...node.childNodes].forEach(child => {
+        const adoptedChild = adoptSvgNode(child);
+        if (adoptedChild) adopted.appendChild(adoptedChild);
+    });
+    return adopted;
+}
+
 const zoneStrokeStyle = {
     color: "#111",
     width: "0.35",
@@ -31,6 +81,7 @@ const hitAreaRevealOpacity = "0.35";
 
 export default function SvgMap({
     svgPath,
+    mapManifest = null,
     found,
     missed = [],
     dueItems = [],
@@ -61,6 +112,7 @@ export default function SvgMap({
     const [svgVersion, setSvgVersion] = useState(0);
     const [tooltip, setTooltip] = useState(null);
     const [hoveredCode, setHoveredCode] = useState(null);
+    const [loadError, setLoadError] = useState("");
     // Set while applying a transform that must not animate (a resize-driven re-fit).
     const [instantTransform, setInstantTransform] = useState(false);
     // True once the user pans/zooms by hand, so a resize re-fit leaves their view alone.
@@ -171,51 +223,135 @@ export default function SvgMap({
 
         setTooltip(null);
         setHoveredCode(null);
+        setLoadError("");
 
-        // After loading, discover every data-code zone so editors can know
-        // which SVG regions are assignable.
+        const isV2 = mapManifest?.schema_version === 2;
+        const sourceUrl = new URL(svgPath, window.location.href);
+        const isBackendOwnedLegacy = (
+            sourceUrl.origin === window.location.origin
+            || ["localhost", "127.0.0.1"].includes(sourceUrl.hostname)
+        );
+
+        if (!isV2 && !isBackendOwnedLegacy) {
+            setLoadError("Cette carte externe doit être mise à niveau avant utilisation.");
+            onCodesLoaded?.([]);
+            return undefined;
+        }
+
         fetch(svgPath)
-            .then((res) => res.text())
+            .then((res) => {
+                if (res.ok === false) {
+                    throw new Error("Map SVG could not be loaded");
+                }
+                return res.text();
+            })
             .then((svg) => {
                 if (cancelled || !containerRef.current) return;
 
-                containerRef.current.innerHTML = svg;
+                const parsed = new DOMParser().parseFromString(
+                    svg, "image/svg+xml"
+                );
+                const parsedRoot = parsed.documentElement;
+                if (
+                    parsed.querySelector("parsererror")
+                    || parsedRoot?.localName?.toLowerCase() !== "svg"
+                    || (
+                        parsedRoot.namespaceURI
+                        && parsedRoot.namespaceURI !== "http://www.w3.org/2000/svg"
+                    )
+                ) {
+                    throw new Error("Map response is not a valid SVG");
+                }
+                const importedRoot = document.importNode(parsedRoot, true);
+                const svgEl = adoptSvgNode(importedRoot);
+                containerRef.current.replaceChildren(svgEl);
 
-                const svgEl = containerRef.current.querySelector("svg");
-                if (!svgEl) return;
+                setSvgStyle(svgEl, "width", "100%");
+                setSvgStyle(svgEl, "height", "100%");
+                setSvgStyle(svgEl, "display", "block");
 
-                svgEl.style.width = "100%";
-                svgEl.style.height = "100%";
-                svgEl.style.display = "block";
-
-                const mapCodes = new Set();
                 const zoneElements = [];
+                let mapCodes = [];
 
-                containerRef.current.querySelectorAll("[data-code]").forEach((el) => {
-                    const code = normalizeCode(el.getAttribute("data-code"));
-                    if (code) mapCodes.add(code);
+                if (isV2) {
+                    const shapesById = new Map();
+                    containerRef.current
+                        .querySelectorAll("[data-nemoris-shape]")
+                        .forEach((el) => {
+                            const shapeId = el.getAttribute("data-nemoris-shape");
+                            if (shapeId && !shapesById.has(shapeId)) {
+                                shapesById.set(shapeId, el);
+                            }
+                        });
+                    const seenShapes = new Set();
+                    let invalidManifest = false;
+                    mapCodes = (mapManifest.zones || []).map(zone => {
+                        const code = normalizeCode(zone.code);
+                        [
+                            ...(zone.shape_ids || []).map(id => [id, false]),
+                            ...(zone.hit_shape_ids || []).map(id => [id, true])
+                        ].forEach(([shapeId, isHitArea]) => {
+                            const el = shapesById.get(shapeId);
+                            if (!el || seenShapes.has(shapeId) || !code) {
+                                invalidManifest = true;
+                                return;
+                            }
+                            seenShapes.add(shapeId);
+                            zoneElements.push({ el, code, isHitArea });
+                        });
+                        return code;
+                    }).filter(Boolean);
 
-                    el.style.cursor = "pointer";
-                    el.style.stroke = zoneStrokeStyle.color;
-                    el.style.strokeWidth = zoneStrokeStyle.width;
-                    el.style.strokeLinecap = zoneStrokeStyle.linecap;
-                    el.style.strokeLinejoin = zoneStrokeStyle.linejoin;
-                    zoneElements.push({ el, code });
+                    if (invalidManifest) {
+                        containerRef.current.replaceChildren();
+                        throw new Error("Map manifest does not match its SVG");
+                    }
+                } else {
+                    const seenCodes = new Set();
+                    containerRef.current
+                        .querySelectorAll("[data-code]")
+                        .forEach((el) => {
+                            const code = normalizeCode(el.getAttribute("data-code"));
+                            if (code && !seenCodes.has(code)) {
+                                seenCodes.add(code);
+                                mapCodes.push(code);
+                            }
+                            zoneElements.push({
+                                el,
+                                code,
+                                isHitArea: el.getAttribute("data-hit-area") === "1"
+                            });
+                        });
+                }
+
+                zoneElements.forEach(({ el }) => {
+                    setSvgStyle(el, "cursor", "pointer");
+                    setSvgStyle(el, "stroke", zoneStrokeStyle.color);
+                    setSvgStyle(el, "strokeWidth", zoneStrokeStyle.width);
+                    setSvgStyle(el, "strokeLinecap", zoneStrokeStyle.linecap);
+                    setSvgStyle(el, "strokeLinejoin", zoneStrokeStyle.linejoin);
                 });
 
                 zoneElementsRef.current = zoneElements;
                 setSvgVersion(version => version + 1);
 
                 if (onCodesLoaded) {
-                    onCodesLoaded([...mapCodes]);
+                    onCodesLoaded(mapCodes);
                 }
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                zoneElementsRef.current = [];
+                containerRef.current?.replaceChildren();
+                setLoadError(error.message || "Impossible de charger la carte.");
+                onCodesLoaded?.([]);
             });
 
         return () => {
             cancelled = true;
             zoneElementsRef.current = [];
         };
-    }, [svgPath, onCodesLoaded]);
+    }, [svgPath, mapManifest, onCodesLoaded]);
 
     useEffect(() => {
         // Apply semantic colors to the imported SVG without modifying the SVG
@@ -256,17 +392,15 @@ export default function SvgMap({
                 : getColor(code)
         );
 
-        const cleanupFns = zoneElementsRef.current.map(({ el, code }) => {
+        const cleanupFns = zoneElementsRef.current.map(({ el, code, isHitArea }) => {
             const isClickable = canSelectCode(code);
             // Hit-area shapes cover islands too small to draw. They behave like any
             // other zone (same neutral/state colors, always visible and clickable)
             // but stay permanently translucent, reading as a see-through overlay so
             // the underlying map still shows through.
-            const isHitArea = el.getAttribute("data-hit-area") === "1";
-
-            el.style.fill = getDisplayColor(code);
-            el.style.cursor = "pointer";
-            if (isHitArea) el.style.opacity = hitAreaRevealOpacity;
+            setSvgStyle(el, "fill", getDisplayColor(code));
+            setSvgStyle(el, "cursor", "pointer");
+            if (isHitArea) setSvgStyle(el, "opacity", hitAreaRevealOpacity);
             const tooltipLabel = String(zoneLabels[code] || "");
             const flashAnimation = flashSet.has(code) && typeof el.animate === "function"
                 ? el.animate(
@@ -300,7 +434,7 @@ export default function SvgMap({
 
             const handleEnter = (event) => {
                 setHoveredCode(code);
-                el.style.fill = getHoverColor(code);
+                setSvgStyle(el, "fill", getHoverColor(code));
 
                 if (tooltipLabel) {
                     showTooltip(event, tooltipLabel);
@@ -315,7 +449,7 @@ export default function SvgMap({
 
             const handleLeave = () => {
                 setHoveredCode(currentCode => currentCode === code ? null : currentCode);
-                el.style.fill = getColor(code);
+                setSvgStyle(el, "fill", getColor(code));
                 hideTooltip();
             };
 
@@ -560,6 +694,22 @@ export default function SvgMap({
                         : "transform 0.15s ease-out"
                 }}
             />
+            {loadError && (
+                <div
+                    role="status"
+                    style={{
+                        color: "#fca5a5",
+                        inset: 0,
+                        display: "grid",
+                        placeItems: "center",
+                        padding: "24px",
+                        position: "absolute",
+                        textAlign: "center"
+                    }}
+                >
+                    {loadError}
+                </div>
+            )}
             {tooltip && (
                 <div
                     data-map-tooltip

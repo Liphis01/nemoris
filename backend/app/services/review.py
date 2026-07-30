@@ -52,6 +52,7 @@ from .mode_selection import (
     question_mode_affinity
 )
 from .media import media_kind_from_name
+from .map_eligibility import map_question_is_ready, reviewable_question_filter
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
@@ -189,6 +190,7 @@ def _question_query(db):
             .joinedload(QuestionGroup.questions)
             .joinedload(Question.progress)
         )
+        .filter(reviewable_question_filter())
         .order_by(Question.id)
     )
 
@@ -239,6 +241,7 @@ def _started_progress_rows(db):
             Question.data.label("question_data")
         )
         .join(Question, Question.id == Progress.question_id)
+        .filter(reviewable_question_filter())
         .all()
     )
 
@@ -284,6 +287,7 @@ def _new_question_ids(db, limit=None, group_ids=None):
             Progress.history
         )
         .outerjoin(Progress, Question.id == Progress.question_id)
+        .filter(reviewable_question_filter())
     )
 
     if group_ids is not None:
@@ -342,6 +346,7 @@ def _due_question_count(db, today):
         )
         .join(Question, Question.id == Progress.question_id)
         .filter(
+            reviewable_question_filter(),
             or_(
                 Progress.next_review == None,
                 Progress.next_review <= today
@@ -359,7 +364,12 @@ def _new_question_count(db, started_rows=None, group_ids=None):
     if group_ids is not None:
         return len(_new_question_ids(db, group_ids=group_ids))
 
-    total_questions = db.query(func.count(Question.id)).scalar() or 0
+    total_questions = (
+        db.query(func.count(Question.id))
+        .filter(reviewable_question_filter())
+        .scalar()
+        or 0
+    )
     started_rows = started_rows if started_rows is not None else (
         _started_progress_rows(db)
     )
@@ -500,6 +510,7 @@ def _serialize_review_items(
                 item
                 for item in (group.questions or [])
                 if item.type_q == "map"
+                and map_question_is_ready(item)
             ],
             key=lambda item: item.id
         )

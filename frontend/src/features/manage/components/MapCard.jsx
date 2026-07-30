@@ -17,6 +17,7 @@ export default function MapCard({
   onToggleFavorite
 }) {
   const mapTypeStyle = questionTypeChipStyles.map;
+  const isDisabled = !String(q.answer || "").trim();
   const cardBackground = selected
     ? "#252525"
     : isHighlighted
@@ -34,7 +35,7 @@ export default function MapCard({
   } = useManageTextPreview([
     {
       label: "Zone",
-      value: q.answer || "Unnamed zone",
+      value: q.answer || "Zone à nommer (désactivée)",
       tone: mapTypeStyle.color
     },
     {
@@ -50,6 +51,7 @@ export default function MapCard({
         ref={setAnchorElement}
         {...triggerProps}
         data-delete-card-id={q.id}
+        data-map-zone-ready={isDisabled ? "false" : "true"}
         onClick={() => {
           if (deleteOpen) {
             closeDelete?.();
@@ -77,7 +79,7 @@ export default function MapCard({
           gap: "6px",
           overflow: "hidden",
           transform: isRemoving ? "scaleY(0.95)" : "scaleY(1)",
-          opacity: isRemoving ? 0 : 1,
+          opacity: isRemoving ? 0 : isDisabled ? 0.62 : 1,
           transformOrigin: "top"
         }}
         onMouseEnter={(e) => {
@@ -164,7 +166,7 @@ export default function MapCard({
             style={{
               flex: 1,
               textAlign: "center",
-              color: "#e5e5e5",
+              color: isDisabled ? "#999" : "#e5e5e5",
               fontWeight: "600",
               fontSize: "14px",
               overflow: "hidden",
@@ -174,7 +176,7 @@ export default function MapCard({
             }}
           >
             <RichText compact style={{ whiteSpace: "inherit" }}>
-              {q.answer || "Unnamed zone"}
+              {q.answer || "Zone à nommer"}
             </RichText>
           </div>
 
@@ -212,7 +214,21 @@ export default function MapCard({
           }}
         >
           {/* REVIEW */}
-          <ReviewBadge progress={q.progress} />
+          {isDisabled ? (
+            <span style={{
+              background: "#2b2b2b",
+              border: "1px solid #444",
+              borderRadius: "999px",
+              color: "#aaa",
+              fontSize: "10px",
+              fontWeight: 700,
+              padding: "3px 7px"
+            }}>
+              Désactivée
+            </span>
+          ) : (
+            <ReviewBadge progress={q.progress} />
+          )}
 
         </div>
 

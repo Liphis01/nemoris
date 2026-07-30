@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 10">
+  <style>.country{fill:#ccc}.border{stroke:#222}</style>
+  <path id="fr" class="country border" d="M0 0H10V10H0Z"/>
+  <path id="de" class="country border" d="M10 0H20V10H10Z"/>
+  <path id="mc-d" class="mc border" d="M25 5a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z"/>
+</svg>

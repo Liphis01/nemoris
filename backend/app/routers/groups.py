@@ -69,6 +69,7 @@ def get_groups(db: Session = Depends(get_db)):
             "type_group": group.type_group,
             "name": group.name,
             "media": group.media,
+            "data": group.data or {},
             "tags": tags_by_group_id.get(group.id, []),
             "question_count": question_count
         }

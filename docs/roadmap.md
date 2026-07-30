@@ -95,6 +95,7 @@
 - faire un truc cooperatif à la git pour les packs
 - quand on change de preview dans manage, garder l'état en mémoire et attendre pour enregistrer ou annuler
 - régler le problème que quand on importe un pack, on n'a pas forcément envie de tout travailler et pour l'instant le seul moyen c'est de supprimer des questions
+- peut être avoir plein de templates de maps à disposition pour aider les gens à faire leurs custom svg
 
 
 ## Conseils/idées issus de la littérature scientifique

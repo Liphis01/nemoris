@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Annotated, Optional, List, Literal, Any, Dict
+from pydantic import BaseModel, Field, field_validator
+from typing import Annotated, Optional, List, Literal, Any, Dict, Union
 from datetime import date
+
+from .services.svg_maps.contracts import MapImportOntology, validate_map_package
 
 
 QuestionType = Literal[
@@ -77,6 +79,13 @@ class GroupCreate(BaseModel):
         default_factory=dict
     )
 
+    @field_validator("data")
+    @classmethod
+    def validate_map_data(cls, value):
+        if isinstance(value, dict) and value.get("map") is not None:
+            validate_map_package(value["map"])
+        return value
+
 
 class GroupUpdate(BaseModel):
 
@@ -85,6 +94,13 @@ class GroupUpdate(BaseModel):
     media: Optional[str] = None
 
     data: Optional[dict[str, Any]] = None
+
+    @field_validator("data")
+    @classmethod
+    def validate_map_data(cls, value):
+        if isinstance(value, dict) and value.get("map") is not None:
+            validate_map_package(value["map"])
+        return value
 
 
 class GroupOut(BaseModel):
@@ -187,6 +203,80 @@ class SetCollections(BaseModel):
 
 class MediaUrlImport(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
+
+
+class MapImportUrlRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+    expected_zone_count: Optional[int] = Field(default=None, ge=1, le=50000)
+    name: Optional[str] = Field(default=None, max_length=100)
+    ontology: MapImportOntology = "auto"
+
+
+class MapImportPatchRequest(BaseModel):
+    expected_zone_count: Optional[int] = Field(default=None, ge=1, le=50000)
+    acknowledgements: Optional[List[str]] = None
+    ontology: Optional[MapImportOntology] = None
+    selected_interpretation_id: Optional[str] = Field(
+        default=None, max_length=64
+    )
+
+
+class MapImportCommitRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+
+
+class MapRepairInitializeRequest(BaseModel):
+    interpretation_id: str = Field(min_length=1, max_length=64)
+
+
+class MapRepairCreateZoneAction(BaseModel):
+    type: Literal["create_zone"]
+    shape_refs: List[str] = Field(min_length=1, max_length=50000)
+
+
+class MapRepairAssignToZoneAction(BaseModel):
+    type: Literal["assign_to_zone"]
+    shape_refs: List[str] = Field(min_length=1, max_length=50000)
+    zone_id: str = Field(min_length=1, max_length=32)
+
+
+class MapRepairSetRoleAction(BaseModel):
+    type: Literal["set_role"]
+    shape_refs: List[str] = Field(min_length=1, max_length=50000)
+    role: Literal["unresolved", "decoration", "label", "excluded"]
+
+
+class MapRepairMergeZonesAction(BaseModel):
+    type: Literal["merge_zones"]
+    zone_ids: List[str] = Field(min_length=2, max_length=50000)
+    primary_zone_id: str = Field(min_length=1, max_length=32)
+
+
+class MapRepairExplodeZoneAction(BaseModel):
+    type: Literal["explode_zone"]
+    zone_id: str = Field(min_length=1, max_length=32)
+
+
+class MapRepairHistoryAction(BaseModel):
+    type: Literal["undo", "redo", "reset_branch"]
+
+
+MapRepairAction = Annotated[
+    Union[
+        MapRepairCreateZoneAction,
+        MapRepairAssignToZoneAction,
+        MapRepairSetRoleAction,
+        MapRepairMergeZonesAction,
+        MapRepairExplodeZoneAction,
+        MapRepairHistoryAction,
+    ],
+    Field(discriminator="type"),
+]
+
+
+class MapRepairActionRequest(BaseModel):
+    base_revision: int = Field(ge=0)
+    action: MapRepairAction
 
 
 class PackExportRequest(BaseModel):

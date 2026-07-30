@@ -10,6 +10,7 @@ from .routers import (
     packs,
     collections,
     groups,
+    map_imports,
     maps,
     media_groups,
     meta,
@@ -75,6 +76,7 @@ def create_app():
     app.include_router(tags.router)
     app.include_router(training.router)
     app.include_router(maps.router)
+    app.include_router(map_imports.router)
     app.include_router(media_groups.router)
     app.include_router(text_groups.router)
     app.include_router(sequence_groups.router)

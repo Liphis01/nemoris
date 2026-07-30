@@ -313,7 +313,8 @@ def store_media_bytes(
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
     allow_audio_video: bool = False,
-    db=None
+    db=None,
+    commit=True
 ):
     media_kind = detect_media_kind(data, allow_audio_video=allow_audio_video)
 
@@ -349,7 +350,9 @@ def store_media_bytes(
             return {
                 "url": f"{STATIC_URL_PREFIX}{existing.path}",
                 "sha256": digest,
-                "deduplicated": True
+                "deduplicated": True,
+                "created_file": False,
+                "stored_path": existing.path
             }
 
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -374,9 +377,15 @@ def store_media_bytes(
             sha256=digest,
             byte_size=len(data)
         ))
-        db.commit()
+        if commit:
+            db.commit()
 
-    return {"url": f"{STATIC_URL_PREFIX}{relative_url_path}", "sha256": digest}
+    return {
+        "url": f"{STATIC_URL_PREFIX}{relative_url_path}",
+        "sha256": digest,
+        "created_file": True,
+        "stored_path": relative_url_path
+    }
 
 
 def store_uploaded_image(

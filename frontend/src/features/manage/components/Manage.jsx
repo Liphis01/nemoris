@@ -1,6 +1,7 @@
 import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManageInspector from "./ManageInspector";
+import MapRepairWorkspace from "./MapRepairWorkspace";
 import TagNetworkModal from "./TagNetworkModal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,6 +33,7 @@ export default function Manage(props) {
   const [highlightedGroupIds, setHighlightedGroupIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState(null);
   const [tagTreeOpen, setTagTreeOpen] = useState(false);
+  const [mapRepairWorkspace, setMapRepairWorkspace] = useState(null);
   const pendingSaveHandlerRef = useRef(null);
   const transitionInProgressRef = useRef(false);
   const autosaveTimeoutRef = useRef(null);
@@ -231,6 +233,42 @@ export default function Manage(props) {
     return created;
   }
 
+  async function finishMapImport({ group, zones }) {
+    props.setAllGroups?.(previous => {
+      const others = previous.filter(item => item.id !== group.id);
+      return [...others, group];
+    });
+    props.setAllQuestions?.(previous => {
+      const importedIds = new Set(zones.map(zone => zone.id));
+      return [
+        ...previous.filter(question => !importedIds.has(question.id)),
+        ...zones.map(zone => ({
+          ...zone,
+          group_id: group.id,
+          group
+        }))
+      ];
+    });
+    props.setIsCreatingGroup?.(false);
+    props.resetGroupDraft?.();
+    props.setViewMode?.("groups");
+    props.setSelectedItem?.(group);
+    setEditingZone(null);
+    setHighlightedGroupIds([group.id]);
+    setMapRepairWorkspace(null);
+  }
+
+  if (mapRepairWorkspace) {
+    return (
+      <MapRepairWorkspace
+        initialDraft={mapRepairWorkspace.draft}
+        groupName={mapRepairWorkspace.groupName}
+        onExit={() => setMapRepairWorkspace(null)}
+        onImported={finishMapImport}
+      />
+    );
+  }
+
   return (
     <div
       style={{
@@ -318,6 +356,9 @@ export default function Manage(props) {
         registerPendingSaveHandler={registerPendingSaveHandler}
         requestManageTransition={requestManageTransition}
         requestQuestionScroll={requestQuestionScroll}
+        onOpenMapRepair={(draft, groupName) => {
+          setMapRepairWorkspace({ draft, groupName });
+        }}
       />
 
       <TagNetworkModal

@@ -102,7 +102,7 @@ Build the sidecar once, place it where Tauri expects it, then run:
 # 1. Build the backend as a single-file sidecar
 cd backend
 ./venv/bin/pyinstaller --name nemoris-backend --onefile --noconfirm \
-  --add-data "questions.db:seed" run_sidecar.py
+  --add-data "questions.db:seed" --collect-data countryinfo run_sidecar.py
 
 # 2. Place it under the target triple Tauri resolves at runtime
 TRIPLE=$(rustc -vV | sed -n 's/host: //p')

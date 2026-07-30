@@ -97,6 +97,8 @@ def serialize_manage_question(question):
                 "type_group": question.group.type_group,
                 "name": question.group.name,
                 "media": question.group.media,
+                "data": question.group.data or {},
+                "map": (question.group.data or {}).get("map"),
                 "tags": (
                     question.tags or []
                     if question.group.type_group in {
@@ -156,6 +158,8 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
         "name": group.name,
 
         "media": group.media,
+
+        "map": (group.data or {}).get("map"),
 
         "tags": tags or [],
 

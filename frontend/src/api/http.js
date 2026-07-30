@@ -20,6 +20,7 @@ const collectionMutationRules = [
   ["POST", /^\/upload\/?$/],
   ["POST", /^\/upload\/url\/?$/],
   ["PATCH", /^\/maps\/\d+\/zones\/?$/],
+  ["POST", /^\/map-imports\/[^/]+\/commit\/?$/],
   ["PATCH", /^\/media-groups\/\d+\/items\/?$/],
   ["POST", /^\/media-groups\/\d+\/upload\/?$/],
   ["POST", /^\/media-groups\/\d+\/upload\/url\/?$/],
@@ -82,7 +83,11 @@ export async function requestJson(path, options = {}) {
     // FastAPI usually returns {detail}; a few legacy endpoints return {error}.
     // Normalize both into one thrown Error for hooks/components.
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail || payload?.error || "Request failed");
+    const detail = payload?.detail || payload?.error;
+    throw new Error(
+      (detail && typeof detail === "object" ? detail.message : detail)
+      || "Request failed"
+    );
   }
 
   const payload = await response.json();
@@ -99,7 +104,11 @@ export async function requestOk(path, options = {}) {
     // Use this helper for endpoints where the caller wants the raw Response
     // instead of parsed JSON, but keep error handling consistent.
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail || payload?.error || "Request failed");
+    const detail = payload?.detail || payload?.error;
+    throw new Error(
+      (detail && typeof detail === "object" ? detail.message : detail)
+      || "Request failed"
+    );
   }
 
   notifyCollectionMutation(path, options);

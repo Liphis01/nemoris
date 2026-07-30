@@ -38,6 +38,7 @@ DATABASE_FILE = APP_DATA_DIR / "questions.db"
 STATIC_DIR = APP_DATA_DIR / "static"
 BACKUP_DIR = APP_DATA_DIR / "backups"
 PACK_DIR = APP_DATA_DIR / "packs"
+MAP_IMPORT_DRAFT_DIR = APP_DATA_DIR / "map-import-drafts"
 # Sync account/token/state (M2). Deliberately a sibling of questions.db, NOT
 # inside it: create_backup only bundles questions.db + static/, so an auth
 # token here never rides along in a synced/backed-up collection.

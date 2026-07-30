@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 10">
+  <style>.land { fill: #4a8; stroke: #fff; stroke-width: .5 }</style>
+  <g data-code="ISLANDS" transform="translate(0 0)">
+    <path class="land" d="M0 0h8v8H0z"/>
+    <circle class="land" cx="14" cy="4" r="3"/>
+    <rect data-hit-area="1" x="20" y="0" width="8" height="8" opacity=".2"/>
+  </g>
+  <text x="0" y="10">Visible answer</text>
+</svg>

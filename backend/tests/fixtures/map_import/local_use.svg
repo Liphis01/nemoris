@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+  <defs><path id="tile" d="M0 0h8v8H0z"/></defs>
+  <use data-code="LEFT" href="#tile" x="0"/>
+  <use data-code="RIGHT" href="#tile" x="10"/>
+</svg>

@@ -166,6 +166,12 @@ def _migration_normalize_legacy_question_types(connection):
     )
 
 
+def _migration_map_package_v2_capability(connection):
+    # Capability gate only. Map content is upgraded explicitly per group so
+    # progress and source identity are never changed by merely launching.
+    return None
+
+
 def _parse_migration_date(value):
     if not value:
         return None
@@ -913,6 +919,12 @@ MIGRATIONS = [
         version="0017",
         name="pack_terminology",
         run=_migration_pack_terminology,
+        requires_backup=True
+    ),
+    Migration(
+        version="0018",
+        name="map_package_v2",
+        run=_migration_map_package_v2_capability,
         requires_backup=True
     )
 ]

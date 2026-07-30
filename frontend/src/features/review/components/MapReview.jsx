@@ -970,6 +970,7 @@ export default function MapReview({
           >
             <SvgMap
               svgPath={resolveMediaUrl(group.media)}
+              mapManifest={group.map || group.data?.map}
               found={foundCodes}
               missed={activeMissedCodes}
               dueItems={dueCodes}
@@ -1304,6 +1305,7 @@ export default function MapReview({
               <div style={recapMapPanelStyle}>
                 <SvgMap
                   svgPath={resolveMediaUrl(group.media)}
+                  mapManifest={group.map || group.data?.map}
                   found={foundCodes}
                   missed={missedCodes}
                   dueItems={[]}

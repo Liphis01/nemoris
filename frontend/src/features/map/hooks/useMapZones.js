@@ -47,7 +47,9 @@ function buildEditableGroup(group, zones = []) {
     name: group.name || "",
     type_group: group.type_group || "map",
     media: group.media || "",
-    tags: Array.isArray(group.tags) ? group.tags : mergeTagsFromZones(zones)
+    tags: Array.isArray(group.tags) ? group.tags : mergeTagsFromZones(zones),
+    data: group.data || {},
+    map: group.map || group.data?.map || null
   };
 }
 
@@ -72,6 +74,8 @@ export function normalizeZone(zone, group) {
       type_group: zoneGroup.type_group || group.type_group || "map",
       name: zoneGroup.name || group.name,
       media: zoneGroup.media || group.media,
+      data: zoneGroup.data || group.data || {},
+      map: zoneGroup.map || group.map || group.data?.map || null,
       tags: Array.isArray(zoneGroup.tags) ? zoneGroup.tags : group.tags || []
     },
     data: {
@@ -149,7 +153,10 @@ export function useMapZones(group) {
   }, []);
 
   const foundCodes = useMemo(
-    () => zones.map(getZoneCode).filter(Boolean),
+    () => zones
+      .filter(zone => String(zone.answer || "").trim())
+      .map(getZoneCode)
+      .filter(Boolean),
     [zones]
   );
 

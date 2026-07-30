@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="360">
+  <path id="path10" d="M5 5H595V355H5Z" fill="#f7f4ed"/>
+  <g id="map-layer">
+    <path id="path100" d="M40 50H190V250H40Z" fill="#ddd" stroke="#fff"/>
+    <path id="path101" d="M205 50H355V250H205Z" fill="#ddd" stroke="#fff"/>
+    <path id="path102" d="M370 50H520V250H370Z" fill="#ddd" stroke="#fff"/>
+  </g>
+  <path id="path200" d="M40 270H520V300H40Z" fill="#ece7db"/>
+  <path id="path300" d="M40 40H520M40 260H520" fill="none" stroke="#333"/>
+  <text x="115" y="150">Province A</text>
+  <text x="280" y="150">Province B</text>
+  <text x="445" y="150">Province C</text>
+</svg>

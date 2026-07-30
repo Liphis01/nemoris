@@ -44,7 +44,7 @@ jobs:
           pip install -r requirements.txt pyinstaller
           python -c "from app.bootstrap import init_database; init_database()"
           python import_csv.py
-          pyinstaller --name nemoris-backend --onefile --noconfirm --add-data "questions.db;seed" run_sidecar.py
+          pyinstaller --name nemoris-backend --onefile --noconfirm --add-data "questions.db;seed" --collect-data countryinfo run_sidecar.py
 
       # Tauri resolves externalBin by target triple; place the built binary
       # where tauri.conf.json's "binaries/nemoris-backend" expects it.

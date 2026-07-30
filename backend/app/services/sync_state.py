@@ -120,6 +120,7 @@ COLLECTION_MUTATION_RULES = [
     ("POST", re.compile(r"^/upload/?$")),
     ("POST", re.compile(r"^/upload/url/?$")),
     ("PATCH", re.compile(r"^/maps/\d+/zones/?$")),
+    ("POST", re.compile(r"^/map-imports/[^/]+/commit/?$")),
     ("PATCH", re.compile(r"^/media-groups/\d+/items/?$")),
     ("POST", re.compile(r"^/media-groups/\d+/upload/?$")),
     ("POST", re.compile(r"^/media-groups/\d+/upload/url/?$")),

@@ -65,6 +65,7 @@ MAP_GROUP_KEYS = {
     "type_q",
     "name",
     "media",
+    "map",
     "tags",
     "mode",
     "context_items",

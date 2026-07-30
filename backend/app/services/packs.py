@@ -28,6 +28,7 @@ from sqlalchemy.orm import joinedload
 
 from ..config import BACKUP_DIR, PACK_DIR, DATABASE_FILE, STATIC_DIR
 from ..migrations import MIGRATIONS
+from .svg_maps.contracts import validate_map_package
 from ..models import Collection, PackSubscription, Question, QuestionGroup
 from .backups import create_backup
 from .media import (
@@ -427,6 +428,16 @@ def _read_manifest_and_content(zip_file):
 
     if not all(isinstance(entry, dict) for entry in group_entries):
         raise ValueError("Invalid pack: content.json is malformed")
+
+    for entry in group_entries:
+        map_data = (entry.get("data") or {}).get("map")
+        if map_data is not None:
+            try:
+                validate_map_package(map_data)
+            except ValueError as error:
+                raise ValueError(
+                    "Invalid pack: unsupported or malformed map package"
+                ) from error
 
     if len(group_entries) == 1:
         # Covers both format 1 and a single-group format 2 pack whose

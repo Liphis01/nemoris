@@ -24,6 +24,8 @@ backend/blueprints/
 backend/packs/*.zip
 backend/sync_state.json
 sync_server/data/
+backend/svg-corpus-cache/
+backend/map-import-drafts/
 
 # Env
 .env

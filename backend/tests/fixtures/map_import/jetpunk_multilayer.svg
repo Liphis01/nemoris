@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 10">
+  <path id="fr" class="country border" d="M0 0H10V10H0Z"/>
+  <circle id="fr-c" class="zoomable-circle" cx="5" cy="5" r="1"/>
+  <path id="de" class="country border" d="M10 0H20V10H10Z"/>
+  <circle id="de-c" class="zoomable-circle" cx="15" cy="5" r="1"/>
+</svg>

@@ -265,6 +265,7 @@ export default function CalendarGroupRecap({
         <div style={{ ...mapPanelStyle, ...(expanded ? expandedMapPanelStyle : {}) }}>
           <SvgMap
             svgPath={mapPath}
+            mapManifest={group.map || group.data?.map}
             found={highlightedCodes}
             dueItems={dueCodes}
             selected={activeCode}

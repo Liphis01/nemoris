@@ -185,10 +185,11 @@ def save_map_group_zones(db, group_id: int, payload):
             else:
                 # Updating answer/aliases preserves the existing question id and
                 # progress history for that zone.
-                desired_data = {
+                desired_data = dict(zone.data or {})
+                desired_data.update({
                     "code": code,
                     "aliases": aliases
-                }
+                })
 
                 zone.answer = zone_payload.answer or ""
                 zone.question = f"{group.name} - {code}"
@@ -240,6 +241,7 @@ def save_map_group_zones(db, group_id: int, payload):
             "type_group": group.type_group,
             "name": group.name,
             "media": group.media,
+            "data": group.data or {},
             "tags": response_tags,
             "question_count": question_count
         },
