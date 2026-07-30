@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import TrainingTimerPanel from "../../review/components/TrainingTimerPanel";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
@@ -662,7 +662,6 @@ function ScopeSelector({
                 aria-pressed={scopeType === "group"}
                 onClick={() => {
                   setScopeType("group");
-                  setComposerOpen(false);
                 }}
                 className={scopeType === "group" ? "is-active" : ""}
               >

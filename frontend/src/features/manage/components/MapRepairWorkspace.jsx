@@ -143,13 +143,15 @@ export default function MapRepairWorkspace({
     });
     return counts;
   }, [repair]);
-  const selectedShapes = selectedRefs
-    .map(ref => shapeByRef.get(ref))
-    .filter(Boolean);
+  const selectedShapes = useMemo(
+    () => selectedRefs.map(ref => shapeByRef.get(ref)).filter(Boolean),
+    [selectedRefs, shapeByRef]
+  );
   const hoveredShape = hoveredRef ? shapeByRef.get(hoveredRef) : null;
-  const selectedZoneIds = [...new Set(
-    selectedShapes.map(shape => shape.zone_id).filter(Boolean)
-  )];
+  const selectedZoneIds = useMemo(
+    () => [...new Set(selectedShapes.map(shape => shape.zone_id).filter(Boolean))],
+    [selectedShapes]
+  );
   const selectedSets = useMemo(() => {
     const ids = new Set(
       selectedRefs.flatMap(ref => shapeByRef.get(ref)?.selection_set_ids || [])
