@@ -23,10 +23,11 @@ test("review session advances a text question", async ({ page }) => {
 
   await page.getByRole("button", { name: /Bon/ }).click();
 
-  // With no due questions left, the session offers bonus review before
-  // returning to the menu; the mock has no bonus groups configured, so it's
-  // immediately "done" and only needs the explicit return click.
-  await expect(page.getByRole("heading", { name: "Bonus terminés" })).toBeVisible();
+  // The queue is empty, so the session ends on its completion panel; returning
+  // to the menu is an explicit click from there.
+  await expect(
+    page.getByRole("heading", { name: "Session terminée" })
+  ).toBeVisible();
   await page.getByRole("button", { name: "Retour au menu" }).click();
 
   await expect(page.getByText("Session terminée")).toBeVisible();
@@ -76,10 +77,11 @@ test("map recap sends per-zone quality", async ({ page }) => {
 
   await page.getByRole("button", { name: "Valider" }).click();
 
-  // With no due questions left, the session offers bonus review before
-  // returning to the menu; the mock has no bonus groups configured, so it's
-  // immediately "done" and only needs the explicit return click.
-  await expect(page.getByRole("heading", { name: "Bonus terminés" })).toBeVisible();
+  // The queue is empty, so the session ends on its completion panel; returning
+  // to the menu is an explicit click from there.
+  await expect(
+    page.getByRole("heading", { name: "Session terminée" })
+  ).toBeVisible();
   await page.getByRole("button", { name: "Retour au menu" }).click();
 
   await expect(page.getByText("Session terminée")).toBeVisible();

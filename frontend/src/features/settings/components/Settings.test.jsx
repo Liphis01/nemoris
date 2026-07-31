@@ -55,10 +55,29 @@ vi.mock("@tauri-apps/api/app", () => ({
   getVersion: vi.fn()
 }));
 
+const PACE_TIERS = [
+  { key: "leger", daily_target: 10, estimated_minutes: 3 },
+  { key: "regulier", daily_target: 20, estimated_minutes: 5 },
+  { key: "soutenu", daily_target: 40, estimated_minutes: 10 },
+  { key: "intensif", daily_target: 80, estimated_minutes: 20 }
+];
+
 describe("Settings", () => {
   beforeEach(() => {
-    getReviewSettings.mockResolvedValue({ catchup_daily_target: 35 });
-    updateReviewSettings.mockResolvedValue({ catchup_daily_target: 40 });
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      effective_daily_target: 20,
+      pace_tiers: PACE_TIERS
+    });
+    updateReviewSettings.mockResolvedValue({
+      catchup_daily_target: 40,
+      pace_tier: "soutenu",
+      pace_tier_resolved: "soutenu",
+      effective_daily_target: 40,
+      pace_tiers: PACE_TIERS
+    });
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
@@ -113,68 +132,104 @@ describe("Settings", () => {
     vi.clearAllMocks();
   });
 
-  it("loads the current daily target", async () => {
+  it("loads the current pace tier", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    expect(await screen.findByDisplayValue("35")).toBeInTheDocument();
+    const tier = await screen.findByRole("radio", { name: /Régulier/ });
+
+    expect(tier).toHaveAttribute("aria-checked", "true");
     expect(getReviewSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("saves a normalized target and rebalances the calendar", async () => {
+  it("offers every tier with its time estimate", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    const input = await screen.findByLabelText("Objectif quotidien");
-    fireEvent.change(input, {
-      target: {
-        value: "40.8"
-      }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    await screen.findByRole("radio", { name: /Régulier/ });
+
+    expect(screen.getByRole("radio", { name: /Léger/ })).toHaveTextContent(
+      "~3 min"
+    );
+    expect(screen.getByRole("radio", { name: /Intensif/ })).toHaveTextContent(
+      "80 questions"
+    );
+  });
+
+  it("saves a picked tier and rebalances the calendar", async () => {
+    render(<Settings setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("radio", { name: /Soutenu/ }));
 
     await waitFor(() => {
       expect(updateReviewSettings).toHaveBeenCalledWith({
-        catchup_daily_target: 40
+        pace_tier: "soutenu"
       });
     });
 
     expect(rebalanceReviewCalendar).toHaveBeenCalledTimes(1);
-    expect(screen.getByDisplayValue("40")).toBeInTheDocument();
     expect(
-      screen.getByText("Paramètres enregistrés. Calendrier rééquilibré.")
+      screen.getByText("Rythme enregistré. Calendrier rééquilibré.")
     ).toBeInTheDocument();
   });
 
-  it("does not save or rebalance an unchanged target", async () => {
+  it("does not save or rebalance the tier already in use", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
-    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Régulier/ }));
 
     expect(updateReviewSettings).not.toHaveBeenCalled();
     expect(rebalanceReviewCalendar).not.toHaveBeenCalled();
   });
 
-  it("shows save errors and restores the previous target draft", async () => {
+  it("shows save errors and restores the previous tier", async () => {
     updateReviewSettings.mockRejectedValue(new Error("Save failed"));
     render(<Settings setMode={vi.fn()} />);
 
-    const input = await screen.findByLabelText("Objectif quotidien");
-    fireEvent.change(input, {
-      target: {
-        value: "42"
-      }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Soutenu/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
-    expect(screen.getByDisplayValue("35")).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /Régulier/ })
+    ).toHaveAttribute("aria-checked", "true");
     expect(rebalanceReviewCalendar).not.toHaveBeenCalled();
+  });
+
+  it("shows the auto-adjusted rate when it differs from the tier", async () => {
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      effective_daily_target: 14,
+      pace_tiers: PACE_TIERS
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    expect(
+      await screen.findByText(/Rythme actuel : 14 \/ jour/)
+    ).toBeInTheDocument();
+  });
+
+  it("highlights the nearest tier for a pre-tier custom target", async () => {
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 50,
+      pace_tier: null,
+      pace_tier_resolved: "soutenu",
+      effective_daily_target: 50,
+      pace_tiers: PACE_TIERS
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    const tier = await screen.findByRole("radio", { name: /Soutenu/ });
+
+    expect(tier).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByText(/Rythme personnalisé : 50 questions \/ jour/)
+    ).toBeInTheDocument();
   });
 
   it("renders the database export and import controls", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     expect(
       screen.getByRole("button", { name: "Exporter la base" })
     ).toBeInTheDocument();
@@ -186,7 +241,7 @@ describe("Settings", () => {
   it("prioritizes sync before local backup controls", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     const main = screen.getByRole("main", { name: "Paramètres" });
     const syncHeading = within(main).getByRole("heading", {
       name: "Synchronisation"
@@ -207,7 +262,7 @@ describe("Settings", () => {
   it("does not render the removed startup review setting", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     expect(
       screen.queryByText("Ouvrir la révision au démarrage si due")
     ).not.toBeInTheDocument();
@@ -216,7 +271,7 @@ describe("Settings", () => {
   it("does not offer to configure the catalogue project", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     expect(
       screen.queryByLabelText("URL du projet Supabase")
     ).not.toBeInTheDocument();
@@ -228,7 +283,7 @@ describe("Settings", () => {
   it("runs the pack catalogue diagnostic", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     fireEvent.click(screen.getByRole("button", { name: "Tester le catalogue" }));
 
     await waitFor(() => {
@@ -243,7 +298,7 @@ describe("Settings", () => {
   it("exports the database and reports the downloaded filename", async () => {
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     fireEvent.click(screen.getByRole("button", { name: "Exporter la base" }));
 
     await waitFor(() => {
@@ -264,7 +319,7 @@ describe("Settings", () => {
 
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     const file = new File(["zip"], "backup.zip", {
       type: "application/zip"
     });
@@ -283,7 +338,7 @@ describe("Settings", () => {
 
     render(<Settings setMode={vi.fn()} />);
 
-    await screen.findByDisplayValue("35");
+    await screen.findByRole("radio", { name: /Régulier/ });
     const file = new File(["zip"], "backup.zip", {
       type: "application/zip"
     });

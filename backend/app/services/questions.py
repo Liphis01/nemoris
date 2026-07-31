@@ -158,7 +158,17 @@ def update_question(db, question_id: int, payload):
     validate_question_sequence(future_type, future_group_id, future_data)
     validate_group_compatibility(db, future_type, future_group_id)
 
-    for field in ["type_q", "question", "answer", "media", "answer_media", "tags", "data", "group_id"]:
+    for field in [
+        "type_q",
+        "question",
+        "answer",
+        "media",
+        "answer_media",
+        "tags",
+        "data",
+        "group_id",
+        "suspended"
+    ]:
         if field in updates:
             setattr(question, field, updates[field])
 

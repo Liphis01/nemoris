@@ -13,7 +13,11 @@ RETENTION_WINDOW_DAYS = 90
 HARD_QUESTION_LIMIT = 12
 FAVORITE_QUESTION_LIMIT = 20
 WEAK_SPOT_LIMIT = 10
-MASTERED_MIN_INTERVAL_DAYS = 60
+# Measured in FSRS stability, not `interval`: interval is the smoothed value the
+# calendar rebalancer shifts around to level daily load, so keying off it would
+# make "maîtrisée" flicker with scheduling rather than with memory. See the note
+# on WIP_RELEASE_MIN_STABILITY_DAYS in services/progress.py.
+MASTERED_MIN_STABILITY_DAYS = 60
 MASTERED_MIN_REPS = 3
 
 
@@ -74,7 +78,7 @@ def _is_mastered(progress):
         return False
 
     return (
-        (progress.interval or 0) >= MASTERED_MIN_INTERVAL_DAYS and
+        (progress.stability or 0) >= MASTERED_MIN_STABILITY_DAYS and
         (progress.reps or 0) >= MASTERED_MIN_REPS
     )
 

@@ -822,6 +822,39 @@ def _migration_tombstones_table(connection):
         )
 
 
+def _migration_review_log_reviewed_on_index(connection):
+    # The new-question intake counters aggregate review_log by reviewed_on on
+    # every review-screen load; unindexed that is a full scan of the biggest
+    # table in the database.
+    if not _table_exists(connection, "review_log"):
+        return
+
+    # A legacy table predating the column would make CREATE INDEX fail outright.
+    if "reviewed_on" not in _column_names(connection, "review_log"):
+        return
+
+    connection.exec_driver_sql(
+        """
+        CREATE INDEX IF NOT EXISTS ix_review_log_reviewed_on
+        ON review_log (reviewed_on)
+        """
+    )
+
+
+def _migration_question_suspended_column(connection):
+    # Existing questions are all active: suspension is opt-in, so a NOT NULL
+    # default of 0 leaves every library behaving exactly as before.
+    if not _table_exists(connection, "questions"):
+        return
+
+    if "suspended" in _column_names(connection, "questions"):
+        return
+
+    connection.exec_driver_sql(
+        "ALTER TABLE questions ADD COLUMN suspended BOOLEAN NOT NULL DEFAULT 0"
+    )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -926,6 +959,16 @@ MIGRATIONS = [
         name="map_package_v2",
         run=_migration_map_package_v2_capability,
         requires_backup=True
+    ),
+    Migration(
+        version="0019",
+        name="review_log_reviewed_on_index",
+        run=_migration_review_log_reviewed_on_index
+    ),
+    Migration(
+        version="0020",
+        name="question_suspended_column",
+        run=_migration_question_suspended_column
     )
 ]
 

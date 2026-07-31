@@ -296,6 +296,82 @@
   padding: 10px 14px;
 }
 
+/* The pace picker needs its chips on their own full-width line rather than in
+   the right-hand action slot the default two-column row provides. */
+.settings-row-stacked {
+  align-items: stretch;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-pace-tiers {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.settings-pace-tier {
+  align-items: flex-start;
+  appearance: none;
+  background: #1a1a1a;
+  border: 1px solid #2c2c2c;
+  border-radius: 8px;
+  color: #cfcfcf;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.settings-pace-tier:hover:not(:disabled) {
+  background: #202020;
+  border-color: #3a3a3a;
+}
+
+.settings-pace-tier:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.settings-pace-tier strong {
+  color: #f3f3f3;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-pace-tier span {
+  color: #9c9c9c;
+  font-size: 12px;
+}
+
+.settings-pace-tier-time {
+  color: #7d7d7d;
+  font-size: 11px;
+}
+
+.settings-pace-tier-active {
+  background: linear-gradient(90deg, rgba(255, 204, 122, 0.1), #1a1a1a 70%);
+  border-color: rgba(255, 204, 122, 0.5);
+}
+
+.settings-pace-tier-active strong {
+  color: #ffcc7a;
+}
+
+.settings-pace-note {
+  color: #8f8f8f;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .settings-row-priority {
   background:
     linear-gradient(90deg, rgba(126, 226, 168, 0.08), #141414 70%);

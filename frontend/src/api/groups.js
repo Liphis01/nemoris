@@ -20,6 +20,19 @@ export function createGroup(payload) {
 }
 
 
+export function suspendGroup(id, suspended) {
+  // One request for the whole group: a group can hold hundreds of questions,
+  // so the backend applies this as a single bulk update.
+  return requestJson(`/groups/${id}/suspend`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ suspended })
+  });
+}
+
+
 export function updateGroup(id, payload) {
   return requestJson(`/groups/${id}`, {
     method: "PUT",

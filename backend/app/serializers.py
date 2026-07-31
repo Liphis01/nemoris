@@ -90,6 +90,7 @@ def serialize_manage_question(question):
         "tags": question.tags or [],
         "data": question.data or {},
         "group_id": question.group_id,
+        "suspended": bool(question.suspended),
         "progress": serialize_progress(question.progress),
         "group":
             {

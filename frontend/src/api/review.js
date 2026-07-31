@@ -34,59 +34,13 @@ export function getReviewSummary() {
 }
 
 
-function appendGroupIds(params, groupIds) {
-  if (!Array.isArray(groupIds) || groupIds.length === 0) {
-    return;
-  }
-
-  params.set("group_ids", groupIds.join(","));
+export function getReview() {
+  return requestJson("/review");
 }
 
 
-export function getBonusReviewStatus(options = {}) {
-  const params = new URLSearchParams();
-  appendGroupIds(params, options.groupIds);
-  const query = params.toString();
-
-  return requestJson(`/review/bonus_status${query ? `?${query}` : ""}`);
-}
-
-
-export function getReview(options = {}) {
-  const params = new URLSearchParams();
-
-  if (options.includeNew) {
-    params.set("include_new", "true");
-  }
-
-  appendGroupIds(params, options.groupIds);
-
-  const query = params.toString();
-
-  return requestJson(`/review${query ? `?${query}` : ""}`);
-}
-
-
-export function getBonusGroups(options = {}) {
-  // Cheap bonus selection list: names/types/counts only, no per-item payload.
-  const params = new URLSearchParams();
-  appendGroupIds(params, options.groupIds);
-  const query = params.toString();
-
-  return requestJson(`/review/bonus_groups${query ? `?${query}` : ""}`);
-}
-
-
-export function getBonusGroupItems(key, count) {
-  // Full review payload for one picked bonus entry (group / question / timeline).
-  // `count` caps a group to that many randomly drawn questions; omit for all.
-  const params = new URLSearchParams({ key });
-
-  if (count !== undefined && count !== null) {
-    params.set("count", String(count));
-  }
-
-  return requestJson(`/review/bonus_items?${params.toString()}`);
+export function getReviewIntake() {
+  return requestJson("/review/intake");
 }
 
 

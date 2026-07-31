@@ -43,6 +43,7 @@
 - type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
 - en entrainement, on ne peut pas zoomer les questions isolées et les images dans les réponses ne sont pas centrées
 - bug menu bonus vide
+- je ne peux pas ajouter d'image à un groupe tant qu'il n'est pas enregistré
 
 ## to do when i have more time
 
@@ -96,6 +97,7 @@
 - quand on change de preview dans manage, garder l'état en mémoire et attendre pour enregistrer ou annuler
 - régler le problème que quand on importe un pack, on n'a pas forcément envie de tout travailler et pour l'instant le seul moyen c'est de supprimer des questions
 - peut être avoir plein de templates de maps à disposition pour aider les gens à faire leurs custom svg
+- faire des modes de jeu infinis et fun (mini jeux)
 
 
 ## Conseils/idées issus de la littérature scientifique

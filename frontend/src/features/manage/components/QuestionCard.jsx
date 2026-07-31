@@ -2,6 +2,7 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
 import RichText from "../../../shared/RichText";
 
 export default function QuestionCard({
@@ -15,6 +16,7 @@ export default function QuestionCard({
   closeDelete,
   deleteQuestion,
   onToggleFavorite,
+  onToggleSuspended,
   playlistNames = []
 }) {
   const cardBackground = selected
@@ -50,6 +52,7 @@ export default function QuestionCard({
       <div
         ref={setAnchorElement}
         {...triggerProps}
+        className="manage-card"
         data-delete-card-id={q.id}
         onClick={() => {
           if (deleteOpen) {
@@ -78,7 +81,7 @@ export default function QuestionCard({
           gap: "6px",
           overflow: "hidden",
           transform: isRemoving ? "scaleY(0.95)" : "scaleY(1)",
-          opacity: isRemoving ? 0 : 1,
+          opacity: isRemoving ? 0 : q.suspended ? 0.55 : 1,
           transformOrigin: "top"
         }}
         onMouseEnter={(e) => {
@@ -197,6 +200,11 @@ export default function QuestionCard({
           <FavoriteToggleButton
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
+          />
+
+          <SuspendToggleButton
+            suspended={Boolean(q.suspended)}
+            onToggle={onToggleSuspended}
           />
         </div>
 

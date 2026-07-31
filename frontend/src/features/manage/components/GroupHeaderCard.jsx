@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useManageTextPreview } from "./ManageTextPreview";
+import SuspendToggleButton from "./SuspendToggleButton";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 
 export default function GroupHeaderCard({
@@ -9,10 +10,22 @@ export default function GroupHeaderCard({
   selectedInside,
   highlightedInside,
   setRowRef,
-  onToggle
+  onToggle,
+  onToggleSuspended
 }) {
   const { groupInfo } = row;
   const tags = groupInfo.tags || [];
+  // There is no group-level flag: the header reflects its questions, so a
+  // partially suspended group reads as "mixed" rather than silently picking a
+  // side.
+  const groupQuestions = groupInfo.questions || [];
+  const suspendedCount = groupQuestions.filter(
+    question => question.suspended
+  ).length;
+  const allSuspended = (
+    groupQuestions.length > 0 && suspendedCount === groupQuestions.length
+  );
+  const someSuspended = suspendedCount > 0 && !allSuspended;
   const mapTypeStyle = questionTypeChipStyles.map;
   const imageTypeStyle = questionTypeChipStyles.media;
   const textTypeStyle = questionTypeChipStyles.text;
@@ -55,14 +68,29 @@ export default function GroupHeaderCard({
 
   return (
     <>
-      <button
+      {/* role="button" rather than a real <button>: the suspend control lives
+          inside this card, and nesting a button inside a button is invalid. */}
+      <div
         ref={setRefs}
-        type="button"
+        className="manage-card"
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
+        onKeyDown={(event) => {
+          // Only when the card itself has focus: Enter/Space on the nested
+          // suspend button must not also expand the group.
+          if (event.target !== event.currentTarget) return;
+
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle?.();
+          }
+        }}
         aria-expanded={isOpen}
         {...triggerProps}
         style={{
           width: "100%",
+          boxSizing: "border-box",
           ...(sticky
             ? {
               position: "sticky",
@@ -84,7 +112,8 @@ export default function GroupHeaderCard({
           boxShadow: highlightedInside
             ? "0 0 0 4px rgba(134, 239, 172, 0.08), 0 0 22px rgba(34, 197, 94, 0.2)"
             : "none",
-          transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+          opacity: allSuspended ? 0.55 : 1,
+          transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, opacity 0.18s ease"
         }}
         onMouseEnter={(event) => {
           event.currentTarget.style.background = isOpen ? "#1d1d1d" : "#181818";
@@ -244,6 +273,24 @@ export default function GroupHeaderCard({
               {groupInfo.sequenceCount} SÉQ
             </span>
           )}
+          {allSuspended && (
+            <span
+              style={{
+                background: "#2b2118",
+                border: "1px solid rgba(224, 160, 92, 0.4)",
+                borderRadius: "999px",
+                color: "#e0a05c",
+                flexShrink: 0,
+                fontSize: "10px",
+                fontWeight: "700",
+                padding: "2px 6px",
+                whiteSpace: "nowrap"
+              }}
+            >
+              En pause
+            </span>
+          )}
+
           <span
             style={{
               color: "#777",
@@ -255,8 +302,16 @@ export default function GroupHeaderCard({
           >
             {groupInfo.questions.length}
           </span>
+
+          <SuspendToggleButton
+            scope="group"
+            suspended={allSuspended}
+            mixed={someSuspended}
+            disabled={groupQuestions.length === 0}
+            onToggle={() => onToggleSuspended?.(!allSuspended)}
+          />
         </span>
-      </button>
+      </div>
       {preview}
     </>
   );

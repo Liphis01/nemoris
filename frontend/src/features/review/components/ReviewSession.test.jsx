@@ -15,14 +15,8 @@ const baseProps = {
   handleSequenceComplete: vi.fn(),
   canReturnToLastQuestion: false,
   returnToLastQuestion: vi.fn(),
-  bonusReviewActive: false,
-  bonusReviewLoading: false,
-  bonusStatusLoading: false,
-  bonusMenuOpen: false,
-  bonusMenuEntries: [],
-  selectBonusItem: vi.fn(),
-  returnToBonusMenu: vi.fn(),
-  skipToBonusMenu: vi.fn(),
+  sessionComplete: false,
+  skipToSessionEnd: vi.fn(),
   reviewLoading: false,
   reviewError: "",
   submitMapAnswer: vi.fn(),
@@ -44,40 +38,6 @@ describe("ReviewSession", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-  });
-
-  it("shows a loading state in the bonus menu while it checks eligibility, with no separate summary screen", () => {
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusMenuOpen: true,
-      bonusMenuEntries: [],
-      bonusReviewLoading: true
-    });
-
-    expect(screen.getByRole("heading", { name: "Recherche de questions bonus" }))
-      .toBeInTheDocument();
-    // No separate "session over" screen ever renders: the bonus menu shell
-    // itself carries the loading state.
-    expect(screen.queryByText("Session terminée")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Bonus terminés" }))
-      .not.toBeInTheDocument();
-  });
-
-  it("falls back to an all-done state once loading finishes with nothing available", () => {
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusMenuOpen: true,
-      bonusMenuEntries: [],
-      bonusReviewLoading: false,
-      bonusStatusLoading: false
-    });
-
-    expect(screen.getByRole("heading", { name: "Bonus terminés" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retour au menu" }))
-      .toBeInTheDocument();
   });
 
   it("uses the compact visual shell for active image review", () => {
@@ -149,187 +109,6 @@ describe("ReviewSession", () => {
     expect(screen.getByRole("heading", { name: "Révision" }))
       .toBeInTheDocument();
     expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
-  });
-
-  it("starts a single bonus question on click but opens a count slider for a group", () => {
-    const selectBonusItem = vi.fn();
-    const textEntry = {
-      key: "q:11",
-      label: "Bonus text",
-      typeLabel: "Question",
-      isContainer: false,
-      itemCount: 1,
-      tags: ["Geo"]
-    };
-    const imagesEntry = {
-      key: "group:5",
-      label: "Bonus images",
-      typeLabel: "Images",
-      isContainer: true,
-      itemCount: 30,
-      tags: []
-    };
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      bonusMenuOpen: true,
-      bonusMenuEntries: [textEntry, imagesEntry],
-      selectBonusItem
-    });
-
-    expect(screen.getByRole("heading", { name: "Choisis une question à réviser" }))
-      .toBeInTheDocument();
-    expect(screen.getByText("Bonus text")).toBeInTheDocument();
-    expect(screen.getByText("Bonus images")).toBeInTheDocument();
-
-    // A single loose question has nothing to choose — it starts on click.
-    fireEvent.click(screen.getByRole("button", { name: /Bonus text/ }));
-    expect(selectBonusItem).toHaveBeenCalledWith(textEntry);
-    selectBonusItem.mockClear();
-
-    // A multi-question group opens a slider instead of starting immediately.
-    fireEvent.click(screen.getByRole("button", { name: /Bonus images/ }));
-    expect(selectBonusItem).not.toHaveBeenCalled();
-
-    const slider = screen.getByRole("slider", { name: /Bonus images/ });
-    expect(slider).toHaveAttribute("min", "1");
-    expect(slider).toHaveAttribute("max", "30");
-    // Default is min(20, available).
-    expect(screen.getByText("20 questions bonus")).toBeInTheDocument();
-
-    fireEvent.change(slider, { target: { value: "5" } });
-    expect(screen.getByText("5 questions bonus")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Commencer/ }));
-    expect(selectBonusItem).toHaveBeenCalledWith(imagesEntry, 5);
-  });
-
-  it("breaks the open group's picker onto its own row instead of squeezing it into the card", () => {
-    // The grid is auto-fill, so its column count depends on the panel's
-    // width; simulate a 3-per-row layout by mocking the computed style the
-    // component reads back from the grid container.
-    const realGetComputedStyle = window.getComputedStyle;
-    const getComputedStyleSpy = vi.spyOn(window, "getComputedStyle")
-      .mockImplementation(element =>
-        element.classList?.contains("bonus-menu-list")
-          ? { gridTemplateColumns: "100px 100px 100px" }
-          : realGetComputedStyle(element)
-      );
-
-    const entries = [
-      { key: "q:1", label: "Q1", typeLabel: "Question", isContainer: false, itemCount: 1, tags: [] },
-      { key: "group:2", label: "Group two", typeLabel: "Images", isContainer: true, itemCount: 10, tags: [] },
-      { key: "q:3", label: "Q3", typeLabel: "Question", isContainer: false, itemCount: 1, tags: [] },
-      { key: "q:4", label: "Q4", typeLabel: "Question", isContainer: false, itemCount: 1, tags: [] }
-    ];
-
-    const { container } = renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      bonusMenuOpen: true,
-      bonusMenuEntries: entries
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Group two/ }));
-
-    const list = container.querySelector(".bonus-menu-list");
-    const children = Array.from(list.children);
-    const pickerIndex = children.findIndex(node =>
-      node.classList.contains("bonus-menu-picker-row")
-    );
-
-    // Row 1 is [Q1, Group two, Q3] at 3 columns, so the picker lands right
-    // after Q3 -- the end of that row -- not right after "Group two" itself,
-    // which would otherwise push Q3 (and Q4) down instead.
-    expect(pickerIndex).toBe(3);
-    expect(children[pickerIndex - 1]).toHaveTextContent("Q3");
-    expect(children[1]).not.toContainElement(screen.getByRole("slider"));
-
-    getComputedStyleSpy.mockRestore();
-  });
-
-  it("keeps the revise-last-answer action reachable from the bonus menu", () => {
-    const returnToLastQuestion = vi.fn();
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      bonusMenuOpen: true,
-      bonusMenuEntries: [],
-      canReturnToLastQuestion: true,
-      returnToLastQuestion
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Modifier la dernière réponse" }));
-    expect(returnToLastQuestion).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a completion state when no bonus items remain", () => {
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      bonusMenuOpen: true,
-      bonusMenuEntries: []
-    });
-
-    expect(screen.getByRole("heading", { name: "Bonus terminés" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retour au menu" }))
-      .toBeInTheDocument();
-  });
-
-  it("shows a return-to-bonus-menu button during an active bonus item", () => {
-    const returnToBonusMenu = vi.fn();
-    renderReviewSession({
-      questions: [
-        {
-          id: 1,
-          type_q: "text",
-          question: "Capital?",
-          answer: "Paris"
-        }
-      ],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      returnToBonusMenu
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "← Menu bonus" }));
-
-    expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a return-to-bonus-menu button in compact visual review", () => {
-    const returnToBonusMenu = vi.fn();
-    renderReviewSession({
-      questions: [
-        {
-          type_q: "timeline",
-          name: "Dates",
-          items: [
-            {
-              question_id: 1,
-              answer: "1900",
-              timeline: {
-                kind: "point",
-                start: { year: 1900 },
-                precision: "year"
-              }
-            }
-          ]
-        }
-      ],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      returnToBonusMenu
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "← Menu bonus" }));
-
-    expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
   });
 
   it("marks a re-queued text question as relearning", () => {
@@ -474,83 +253,81 @@ describe("ReviewSession", () => {
       .not.toBeInTheDocument();
   });
 
-  it("offers a shortcut to the bonus menu once only relearning questions remain", () => {
-    const skipToBonusMenu = vi.fn();
+  it("shows the end-of-session panel once the session is complete", () => {
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      sessionComplete: true
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Session terminée" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Retour au menu" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the revise-last-answer action reachable once the session ends", () => {
+    const returnToLastQuestion = vi.fn();
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      sessionComplete: true,
+      canReturnToLastQuestion: true,
+      returnToLastQuestion
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Modifier la dernière réponse" })
+    );
+
+    expect(returnToLastQuestion).toHaveBeenCalled();
+  });
+
+  it("offers an early exit once only relearning questions remain", () => {
+    const skipToSessionEnd = vi.fn();
     renderReviewSession({
       questions: [
         {
-          id: 1,
+          question_id: 4,
           type_q: "text",
-          question: "Capital?",
-          answer: "Paris",
+          question: "Retry",
+          answer: "Answer",
           _reviewRetryOfIndex: 0
         }
       ],
       currentIndex: 0,
-      skipToBonusMenu
+      skipToSessionEnd
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Questions bonus →" }));
-    expect(skipToBonusMenu).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Terminer →" }));
+
+    expect(skipToSessionEnd).toHaveBeenCalled();
   });
 
-  it("offers the bonus shortcut in the compact visual layout too", () => {
-    const skipToBonusMenu = vi.fn();
+  it("hides the early exit while any question ahead is still fresh", () => {
     renderReviewSession({
       questions: [
         {
-          type_q: "media",
-          name: "Flags",
-          mode: "type_prompt",
-          tags: [],
-          items: [
-            {
-              question_id: 1,
-              answer: "France",
-              label: "France",
-              media: "/static/france.png"
-            }
-          ],
+          question_id: 4,
+          type_q: "text",
+          question: "Retry",
+          answer: "Answer",
           _reviewRetryOfIndex: 0
+        },
+        {
+          question_id: 5,
+          type_q: "text",
+          question: "Fresh",
+          answer: "Answer"
         }
-      ],
-      currentIndex: 0,
-      skipToBonusMenu
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Questions bonus →" }));
-    expect(skipToBonusMenu).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides the bonus shortcut while any question ahead is still fresh", () => {
-    renderReviewSession({
-      questions: [
-        { id: 1, type_q: "text", question: "Q1", answer: "A1", _reviewRetryOfIndex: 0 },
-        { id: 2, type_q: "text", question: "Q2", answer: "A2" }
       ],
       currentIndex: 0
     });
 
-    expect(screen.queryByRole("button", { name: "Questions bonus →" }))
-      .not.toBeInTheDocument();
-  });
-
-  it("hides the bonus shortcut once bonus review is already active", () => {
-    renderReviewSession({
-      questions: [
-        {
-          id: 1,
-          type_q: "text",
-          question: "Capital?",
-          answer: "Paris",
-          _reviewRetryOfIndex: 0
-        }
-      ],
-      currentIndex: 0,
-      bonusReviewActive: true
-    });
-
-    expect(screen.queryByRole("button", { name: "Questions bonus →" }))
-      .not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Terminer →" })
+    ).not.toBeInTheDocument();
   });
 });

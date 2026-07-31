@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 
 from ..models import Question
 
@@ -10,10 +10,35 @@ def map_question_is_ready(question):
     )
 
 
+def question_is_reviewable(question):
+    """Python twin of reviewable_question_filter.
+
+    A question reaches a review session only if the user has not set it aside
+    and, for map zones, it actually has an answer to grade.
+    """
+    if question is None:
+        return True
+
+    return (
+        not bool(question.suspended) and
+        map_question_is_ready(question)
+    )
+
+
 def reviewable_question_filter():
-    """SQL equivalent of map_question_is_ready for selection/count queries."""
+    """SQL equivalent of question_is_reviewable for selection/count queries.
+
+    Every path that reads the review pool goes through this -- due questions,
+    the new-question intake pool, the in-flight (WIP) count -- so suspending a
+    question drops it out of all of them at once.
+    """
     return or_(
         Question.id == None,
-        Question.type_q != "map",
-        func.trim(func.coalesce(Question.answer, "")) != "",
+        and_(
+            func.coalesce(Question.suspended, False) == False,
+            or_(
+                Question.type_q != "map",
+                func.trim(func.coalesce(Question.answer, "")) != "",
+            )
+        )
     )

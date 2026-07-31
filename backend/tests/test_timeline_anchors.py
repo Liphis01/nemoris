@@ -42,7 +42,8 @@ class TimelineAnchorTests(unittest.TestCase):
         data=None,
         interval=120,
         reps=5,
-        next_review=None
+        next_review=None,
+        stability=120.0
     ):
         question = Question(
             id=question_id,
@@ -53,7 +54,7 @@ class TimelineAnchorTests(unittest.TestCase):
             data=data if data is not None else point_data(1500)
         )
         question.progress = Progress(
-            stability=10.0,
+            stability=stability,
             difficulty=5.0,
             reps=reps,
             lapses=0,
@@ -66,7 +67,8 @@ class TimelineAnchorTests(unittest.TestCase):
 
     def test_only_well_retained_timeline_cards_become_anchors(self):
         mastered = self.add_question(1, data=point_data(1492))
-        self.add_question(2, data=point_data(1600), interval=30)  # interval too low
+        # Anchors key off stability, not the smoothed interval.
+        self.add_question(2, data=point_data(1600), stability=30.0)
         self.add_question(3, data=point_data(1700), reps=2)  # too few reps
         self.add_question(4, type_q="text", data={})  # not a timeline card
         self.db.commit()

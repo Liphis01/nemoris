@@ -43,17 +43,18 @@ from ..services.text_modes import (
     text_mode_difficulty,
     normalize_text_mode
 )
+from ..services.intake import compute_intake_quota, tune_intake_rate
 from ..services.review import (
-    get_bonus_group_entries,
-    get_bonus_group_items,
-    get_bonus_review_status,
     get_review_items,
     get_review_summary
 )
 from ..services.settings import (
     get_review_settings,
     get_startup_rebalance_notice,
+    load_intake_settings,
     load_scheduler_tuning_settings,
+    pace_tier_options,
+    resolve_pace_tier,
     save_review_settings
 )
 from ..services.sequence import (
@@ -75,29 +76,6 @@ from ..services.timeline import (
 router = APIRouter()
 
 
-def parse_group_ids(value):
-    if not value:
-        return None
-
-    group_ids = []
-
-    for raw_id in value.split(","):
-        raw_id = raw_id.strip()
-
-        if not raw_id:
-            continue
-
-        try:
-            group_ids.append(int(raw_id))
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid group_ids query parameter."
-            ) from exc
-
-    return group_ids
-
-
 def answer_progress_payload(progress, today=None):
     return {
         "stability": progress.stability,
@@ -114,12 +92,33 @@ def answer_progress_payload(progress, today=None):
     }
 
 
+def review_settings_payload(db, settings):
+    # The stored settings plus what the picker needs to render itself: the tier
+    # to highlight, the tiers on offer, and the rate the tuner has actually
+    # settled on (which the UI shows next to the chosen tier).
+    intake = load_intake_settings(db, settings["catchup_daily_target"])
+
+    return {
+        **settings,
+        "pace_tier_resolved": resolve_pace_tier(
+            settings["catchup_daily_target"],
+            settings.get("pace_tier")
+        ),
+        "pace_tiers": pace_tier_options(),
+        "effective_daily_target": intake["effective_daily_target"],
+        "tuned_on": intake["tuned_on"],
+        "last_retention": intake["last_retention"],
+        "last_completion_ratio": intake["last_completion_ratio"]
+    }
+
+
 @router.get("/review/settings")
 def get_settings(db: Session = Depends(get_db)):
     settings = get_review_settings(db)
+    payload = review_settings_payload(db, settings)
     db.commit()
 
-    return settings
+    return payload
 
 
 @router.put("/review/settings")
@@ -127,10 +126,11 @@ def update_settings(
     data: ReviewSettings,
     db: Session = Depends(get_db)
 ):
-    settings = save_review_settings(db, data.model_dump())
+    settings = save_review_settings(db, data.model_dump(exclude_none=True))
+    payload = review_settings_payload(db, settings)
     db.commit()
 
-    return settings
+    return payload
 
 
 @router.post("/review/rebalance")
@@ -150,58 +150,29 @@ def get_startup_notice(db: Session = Depends(get_db)):
 
 
 @router.get("/review")
-def get_review(
-    include_new: bool = False,
-    group_ids: str | None = None,
-    db: Session = Depends(get_db)
-):
-    bonus_status = None
-    parsed_group_ids = parse_group_ids(group_ids)
+def get_review(db: Session = Depends(get_db)):
+    # Lazy once-per-day intake tuning. This is the only write on this route: one
+    # AppSetting row, and a no-op on every call after the first of the day. It
+    # is committed before the session is assembled so get_review_items still
+    # runs against a clean session and stays a pure read.
+    tuned = tune_intake_rate(db)
 
-    if include_new:
-        # Capacity is informational only: it no longer blocks bonus review.
-        bonus_status = get_bonus_review_status(
-            db,
-            group_ids=parsed_group_ids
-        )
+    if tuned["changed"]:
+        db.commit()
 
-    # The service handles due filtering and runtime map grouping.
-    return get_review_items(
+    quota = compute_intake_quota(
         db,
-        include_new=include_new,
-        bonus_status=bonus_status,
-        group_ids=parsed_group_ids
+        daily_rate=tuned["effective_daily_target"]
     )
 
-
-@router.get("/review/bonus_groups")
-def get_bonus_groups(
-    group_ids: str | None = None,
-    db: Session = Depends(get_db)
-):
-    # Cheap list of every group / question with new questions available. The
-    # frontend renders this as the bonus selection menu, then fetches one
-    # entry's full payload from /review/bonus_items on pick.
-    return get_bonus_group_entries(db, group_ids=parse_group_ids(group_ids))
+    # The service handles due filtering and runtime map grouping.
+    return get_review_items(db, intake_quota=quota)
 
 
-@router.get("/review/bonus_items")
-def get_bonus_items(
-    key: str,
-    count: int | None = None,
-    db: Session = Depends(get_db)
-):
-    # Full serialized review payload for a single picked bonus entry, optionally
-    # capped to `count` questions drawn at random from the entry's pool.
-    return get_bonus_group_items(db, key, limit=count)
-
-
-@router.get("/review/bonus_status")
-def get_bonus_status(
-    group_ids: str | None = None,
-    db: Session = Depends(get_db)
-):
-    return get_bonus_review_status(db, group_ids=parse_group_ids(group_ids))
+@router.get("/review/intake")
+def get_intake(db: Session = Depends(get_db)):
+    # Read-only view of today's quota and the reasoning behind it.
+    return compute_intake_quota(db)
 
 
 @router.get("/review/summary")

@@ -12,15 +12,21 @@ import SyncAccountSection from "./SyncAccountSection";
 import UpdateSection from "./UpdateSection";
 import { useSyncAccount } from "./useSyncAccount";
 
-function normalizeTarget(value, fallback) {
-  const parsed = Number(value);
+const PACE_TIER_LABELS = {
+  leger: "Léger",
+  regulier: "Régulier",
+  soutenu: "Soutenu",
+  intensif: "Intensif"
+};
 
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  return Math.max(1, Math.floor(parsed));
-}
+// Fallback only: the backend is the source of truth and ships the tiers with
+// their time estimates in the settings payload.
+const FALLBACK_PACE_TIERS = [
+  { key: "leger", daily_target: 10, estimated_minutes: 3 },
+  { key: "regulier", daily_target: 20, estimated_minutes: 5 },
+  { key: "soutenu", daily_target: 40, estimated_minutes: 10 },
+  { key: "intensif", daily_target: 80, estimated_minutes: 20 }
+];
 
 function SettingsGroup({
   children,
@@ -77,6 +83,7 @@ function syncRailCaption(sync) {
 function SettingsRail({
   loading,
   target,
+  tierLabel,
   sync,
   exporting,
   importing,
@@ -98,8 +105,8 @@ function SettingsRail({
 
       <div className="settings-rail-card">
         <div className="settings-overline">Objectif actif</div>
-        <strong>{loading ? "..." : target}</strong>
-        <span>questions / jour</span>
+        <strong>{loading ? "..." : tierLabel}</strong>
+        <span>{loading ? "" : `${target} questions / jour`}</span>
       </div>
 
       <div className="settings-rail-card settings-rail-shortcuts">
@@ -262,7 +269,10 @@ export default function Settings({
   onInitialSectionHandled = null
 }) {
   const [target, setTarget] = useState(50);
-  const [draft, setDraft] = useState("50");
+  const [paceTier, setPaceTier] = useState(null);
+  const [paceTiers, setPaceTiers] = useState(FALLBACK_PACE_TIERS);
+  const [effectiveTarget, setEffectiveTarget] = useState(null);
+  const [resolvedTier, setResolvedTier] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -321,9 +331,7 @@ export default function Settings({
       .then((settings) => {
         if (cancelled) return;
 
-        const loadedTarget = settings.catchup_daily_target || 50;
-        setTarget(loadedTarget);
-        setDraft(String(loadedTarget));
+        applySettings(settings);
         setLoading(false);
       })
       .catch((settingsError) => {
@@ -340,11 +348,22 @@ export default function Settings({
     };
   }, []);
 
-  async function saveTarget() {
-    const nextTarget = normalizeTarget(draft, target);
+  function applySettings(settings) {
+    setTarget(settings.catchup_daily_target || 50);
+    setPaceTier(settings.pace_tier ?? null);
+    setEffectiveTarget(settings.effective_daily_target ?? null);
 
-    if (nextTarget === target) {
-      setDraft(String(target));
+    if (Array.isArray(settings.pace_tiers) && settings.pace_tiers.length > 0) {
+      setPaceTiers(settings.pace_tiers);
+    }
+
+    // A user predating the tiers keeps their own number; the picker still
+    // highlights the closest tier so the section is not left blank.
+    setResolvedTier(settings.pace_tier ?? settings.pace_tier_resolved ?? null);
+  }
+
+  async function savePaceTier(tierKey) {
+    if (tierKey === paceTier) {
       setStatus("");
       setError("");
       return;
@@ -355,18 +374,13 @@ export default function Settings({
     setStatus("");
 
     try {
-      const settings = await updateReviewSettings({
-        catchup_daily_target: nextTarget
-      });
-      const savedTarget = settings.catchup_daily_target || nextTarget;
-
-      setTarget(savedTarget);
-      setDraft(String(savedTarget));
+      const settings = await updateReviewSettings({ pace_tier: tierKey });
+      applySettings(settings);
       await rebalanceReviewCalendar();
-      setStatus("Paramètres enregistrés. Calendrier rééquilibré.");
+      setStatus("Rythme enregistré. Calendrier rééquilibré.");
     } catch (saveError) {
       console.error(saveError);
-      setDraft(String(target));
+      setResolvedTier(paceTier);
       setError(saveError.message || "Paramètres impossibles à enregistrer.");
     } finally {
       setSaving(false);
@@ -473,7 +487,12 @@ export default function Settings({
         <div className="settings-layout">
           <SettingsRail
             loading={loading}
-            target={target}
+            target={effectiveTarget ?? target}
+            tierLabel={
+              resolvedTier
+                ? PACE_TIER_LABELS[resolvedTier] || resolvedTier
+                : "Personnalisé"
+            }
             sync={sync}
             exporting={exporting}
             importing={importing}
@@ -489,49 +508,64 @@ export default function Settings({
               accent="amber"
               title="Review"
               description="Rythme quotidien"
-              badge={loading ? "..." : `${target} / jour`}
+              badge={loading ? "..." : `${effectiveTarget ?? target} / jour`}
             >
               {loading ? (
                 <div className="settings-loading">
                   Chargement des paramètres...
                 </div>
               ) : (
-                <div className="settings-row">
+                <div className="settings-row settings-row-stacked">
                   <div className="settings-row-copy">
-                    <strong>Objectif quotidien</strong>
+                    <strong>Rythme quotidien</strong>
                     <span>
-                      Volume visé par le rééquilibrage du calendrier.
+                      Volume visé chaque jour, révisions et nouvelles questions
+                      comprises. Le rythme s'ajuste ensuite tout seul selon tes
+                      résultats.
                     </span>
                   </div>
 
-                  <div className="settings-inline-actions">
-                    <input
-                      aria-label="Objectif quotidien"
-                      type="number"
-                      min="1"
-                      max="10000"
-                      value={draft}
-                      disabled={saving}
-                      onChange={(event) => setDraft(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          saveTarget();
-                        }
-                      }}
-                      className="settings-input settings-input-number"
-                    />
-
-                    <span className="settings-unit">/ jour</span>
-
-                    <button
-                      type="button"
-                      onClick={saveTarget}
-                      disabled={saving}
-                      className="settings-save"
-                    >
-                      {saving ? "Enregistrement..." : "Enregistrer"}
-                    </button>
+                  <div
+                    className="settings-pace-tiers"
+                    role="radiogroup"
+                    aria-label="Rythme quotidien"
+                  >
+                    {paceTiers.map((tier) => (
+                      <button
+                        key={tier.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={tier.key === resolvedTier}
+                        disabled={saving}
+                        onClick={() => savePaceTier(tier.key)}
+                        className={`settings-pace-tier${
+                          tier.key === resolvedTier
+                            ? " settings-pace-tier-active"
+                            : ""
+                        }`}
+                      >
+                        <strong>{PACE_TIER_LABELS[tier.key] || tier.key}</strong>
+                        <span>{tier.daily_target} questions</span>
+                        <span className="settings-pace-tier-time">
+                          ~{tier.estimated_minutes} min
+                        </span>
+                      </button>
+                    ))}
                   </div>
+
+                  {!paceTier && (
+                    <p className="settings-pace-note">
+                      Rythme personnalisé : {target} questions / jour. Choisis un
+                      palier pour le remplacer.
+                    </p>
+                  )}
+
+                  {effectiveTarget !== null && effectiveTarget !== target && (
+                    <p className="settings-pace-note">
+                      Rythme actuel : {effectiveTarget} / jour — ajusté
+                      automatiquement d'après tes résultats récents.
+                    </p>
+                  )}
                 </div>
               )}
 

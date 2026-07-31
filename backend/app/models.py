@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Integer,
     String,
@@ -113,6 +114,17 @@ class Question(Base):
     # data.aliases so the schema stays stable as map features grow.
     data = Column(JSON, nullable=True)
 
+    # Set aside by the user: a suspended question is out of reviews entirely --
+    # automatic intake never introduces it, and if it was already started it
+    # stops coming up as due. Its progress is kept untouched, so unsuspending
+    # resumes exactly where it left off.
+    suspended = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
     # Pack provenance (sync-roadmap M1); see QuestionGroup.pack_guid.
     pack_guid = Column(String, nullable=True, index=True)
     pack_version = Column(Integer, nullable=True)
@@ -222,7 +234,9 @@ class ReviewLog(Base):
     # so array position (captured here) is the only same-day ordering.
     seq = Column(Integer, nullable=False)
 
-    reviewed_on = Column(Date)
+    # Indexed: the new-question intake counters aggregate this column on every
+    # review-screen load, and this is the largest table in the database.
+    reviewed_on = Column(Date, index=True)
 
     # UTC ISO datetime string; None on rows migrated from date-only history.
     reviewed_at = Column(String, nullable=True)

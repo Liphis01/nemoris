@@ -1,13 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { isRelearningQuestion } from "../relearningGrades";
-import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import "./ReviewSession.css";
-
-// A group with more than one available question opens the count slider; a single
-// question (loose or a group of one) has nothing to choose and starts on click.
-const DEFAULT_BONUS_COUNT = 20;
 
 function isVisualQuestion(question) {
   return (
@@ -71,98 +65,23 @@ function RelearningCountChip({ count, compact = false }) {
   );
 }
 
-function bonusQuestionsLabel(count) {
-  return count === 1 ? "1 question bonus" : `${count} questions bonus`;
-}
-
-function chunkEntries(entries, size) {
-  const rows = [];
-
-  for (let i = 0; i < entries.length; i += size) {
-    rows.push(entries.slice(i, i + size));
-  }
-
-  return rows;
-}
-
-function BonusReviewMenu({
-  entries,
-  loading,
-  selectBonusItem,
-  itemLoading,
+function SessionCompletePanel({
   setMode,
   canReturnToLastQuestion,
   returnToLastQuestion
 }) {
-  const allDone = !loading && entries.length === 0;
-  const [openKey, setOpenKey] = useState(null);
-  const [counts, setCounts] = useState({});
-  const [rowSize, setRowSize] = useState(1);
-  const listRef = useRef(null);
-
-  // The grid is auto-fill (see .bonus-menu-list), so its column count depends
-  // on the panel's width rather than any fixed number. Reading it back from
-  // the resolved computed style — instead of guessing a constant — lets the
-  // open card's picker break onto a full-width row right after the row it
-  // belongs to, however many cards actually share that row.
-  useEffect(() => {
-    const node = listRef.current;
-    if (!node) return undefined;
-
-    function syncRowSize() {
-      const columns = getComputedStyle(node)
-        .gridTemplateColumns
-        .split(" ")
-        .filter(Boolean).length;
-
-      setRowSize(prev => (columns > 0 && columns !== prev ? columns : prev));
-    }
-
-    syncRowSize();
-
-    const observer = new ResizeObserver(syncRowSize);
-    observer.observe(node);
-
-    return () => observer.disconnect();
-  }, [loading, allDone]);
-
-  const bonusCountFor = (entry) =>
-    counts[entry.key] ?? Math.min(DEFAULT_BONUS_COUNT, entry.itemCount);
-
-  const toggleEntry = (entry) => {
-    // Nothing to choose for a single question — start it straight away. A
-    // multi-question group opens (or closes) its count slider instead.
-    if (entry.itemCount <= 1) {
-      selectBonusItem(entry);
-      return;
-    }
-
-    setOpenKey(prev => (prev === entry.key ? null : entry.key));
-  };
-
-  const setBonusCount = (entry, value) => {
-    const clamped = Math.max(1, Math.min(entry.itemCount, Number(value) || 1));
-    setCounts(prev => ({ ...prev, [entry.key]: clamped }));
-  };
-
+  // The only screen once the queue ends, whether nothing was scheduled today or
+  // everything just got answered. New questions are introduced automatically by
+  // the backend, so there is nothing to pick here — just a way out.
   return (
-    <section className="bonus-menu" aria-label="Questions bonus">
-      <div className="bonus-menu-head">
+    <section className="session-end" aria-label="Session terminée">
+      <div className="session-end-head">
         <div>
-          <div className="bonus-menu-kicker">Questions bonus</div>
-          <h2 className="bonus-menu-title">
-            {loading
-              ? "Recherche de questions bonus"
-              : allDone
-                ? "Bonus terminés"
-                : "Choisis une question à réviser"}
-          </h2>
-          <p className="bonus-menu-copy">
-            {loading
-              ? "Un instant, on regarde ce qu'il reste à faire."
-              : allDone
-                ? "Tu as fait toutes les questions bonus disponibles."
-                : "Sélectionne la question ou le groupe que tu veux faire. Tu reviens ici après chaque item."}
+          <div className="session-end-kicker">Révision</div>
+          <h2 className="session-end-title">Session terminée</h2>
+          <p className="session-end-copy">
+            Tu as fait tout ce qui était prévu aujourd'hui. De nouvelles
+            questions seront ajoutées automatiquement au fil de tes progrès.
           </p>
         </div>
 
@@ -184,141 +103,18 @@ function BonusReviewMenu({
               Modifier la dernière réponse
             </button>
           )}
-
-          <ReturnToMenuButton
-            onClick={() => setMode("menu")}
-            style={{
-              background: "#1a1a1a",
-              border: "1px solid #2a2a2a",
-              borderRadius: "10px",
-              color: "#bbb",
-              cursor: "pointer",
-              fontSize: "14px",
-              padding: "10px 14px"
-            }}
-          />
         </div>
       </div>
 
-      {loading ? (
-        <p className="bonus-menu-loading">Chargement...</p>
-      ) : allDone ? (
-        <div className="bonus-menu-empty">
-          <button
-            type="button"
-            className="review-outcome-button review-outcome-button-primary"
-            onClick={() => setMode("menu")}
-          >
-            Retour au menu
-          </button>
-        </div>
-      ) : (
-        <ul className="bonus-menu-list app-scrollbar" ref={listRef}>
-          {chunkEntries(entries, rowSize).flatMap(row => {
-            const cards = row.map(entry => {
-              const expandable = entry.itemCount > 1;
-              const isOpen = expandable && openKey === entry.key;
-              const typeStyle = getQuestionTypeChipStyle(entry.typeQ);
-
-              return (
-                <li
-                  key={entry.key}
-                  className={`bonus-menu-card${isOpen ? " bonus-menu-card-open" : ""}`}
-                >
-                  <button
-                    type="button"
-                    className="bonus-menu-row"
-                    onClick={() => toggleEntry(entry)}
-                    disabled={itemLoading}
-                    aria-busy={itemLoading}
-                    aria-expanded={expandable ? isOpen : undefined}
-                    style={{
-                      "--bonus-type-bg": typeStyle.background,
-                      "--bonus-type-color": typeStyle.color
-                    }}
-                  >
-                    <span className="bonus-menu-row-top">
-                      <span className="bonus-menu-row-type">
-                        {entry.typeLabel}
-                      </span>
-                      {entry.isContainer && (
-                        <span className="bonus-menu-row-count">
-                          {entry.itemCount}
-                        </span>
-                      )}
-                    </span>
-
-                    <span className="bonus-menu-row-label">
-                      {entry.label}
-                    </span>
-
-                    <span className="bonus-menu-row-foot">
-                      <span className="bonus-menu-row-tags">
-                        {(entry.tags || []).slice(0, 3).map(tag => (
-                          <span key={tag} className="bonus-menu-row-tag">#{tag}</span>
-                        ))}
-                      </span>
-                      <span className="bonus-menu-row-arrow" aria-hidden="true">
-                        {itemLoading ? "…" : expandable ? (isOpen ? "▾" : "▸") : "→"}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            });
-
-            // The open card (if any) in this row gets its picker rendered as a
-            // full-width row right after it, instead of the card itself going
-            // full-width in place -- that would force grid auto-placement to
-            // bump every other card in the row down (see ReviewSession.css).
-            const openEntry = row.find(
-              entry => entry.itemCount > 1 && entry.key === openKey
-            );
-
-            if (!openEntry) {
-              return cards;
-            }
-
-            const count = bonusCountFor(openEntry);
-            // WebKit can't paint a range's filled portion on its own, so drive it
-            // from the value as a percentage (Firefox uses ::-moz-range-progress).
-            const fillPercent = ((count - 1) / (openEntry.itemCount - 1)) * 100;
-
-            return [
-              ...cards,
-              <li key={`${openEntry.key}-picker`} className="bonus-menu-picker-row">
-                <div className="bonus-menu-picker">
-                  <div className="bonus-menu-picker-count">
-                    <strong>{bonusQuestionsLabel(count)}</strong>
-                    <span className="bonus-menu-picker-total">
-                      sur {openEntry.itemCount} disponibles
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    className="bonus-menu-picker-slider"
-                    style={{ "--bonus-fill": `${fillPercent}%` }}
-                    min={1}
-                    max={openEntry.itemCount}
-                    value={count}
-                    onChange={event => setBonusCount(openEntry, event.target.value)}
-                    aria-label={`Nombre de questions bonus pour ${openEntry.label}`}
-                  />
-                  <button
-                    type="button"
-                    className="review-outcome-button review-outcome-button-primary"
-                    onClick={() => selectBonusItem(openEntry, count)}
-                    disabled={itemLoading}
-                    aria-busy={itemLoading}
-                  >
-                    {itemLoading ? "Chargement…" : "Commencer →"}
-                  </button>
-                </div>
-              </li>
-            ];
-          })}
-        </ul>
-      )}
+      <div className="session-end-actions">
+        <button
+          type="button"
+          className="review-outcome-button review-outcome-button-primary"
+          onClick={() => setMode("menu")}
+        >
+          Retour au menu
+        </button>
+      </div>
     </section>
   );
 }
@@ -338,15 +134,8 @@ export default function ReviewSession({
   handleSequenceComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
-  bonusReviewActive,
-  bonusReviewLoading,
-  bonusItemLoading,
-  bonusStatusLoading,
-  bonusMenuOpen,
-  bonusMenuEntries,
-  selectBonusItem,
-  returnToBonusMenu,
-  skipToBonusMenu,
+  sessionComplete,
+  skipToSessionEnd,
   reviewLoading,
   reviewError,
   submitMapAnswer,
@@ -360,12 +149,11 @@ export default function ReviewSession({
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
     !reviewError &&
-    !bonusMenuOpen &&
+    !sessionComplete &&
     currentQuestion &&
     currentIndex < questions.length
   );
   const useCompactVisualLayout = hasActiveQuestion && isVisualQuestion(currentQuestion);
-  const showReturnToBonusMenu = bonusReviewActive && !bonusMenuOpen;
   const headerSubtitle = `${questions.length} questions disponibles`;
   const relearning = hasActiveQuestion && isRelearningQuestion(currentQuestion);
   // Failing a question appends a retry to `questions`, so its length grows as
@@ -397,13 +185,10 @@ export default function ReviewSession({
   );
   const showRelearningCount = hasActiveQuestion && relearningRemaining > 0;
   // True once the current question and everything still queued behind it are
-  // relearning retries: the day's fresh queue is exhausted, so there's nothing
-  // left to skip by jumping to bonus early.
-  const onlyRelearningLeft = hasActiveQuestion &&
+  // relearning retries: the day's fresh queue is exhausted, so the user can end
+  // the session early instead of grinding through the retries.
+  const showSkipToSessionEnd = hasActiveQuestion &&
     questions.slice(currentIndex).every(isRelearningQuestion);
-  // Only offered during the original review: once bonus is already active this
-  // would just duplicate the existing "← Menu bonus" action.
-  const showSkipToBonusMenu = onlyRelearningLeft && !bonusReviewActive;
 
   if (useCompactVisualLayout) {
     return (
@@ -462,11 +247,11 @@ export default function ReviewSession({
                 minWidth: 0
               }}
             >
-              {showReturnToBonusMenu && (
+              {showSkipToSessionEnd && (
                 <button
                   type="button"
-                  onClick={returnToBonusMenu}
-                  title="Revenir au menu des questions bonus"
+                  onClick={skipToSessionEnd}
+                  title="Terminer la session sans refaire les questions en réapprentissage"
                   style={{
                     background: "#1f1f1f",
                     border: "1px solid #333",
@@ -478,27 +263,7 @@ export default function ReviewSession({
                     padding: "7px 10px"
                   }}
                 >
-                  ← Menu bonus
-                </button>
-              )}
-
-              {showSkipToBonusMenu && (
-                <button
-                  type="button"
-                  onClick={skipToBonusMenu}
-                  title="Passer directement aux questions bonus"
-                  style={{
-                    background: "#1f1f1f",
-                    border: "1px solid #333",
-                    borderRadius: "9px",
-                    color: "#ccc",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    padding: "7px 10px"
-                  }}
-                >
-                  Questions bonus →
+                  Terminer →
                 </button>
               )}
 
@@ -566,7 +331,7 @@ export default function ReviewSession({
                     textTransform: "uppercase"
                   }}
                 >
-                  {bonusReviewActive ? "Bonus" : "Révision"}
+                  Révision
                 </div>
               )}
               <div
@@ -665,7 +430,7 @@ export default function ReviewSession({
               submitTimelineAnswer={submitTimelineAnswer}
               submitSequenceAnswer={submitSequenceAnswer}
               graduateGroupedAnswer={graduateGroupedAnswer}
-              allowPartialSubmit={bonusReviewActive}
+              allowPartialSubmit={false}
               compactVisualLayout
             />
           </div>
@@ -699,8 +464,8 @@ export default function ReviewSession({
         }}
       >
 
-        {/* HEADER — hidden while the bonus menu owns the screen */}
-        {!bonusMenuOpen && (
+        {/* HEADER — hidden while the end-of-session panel owns the screen */}
+        {!sessionComplete && (
           <div
             style={{
               display: "flex",
@@ -797,12 +562,8 @@ export default function ReviewSession({
         {/* BONUS MENU — the only screen once the queue ends, whether nothing
             was due today or everything just got answered. It owns its own
             loading state, so there's no separate "session over" step first. */}
-        {!reviewLoading && !reviewError && bonusMenuOpen && (
-          <BonusReviewMenu
-            entries={bonusMenuEntries}
-            loading={bonusStatusLoading || bonusReviewLoading}
-            selectBonusItem={selectBonusItem}
-            itemLoading={bonusItemLoading}
+        {!reviewLoading && !reviewError && sessionComplete && (
+          <SessionCompletePanel
             setMode={setMode}
             canReturnToLastQuestion={canReturnToLastQuestion}
             returnToLastQuestion={returnToLastQuestion}
@@ -812,7 +573,7 @@ export default function ReviewSession({
         {/* QUESTION */}
         {!reviewLoading &&
           !reviewError &&
-          !bonusMenuOpen &&
+          !sessionComplete &&
           currentQuestion &&
           currentIndex < questions.length && (
           <>
@@ -850,11 +611,11 @@ export default function ReviewSession({
 
                 {relearning && <RelearningBadge />}
 
-                {showReturnToBonusMenu && (
+                {showSkipToSessionEnd && (
                   <button
                     type="button"
-                    onClick={returnToBonusMenu}
-                    title="Revenir au menu des questions bonus"
+                    onClick={skipToSessionEnd}
+                    title="Terminer la session sans refaire les questions en réapprentissage"
                     style={{
                       background: "#1f1f1f",
                       border: "1px solid #333",
@@ -866,27 +627,7 @@ export default function ReviewSession({
                       fontWeight: "650"
                     }}
                   >
-                    ← Menu bonus
-                  </button>
-                )}
-
-                {showSkipToBonusMenu && (
-                  <button
-                    type="button"
-                    onClick={skipToBonusMenu}
-                    title="Passer directement aux questions bonus"
-                    style={{
-                      background: "#1f1f1f",
-                      border: "1px solid #333",
-                      color: "#ccc",
-                      padding: "7px 10px",
-                      borderRadius: "10px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: "650"
-                    }}
-                  >
-                    Questions bonus →
+                    Terminer →
                   </button>
                 )}
 
@@ -955,7 +696,7 @@ export default function ReviewSession({
               submitTimelineAnswer={submitTimelineAnswer}
               submitSequenceAnswer={submitSequenceAnswer}
               graduateGroupedAnswer={graduateGroupedAnswer}
-              allowPartialSubmit={bonusReviewActive}
+              allowPartialSubmit={false}
             />
 
           </>

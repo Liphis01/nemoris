@@ -2,6 +2,7 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
 import RichText from "../../../shared/RichText";
 
 export default function MapCard({
@@ -14,7 +15,8 @@ export default function MapCard({
   onDeleteOpen,
   closeDelete,
   deleteQuestion,
-  onToggleFavorite
+  onToggleFavorite,
+  onToggleSuspended
 }) {
   const mapTypeStyle = questionTypeChipStyles.map;
   const isDisabled = !String(q.answer || "").trim();
@@ -50,6 +52,7 @@ export default function MapCard({
       <div
         ref={setAnchorElement}
         {...triggerProps}
+        className="manage-card"
         data-delete-card-id={q.id}
         data-map-zone-ready={isDisabled ? "false" : "true"}
         onClick={() => {
@@ -79,7 +82,11 @@ export default function MapCard({
           gap: "6px",
           overflow: "hidden",
           transform: isRemoving ? "scaleY(0.95)" : "scaleY(1)",
-          opacity: isRemoving ? 0 : isDisabled ? 0.62 : 1,
+          opacity: isRemoving
+            ? 0
+            : isDisabled || q.suspended
+              ? 0.55
+              : 1,
           transformOrigin: "top"
         }}
         onMouseEnter={(e) => {
@@ -183,6 +190,11 @@ export default function MapCard({
           <FavoriteToggleButton
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
+          />
+
+          <SuspendToggleButton
+            suspended={Boolean(q.suspended)}
+            onToggle={onToggleSuspended}
           />
         </div>
 

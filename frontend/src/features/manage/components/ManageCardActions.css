@@ -1,0 +1,50 @@
+/* Per-card action buttons stay out of the way until the row is hovered, so a
+   long list reads as content rather than as rows of controls.
+
+   display:none rather than opacity:0 on purpose: a hidden-but-laid-out button
+   still occupies its width *and* its share of the parent's flex gap, which
+   pushed a lone favourite star away from the card's right edge. */
+.manage-card .favorite-toggle,
+.manage-card .suspend-toggle {
+  display: none;
+}
+
+.manage-card:hover .favorite-toggle,
+.manage-card:hover .suspend-toggle {
+  animation: manage-action-in 0.16s ease;
+  display: inline-flex;
+}
+
+/* Keyboard reveal, deliberately :focus-visible and not :focus-within: after a
+   mouse click the button keeps DOM focus, and :focus-within would leave the
+   controls stuck on screen once the pointer had moved away. */
+.manage-card:has(:focus-visible) .favorite-toggle,
+.manage-card:has(:focus-visible) .suspend-toggle {
+  display: inline-flex;
+}
+
+/* A button that is switched on is state, not clutter: hiding it would leave no
+   way to spot favourites, or to tell a suspended group from an active one. */
+.manage-card .favorite-toggle.favorite-toggle-on,
+.manage-card .suspend-toggle.suspend-toggle-on,
+.manage-card .suspend-toggle.suspend-toggle-mixed {
+  display: inline-flex;
+}
+
+@keyframes manage-action-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manage-card:hover .favorite-toggle,
+  .manage-card:hover .suspend-toggle {
+    animation: none;
+  }
+}

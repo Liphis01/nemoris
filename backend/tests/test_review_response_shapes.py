@@ -726,7 +726,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             [due_zone.id]
         )
 
-    def test_bonus_image_context_uses_selected_items_and_started_distractors(self):
+    def test_new_image_context_uses_selected_items_and_started_distractors(self):
         today = date.today()
         image_group = QuestionGroup(
             id=32,
@@ -777,8 +777,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         with patch("app.services.mode_selection.random.random", return_value=0):
             response = get_review_items(
                 self.db,
-                include_new=True,
-                bonus_status={"available_bonus_question_count": 1}
+                intake_quota={"quota": 1}
             )
 
         image_payload = next(item for item in response if item["type_q"] == "media")

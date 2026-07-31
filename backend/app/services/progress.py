@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 
 from ..models import Progress, Question, ReviewLog
 from ..scheduler import (
@@ -54,6 +54,60 @@ def progress_has_started(progress: Progress | None):
 
 def progress_is_new(progress: Progress | None):
     return not progress_has_started(progress)
+
+
+# A card leaves the "in flight" pool once it is clearly retained: three weeks of
+# FSRS stability reached over at least two reviews. This is deliberately gentler
+# than stats' MASTERED_* bar (60 days / 3 reps): mastery describes an achievement
+# the user is shown, while this only decides when a new-question slot frees up,
+# and a 60-day wait there would stall intake for months.
+#
+# Stability, not `interval`: interval is the *smoothed* value, shifted by up to
+# +/-3 days to level daily calendar load (choose_smoothed_review_date) and
+# stretched further for favorites. Keying off it would let two equally-retained
+# cards fall on opposite sides of this line purely because one was nudged onto a
+# quieter day. Stability is FSRS's own measure of how well a card is known --
+# days until recall probability decays to ~90% -- and no scheduling decision
+# touches it.
+WIP_RELEASE_MIN_STABILITY_DAYS = 21
+WIP_RELEASE_MIN_REPS = 2
+
+
+def progress_is_settled(progress: Progress | None):
+    if not progress_has_started(progress):
+        return False
+
+    return (
+        (progress.stability or 0) >= WIP_RELEASE_MIN_STABILITY_DAYS and
+        (progress.reps or 0) >= WIP_RELEASE_MIN_REPS
+    )
+
+
+def progress_in_flight(progress: Progress | None):
+    # Started, but not yet settled: the questions the user is actively carrying.
+    return progress_has_started(progress) and not progress_is_settled(progress)
+
+
+def started_progress_filter():
+    # SQL twin of progress_has_started, minus its `len(history) > 0` clause:
+    # JSON array length is dialect-specific, and that clause only fires for a
+    # pathological row holding history with reps=0 and no last_review. Both
+    # forms are asserted to agree on realistic rows in test_review_intake.py.
+    return or_(
+        func.coalesce(Progress.reps, 0) > 0,
+        Progress.last_review.isnot(None)
+    )
+
+
+def in_flight_progress_filter():
+    # SQL twin of progress_in_flight, for counting the pool without loading it.
+    return and_(
+        started_progress_filter(),
+        or_(
+            func.coalesce(Progress.stability, 0) < WIP_RELEASE_MIN_STABILITY_DAYS,
+            func.coalesce(Progress.reps, 0) < WIP_RELEASE_MIN_REPS
+        )
+    )
 
 
 def count_reviews_on_day(progresses, day):

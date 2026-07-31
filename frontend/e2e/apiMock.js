@@ -144,6 +144,9 @@ function markQuestionsAnswered(state, count) {
   // menu never reports the session as complete after returning from review.
   state.reviewSummary.due_count = Math.max(0, (state.reviewSummary.due_count || 0) - count);
   state.reviewSummary.has_due = state.reviewSummary.due_count > 0;
+  state.reviewSummary.session_count = (
+    state.reviewSummary.due_count + (state.reviewSummary.new_count || 0)
+  );
 }
 
 export async function mockApi(page, options = {}) {
@@ -156,12 +159,23 @@ export async function mockApi(page, options = {}) {
     review: clone(options.review || []),
     stats: clone(options.stats || defaultStats(options.questions || [])),
     reviewSettings: {
-      catchup_daily_target: 50,
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      effective_daily_target: 20,
+      pace_tiers: [
+        { key: "leger", daily_target: 10, estimated_minutes: 3 },
+        { key: "regulier", daily_target: 20, estimated_minutes: 5 },
+        { key: "soutenu", daily_target: 40, estimated_minutes: 10 },
+        { key: "intensif", daily_target: 80, estimated_minutes: 20 }
+      ],
       ...(options.reviewSettings || {})
     },
     reviewSummary: {
       due_count: options.review?.length || 0,
       has_due: (options.review?.length || 0) > 0,
+      new_count: 0,
+      session_count: options.review?.length || 0,
       ...(options.reviewSummary || {})
     },
     syncStatus: {
@@ -183,32 +197,8 @@ export async function mockApi(page, options = {}) {
     },
     profile: clone(options.profile ?? null),
     profileUpdates: [],
-    bonusReviewStatus: {
-      allowed: true,
-      bonus_question_capacity: 315,
-      daily_counts: [],
-      daily_target: 50,
-      due_count: 0,
-      estimated_bonus_card_cost: 2,
-      forecast_average: 0,
-      forecast_days: 14,
-      forecast_fill_ratio: 0,
-      forecast_total: 0,
-      full_threshold: 630,
-      low_threshold: 350,
-      state: "low",
-      message: "Le planning prévu est léger.",
-      new_count: 1,
-      scheduled_average: 0,
-      scheduled_total: 0,
-      static_scheduled_total: 0,
-      window_days: 14,
-      ...(options.bonusReviewStatus || {})
-    },
     questions: clone(options.questions || []),
     groups: clone(options.groups || []),
-    bonusGroups: clone(options.bonusGroups || []),
-    bonusItems: clone(options.bonusItems || {}),
     nextQuestionId: options.nextQuestionId || 100,
     timelineResults: clone(options.timelineResults || null)
   };
@@ -298,19 +288,11 @@ export async function mockApi(page, options = {}) {
       return;
     }
 
-    if (method === "GET" && path === "/review/bonus_status") {
-      await fulfillJson(route, state.bonusReviewStatus);
-      return;
-    }
-
-    if (method === "GET" && path === "/review/bonus_groups") {
-      await fulfillJson(route, state.bonusGroups);
-      return;
-    }
-
-    if (method === "GET" && path === "/review/bonus_items") {
-      const key = url.searchParams.get("key");
-      await fulfillJson(route, state.bonusItems[key] || []);
+    if (method === "GET" && path === "/review/intake") {
+      await fulfillJson(route, {
+        quota: state.reviewSummary.new_count || 0,
+        due_count: state.reviewSummary.due_count || 0
+      });
       return;
     }
 
@@ -434,6 +416,30 @@ export async function mockApi(page, options = {}) {
 
       state.groups.push(created);
       await fulfillJson(route, created);
+      return;
+    }
+
+    const groupSuspendMatch = path.match(/^\/groups\/(\d+)\/suspend$/);
+
+    if (groupSuspendMatch && method === "POST") {
+      const id = Number(groupSuspendMatch[1]);
+      const { suspended } = await requestJson(request);
+      let updated = 0;
+
+      state.questions = state.questions.map((question) => {
+        if ((question.group_id ?? question.group?.id ?? null) !== id) {
+          return question;
+        }
+
+        updated += 1;
+        return { ...question, suspended };
+      });
+
+      await fulfillJson(route, {
+        group_id: id,
+        suspended,
+        updated_count: updated
+      });
       return;
     }
 

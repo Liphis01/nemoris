@@ -91,7 +91,14 @@ function reviewDueValue(summary, loading, error) {
     return "!";
   }
 
-  return String(summary?.due_count ?? 0);
+  return String(sessionCount(summary));
+}
+
+// Due reviews plus the new questions intake will introduce today: the dial and
+// its caption describe the whole session, not just the backlog.
+function sessionCount(summary) {
+  return summary?.session_count
+    ?? ((summary?.due_count ?? 0) + (summary?.new_count ?? 0));
 }
 
 function reviewDueCaption(summary, loading, error) {
@@ -103,7 +110,7 @@ function reviewDueCaption(summary, loading, error) {
     return "Indisponible";
   }
 
-  return (summary?.due_count ?? 0) === 0 ? "À jour" : "À revoir";
+  return sessionCount(summary) === 0 ? "À jour" : "À faire";
 }
 
 function formatNumber(value) {
@@ -455,29 +462,34 @@ export default function Menu({
     reviewSummaryError
   );
   const reviewDueCount = reviewSummary?.due_count ?? 0;
+  // New questions are introduced automatically, so the tile counts them as part
+  // of the session: with 0 due but new ones queued, there is still work to do.
+  const reviewNewCount = reviewSummary?.new_count ?? 0;
+  const reviewSessionCount = reviewSummary?.session_count
+    ?? (reviewDueCount + reviewNewCount);
   const reviewTargetMode = "quiz";
   const reviewActionLabel = "Démarrer";
   const reviewIsClear = (
-    !reviewSummaryLoading && !reviewSummaryError && reviewDueCount <= 0
+    !reviewSummaryLoading && !reviewSummaryError && reviewSessionCount <= 0
   );
   const reviewTitle = reviewIsClear
     ? "Session terminée"
     : "Révision du jour";
   const reviewText = reviewIsClear
-    ? "Répondre à de nouvelles questions pour les ajouter au flux de review."
-    : "Lance la session due avec les questions texte, maps, images, timelines et séquences.";
+    ? "Rien à réviser aujourd'hui. De nouvelles questions arriveront au fil de tes progrès."
+    : "Lance la session du jour avec les questions texte, maps, images, timelines et séquences.";
   const reviewFooterTitle = reviewIsClear
-    ? "Bonus"
+    ? "À jour"
     : "File active";
   const reviewFooterCaption = reviewIsClear
-    ? "Questions neuves"
+    ? "Rien en attente"
     : `${reviewCountCaption} aujourd'hui`;
   const reviewDialAngle = (
     reviewSummaryLoading || reviewSummaryError
       ? 90
-      : reviewDueCount <= 0
+      : reviewSessionCount <= 0
         ? 0
-        : Math.min(330, 72 + reviewDueCount * 18)
+        : Math.min(330, 72 + reviewSessionCount * 18)
   );
   const reviewDialStyle = {
     "--menu-review-dial-angle": `${reviewDialAngle}deg`

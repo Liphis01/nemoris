@@ -1,36 +1,49 @@
+import { useEffect, useRef, useState } from "react";
+import "./FavoriteToggleButton.css";
+import "./ManageCardActions.css";
+
 export default function FavoriteToggleButton({
   favorite,
   onToggle
 }) {
+  const [pulsing, setPulsing] = useState(false);
+  const pulseTimeoutRef = useRef(null);
+  const label = favorite ? "Retirer des favoris" : "Ajouter aux favoris";
+
+  useEffect(() => () => {
+    if (pulseTimeoutRef.current) {
+      window.clearTimeout(pulseTimeoutRef.current);
+    }
+  }, []);
+
   return (
     <button
       type="button"
-      aria-label={favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
-      title={favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+      aria-label={label}
+      aria-pressed={Boolean(favorite)}
+      title={label}
+      className={
+        `favorite-toggle${favorite ? " favorite-toggle-on" : ""}` +
+        `${pulsing ? " favorite-toggle-pulse" : ""}`
+      }
       onClick={(event) => {
         event.stopPropagation();
+
+        // Restart cleanly if the button is clicked twice in quick succession.
+        setPulsing(false);
+        window.clearTimeout(pulseTimeoutRef.current);
+        window.requestAnimationFrame(() => setPulsing(true));
+        pulseTimeoutRef.current = window.setTimeout(
+          () => setPulsing(false),
+          450
+        );
+
         onToggle?.();
       }}
-      style={{
-        alignItems: "center",
-        background: favorite ? "#3d3215" : "#181818",
-        border: favorite
-          ? "1px solid rgba(255, 204, 122, 0.48)"
-          : "1px solid #303030",
-        borderRadius: "999px",
-        color: favorite ? "#ffcc7a" : "#666",
-        cursor: "pointer",
-        display: "inline-flex",
-        flexShrink: 0,
-        fontSize: "15px",
-        height: "24px",
-        justifyContent: "center",
-        lineHeight: 1,
-        padding: 0,
-        width: "24px"
-      }}
     >
-      {favorite ? "★" : "☆"}
+      <span className="favorite-toggle-icon" aria-hidden="true">
+        {favorite ? "★" : "☆"}
+      </span>
     </button>
   );
 }

@@ -71,7 +71,7 @@ describe("Menu", () => {
     expect(screen.getAllByText("4").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("button", {
-        name: /Révision du jour: 4 questions, À revoir/
+        name: /Révision du jour: 4 questions, À faire/
       })
     ).toBeInTheDocument();
   });
@@ -90,6 +90,28 @@ describe("Menu", () => {
     expect(
       screen.getByRole("button", {
         name: /Session terminée: 0 questions, À jour/
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("counts new questions as part of the session, not as a finished day", () => {
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{
+          due_count: 0,
+          has_due: false,
+          new_count: 3,
+          session_count: 3
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /Révision du jour: 3 questions, À faire/
       })
     ).toBeInTheDocument();
   });

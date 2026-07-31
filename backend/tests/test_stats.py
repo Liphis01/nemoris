@@ -45,7 +45,8 @@ class StatsServiceTests(unittest.TestCase):
         reps=None,
         lapses=None,
         difficulty=5.0,
-        interval=0
+        interval=0,
+        stability=1.0
     ):
         item = Question(
             id=question_id,
@@ -59,7 +60,7 @@ class StatsServiceTests(unittest.TestCase):
 
         if next_review is not None or history is not None or reps is not None:
             item.progress = Progress(
-                stability=1.0,
+                stability=stability,
                 difficulty=difficulty,
                 reps=reps if reps is not None else len(history or []),
                 lapses=lapses if lapses is not None else sum(
@@ -239,15 +240,19 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["counts"]["due_today"], 0)
         self.assertEqual(stats["load_by_type"][0]["total"], 0)
 
-    def test_mastered_count_uses_interval_and_reps_threshold(self):
+    def test_mastered_count_uses_stability_and_reps_threshold(self):
         today = date(2026, 1, 15)
+        # Mastery reads FSRS stability, never the smoothed `interval`: question 1
+        # qualifies on stability alone even though its interval was shifted well
+        # below the bar by calendar smoothing.
         self.add_question(
             1,
             type_q="text",
             next_review=today + timedelta(days=90),
             history=[history_entry(today - timedelta(days=1), 3)],
             reps=3,
-            interval=60
+            interval=12,
+            stability=60.0
         )
         self.add_question(
             2,
@@ -255,7 +260,8 @@ class StatsServiceTests(unittest.TestCase):
             next_review=today + timedelta(days=90),
             history=[history_entry(today - timedelta(days=1), 3)],
             reps=2,
-            interval=90
+            interval=90,
+            stability=90.0
         )
         self.add_question(
             3,
@@ -263,7 +269,8 @@ class StatsServiceTests(unittest.TestCase):
             next_review=today + timedelta(days=90),
             history=[history_entry(today - timedelta(days=1), 3)],
             reps=4,
-            interval=30
+            interval=90,
+            stability=30.0
         )
         self.add_question(4, type_q="text")
         self.db.commit()

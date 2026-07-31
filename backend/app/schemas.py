@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Annotated, Optional, List, Literal, Any, Dict, Union
 from datetime import date
 
@@ -119,6 +119,10 @@ class GroupOut(BaseModel):
         from_attributes = True
 
 
+class GroupSuspend(BaseModel):
+    suspended: bool
+
+
 class GroupMini(BaseModel):
     id: int
     name: str
@@ -172,6 +176,9 @@ class QuestionUpdate(BaseModel):
 
     collection_ids: Optional[List[int]] = None
 
+    # Set aside by the user: excluded from reviews and from automatic intake.
+    suspended: Optional[bool] = None
+
 
 class QuestionOut(BaseModel):
 
@@ -192,6 +199,8 @@ class QuestionOut(BaseModel):
     group_id: Optional[int]
 
     data: Optional[dict[str, Any]] = None
+
+    suspended: bool = False
 
     class Config:
         from_attributes = True
@@ -327,11 +336,33 @@ class RelearningGraduateRequest(BaseModel):
     review_date: Optional[date] = None
 
 
+PaceTier = Literal[
+    "leger",
+    "regulier",
+    "soutenu",
+    "intensif"
+]
+
+
 class ReviewSettings(BaseModel):
-    catchup_daily_target: int = Field(
+    # Either form is accepted: a tier (which sets the number) or the raw number
+    # kept for users predating the tiers. Both optional so the older payload
+    # shape still validates; at least one must be present.
+    catchup_daily_target: Optional[int] = Field(
+        default=None,
         ge=1,
         le=10000
     )
+    pace_tier: Optional[PaceTier] = None
+
+    @model_validator(mode="after")
+    def require_a_target(self):
+        if self.catchup_daily_target is None and self.pace_tier is None:
+            raise ValueError(
+                "catchup_daily_target or pace_tier is required"
+            )
+
+        return self
 
 
 class SyncPreferences(BaseModel):
