@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { applyTagActions, resolveTagConflict, resolveTagInbox } from "../../../api/tags";
 import TagPicker from "../../../shared/TagPicker";
 import { normalizeKey, wouldCreateCycle } from "../../../shared/tagGraph";
-import { labelForTag, loadTags, primeTags, useTagHierarchy } from "../../../shared/tagLabels";
+import { loadTags, primeTags, useTagHierarchy } from "../../../shared/tagLabels";
 import { ancestorPaths, childrenMap, isBrowseRoot } from "../../../shared/tagTree";
 import { findSimilarPairs } from "../utils/tagDuplicates";
 
@@ -225,7 +225,7 @@ export default function TagManagerModal({ open, onClose }) {
     setSelected(current => nodes[current] ? current : Object.keys(nodes)[0] || null);
     setExpanded(new Set(Object.keys(nodes).filter(id => isBrowseRoot(id, nodes))));
     setError("");
-  }, [open, snapshot.loaded, snapshot.revision]);
+  }, [open, snapshot.loaded, snapshot.nodes, snapshot.revision]);
 
   const state = history[historyIndex] || {
     nodes: cloneNodes(snapshot.nodes), hidden: [], originalHidden: [], commands: []

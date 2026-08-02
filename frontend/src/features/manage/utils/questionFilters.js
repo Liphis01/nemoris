@@ -1,4 +1,4 @@
-import { descendants, normalizeKey } from "../../../shared/tagGraph";
+import { descendants } from "../../../shared/tagGraph";
 
 
 export function getNextReview(question) {
