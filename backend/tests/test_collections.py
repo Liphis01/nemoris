@@ -44,6 +44,11 @@ from app.services.training import (
     list_training_scopes,
     record_collection_training_attempt
 )
+from app.services.tag_hierarchy import (
+    TagValidationError,
+    apply_tag_actions,
+    load_tag_hierarchy
+)
 
 
 def point_timeline(year):
@@ -690,6 +695,70 @@ class PlaylistRuleTests(unittest.TestCase):
         self.db.add(item)
         return item
 
+    def test_parent_scope_resolves_identically_in_preview_saved_playlist_and_training(self):
+        parent_id = "11111111-1111-4111-8111-111111111111"
+        child_id = "22222222-2222-4222-8222-222222222222"
+        hierarchy = load_tag_hierarchy(self.db)
+        apply_tag_actions(self.db, hierarchy["revision"], [
+            {
+                "type": "create",
+                "tag_id": parent_id,
+                "label": "Europe locale",
+                "parent_ids": ["core:geography"]
+            },
+            {
+                "type": "create",
+                "tag_id": child_id,
+                "label": "France locale",
+                "parent_ids": [parent_id]
+            }
+        ])
+        self.add_question(1, tags=[child_id])
+        self.add_question(2, tags=["core:history"])
+        self.db.commit()
+
+        candidates = get_collection_question_candidates(
+            tag=parent_id, limit=10, offset=0, db=self.db
+        )
+        rules = {
+            "match": "any",
+            "clauses": [{"kind": "tag", "tag": parent_id}]
+        }
+        preview = preview_collection(
+            CollectionPreview(rules=rules), db=self.db
+        )
+        saved = create_collection(
+            CollectionCreate(name="Europe", rules=rules), db=self.db
+        )
+        trained = get_training_items(
+            self.db, scope_type="tag", tag=parent_id
+        )
+
+        self.assertEqual([item["id"] for item in candidates["items"]], [1])
+        self.assertEqual([item["id"] for item in preview["items"]], [1])
+        self.assertEqual(saved["question_ids"], [1])
+        self.assertEqual(
+            [item["question_id"] for item in trained if item["type_q"] == "text"],
+            [1]
+        )
+        self.assertEqual(saved["rules"]["clauses"][0]["tag"], parent_id)
+
+    def test_new_playlist_rules_reject_unknown_tag_ids(self):
+        with self.assertRaises(TagValidationError):
+            create_collection(
+                CollectionCreate(
+                    name="Invalide",
+                    rules={
+                        "match": "any",
+                        "clauses": [{
+                            "kind": "tag",
+                            "tag": "99999999-9999-4999-8999-999999999999"
+                        }]
+                    }
+                ),
+                db=self.db
+            )
+
     def test_legacy_playlist_without_rules_keeps_its_membership(self):
         # The data-loss guard: playlists saved before rules existed store
         # their membership only in the association table. Resolving one must
@@ -829,7 +898,8 @@ class PlaylistRuleTests(unittest.TestCase):
         )
 
         self.assertEqual(created["question_ids"], [1, 2])
-        self.assertEqual(created["rules"]["clauses"][0]["tag"], "drapeaux")
+        stored_tag_id = created["rules"]["clauses"][0]["tag"]
+        self.assertNotEqual(stored_tag_id, "drapeaux")
 
         updated = update_collection(
             created["id"],
@@ -841,6 +911,9 @@ class PlaylistRuleTests(unittest.TestCase):
         self.assertEqual(updated["question_ids"], [1, 3])
         self.assertEqual(updated["pinned_question_ids"], [3])
         self.assertEqual(updated["excluded_question_ids"], [2])
+        self.assertEqual(
+            updated["rules"]["clauses"][0]["tag"], stored_tag_id
+        )
 
     def test_preview_resolves_a_rule_without_saving_anything(self):
         group = QuestionGroup(type_group="media", name="Drapeaux du monde")

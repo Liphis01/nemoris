@@ -40,17 +40,33 @@ from .media import (
 )
 from .media_pool import MEDIA_POOL_KEY, question_media_refs
 from .questions import delete_question_dependents
+from .tag_hierarchy import (
+    _replace_tag_id,
+    _replace_tag_in_slice,
+    detach_pack_tag_state,
+    ensure_tag_ids,
+    ensure_stored_tag_ids,
+    hierarchy_slice_for_tags,
+    is_custom_tag_id,
+    load_tag_hierarchy,
+    map_legacy_pack_tags,
+    merge_pack_hierarchy,
+    normalize_pack_hierarchy
+)
 from .tombstones import record_tombstone
 
 
-PACK_FORMAT = 2
+# 4 replaces language-derived slugs with reserved root IDs, UUID custom tags,
+# and localized labels. Formats 1-3 remain readable through a deterministic
+# per-pack legacy mapping.
+PACK_FORMAT = 4
 
 # Format 2 packs carry several groups, so a playlist spanning question types
 # (a map group plus text questions, say) survives the round trip -- a single
 # group cannot hold that, its type_group is immutable. Format 1 is still
 # readable: _read_manifest_and_content normalizes it into the same shape, so
 # only this module knows there were ever two layouts.
-SUPPORTED_PACK_FORMATS = (1, 2)
+SUPPORTED_PACK_FORMATS = (1, 2, 3, 4)
 
 # Fields that define whether an item "changed" for future update-diffing
 # (1.3). Deliberately excludes guid/id/group_id/anything progress-related.
@@ -195,8 +211,15 @@ def _export_pack_bundle(
     media_assets = {}
     group_entries = []
     question_entries = []
+    ensure_stored_tag_ids(db)
 
     for group, questions in sources:
+        for question in questions:
+            canonical_tags = ensure_tag_ids(db, question.tags or [])
+            if canonical_tags != (question.tags or []):
+                question.tags = canonical_tags
+        db.flush()
+
         group_entries.append({
             "guid": group.guid,
             "type_group": group.type_group,
@@ -245,6 +268,13 @@ def _export_pack_bundle(
         "description": description,
         "license": license,
         "minimum_schema_version": MIGRATIONS[-1].version,
+        # Only the ancestor chains this pack's own tags need. Without it the
+        # installer receives unfiled tags and "train on Sciences" misses the
+        # questions the author had carefully filed under it.
+        "tag_hierarchy": hierarchy_slice_for_tags(
+            load_tag_hierarchy(db),
+            {tag for entry in question_entries for tag in entry["tags"]}
+        ),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
 
@@ -458,6 +488,70 @@ def _read_manifest_and_content(zip_file):
     return manifest, pack_guid, version, group_entries, question_entries
 
 
+def _normalize_pack_tag_payload(
+    manifest,
+    pack_guid,
+    question_entries,
+    legacy_map=None
+):
+    """Normalize IDs before hashes are compared or stored."""
+    tag_values = [
+        value
+        for entry in question_entries
+        for value in (entry.get("tags") or [])
+    ]
+    hierarchy, legacy_map = normalize_pack_hierarchy(
+        manifest.get("tag_hierarchy"),
+        pack_guid,
+        legacy_map=legacy_map,
+        tag_values=tag_values
+    )
+
+    if manifest.get("format") == PACK_FORMAT:
+        known_ids = set(hierarchy.get("nodes", {}))
+        for entry in question_entries:
+            normalized = []
+            for value in entry.get("tags") or []:
+                tag_id = str(value or "").strip()
+                if not tag_id or not (
+                    tag_id.startswith("core:") or is_custom_tag_id(tag_id)
+                ):
+                    raise ValueError("Invalid pack: malformed tag identity")
+                if tag_id not in known_ids:
+                    raise ValueError("Invalid pack: a question references an unknown tag")
+                if tag_id not in normalized:
+                    normalized.append(tag_id)
+            entry["tags"] = normalized
+    else:
+        for entry in question_entries:
+            entry["tags"] = map_legacy_pack_tags(
+                entry.get("tags"), pack_guid, legacy_map
+            )
+
+    return hierarchy, legacy_map
+
+
+def _apply_local_tag_redirects(db, incoming, question_entries):
+    """Keep an explicit local merge stable across later pack imports."""
+    local = load_tag_hierarchy(db)
+    redirects = local.get("redirects") or {}
+    result = incoming
+    for source_id, initial_target in list(redirects.items()):
+        target_id = initial_target
+        seen = {source_id}
+        while target_id in redirects and target_id not in seen:
+            seen.add(target_id)
+            target_id = redirects[target_id]
+        if not target_id or target_id == source_id:
+            continue
+        result = _replace_tag_in_slice(result, source_id, target_id)
+        for entry in question_entries:
+            entry["tags"] = _replace_tag_id(
+                entry.get("tags"), source_id, target_id
+            )
+    return result
+
+
 def _make_materializer(zip_file, static_dir, db):
     def materialize(ref):
         # Mirrors the two cases from _resolve_media_ref: only a sha256
@@ -517,6 +611,15 @@ def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
     with ZipFile(zip_path) as zip_file:
         manifest, pack_guid, version, group_entries, question_entries = (
             _read_manifest_and_content(zip_file)
+        )
+
+        incoming_tag_hierarchy, legacy_tag_map = _normalize_pack_tag_payload(
+            manifest,
+            pack_guid,
+            question_entries
+        )
+        incoming_tag_hierarchy = _apply_local_tag_redirects(
+            db, incoming_tag_hierarchy, question_entries
         )
 
         already_subscribed = (
@@ -623,13 +726,25 @@ def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
             # No Progress row -- mirrors create_question()'s own lazy
             # creation on first answer, needs no special-casing here.
 
-        db.add(PackSubscription(
+        subscription = PackSubscription(
             pack_guid=pack_guid,
             installed_version=version,
             name=manifest.get("name"),
             source=str(source or zip_path.name),
-            subscribed_at=datetime.now(timezone.utc).isoformat()
-        ))
+            subscribed_at=datetime.now(timezone.utc).isoformat(),
+            tag_hierarchy_base=incoming_tag_hierarchy,
+            tag_pending=[],
+            tag_conflicts=[],
+            tag_legacy_map=legacy_tag_map
+        )
+        db.add(subscription)
+        db.flush()
+        unplaced_tag_roots = _merge_pack_tag_hierarchy(
+            db,
+            subscription,
+            incoming_tag_hierarchy,
+            previous=None
+        )
         db.commit()
 
         group_id = group_results[0]["id"]
@@ -637,6 +752,11 @@ def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
     return {
         "status": "imported",
         "pack_guid": pack_guid,
+        # Themes the pack brought that have no home here, for the caller to
+        # ask about once each rather than leaving them silently unfiled.
+        "unplaced_tag_roots": unplaced_tag_roots,
+        "tag_inbox": subscription.tag_pending or [],
+        "tag_conflicts": subscription.tag_conflicts or [],
         # First group, for callers that predate multi-group packs.
         "group_id": group_id,
         "groups": group_results,
@@ -664,6 +784,30 @@ def _row_canonical_payload(db, row, fields, static_dir):
             payload[field] = value
 
     return payload
+
+
+def _merge_pack_tag_hierarchy(db, subscription, incoming, previous=None):
+    """Apply a normalized slice and persist its inbox/conflict state."""
+    _hierarchy, pending, conflicts = merge_pack_hierarchy(
+        db,
+        incoming,
+        pack_guid=subscription.pack_guid,
+        previous=previous
+    )
+    old_pending = [
+        entry for entry in (subscription.tag_pending or [])
+        if entry.get("status") in {"pending", "deferred"}
+    ]
+    pending_by_tag = {entry.get("tag_id"): entry for entry in old_pending}
+    for entry in pending:
+        pending_by_tag.setdefault(entry.get("tag_id"), entry)
+    subscription.tag_pending = list(pending_by_tag.values())
+    subscription.tag_conflicts = [
+        entry for entry in (subscription.tag_conflicts or [])
+        if entry.get("status") == "pending"
+    ] + conflicts
+    subscription.tag_hierarchy_base = incoming
+    return [entry["tag_id"] for entry in pending]
 
 
 def _is_row_forked(db, row, fields, static_dir):
@@ -736,6 +880,18 @@ def update_pack(
                 f"This pack zip (v{version}) is older than the "
                 f"installed version (v{subscription.installed_version})"
             )
+
+        previous_tag_hierarchy = subscription.tag_hierarchy_base
+        incoming_tag_hierarchy, legacy_tag_map = _normalize_pack_tag_payload(
+            manifest,
+            pack_guid,
+            question_entries,
+            legacy_map=subscription.tag_legacy_map
+        )
+        incoming_tag_hierarchy = _apply_local_tag_redirects(
+            db, incoming_tag_hierarchy, question_entries
+        )
+        subscription.tag_legacy_map = legacy_tag_map
 
         # Ownership is the pack_guid stamp, not guid equality: a format 2
         # pack's groups keep their own guids and only the stamp says they
@@ -940,12 +1096,21 @@ def update_pack(
         if source:
             subscription.source = str(source)
 
+        unplaced_tag_roots = _merge_pack_tag_hierarchy(
+            db,
+            subscription,
+            incoming_tag_hierarchy,
+            previous=previous_tag_hierarchy
+        )
         db.commit()
 
     return {
         "status": "updated",
         "pack_guid": pack_guid,
         "version": version,
+        "unplaced_tag_roots": unplaced_tag_roots,
+        "tag_inbox": subscription.tag_pending or [],
+        "tag_conflicts": subscription.tag_conflicts or [],
         # Kept as a bool for callers that predate multi-group packs; the
         # per-group guid lists below are the precise answer.
         "group_updated": bool(groups_updated),
@@ -1028,6 +1193,8 @@ def unsubscribe_pack(
             group.pack_version = None
             group.content_hash = None
 
+        detach_pack_tag_state(db, pack_guid, keep_content=True)
+
         db.delete(subscription)
         db.commit()
 
@@ -1094,6 +1261,8 @@ def unsubscribe_pack(
     for group in owned_groups:
         record_tombstone(db, "question_group", group.guid)
         db.delete(group)
+
+    detach_pack_tag_state(db, pack_guid, keep_content=False)
 
     db.delete(subscription)
     db.commit()

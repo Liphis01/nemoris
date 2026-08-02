@@ -13,7 +13,7 @@ import {
   pendingSaveButtonStyle,
   primaryButtonStyle
 } from "./QuestionEditorStyles";
-import AutocompleteInput from "../../../shared/AutocompleteInput";
+import TagPicker from "../../../shared/TagPicker";
 import {
   getMediaKind,
   normalizeMediaPool,
@@ -28,10 +28,6 @@ const DEFAULT_MEDIA_LABELS = {
   dragging: "Déposer l'image",
   typeError: "Seules les images sont acceptées."
 };
-
-function tagKey(tag) {
-  return String(tag || "").trim().toLowerCase();
-}
 
 function QuestionTypeChip({ type }) {
   const typeStyle = getQuestionTypeChipStyle(type);
@@ -1276,88 +1272,25 @@ export function TagEditor({
   inputOverrideStyle,
   labelOverrideStyle
 }) {
-  const currentTagKeys = new Set(tags.map(tagKey));
-  const suggestedTags = availableTags.filter(tag =>
-    !currentTagKeys.has(tagKey(tag))
-  );
-
+  // Props are unchanged so the five editors that mount this need no edits; the
+  // browsing, drilling and creating all live in TagPicker.
   return (
     <div>
       <div style={{ ...labelStyle, marginBottom: compact ? "6px" : "8px", ...labelOverrideStyle }}>
         Tags
       </div>
-      {tags.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: compact ? "6px" : "8px",
-            marginBottom: compact ? "7px" : "10px"
-          }}
-        >
-          {tags.map(tag => (
-            <span
-              key={tag}
-              style={{
-                alignItems: "center",
-                background: "#212121",
-                borderRadius: "999px",
-                color: "#ccc",
-                display: "inline-flex",
-                gap: "8px",
-                padding: compact ? "4px 8px" : "6px 9px",
-                ...chipStyle
-              }}
-            >
-              #{tag}
-              <button
-                type="button"
-                aria-label={`Retirer le tag ${tag}`}
-                onClick={() => onRemoveTag?.(tag)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#888",
-                  cursor: "pointer",
-                  padding: 0
-                }}
-              >
-                x
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) auto",
-          gap: compact ? "6px" : "8px"
-        }}
-      >
-        <AutocompleteInput
-          value={tagInput}
-          onChange={(event) => onTagInputChange?.(event.target.value)}
-          onSuggestionSelect={(tag) => onAddTag?.(tag)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onAddTag?.();
-            }
-          }}
-          placeholder="Ajouter un tag"
-          suggestions={suggestedTags}
-          style={{ ...inputStyle, ...inputOverrideStyle }}
-        />
-        <button
-          type="button"
-          onClick={() => onAddTag?.()}
-          style={compact ? { ...buttonStyle, padding: "8px 12px" } : buttonStyle}
-        >
-          Ajouter
-        </button>
-      </div>
+      <TagPicker
+        tags={tags}
+        value={tagInput}
+        onChange={onTagInputChange}
+        onAdd={(tag) => onAddTag?.(tag)}
+        onRemove={(tag) => onRemoveTag?.(tag)}
+        extraKeys={availableTags}
+        chipStyle={chipStyle}
+        compact={compact}
+        inputStyle={{ ...inputStyle, ...inputOverrideStyle }}
+      />
     </div>
   );
 }

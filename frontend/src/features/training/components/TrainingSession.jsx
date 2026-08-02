@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import TrainingTimerPanel from "../../review/components/TrainingTimerPanel";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { useTagLabels } from "../../../shared/tagLabels";
 import { useTrainingSession } from "../hooks/useTrainingSession";
 import {
   formatDuration,
@@ -323,18 +324,21 @@ function GroupTile({ group, onSelect, selected }) {
 
 
 function TagTile({ tag, startScope }) {
+  const label = tag.label || tag.name;
   return (
     <button
       type="button"
-      aria-label={`Démarrer le tag ${tag.name}`}
+      aria-label={`Démarrer le tag ${label}`}
       className="training-scope-tile training-tag-tile"
       onClick={() => startScope({
         type: "tag",
-        name: tag.name
+        id: tag.id || tag.key,
+        label,
+        name: label
       })}
     >
       <span className="training-scope-tile-main">
-        <strong>#{tag.name}</strong>
+        <strong>#{label}</strong>
         <span>{questionCountLabel(tag.count)}</span>
       </span>
 
@@ -567,7 +571,7 @@ function ScopeSelector({
   );
   const tags = useMemo(
     () => (scopes.tags || []).filter(tag =>
-      normalizeText(tag.name).includes(normalizedSearch)
+      normalizeText(tag.label || tag.name).includes(normalizedSearch)
     ),
     [normalizedSearch, scopes.tags]
   );
@@ -750,7 +754,7 @@ function ScopeSelector({
                   <div className="training-scope-grid" aria-label="Tags d'entrainement">
                     {tags.map(tag => (
                       <TagTile
-                        key={tag.name}
+                        key={tag.id || tag.key || tag.name}
                         startScope={startScope}
                         tag={tag}
                       />
@@ -769,6 +773,7 @@ function ScopeSelector({
 
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
+  const labelForTag = useTagLabels();
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const currentQuestion = session.questions[session.currentIndex];
@@ -933,7 +938,7 @@ export default function TrainingSession({ setMode }) {
                       padding: "3px 8px"
                     }}
                   >
-                    #{tag}
+                    #{labelForTag(tag)}
                   </span>
                 ))}
               </div>
@@ -1271,7 +1276,7 @@ export default function TrainingSession({ setMode }) {
                           padding: "4px 10px"
                         }}
                       >
-                        #{tag}
+                        #{labelForTag(tag)}
                       </div>
                     ))}
                   </div>

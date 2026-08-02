@@ -4,6 +4,7 @@ import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import SuspendToggleButton from "./SuspendToggleButton";
 import RichText from "../../../shared/RichText";
+import { useTagLabels } from "../../../shared/tagLabels";
 
 export default function QuestionCard({
   q,
@@ -19,6 +20,7 @@ export default function QuestionCard({
   onToggleSuspended,
   playlistNames = []
 }) {
+  const labelFor = useTagLabels();
   const cardBackground = selected
     ? "#252525"
     : isHighlighted
@@ -247,7 +249,7 @@ export default function QuestionCard({
             {(q.tags || []).slice(0, 3).map(tag => (
               <div
                 key={tag}
-                title={tag}
+                title={labelFor(tag)}
                 style={{
                   maxWidth: "80px",
                   padding: "1px 6px",
@@ -261,7 +263,7 @@ export default function QuestionCard({
                   flexShrink: 0
                 }}
               >
-                #{tag}
+                #{labelFor(tag)}
               </div>
             ))}
 

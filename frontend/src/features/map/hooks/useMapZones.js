@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMapZones, patchMapZones } from "../../../api/maps";
+import { invalidateTags } from "../../../shared/tagLabels";
 
 
 export function getZoneCode(zone) {
@@ -25,20 +26,16 @@ function arraysMatch(left = [], right = []) {
 
 
 function mergeTagsFromZones(zones = []) {
-  const tagsByKey = new Map();
+  const tagIds = new Set();
 
   zones.forEach((zone) => {
     (zone.tags || []).forEach((tag) => {
       const value = String(tag || "").trim();
-      const key = value.toLowerCase();
-
-      if (value && !tagsByKey.has(key)) {
-        tagsByKey.set(key, value);
-      }
+      if (value) tagIds.add(value);
     });
   });
 
-  return [...tagsByKey.values()];
+  return [...tagIds];
 }
 
 
@@ -294,6 +291,7 @@ export function useMapZones(group) {
 
     setEditableGroup(nextGroup);
     initialGroupRef.current = nextGroup;
+    invalidateTags().catch(() => {});
 
     return {
       delta: newCount - initialCount,

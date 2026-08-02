@@ -345,6 +345,15 @@ class PackSubscription(Base):
     subscribed_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=True)
 
+    # Tag hierarchy state is pack-specific: the previous imported slice is the
+    # base for three-way updates, while unresolved roots/conflicts remain
+    # available after the import dialog closes. JSON keeps this metadata local
+    # to the subscription without turning tags themselves into SQL rows.
+    tag_hierarchy_base = Column(JSON, nullable=True)
+    tag_pending = Column(JSON, nullable=True)
+    tag_conflicts = Column(JSON, nullable=True)
+    tag_legacy_map = Column(JSON, nullable=True)
+
 
 # =========================================================
 # APP SETTINGS

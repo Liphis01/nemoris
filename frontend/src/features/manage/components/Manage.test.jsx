@@ -27,7 +27,7 @@ vi.mock("./ManageInspector", () => ({
   )
 }));
 
-vi.mock("./TagNetworkModal", () => ({
+vi.mock("./TagManagerModal", () => ({
   default: () => null
 }));
 

@@ -1,5 +1,6 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { useTagLabels } from "../../../shared/tagLabels";
 import { isRelearningQuestion } from "../relearningGrades";
 import "./ReviewSession.css";
 
@@ -145,6 +146,7 @@ export default function ReviewSession({
   submitSequenceAnswer,
   graduateGroupedAnswer
 }) {
+  const labelForTag = useTagLabels();
   const currentQuestion = questions[currentIndex];
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
@@ -370,7 +372,7 @@ export default function ReviewSession({
                         padding: "3px 8px"
                       }}
                     >
-                      #{tag}
+                      #{labelForTag(tag)}
                     </span>
                   ))}
                 </div>
@@ -671,7 +673,7 @@ export default function ReviewSession({
                       fontWeight: "600"
                     }}
                   >
-                    #{tag}
+                    #{labelForTag(tag)}
                   </div>
                 ))}
               </div>

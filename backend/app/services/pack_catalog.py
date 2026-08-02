@@ -26,6 +26,15 @@ from .packs import (
     export_playlist_pack
 )
 from .settings import get_pack_catalog_settings
+from .tag_hierarchy import (
+    CORE_ROOT_IDS,
+    ancestors,
+    ensure_stored_tag_ids,
+    label_for_tag,
+    load_tag_hierarchy,
+    parent_map,
+    resolve_tag_id
+)
 from .sync_state import (
     is_signed_in as is_sync_signed_in,
     load_sync_state,
@@ -1080,6 +1089,18 @@ def _filename_slug(value):
     return slug[:64] or "pack"
 
 
+def _catalog_themes_for_tags(db, tag_values):
+    ensure_stored_tag_ids(db)
+    hierarchy = load_tag_hierarchy(db)
+    parents = parent_map(hierarchy)
+    root_ids = set()
+    for value in tag_values or []:
+        tag_id = resolve_tag_id(hierarchy, value)
+        if tag_id:
+            root_ids |= ancestors(tag_id, parents) & set(CORE_ROOT_IDS)
+    return [label_for_tag(hierarchy, tag_id) for tag_id in sorted(root_ids)]
+
+
 def _group_publish_summary(db, group_id):
     group = (
         db.query(QuestionGroup)
@@ -1095,7 +1116,6 @@ def _group_publish_summary(db, group_id):
     tags = merge_tags(*[
         question.tags or []
         for question in questions
-        if question.type_q in {"map", "media", "text"}
     ])
 
     return {
@@ -1103,6 +1123,7 @@ def _group_publish_summary(db, group_id):
         "type_group": group.type_group,
         "question_count": len(questions),
         "tags": tags,
+        "themes": _catalog_themes_for_tags(db, tags),
         "source_kind": "group",
         "group_count": 1
     }
@@ -1142,6 +1163,7 @@ def _collection_publish_summary(db, collection_id):
         ),
         "question_count": len(questions),
         "tags": tags,
+        "themes": _catalog_themes_for_tags(db, tags),
         "source_kind": "playlist",
         "group_count": len({question.group.id for question in questions})
     }
@@ -1349,6 +1371,12 @@ def _diff_entries(previous_entries, next_entries, fields):
 
 
 def _metadata_changes(publication, *, name, description, license, tags, themes):
+    def comparable_terms(values, limit):
+        return [
+            value.casefold()
+            for value in _normalize_terms(values, max_items=limit)
+        ]
+
     comparisons = {
         "name": (
             str(publication.get("name") or "").strip(),
@@ -1363,12 +1391,12 @@ def _metadata_changes(publication, *, name, description, license, tags, themes):
             str(license or "").strip()
         ),
         "tags": (
-            publication.get("tags") or [],
-            _normalize_terms(tags, max_items=20)
+            comparable_terms(publication.get("tags") or [], 20),
+            comparable_terms(tags, 20)
         ),
         "themes": (
-            publication.get("themes") or [],
-            _normalize_terms(themes, max_items=12)
+            comparable_terms(publication.get("themes") or [], 12),
+            comparable_terms(themes, 12)
         )
     }
 
@@ -1522,6 +1550,12 @@ def preview_pack_release(
         )
 
     source = _local_publication_source(db, publication["pack_guid"])
+    source_summary = (
+        _collection_publish_summary(db, source["id"])
+        if source["kind"] == "playlist"
+        else _group_publish_summary(db, source["id"])
+    )
+    themes = source_summary["themes"]
     previous_content = _pack_content_from_zip_bytes(
         _publication_zip_bytes(db, publication)
     )
@@ -1718,7 +1752,10 @@ def _upload_publish_draft(
         tags if tags else summary["tags"],
         max_items=20
     )
-    draft_themes = _normalize_terms(themes, max_items=12)
+    # Themes are semantic roots from the exported questions. Manual catalog
+    # terms remain available as search keywords, but cannot contradict the
+    # hierarchy carried by the pack itself.
+    draft_themes = _normalize_terms(summary.get("themes"), max_items=12)
     payload = {
         "p_pack_guid": summary["pack_guid"],
         "p_name": str(name or "").strip(),

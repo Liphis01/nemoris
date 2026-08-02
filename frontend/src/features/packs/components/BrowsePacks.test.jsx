@@ -375,11 +375,7 @@ describe("BrowsePacks", () => {
       "États et géographie"
     );
     await userEvent.type(
-      screen.getByRole("textbox", { name: "Thèmes du pack" }),
-      "géographie, cartes"
-    );
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "Tags du pack" }),
+      screen.getByRole("textbox", { name: "Mots-clés de recherche du pack" }),
       "capitales, quiz"
     );
     await userEvent.click(publishButton);
@@ -392,7 +388,6 @@ describe("BrowsePacks", () => {
           name: "États et géographie",
           description: "",
           license: "",
-          themes: ["géographie", "cartes"],
           tags: ["capitales", "quiz"]
         }
       );

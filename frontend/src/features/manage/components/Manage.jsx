@@ -2,7 +2,7 @@ import ManageSidebar from "./ManageSidebar";
 import ManageList from "./ManageList";
 import ManageInspector from "./ManageInspector";
 import MapImportWorkspace from "./MapImportWorkspace";
-import TagNetworkModal from "./TagNetworkModal";
+import TagManagerModal from "./TagManagerModal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function collectAvailableTags(questions = []) {
@@ -364,10 +364,9 @@ export default function Manage(props) {
         }}
       />
 
-      <TagNetworkModal
+      <TagManagerModal
         open={tagTreeOpen}
         onClose={() => setTagTreeOpen(false)}
-        availableTags={availableTags}
       />
     </div>
   );

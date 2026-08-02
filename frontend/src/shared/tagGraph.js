@@ -3,7 +3,12 @@
 // Kept free of React / React Flow so it is unit-testable under jsdom.
 
 export function normalizeKey(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[\s_-]+/g, " ");
 }
 
 // parents: { childKey: [parentKey, ...] }

@@ -6,6 +6,7 @@ import {
   previewCollection,
   updateCollection
 } from "../../../api/collections";
+import { primeTags, resetTags } from "../../../shared/tagLabels";
 import PlaylistBuilder from "./PlaylistBuilder";
 
 vi.mock("../../../api/collections", () => ({
@@ -18,6 +19,25 @@ const groups = [
   { id: 7, name: "Drapeaux du monde", type_group: "media" },
   { id: 9, name: "Geographie", type_group: "text" }
 ];
+
+const FLAGS_TAG_ID = "11111111-1111-4111-8111-111111111111";
+const TAG_SNAPSHOT = {
+  revision: 4,
+  nodes: [{
+    id: FLAGS_TAG_ID,
+    label: "Drapeaux",
+    labels: { fr: "Drapeaux" },
+    default_locale: "fr",
+    parents: [],
+    direct_count: 3,
+    total_count: 3,
+    kind: "custom",
+    origin: "local",
+    pack_ids: [],
+    classification: "root",
+    hidden: false
+  }]
+};
 
 function previewResult(overrides = {}) {
   return {
@@ -45,6 +65,8 @@ function previewResult(overrides = {}) {
 
 describe("PlaylistBuilder", () => {
   beforeEach(() => {
+    resetTags();
+    primeTags(TAG_SNAPSHOT);
     previewCollection.mockResolvedValue(previewResult());
     createCollection.mockResolvedValue({ id: 3, name: "Drapeaux mix" });
     updateCollection.mockResolvedValue({ id: 3, name: "Drapeaux mix" });
@@ -84,8 +106,9 @@ describe("PlaylistBuilder", () => {
     await userEvent.click(screen.getByRole("button", { name: "+ tag" }));
     await userEvent.type(
       screen.getByRole("combobox", { name: "Tag de la règle 2" }),
-      "drapeaux"
+      "Drapeaux"
     );
+    await userEvent.click(screen.getByText("#Drapeaux"));
     await userEvent.click(screen.getByRole("button", { name: "Créer" }));
 
     await waitFor(() => {
@@ -95,7 +118,7 @@ describe("PlaylistBuilder", () => {
           match: "any",
           clauses: [
             { kind: "group", group_id: 7 },
-            { kind: "tag", tag: "drapeaux" }
+            { kind: "tag", tag: FLAGS_TAG_ID }
           ]
         },
         question_ids: [],
@@ -141,7 +164,7 @@ describe("PlaylistBuilder", () => {
           name: "Drapeaux mix",
           rules: {
             match: "all",
-            clauses: [{ kind: "tag", tag: "drapeaux" }]
+            clauses: [{ kind: "tag", tag: FLAGS_TAG_ID }]
           },
           pinned_question_ids: [5],
           excluded_question_ids: []
@@ -156,14 +179,15 @@ describe("PlaylistBuilder", () => {
       .toHaveValue("Drapeaux mix");
     expect(screen.getByRole("combobox", { name: "Combinaison des règles" }))
       .toHaveValue("all");
+    expect(screen.getByText("#Drapeaux")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Tag de la règle 1" }))
-      .toHaveValue("drapeaux");
+      .toHaveValue("");
 
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
 
     await waitFor(() => {
       expect(updateCollection).toHaveBeenCalledWith(3, expect.objectContaining({
-        rules: { match: "all", clauses: [{ kind: "tag", tag: "drapeaux" }] },
+        rules: { match: "all", clauses: [{ kind: "tag", tag: FLAGS_TAG_ID }] },
         question_ids: [5]
       }));
     });

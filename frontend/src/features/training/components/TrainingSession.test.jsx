@@ -123,7 +123,9 @@ describe("TrainingSession", () => {
       ],
       tags: [
         {
-          name: "Geo",
+          id: "tag-geo",
+          key: "tag-geo",
+          label: "Geo",
           count: 13
         }
       ]
@@ -335,7 +337,7 @@ describe("TrainingSession", () => {
     await waitFor(() => {
       expect(getTrainingItems).toHaveBeenCalledWith({
         scopeType: "tag",
-        tag: "Geo"
+        tag: "tag-geo"
       });
     });
   });

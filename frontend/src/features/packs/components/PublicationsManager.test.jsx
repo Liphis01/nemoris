@@ -333,8 +333,8 @@ describe("PublicationsManager", () => {
     expect(screen.getByLabelText("Titre du pack")).toHaveValue("Territoires du monde");
     expect(screen.getByLabelText("Version du pack")).toHaveValue(4);
     expect(screen.getByLabelText("Licence du pack")).toHaveValue("CC0");
-    expect(screen.getByLabelText("Thèmes du pack")).toHaveValue("cartes");
-    expect(screen.getByLabelText("Tags du pack")).toHaveValue("géographie");
+    expect(screen.getByText(/Déduits automatiquement des thèmes de base/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Mots-clés de recherche du pack")).toHaveValue("géographie");
 
     await waitFor(() => {
       expect(
@@ -354,8 +354,7 @@ describe("PublicationsManager", () => {
           name: "Territoires du monde",
           description: "Ancienne description.",
           license: "CC0",
-          tags: ["géographie"],
-          themes: ["cartes"]
+          tags: ["géographie"]
         })
       );
     });

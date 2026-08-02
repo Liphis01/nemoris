@@ -8,6 +8,7 @@ import {
   updatePackFromCatalog
 } from "../../../api/packs";
 import { useActionState } from "./useActionState";
+import { invalidateTags } from "../../../shared/tagLabels";
 
 export const POPULAR_THEME = "__popular__";
 const DEFAULT_LIMIT = 24;
@@ -61,6 +62,7 @@ export function useBrowsePacks(filters = {}) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [unplacedTagRoots, setUnplacedTagRoots] = useState([]);
   const [actionState, patchAction] = useActionState();
   const requestIdRef = useRef(0);
 
@@ -139,6 +141,17 @@ export function useBrowsePacks(filters = {}) {
   // Best-effort, never awaited: recording an install must never delay
   // clearing `busy` or surface into `action.error`. Installing a pack has
   // to stay account-free (docs/roadmap.md), so this silently no-ops
+  // Accumulated across installs so a user who adds several packs in a row is
+  // asked once at the end rather than interrupted each time.
+  function noteUnplacedTagRoots(roots) {
+    if (!Array.isArray(roots) || !roots.length) return;
+
+    setUnplacedTagRoots((current) => [
+      ...current,
+      ...roots.filter((root) => !current.includes(root))
+    ]);
+  }
+
   // server-side whenever the user isn't signed in.
   function trackInstall(entry) {
     recordPackInstall(entry.pack_guid, entry.version).catch((trackError) => {
@@ -150,9 +163,13 @@ export function useBrowsePacks(filters = {}) {
     patchAction(entry.pack_guid, { busy: true, error: "" });
 
     try {
-      await installPackFromCatalog(entry);
+      const result = await installPackFromCatalog(entry);
+      await invalidateTags();
       trackInstall(entry);
       await loadPage({ append: false });
+      // Themes the pack brought that have no home here. Asking now, while the
+      // user is thinking about this pack, beats leaving them unfiled forever.
+      noteUnplacedTagRoots(result?.unplaced_tag_roots);
       patchAction(entry.pack_guid, { busy: false });
     } catch (installError) {
       console.error(installError);
@@ -168,8 +185,10 @@ export function useBrowsePacks(filters = {}) {
 
     try {
       const result = await updatePackFromCatalog(entry, { deleteRemoved });
+      await invalidateTags();
       trackInstall(entry);
       await loadPage({ append: false });
+      noteUnplacedTagRoots(result?.unplaced_tag_roots);
 
       patchAction(entry.pack_guid, {
         busy: false,
@@ -190,6 +209,7 @@ export function useBrowsePacks(filters = {}) {
 
     try {
       await requestUnsubscribe(packGuid, { deleteContent });
+      await invalidateTags();
       await loadPage({ append: false });
       patchAction(packGuid, { busy: false, pendingRemoval: null });
     } catch (unsubscribeError) {
@@ -248,6 +268,8 @@ export function useBrowsePacks(filters = {}) {
     ),
     install,
     update,
-    unsubscribe
+    unsubscribe,
+    unplacedTagRoots,
+    clearUnplacedTagRoots: () => setUnplacedTagRoots([])
   };
 }

@@ -5,6 +5,7 @@ import {
   updateCollection
 } from "../../../api/collections";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import TagPicker from "../../../shared/TagPicker";
 
 /**
  * Rules-first playlist builder.
@@ -196,6 +197,7 @@ export default function PlaylistBuilder({
     (playlist?.rules?.match || "any") === "all"
   );
   const [clauses, setClauses] = useState(playlist?.rules?.clauses || []);
+  const [tagQueries, setTagQueries] = useState({});
   const [pinnedIds, setPinnedIds] = useState(
     playlist?.pinned_question_ids || []
   );
@@ -313,13 +315,6 @@ export default function PlaylistBuilder({
 
   return (
     <div className="app-scrollbar" style={styles.root}>
-      {/* One shared datalist: ids must be unique, so it cannot live per row. */}
-      <datalist id="playlist-builder-tags">
-        {availableTags.map((tag) => (
-          <option key={tag} value={tag} />
-        ))}
-      </datalist>
-
       <div>
         <span style={styles.label}>Nom de la playlist</span>
         <input
@@ -394,16 +389,26 @@ export default function PlaylistBuilder({
             )}
 
             {clause.kind === "tag" && (
-              <input
-                aria-label={`Tag de la règle ${index + 1}`}
-                type="text"
-                list="playlist-builder-tags"
-                style={{ ...styles.input, width: 200 }}
-                value={clause.tag || ""}
-                onChange={(event) => patchClause(index, {
-                  tag: event.target.value
-                })}
-              />
+              <div style={{ width: 200 }}>
+                {/* A datalist would list raw tag keys; the picker shows the
+                    themes by name and lets a rule be built by browsing. */}
+                <TagPicker
+                  tags={clause.tag ? [clause.tag] : []}
+                  value={tagQueries[index] || ""}
+                  onChange={(text) => setTagQueries(current => ({ ...current, [index]: text }))}
+                  onAdd={(key) => {
+                    patchClause(index, { tag: key });
+                    setTagQueries(current => ({ ...current, [index]: "" }));
+                  }}
+                  onRemove={() => patchClause(index, { tag: "" })}
+                  placeholder={`Tag de la règle ${index + 1}`}
+                  extraKeys={availableTags}
+                  allowCreate={false}
+                  showChips
+                  compact
+                  inputStyle={styles.input}
+                />
+              </div>
             )}
 
             {clause.kind === "type" && (

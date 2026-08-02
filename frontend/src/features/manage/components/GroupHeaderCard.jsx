@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useManageTextPreview } from "./ManageTextPreview";
 import SuspendToggleButton from "./SuspendToggleButton";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
+import { useTagLabels } from "../../../shared/tagLabels";
 
 export default function GroupHeaderCard({
   row,
@@ -15,6 +16,7 @@ export default function GroupHeaderCard({
 }) {
   const { groupInfo } = row;
   const tags = groupInfo.tags || [];
+  const labelFor = useTagLabels();
   // There is no group-level flag: the header reflects its questions, so a
   // partially suspended group reads as "mixed" rather than silently picking a
   // side.
@@ -57,7 +59,7 @@ export default function GroupHeaderCard({
     },
     {
       label: "Tags",
-      value: tags.map(tag => `#${tag}`).join(" "),
+      value: tags.map(tag => `#${labelFor(tag)}`).join(" "),
       tone: "#999"
     }
   ]);
@@ -183,7 +185,7 @@ export default function GroupHeaderCard({
           {tags.slice(0, 3).map(tag => (
             <span
               key={tag}
-              title={tag}
+              title={labelFor(tag)}
               style={{
                 background: "#242424",
                 borderRadius: "999px",
@@ -199,7 +201,7 @@ export default function GroupHeaderCard({
                 whiteSpace: "nowrap"
               }}
             >
-              #{tag}
+              #{labelFor(tag)}
             </span>
           ))}
           {tags.length > 3 && (

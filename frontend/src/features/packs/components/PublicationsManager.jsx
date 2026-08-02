@@ -60,8 +60,7 @@ function releasePayloadKey(payload) {
     name: payload.name,
     description: payload.description,
     license: payload.license,
-    tags: payload.tags,
-    themes: payload.themes
+    tags: payload.tags
   });
 }
 
@@ -78,8 +77,8 @@ function ReleaseDiffPreview({ preview }) {
     name: "titre",
     description: "description",
     license: "licence",
-    tags: "tags",
-    themes: "thèmes"
+    tags: "mots-clés de recherche",
+    themes: "thèmes dérivés"
   };
   const metadataChanged = Array.isArray(preview.metadata_changed)
     ? preview.metadata_changed
@@ -161,7 +160,6 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
   );
   const [license, setLicense] = useState(basePublication?.license || "");
   const [description, setDescription] = useState(basePublication?.description || "");
-  const [themesDraft, setThemesDraft] = useState(termsToDraft(basePublication?.themes));
   const [tagsDraft, setTagsDraft] = useState(termsToDraft(basePublication?.tags));
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftError, setDraftError] = useState("");
@@ -231,8 +229,7 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
     name: title.trim(),
     description: description.trim(),
     license: license.trim(),
-    tags: splitTerms(tagsDraft),
-    themes: splitTerms(themesDraft)
+    tags: splitTerms(tagsDraft)
   };
   const currentPublicationVersion = Number(basePublication?.version || 0);
   const previewKey = releasePayloadKey(publishPayload);
@@ -557,22 +554,16 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
         </label>
 
         <div className="pack-form-grid">
-          <label className="pack-field">
+          <div className="pack-field">
             <span className="pack-field-label">Thèmes</span>
-            <input
-              aria-label="Thèmes du pack"
-              type="text"
-              placeholder="géographie, cartes"
-              value={themesDraft}
-              onChange={(event) => setThemesDraft(event.target.value)}
-              disabled={publishingBusy}
-            />
-          </label>
-
+            <div style={{ color: "#777", fontSize: "12px", lineHeight: 1.45, paddingTop: "7px" }}>
+              Déduits automatiquement des thèmes de base présents dans le pack.
+            </div>
+          </div>
           <label className="pack-field">
-            <span className="pack-field-label">Tags</span>
+            <span className="pack-field-label">Mots-clés de recherche</span>
             <input
-              aria-label="Tags du pack"
+              aria-label="Mots-clés de recherche du pack"
               type="text"
               placeholder="pays, capitales"
               value={tagsDraft}

@@ -17,7 +17,7 @@ from app.schemas import (
     TrainingAttemptRecordRequest
 )
 from app.services.questions import delete_question, update_question
-from app.services.tag_hierarchy import save_tag_hierarchy
+from app.services.tag_hierarchy import load_tag_hierarchy, resolve_tag_id, save_tag_hierarchy
 from app.services.training import (
     get_training_items,
     group_training_fingerprint,
@@ -158,7 +158,8 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(response[0]["type_q"], "map")
         self.assertEqual(response[0]["group_id"], group.id)
         self.assertEqual(response[0]["mode"], "type_all")
-        self.assertEqual(response[0]["tags"], ["Geo"])
+        hierarchy = load_tag_hierarchy(self.db)
+        self.assertEqual(response[0]["tags"], [resolve_tag_id(hierarchy, "Geo")])
         self.assertEqual(
             {item["question_id"] for item in response[0]["items"]},
             {1, 2}
@@ -453,7 +454,8 @@ class TrainingTests(unittest.TestCase):
 
         self.assertEqual(response["groups"][0]["id"], group.id)
         self.assertEqual(response["groups"][0]["question_count"], 1)
-        self.assertEqual(response["groups"][0]["tags"], ["Geo"])
+        geo_scope = next(tag for tag in response["tags"] if tag["label"] == "Geo")
+        self.assertEqual(response["groups"][0]["tags"], [geo_scope["id"]])
         self.assertEqual(
             response["groups"][0]["training_record"]["best_found_percent"],
             100
@@ -462,10 +464,10 @@ class TrainingTests(unittest.TestCase):
             response["groups"][0]["training_records"]["type_all"]["best_found_percent"],
             100
         )
-        self.assertEqual(response["tags"], [
-            {"name": "Geo", "count": 2},
-            {"name": "History", "count": 2}
-        ])
+        self.assertEqual(
+            [(tag["id"], tag["label"], tag["count"]) for tag in response["tags"]],
+            [(geo_scope["id"], "Geo", 2), ("core:history", "Histoire", 2)]
+        )
 
     def test_scopes_hide_legacy_records_without_fingerprint(self):
         group = QuestionGroup(
@@ -927,7 +929,7 @@ class TrainingTests(unittest.TestCase):
         # Editing an existing item — tags, aliases, even its answer — is a
         # content fix, not a membership change, so the best-time record survives
         # and is still served by the fingerprint.
-        update_question(self.db, 1, QuestionUpdate(tags=["geo"]))
+        update_question(self.db, 1, QuestionUpdate(tags=["core:geography"]))
         update_question(
             self.db,
             1,

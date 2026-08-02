@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTextGroupItems, patchTextGroupItems } from "../../../api/textGroups";
+import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
   dangerButtonStyle,
@@ -514,6 +515,7 @@ export default function TextGroupEditor({
         []
       ));
       setSaveStatus("Enregistré");
+      invalidateTags().catch(() => {});
 
       await onSave?.(saveResult);
 

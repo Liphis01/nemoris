@@ -23,6 +23,10 @@ vi.mock("../../../api/packs", () => ({
   updatePackFromCatalog: vi.fn()
 }));
 
+vi.mock("../../../shared/tagLabels", () => ({
+  invalidateTags: vi.fn(() => Promise.resolve())
+}));
+
 describe("packStatus", () => {
   it("classifies not_installed, up_to_date and update_available", () => {
     const entry = { pack_guid: "g1", version: 3 };

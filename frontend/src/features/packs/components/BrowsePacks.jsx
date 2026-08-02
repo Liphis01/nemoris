@@ -10,6 +10,7 @@ import {
 } from "../hooks/useBrowsePacks";
 import PackCard from "./PackCard";
 import PackReviewsSection from "./PackReviewsSection";
+import UnplacedTagRootsDialog from "./UnplacedTagRootsDialog";
 import PublicationsManager from "./PublicationsManager";
 import { formatSize, questionCountLabel } from "./packFormatting";
 import "./BrowsePacks.css";
@@ -443,7 +444,9 @@ function ImporterScreen({
     loadMore,
     install,
     update,
-    unsubscribe
+    unsubscribe,
+    unplacedTagRoots = [],
+    clearUnplacedTagRoots
   } = useBrowsePacks(filters);
 
   const themes = facets?.themes || [];
@@ -456,6 +459,13 @@ function ImporterScreen({
 
   return (
     <div className="pack-import-layout">
+      {unplacedTagRoots.length > 0 && (
+        <UnplacedTagRootsDialog
+          roots={unplacedTagRoots}
+          onClose={clearUnplacedTagRoots}
+        />
+      )}
+
       <ThemeRail
         activeTheme={activeTheme}
         loading={loading}

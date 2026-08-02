@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMediaGroupItems, patchMediaGroupItems } from "../../../api/mediaGroups";
+import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
   buttonStyle,
@@ -981,6 +982,7 @@ export default function MediaGroupEditor({
         items: savedItems
       };
       setSaveStatus("Enregistré");
+      invalidateTags().catch(() => {});
 
       await onSave?.(saveResult);
 

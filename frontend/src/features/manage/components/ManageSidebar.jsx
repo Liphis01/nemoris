@@ -1,5 +1,6 @@
 import AutocompleteInput from "../../../shared/AutocompleteInput";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import TagFilterControl from "./TagFilterControl";
 
 const sortOptions = [
   { value: "id", label: "Ajout" },
@@ -73,7 +74,6 @@ export default function ManageSidebar({
   availableTags = [],
   onOpenTagTree
 }) {
-
   const inputStyle = {
     width: "100%",
     padding: "11px 12px",
@@ -506,15 +506,13 @@ export default function ManageSidebar({
               ariaLabel: "Effacer la recherche"
             })}
 
-            {renderClearableInput({
-              value: tagFilter,
-              onChange: setTagFilter,
-              onClear: () => setTagFilter(""),
-              placeholder: "Tags...",
-              ariaLabel: "Effacer les tags",
-              suggestions: availableTags,
-              onSuggestionSelect: setTagFilter
-            })}
+            {/* Picking a theme here filters by its whole subtree, so
+                "Sciences" also lists questions tagged only "Linux". */}
+            <TagFilterControl
+              value={tagFilter}
+              onChange={setTagFilter}
+              availableTags={availableTags}
+            />
 
             <select
               value={questionTypeFilter}
@@ -607,8 +605,8 @@ export default function ManageSidebar({
                 gap: "8px"
               }}
             >
-              <span aria-hidden="true">🌐</span>
-              <span>Réseau de tags</span>
+              <span aria-hidden="true">🏷️</span>
+              <span>Gérer les tags</span>
             </button>
 
           </>

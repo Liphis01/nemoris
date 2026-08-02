@@ -3,6 +3,7 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
+from .tag_hierarchy import ensure_tag_ids
 
 
 def merge_tags(*tag_lists):
@@ -11,7 +12,7 @@ def merge_tags(*tag_lists):
     for tag_list in tag_lists:
         for tag in tag_list or []:
             value = str(tag or "").strip()
-            key = value.lower()
+            key = value
 
             if value and key not in tags_by_key:
                 tags_by_key[key] = value
@@ -101,7 +102,7 @@ def save_map_group_zones(db, group_id: int, payload):
 
         if "tags" in group_updates:
             shared_tags_provided = True
-            shared_tags = group_updates.get("tags") or []
+            shared_tags = ensure_tag_ids(db, group_updates.get("tags"))
 
     existing_zones = (
         db.query(Question)

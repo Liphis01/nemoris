@@ -1,8 +1,17 @@
+import copy
 from datetime import datetime, timezone
 
 from sqlalchemy import String, and_, func, or_
 
 from ..models import Collection, Progress, Question
+from .tag_hierarchy import (
+    descendants,
+    ensure_tag_ids,
+    ensure_stored_tag_ids,
+    load_tag_hierarchy,
+    parent_map,
+    resolve_tag_id
+)
 
 
 AUTO_COLLECTION_KEY_FIELD = "auto_collection_key"
@@ -18,6 +27,25 @@ AUTO_HARD_COLLECTION_THRESHOLD = 9.0
 RULES_FIELD = "rules"
 PINNED_FIELD = "pinned_question_ids"
 EXCLUDED_FIELD = "excluded_question_ids"
+
+
+def canonicalize_collection_rules(db, rules):
+    """Validate tag references and persist their current canonical IDs."""
+    normalized = copy.deepcopy(rules) if isinstance(rules, dict) else {
+        "match": "any", "clauses": []
+    }
+    # Old restored databases may still contain text tags. Upgrade that data
+    # first, then keep this write path strict for the rule being submitted.
+    ensure_stored_tag_ids(db)
+    for clause in normalized.get("clauses") or []:
+        if not isinstance(clause, dict) or clause.get("kind") != "tag":
+            continue
+        raw_tag = str(clause.get("tag") or "").strip()
+        if not raw_tag:
+            clause["tag"] = ""
+            continue
+        clause["tag"] = ensure_tag_ids(db, [raw_tag])[0]
+    return normalized
 
 
 def _now_utc_iso():
@@ -51,7 +79,7 @@ def generated_collection_response_fields(collection):
     }
 
 
-def _clause_criterion(clause):
+def _clause_criterion(db, clause):
     """Translate one rule clause into a SQLAlchemy criterion.
 
     Unknown or blank clauses return None and are dropped rather than
@@ -69,13 +97,18 @@ def _clause_criterion(clause):
         return None if group_id is None else Question.group_id == int(group_id)
 
     if kind == "tag":
-        tag = str(clause.get("tag") or "").strip()
+        ensure_stored_tag_ids(db)
+        hierarchy = load_tag_hierarchy(db)
+        tag = resolve_tag_id(hierarchy, clause.get("tag"))
 
-        # Same JSON-cast match the question_candidates endpoint uses, so a
-        # rule preview and the real resolution can never disagree.
-        return (
-            Question.tags.cast(String).ilike(f'%"{tag}"%') if tag else None
-        )
+        if not tag:
+            return None
+
+        tag_ids = descendants(tag, parent_map(hierarchy))
+        return or_(*[
+            Question.tags.cast(String).ilike(f'%"{tag_id}"%')
+            for tag_id in sorted(tag_ids)
+        ])
 
     if kind == "type":
         type_q = str(clause.get("type_q") or "").strip()
@@ -106,7 +139,7 @@ def clause_match_count(db, clause):
     Lets the builder show a per-rule count next to each row, so "tag =
     drapeaux · 54 questions" is visible before saving anything.
     """
-    criterion = _clause_criterion(clause)
+    criterion = _clause_criterion(db, clause)
 
     if criterion is None:
         return 0
@@ -135,7 +168,7 @@ def resolve_playlist_data(db, data):
 
     criteria = [
         criterion
-        for criterion in (_clause_criterion(clause) for clause in clauses)
+        for criterion in (_clause_criterion(db, clause) for clause in clauses)
         if criterion is not None
     ]
     resolved = {}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import AutocompleteInput from "../../../shared/AutocompleteInput";
+import TagPicker from "../../../shared/TagPicker";
+import { useTagLabels } from "../../../shared/tagLabels";
 import { resolveMediaUrl } from "../../../shared/media";
 import { apiUrl } from "../../../api/config";
 import {
@@ -49,6 +50,7 @@ export default function MapEditor({
   const [upgradeDraft, setUpgradeDraft] = useState(null);
   const [upgradeError, setUpgradeError] = useState("");
   const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const labelForTag = useTagLabels();
   const labelInputRef = useRef(null);
   const aliasInputRef = useRef(null);
   const focusLabelAfterZoneChangeRef = useRef(false);
@@ -722,7 +724,7 @@ export default function MapEditor({
                         }}
                       >
                         <span
-                          title={tag}
+                          title={labelForTag(tag)}
                           style={{
                             minWidth: 0,
                             overflow: "hidden",
@@ -730,11 +732,11 @@ export default function MapEditor({
                             whiteSpace: "nowrap"
                           }}
                         >
-                          #{tag}
+                          #{labelForTag(tag)}
                         </span>
                         <button
                           type="button"
-                          aria-label={`Retirer le tag ${tag}`}
+                          aria-label={`Retirer le tag ${labelForTag(tag)}`}
                           onClick={() => removeGroupTag(tag)}
                           style={{
                             background: "transparent",
@@ -766,28 +768,16 @@ export default function MapEditor({
                 </div>
               )}
 
-              <div
-                style={{
-                  display: "grid",
-                  gap: "6px",
-                  gridTemplateColumns: "minmax(0, 1fr) 32px"
-                }}
-              >
-                <AutocompleteInput
+              <div>
+                <TagPicker
+                  tags={editableGroup.tags || []}
                   value={groupTagInput}
-                  onChange={(event) => setGroupTagInput(event.target.value)}
-                  onSuggestionSelect={addGroupTag}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addGroupTag();
-                    }
-                  }}
+                  onChange={setGroupTagInput}
+                  onAdd={addGroupTag}
                   placeholder="Tag"
-                  suggestions={availableTags.filter(tag =>
-                    !(editableGroup.tags || []).includes(tag)
-                  )}
-                  style={{
+                  extraKeys={availableTags}
+                  showChips={false}
+                  inputStyle={{
                     padding: "8px 9px",
                     background: "#111",
                     color: "#eee",
@@ -796,23 +786,6 @@ export default function MapEditor({
                     fontSize: "13px"
                   }}
                 />
-                <button
-                  type="button"
-                  onClick={() => addGroupTag()}
-                  title="Ajouter le tag"
-                  style={{
-                    background: "#242424",
-                    border: "1px solid #333",
-                    borderRadius: "8px",
-                    color: "#ddd",
-                    cursor: "pointer",
-                    fontSize: "18px",
-                    lineHeight: 1,
-                    padding: 0
-                  }}
-                >
-                  +
-                </button>
               </div>
             </div>
 

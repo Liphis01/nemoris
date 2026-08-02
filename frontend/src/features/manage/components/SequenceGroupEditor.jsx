@@ -3,6 +3,7 @@ import {
   getSequenceGroupItems,
   patchSequenceGroupItems
 } from "../../../api/sequenceGroups";
+import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
   dangerButtonStyle,
@@ -477,6 +478,7 @@ export default function SequenceGroupEditor({
         []
       ));
       setSaveStatus("Enregistré");
+      invalidateTags().catch(() => {});
 
       await onSave?.(saveResult);
 

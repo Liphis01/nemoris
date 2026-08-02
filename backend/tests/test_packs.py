@@ -3,6 +3,7 @@ import io
 import json
 import tempfile
 import unittest
+import uuid
 from datetime import date
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -127,7 +128,7 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
             content = json.loads(zip_file.read("content.json"))
             names = zip_file.namelist()
 
-        self.assertEqual(manifest["format"], 2)
+        self.assertEqual(manifest["format"], 4)
         self.assertEqual(manifest["pack_guid"], group.guid)
         self.assertEqual(manifest["version"], 1)
         self.assertEqual(manifest["name"], "Countries of the world")
@@ -165,7 +166,13 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
 
         first_entry = questions_by_guid[first.guid]
         self.assertEqual(first_entry["question"], "Q1")
-        self.assertEqual(first_entry["tags"], ["europe"])
+        self.assertEqual(len(first_entry["tags"]), 1)
+        tag_id = first_entry["tags"][0]
+        self.assertEqual(str(uuid.UUID(tag_id)), tag_id)
+        self.assertEqual(
+            manifest["tag_hierarchy"]["nodes"][tag_id]["labels"]["fr"],
+            "europe"
+        )
         self.assertEqual(
             first_entry["data"], {"code": "fr", "aliases": ["france"]}
         )
@@ -410,7 +417,8 @@ class ImportPackTests(PackFixtureMixin, unittest.TestCase):
 
         imported_first = imported_questions[first.guid]
         self.assertEqual(imported_first.question, "Q1")
-        self.assertEqual(imported_first.tags, ["europe"])
+        self.assertEqual(len(imported_first.tags), 1)
+        self.assertEqual(str(uuid.UUID(imported_first.tags[0])), imported_first.tags[0])
         self.assertEqual(imported_first.pack_version, 1)
 
         # content_hash is independently reproducible from the imported row.

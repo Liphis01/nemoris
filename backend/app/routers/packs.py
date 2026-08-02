@@ -55,7 +55,15 @@ def list_pack_subscriptions(db: Session = Depends(get_db)):
             "name": subscription.name,
             "source": subscription.source,
             "subscribed_at": subscription.subscribed_at,
-            "updated_at": subscription.updated_at
+            "updated_at": subscription.updated_at,
+            "tag_inbox_count": len([
+                item for item in (subscription.tag_pending or [])
+                if item.get("status") in {"pending", "deferred"}
+            ]),
+            "tag_conflict_count": len([
+                item for item in (subscription.tag_conflicts or [])
+                if item.get("status") == "pending"
+            ])
         }
         for subscription in db.query(PackSubscription).all()
     ]

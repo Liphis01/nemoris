@@ -6,10 +6,18 @@ from ..dependencies import get_db
 from ..models import Collection, Question, QuestionGroup, question_collection
 from ..schemas import CollectionCreate, CollectionPreview, CollectionUpdate
 from ..services.tombstones import record_tombstone
+from ..services.tag_hierarchy import (
+    descendants,
+    ensure_stored_tag_ids,
+    load_tag_hierarchy,
+    parent_map,
+    resolve_tag_id
+)
 from ..services.collections import (
     EXCLUDED_FIELD,
     PINNED_FIELD,
     RULES_FIELD,
+    canonicalize_collection_rules,
     clause_match_count,
     collection_data,
     generated_collection_response_fields,
@@ -194,9 +202,16 @@ def get_collection_question_candidates(
     clean_tag = str(tag or "").strip()
 
     if clean_tag:
-        query = query.filter(
-            Question.tags.cast(String).ilike(f'%"{clean_tag}"%')
-        )
+        ensure_stored_tag_ids(db)
+        hierarchy = load_tag_hierarchy(db)
+        tag_id = resolve_tag_id(hierarchy, clean_tag)
+        if tag_id:
+            query = query.filter(or_(*[
+                Question.tags.cast(String).ilike(f'%"{descendant_id}"%')
+                for descendant_id in sorted(descendants(tag_id, parent_map(hierarchy)))
+            ]))
+        else:
+            query = query.filter(Question.id == -1)
 
     clean_search = str(search or "").strip()
 
@@ -258,7 +273,10 @@ def preview_collection(
     Declared before /collections/{collection_id} so "preview" is not parsed
     as an id.
     """
-    rules = payload.rules.model_dump() if payload.rules is not None else {}
+    rules = canonicalize_collection_rules(
+        db,
+        payload.rules.model_dump() if payload.rules is not None else {}
+    )
     questions = resolve_playlist_data(db, {
         RULES_FIELD: rules,
         PINNED_FIELD: _dedupe_question_ids(payload.question_ids),
@@ -302,7 +320,8 @@ def create_collection(data: CollectionCreate, db: Session = Depends(get_db)):
     collection = Collection(
         name=name,
         data={
-            RULES_FIELD: (
+            RULES_FIELD: canonicalize_collection_rules(
+                db,
                 data.rules.model_dump() if data.rules is not None
                 else {"match": "any", "clauses": []}
             ),
@@ -419,7 +438,10 @@ def update_collection(
     data = collection_data(collection)
 
     if "rules" in updates:
-        data[RULES_FIELD] = updates["rules"] or {"match": "any", "clauses": []}
+        data[RULES_FIELD] = canonicalize_collection_rules(
+            db,
+            updates["rules"] or {"match": "any", "clauses": []}
+        )
 
     if "question_ids" in updates:
         pinned = _dedupe_question_ids(updates["question_ids"])

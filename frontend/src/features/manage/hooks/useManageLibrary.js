@@ -23,6 +23,7 @@ import {
   listCollections
 } from "../../../api/collections";
 import { getQuestionGroupId } from "../utils/manageRows";
+import { invalidateTags, useTagHierarchy } from "../../../shared/tagLabels";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
@@ -96,6 +97,9 @@ export function useManageLibrary(mode) {
   const [allGroups, setAllGroups] = useState([]);
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  // Filtering on a theme has to reach its descendants, and stored tags are
+  // opaque keys, so the filter needs the hierarchy rather than just the text.
+  const { parents: tagParents, labels: tagLabels } = useTagHierarchy();
   const [questionTypeFilter, setQuestionTypeFilter] = useState("");
   const [dueOnly, setDueOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -186,6 +190,10 @@ export function useManageLibrary(mode) {
   async function updateQuestion(id, updatedFields) {
     await updateQuestionRequest(id, updatedFields);
 
+    if (Object.prototype.hasOwnProperty.call(updatedFields || {}, "tags")) {
+      invalidateTags().catch(() => {});
+    }
+
     // Optimistic local patch keeps spreadsheet interactions quick. For fields
     // that require server-calculated shape, callers can reload or patch richer
     // data afterward.
@@ -235,6 +243,7 @@ export function useManageLibrary(mode) {
 
   async function deleteQuestion(id) {
     await deleteQuestionRequest(id);
+    invalidateTags().catch(() => {});
 
     const deletedQuestion = allQuestions.find(question => question.id === id);
 
@@ -265,6 +274,7 @@ export function useManageLibrary(mode) {
   async function deleteGroup(id) {
     try {
       await deleteGroupRequest(id);
+      invalidateTags().catch(() => {});
       setAllGroups(prev => prev.filter(group => group.id !== id));
       setAllQuestions(prev =>
         prev.filter(question => getItemGroupId(question) !== id)
@@ -307,6 +317,8 @@ export function useManageLibrary(mode) {
     }
 
     const created = await createQuestionRequest(payload);
+
+    if ((payload.tags || []).length) invalidateTags().catch(() => {});
 
     setAllQuestions(prev => [...prev, created]);
     resetQuestionDraft();
@@ -488,6 +500,8 @@ export function useManageLibrary(mode) {
         questions: allQuestions,
         search,
         tagFilter,
+        tagParents,
+        tagLabels,
         questionTypeFilter,
         dueOnly,
         favoritesOnly,
@@ -500,6 +514,8 @@ export function useManageLibrary(mode) {
       favoritesOnly,
       questionTypeFilter,
       tagFilter,
+      tagParents,
+      tagLabels,
       search,
       sortField,
       sortOrder

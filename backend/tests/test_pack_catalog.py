@@ -42,6 +42,7 @@ from app.services.pack_catalog import (
     save_pack_publish_draft
 )
 from app.services.packs import export_pack
+from app.services.tag_hierarchy import apply_tag_actions, load_tag_hierarchy
 from app.services import settings as settings_module
 
 
@@ -625,6 +626,21 @@ class PackCatalogAuthTestCase(unittest.TestCase):
 
     def configure(self, db):
         use_catalog(self, url="https://project.supabase.co")
+        current = load_tag_hierarchy(db)
+        apply_tag_actions(db, current["revision"], [
+            {
+                "type": "create",
+                "tag_id": "11111111-1111-4111-8111-111111111111",
+                "label": "Capitales",
+                "parent_ids": ["core:geography"]
+            },
+            {
+                "type": "create",
+                "tag_id": "22222222-2222-4222-8222-222222222222",
+                "label": "Europe",
+                "parent_ids": ["core:geography"]
+            }
+        ])
         group = QuestionGroup(
             guid="group-guid",
             type_group="map",
@@ -637,7 +653,10 @@ class PackCatalogAuthTestCase(unittest.TestCase):
             type_q="map",
             question="France",
             answer="Paris",
-            tags=["capitales", "europe"],
+            tags=[
+                "11111111-1111-4111-8111-111111111111",
+                "22222222-2222-4222-8222-222222222222"
+            ],
             group_id=group.id
         ))
         db.commit()
@@ -794,7 +813,7 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
             "Cartes de capitales françaises."
         )
         self.assertEqual(payload["p_tags"], ["capitales"])
-        self.assertEqual(payload["p_themes"], ["géographie"])
+        self.assertEqual(payload["p_themes"], ["Géographie"])
 
     def test_preview_release_compares_published_zip_with_local_source(self):
         db = make_db()
@@ -822,7 +841,10 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
             type_q="map",
             question="Espagne",
             answer="Madrid",
-            tags=["capitales", "europe"],
+            tags=[
+                "11111111-1111-4111-8111-111111111111",
+                "22222222-2222-4222-8222-222222222222"
+            ],
             group_id=group_id
         ))
         db.commit()

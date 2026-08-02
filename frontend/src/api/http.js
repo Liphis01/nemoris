@@ -17,6 +17,9 @@ const collectionMutationRules = [
   ["PUT", /^\/collections\/\d+\/?$/],
   ["DELETE", /^\/collections\/\d+\/?$/],
   ["PUT", /^\/tags\/hierarchy\/?$/],
+  ["POST", /^\/tags\/actions\/?$/],
+  ["POST", /^\/tags\/inbox\/resolve\/?$/],
+  ["POST", /^\/tags\/conflicts\/resolve\/?$/],
   ["POST", /^\/upload\/?$/],
   ["POST", /^\/upload\/url\/?$/],
   ["PATCH", /^\/maps\/\d+\/zones\/?$/],
@@ -84,10 +87,17 @@ export async function requestJson(path, options = {}) {
     // Normalize both into one thrown Error for hooks/components.
     const payload = await response.json().catch(() => null);
     const detail = payload?.detail || payload?.error;
-    throw new Error(
+    const error = new Error(
       (detail && typeof detail === "object" ? detail.message : detail)
       || "Request failed"
     );
+    error.status = response.status;
+    error.detail = detail;
+    error.payload = payload;
+    error.snapshot = detail && typeof detail === "object"
+      ? detail.snapshot
+      : undefined;
+    throw error;
   }
 
   const payload = await response.json();
@@ -105,10 +115,14 @@ export async function requestOk(path, options = {}) {
     // instead of parsed JSON, but keep error handling consistent.
     const payload = await response.json().catch(() => null);
     const detail = payload?.detail || payload?.error;
-    throw new Error(
+    const error = new Error(
       (detail && typeof detail === "object" ? detail.message : detail)
       || "Request failed"
     );
+    error.status = response.status;
+    error.detail = detail;
+    error.payload = payload;
+    throw error;
   }
 
   notifyCollectionMutation(path, options);

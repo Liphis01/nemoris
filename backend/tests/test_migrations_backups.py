@@ -328,7 +328,7 @@ class MigrationTests(unittest.TestCase):
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
                     "0015", "0016", "0017", "0018",
-                    "0019", "0020"
+                    "0019", "0020", "0021", "0022", "0023", "0024"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -365,7 +365,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 20)
+            self.assertEqual(migration_count, 24)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -413,7 +413,7 @@ class MigrationTests(unittest.TestCase):
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
                     "0015", "0016", "0017", "0018",
-                    "0019", "0020"
+                    "0019", "0020", "0021", "0022", "0023", "0024"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -515,7 +515,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0005", "0006", "0007", "0008", "0009",
                     "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018",
-                    "0019", "0020"
+                    "0019", "0020", "0021", "0022", "0023", "0024"
                 ]
             )
 
@@ -591,7 +591,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0006", "0007", "0008", "0009",
                     "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018",
-                    "0019", "0020"
+                    "0019", "0020", "0021", "0022", "0023", "0024"
                 ]
             )
 
@@ -686,7 +686,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]
+                ["0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             guids = {}
@@ -873,7 +873,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]
+                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1031,7 +1031,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]
+                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1124,7 +1124,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]
+                ["0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1178,7 +1178,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0014", "0015", "0016", "0017", "0018", "0019", "0020"]
+                ["0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1274,7 +1274,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0015", "0016", "0017", "0018", "0019", "0020"]
+                ["0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             self.assertIn("pack_subscriptions", table_names(database_file))
@@ -1421,7 +1421,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0017", "0018", "0019", "0020"]
+                ["0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
             self.assertIn("pack_subscriptions", table_names(database_file))
             self.assertNotIn("blueprint_subscriptions", table_names(database_file))
@@ -1560,7 +1560,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0016", "0017", "0018", "0019", "0020"]
+                ["0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
             )
 
             digest = hashlib.sha256(svg_bytes).hexdigest()

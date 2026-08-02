@@ -16,6 +16,7 @@ from .media import (
 )
 from .media_pool import read_media_pool
 from .sequence import validate_question_sequence
+from .tag_hierarchy import ensure_tag_ids
 from .tombstones import record_question_tombstones, record_tombstone
 from .timeline import validate_question_timeline
 
@@ -79,7 +80,7 @@ def create_question(db, payload):
         answer=payload.answer,
         media=payload.media,
         answer_media=payload.answer_media,
-        tags=payload.tags or [],
+        tags=ensure_tag_ids(db, payload.tags),
         data=payload.data or {},
         group_id=payload.group_id
     )
@@ -170,7 +171,12 @@ def update_question(db, question_id: int, payload):
         "suspended"
     ]:
         if field in updates:
-            setattr(question, field, updates[field])
+            value = updates[field]
+
+            if field == "tags":
+                value = ensure_tag_ids(db, value)
+
+            setattr(question, field, value)
 
     if "collection_ids" in updates:
         question.collections = get_collections_by_ids(db, updates["collection_ids"])

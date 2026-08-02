@@ -123,7 +123,7 @@ function labelForScope(scope) {
     return scope.name || `Collection #${scope.id}`;
   }
 
-  return `#${scope.name}`;
+  return `#${scope.label || scope.name || ""}`;
 }
 
 
@@ -148,7 +148,7 @@ function scopeRequestOptions(scope) {
 
   return {
     scopeType: "tag",
-    tag: scope?.name || ""
+    tag: scope?.id || scope?.key || ""
   };
 }
 

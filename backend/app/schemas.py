@@ -667,8 +667,57 @@ class TagPosition(BaseModel):
 
 class TagHierarchyUpdate(BaseModel):
 
+    # Compatibility clients must still participate in optimistic locking;
+    # current clients use the narrower /tags/actions endpoint.
+    revision: int = Field(ge=0)
+
     parents: Dict[str, List[str]] = Field(default_factory=dict)
 
     labels: Dict[str, str] = Field(default_factory=dict)
 
     positions: Dict[str, TagPosition] = Field(default_factory=dict)
+
+
+class TagAction(BaseModel):
+
+    type: Literal[
+        "create",
+        "set_label",
+        "remove_label",
+        "set_parents",
+        "hide_root",
+        "unfile",
+        "accept_root",
+        "remove_assignments",
+        "delete",
+        "merge"
+    ]
+    tag_id: Optional[str] = None
+    target_id: Optional[str] = None
+    label: Optional[str] = None
+    locale: str = "fr"
+    suggestion_key: Optional[str] = None
+    parent_ids: List[str] = Field(default_factory=list)
+    hidden: Optional[bool] = None
+
+
+class TagActionsRequest(BaseModel):
+
+    base_revision: int = Field(ge=0)
+    actions: List[TagAction] = Field(min_length=1)
+
+
+class TagInboxResolution(BaseModel):
+
+    pack_guid: str
+    tag_id: str
+    action: Literal["place", "merge", "keep_root", "defer"]
+    parent_id: Optional[str] = None
+    target_id: Optional[str] = None
+
+
+class TagConflictResolution(BaseModel):
+
+    pack_guid: str
+    conflict_id: str
+    choice: Literal["local", "pack"]
