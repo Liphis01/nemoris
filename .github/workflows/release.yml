@@ -34,9 +34,9 @@ jobs:
         working-directory: frontend
         run: npm ci --legacy-peer-deps
 
-      # The FastAPI backend ships as a single-file console binary that Tauri
-      # spawns as a sidecar. questions.db is seeded from the tracked CSV and
-      # bundled so the app has data on first run.
+      # The FastAPI backend ships as a PyInstaller onedir resource. Avoiding
+      # onefile prevents a large temporary extraction on every app launch.
+      # questions.db is seeded from the tracked CSV for first-run data.
       - name: Build backend sidecar
         working-directory: backend
         run: |
@@ -44,16 +44,54 @@ jobs:
           pip install -r requirements.txt pyinstaller
           python -c "from app.bootstrap import init_database; init_database()"
           python import_csv.py
-          pyinstaller --name nemoris-backend --onefile --noconfirm --add-data "questions.db;seed" --collect-data countryinfo run_sidecar.py
+          pyinstaller --name nemoris-backend --onedir --clean --noconfirm --add-data "questions.db;seed" --collect-data countryinfo run_sidecar.py
 
-      # Tauri resolves externalBin by target triple; place the built binary
-      # where tauri.conf.json's "binaries/nemoris-backend" expects it.
-      - name: Place sidecar for Tauri
-        shell: bash
+      - name: Smoke-test backend sidecar
+        shell: pwsh
+        working-directory: backend
         run: |
-          mkdir -p frontend/src-tauri/binaries
-          cp backend/dist/nemoris-backend.exe \
-            "frontend/src-tauri/binaries/nemoris-backend-x86_64-pc-windows-msvc.exe"
+          $backend = Resolve-Path "dist/nemoris-backend/nemoris-backend.exe"
+          if (-not (Test-Path "dist/nemoris-backend/_internal" -PathType Container)) {
+            throw "PyInstaller onedir support directory is missing."
+          }
+
+          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+          $listener.Start()
+          $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+          $listener.Stop()
+
+          $smokeData = Join-Path $env:RUNNER_TEMP "nemoris-sidecar-smoke"
+          New-Item -ItemType Directory -Force -Path $smokeData | Out-Null
+          $env:APPDATA = $smokeData
+          $env:QUIZ_APP_PORT = "$port"
+          $startedAt = [System.Diagnostics.Stopwatch]::StartNew()
+          $process = Start-Process -FilePath $backend -PassThru -NoNewWindow
+
+          try {
+            $ready = $false
+            $deadline = [DateTime]::UtcNow.AddSeconds(30)
+            while ([DateTime]::UtcNow -lt $deadline -and -not $ready) {
+              if ($process.HasExited) {
+                throw "Backend exited before becoming ready (code $($process.ExitCode))."
+              }
+              try {
+                $client = [System.Net.Sockets.TcpClient]::new()
+                $client.Connect("127.0.0.1", $port)
+                $client.Dispose()
+                $ready = $true
+              } catch {
+                Start-Sleep -Milliseconds 200
+              }
+            }
+            if (-not $ready) {
+              throw "Backend did not become ready within 30 seconds."
+            }
+            Write-Host "Backend ready after $($startedAt.Elapsed.TotalSeconds.ToString('0.000')) s"
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
 
       # The updater compares this against the installed app's version, so a
       # forgotten manual bump here would silently break update detection

@@ -7,7 +7,7 @@ import Profile from "./features/profile/components/Profile";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
 import BrowsePacks from "./features/packs/components/BrowsePacks";
-import DesktopTitleBar from "./shared/DesktopTitleBar";
+import DesktopStartupGate from "./shared/DesktopStartupGate";
 import UpdateBanner from "./features/update/UpdateBanner";
 import AutoSyncBanner from "./features/sync/AutoSyncBanner";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
@@ -24,7 +24,7 @@ const BACK_MOUSE_BUTTON = 3;
 const FORWARD_MOUSE_BUTTON = 4;
 
 
-function App() {
+function AppContent() {
   // Top-level mode switching is intentionally simple: each feature owns its
   // internal state through hooks, while App only coordinates cross-feature jumps.
   const [mode, setMode] = useState("menu");
@@ -285,7 +285,6 @@ function App() {
 
   return (
     <div style={appStyle}>
-      <DesktopTitleBar />
       <div style={bannerOverlayStyle}>
         <UpdateBanner />
         <AutoSyncBanner {...autoSync} />
@@ -363,6 +362,14 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <DesktopStartupGate>
+      <AppContent />
+    </DesktopStartupGate>
   );
 }
 
