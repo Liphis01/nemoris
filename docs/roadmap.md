@@ -35,7 +35,6 @@
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
 - trouver un meilleur agencement pour les aliases dans map preview
-- mettre des groupes en favoris pour les faire réapparaître plus souvent (qui se met sur toutes les questions du groupe)
 - supprimer une question appelle le rebalancing ?
 - permettre d'accepter une réponse fausse si faute de frappe
 - ajouter une barre de progression qui montre la maîtrise d'une question dans manage (et éventuellement un historique de la progression en fonction du temps)
@@ -44,10 +43,8 @@
 - uniformiser le style partout
 - augmenter la difficulté des qcm en proposant des réponses plus proches
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
-- make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
-- faire un sytème automatique pour ajouter progressivement un groupe au schedule (ex: avoir en permanence une dizaine de questions non maîtrisées dans le schedule, et quand on en maîtrise une, en ajouter une autre du groupe)
 - un mode où je dois pointer sur une map le plus proche possible
 - site de quiz en ligne relié
 - ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
@@ -56,7 +53,7 @@
 - suivre des amis
 - faire des packs publics/amis only/privés
 - challenge des amis sur des packs
-- autoriser les pauses en training
+- quels sont les principes à respecter pour un rendu graphique idéal ? vérifie que c'est appliqué partout
 
 ## refactors
 

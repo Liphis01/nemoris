@@ -112,6 +112,9 @@ function addFailedIds(setFailedQuestionIds, failedQuestionIds = []) {
 }
 
 
+const MAX_TRAINING_PAUSES = 3;
+
+
 function labelForScope(scope) {
   if (!scope) return "";
 
@@ -177,7 +180,10 @@ export function useTrainingSession(active = true) {
   const [recordSaveStatus, setRecordSaveStatus] = useState("idle");
   const [recordSaveError, setRecordSaveError] = useState("");
   const [recordResult, setRecordResult] = useState(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [pauseCount, setPauseCount] = useState(0);
   const recordSubmittedRef = useRef(false);
+  const pausedElapsedRef = useRef(0);
 
   const current = questions[currentIndex];
   const failedCount = failedQuestionIds.size;
@@ -226,6 +232,9 @@ export function useTrainingSession(active = true) {
     setRecordSaveError("");
     setRecordResult(null);
     recordSubmittedRef.current = false;
+    setIsPaused(false);
+    setPauseCount(0);
+    pausedElapsedRef.current = 0;
   }, []);
 
   const resetRun = useCallback((items, nextRunMode = "full") => {
@@ -373,6 +382,29 @@ export function useTrainingSession(active = true) {
     setRunStartedAt(null);
     setAnsweringComplete(true);
   }, [currentIndex, questions.length, runStartedAt]);
+
+  const pausesRemaining = Math.max(0, MAX_TRAINING_PAUSES - pauseCount);
+  const canPause = Boolean(runStartedAt !== null && !isPaused && pausesRemaining > 0);
+
+  const pauseRun = useCallback(() => {
+    if (runStartedAt === null || isPaused || pausesRemaining <= 0) return;
+
+    pausedElapsedRef.current = Math.max(
+      1,
+      Math.round(performance.now() - runStartedAt)
+    );
+    setElapsedMs(pausedElapsedRef.current);
+    setRunStartedAt(null);
+    setIsPaused(true);
+    setPauseCount(prev => prev + 1);
+  }, [isPaused, pausesRemaining, runStartedAt]);
+
+  const resumeRun = useCallback(() => {
+    if (!isPaused) return;
+
+    setRunStartedAt(performance.now() - pausedElapsedRef.current);
+    setIsPaused(false);
+  }, [isPaused]);
 
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitMediaTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
@@ -540,6 +572,10 @@ export function useTrainingSession(active = true) {
     if (!active) return;
 
     function handleKeyDown(event) {
+      if (isPaused) {
+        return;
+      }
+
       if (current?.type_q === "text") {
         return;
       }
@@ -573,12 +609,13 @@ export function useTrainingSession(active = true) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [active, current?.items, current?.type_q, handleTextAnswer, showAnswer]);
+  }, [active, current?.items, current?.type_q, handleTextAnswer, isPaused, showAnswer]);
 
   return {
     activeScope,
     allQuestionIds,
     attemptFoundCount,
+    canPause,
     completedElapsedMs,
     completedRunElapsedMs,
     currentIndex,
@@ -591,16 +628,21 @@ export function useTrainingSession(active = true) {
     handleTimelineComplete,
     handleSequenceComplete,
     isComplete,
+    isPaused,
     labelForActiveScope: labelForScope(activeScope),
     loadScopes,
     markAnsweringComplete,
+    maxPauses: MAX_TRAINING_PAUSES,
     originalQuestions,
+    pauseRun,
+    pausesRemaining,
     questions,
     recordEligible,
     recordResult,
     recordSaveError,
     recordSaveStatus,
     restartFullScope,
+    resumeRun,
     retryFailedItems,
     returnToScopeSelector,
     scopes,

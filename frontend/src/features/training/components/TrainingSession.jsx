@@ -771,6 +771,72 @@ function ScopeSelector({
 }
 
 
+function PauseResumeButton({ session, style }) {
+  if (session.isPaused) {
+    return (
+      <button
+        type="button"
+        onClick={session.resumeRun}
+        style={{ ...primaryButtonStyle, ...style }}
+      >
+        Reprendre
+      </button>
+    );
+  }
+
+  const disabled = !session.canPause;
+
+  return (
+    <button
+      type="button"
+      onClick={session.pauseRun}
+      disabled={disabled}
+      style={disabled ? { ...disabledButtonStyle, ...style } : { ...buttonStyle, ...style }}
+    >
+      Pause ({session.pausesRemaining}/{session.maxPauses})
+    </button>
+  );
+}
+
+function PauseOverlay({ session }) {
+  if (!session.isPaused) return null;
+
+  return (
+    <div
+      data-training-pause-overlay
+      style={{
+        alignItems: "center",
+        background: "rgba(8, 8, 8, 0.9)",
+        borderRadius: "8px",
+        bottom: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        justifyContent: "center",
+        left: 0,
+        position: "absolute",
+        right: 0,
+        top: 0,
+        zIndex: 5
+      }}
+    >
+      <div
+        style={{
+          color: "#f0c36a",
+          fontSize: "13px",
+          fontWeight: 900,
+          textTransform: "uppercase"
+        }}
+      >
+        Entraînement en pause
+      </div>
+      <button type="button" onClick={session.resumeRun} style={primaryButtonStyle}>
+        Reprendre
+      </button>
+    </div>
+  );
+}
+
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
   const labelForTag = useTagLabels();
@@ -949,10 +1015,21 @@ export default function TrainingSession({ setMode }) {
               style={{
                 alignItems: "center",
                 display: "flex",
+                gap: "8px",
                 justifyContent: "flex-end",
                 minWidth: 0
               }}
             >
+              {compactTrainingElapsedMs !== null && (
+                <PauseResumeButton
+                  session={session}
+                  style={{
+                    borderRadius: "9px",
+                    fontSize: "13px",
+                    padding: "8px 11px"
+                  }}
+                />
+              )}
               {compactTrainingElapsedMs !== null ? (
                 <TrainingTimerPanel
                   elapsedMs={compactTrainingElapsedMs}
@@ -983,7 +1060,8 @@ export default function TrainingSession({ setMode }) {
             style={{
               flex: 1,
               minHeight: 0,
-              overflow: "hidden"
+              overflow: "hidden",
+              position: "relative"
             }}
           >
             <ReviewQuestionRenderer
@@ -1009,6 +1087,7 @@ export default function TrainingSession({ setMode }) {
               trainingBestTimeMs={null}
               compactVisualLayout
             />
+            <PauseOverlay session={session} />
           </div>
         </div>
       </div>
@@ -1252,8 +1331,16 @@ export default function TrainingSession({ setMode }) {
                     marginBottom: "18px"
                   }}
                 >
-                  <div style={{ color: "#888", fontSize: "14px" }}>
-                    Question {session.currentIndex + 1} / {session.questions.length}
+                  <div style={{ alignItems: "center", display: "flex", gap: "12px" }}>
+                    <div style={{ color: "#888", fontSize: "14px" }}>
+                      Question {session.currentIndex + 1} / {session.questions.length}
+                    </div>
+                    {session.recordEligible && (
+                      <PauseResumeButton
+                        session={session}
+                        style={{ fontSize: "12px", padding: "7px 10px" }}
+                      />
+                    )}
                   </div>
 
                   <div
@@ -1282,28 +1369,31 @@ export default function TrainingSession({ setMode }) {
                   </div>
                 </div>
 
-                <ReviewQuestionRenderer
-                  q={currentQuestion}
-                  currentIndex={session.currentIndex}
-                  showAnswer={session.showAnswer}
-                  setShowAnswer={session.setShowAnswer}
-                  handleTextAnswer={session.handleTextAnswer}
-                  currentTextQuality={null}
-                  selectedTextQuality={null}
-                  handleMapComplete={session.handleMapComplete}
-                  handleImageComplete={session.handleImageComplete}
-                  handleTimelineComplete={session.handleTimelineComplete}
-                  handleSequenceComplete={session.handleSequenceComplete}
-                  onAnsweringComplete={session.markAnsweringComplete}
-                  submitMapAnswer={session.submitMapTrainingAnswer}
-                  submitMediaAnswer={session.submitMediaTrainingAnswer}
-                  submitTextAnswer={session.submitTextTrainingAnswer}
-                  submitTimelineAnswer={session.submitTimelineTrainingAnswer}
-                  submitSequenceAnswer={session.submitSequenceTrainingAnswer}
-                  trainingMode
-                  trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
-                  trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
-                />
+                <div style={{ position: "relative" }}>
+                  <ReviewQuestionRenderer
+                    q={currentQuestion}
+                    currentIndex={session.currentIndex}
+                    showAnswer={session.showAnswer}
+                    setShowAnswer={session.setShowAnswer}
+                    handleTextAnswer={session.handleTextAnswer}
+                    currentTextQuality={null}
+                    selectedTextQuality={null}
+                    handleMapComplete={session.handleMapComplete}
+                    handleImageComplete={session.handleImageComplete}
+                    handleTimelineComplete={session.handleTimelineComplete}
+                    handleSequenceComplete={session.handleSequenceComplete}
+                    onAnsweringComplete={session.markAnsweringComplete}
+                    submitMapAnswer={session.submitMapTrainingAnswer}
+                    submitMediaAnswer={session.submitMediaTrainingAnswer}
+                    submitTextAnswer={session.submitTextTrainingAnswer}
+                    submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+                    submitSequenceAnswer={session.submitSequenceTrainingAnswer}
+                    trainingMode
+                    trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
+                    trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
+                  />
+                  <PauseOverlay session={session} />
+                </div>
               </>
             )}
           </>
