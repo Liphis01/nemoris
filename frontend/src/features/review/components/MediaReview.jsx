@@ -889,6 +889,11 @@ export default function MediaReview({
       const selectedQuality = row.isFound
         ? qualityByQuestionId[row.item.question_id] ?? row.quality ?? 2
         : qualityByQuestionId[row.item.question_id] ?? 0;
+      // A relearning retry never re-grades FSRS: Encore and Acquis lead to the
+      // same already-frozen interval, so it stays fixed no matter which is picked.
+      const projectedInterval = isRelearningGroupItem(group, row.item)
+        ? (row.item.relearning_interval ?? 0)
+        : projectedIntervalForImage(row.item, selectedQuality);
 
       return {
         item: row.item,
@@ -897,7 +902,7 @@ export default function MediaReview({
         isFound: row.isFound,
         isUnanswered: selectedQuality === IMAGE_RECAP_UNANSWERED,
         selectedQuality,
-        projectedInterval: projectedIntervalForImage(row.item, selectedQuality)
+        projectedInterval
       };
     });
   }, [gridItems, qualityByQuestionId, recapRows]);
@@ -1907,15 +1912,21 @@ export default function MediaReview({
     // A correct pick on a relearning card just graduates it, so the three "how
     // easy" grades collapse to a single "Acquis" (a wrong pick already takes the
     // "Continuer" branch above, which is the "Encore" half of the binary).
-    const ratingOptions =
+    const correctItemRelearning = Boolean(
       correctItem && isRelearningGroupItem(group, correctItem)
-        ? acquisOnlyOptions
-        : choiceQualityOptions;
+    );
+    const ratingOptions = correctItemRelearning
+      ? acquisOnlyOptions
+      : choiceQualityOptions;
 
     return ratingOptions.map(option => {
-      const interval = correctItem
-        ? projectedIntervalForImage(correctItem, option.value)
-        : null;
+      // A relearning retry never re-grades FSRS: whichever grade is picked, the
+      // card lands on the same already-frozen interval.
+      const interval = correctItemRelearning
+        ? correctItem?.relearning_interval
+        : correctItem
+          ? projectedIntervalForImage(correctItem, option.value)
+          : null;
 
       return (
         <button
@@ -1946,6 +1957,9 @@ export default function MediaReview({
             <Fragment>
               <span aria-hidden="true" style={keyCapStyle}>{option.value}</span>
               <span>{option.icon} {option.title}</span>
+              {interval > 0 && (
+                <span style={{ opacity: 0.7 }}>≈ {interval} j</span>
+              )}
             </Fragment>
           )}
         </button>

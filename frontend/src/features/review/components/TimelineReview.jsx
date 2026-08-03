@@ -129,6 +129,21 @@ function isEditableTarget(target) {
   return Boolean(target.closest("input, textarea, select, [contenteditable]"));
 }
 
+function projectedIntervalLabel(item, quality) {
+  const value = item?.projected_intervals?.[quality];
+
+  return Number(value) > 0 ? `≈ ${value} j` : null;
+}
+
+// A relearning retry never re-grades FSRS: Encore and Acquis lead to the same
+// already-frozen interval, so both buttons show that one value rather than a
+// per-grade estimate that would wrongly suggest the choice changes anything.
+function relearningIntervalLabel(item) {
+  const value = item?.relearning_interval;
+
+  return Number(value) > 0 ? `≈ ${value} j` : null;
+}
+
 function qualityColor(quality) {
   if (quality === 2) return "#7ee2a8";
   if (quality === 1) return "#f3d36a";
@@ -714,6 +729,9 @@ export default function TimelineReview({
               >
                 {activeQualityOptions.map(option => {
                   const active = selectedQuality === option.value;
+                  const intervalLabel = activeItemRelearning
+                    ? relearningIntervalLabel(activeItem)
+                    : projectedIntervalLabel(activeItem, option.value);
 
                   return (
                     <button
@@ -735,6 +753,11 @@ export default function TimelineReview({
                       }}
                     >
                       {option.value} {option.label}
+                      {intervalLabel && (
+                        <span style={{ fontWeight: 600, marginLeft: "5px", opacity: 0.75 }}>
+                          {intervalLabel}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

@@ -58,7 +58,9 @@ TEXT_REVIEW_KEYS = {
     "media_pool",
     "answer_media",
     "tags",
-    "progress"
+    "progress",
+    "projected_intervals",
+    "relearning_interval"
 }
 MAP_GROUP_KEYS = {
     "group_id",
@@ -77,7 +79,8 @@ MAP_ZONE_KEYS = {
     "label",
     "aliases",
     "progress",
-    "projected_intervals"
+    "projected_intervals",
+    "relearning_interval"
 }
 IMAGE_GROUP_KEYS = {
     "group_id",
@@ -99,7 +102,8 @@ IMAGE_ITEM_KEYS = {
     "tags",
     "aliases",
     "progress",
-    "projected_intervals"
+    "projected_intervals",
+    "relearning_interval"
 }
 TIMELINE_GROUP_KEYS = {
     "type_q",
@@ -117,6 +121,7 @@ TIMELINE_ITEM_KEYS = {
     "timeline",
     "progress",
     "projected_intervals",
+    "relearning_interval",
     "start_value"
 }
 TIMELINE_RESULT_KEYS = {
@@ -337,6 +342,9 @@ class ReviewResponseShapeTests(unittest.TestCase):
             for value in projected_intervals.values()
         ))
 
+    def assert_relearning_interval_shape(self, relearning_interval):
+        self.assertIsInstance(relearning_interval, int)
+
     def assert_timeline_date_shape(self, value):
         self.assertEqual(set(value), TIMELINE_DATE_KEYS)
         self.assertIn(value["precision"], {"year", "month", "day"})
@@ -363,6 +371,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assert_timeline_payload_shape(item["timeline"])
         self.assert_progress_shape(item["progress"])
         self.assert_projected_intervals_shape(item["projected_intervals"])
+        self.assert_relearning_interval_shape(item["relearning_interval"])
         self.assertIsInstance(item["start_value"], int)
 
         if item["timeline"]["kind"] == "interval":
@@ -439,11 +448,13 @@ class ReviewResponseShapeTests(unittest.TestCase):
             self.assertEqual(set(zone), MAP_ZONE_KEYS)
             self.assert_progress_shape(zone["progress"])
             self.assert_projected_intervals_shape(zone["projected_intervals"])
+            self.assert_relearning_interval_shape(zone["relearning_interval"])
 
         for zone in map_group["context_items"]:
             self.assertEqual(set(zone), MAP_ZONE_KEYS)
             self.assert_progress_shape(zone["progress"])
             self.assert_projected_intervals_shape(zone["projected_intervals"])
+            self.assert_relearning_interval_shape(zone["relearning_interval"])
 
         mode_difficulty = map_mode_difficulty(
             map_group["mode"],
@@ -512,11 +523,13 @@ class ReviewResponseShapeTests(unittest.TestCase):
             self.assertEqual(set(item), IMAGE_ITEM_KEYS)
             self.assert_progress_shape(item["progress"])
             self.assert_projected_intervals_shape(item["projected_intervals"])
+            self.assert_relearning_interval_shape(item["relearning_interval"])
 
         for item in image_group["context_items"]:
             self.assertEqual(set(item), IMAGE_ITEM_KEYS)
             self.assert_progress_shape(item["progress"])
             self.assert_projected_intervals_shape(item["projected_intervals"])
+            self.assert_relearning_interval_shape(item["relearning_interval"])
 
         mode_difficulty = image_mode_difficulty(
             image_group["mode"],
@@ -1398,6 +1411,10 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(set(text_payload), TEXT_REVIEW_KEYS)
         self.assertEqual(text_payload["question_id"], text.id)
         self.assert_progress_shape(text_payload["progress"])
+        self.assert_projected_intervals_shape(
+            text_payload["projected_intervals"]
+        )
+        self.assert_relearning_interval_shape(text_payload["relearning_interval"])
 
         map_group_payload = serialize_map_review_group(map_group, tags=["geo"])
         self.assertEqual(set(map_group_payload), MAP_GROUP_KEYS)
@@ -1416,6 +1433,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assert_projected_intervals_shape(
             map_zone_payload["projected_intervals"]
         )
+        self.assert_relearning_interval_shape(map_zone_payload["relearning_interval"])
 
         image_group_payload = serialize_media_review_group(
             image_group,
@@ -1437,6 +1455,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assert_projected_intervals_shape(
             image_item_payload["projected_intervals"]
         )
+        self.assert_relearning_interval_shape(image_item_payload["relearning_interval"])
 
         timeline_point_payload = serialize_timeline_review_item(timeline_point)
         timeline_interval_payload = serialize_timeline_review_item(

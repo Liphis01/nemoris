@@ -3,7 +3,7 @@ import random
 from fastapi import HTTPException
 
 from ..models import Progress, Question
-from ..scheduler import preview_intervals
+from ..scheduler import preview_intervals, relearning_graduate_interval
 from ..serializers import serialize_progress
 
 
@@ -280,7 +280,8 @@ def serialize_timeline_review_item(question):
         "projected_intervals": preview_intervals(
             question.progress,
             favorite=bool((question.data or {}).get("favorite"))
-        )
+        ),
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
     item["start_value"] = date_center_value(timeline["start"])

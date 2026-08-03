@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sendMediaAnswer } from "../../../api/review";
 import { mediaPoolFrom, pickReviewMedia } from "../../../shared/media";
-import { partitionRelearningQualities } from "../relearningGrades";
+import { isRelearningGroupItem, partitionRelearningQualities } from "../relearningGrades";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -431,13 +431,16 @@ function getSelectedQuality(item, isFound, qualityByQuestionId) {
 }
 
 
-function getProjectedInterval(item, selectedQuality) {
+function getProjectedInterval(item, selectedQuality, isRelearning = false) {
   if (selectedQuality === IMAGE_RECAP_UNANSWERED) return null;
 
-  const value =
-    item.projected_intervals?.[selectedQuality] ??
-    item.progress?.interval ??
-    0;
+  // A relearning retry never re-grades FSRS: Encore and Acquis lead to the
+  // same already-frozen interval, so it stays fixed no matter which is picked.
+  const value = isRelearning
+    ? item.relearning_interval ?? 0
+    : item.projected_intervals?.[selectedQuality] ??
+      item.progress?.interval ??
+      0;
   const interval = Number(value);
 
   return Number.isFinite(interval) ? interval : 0;
@@ -1223,7 +1226,11 @@ export function useMediaReview(
           difficultyScore: getDifficultyScore(item, historyStats),
           isUnanswered: selectedQuality === IMAGE_RECAP_UNANSWERED,
           selectedQuality,
-          projectedInterval: getProjectedInterval(item, selectedQuality)
+          projectedInterval: getProjectedInterval(
+            item,
+            selectedQuality,
+            isRelearningGroupItem(relearningGroup, item)
+          )
         };
       })
       .sort((a, b) => {

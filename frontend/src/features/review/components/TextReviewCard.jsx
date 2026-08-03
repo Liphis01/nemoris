@@ -84,6 +84,19 @@ const relearningOptions = [
     }
 ];
 
+function projectedIntervalLabel(projectedIntervals, quality) {
+    const value = projectedIntervals?.[quality];
+
+    return Number(value) > 0 ? `≈ ${value} j` : null;
+}
+
+// A relearning retry never re-grades FSRS, so Encore and Acquis lead to the
+// same already-frozen interval — shown identically on both buttons so it is
+// obvious that the choice itself changes nothing.
+function relearningIntervalLabel(relearningInterval) {
+    return Number(relearningInterval) > 0 ? `≈ ${relearningInterval} j` : null;
+}
+
 function getAnswerButtonStyle(option, displayQuality, isAnswering) {
     const isSelected = displayQuality === option.value;
 
@@ -366,21 +379,35 @@ export default function TextReviewCard({
                                 }}
                             >
 
-                                {gradeOptions.map(option => (
-                                    <button
-                                        key={option.value}
-                                        aria-pressed={displayQuality === option.value}
-                                        disabled={isAnswering}
-                                        onClick={() => handleAnswer(option.value)}
-                                        style={getAnswerButtonStyle(
-                                            option,
-                                            displayQuality,
-                                            isAnswering
-                                        )}
-                                    >
-                                        {option.label}
-                                    </button>
-                                ))}
+                                {gradeOptions.map(option => {
+                                    const intervalLabel = relearning
+                                        ? relearningIntervalLabel(q.relearning_interval)
+                                        : projectedIntervalLabel(
+                                            q.projected_intervals,
+                                            option.value
+                                        );
+
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            aria-pressed={displayQuality === option.value}
+                                            disabled={isAnswering}
+                                            onClick={() => handleAnswer(option.value)}
+                                            style={getAnswerButtonStyle(
+                                                option,
+                                                displayQuality,
+                                                isAnswering
+                                            )}
+                                        >
+                                            <div>{option.label}</div>
+                                            {intervalLabel && (
+                                                <div style={{ fontSize: "12px", fontWeight: "500", opacity: 0.75, marginTop: "2px" }}>
+                                                    {intervalLabel}
+                                                </div>
+                                            )}
+                                        </button>
+                                    );
+                                })}
 
                             </div>
                         ) : (

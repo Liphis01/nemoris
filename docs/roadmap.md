@@ -26,6 +26,7 @@
 - il ne faudrait pas être bloqué par les questions bonus ratées quand je veux retourner dans le menu bonus
 - il faudrait pouvoir naviguer les suggestions de tags avec les flèches du clavier
 - bouton annuler dans le manage de groupes
+- Le header de certaines questions est rempli et déborde
 
 ## bugs
 

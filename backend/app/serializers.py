@@ -1,4 +1,8 @@
-from .scheduler import preview_intervals, progress_in_relearning
+from .scheduler import (
+    preview_intervals,
+    progress_in_relearning,
+    relearning_graduate_interval
+)
 from .services.image_modes import (
     DEFAULT_IMAGE_MODE,
     normalize_image_mode
@@ -144,7 +148,14 @@ def serialize_review_question_item(question):
 
         "progress": serialize_progress(
             question.progress
-        )
+        ),
+
+        "projected_intervals": preview_intervals(
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite"))
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 
@@ -198,7 +209,9 @@ def serialize_map_review_zone(
             favorite=bool((question.data or {}).get("favorite")),
             mode_difficulty=mode_difficulty,
             scheduler_tuning=scheduler_tuning
-        )
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 
@@ -255,7 +268,9 @@ def serialize_media_review_item(
             favorite=bool((question.data or {}).get("favorite")),
             mode_difficulty=mode_difficulty,
             scheduler_tuning=scheduler_tuning
-        )
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 
@@ -308,7 +323,9 @@ def serialize_text_review_item(
             favorite=bool((question.data or {}).get("favorite")),
             mode_difficulty=mode_difficulty,
             scheduler_tuning=scheduler_tuning
-        )
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 

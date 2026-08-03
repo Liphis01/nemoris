@@ -105,6 +105,13 @@ const qualityOptions = [
 // which is exactly how many slots the three decoys free up.
 const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
 
+// A relearning zone never re-grades: FSRS is frozen for the day, so any success
+// graduates it identically. The three "how easy" grades collapse to the single
+// "Acquis" from relearningQualityOptions. See relearningGrades.js.
+const acquisOnlyOptions = relearningQualityOptions.filter(
+  option => option.value === GOT_IT_QUALITY
+);
+
 const unansweredQualityOption = {
   value: MAP_RECAP_UNANSWERED,
   icon: "NR",
@@ -1128,19 +1135,42 @@ export default function MapReview({
               ))}
 
               {showChoiceRating && (choiceFeedback.isCorrect
-                ? choiceQualityOptions.map(option => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    title={option.title}
-                    data-map-choice-quality={option.value}
-                    onClick={() => rateChoice(option.value)}
-                    style={choiceQualityButtonStyle()}
-                  >
-                    <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
-                    <span>{option.icon} {option.title}</span>
-                  </button>
-                ))
+                ? (() => {
+                  const correctChoice = revealedChoices.find(
+                    choice => choice.question_id === correctChoiceId
+                  );
+                  const correctChoiceRelearning = Boolean(
+                    correctChoice && isRelearningGroupItem(group, correctChoice)
+                  );
+                  const ratingOptions = correctChoiceRelearning
+                    ? acquisOnlyOptions
+                    : choiceQualityOptions;
+
+                  return ratingOptions.map(option => {
+                    // A relearning retry never re-grades FSRS: whichever grade is
+                    // picked, the zone lands on the same already-frozen interval.
+                    const interval = correctChoiceRelearning
+                      ? correctChoice?.relearning_interval
+                      : correctChoice?.projected_intervals?.[option.value];
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        title={option.title}
+                        data-map-choice-quality={option.value}
+                        onClick={() => rateChoice(option.value)}
+                        style={choiceQualityButtonStyle()}
+                      >
+                        <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
+                        <span>{option.icon} {option.title}</span>
+                        {Number(interval) > 0 && (
+                          <span style={{ opacity: 0.7 }}>≈ {interval} j</span>
+                        )}
+                      </button>
+                    );
+                  });
+                })()
                 : (
                   <button
                     type="button"
@@ -1466,13 +1496,18 @@ export default function MapReview({
                     const recapStatusLabel = isUnanswered
                       ? "Non répondu"
                       : isFound ? "Trouvée" : "À revoir";
+                    // A relearning zone never re-grades FSRS: Encore and Acquis
+                    // lead to the same already-frozen interval, so it stays fixed
+                    // no matter which one is selected.
                     const projectedInterval = isUnanswered
                       ? null
-                      : (
-                        item.projected_intervals?.[selectedQuality] ??
-                        item.progress?.interval ??
-                        0
-                      );
+                      : rowRelearning
+                        ? (item.relearning_interval ?? 0)
+                        : (
+                          item.projected_intervals?.[selectedQuality] ??
+                          item.progress?.interval ??
+                          0
+                        );
                     // A relearning zone collapses to the binary Encore/Acquis
                     // choice; the grade is never re-applied to FSRS.
                     const rowQualityOptions = rowRelearning

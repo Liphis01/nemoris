@@ -393,6 +393,12 @@ export default function TextGroupReview({
             const rowButtonColors = relearning
               ? relearningButtonColors
               : qualityButtonColors;
+            // A relearning retry never re-grades FSRS: Encore and Acquis lead to
+            // the same already-frozen interval, so both show that one value
+            // rather than a per-grade estimate that would imply a difference.
+            const projectedInterval = relearning
+              ? (item.relearning_interval ?? 0)
+              : (item.projected_intervals?.[quality] ?? item.progress?.interval ?? 0);
 
             return (
               <div
@@ -411,7 +417,7 @@ export default function TextGroupReview({
                   cursor: "pointer",
                   display: "grid",
                   gap: "10px",
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
                   padding: "10px 12px"
                 }}
               >
@@ -422,6 +428,9 @@ export default function TextGroupReview({
                   <div style={{ color: "#8fc7ff", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     <RichText>{item.answer}</RichText>
                   </div>
+                </div>
+                <div style={{ color: "#8a8a8a", fontSize: "12px", fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>
+                  {projectedInterval > 0 ? `${projectedInterval} j` : "—"}
                 </div>
                 <div style={{ display: "flex", gap: "5px" }}>
                   {rowQualityOptions.map(option => {
