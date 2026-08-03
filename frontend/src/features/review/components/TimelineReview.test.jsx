@@ -24,12 +24,21 @@ function yearItem(year, question = "Évènement", questionId = 9) {
   };
 }
 
+function relearningYearItem(year, questionId = 9) {
+  return {
+    ...yearItem(year, "Évènement", questionId),
+    progress: { relearning: true }
+  };
+}
+
 function renderReview(props = {}) {
   const submitAnswer = props.submitAnswer || vi.fn();
+  const graduateAnswer = props.graduateAnswer || vi.fn();
 
   render(
     <TimelineReview
       fillAvailableHeight
+      graduateAnswer={graduateAnswer}
       group={props.group || {}}
       onAnsweringComplete={props.onAnsweringComplete || vi.fn()}
       onComplete={props.onComplete || vi.fn()}
@@ -38,7 +47,7 @@ function renderReview(props = {}) {
     />
   );
 
-  return { submitAnswer };
+  return { graduateAnswer, submitAnswer };
 }
 
 describe("TimelineReview", () => {
@@ -155,6 +164,49 @@ describe("TimelineReview", () => {
     await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
       9: { start: { day: null, month: null, precision: "year", year: 1850 }, quality: 3 }
     }));
+  });
+
+  it("collapses a relearning hit to Encore/Acquis and graduates instead of re-grading", async () => {
+    const { graduateAnswer, submitAnswer } = renderReview({
+      reviewItems: [relearningYearItem(1850)]
+    });
+
+    fireEvent.change(screen.getByLabelText("Saisir la date"), { target: { value: "1850" } });
+    fireEvent.keyDown(screen.getByLabelText("Saisir la date"), { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
+
+    await screen.findByText("Exact !");
+
+    // Only the binary relearning choice is offered, never the Dur/Bon/Facile scale.
+    expect(screen.getByRole("button", { name: /Acquis/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Encore/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Facile/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Bon/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
+
+    // A relearning retry never re-grades FSRS: "Acquis" graduates it instead.
+    await waitFor(() => expect(graduateAnswer).toHaveBeenCalledWith([9]));
+    expect(submitAnswer).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing and requeues the card on Encore for a relearning hit", async () => {
+    const onComplete = vi.fn();
+    const { graduateAnswer, submitAnswer } = renderReview({
+      onComplete,
+      reviewItems: [relearningYearItem(1850)]
+    });
+
+    fireEvent.change(screen.getByLabelText("Saisir la date"), { target: { value: "1850" } });
+    fireEvent.keyDown(screen.getByLabelText("Saisir la date"), { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Encore/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith([9]));
+    expect(submitAnswer).not.toHaveBeenCalled();
+    expect(graduateAnswer).not.toHaveBeenCalled();
   });
 
   it("renders curated landmark anchors on the global track", () => {

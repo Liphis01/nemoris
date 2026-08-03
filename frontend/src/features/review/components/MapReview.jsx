@@ -404,17 +404,27 @@ export default function MapReview({
             ? "Choisis la réponse."
             : "Tape le nom de la zone.";
   const feedbackCopy = fillAvailableHeight && !feedbackTone ? "" : baseFeedbackCopy;
+  // When every found zone is a relearning retry, the bulk row collapses to the
+  // same binary Encore/Acquis choice as its individual rows — the Dur/Bon/Facile
+  // split is meaningless there since none of it is ever re-sent as an FSRS grade.
+  const allFoundRelearning = useMemo(() => {
+    const foundRows = recapRows.filter(row => row.isFound);
+
+    return foundRows.length > 0 && foundRows.every(row => isRelearningGroupItem(group, row.item));
+  }, [group, recapRows]);
+  const bulkQualityOptions = allFoundRelearning ? relearningQualityOptions : qualityOptions;
+  const bulkQualityDefault = allFoundRelearning ? GOT_IT_QUALITY : 2;
   const foundBulkQuality = useMemo(() => {
     if (foundQuestionIds.length === 0) return null;
 
-    const firstQuality = qualityByQuestionId[foundQuestionIds[0]] ?? 2;
+    const firstQuality = qualityByQuestionId[foundQuestionIds[0]] ?? bulkQualityDefault;
 
     return foundQuestionIds.every(
-      questionId => (qualityByQuestionId[questionId] ?? 2) === firstQuality
+      questionId => (qualityByQuestionId[questionId] ?? bulkQualityDefault) === firstQuality
     )
       ? firstQuality
       : null;
-  }, [foundQuestionIds, qualityByQuestionId]);
+  }, [bulkQualityDefault, foundQuestionIds, qualityByQuestionId]);
   const foundZoneLabels = useMemo(() => {
     const labels = {};
     const activeMissedCodeSet = new Set(activeMissedCodes);
@@ -1401,8 +1411,8 @@ export default function MapReview({
                       </div>
 
                       <div style={recapBulkQualityControlsStyle}>
-                        {qualityOptions.map(({ value: qVal, icon, title }) => {
-                          const disabled = qVal === 0;
+                        {bulkQualityOptions.map(({ value: qVal, icon, title }) => {
+                          const disabled = !allFoundRelearning && qVal === 0;
                           const selected = !disabled && foundBulkQuality === qVal;
                           const activeStyle = qualityButtonStyles[qVal];
 

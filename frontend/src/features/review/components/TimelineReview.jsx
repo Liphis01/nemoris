@@ -23,6 +23,7 @@ import {
 import TimelineCascade from "./TimelineCascade";
 import TimelineGlobalTrack from "./TimelineGlobalTrack";
 import useTimelineReview from "../hooks/useTimelineReview";
+import { GOT_IT_QUALITY, STILL_LEARNING_QUALITY } from "../relearningGrades";
 
 const emptyAnchors = [];
 
@@ -144,6 +145,14 @@ const qualityRatingOptions = [
   { value: 3, label: "Facile", color: "#7ee2a8", activeBg: "#183a24" }
 ];
 
+// A relearning retry never re-grades FSRS, so the Dur/Bon/Facile nuance above
+// is meaningless there — it collapses to the same binary Encore/Acquis choice
+// every other question type uses for relearning. See relearningGrades.js.
+const relearningRatingOptions = [
+  { value: STILL_LEARNING_QUALITY, label: "Encore", color: "#ff9aa5", activeBg: "#3a1f24" },
+  { value: GOT_IT_QUALITY, label: "Acquis", color: "#7ee2a8", activeBg: "#1d3a2b" }
+];
+
 // The backend returns an unsigned distance; the direction is ours to work out,
 // and "3 ans trop tôt" teaches far more than "3 ans d'écart".
 function describeGap(result) {
@@ -204,10 +213,13 @@ export default function TimelineReview({
   onAnsweringComplete,
   onComplete,
   submitAnswer = sendTimelineAnswer,
+  graduateAnswer,
+  showQualityControls = true,
   fillAvailableHeight = false
 }) {
   const {
     activeItem,
+    activeItemRelearning,
     activeTimeline,
     adjustQuality,
     answer,
@@ -234,11 +246,14 @@ export default function TimelineReview({
     validate
   } = useTimelineReview({
     group,
+    graduateAnswer,
     onAnsweringComplete,
     onComplete,
     reviewItems,
+    showQualityControls,
     submitAnswer
   });
+  const activeQualityOptions = activeItemRelearning ? relearningRatingOptions : qualityRatingOptions;
 
   const displayRange = useMemo(() => buildDisplayRange(range), [range]);
   const bounds = useMemo(() => yearBoundsFromRange(displayRange), [displayRange]);
@@ -697,7 +712,7 @@ export default function TimelineReview({
                 data-timeline-quality-bar
                 style={{ alignItems: "center", display: "flex", gap: "6px", marginLeft: "auto" }}
               >
-                {qualityRatingOptions.map(option => {
+                {activeQualityOptions.map(option => {
                   const active = selectedQuality === option.value;
 
                   return (
@@ -755,10 +770,16 @@ export default function TimelineReview({
         <div style={{ color: "#5f5f5f", fontSize: "11px", fontWeight: 700 }}>
           {revealed ? (
             canAdjustQuality ? (
-              <>
-                <span style={keycapStyle}>1</span>/<span style={keycapStyle}>2</span>/
-                <span style={keycapStyle}>3</span> difficulté · <span style={keycapStyle}>↵</span> continuer
-              </>
+              activeItemRelearning ? (
+                <>
+                  <span style={keycapStyle}>1</span> acquis · <span style={keycapStyle}>↵</span> continuer
+                </>
+              ) : (
+                <>
+                  <span style={keycapStyle}>1</span>/<span style={keycapStyle}>2</span>/
+                  <span style={keycapStyle}>3</span> difficulté · <span style={keycapStyle}>↵</span> continuer
+                </>
+              )
             ) : (
               <><span style={keycapStyle}>↵</span> continuer</>
             )

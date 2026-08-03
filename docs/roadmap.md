@@ -17,7 +17,6 @@
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
 - scroll automatique à enlever quand on quitte la preview d'une image de 
-- changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
 - mettre une ou deux stats dans les gros boutons de qualité des modes qcm
 - pouvoir zoomer sur les images pour les questions isolées
 - ne pas nécessairement reset les records après un edit
