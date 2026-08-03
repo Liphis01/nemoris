@@ -1,5 +1,13 @@
 import '@testing-library/jest-dom/vitest'
-import { vi } from 'vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach, vi } from 'vitest'
+
+// `globals` is off, so testing-library never registers its own auto-cleanup.
+// Without this, components stay mounted after each test and their timers keep
+// firing into a torn-down jsdom ("window is not defined").
+afterEach(() => {
+  cleanup()
+})
 
 if (!window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query) => ({

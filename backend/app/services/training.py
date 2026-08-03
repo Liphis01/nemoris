@@ -565,7 +565,12 @@ def list_training_scopes(db):
                 "name": tag_names_by_key[key],
                 "count": tag_counts_by_key[key]
             }
-            for key in sorted(tag_names_by_key)
+            # Keys are random UUIDs for user tags, so sort on the label to get
+            # a stable, display-friendly order.
+            for key in sorted(
+                tag_names_by_key,
+                key=lambda key: (tag_names_by_key[key] or "", key)
+            )
             if tag_counts_by_key.get(key, 0) > 0
             and key not in set(hierarchy.get("hidden_core_roots") or [])
         ]
