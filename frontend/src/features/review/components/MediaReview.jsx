@@ -606,6 +606,24 @@ function findTypeAllScrollAnchorRowIndex(rows, container, direction) {
     ) ?? incompleteRowIndexes[0];
   }
 
+  // A container can't scroll a bottom row all the way to its own top once
+  // there's nothing left below it, so scrollTop cannot always reach a row's
+  // true offset the way it can at the top (scrollTop 0 always matches row
+  // 0 exactly). Once maxed out, every remaining row is already on screen,
+  // and the raw top comparison below would keep resolving to the row just
+  // before the true last one — anchoring there instead so the wraparound
+  // in findAdjacentIncompleteImageRowIndex actually gets a turn to run.
+  const maxScrollTop = container
+    ? container.scrollHeight - container.clientHeight
+    : 0;
+
+  if (
+    maxScrollTop > 0 &&
+    scrollTop >= maxScrollTop - imageRowPositionTolerance
+  ) {
+    return incompleteRowIndexes[incompleteRowIndexes.length - 1];
+  }
+
   return incompleteRowIndexes.find(index =>
     rows[index].top >= scrollTop - imageRowPositionTolerance
   ) ?? incompleteRowIndexes[incompleteRowIndexes.length - 1];
@@ -1262,6 +1280,48 @@ export default function MediaReview({
     showTextInput
   ]);
 
+  // Tab belongs to the review's own navigation in the typed modes, wherever
+  // focus happens to sit. A click inside the grid can hand focus to a tile, and
+  // from there the native focus walk would step onto the next thumbnail instead
+  // of moving through the rows.
+  useEffect(() => {
+    if (!showTextInput || resultMode || previewRow) return undefined;
+
+    function handleTypedTabKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.key !== "Tab" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (normalizedMode === IMAGE_MODE_TYPE_ALL) {
+        scrollToAdjacentTypeAllRow(event.shiftKey ? -1 : 1);
+      } else {
+        selectNextItem(event.shiftKey ? -1 : 1);
+      }
+
+      focusAnswerInput();
+    }
+
+    window.addEventListener("keydown", handleTypedTabKeyDown);
+
+    return () => window.removeEventListener("keydown", handleTypedTabKeyDown);
+  }, [
+    focusAnswerInput,
+    normalizedMode,
+    previewRow,
+    resultMode,
+    scrollToAdjacentTypeAllRow,
+    selectNextItem,
+    showTextInput
+  ]);
+
   useEffect(() => {
     const previousFoundQuestionIds = previousFoundQuestionIdsRef.current;
 
@@ -1443,7 +1503,7 @@ export default function MediaReview({
           selectTile(row.item.question_id);
         }}
         role={selectable ? "button" : undefined}
-        tabIndex={selectable ? 0 : -1}
+        tabIndex={selectable ? 0 : undefined}
         style={{
           animation: tileRevealAnimation(row.feedbackState),
           background: tileBackground(row),
@@ -1469,6 +1529,9 @@ export default function MediaReview({
               event.stopPropagation();
               openPreview(row);
             }
+            : undefined}
+          onMouseDown={previewByThumbnail
+            ? (event) => event.preventDefault()
             : undefined}
           onKeyDown={previewByThumbnail
             ? (event) => {
@@ -2782,28 +2845,6 @@ export default function MediaReview({
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
-                if (
-                  event.key === "Tab" &&
-                  normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
-                  !resultMode
-                ) {
-                  event.preventDefault();
-                  selectNextItem(event.shiftKey ? -1 : 1);
-                  focusAnswerInput();
-                  return;
-                }
-
-                if (
-                  event.key === "Tab" &&
-                  normalizedMode === IMAGE_MODE_TYPE_ALL &&
-                  !resultMode
-                ) {
-                  event.preventDefault();
-                  scrollToAdjacentTypeAllRow(event.shiftKey ? -1 : 1);
-                  focusAnswerInput();
-                  return;
-                }
-
                 if (event.key === "Enter") {
                   event.preventDefault();
                   handleSubmit();

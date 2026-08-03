@@ -17,7 +17,6 @@
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
 - scroll automatique à enlever quand on quitte la preview d'une image de 
-- mettre une ou deux stats dans les gros boutons de qualité des modes qcm
 - pouvoir zoomer sur les images pour les questions isolées
 - ne pas nécessairement reset les records après un edit (et s'interroger sur comment gérer les records sur les packs importés (leaderboard possible ?))
 
@@ -69,14 +68,13 @@
 - un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
 ----> peut aussi servir pour dessiner des drapeaux, des symboles, des logos (soit self evaluation, soit reconnaissance par l'ia)
 - organiser la section tags de training en arborescence conformément à l'arborescence des tags dans manage
-- autoriser l'italique, le gras, le souligné + latex
+- autoriser l'italique, le gras, le souligné
 - faire un truc cooperatif à la git pour les packs
 - quand on change de preview dans manage, garder l'état en mémoire et attendre pour enregistrer ou annuler
-- régler le problème que quand on importe un pack, on n'a pas forcément envie de tout travailler et pour l'instant le seul moyen c'est de supprimer des questions
 - peut être avoir plein de templates de maps à disposition pour aider les gens à faire leurs custom svg
 - faire des modes de jeu infinis et fun (mini jeux)
 - si c'est la même map, permettre de combiner des trainings de deux trucs différents (pays + capitales du monde par exemple)
-- un mode 1v1 (ou plus) sur un pack en particulier ou sur un pack aléatoire ou sur un pack aléatoire en commun ? sur un tirage aléatoire du pack (pour pas faire tout le pack)
+- un mode 1v1 (ou plus) sur un pack en particulier ou sur un pack aléatoire ou sur un pack aléatoire en commun ? sur un tirage aléatoire du pack (pour pas faire tout le pack) ex: chacun son tour remplir une map, le dernier gagne
 - enlever le truc des versions de packs et juste permettre d'éditer un pack
 
 
