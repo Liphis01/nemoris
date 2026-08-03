@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1000" height="1000" viewBox="0 0 1000 1000">
+  <g id="features">
+    <path id="COANT" name="Antioquia"
+          d="M100 100H450V900H100Z" fill="#d8e8f4"/>
+    <path id="COCUN" name="Cundinamarca"
+          d="M550 100H900V900H550Z" fill="#b8d6ea"/>
+  </g>
+  <g id="points">
+    <circle id="0" class="3.78|-73.55" cx="475" cy="475" r="3"/>
+    <circle id="1" class="12.68|-67.61" cx="525" cy="525" r="3"/>
+  </g>
+  <g id="label_points">
+    <circle id="COANT" cx="275" cy="500"/>
+    <circle id="COCUN" cx="725" cy="500"/>
+  </g>
+</svg>

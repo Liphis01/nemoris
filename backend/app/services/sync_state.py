@@ -2,24 +2,96 @@
 
 Persisted to SYNC_STATE_FILE (a sibling of questions.db), deliberately OUTSIDE
 the database so the auth token never rides along in a synced/backed-up
-collection. Plaintext + user-scoped, like everything else under APP_DATA_DIR —
-adequate for this slice; OS-keychain hardening is a follow-up for when a real
-cloud backend is wired.
+collection. Most fields are plaintext JSON, user-scoped like everything else
+under APP_DATA_DIR — fine, since none of them are secret (the Supabase key is
+a publishable key; safety comes from RLS). The one exception is `token`
+(the session access/refresh token pair), which is kept out of the JSON file
+and stored via the OS keychain (`keyring`) instead, when a real backend is
+available. Where no backend exists (headless Linux with no Secret Service
+daemon, this project's own dev/CI environment included), `keyring` resolves
+to its "fail" backend and every call below transparently falls back to the
+old plaintext-in-JSON behavior — so this file works unchanged in both cases,
+callers never need to know which one is active.
 """
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import re
 from uuid import uuid4
 
-from ..config import SYNC_STATE_FILE
+from ..config import CLOUD_KEY, CLOUD_URL, SYNC_STATE_FILE
+
+try:
+    import keyring
+except ImportError:  # pragma: no cover - keyring is a pinned dependency
+    keyring = None
+
+KEYRING_SERVICE = "quiz-app-sync-token"
+
+# Test seam: point this at a fake backend (get_password/set_password/
+# delete_password) to verify keychain behavior without touching a real OS
+# credential store. Defaults to the real `keyring` module.
+_keyring_backend = keyring
+
+
+def _keyring_account(path):
+    # Namespaced by the resolved state-file path so distinct installs (or
+    # distinct temp dirs in tests) never share a keychain entry.
+    return hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()
+
+
+def _token_get(path):
+    if _keyring_backend is None:
+        return None
+
+    try:
+        raw = _keyring_backend.get_password(
+            KEYRING_SERVICE, _keyring_account(path)
+        )
+    except Exception:
+        return None
+
+    if not raw:
+        return None
+
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
+def _token_set(path, token):
+    if _keyring_backend is None:
+        return False
+
+    try:
+        _keyring_backend.set_password(
+            KEYRING_SERVICE, _keyring_account(path), json.dumps(token)
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _token_delete(path):
+    if _keyring_backend is None:
+        return
+
+    try:
+        _keyring_backend.delete_password(KEYRING_SERVICE, _keyring_account(path))
+    except Exception:
+        # Best-effort: nothing to clean up, or no backend to clean up with.
+        pass
 
 
 DEFAULT_STATE = {
-    "server_url": "",
-    # Publishable API key (Supabase). Safe to store/expose to the local UI —
-    # security comes from RLS + the user's auth token, never from this key.
-    "server_key": "",
+    # The bundled cloud project (config.CLOUD_URL/CLOUD_KEY). Users never type
+    # these: there is one Nemoris cloud, and the key is publishable — security
+    # comes from RLS + the user's auth token, never from this key. Self-hosters
+    # point the whole app elsewhere through NEMORIS_SUPABASE_URL/_KEY.
+    "server_url": CLOUD_URL,
+    "server_key": CLOUD_KEY,
     "account_email": None,
     "token": None,
     "device_id": None,
@@ -47,9 +119,13 @@ COLLECTION_MUTATION_RULES = [
     ("PUT", re.compile(r"^/collections/\d+/?$")),
     ("DELETE", re.compile(r"^/collections/\d+/?$")),
     ("PUT", re.compile(r"^/tags/hierarchy/?$")),
+    ("POST", re.compile(r"^/tags/actions/?$")),
+    ("POST", re.compile(r"^/tags/inbox/resolve/?$")),
+    ("POST", re.compile(r"^/tags/conflicts/resolve/?$")),
     ("POST", re.compile(r"^/upload/?$")),
     ("POST", re.compile(r"^/upload/url/?$")),
     ("PATCH", re.compile(r"^/maps/\d+/zones/?$")),
+    ("POST", re.compile(r"^/map-imports/[^/]+/commit/?$")),
     ("PATCH", re.compile(r"^/media-groups/\d+/items/?$")),
     ("POST", re.compile(r"^/media-groups/\d+/upload/?$")),
     ("POST", re.compile(r"^/media-groups/\d+/upload/url/?$")),
@@ -99,14 +175,38 @@ def load_sync_state(path=None):
     state = dict(DEFAULT_STATE)
     state.update({key: stored[key] for key in DEFAULT_STATE if key in stored})
 
+    # Installs written before the cloud project was bundled stored an empty
+    # server; adopt the bundled one rather than staying unconfigured. The pair
+    # is atomic: a state file that names a server keeps its own key too.
+    if not state.get("server_url"):
+        state["server_url"] = CLOUD_URL
+        state["server_key"] = CLOUD_KEY
+
+    if not state.get("token"):
+        keyring_token = _token_get(path)
+        if keyring_token:
+            state["token"] = keyring_token
+
     return state
 
 
 def save_sync_state(state, path=None):
     path = path or SYNC_STATE_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    to_write = dict(state)
+    token = to_write.get("token")
+
+    if token:
+        if _token_set(path, token):
+            to_write.pop("token", None)
+        # else: no backend available, fall back to writing it below like today
+    else:
+        _token_delete(path)
+        to_write.pop("token", None)
+
     path.write_text(
-        json.dumps(state, indent=2, sort_keys=True),
+        json.dumps(to_write, indent=2, sort_keys=True),
         encoding="utf-8"
     )
 

@@ -395,8 +395,7 @@ export default function SequenceReview({
   return (
     <div style={containerStyle} data-sequence-review={mode}>
       <div style={{ color: "#888", fontSize: "13px" }}>
-        {group?.name}
-        {" · "}
+        {!fillAvailableHeight && group?.name && `${group.name} · `}
         {answeredCount}/{items.length}
       </div>
 

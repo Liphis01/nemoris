@@ -1,4 +1,5 @@
 import unittest
+import uuid
 from datetime import date
 
 from sqlalchemy import create_engine
@@ -8,6 +9,7 @@ from app.models import Base, Progress, Question, QuestionGroup
 from app.routers.review import get_review
 from app.schemas import MapZonesBulkUpdate
 from app.services.map_zones import save_map_group_zones
+from app.services.tag_hierarchy import apply_tag_actions, load_tag_hierarchy
 from app.services.training import (
     group_training_fingerprint,
     serialize_training_record
@@ -41,7 +43,21 @@ class MapTagTests(unittest.TestCase):
         }
         self.db.commit()
 
+    def create_tag(self, label, parent_id=None):
+        created_id = str(uuid.uuid4())
+        hierarchy = load_tag_hierarchy(self.db)
+        apply_tag_actions(self.db, hierarchy["revision"], [{
+            "type": "create",
+            "tag_id": created_id,
+            "label": label,
+            "parent_ids": [parent_id] if parent_id else []
+        }])
+        self.db.commit()
+        return created_id
+
     def test_bulk_save_applies_group_tags_to_existing_and_created_zones(self):
+        geo_id = self.create_tag("Geo", "core:geography")
+        capitals_id = self.create_tag("Capitales", "core:geography")
         group = QuestionGroup(
             type_group="map",
             name="Europe",
@@ -77,7 +93,7 @@ class MapTagTests(unittest.TestCase):
                 group={
                     "name": "Europe",
                     "media": "europe.svg",
-                    "tags": ["geo", "capitales"]
+                    "tags": [geo_id, capitals_id]
                 },
                 zones=[
                     {
@@ -101,11 +117,11 @@ class MapTagTests(unittest.TestCase):
             .all()
         )
 
-        self.assertEqual(response["group"]["tags"], ["geo", "capitales"])
+        self.assertEqual(response["group"]["tags"], [geo_id, capitals_id])
         self.assertEqual(response["question_count"], 3)
         self.assertEqual(len(response["zones"]), 3)
         self.assertTrue(all(
-            question.tags == ["geo", "capitales"]
+            question.tags == [geo_id, capitals_id]
             for question in questions
         ))
 
@@ -116,6 +132,7 @@ class MapTagTests(unittest.TestCase):
         )
 
     def test_bulk_save_invalidates_record_only_on_membership_or_map_change(self):
+        geo_id = self.create_tag("Geo", "core:geography")
         group = QuestionGroup(
             type_group="map",
             name="Europe",
@@ -154,7 +171,7 @@ class MapTagTests(unittest.TestCase):
                 group={
                     "name": "European map",
                     "media": "europe.svg",
-                    "tags": ["geo"]
+                    "tags": [geo_id]
                 },
                 zones=[
                     {
@@ -184,7 +201,7 @@ class MapTagTests(unittest.TestCase):
                 group={
                     "name": "European map",
                     "media": "europe-v2.svg",
-                    "tags": ["geo"]
+                    "tags": [geo_id]
                 },
                 zones=[
                     {
@@ -215,7 +232,7 @@ class MapTagTests(unittest.TestCase):
                 group={
                     "name": "European map",
                     "media": "europe-v2.svg",
-                    "tags": ["geo"]
+                    "tags": [geo_id]
                 },
                 zones=[
                     {
@@ -253,7 +270,7 @@ class MapTagTests(unittest.TestCase):
                 question="Europe - fr",
                 answer="France",
                 media="",
-                tags=["geo", "capitales"],
+                tags=["geo", "capitals"],
                 data={"code": "fr", "aliases": []},
                 group=group
             ),
@@ -262,7 +279,7 @@ class MapTagTests(unittest.TestCase):
                 question="Europe - de",
                 answer="Allemagne",
                 media="",
-                tags=["geo", "capitales"],
+                tags=["geo", "capitals"],
                 data={"code": "de", "aliases": []},
                 group=group
             )
@@ -284,7 +301,7 @@ class MapTagTests(unittest.TestCase):
 
         self.assertEqual(len(response), 1)
         self.assertEqual(response[0]["type_q"], "map")
-        self.assertEqual(response[0]["tags"], ["geo", "capitales"])
+        self.assertEqual(response[0]["tags"], ["geo", "capitals"])
         self.assertEqual(len(response[0]["items"]), 2)
 
 

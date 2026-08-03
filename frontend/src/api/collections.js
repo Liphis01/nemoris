@@ -29,6 +29,24 @@ export function listCollectionQuestionCandidates(filters = {}, options = {}) {
 }
 
 
+/**
+ * Resolve a rule without saving it.
+ *
+ * What makes the builder live: the count shown is the real resolved total,
+ * not "how many of the currently loaded rows matched".
+ */
+export function previewCollection(payload, options = {}) {
+  return requestJson("/collections/preview", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload),
+    ...options
+  });
+}
+
+
 export function listCollectionQuestions(id) {
   return requestJson(`/collections/${id}/questions`);
 }

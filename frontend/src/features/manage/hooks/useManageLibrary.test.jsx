@@ -19,6 +19,10 @@ import {
   importMediaGroupMediaUrl,
   uploadMediaGroupMedia
 } from "../../../api/mediaGroups";
+import {
+  deleteCollection,
+  listCollections
+} from "../../../api/collections";
 
 vi.mock("../../../api/questions", () => ({
   createQuestion: vi.fn(),
@@ -39,6 +43,11 @@ vi.mock("../../../api/groups", () => ({
 vi.mock("../../../api/mediaGroups", () => ({
   importMediaGroupMediaUrl: vi.fn(),
   uploadMediaGroupMedia: vi.fn()
+}));
+
+vi.mock("../../../api/collections", () => ({
+  deleteCollection: vi.fn(),
+  listCollections: vi.fn()
 }));
 
 describe("useManageLibrary", () => {
@@ -68,6 +77,12 @@ describe("useManageLibrary", () => {
     question: "Loose",
     answer: "Item"
   };
+  const playlist = {
+    id: 4,
+    name: "Révisions rapides",
+    isPlaylist: true,
+    question_count: 3
+  };
 
   beforeEach(() => {
     listQuestions.mockResolvedValue([
@@ -89,6 +104,8 @@ describe("useManageLibrary", () => {
     updateQuestion.mockResolvedValue({});
     createQuestion.mockResolvedValue({});
     createGroup.mockResolvedValue({});
+    deleteCollection.mockResolvedValue({});
+    listCollections.mockResolvedValue([playlist]);
     importMediaUrl.mockResolvedValue({});
     importMediaGroupMediaUrl.mockResolvedValue({});
     removeQuestionMedia.mockResolvedValue({});
@@ -102,8 +119,20 @@ describe("useManageLibrary", () => {
     vi.clearAllMocks();
   });
 
+  async function renderManageLibrary() {
+    const hook = renderHook(() => useManageLibrary("manage"));
+
+    await waitFor(() => {
+      expect(hook.result.current.allQuestions).toHaveLength(3);
+      expect(hook.result.current.allGroups).toHaveLength(2);
+      expect(hook.result.current.allPlaylists).toHaveLength(1);
+    });
+
+    return hook;
+  }
+
   it("loads questions and groups in manage mode", async () => {
-    const { result } = renderHook(() => useManageLibrary("manage"));
+    const { result } = await renderManageLibrary();
 
     await waitFor(() => {
       expect(result.current.allQuestions).toHaveLength(3);
@@ -115,7 +144,7 @@ describe("useManageLibrary", () => {
   });
 
   it("removes a deleted group, its questions, and the selected grouped item from cache", async () => {
-    const { result } = renderHook(() => useManageLibrary("manage"));
+    const { result } = await renderManageLibrary();
 
     await waitFor(() => {
       expect(result.current.allQuestions).toHaveLength(3);
@@ -135,8 +164,8 @@ describe("useManageLibrary", () => {
     expect(result.current.selectedItem).toBeNull();
   });
 
-  it("opens group creation without preselecting a type", () => {
-    const { result } = renderHook(() => useManageLibrary("manage"));
+  it("opens group creation without preselecting a type", async () => {
+    const { result } = await renderManageLibrary();
 
     act(() => {
       result.current.startCreateGroup();
@@ -147,7 +176,7 @@ describe("useManageLibrary", () => {
   });
 
   it("requires a svg media before creating a map group", async () => {
-    const { result } = renderHook(() => useManageLibrary("manage"));
+    const { result } = await renderManageLibrary();
 
     act(() => {
       result.current.startCreateGroup("map");
@@ -175,7 +204,7 @@ describe("useManageLibrary", () => {
       media: null
     };
     createGroup.mockResolvedValue(createdGroup);
-    const { result } = renderHook(() => useManageLibrary("manage"));
+    const { result } = await renderManageLibrary();
 
     act(() => {
       result.current.startCreateGroup("media");
@@ -202,7 +231,7 @@ describe("useManageLibrary", () => {
 
   it("imports remote question media into the new question draft", async () => {
     importMediaUrl.mockResolvedValue({ url: "/static/imported.png" });
-    const { result } = renderHook(() => useManageLibrary("manage"));
+    const { result } = await renderManageLibrary();
 
     await act(async () => {
       await result.current.importQuestionMediaUrl(
@@ -217,7 +246,7 @@ describe("useManageLibrary", () => {
 
   it("imports remote image group media through the group upload endpoint", async () => {
     importMediaGroupMediaUrl.mockResolvedValue({ url: "/static/media-groups/7/france.png" });
-    const { result } = renderHook(() => useManageLibrary("manage"));
+    const { result } = await renderManageLibrary();
 
     await act(async () => {
       await result.current.importMediaGroupMediaUrl(

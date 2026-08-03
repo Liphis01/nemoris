@@ -1,20 +1,40 @@
+import io
 import json
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
+from zipfile import BadZipFile, ZipFile
 
 from sqlalchemy.orm import joinedload
 
-from ..models import PackSubscription, QuestionGroup
+from ..models import Collection, PackSubscription, Question, QuestionGroup
 from .map_zones import merge_tags
 from .pack_publish_state import (
     is_pack_publisher_signed_in,
     load_pack_publish_state,
     save_pack_publish_state
 )
-from .packs import export_pack
+from .packs import (
+    GROUP_HASH_FIELDS,
+    QUESTION_HASH_FIELDS,
+    _read_manifest_and_content,
+    content_hash,
+    export_pack,
+    export_playlist_pack
+)
 from .settings import get_pack_catalog_settings
+from .tag_hierarchy import (
+    CORE_ROOT_IDS,
+    ancestors,
+    ensure_stored_tag_ids,
+    label_for_tag,
+    load_tag_hierarchy,
+    parent_map,
+    resolve_tag_id
+)
 from .sync_state import (
     is_signed_in as is_sync_signed_in,
     load_sync_state,
@@ -24,7 +44,7 @@ from .sync_state import (
 
 CATALOG_BUCKET = "pack-zips"
 POPULAR_THEME = "__popular__"
-VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions"}
+VALID_SORTS = {"pertinence", "populaires", "récents", "nom", "questions", "note"}
 VALID_STATUSES = {
     "all",
     "not_installed",
@@ -223,6 +243,13 @@ def _int_or_none(value):
         return None
 
 
+def _float_or_none(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _local_pack_state(db):
     subscriptions = {
         subscription.pack_guid: {
@@ -251,6 +278,57 @@ def _local_pack_state(db):
         }
 
     return subscriptions, groups
+
+
+def _annotate_publication_sources(db, publications):
+    """Link each published pack back to the local content it came from.
+
+    Deliberately separate from _annotate_local_pack_status: that answers "have
+    I installed this pack", which is a different question from "does the group
+    or playlist I published from still exist". Deleting the source locally
+    never touches the catalog row, so a published pack can outlive it and stay
+    installable by everyone else -- the dashboard has to be able to say so.
+    """
+    guids = [
+        entry.get("pack_guid")
+        for entry in publications
+        if entry.get("pack_guid")
+    ]
+
+    if not guids:
+        return publications
+
+    groups = {
+        guid: {"id": group_id, "name": name}
+        for group_id, guid, name in (
+            db.query(QuestionGroup.id, QuestionGroup.guid, QuestionGroup.name)
+            .filter(QuestionGroup.guid.in_(guids))
+            .all()
+        )
+    }
+    collections = {
+        guid: {"id": collection_id, "name": name}
+        for collection_id, guid, name in (
+            db.query(Collection.id, Collection.guid, Collection.name)
+            .filter(Collection.guid.in_(guids))
+            .all()
+        )
+    }
+
+    for entry in publications:
+        pack_guid = entry.get("pack_guid")
+        group = groups.get(pack_guid)
+        collection = collections.get(pack_guid)
+        source = group or collection
+
+        entry["source"] = {
+            "kind": "group" if group else ("playlist" if collection else None),
+            "id": source["id"] if source else None,
+            "name": source["name"] if source else None
+        }
+        entry["orphaned"] = source is None
+
+    return publications
 
 
 def _annotate_local_pack_status(db, packs):
@@ -349,7 +427,10 @@ def _normalize_pack(row, project_url):
         "featured": bool(row.get("featured")),
         "is_mine": bool(row.get("is_mine")),
         "published_at": row.get("published_at"),
-        "updated_at": row.get("updated_at")
+        "updated_at": row.get("updated_at"),
+        "avg_rating": _float_or_none(row.get("avg_rating")),
+        "rating_count": _int_or_none(row.get("rating_count")) or 0,
+        "comment_count": _int_or_none(row.get("comment_count")) or 0
     }
     entry["download_url"] = (
         str(row.get("download_url") or "").strip()
@@ -528,7 +609,7 @@ def search_pack_catalog(
     limit=24,
     cursor=None
 ):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
 
@@ -578,7 +659,7 @@ def search_pack_catalog(
 
 
 def check_pack_catalog_health(db):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     raw_url = str(settings.get("url") or "").strip()
     project_url = normalize_supabase_url(raw_url)
     key = str(settings.get("key") or "").strip()
@@ -736,7 +817,7 @@ def check_pack_catalog_health(db):
 
 
 def _publish_config(db):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
 
@@ -1008,6 +1089,18 @@ def _filename_slug(value):
     return slug[:64] or "pack"
 
 
+def _catalog_themes_for_tags(db, tag_values):
+    ensure_stored_tag_ids(db)
+    hierarchy = load_tag_hierarchy(db)
+    parents = parent_map(hierarchy)
+    root_ids = set()
+    for value in tag_values or []:
+        tag_id = resolve_tag_id(hierarchy, value)
+        if tag_id:
+            root_ids |= ancestors(tag_id, parents) & set(CORE_ROOT_IDS)
+    return [label_for_tag(hierarchy, tag_id) for tag_id in sorted(root_ids)]
+
+
 def _group_publish_summary(db, group_id):
     group = (
         db.query(QuestionGroup)
@@ -1023,14 +1116,56 @@ def _group_publish_summary(db, group_id):
     tags = merge_tags(*[
         question.tags or []
         for question in questions
-        if question.type_q in {"map", "media", "text"}
     ])
 
     return {
         "pack_guid": group.guid,
         "type_group": group.type_group,
         "question_count": len(questions),
-        "tags": tags
+        "tags": tags,
+        "themes": _catalog_themes_for_tags(db, tags),
+        "source_kind": "group",
+        "group_count": 1
+    }
+
+
+def _collection_publish_summary(db, collection_id):
+    collection = (
+        db.query(Collection)
+        .options(joinedload(Collection.questions).joinedload(Question.group))
+        .filter(Collection.id == collection_id)
+        .first()
+    )
+
+    if not collection:
+        raise ValueError("Playlist not found")
+
+    # An ungrouped question carries no presentation context, so it cannot
+    # travel in a pack -- same rule the exporter applies.
+    questions = [
+        question
+        for question in (collection.questions or [])
+        if question.group is not None
+    ]
+    source_types = {question.group.type_group for question in questions}
+    tags = merge_tags(*[
+        question.tags or []
+        for question in questions
+        if question.type_q in {"map", "media", "text"}
+    ])
+
+    return {
+        "pack_guid": collection.guid,
+        # "mixed" rather than the dominant type: a part-map playlist
+        # advertised as MAP would misdescribe what installers receive.
+        "type_group": (
+            next(iter(source_types)) if len(source_types) == 1 else "mixed"
+        ),
+        "question_count": len(questions),
+        "tags": tags,
+        "themes": _catalog_themes_for_tags(db, tags),
+        "source_kind": "playlist",
+        "group_count": len({question.group.id for question in questions})
     }
 
 
@@ -1064,12 +1199,228 @@ def _normalize_publication(row, project_url):
             or ("published" if row.get("is_public") else "draft")
         ),
         "published_at": row.get("published_at"),
-        "updated_at": row.get("updated_at")
+        "updated_at": row.get("updated_at"),
+        "avg_rating": _float_or_none(row.get("avg_rating")),
+        "rating_count": _int_or_none(row.get("rating_count")) or 0,
+        "comment_count": _int_or_none(row.get("comment_count")) or 0
     }
 
 
+def _owned_publication_select_path(pack_guid, owner_id):
+    return (
+        "/rest/v1/pack_catalog"
+        "?select=pack_guid,name,description,type_group,question_count,"
+        "version,size_bytes,license,tags,themes,storage_path,is_public,"
+        "publication_status,published_at,updated_at,avg_rating,"
+        "rating_count,comment_count"
+        f"&pack_guid=eq.{quote(str(pack_guid or '').strip(), safe='')}"
+        f"&owner_id=eq.{quote(str(owner_id or '').strip(), safe='')}"
+        "&limit=1"
+    )
+
+
+def _get_owned_publication(db, pack_guid, *, required=False):
+    clean_guid = str(pack_guid or "").strip()
+
+    if not clean_guid:
+        raise PackCatalogError("Pack introuvable.")
+
+    project_url, _ = _publish_config(db)
+    state, _ = _effective_publish_state(project_url)
+    owner_id = state["token"].get("user_id")
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        _owned_publication_select_path(clean_guid, owner_id)
+    )
+    _raise_supabase_status(status, body, "Publication introuvable")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    if not rows:
+        if required:
+            raise PackCatalogError("Publication introuvable.")
+
+        return None
+
+    return _normalize_publication(rows[0], project_url)
+
+
+def _validate_public_release_version(db, pack_guid, version):
+    publication = _get_owned_publication(db, pack_guid)
+    current_version = _int_or_none(
+        publication.get("version") if publication else None
+    )
+
+    if (
+        publication
+        and publication.get("is_public")
+        and current_version is not None
+        and int(version) <= current_version
+    ):
+        raise PackCatalogError(
+            "La nouvelle version doit être supérieure à la version publiée."
+        )
+
+    return publication
+
+
+def _local_publication_source(db, pack_guid):
+    group = (
+        db.query(QuestionGroup)
+        .options(joinedload(QuestionGroup.questions))
+        .filter(QuestionGroup.guid == pack_guid)
+        .first()
+    )
+
+    if group:
+        return {
+            "kind": "group",
+            "id": group.id,
+            "name": group.name,
+            "question_count": len(group.questions or [])
+        }
+
+    collection = (
+        db.query(Collection)
+        .options(joinedload(Collection.questions).joinedload(Question.group))
+        .filter(Collection.guid == pack_guid)
+        .first()
+    )
+
+    if collection:
+        question_count = len([
+            question
+            for question in (collection.questions or [])
+            if question.group is not None
+        ])
+
+        return {
+            "kind": "playlist",
+            "id": collection.id,
+            "name": collection.name,
+            "question_count": question_count
+        }
+
+    raise PackCatalogError(
+        "Source supprimée localement : impossible de préparer cette version."
+    )
+
+
+def _pack_content_from_zip_bytes(zip_bytes):
+    try:
+        with ZipFile(io.BytesIO(zip_bytes)) as zip_file:
+            _, _, version, group_entries, question_entries = (
+                _read_manifest_and_content(zip_file)
+            )
+    except (BadZipFile, ValueError) as error:
+        raise PackCatalogError("ZIP publié impossible à lire.") from error
+
+    return {
+        "version": version,
+        "groups": group_entries,
+        "questions": question_entries
+    }
+
+
+def _publication_zip_bytes(db, publication):
+    storage_path = str(publication.get("storage_path") or "").strip()
+
+    if not storage_path:
+        raise PackCatalogError("ZIP publié introuvable.")
+
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        f"/storage/v1/object/{CATALOG_BUCKET}/"
+        f"{quote(storage_path, safe='/')}",
+        timeout=PUBLISH_TRANSFER_TIMEOUT
+    )
+    _raise_supabase_status(
+        status, body, "Téléchargement du ZIP publié impossible"
+    )
+
+    return body
+
+
+def _diff_entries(previous_entries, next_entries, fields):
+    previous = {
+        entry.get("guid"): content_hash(entry, fields)
+        for entry in previous_entries
+        if entry.get("guid")
+    }
+    next_values = {
+        entry.get("guid"): content_hash(entry, fields)
+        for entry in next_entries
+        if entry.get("guid")
+    }
+    previous_guids = set(previous)
+    next_guids = set(next_values)
+    shared = previous_guids & next_guids
+
+    return {
+        "added": sorted(next_guids - previous_guids),
+        "edited": sorted(
+            guid for guid in shared if previous[guid] != next_values[guid]
+        ),
+        "removed": sorted(previous_guids - next_guids),
+        "unchanged": len([
+            guid for guid in shared if previous[guid] == next_values[guid]
+        ])
+    }
+
+
+def _metadata_changes(publication, *, name, description, license, tags, themes):
+    def comparable_terms(values, limit):
+        return [
+            value.casefold()
+            for value in _normalize_terms(values, max_items=limit)
+        ]
+
+    comparisons = {
+        "name": (
+            str(publication.get("name") or "").strip(),
+            str(name or "").strip()
+        ),
+        "description": (
+            str(publication.get("description") or "").strip(),
+            str(description or "").strip()
+        ),
+        "license": (
+            str(publication.get("license") or "").strip(),
+            str(license or "").strip()
+        ),
+        "tags": (
+            comparable_terms(publication.get("tags") or [], 20),
+            comparable_terms(tags, 20)
+        ),
+        "themes": (
+            comparable_terms(publication.get("themes") or [], 12),
+            comparable_terms(themes, 12)
+        )
+    }
+
+    return [
+        field
+        for field, (previous, next_value) in comparisons.items()
+        if previous != next_value
+    ]
+
+
+def _has_release_changes(diff):
+    return bool(
+        diff["questions"]["added"]
+        or diff["questions"]["edited"]
+        or diff["questions"]["removed"]
+        or diff["groups"]["added"]
+        or diff["groups"]["edited"]
+        or diff["groups"]["removed"]
+        or diff["metadata_changed"]
+    )
+
+
 def get_pack_publish_status(db):
-    settings = get_pack_catalog_settings(db)
+    settings = get_pack_catalog_settings()
     project_url = normalize_supabase_url(settings.get("url"))
     key = str(settings.get("key") or "").strip()
     state, source = _effective_publish_state(project_url, required=False)
@@ -1158,7 +1509,8 @@ def list_pack_publications(db):
         "/rest/v1/pack_catalog"
         "?select=pack_guid,name,description,type_group,question_count,"
         "version,size_bytes,license,tags,themes,storage_path,is_public,"
-        "publication_status,published_at,updated_at"
+        "publication_status,published_at,updated_at,avg_rating,"
+        "rating_count,comment_count"
         f"&owner_id=eq.{owner_id}"
         "&order=updated_at.desc"
         "&limit=50"
@@ -1170,10 +1522,107 @@ def list_pack_publications(db):
         raise PackCatalogError("Réponse Supabase invalide.")
 
     return {
-        "publications": [
+        "publications": _annotate_publication_sources(db, [
             _normalize_publication(row, project_url)
             for row in rows
-        ]
+        ])
+    }
+
+
+def preview_pack_release(
+    db,
+    pack_guid,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    safe_version = int(version)
+    publication = _get_owned_publication(db, pack_guid, required=True)
+    current_version = _int_or_none(publication.get("version")) or 1
+
+    if publication.get("is_public") and safe_version <= current_version:
+        raise PackCatalogError(
+            "La nouvelle version doit être supérieure à la version publiée."
+        )
+
+    source = _local_publication_source(db, publication["pack_guid"])
+    source_summary = (
+        _collection_publish_summary(db, source["id"])
+        if source["kind"] == "playlist"
+        else _group_publish_summary(db, source["id"])
+    )
+    themes = source_summary["themes"]
+    previous_content = _pack_content_from_zip_bytes(
+        _publication_zip_bytes(db, publication)
+    )
+
+    with tempfile.TemporaryDirectory() as temp_name:
+        pack_dir = Path(temp_name)
+
+        if source["kind"] == "playlist":
+            next_zip = export_playlist_pack(
+                db,
+                source["id"],
+                version=safe_version,
+                name=name,
+                description=description,
+                license=license,
+                pack_dir=pack_dir
+            )
+        else:
+            next_zip = export_pack(
+                db,
+                source["id"],
+                version=safe_version,
+                name=name,
+                description=description,
+                license=license,
+                pack_dir=pack_dir
+            )
+
+        next_content = _pack_content_from_zip_bytes(next_zip.read_bytes())
+
+    diff = {
+        "questions": _diff_entries(
+            previous_content["questions"],
+            next_content["questions"],
+            QUESTION_HASH_FIELDS
+        ),
+        "groups": _diff_entries(
+            previous_content["groups"],
+            next_content["groups"],
+            GROUP_HASH_FIELDS
+        ),
+        "metadata_changed": _metadata_changes(
+            publication,
+            name=name,
+            description=description,
+            license=license,
+            tags=tags,
+            themes=themes
+        )
+    }
+
+    return {
+        "status": "preview",
+        "pack_guid": publication["pack_guid"],
+        "source": source,
+        "published_version": current_version,
+        "next_version": safe_version,
+        "question_count": {
+            "published": len(previous_content["questions"]),
+            "next": len(next_content["questions"])
+        },
+        "group_count": {
+            "published": len(previous_content["groups"]),
+            "next": len(next_content["groups"])
+        },
+        **diff,
+        "unchanged": not _has_release_changes(diff)
     }
 
 
@@ -1194,6 +1643,9 @@ def save_pack_publish_draft(
         raise ValueError("Cannot publish an empty group")
 
     safe_version = int(version)
+    _validate_public_release_version(
+        db, summary["pack_guid"], safe_version
+    )
     zip_path = export_pack(
         db,
         group_id,
@@ -1202,6 +1654,80 @@ def save_pack_publish_draft(
         description=description,
         license=license
     )
+
+    return _upload_publish_draft(
+        db,
+        summary,
+        zip_path,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license,
+        tags=tags,
+        themes=themes
+    )
+
+
+def save_playlist_publish_draft(
+    db,
+    collection_id,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    """Publish a playlist as a multi-group pack.
+
+    Same upload/RPC path as a group; only the source and the resulting
+    pack_guid (the playlist's own guid) differ.
+    """
+    summary = _collection_publish_summary(db, collection_id)
+
+    if summary["question_count"] <= 0:
+        raise ValueError("Cannot publish an empty playlist")
+
+    safe_version = int(version)
+    _validate_public_release_version(
+        db, summary["pack_guid"], safe_version
+    )
+    zip_path = export_playlist_pack(
+        db,
+        collection_id,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license
+    )
+
+    return _upload_publish_draft(
+        db,
+        summary,
+        zip_path,
+        version=safe_version,
+        name=name,
+        description=description,
+        license=license,
+        tags=tags,
+        themes=themes
+    )
+
+
+def _upload_publish_draft(
+    db,
+    summary,
+    zip_path,
+    *,
+    version,
+    name,
+    description="",
+    license="",
+    tags=None,
+    themes=None
+):
+    safe_version = int(version)
     zip_bytes = zip_path.read_bytes()
     project_url, _ = _publish_config(db)
     state, _ = _effective_publish_state(project_url)
@@ -1226,7 +1752,10 @@ def save_pack_publish_draft(
         tags if tags else summary["tags"],
         max_items=20
     )
-    draft_themes = _normalize_terms(themes, max_items=12)
+    # Themes are semantic roots from the exported questions. Manual catalog
+    # terms remain available as search keywords, but cannot contradict the
+    # hierarchy carried by the pack itself.
+    draft_themes = _normalize_terms(summary.get("themes"), max_items=12)
     payload = {
         "p_pack_guid": summary["pack_guid"],
         "p_name": str(name or "").strip(),
@@ -1273,3 +1802,175 @@ def publish_pack_publication(db, pack_guid):
         "status": "published",
         "publication": publication
     }
+
+
+def unpublish_pack_publication(db, pack_guid):
+    """Owner-only soft delete: the row and its storage zip are kept so the
+    creator can see/republish it later, only its catalog visibility is
+    cleared (RPC unpublish_my_pack sets is_public=false)."""
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/unpublish_my_pack",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+    _raise_supabase_status(status, body, "Dépublication impossible")
+
+    publication = _normalize_publication(_decode_json_body(body), project_url)
+
+    return {
+        "status": "unpublished",
+        "publication": publication
+    }
+
+
+def delete_pack_publication(db, pack_guid):
+    """Owner-only hard delete for already-archived catalog rows."""
+    publication = _get_owned_publication(db, pack_guid, required=True)
+
+    if publication.get("publication_status") != "archived":
+        raise PackCatalogError(
+            "Dépublie ce pack avant de le supprimer définitivement."
+        )
+
+    storage_path = str(publication.get("storage_path") or "").strip()
+    project_url, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/delete_my_pack",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+    _raise_supabase_status(status, body, "Suppression impossible")
+    deleted_publication = _normalize_publication(
+        _decode_json_body(body), project_url
+    )
+    zip_deleted = False
+
+    if storage_path:
+        _, _, storage_status, _, _ = _authed_supabase_request(
+            db,
+            f"/storage/v1/object/{CATALOG_BUCKET}/"
+            f"{quote(storage_path, safe='/')}",
+            method="DELETE",
+            timeout=PUBLISH_TRANSFER_TIMEOUT
+        )
+        zip_deleted = storage_status < 400 or storage_status == 404
+
+    return {
+        "status": "deleted",
+        "pack_guid": deleted_publication["pack_guid"],
+        "zip_deleted": zip_deleted
+    }
+
+
+def record_pack_install(db, pack_guid, *, installed_version):
+    """Best-effort by design -- the caller must not await/block on this or
+    surface its errors, since installing a pack must stay account-free
+    (only signed-in users end up with a tracked install)."""
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/record_pack_install",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_installed_version": int(installed_version or 1)
+        }
+    )
+    _raise_supabase_status(status, body, "Enregistrement de l'installation impossible")
+
+    return {"recorded": True}
+
+
+def backfill_pack_installs(db):
+    """One-shot, called right after a successful sign-in. Reads local
+    PackSubscription rows (already-known local truth) and bulk-upserts
+    them as this account's installs, so packs installed anonymously before
+    this sign-in become retroactively eligible to rate/comment."""
+    installed_versions = _installed_versions(db)
+
+    if not installed_versions:
+        return {"recorded": 0}
+
+    payload = {
+        "p_installs": [
+            {"pack_guid": guid, "installed_version": version}
+            for guid, version in installed_versions.items()
+        ]
+    }
+
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/record_pack_installs_bulk",
+        method="POST",
+        payload=payload
+    )
+    _raise_supabase_status(status, body, "Synchronisation des installations impossible")
+
+    return {"recorded": _decode_json_body(body)}
+
+
+def get_my_pack_status(db, pack_guid):
+    body = _authed_json(
+        db,
+        "/rest/v1/rpc/get_my_pack_status",
+        method="POST",
+        payload={"p_pack_guid": str(pack_guid or "").strip()}
+    )
+
+    return {
+        "is_installed": bool(body.get("is_installed")),
+        "my_rating": _int_or_none(body.get("my_rating"))
+    }
+
+
+def rate_pack(db, pack_guid, rating):
+    body = _authed_json(
+        db,
+        "/rest/v1/rpc/rate_pack",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_rating": int(rating)
+        }
+    )
+
+    return {
+        "my_rating": _int_or_none(body.get("my_rating")),
+        "avg_rating": _float_or_none(body.get("avg_rating")),
+        "rating_count": _int_or_none(body.get("rating_count")) or 0
+    }
+
+
+def list_pack_comments(db, pack_guid, *, limit=50):
+    """No auth required -- same anonymous request shape as
+    search_pack_catalog, since reading the thread needs no sign-in."""
+    project_url, key = _publish_config(db)
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/rest/v1/pack_comments"
+        "?select=id,author_label,body,created_at"
+        f"&pack_guid=eq.{quote(str(pack_guid or ''))}"
+        f"&order=created_at.desc&limit={_clamp_limit(limit)}"
+    )
+    _raise_supabase_status(status, body, "Commentaires indisponibles")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return {"comments": rows}
+
+
+def add_pack_comment(db, pack_guid, body_text):
+    body = _authed_json(
+        db,
+        "/rest/v1/rpc/add_pack_comment",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_body": str(body_text or "").strip()
+        }
+    )
+
+    return {"comment": body}

@@ -52,6 +52,8 @@ from .mode_selection import (
     question_mode_affinity
 )
 from .media import media_kind_from_name
+from .map_eligibility import question_is_reviewable, reviewable_question_filter
+from .intake import compute_intake_quota
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
@@ -189,13 +191,15 @@ def _question_query(db):
             .joinedload(QuestionGroup.questions)
             .joinedload(Question.progress)
         )
+        .filter(reviewable_question_filter())
         .order_by(Question.id)
     )
 
 
 def _due_questions(db, today):
     # Only started cards are part of the scheduled daily workload. Unstarted
-    # progress rows are legacy/new rows and are handled as bonus questions.
+    # progress rows are legacy/new rows; they reach a session through the
+    # automatic intake path instead (see services/intake.py).
     return [
         question
         for question in _question_query(db)
@@ -239,44 +243,16 @@ def _started_progress_rows(db):
             Question.data.label("question_data")
         )
         .join(Question, Question.id == Progress.question_id)
+        .filter(reviewable_question_filter())
         .all()
     )
 
 
-def _normalized_group_ids(group_ids):
-    if group_ids is None:
-        return None
-
-    if isinstance(group_ids, str):
-        group_ids = [
-            raw_id.strip()
-            for raw_id in group_ids.split(",")
-            if raw_id.strip()
-        ]
-
-    normalized = []
-    seen = set()
-
-    for group_id in group_ids:
-        group_id = int(group_id)
-
-        if group_id in seen:
-            continue
-
-        normalized.append(group_id)
-        seen.add(group_id)
-
-    return normalized
-
-
-def _new_question_ids(db, limit=None, group_ids=None):
-    group_ids = _normalized_group_ids(group_ids)
-
-    if group_ids is not None and not group_ids:
-        return []
-
+def _new_question_ids(db, limit=None):
+    # One global pool, ordered by id: new questions are introduced in creation
+    # order, across every group, and the scan stops as soon as `limit` is met.
     ids = []
-    query = (
+    rows = (
         db.query(
             Question.id,
             Progress.reps,
@@ -284,13 +260,7 @@ def _new_question_ids(db, limit=None, group_ids=None):
             Progress.history
         )
         .outerjoin(Progress, Question.id == Progress.question_id)
-    )
-
-    if group_ids is not None:
-        query = query.filter(Question.group_id.in_(group_ids))
-
-    rows = (
-        query
+        .filter(reviewable_question_filter())
         .order_by(Question.id)
         .all()
     )
@@ -325,11 +295,8 @@ def _questions_by_ids(db, question_ids):
     ]
 
 
-def _new_questions(db, limit=None, group_ids=None):
-    return _questions_by_ids(
-        db,
-        _new_question_ids(db, limit=limit, group_ids=group_ids)
-    )
+def _new_questions(db, limit=None):
+    return _questions_by_ids(db, _new_question_ids(db, limit=limit))
 
 
 def _due_question_count(db, today):
@@ -342,6 +309,7 @@ def _due_question_count(db, today):
         )
         .join(Question, Question.id == Progress.question_id)
         .filter(
+            reviewable_question_filter(),
             or_(
                 Progress.next_review == None,
                 Progress.next_review <= today
@@ -353,13 +321,13 @@ def _due_question_count(db, today):
     return sum(1 for row in rows if _progress_row_has_started(row))
 
 
-def _new_question_count(db, started_rows=None, group_ids=None):
-    group_ids = _normalized_group_ids(group_ids)
-
-    if group_ids is not None:
-        return len(_new_question_ids(db, group_ids=group_ids))
-
-    total_questions = db.query(func.count(Question.id)).scalar() or 0
+def _new_question_count(db, started_rows=None):
+    total_questions = (
+        db.query(func.count(Question.id))
+        .filter(reviewable_question_filter())
+        .scalar()
+        or 0
+    )
     started_rows = started_rows if started_rows is not None else (
         _started_progress_rows(db)
     )
@@ -372,39 +340,26 @@ def _new_question_count(db, started_rows=None, group_ids=None):
     return max(0, total_questions - started_count)
 
 
-def get_bonus_review_status(db, today=None, group_ids=None):
-    today = today or date.today()
-    scoped_group_ids = _normalized_group_ids(group_ids)
-    same_group_filter_applied = scoped_group_ids is not None
-    due_count = _due_question_count(db, today)
-    started_rows = _started_progress_rows(db)
-    new_count = _new_question_count(db, started_rows=started_rows)
-    same_group_new_count = (
-        _new_question_count(db, group_ids=scoped_group_ids)
-        if same_group_filter_applied
-        else new_count
-    )
-    available_bonus_question_count = same_group_new_count
-
-    return {
-        "new_count": new_count,
-        "same_group_new_count": same_group_new_count,
-        "available_bonus_question_count": available_bonus_question_count,
-        "same_group_bonus_question_count": available_bonus_question_count,
-        "same_group_filter_applied": same_group_filter_applied,
-        "same_group_ids": scoped_group_ids or [],
-        "due_count": due_count,
-        "allowed": due_count == 0 and available_bonus_question_count > 0
-    }
-
-
 def get_review_summary(db, today=None):
     today = today or date.today()
     due_count = _due_question_count(db, today)
+    # The menu tile counts the whole session, not just the backlog: without the
+    # intake quota it would announce "Session terminée" while new questions are
+    # queued to be introduced. The quota is only an allowance, so it is capped
+    # by what the pool actually holds — otherwise the tile would promise more
+    # questions than exist.
+    quota = compute_intake_quota(
+        db,
+        today=today,
+        due_count=due_count
+    )["quota"]
+    new_count = len(_new_question_ids(db, limit=quota)) if quota else 0
 
     return {
         "due_count": due_count,
-        "has_due": due_count > 0
+        "has_due": due_count > 0,
+        "new_count": new_count,
+        "session_count": due_count + new_count
     }
 
 
@@ -500,6 +455,7 @@ def _serialize_review_items(
                 item
                 for item in (group.questions or [])
                 if item.type_q == "map"
+                and question_is_reviewable(item)
             ],
             key=lambda item: item.id
         )
@@ -854,173 +810,104 @@ def _timeline_anchors_for(db, questions):
     )
 
 
-def get_review_items(db, include_new=False, bonus_status=None, group_ids=None):
-    today = date.today()
+def spread_new_items(review_items, new_question_ids):
+    """Interleave freshly introduced questions through the session.
+
+    _unique_sorted_questions orders by id, which parks new (high-id) questions
+    at the tail and makes them read as a separate phase. Placing them at evenly
+    spaced positions instead keeps the session one continuous flow. Purely
+    positional and deterministic: no shuffling, so sessions stay reproducible.
+    """
+    new_question_ids = set(new_question_ids or [])
+
+    if not new_question_ids:
+        return review_items
+
+    fresh = []
+    existing = []
+
+    for item in review_items:
+        ids = _item_question_ids(item)
+        (fresh if ids & new_question_ids else existing).append(item)
+
+    if not fresh or not existing:
+        return review_items
+
+    spread = list(existing)
+
+    for index, item in enumerate(fresh):
+        position = round(
+            (index + 1) * (len(existing) + 1) / (len(fresh) + 1)
+        ) + index
+        spread.insert(min(position, len(spread)), item)
+
+    return spread
+
+
+def _item_question_ids(item):
+    if not isinstance(item, dict):
+        return set()
+
+    ids = set()
+
+    if item.get("question_id") is not None:
+        ids.add(item["question_id"])
+
+    for entry in item.get("items") or []:
+        if isinstance(entry, dict) and entry.get("question_id") is not None:
+            ids.add(entry["question_id"])
+
+    return ids
+
+
+def _item_is_relearning(item):
+    if not isinstance(item, dict):
+        return False
+
+    if (item.get("progress") or {}).get("relearning"):
+        return True
+
+    return any(
+        isinstance(entry, dict) and (entry.get("progress") or {}).get("relearning")
+        for entry in item.get("items") or []
+    )
+
+
+def defer_relearning_items(review_items):
+    """Push same-day relearning retries to the end of the session.
+
+    Mid-session, a retry is appended live to the tail of the queue (see
+    isRelearningQuestion() / useReviewSession.js). A resumed session re-fetches
+    from here instead, so without this it would fall back to whatever
+    Question.id happened to sort first, surfacing relearning retries before
+    unrelated due cards. Stable sort: order is otherwise unchanged.
+    """
+    return sorted(review_items, key=_item_is_relearning)
+
+
+def get_review_items(db, today=None, intake_quota=None):
+    today = today or date.today()
     scheduler_tuning = load_scheduler_tuning_settings(db)
     due_questions = _due_questions(db, today)
 
-    if due_questions or not include_new:
-        questions = due_questions
-    else:
-        bonus_status = bonus_status or get_bonus_review_status(
-            db,
-            today=today,
-            group_ids=group_ids
-        )
-        remaining_bonus_slots = max(
-            0,
-            bonus_status.get("available_bonus_question_count", 0)
-        )
-        questions = _new_questions(
-            db,
-            limit=remaining_bonus_slots,
-            group_ids=group_ids
-        )
+    if intake_quota is None:
+        intake_quota = compute_intake_quota(db, today=today)
 
-    return serialize_review_items(
+    quota = max(0, intake_quota.get("quota", 0))
+    new_questions = _new_questions(db, limit=quota) if quota else []
+    questions = _unique_sorted_questions(due_questions, new_questions)
+
+    # One serialization pass, not two: a group holding both a due zone and a
+    # new one has to render as a single card, and its distractor contexts are
+    # computed from the whole group.
+    items = serialize_review_items(
         questions,
         scheduler_tuning=scheduler_tuning,
         scheduled_review=True,
         timeline_anchors=_timeline_anchors_for(db, questions)
     )
 
-
-def get_bonus_group_entries(db, group_ids=None):
-    # Lightweight bonus menu: one entry per group / loose question that still has
-    # new (unstarted) questions. Reads only the columns the menu needs (no ORM
-    # objects, no scheduling math), so listing every available bonus stays cheap;
-    # the heavy work (modes, contexts, projected intervals) is deferred to
-    # get_bonus_group_items when a single entry is picked.
-    new_ids = _new_question_ids(db, group_ids=group_ids)
-
-    if not new_ids:
-        return []
-
-    rows = (
-        db.query(
-            Question.id,
-            Question.question,
-            Question.type_q,
-            Question.tags,
-            QuestionGroup.id.label("group_id"),
-            QuestionGroup.name.label("group_name"),
-            QuestionGroup.type_group.label("group_type")
-        )
-        .outerjoin(QuestionGroup, QuestionGroup.id == Question.group_id)
-        .filter(Question.id.in_(new_ids))
-        .order_by(Question.id)
-        .all()
-    )
-
-    entries = []
-    entry_by_key = {}
-
-    def container_entry(key, type_q, name, tags):
-        entry = entry_by_key.get(key)
-
-        if entry is None:
-            entry = {
-                "key": key,
-                "type_q": type_q,
-                "name": name,
-                "tags": list(tags or []),
-                "item_count": 0,
-                "is_container": True
-            }
-            entry_by_key[key] = entry
-            entries.append(entry)
-
-        return entry
-
-    for row in rows:
-        # Mirror the bucketing used by _serialize_review_items so the menu
-        # entries line up with what a picked entry will actually render.
-        if row.group_id is not None and row.group_type in (
-            "map",
-            "media",
-            "text",
-            "sequence"
-        ):
-            entry = container_entry(
-                f"group:{row.group_id}",
-                row.group_type,
-                row.group_name,
-                row.tags
-            )
-            entry["item_count"] += 1
-            continue
-
-        if row.type_q == "timeline":
-            # Every due timeline item shares one combined review screen.
-            entry = container_entry("type:timeline", "timeline", "Timeline", [])
-            entry["item_count"] += 1
-            continue
-
-        entries.append({
-            "key": f"q:{row.id}",
-            "type_q": row.type_q,
-            "name": row.question,
-            "tags": row.tags or [],
-            "item_count": 1,
-            "is_container": False
-        })
-
-    return entries
-
-
-def _sample_bonus_questions(questions, limit):
-    # A picked bonus entry can be capped to a chosen count, drawn at random from
-    # the entry's available (new) questions so repeat visits vary. limit=None — or
-    # a count at/above the pool size — keeps every question; a non-positive count
-    # yields nothing.
-    if limit is None:
-        return questions
-
-    try:
-        limit = int(limit)
-    except (TypeError, ValueError):
-        return questions
-
-    if limit <= 0:
-        return []
-
-    if limit >= len(questions):
-        return questions
-
-    return random.sample(list(questions), limit)
-
-
-def get_bonus_group_items(db, key, limit=None):
-    # Full serialization for a single picked bonus entry. Reuses the shared
-    # review serializer so modes/contexts/projected intervals stay identical to
-    # a scheduled session, just scoped to one group / question. `limit` caps the
-    # entry to a randomly drawn subset of its available questions.
-    if not key:
-        return []
-
-    try:
-        if key == "type:timeline":
-            questions = [
-                question
-                for question in _new_questions(db)
-                if question.type_q == "timeline"
-            ]
-        elif key.startswith("group:"):
-            questions = _new_questions(db, group_ids=[int(key[len("group:"):])])
-        elif key.startswith("q:"):
-            questions = _questions_by_ids(db, [int(key[len("q:"):])])
-        else:
-            return []
-    except ValueError:
-        return []
-
-    questions = _sample_bonus_questions(questions, limit)
-
-    scheduler_tuning = load_scheduler_tuning_settings(db)
-
-    return serialize_review_items(
-        questions,
-        scheduler_tuning=scheduler_tuning,
-        scheduled_review=True,
-        timeline_anchors=_timeline_anchors_for(db, questions)
-    )
+    return defer_relearning_items(spread_new_items(
+        items,
+        {question.id for question in new_questions}
+    ))

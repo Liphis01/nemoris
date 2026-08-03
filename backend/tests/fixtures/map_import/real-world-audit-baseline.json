@@ -1,0 +1,1322 @@
+{
+  "cases": [
+    {
+      "active_zone_count": 33,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "81e38bc6e5620ac986a0064f496328b987313f2e6149a9e09225e55a0a588763",
+      "canonical_shape_annotation_count": 33,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.probable_path_labels",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-argentina-provinces",
+      "interpretation_sha256": "adf62bd50394e81f5dcbd6e132100bc1d4c6b0911ffc124ef58a3db28780884a",
+      "interpretation_zone_counts": [
+        33
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 33,
+          "blocker_codes": [
+            "repair.required_unresolved",
+            "repair.optional_acknowledgement"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 1,
+          "required_unresolved_count": 2,
+          "suggested_bulk_action_count": 2,
+          "zone_count": 33
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "3770d8c264db10c163fdeca7d30136bab02c2bfdebd7f2add3eaca29a6a8e776",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 24
+    },
+    {
+      "active_zone_count": 15,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "f21531c8089a9acf14e959dd4f21856d30ec5e1254c89b4b9e3cb84586267161",
+      "canonical_shape_annotation_count": 15,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-australia-states",
+      "interpretation_sha256": "e5fd93ecd954e8f0320f1b2e2a09376421812d8dc1861efede23d860ae384734",
+      "interpretation_zone_counts": [
+        15
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 15,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 15
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "a71142a0072df15415f4d8d483352703ba39bb9d68c1cf983496026fe0697a31",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 8
+    },
+    {
+      "active_zone_count": 9,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "17b7bd56ab0c2e027d129672328d6bdea57c8599cd23d08342e21268fdee3a38",
+      "canonical_shape_annotation_count": 9,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-austria-states",
+      "interpretation_sha256": "62fa0b341a969469ab3a28501bf9db8db1f112ca33e662cbff14613f7cdc1e63",
+      "interpretation_zone_counts": [
+        9
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 9,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 9
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "1fce8a40ccaa7f044339bb6922efd43c2ca9129ebfabcb2ed200d4d874b2421a",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 9
+    },
+    {
+      "active_zone_count": 0,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "a5c11ee90138b7732c177f5b706a4af0508f2bf20d22edc1b710ec6ae29d6a55",
+      "canonical_shape_annotation_count": 0,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.no_usable_data_code",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-belgium-provinces",
+      "interpretation_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "interpretation_zone_counts": [],
+      "parse_error_code": null,
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "assisted",
+      "sha256": "7ee56d7373c17dead06a9de279742764b869fb43395aeb5f48a74286ca8b7437",
+      "target_actual_workflow": "unsupported",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 11
+    },
+    {
+      "active_zone_count": 4,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "4b26e9914abdd78a3b00eeddd6e4415f8fa3425f2079102dee945109be3e6583",
+      "canonical_shape_annotation_count": 44,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.multiple_interpretations",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-brazil-states",
+      "interpretation_sha256": "e475609af297e3dec4f9c75f069ab0450791b7833866ca0476b2ad9ce9407e17",
+      "interpretation_zone_counts": [
+        4,
+        5
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 44,
+          "blocker_codes": [],
+          "multipart_zone_count": 3,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 4
+        },
+        {
+          "assigned_shape_count": 27,
+          "blocker_codes": [],
+          "multipart_zone_count": 5,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 5
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "e8ceb07dead511cc98338bdfb598130ada7ee46ea1507878ed12491d3532cf6d",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 27
+    },
+    {
+      "active_zone_count": 53,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "ffb91acde6e0b3ea9282324a53bfed99bca58ada47a21afbda551f92c6ebac27",
+      "canonical_shape_annotation_count": 53,
+      "diagnostic_codes": [
+        "svg.multiple_interpretations",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-canada-provinces",
+      "interpretation_sha256": "76f2e3356b16d2ac774807761fbbd06fad3391864036a78879786e6f065ea0a3",
+      "interpretation_zone_counts": [
+        53,
+        13,
+        13
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 53,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 53
+        },
+        {
+          "assigned_shape_count": 53,
+          "blocker_codes": [],
+          "multipart_zone_count": 6,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 13
+        },
+        {
+          "assigned_shape_count": 53,
+          "blocker_codes": [],
+          "multipart_zone_count": 6,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 13
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "4bec4ed3454994625d88ca9afa5cb69b79e26fed72860a6c6df1840758d2eddc",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 13
+    },
+    {
+      "active_zone_count": 2,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "d24ab6e2eae7a35332b9957e48f505055ac62c79014b771bf785ddbd7e0df2dd",
+      "canonical_shape_annotation_count": 2,
+      "diagnostic_codes": [
+        "svg.embedded_raster_requires_manual",
+        "svg.generated_ids_ignored",
+        "svg.labels_removed",
+        "svg.multiple_interpretations",
+        "svg.probable_path_labels",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-chile-regions",
+      "interpretation_sha256": "609270b96302a32c7ecdf31efea9a4841af983b77a2232661c95418d2a3ba1ce",
+      "interpretation_zone_counts": [
+        2,
+        60,
+        13,
+        3,
+        5,
+        7,
+        181
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "manual",
+      "sha256": "9ce33b8829e33bbfc8a2dfc8b5e1a6bfdda8e5e2ccd066a91bf0e79011d94c21",
+      "target_actual_workflow": "manual",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 16
+    },
+    {
+      "active_zone_count": 54,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "0ecd496eff9a119dca399ed280a5f5eb11cb4b475f1ecc58f6596e6acaf175e8",
+      "canonical_shape_annotation_count": 54,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-china-provinces",
+      "interpretation_sha256": "08256e989cd3dabcd1372d29d91672e018b597a57bd583699ac8117fbc75946e",
+      "interpretation_zone_counts": [
+        54
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 54,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 3,
+          "suggested_bulk_action_count": 2,
+          "zone_count": 54
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "5384aaf8e7f123edce38309869d6651992f053429e10c3495bb58eaf7cd8aa25",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 34
+    },
+    {
+      "active_zone_count": 19,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "b3709f65e9d9aea06f706c1defa6ee62223fd9cbcca5872577cb71bbb1c2e071",
+      "canonical_shape_annotation_count": 19,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-finland-regions",
+      "interpretation_sha256": "19391daa669c32a1d3a8fc16cd91d037a8c75cce9773ce1700090ae504a747db",
+      "interpretation_zone_counts": [
+        19
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 19,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 19
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "7b7b960feef703077562c7cdfbcee33e4344e477b1f5ccf51a4bc9e452384e18",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 19
+    },
+    {
+      "active_zone_count": null,
+      "canonical_safety_pass": false,
+      "canonical_scalable_viewbox": false,
+      "canonical_sha256": null,
+      "canonical_shape_annotation_count": 0,
+      "diagnostic_codes": [],
+      "identity": "commons-france-departments-communes",
+      "interpretation_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "interpretation_zone_counts": [],
+      "parse_error_code": "svg.path_data_limit",
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "parser_failure",
+      "sha256": "caf8b9a04730a5ce6b7397cf51107b26eea9ba64da6192f150f00b28cf66f879",
+      "target_actual_workflow": "parser_failure",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 101
+    },
+    {
+      "active_zone_count": 6,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "4662b5192abd4b48c584ec20c0ef84942ed1dde0651970acd7c16b1a610d97c1",
+      "canonical_shape_annotation_count": 46,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-germany-states",
+      "interpretation_sha256": "fef699e133d53436b4a73e40cf25bdaecb74f56721ad38510ad5196b17532be3",
+      "interpretation_zone_counts": [
+        6
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 46,
+          "blocker_codes": [],
+          "multipart_zone_count": 5,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 6
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "9fdd77cacfeef895f46dd57da75210f45d91f7f7340872a3cc134e7bef1d701e",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 16
+    },
+    {
+      "active_zone_count": 7,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "25045ad5ad17c8c451327a177c6a1e22f4a637cfbc508b804cfb2933c3f51606",
+      "canonical_shape_annotation_count": 7,
+      "diagnostic_codes": [
+        "svg.embedded_raster_requires_manual",
+        "svg.generated_ids_ignored",
+        "svg.incomplete_semantic_layer",
+        "svg.labels_removed",
+        "svg.probable_path_labels",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-greece-regions",
+      "interpretation_sha256": "d96c587f3ef3b6e20e98c1bca1d8c7e24cf5ed5adc54cf20f2072ae26b2d47f4",
+      "interpretation_zone_counts": [
+        7
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "manual",
+      "sha256": "73e0027e2e497218dadaa228b3f565f763fc6342baac172c105fe08ba92ed709",
+      "target_actual_workflow": "manual",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 13
+    },
+    {
+      "active_zone_count": 5,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "4c22522410fd09776ed74502db95f3b6cfe2521c2de5d18ba5e7b282525077ff",
+      "canonical_shape_annotation_count": 5,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.labels_removed",
+        "svg.probable_path_labels"
+      ],
+      "identity": "commons-indonesia-provinces",
+      "interpretation_sha256": "a9c3110457d0199a363229efc1c500d0d7bf7f7d4fc27b4e90015f7bd0ad00d7",
+      "interpretation_zone_counts": [
+        5
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 5,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 45,
+          "suggested_bulk_action_count": 12,
+          "zone_count": 5
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "36e4fdd75a6c428c933d01312121128dbc8dd4cd43dcc9d91a4012f935c54e0b",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 38
+    },
+    {
+      "active_zone_count": 13,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "5d1888a0d5d0c0e12b2a93c1a4b3b1c0acb63a9a5c6c77559807ffe165c4f61a",
+      "canonical_shape_annotation_count": 13,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-italy-regions",
+      "interpretation_sha256": "45e35a368a0f50e0aecd0ac76982bdd4af82f499c5c23842e8b98b39e26e6553",
+      "interpretation_zone_counts": [
+        13
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 13,
+          "blocker_codes": [
+            "repair.optional_acknowledgement"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 15,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 13
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "0f49c5411f5b764eda0cdf96139b8a1d5afad2327073c2fce4de3116241fd067",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 20
+    },
+    {
+      "active_zone_count": null,
+      "canonical_safety_pass": false,
+      "canonical_scalable_viewbox": false,
+      "canonical_sha256": null,
+      "canonical_shape_annotation_count": 0,
+      "diagnostic_codes": [],
+      "identity": "commons-japan-prefectures",
+      "interpretation_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "interpretation_zone_counts": [],
+      "parse_error_code": "EntitiesForbidden",
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "parser_failure",
+      "sha256": "90b04c8ec62b7a0dad9aceb39bed3147b421b52b024293b94d66943c0ce02403",
+      "target_actual_workflow": "parser_failure",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 47
+    },
+    {
+      "active_zone_count": 4,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "ccf748404a193f49e3403fa3ae7f1ecbfbeca47d881f8159d525f5af02f189b2",
+      "canonical_shape_annotation_count": 214,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.local_reference_missing",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-mexico-states",
+      "interpretation_sha256": "060f2818ad9a8581bcd24a4b5eb0776ae0f3dc5ce1a6f87fe365bd8aef51ef74",
+      "interpretation_zone_counts": [
+        4
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 214,
+          "blocker_codes": [],
+          "multipart_zone_count": 4,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 4
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "8a0700df71d3009d052c6822626e2b31c74530d1cce9b30428d1b363f22178e3",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 32
+    },
+    {
+      "active_zone_count": 30,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "a383ae97ef246820b987f3f79fe3cf8cd19ec6febe9ca27d6ed6176186aba992",
+      "canonical_shape_annotation_count": 30,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-netherlands-provinces",
+      "interpretation_sha256": "6cc18704251b134792072288c2122131cb906aac7bc7d8e0ee6d1c63d2e2a9d2",
+      "interpretation_zone_counts": [
+        30
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 30,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 30
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "9ec70b115347a36cde0bfbe47f7b9f43e54f0e81f72aa42f68648fa84539b75b",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 12
+    },
+    {
+      "active_zone_count": 6,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "23323531754d84dbcd3cd3bab1330922c906f53a53e463f9b3fe15f621b6cb15",
+      "canonical_shape_annotation_count": 38,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-new-zealand-outline",
+      "interpretation_sha256": "836581d2ae573d58b9e7fc1423f702fcbc3c2129b0d3d7ad05837734c958b919",
+      "interpretation_zone_counts": [
+        6
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 38,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 3,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 1,
+          "suggested_bulk_action_count": 1,
+          "zone_count": 6
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "aa5b0ba125cd4791967b02fc047e321cd6273a2b9ba0ffe10023c620e1a9b8c4",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch"
+      ],
+      "target_workflow": "manual",
+      "target_zone_count": null
+    },
+    {
+      "active_zone_count": 3,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "25fba4a20ebbdabb599e01fc85c56b3a77ef79e391adf45b7a5ca39ed38382ac",
+      "canonical_shape_annotation_count": 3,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.labels_removed",
+        "svg.probable_path_labels",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-new-zealand-regions",
+      "interpretation_sha256": "382d7aca0ad210bfc714208771856bdebea4665794ce4bb948705d00fed52fb1",
+      "interpretation_zone_counts": [
+        3
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 3,
+          "blocker_codes": [
+            "repair.required_unresolved",
+            "repair.optional_acknowledgement"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 155,
+          "required_unresolved_count": 10,
+          "suggested_bulk_action_count": 10,
+          "zone_count": 3
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "377b338155fcf62a637fd0c7e521dfef06c9fb02d7f606098a4d66843aba0304",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 16
+    },
+    {
+      "active_zone_count": 0,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "b70b8683d33ff7582bdb36695e8a1b1dd3de0ae3d3b6e68b01bb796e0723c38e",
+      "canonical_shape_annotation_count": 0,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.no_usable_data_code",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-nigeria-states",
+      "interpretation_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "interpretation_zone_counts": [],
+      "parse_error_code": null,
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "assisted",
+      "sha256": "1752b923a03c7e1f3c9cc132642aee7b12b30082f1d43a428295d9d892761f18",
+      "target_actual_workflow": "unsupported",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 37
+    },
+    {
+      "active_zone_count": 15,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "90e888d1afd3c6058700bb2f163b977982317b3bb1fb7fd92269313e80deb49a",
+      "canonical_shape_annotation_count": 15,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-norway-counties",
+      "interpretation_sha256": "e5fd93ecd954e8f0320f1b2e2a09376421812d8dc1861efede23d860ae384734",
+      "interpretation_zone_counts": [
+        15
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 15,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 15
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "8d0d475466952f0c8b15c03e5e643294d26d2201c7b9ae8269d3484675298bb7",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 15
+    },
+    {
+      "active_zone_count": null,
+      "canonical_safety_pass": false,
+      "canonical_scalable_viewbox": false,
+      "canonical_sha256": null,
+      "canonical_shape_annotation_count": 0,
+      "diagnostic_codes": [],
+      "identity": "commons-poland-voivodeships",
+      "interpretation_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "interpretation_zone_counts": [],
+      "parse_error_code": "EntitiesForbidden",
+      "repair_interpretations": [],
+      "repairability_available": false,
+      "route": "parser_failure",
+      "sha256": "fdb5570e650f047248665dced287b4e360a6be44fcba4f9e4798fe38fdc8b8a3",
+      "target_actual_workflow": "parser_failure",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch",
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 16
+    },
+    {
+      "active_zone_count": 5,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "ff01aabf1cbad2af5b82ae635e379efb85a0edc57c932a8df042db2eee01c608",
+      "canonical_shape_annotation_count": 5,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.labels_removed",
+        "svg.multiple_interpretations",
+        "svg.probable_path_labels",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-portugal-districts",
+      "interpretation_sha256": "b1e181125a30afa9d85d05c2eadca657da5daa1bd4c83f2d3473802e38072d50",
+      "interpretation_zone_counts": [
+        5,
+        10
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 5,
+          "blocker_codes": [
+            "repair.required_unresolved",
+            "repair.optional_acknowledgement"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 20,
+          "required_unresolved_count": 4,
+          "suggested_bulk_action_count": 1,
+          "zone_count": 5
+        },
+        {
+          "assigned_shape_count": 18,
+          "blocker_codes": [
+            "repair.required_unresolved",
+            "repair.optional_acknowledgement"
+          ],
+          "multipart_zone_count": 4,
+          "optional_unresolved_count": 2,
+          "required_unresolved_count": 7,
+          "suggested_bulk_action_count": 3,
+          "zone_count": 10
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "bcf7368bcc474abe5ba1e6ef2b6277400d1e8e1fedfd977af936b66eeb0ba337",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 20
+    },
+    {
+      "active_zone_count": 95,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "12ba919833fbf4a87c0fecbef7e773894193d1a8e1dcbecc183e9c4e7b093191",
+      "canonical_shape_annotation_count": 95,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.multiple_interpretations"
+      ],
+      "identity": "commons-russia-subjects-2008",
+      "interpretation_sha256": "40f2a7063c5b98a8af57959858753854787ec1102a0d6c57da04383f7c3fe53f",
+      "interpretation_zone_counts": [
+        95,
+        20,
+        83,
+        6
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 95,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 103,
+          "suggested_bulk_action_count": 19,
+          "zone_count": 95
+        },
+        {
+          "assigned_shape_count": 173,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 20,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 88,
+          "suggested_bulk_action_count": 87,
+          "zone_count": 20
+        },
+        {
+          "assigned_shape_count": 151,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 10,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 40,
+          "suggested_bulk_action_count": 1,
+          "zone_count": 83
+        },
+        {
+          "assigned_shape_count": 151,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 5,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 40,
+          "suggested_bulk_action_count": 1,
+          "zone_count": 6
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "64765dbd1fd0613eeacaf9109efd49515aa01b6bbe2865385f113e7cb2418021",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 83
+    },
+    {
+      "active_zone_count": 9,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "39a9c409e19d5ad780a46829133a099068146e4be83c148d46025ec1bedffca0",
+      "canonical_shape_annotation_count": 9,
+      "diagnostic_codes": [],
+      "identity": "commons-south-africa-outline",
+      "interpretation_sha256": "d585f5d50082772213cefaa13b34545ef4ec0305f17c03b8ecd13f321c5b7fee",
+      "interpretation_zone_counts": [
+        9
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 9,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 9
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "9bd38a5ade1bc75f0c8c4644510010e3089a31a21eaa1fcdc0d935a3e619d895",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.workflow_mismatch"
+      ],
+      "target_workflow": "manual",
+      "target_zone_count": null
+    },
+    {
+      "active_zone_count": 11,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "8315d9fa0f910c6ec5cf416a7b48436f67cebd95870f8066a4b4fc84974924f5",
+      "canonical_shape_annotation_count": 25,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.multiple_interpretations",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-south-africa-provinces",
+      "interpretation_sha256": "fbb2c825a867e4dffcd8b8af304715edf514646117820fc6462f72630e778795",
+      "interpretation_zone_counts": [
+        11,
+        11,
+        9
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 25,
+          "blocker_codes": [],
+          "multipart_zone_count": 2,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 11
+        },
+        {
+          "assigned_shape_count": 25,
+          "blocker_codes": [],
+          "multipart_zone_count": 2,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 11
+        },
+        {
+          "assigned_shape_count": 19,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 1,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 6,
+          "suggested_bulk_action_count": 2,
+          "zone_count": 9
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "25db9e5b5c3c303b3361ba970547bedd8b62898b04ed50a59c561d35d03c109c",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 9
+    },
+    {
+      "active_zone_count": 337,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "98c62f44b0eafce2cab76fb6db7d9268dc164fc20db162859d57e5737c8793eb",
+      "canonical_shape_annotation_count": 337,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-spain-provinces",
+      "interpretation_sha256": "87f6373f224bd4d489d5439c1b764e2da6cdb139d440afd40f13e599e56094ec",
+      "interpretation_zone_counts": [
+        337
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 337,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 337
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "ef4a268e5ec73e915e6e663567a655d291cce2064aaaf951fba7d2e82ca3d062",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 52
+    },
+    {
+      "active_zone_count": 22,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "599f7f221089ff22ef37aebf75a93a920e5ae2757d222e38e859d84aca59b301",
+      "canonical_shape_annotation_count": 22,
+      "diagnostic_codes": [
+        "svg.multiple_interpretations",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-sweden-counties",
+      "interpretation_sha256": "7d5e7948b16f83b062c1301200f6e2d88931d974daa686bb33f9e9ca1f9478aa",
+      "interpretation_zone_counts": [
+        22,
+        21
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 22,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 22
+        },
+        {
+          "assigned_shape_count": 21,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 21
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "8a0a72e8cadac08af2cd1dc7caa16541efc376d483acf228f6339fbc658509ef",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 21
+    },
+    {
+      "active_zone_count": 81,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "153eb4acabdd774ed7436f2f58a902f81e2ae4e4bc885e34cf10053c17859645",
+      "canonical_shape_annotation_count": 81,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored"
+      ],
+      "identity": "commons-turkey-provinces",
+      "interpretation_sha256": "f21d2107ee690f320365795268848ac52def5f0910c0ec92c42840f95808d247",
+      "interpretation_zone_counts": [
+        81
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 81,
+          "blocker_codes": [],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 81
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "1dd31bf7919a9eb9b96bb777e2a0000c654587d5b05ef10849704337cd6b7310",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 81
+    },
+    {
+      "active_zone_count": 3,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "04c44e08befea58dbedd23153471a4878902932e69cbccb4bc9b539092b0f0d2",
+      "canonical_shape_annotation_count": 3,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.labels_removed",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-ukraine-oblasts",
+      "interpretation_sha256": "d6cd99527b3f91d4c97c5ad28c0d713fe9a61e045efa8a82d93e0c12f7e02be2",
+      "interpretation_zone_counts": [
+        3
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 3,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 75,
+          "suggested_bulk_action_count": 30,
+          "zone_count": 3
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "84a7d3577a10fcd2a56e4d3ca1be0132146187d0cf991a90dad5211cfad857fe",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 27
+    },
+    {
+      "active_zone_count": 2,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "cbed5e67763576ab59ea0ed7ad9d2a2be26336ef41c9ce7aa0e5328c9a3a6996",
+      "canonical_shape_annotation_count": 2,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.probable_path_labels"
+      ],
+      "identity": "commons-ukraine-political",
+      "interpretation_sha256": "7dc4f21af1dd124087f337c75acd695ba7b18e0f685bc4da3b4d794693f32288",
+      "interpretation_zone_counts": [
+        2
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 2,
+          "blocker_codes": [
+            "repair.required_unresolved",
+            "repair.optional_acknowledgement"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 2,
+          "required_unresolved_count": 6,
+          "suggested_bulk_action_count": 6,
+          "zone_count": 2
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "bd96436f608c7a435c03d6ccaca72bf222036867fc4415c1f6f0523910336496",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 27
+    },
+    {
+      "active_zone_count": 51,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "aed686dba0aadfa50a8de61a8aa8b0433f5d7a2dee9c768dd191a74b9bf12ac8",
+      "canonical_shape_annotation_count": 52,
+      "diagnostic_codes": [
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-us-states",
+      "interpretation_sha256": "d7cae07c81bbbe238ae44d131b70e3f353f81502c7051072c468c6650685bdf1",
+      "interpretation_zone_counts": [
+        51
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 52,
+          "blocker_codes": [],
+          "multipart_zone_count": 1,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 0,
+          "suggested_bulk_action_count": 0,
+          "zone_count": 51
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "2279580797b53481b29fc168145129db926c21f91d4bc6d82c04e9801bdf932f",
+      "target_actual_workflow": "selectable",
+      "target_pass": true,
+      "target_reason_codes": [],
+      "target_workflow": "selectable",
+      "target_zone_count": 51
+    },
+    {
+      "active_zone_count": 309,
+      "canonical_safety_pass": true,
+      "canonical_scalable_viewbox": true,
+      "canonical_sha256": "115ea800dd571949734f0fb79f81a162a8d4266f347d5f82413586dd7b923572",
+      "canonical_shape_annotation_count": 309,
+      "diagnostic_codes": [
+        "svg.generated_ids_ignored",
+        "svg.incomplete_semantic_layer",
+        "svg.probable_path_labels",
+        "svg.unsupported_elements_removed"
+      ],
+      "identity": "commons-world-blankmap",
+      "interpretation_sha256": "d11d2ab54e7a4079abc7d8f0ab22bfe8f9e6ae079133a4eb107fc8f2d0345312",
+      "interpretation_zone_counts": [
+        309
+      ],
+      "parse_error_code": null,
+      "repair_interpretations": [
+        {
+          "assigned_shape_count": 309,
+          "blocker_codes": [
+            "repair.required_unresolved"
+          ],
+          "multipart_zone_count": 0,
+          "optional_unresolved_count": 0,
+          "required_unresolved_count": 1896,
+          "suggested_bulk_action_count": 1772,
+          "zone_count": 309
+        }
+      ],
+      "repairability_available": true,
+      "route": "assisted",
+      "sha256": "88ae6cbcbe054c00455d16899724b348a102f49ff059bf7027c94e63b040e3e7",
+      "target_actual_workflow": "selectable",
+      "target_pass": false,
+      "target_reason_codes": [
+        "target.zone_count_mismatch",
+        "target.ontology_mismatch"
+      ],
+      "target_workflow": "selectable",
+      "target_zone_count": 249
+    }
+  ],
+  "format": "nemoris-svg-corpus-baseline-v1",
+  "generated_with": "backend/tools/audit_svg_corpus.py"
+}

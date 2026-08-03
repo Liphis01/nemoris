@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from ..config import CLOUD_KEY, CLOUD_URL
 from ..models import AppSetting
 from ..scheduler import (
     DEFAULT_CATCHUP_DAILY_TARGET,
@@ -22,6 +23,20 @@ REVIEW_SETTINGS_KEY = "review"
 SCHEDULER_TUNING_SETTINGS_KEY = "scheduler_tuning"
 STARTUP_REBALANCE_NOTICE_KEY = "startup_rebalance_notice"
 PACK_CATALOG_SETTINGS_KEY = "pack_catalog"
+INTAKE_SETTINGS_KEY = "review_intake"
+
+# The pace the user picks, as questions per day. The tier is the single volume
+# knob: it *is* catchup_daily_target, so the calendar smoothing and the
+# new-question intake are always driven by the same number.
+PACE_TIERS = {
+    "leger": 10,
+    "regulier": 20,
+    "soutenu": 40,
+    "intensif": 80
+}
+# Flat estimate used only to label the tiers ("~5 min"). Question types differ
+# in practice; this is a rough figure for the picker, not a measurement.
+INTAKE_SECONDS_PER_QUESTION = 15
 
 # sync-roadmap 0.6 — classification of AppSetting keys. Sync (M2) sends only
 # SYNC_SETTING_KEYS; everything else stays on the device. An unknown key is
@@ -34,8 +49,14 @@ SYNC_SETTING_KEYS = {
 DEVICE_SETTING_KEYS = {
     STARTUP_REBALANCE_NOTICE_KEY,
     "fsrs_v6_migration",
-    # A catalog URL is a per-device preference (M1 1.5), not sync data.
-    PACK_CATALOG_SETTINGS_KEY
+    # Legacy rows from when the catalogue URL was typed in per device. The
+    # catalogue now ships with the app; these must still never be synced.
+    PACK_CATALOG_SETTINGS_KEY,
+    # Derived, not chosen: the auto-tuned intake rate is keyed to one device's
+    # "today", churns daily, and is rebuildable anywhere from review_log (which
+    # does sync). Syncing it would only manufacture daily write conflicts. The
+    # user's intent (pace_tier) lives in REVIEW_SETTINGS_KEY and does sync.
+    INTAKE_SETTINGS_KEY
 }
 
 
@@ -57,7 +78,8 @@ MIN_CLICK_PROMPT_BIAS = -0.25
 MAX_CLICK_PROMPT_BIAS = 0.15
 
 DEFAULT_REVIEW_SETTINGS = {
-    "catchup_daily_target": DEFAULT_CATCHUP_DAILY_TARGET
+    "catchup_daily_target": DEFAULT_CATCHUP_DAILY_TARGET,
+    "pace_tier": None
 }
 DEFAULT_SCHEDULER_TUNING_SETTINGS = {
     "type_prompt_difficulty": MAP_TYPE_PROMPT_DIFFICULTY,
@@ -83,12 +105,48 @@ def _float_setting(data, key, default, lower, upper):
 
 def normalize_review_settings(value):
     data = value if isinstance(value, dict) else {}
+    tier = data.get("pace_tier")
+    tier = tier if tier in PACE_TIERS else None
+
+    # A tier, when set, is authoritative for the number: one source of truth, so
+    # the two can never drift. Users predating the tiers keep their raw target.
+    raw_target = (
+        PACE_TIERS[tier]
+        if tier
+        else data.get("catchup_daily_target", DEFAULT_CATCHUP_DAILY_TARGET)
+    )
 
     return {
-        "catchup_daily_target": normalize_daily_target(
-            data.get("catchup_daily_target", DEFAULT_CATCHUP_DAILY_TARGET)
-        )
+        "catchup_daily_target": normalize_daily_target(raw_target),
+        "pace_tier": tier
     }
+
+
+def resolve_pace_tier(daily_target, stored_tier=None):
+    # The tier to highlight in the UI. An explicit choice wins; otherwise pick
+    # the closest tier to the stored number so a pre-tier user still sees a
+    # sensible chip selected. Ties resolve to the smaller (gentler) tier.
+    if stored_tier in PACE_TIERS:
+        return stored_tier
+
+    return min(
+        PACE_TIERS,
+        key=lambda key: (abs(PACE_TIERS[key] - daily_target), PACE_TIERS[key])
+    )
+
+
+def pace_tier_options():
+    # One source of truth for the picker: value and its time estimate.
+    return [
+        {
+            "key": key,
+            "daily_target": target,
+            "estimated_minutes": round(
+                target * INTAKE_SECONDS_PER_QUESTION / 60
+            )
+        }
+        for key, target in PACE_TIERS.items()
+    ]
 
 
 def get_or_create_review_settings_row(db):
@@ -123,10 +181,78 @@ def get_review_settings(db):
 
 def save_review_settings(db, settings):
     setting = get_or_create_review_settings_row(db)
+    previous = normalize_review_settings(setting.value)
     normalized = normalize_review_settings(settings)
     setting.value = normalized
 
+    if previous["catchup_daily_target"] != normalized["catchup_daily_target"]:
+        # An explicit pace choice outranks the tuner: restart from the new seed
+        # so yesterday's adjustment cannot silently override what was just set.
+        reset_intake_settings(db, normalized["catchup_daily_target"])
+
     return normalized
+
+
+def normalize_intake_settings(value, seed):
+    # `seed` is the user's chosen daily target; it is the fallback for a missing
+    # or unusable stored rate, so a fresh device starts exactly on the tier.
+    data = value if isinstance(value, dict) else {}
+
+    try:
+        effective = normalize_daily_target(
+            data.get("effective_daily_target", seed)
+        )
+    except (TypeError, ValueError):
+        effective = seed
+
+    try:
+        up_streak = max(0, int(data.get("up_streak", 0)))
+    except (TypeError, ValueError):
+        up_streak = 0
+
+    tuned_on = data.get("tuned_on")
+    tuned_on = tuned_on if isinstance(tuned_on, str) else None
+
+    return {
+        "effective_daily_target": effective,
+        "tuned_on": tuned_on,
+        "up_streak": up_streak,
+        "last_retention": data.get("last_retention"),
+        "last_completion_ratio": data.get("last_completion_ratio"),
+        "last_reviews_in_window": data.get("last_reviews_in_window")
+    }
+
+
+def load_intake_settings(db, seed):
+    # Deliberately non-creating (unlike get_or_create_review_settings_row): this
+    # runs on the read-only review path, which must not flush.
+    setting = (
+        db.query(AppSetting)
+        .filter(AppSetting.key == INTAKE_SETTINGS_KEY)
+        .first()
+    )
+
+    return normalize_intake_settings(setting.value if setting else None, seed)
+
+
+def save_intake_settings(db, settings, seed):
+    normalized = normalize_intake_settings(settings, seed)
+    setting = (
+        db.query(AppSetting)
+        .filter(AppSetting.key == INTAKE_SETTINGS_KEY)
+        .first()
+    )
+
+    if not setting:
+        db.add(AppSetting(key=INTAKE_SETTINGS_KEY, value=normalized))
+    else:
+        setting.value = normalized
+
+    return normalized
+
+
+def reset_intake_settings(db, seed):
+    return save_intake_settings(db, None, seed)
 
 
 def normalize_scheduler_tuning_settings(value):
@@ -260,37 +386,12 @@ def clear_startup_rebalance_notice(db):
     )
 
 
-def get_pack_catalog_settings(db):
-    setting = (
-        db.query(AppSetting)
-        .filter(AppSetting.key == PACK_CATALOG_SETTINGS_KEY)
-        .first()
-    )
-    value = setting.value if setting and isinstance(setting.value, dict) else {}
+def get_pack_catalog_settings():
+    """The catalogue's Supabase project — bundled, not user-configured.
 
-    return {
-        "url": str(value.get("url", "")),
-        "key": str(value.get("key", ""))
-    }
-
-
-def save_pack_catalog_settings(db, url, key=""):
-    normalized = {
-        "url": str(url or "").strip().rstrip("/"),
-        "key": str(key or "").strip()
-    }
-    setting = (
-        db.query(AppSetting)
-        .filter(AppSetting.key == PACK_CATALOG_SETTINGS_KEY)
-        .first()
-    )
-
-    if not setting:
-        db.add(AppSetting(
-            key=PACK_CATALOG_SETTINGS_KEY,
-            value=normalized
-        ))
-    else:
-        setting.value = normalized
-
-    return normalized
+    A pack catalogue is only meaningful as one shared service: pointing a
+    device at its own project would just show an empty catalogue with nobody
+    to publish to. So this reads config, which self-hosters override through
+    NEMORIS_SUPABASE_URL/_KEY.
+    """
+    return {"url": CLOUD_URL, "key": CLOUD_KEY}

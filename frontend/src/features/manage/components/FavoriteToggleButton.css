@@ -1,0 +1,94 @@
+/* Deliberately mirrors .suspend-toggle (same sizing, easing, lift and press) so
+   the two controls on a card read as one system. The accent differs -- gold for
+   favourite, amber for suspended -- because they mean different things. */
+.favorite-toggle {
+  align-items: center;
+  appearance: none;
+  background: #181818;
+  border: 1px solid #303030;
+  border-radius: 999px;
+  color: #6b6b6b;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 15px;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.12s ease;
+  width: 24px;
+}
+
+.favorite-toggle-icon {
+  display: inline-flex;
+  transition: transform 0.18s ease;
+}
+
+.favorite-toggle:hover:not(:disabled),
+.favorite-toggle:focus-visible {
+  background: #2a2415;
+  border-color: rgba(255, 204, 122, 0.6);
+  color: #ffcc7a;
+  transform: translateY(-1px);
+}
+
+/* The star grows and tips slightly, so hovering previews the "mark it" action
+   instead of only changing colour. */
+.favorite-toggle:hover .favorite-toggle-icon {
+  transform: scale(1.18) rotate(-8deg);
+}
+
+.favorite-toggle:focus-visible {
+  outline: 2px solid rgba(255, 204, 122, 0.65);
+  outline-offset: 2px;
+}
+
+.favorite-toggle:active:not(:disabled) {
+  transform: translateY(0) scale(0.88);
+  transition-duration: 0.06s;
+}
+
+.favorite-toggle-on {
+  background: #3d3215;
+  border-color: rgba(255, 204, 122, 0.48);
+  color: #ffcc7a;
+}
+
+.favorite-toggle-on:hover:not(:disabled) {
+  background: #4a3c19;
+  border-color: rgba(255, 204, 122, 0.75);
+}
+
+.favorite-toggle-pulse {
+  animation: favorite-toggle-pulse 0.45s ease-out;
+}
+
+@keyframes favorite-toggle-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgba(255, 204, 122, 0.55);
+  }
+  to {
+    box-shadow: 0 0 0 11px rgba(255, 204, 122, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .favorite-toggle,
+  .favorite-toggle-icon {
+    transition-duration: 0.01ms;
+  }
+
+  .favorite-toggle-pulse {
+    animation: none;
+  }
+
+  .favorite-toggle:active:not(:disabled) {
+    transform: none;
+  }
+}

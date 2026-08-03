@@ -1,24 +1,29 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMediaGroupItems, patchMediaGroupItems } from "../../../api/mediaGroups";
-import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
 import {
   buttonStyle,
+  cancelButtonStyle,
   dangerButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   inputStyle,
   labelStyle,
   pendingSaveButtonStyle,
-  pendingSaveDotStyle,
-  primaryButtonStyle
+  pendingSaveDotStyle
 } from "./QuestionEditorStyles";
+import { normalizeMediaPool } from "../../../shared/media";
+import { matchesSearch } from "../utils/questionFilters";
 import {
+  MediaPoolField,
   QuestionEditorField,
   TagEditor
 } from "./QuestionEditorPrimitives";
 
 let tempItemCounter = 0;
-const MEDIA_GROUP_ROW_HEIGHT = 292;
+const MEDIA_GROUP_ROW_HEIGHT = 214;
 const MEDIA_GROUP_ROW_GAP = 10;
 const MEDIA_GROUP_ROW_SLOT_HEIGHT = MEDIA_GROUP_ROW_HEIGHT + MEDIA_GROUP_ROW_GAP;
 const MEDIA_GROUP_OVERSCAN_ROWS = 8;
@@ -70,8 +75,49 @@ function transferHasImageFiles(dataTransfer) {
   );
 }
 
+// Converts vertical wheel scroll into horizontal scroll on the (scrollbar-less)
+// alias chip strip, since a trackpad/mouse wheel over a nowrap row otherwise
+// does nothing. Mirrors MapEditor's identical chip-strip behaviour.
+function handleHorizontalChipWheel(event) {
+  const chip = event.target?.closest?.("[data-chip-wheel-target]");
+
+  if (!chip || !event.currentTarget.contains(chip)) {
+    return;
+  }
+
+  const strip = event.currentTarget;
+  const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
+
+  if (maxScrollLeft <= 0) {
+    return;
+  }
+
+  const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+    ? event.deltaX
+    : event.deltaY;
+
+  if (!delta) {
+    return;
+  }
+
+  event.preventDefault();
+  strip.scrollLeft = Math.max(
+    0,
+    Math.min(maxScrollLeft, strip.scrollLeft + delta)
+  );
+}
+
 function normalizeItem(item) {
   const data = item?.data || {};
+  const mediaPool = normalizeMediaPool(
+    item?.media_pool?.length
+      ? item.media_pool
+      : data.media_pool?.length
+        ? data.media_pool
+        : item?.media
+          ? [item.media]
+          : []
+  );
 
   return {
     tempId: item?.id ? `image-${item.id}` : item?.tempId || nextTempId(),
@@ -79,26 +125,39 @@ function normalizeItem(item) {
     type_q: "media",
     question: item?.question || "",
     answer: item?.answer || item?.label || "",
-    media: item?.media || "",
+    media: item?.media || mediaPool[0] || "",
+    media_pool: mediaPool,
     tags: item?.tags || [],
     group_id: item?.group_id || null,
     data,
     aliases: item?.aliases || data.aliases || [],
     progress: item?.progress || null,
-    group: item?.group || null
+    group: item?.group || null,
+    suspended: Boolean(item?.suspended)
   };
 }
 
 function serializeItem(item) {
+  const pool = normalizeMediaPool(
+    item.media_pool?.length
+      ? item.media_pool
+      : item.media
+        ? [item.media]
+        : []
+  );
   const data = {
     ...(item.data || {})
   };
   data.aliases = item.aliases || [];
+  // The backend rederives data.media_pool from the media_pool field, so don't
+  // ship a stale copy inside data.
+  delete data.media_pool;
 
   return {
     ...(item.id ? { id: item.id } : {}),
     answer: item.answer || "",
-    media: item.media || "",
+    media: pool[0] || "",
+    media_pool: pool,
     aliases: item.aliases || [],
     data
   };
@@ -115,34 +174,12 @@ function buildSignature(group, tags, items, deletedItemIds) {
       id: item.id || item.tempId,
       answer: item.answer || "",
       media: item.media || "",
+      media_pool: item.media_pool || [],
       aliases: item.aliases || [],
       data: item.data || {}
     })),
     deletedItemIds: [...deletedItemIds].sort((a, b) => a - b)
   });
-}
-
-function imagePreviewStyle(hasImage) {
-  return {
-    width: "86px",
-    height: "62px",
-    borderRadius: "8px",
-    border: "1px solid #2f2f2f",
-    background: hasImage ? "#101010" : "#181818",
-    objectFit: "contain"
-  };
-}
-
-function imagePreviewButtonStyle(hasImage) {
-  return {
-    ...imagePreviewStyle(hasImage),
-    alignItems: "center",
-    cursor: hasImage ? "zoom-in" : "default",
-    display: "flex",
-    justifyContent: "center",
-    overflow: "hidden",
-    padding: 0
-  };
 }
 
 const compactHeaderInputStyle = {
@@ -166,81 +203,31 @@ const imageGroupHeaderTagChipStyle = {
 
 const MediaGroupItemRow = memo(function MediaGroupItemRow({
   aliasInputValue,
-  canUpload,
   item,
   onAddAlias,
-  onHorizontalChipWheel,
-  onPreviewItem,
+  onImportMediaUrl,
   onRegisterAliasInput,
   onRemoveAlias,
   onRemoveItem,
-  onReplaceMedia,
   onToggleFavorite,
+  onToggleSuspended,
   onUpdateAliasInput,
   onUpdateItem,
-  selected,
-  uploading
+  onUploadFile,
+  selected
 }) {
-  const mediaSrc = useMemo(() => resolveMediaUrl(item.media), [item.media]);
-  const mediaKind = useMemo(() => getMediaKind(item.media), [item.media]);
-
   const handleAnswerChange = useCallback((event) => {
     onUpdateItem(item.tempId, {
       answer: event.target.value
     });
   }, [item.tempId, onUpdateItem]);
 
-  const handleMediaChange = useCallback((event) => {
+  const handlePoolChange = useCallback((pool) => {
     onUpdateItem(item.tempId, {
-      media: event.target.value
+      media_pool: pool,
+      media: pool[0] || ""
     });
   }, [item.tempId, onUpdateItem]);
-
-  const fileInputRef = useRef(null);
-  const [isRowDragging, setIsRowDragging] = useState(false);
-
-  const handlePickFile = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileChange = useCallback((event) => {
-    const file = event.target.files?.[0];
-
-    if (file) {
-      onReplaceMedia?.(item.tempId, file);
-    }
-
-    event.target.value = "";
-  }, [item.tempId, onReplaceMedia]);
-
-  const handleRowDragOver = useCallback((event) => {
-    if (!canUpload) return;
-
-    if (!Array.from(event.dataTransfer?.items || []).some(i => i.kind === "file")) {
-      return;
-    }
-
-    event.preventDefault();
-    setIsRowDragging(true);
-  }, [canUpload]);
-
-  const handleRowDragLeave = useCallback((event) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) {
-      setIsRowDragging(false);
-    }
-  }, []);
-
-  const handleRowDrop = useCallback((event) => {
-    const file = Array.from(event.dataTransfer?.files || []).find(isMediaFile);
-
-    if (!file) return;
-
-    // Stop the drop from bubbling to the editor's "add new items" handler.
-    event.preventDefault();
-    event.stopPropagation();
-    setIsRowDragging(false);
-    onReplaceMedia?.(item.tempId, file);
-  }, [item.tempId, onReplaceMedia]);
 
   const handleAliasInputChange = useCallback((event) => {
     onUpdateAliasInput(item.tempId, event.target.value);
@@ -265,96 +252,41 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
     <div
       data-image-group-item-row
       data-image-group-item-id={item.id || item.tempId}
-      onDragOver={handleRowDragOver}
-      onDragLeave={handleRowDragLeave}
-      onDrop={handleRowDrop}
       style={{
-        border: isRowDragging
-          ? "1px solid rgba(126, 226, 168, 0.85)"
-          : selected
-            ? "1px solid #f0c36a"
-            : "1px solid #2a2a2a",
+        border: selected ? "1px solid #f0c36a" : "1px solid #2a2a2a",
         borderRadius: "10px",
-        background: isRowDragging
-          ? "#1b241b"
-          : selected ? "#241f15" : "#171717",
+        background: selected ? "#241f15" : "#171717",
         boxSizing: "border-box",
         height: `${MEDIA_GROUP_ROW_HEIGHT}px`,
         padding: "12px",
         display: "grid",
-        gridTemplateColumns: "96px minmax(0, 1fr) auto",
+        gridTemplateColumns: "auto minmax(0, 1fr) auto",
         gap: "12px",
         alignItems: "start"
       }}
     >
-      {mediaSrc ? (
-        <button
-          type="button"
-          onClick={() => onPreviewItem(item)}
-          aria-label={`Agrandir ${item.answer || "le média"}`}
-          title="Agrandir le média"
-          style={imagePreviewButtonStyle(true)}
-        >
-          {mediaKind === "audio" ? (
-            <span aria-hidden="true" style={{ fontSize: "24px" }}>🎧</span>
-          ) : mediaKind === "video" ? (
-            <video
-              src={mediaSrc}
-              muted
-              playsInline
-              preload="metadata"
-              style={{
-                maxHeight: "100%",
-                maxWidth: "100%",
-                objectFit: "contain"
-              }}
-            />
-          ) : (
-            <img
-              src={mediaSrc}
-              alt={item.answer || "média"}
-              loading="lazy"
-              decoding="async"
-              fetchpriority="low"
-              style={{
-                maxHeight: "100%",
-                maxWidth: "100%",
-                objectFit: "contain"
-              }}
-            />
-          )}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={handlePickFile}
-          disabled={!canUpload || uploading}
-          title="Importer un fichier"
-          style={{
-            ...imagePreviewStyle(false),
-            alignItems: "center",
-            color: "#888",
-            cursor: canUpload && !uploading ? "pointer" : "default",
-            display: "flex",
-            flexDirection: "column",
-            fontSize: "11px",
-            gap: "3px",
-            justifyContent: "center"
-          }}
-        >
-          <span aria-hidden="true" style={{ fontSize: "18px" }}>＋</span>
-          {uploading ? "Import…" : "média"}
-        </button>
-      )}
+      <div style={{ alignSelf: "center", display: "grid", justifyItems: "start" }}>
+        <MediaPoolField
+          compact
+          size={180}
+          pool={item.media_pool || (item.media ? [item.media] : [])}
+          onPoolChange={handlePoolChange}
+          onUploadFile={onUploadFile}
+          onImportMediaUrl={onImportMediaUrl}
+          accept="image/*,audio/*,video/*"
+        />
+      </div>
 
       <div
         style={{
+          alignContent: "start",
           display: "grid",
-          gap: "10px",
-          minWidth: 0
+          gap: "6px",
+          minWidth: 0,
+          overflow: "hidden"
         }}
       >
-        <label style={{ display: "grid", gap: "6px" }}>
+        <label style={{ display: "grid", gap: "4px" }}>
           <span style={labelStyle}>Réponse</span>
           <input
             value={item.answer || ""}
@@ -363,63 +295,30 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
           />
         </label>
 
-        <div style={{ display: "grid", gap: "6px", minWidth: 0 }}>
-          <span style={labelStyle}>Média</span>
-          <div style={{ alignItems: "center", display: "flex", gap: "8px", minWidth: 0 }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,audio/*,video/*"
-              onChange={handleFileChange}
-              style={{ display: "none" }}
-            />
-            <button
-              type="button"
-              onClick={handlePickFile}
-              disabled={!canUpload || uploading}
-              style={{
-                ...buttonStyle,
-                cursor: canUpload && !uploading ? "pointer" : "not-allowed",
-                flexShrink: 0,
-                fontSize: "13px",
-                opacity: canUpload && !uploading ? 1 : 0.6,
-                padding: "9px 12px"
-              }}
-            >
-              {uploading ? "Import…" : "📁 Importer"}
-            </button>
-            <input
-              value={item.media || ""}
-              onChange={handleMediaChange}
-              placeholder="ou colle une URL"
-              style={{ ...inputStyle, minWidth: 0 }}
-            />
-          </div>
-        </div>
-
         <div style={{ minWidth: 0 }}>
-          <div style={{ ...labelStyle, marginBottom: "6px" }}>
+          <div style={{ ...labelStyle, marginBottom: "4px" }}>
             Alias
           </div>
           <div
             style={{
-              marginBottom: (item.aliases || []).length > 0 ? "8px" : 0,
+              marginBottom: (item.aliases || []).length > 0 ? "6px" : 0,
               minWidth: 0,
               position: "relative"
             }}
           >
             <div
               className="map-editor-chip-strip"
-              onWheel={onHorizontalChipWheel}
+              onWheel={handleHorizontalChipWheel}
               style={{
                 display: "flex",
                 flexWrap: "nowrap",
-                gap: "6px",
-                minHeight: (item.aliases || []).length > 0 ? "27px" : 0,
+                fontSize: "12px",
+                gap: "5px",
+                minHeight: "24px",
                 minWidth: 0,
                 overflowX: "auto",
                 overflowY: "hidden",
-                paddingRight: "24px",
+                paddingRight: "22px",
                 scrollbarWidth: "none"
               }}
             >
@@ -433,9 +332,9 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
                     borderRadius: "6px",
                     display: "inline-flex",
                     flex: "0 0 auto",
-                    gap: "6px",
-                    maxWidth: "150px",
-                    padding: "5px 8px"
+                    gap: "5px",
+                    maxWidth: "140px",
+                    padding: "4px 6px"
                   }}
                 >
                   <span
@@ -473,13 +372,15 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
               <div
                 aria-hidden="true"
                 style={{
-                  background: "linear-gradient(90deg, rgba(23, 23, 23, 0), #171717 82%)",
+                  background: `linear-gradient(90deg, rgba(23, 23, 23, 0), ${
+                    selected ? "#241f15" : "#171717"
+                  } 82%)`,
                   bottom: 0,
                   pointerEvents: "none",
                   position: "absolute",
                   right: 0,
                   top: 0,
-                  width: "28px"
+                  width: "22px"
                 }}
               />
             )}
@@ -499,14 +400,19 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
       <div
         style={{
           alignItems: "center",
+          alignSelf: "center",
           display: "flex",
-          flexDirection: "column",
           gap: "8px"
         }}
       >
         <FavoriteToggleButton
           favorite={Boolean(item.data?.favorite)}
           onToggle={() => onToggleFavorite(item)}
+        />
+        <SuspendToggleButton
+          suspended={Boolean(item.suspended)}
+          disabled={!item.id}
+          onToggle={() => onToggleSuspended(item)}
         />
         <button
           type="button"
@@ -532,7 +438,8 @@ export default function MediaGroupEditor({
   onImportMediaUrl,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction
+  headerAction,
+  updateQuestion
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -542,13 +449,12 @@ export default function MediaGroupEditor({
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [uploadingItemTempId, setUploadingItemTempId] = useState(null);
   const [importUrlInput, setImportUrlInput] = useState("");
   const [importingUrl, setImportingUrl] = useState(false);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [initialSignature, setInitialSignature] = useState("");
-  const [previewItem, setPreviewItem] = useState(null);
   const [aliasInputByTempId, setAliasInputByTempId] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
   const [itemsScrollTop, setItemsScrollTop] = useState(0);
   const [itemsViewportHeight, setItemsViewportHeight] = useState(
     MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT
@@ -559,6 +465,7 @@ export default function MediaGroupEditor({
   const pendingScrollItemTempIdRef = useRef(null);
   const currentGroupRef = useRef(group);
   const saveImageItemsRef = useRef(null);
+  const savedStateRef = useRef(null);
   const groupId = group?.id;
   const selectedItemId = selectedItem?.id ?? null;
 
@@ -566,13 +473,18 @@ export default function MediaGroupEditor({
     buildSignature(editableGroup, sharedTags, items, deletedItemIds)
   ), [deletedItemIds, editableGroup, items, sharedTags]);
   const hasUnsavedChanges = currentSignature !== initialSignature;
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+
+    return items.filter((item) => matchesSearch(item, searchQuery));
+  }, [items, searchQuery]);
   const selectedItemIndex = useMemo(() => {
     if (!selectedItemId) return -1;
 
-    return items.findIndex((item) => item.id === selectedItemId);
-  }, [items, selectedItemId]);
+    return filteredItems.findIndex((item) => item.id === selectedItemId);
+  }, [filteredItems, selectedItemId]);
   const visibleItemWindow = useMemo(() => {
-    if (items.length === 0) {
+    if (filteredItems.length === 0) {
       return {
         startIndex: 0,
         endIndex: 0,
@@ -594,16 +506,16 @@ export default function MediaGroupEditor({
     const visibleCount = Math.ceil(viewportHeight / MEDIA_GROUP_ROW_SLOT_HEIGHT) +
       (MEDIA_GROUP_OVERSCAN_ROWS * 2) +
       1;
-    const endIndex = Math.min(items.length, startIndex + visibleCount);
+    const endIndex = Math.min(filteredItems.length, startIndex + visibleCount);
 
     return {
       startIndex,
       endIndex,
-      items: items.slice(startIndex, endIndex),
+      items: filteredItems.slice(startIndex, endIndex),
       topSpacerHeight: startIndex * MEDIA_GROUP_ROW_SLOT_HEIGHT,
-      bottomSpacerHeight: Math.max(0, (items.length - endIndex) * MEDIA_GROUP_ROW_SLOT_HEIGHT)
+      bottomSpacerHeight: Math.max(0, (filteredItems.length - endIndex) * MEDIA_GROUP_ROW_SLOT_HEIGHT)
     };
-  }, [items, itemsScrollTop, itemsViewportHeight]);
+  }, [filteredItems, itemsScrollTop, itemsViewportHeight]);
 
   useEffect(() => {
     currentGroupRef.current = group;
@@ -618,6 +530,11 @@ export default function MediaGroupEditor({
       setInitialSignature(
         buildSignature(currentGroupRef.current, [], [], [])
       );
+      savedStateRef.current = {
+        group: currentGroupRef.current,
+        tags: [],
+        items: []
+      };
 
       return undefined;
     }
@@ -662,6 +579,11 @@ export default function MediaGroupEditor({
           normalizedItems,
           []
         ));
+        savedStateRef.current = {
+          group: nextGroup,
+          tags: selectedGroup.tags || [],
+          items: normalizedItems
+        };
       })
       .catch((error) => {
         console.error(error);
@@ -727,7 +649,7 @@ export default function MediaGroupEditor({
       MEDIA_GROUP_DEFAULT_VIEWPORT_HEIGHT;
     const maxScrollTop = Math.max(
       0,
-      (items.length * MEDIA_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
+      (filteredItems.length * MEDIA_GROUP_ROW_SLOT_HEIGHT) - viewportHeight
     );
     const nextScrollTop = Math.min(
       maxScrollTop,
@@ -736,7 +658,7 @@ export default function MediaGroupEditor({
 
     scrollElement.scrollTop = nextScrollTop;
     setItemsScrollTop(nextScrollTop);
-  }, [items.length, itemsViewportHeight]);
+  }, [filteredItems.length, itemsViewportHeight]);
 
   useEffect(() => {
     if (loading || selectedItemIndex < 0) return;
@@ -747,7 +669,7 @@ export default function MediaGroupEditor({
   useEffect(() => {
     if (loading || !pendingScrollItemTempIdRef.current) return;
 
-    const targetIndex = items.findIndex(
+    const targetIndex = filteredItems.findIndex(
       item => item.tempId === pendingScrollItemTempIdRef.current
     );
 
@@ -755,7 +677,7 @@ export default function MediaGroupEditor({
 
     pendingScrollItemTempIdRef.current = null;
     scrollToItemIndex(targetIndex);
-  }, [items, loading, scrollToItemIndex]);
+  }, [filteredItems, loading, scrollToItemIndex]);
 
   const updateItem = useCallback((tempId, patch) => {
     setItems(prev =>
@@ -766,29 +688,6 @@ export default function MediaGroupEditor({
       )
     );
   }, []);
-
-  const handleReplaceItemMedia = useCallback(async (tempId, file) => {
-    // Upload a file for one existing item and swap its media in place, so a
-    // question's media can be changed without hand-editing the URL.
-    if (!file || !onUploadFile) return;
-
-    setUploadingItemTempId(tempId);
-    setSaveStatus("");
-
-    try {
-      const result = await onUploadFile(file);
-      const media = result?.media || result?.url || "";
-
-      if (media) {
-        updateItem(tempId, { media });
-      }
-    } catch (error) {
-      console.error(error);
-      setSaveStatus("Import impossible");
-    } finally {
-      setUploadingItemTempId(null);
-    }
-  }, [onUploadFile, updateItem]);
 
   const updateAliasInput = useCallback((tempId, value) => {
     setAliasInputByTempId(prev => ({
@@ -836,31 +735,6 @@ export default function MediaGroupEditor({
     });
   }, [updateItem]);
 
-  const handleHorizontalChipWheel = useCallback((event) => {
-    const chip = event.target?.closest?.("[data-chip-wheel-target]");
-
-    if (!chip || !event.currentTarget.contains(chip)) {
-      return;
-    }
-
-    const strip = event.currentTarget;
-    const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
-
-    if (maxScrollLeft <= 0) return;
-
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
-      ? event.deltaX
-      : event.deltaY;
-
-    if (!delta) return;
-
-    event.preventDefault();
-    strip.scrollLeft = Math.max(
-      0,
-      Math.min(maxScrollLeft, strip.scrollLeft + delta)
-    );
-  }, []);
-
   const addEmptyItem = useCallback(() => {
     const nextItem = normalizeItem({
       answer: "",
@@ -873,6 +747,7 @@ export default function MediaGroupEditor({
     });
 
     pendingScrollItemTempIdRef.current = nextItem.tempId;
+    setSearchQuery("");
     setItems(prev => [
       ...prev,
       nextItem
@@ -906,6 +781,36 @@ export default function MediaGroupEditor({
 
     updateItem(item.tempId, { data });
   }, [updateItem]);
+
+  const toggleSuspended = useCallback(async (item) => {
+    if (!item.id) return;
+
+    const nextSuspended = !item.suspended;
+
+    try {
+      await updateQuestion?.(item.id, { suspended: nextSuspended });
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Impossible de suspendre la question.");
+      return;
+    }
+
+    updateItem(item.tempId, { suspended: nextSuspended });
+  }, [updateItem, updateQuestion]);
+
+  const cancelChanges = useCallback(() => {
+    const snapshot = savedStateRef.current;
+    if (!snapshot) return;
+
+    setEditableGroup(snapshot.group);
+    setSharedTags(snapshot.tags);
+    setItems(snapshot.items);
+    setDeletedItemIds([]);
+    setTagInput("");
+    setAliasInputByTempId({});
+    aliasInputRefs.current = {};
+    setSaveStatus("");
+  }, []);
 
   const addTag = useCallback((selectedTag) => {
     const value = String(selectedTag ?? tagInput).trim();
@@ -947,6 +852,7 @@ export default function MediaGroupEditor({
       }
 
       pendingScrollItemTempIdRef.current = uploadedItems[0]?.tempId || null;
+      setSearchQuery("");
       setItems(prev => [...prev, ...uploadedItems]);
     } catch (error) {
       console.error(error);
@@ -982,6 +888,7 @@ export default function MediaGroupEditor({
       });
 
       pendingScrollItemTempIdRef.current = nextItem.tempId;
+      setSearchQuery("");
       setItems(prev => [...prev, nextItem]);
       setImportUrlInput("");
     } catch (error) {
@@ -1094,7 +1001,13 @@ export default function MediaGroupEditor({
         savedItems,
         []
       ));
+      savedStateRef.current = {
+        group: savedGroup,
+        tags: savedGroup.tags || sharedTags || [],
+        items: savedItems
+      };
       setSaveStatus("Enregistré");
+      invalidateTags().catch(() => {});
 
       await onSave?.(saveResult);
 
@@ -1130,22 +1043,6 @@ export default function MediaGroupEditor({
 
     return registerPendingSaveHandler(saveIfDirty);
   }, [registerPendingSaveHandler]);
-
-  useEffect(() => {
-    if (!previewItem) return undefined;
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        setPreviewItem(null);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [previewItem]);
 
   return (
     <div
@@ -1195,6 +1092,19 @@ export default function MediaGroupEditor({
             {headerAction}
             <button
               type="button"
+              onClick={cancelChanges}
+              disabled={!hasUnsavedChanges}
+              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
+              style={
+                hasUnsavedChanges
+                  ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }
+                  : { ...disabledCancelButtonStyle, ...compactHeaderButtonStyle }
+              }
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
               onClick={() => saveImageItems()}
               disabled={!hasUnsavedChanges}
               style={
@@ -1238,60 +1148,6 @@ export default function MediaGroupEditor({
             gap: "8px"
           }}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,audio/*,video/*"
-            multiple
-            onChange={(event) => handleUploadFiles(event.target.files)}
-            style={{ display: "none" }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!onUploadFile || uploading || importingUrl}
-            style={{
-              ...primaryButtonStyle,
-              ...compactHeaderButtonStyle,
-              opacity: !onUploadFile || uploading || importingUrl ? 0.6 : 1
-            }}
-          >
-            {uploading ? "Import..." : "Importer des médias"}
-          </button>
-          <input
-            value={importUrlInput}
-            onChange={(event) => setImportUrlInput(event.target.value)}
-            onKeyDown={handleImportUrlKeyDown}
-            placeholder="URL image"
-            style={{
-              ...compactHeaderInputStyle,
-              flex: "1 1 180px",
-              maxWidth: "280px",
-              minWidth: "150px"
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleImportUrl}
-            disabled={
-              !onImportMediaUrl ||
-              !importUrlInput.trim() ||
-              uploading ||
-              importingUrl
-            }
-            style={{
-              ...buttonStyle,
-              ...compactHeaderButtonStyle,
-              opacity: !onImportMediaUrl ||
-                !importUrlInput.trim() ||
-                uploading ||
-                importingUrl
-                ? 0.6
-                : 1
-            }}
-          >
-            {importingUrl ? "Import URL..." : "Importer l'URL"}
-          </button>
           <button
             type="button"
             onClick={addEmptyItem}
@@ -1299,6 +1155,51 @@ export default function MediaGroupEditor({
           >
             Ajouter une ligne
           </button>
+
+          <div style={{ flex: "1 1 160px", maxWidth: "240px", position: "relative" }}>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Recherche..."
+              aria-label="Rechercher dans le groupe"
+              style={{
+                ...compactHeaderInputStyle,
+                ...(searchQuery ? { paddingRight: "28px" } : null),
+                width: "100%"
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Effacer la recherche"
+                title="Effacer la recherche"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "50%",
+                  color: "#777",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  height: "20px",
+                  lineHeight: 1,
+                  position: "absolute",
+                  right: "6px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px"
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim() && (
+            <span style={{ color: "#888", fontSize: "12px" }}>
+              {filteredItems.length} / {items.length}
+            </span>
+          )}
           {saveStatus && (
             <span style={{ color: "#888", fontSize: "13px" }}>
               {saveStatus}
@@ -1326,7 +1227,7 @@ export default function MediaGroupEditor({
           </div>
         )}
 
-        {!loading && items.length === 0 && (
+        {!loading && searchQuery.trim() && filteredItems.length === 0 && (
           <div
             style={{
               alignItems: "center",
@@ -1335,14 +1236,17 @@ export default function MediaGroupEditor({
               color: "#777",
               display: "flex",
               justifyContent: "center",
-              minHeight: "180px"
+              marginBottom: `${MEDIA_GROUP_ROW_GAP}px`,
+              minHeight: "80px",
+              padding: "18px",
+              textAlign: "center"
             }}
           >
-            Aucun item média
+            Aucun résultat pour « {searchQuery.trim()} »
           </div>
         )}
 
-        {!loading && items.length > 0 && (
+        {!loading && filteredItems.length > 0 && (
           <div>
             {visibleItemWindow.topSpacerHeight > 0 && (
               <div
@@ -1353,7 +1257,7 @@ export default function MediaGroupEditor({
 
             {visibleItemWindow.items.map((item, index) => {
               const itemIndex = visibleItemWindow.startIndex + index;
-              const hasFollowingRows = itemIndex < items.length - 1;
+              const hasFollowingRows = itemIndex < filteredItems.length - 1;
 
               return (
                 <div
@@ -1367,20 +1271,18 @@ export default function MediaGroupEditor({
                 >
                   <MediaGroupItemRow
                     aliasInputValue={aliasInputByTempId[item.tempId] || ""}
-                    canUpload={Boolean(onUploadFile)}
                     item={item}
                     onAddAlias={addAlias}
-                    onHorizontalChipWheel={handleHorizontalChipWheel}
-                    onPreviewItem={setPreviewItem}
+                    onImportMediaUrl={onImportMediaUrl}
                     onRegisterAliasInput={registerAliasInput}
                     onRemoveAlias={removeAlias}
                     onRemoveItem={removeItem}
-                    onReplaceMedia={handleReplaceItemMedia}
                     onToggleFavorite={toggleFavorite}
+                    onToggleSuspended={toggleSuspended}
                     onUpdateAliasInput={updateAliasInput}
                     onUpdateItem={updateItem}
+                    onUploadFile={onUploadFile}
                     selected={Boolean(selectedItemId && selectedItemId === item.id)}
-                    uploading={uploadingItemTempId === item.tempId}
                   />
                 </div>
               );
@@ -1394,120 +1296,101 @@ export default function MediaGroupEditor({
             )}
           </div>
         )}
-      </div>
 
-      {previewItem && (
-        <div
-          role="presentation"
-          onClick={() => setPreviewItem(null)}
-          style={{
-            alignItems: "center",
-            background: "rgba(0, 0, 0, 0.82)",
-            display: "flex",
-            inset: "var(--shell-top, 0px) 0 0 0",
-            justifyContent: "center",
-            padding: "28px",
-            position: "fixed",
-            zIndex: 1000
-          }}
-        >
+        {!loading && (
           <div
-            onClick={(event) => event.stopPropagation()}
+            data-image-group-add-cell
             style={{
-              background: "#111",
-              border: "1px solid #333",
-              borderRadius: "12px",
-              boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
+              alignItems: "center",
+              background: "#171717",
+              border: "1px dashed #3a3a3a",
+              borderRadius: "10px",
               boxSizing: "border-box",
-              display: "grid",
-              gridTemplateRows: "auto auto",
-              maxHeight: "86vh",
-              width: "min(82vw, 900px)",
-              overflow: "hidden",
-              padding: "14px",
-              position: "relative"
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              justifyContent: "center",
+              marginTop: items.length > 0 ? `${MEDIA_GROUP_ROW_GAP}px` : 0,
+              minHeight: `${MEDIA_GROUP_ROW_HEIGHT}px`,
+              padding: "20px"
             }}
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,audio/*,video/*"
+              multiple
+              onChange={(event) => handleUploadFiles(event.target.files)}
+              style={{ display: "none" }}
+            />
             <button
               type="button"
-              onClick={() => setPreviewItem(null)}
-              aria-label="Fermer l'image agrandie"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!onUploadFile || uploading || importingUrl}
               style={{
                 alignItems: "center",
-                background: "#1f1f1f",
-                border: "1px solid #3a3a3a",
-                borderRadius: "999px",
-                color: "#ddd",
-                cursor: "pointer",
+                background: "transparent",
+                border: "none",
+                color: "#999",
+                cursor: !onUploadFile || uploading || importingUrl ? "default" : "pointer",
                 display: "flex",
-                fontSize: "20px",
-                height: "34px",
-                justifyContent: "center",
-                lineHeight: 1,
-                position: "absolute",
-                right: "12px",
-                top: "12px",
-                width: "34px",
-                zIndex: 1
-              }}
-            >
-              ×
-            </button>
-
-            {getMediaKind(previewItem.media) === "audio" ? (
-              <audio
-                src={resolveMediaUrl(previewItem.media)}
-                controls
-                autoPlay
-                style={{
-                  background: "#0d0d0d",
-                  borderRadius: "8px",
-                  display: "block",
-                  width: "100%"
-                }}
-              />
-            ) : getMediaKind(previewItem.media) === "video" ? (
-              <video
-                src={resolveMediaUrl(previewItem.media)}
-                controls
-                style={{
-                  background: "#0d0d0d",
-                  borderRadius: "8px",
-                  display: "block",
-                  height: "min(62vh, 560px)",
-                  objectFit: "contain",
-                  width: "100%"
-                }}
-              />
-            ) : (
-              <img
-                src={resolveMediaUrl(previewItem.media)}
-                alt={previewItem.answer || "média"}
-                style={{
-                  background: "#0d0d0d",
-                  borderRadius: "8px",
-                  display: "block",
-                  height: "min(62vh, 560px)",
-                  objectFit: "contain",
-                  width: "100%"
-                }}
-              />
-            )}
-
-            <div
-              style={{
-                color: "#eee",
-                fontSize: "16px",
-                fontWeight: 800,
-                padding: "12px 44px 0",
+                flexDirection: "column",
+                gap: "8px",
+                padding: 0,
                 textAlign: "center"
               }}
             >
-              {previewItem.answer || "Média"}
+              <span aria-hidden="true" style={{ fontSize: "26px" }}>＋</span>
+              <span style={{ fontSize: "13px", maxWidth: "320px" }}>
+                {uploading
+                  ? "Import..."
+                  : "Glissez une image, collez (Ctrl+V) ou cliquez pour choisir un fichier"}
+              </span>
+            </button>
+
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: "8px",
+                maxWidth: "360px",
+                width: "100%"
+              }}
+            >
+              <input
+                value={importUrlInput}
+                onChange={(event) => setImportUrlInput(event.target.value)}
+                onKeyDown={handleImportUrlKeyDown}
+                placeholder="URL image"
+                style={{ ...compactHeaderInputStyle, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={handleImportUrl}
+                disabled={
+                  !onImportMediaUrl ||
+                  !importUrlInput.trim() ||
+                  uploading ||
+                  importingUrl
+                }
+                style={{
+                  ...buttonStyle,
+                  ...compactHeaderButtonStyle,
+                  opacity: !onImportMediaUrl ||
+                    !importUrlInput.trim() ||
+                    uploading ||
+                    importingUrl
+                    ? 0.6
+                    : 1
+                }}
+              >
+                {importingUrl ? "Import..." : "Importer l'URL"}
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
     </div>
   );
 }

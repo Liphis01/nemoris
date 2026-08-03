@@ -1211,3 +1211,22 @@
     text-align: left;
   }
 }
+
+/* The compact session bar (map/media/sequence/text-group training) is a fixed
+   3-column grid with a 280px-minimum center column. Below this width the side
+   columns no longer have room for their content (back button / pause+timer),
+   which starts overlapping the centered title instead of shrinking. Stack
+   everything into full-width rows instead. */
+@media (max-width: 720px) {
+  [data-visual-session-bar] {
+    grid-template-columns: minmax(0, 1fr) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 10px !important;
+  }
+
+  [data-visual-session-actions],
+  [data-visual-session-secondary] {
+    justify-content: center !important;
+  }
+}

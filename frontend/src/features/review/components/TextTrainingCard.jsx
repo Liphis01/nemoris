@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fadeInStyle } from "../../../shared/styles";
-import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import RichText from "../../../shared/RichText";
+import {
+  getMediaKind,
+  mediaPoolFrom,
+  pickReviewMedia,
+  resolveMediaUrl
+} from "../../../shared/media";
+import { MediaZoomOverlay, ZoomableImageThumb } from "../../../shared/MediaZoom";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import {
   matchesTextTrainingAnswer,
@@ -43,8 +50,10 @@ const primaryButtonStyle = {
 
 // Renders a training item's media by kind. `boxed` frames images in a thumbnail
 // (used for the question prompt); the plain form is used inline in the answer
-// reveal. Used for both the question media and the answer media.
+// reveal. Both forms let the user click the image to zoom it, same as review
+// mode. Used for both the question media and the answer media.
 function TrainingMedia({ media, label = "média", boxed = false, style }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
   const src = resolveMediaUrl(media);
 
   if (!src) return null;
@@ -76,44 +85,24 @@ function TrainingMedia({ media, label = "média", boxed = false, style }) {
     );
   }
 
-  const image = (
-    <img
-      src={src}
-      alt={label}
-      style={{
-        borderRadius: "8px",
-        display: "block",
-        maxHeight: boxed ? "132px" : "180px",
-        maxWidth: "100%",
-        objectFit: "contain"
-      }}
-    />
+  return (
+    <div style={style}>
+      <ZoomableImageThumb
+        src={src}
+        alt={label}
+        boxed={boxed}
+        onOpen={() => setPreviewOpen(true)}
+      />
+
+      {previewOpen && (
+        <MediaZoomOverlay
+          src={src}
+          alt={label}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+    </div>
   );
-
-  if (boxed) {
-    return (
-      <div
-        style={{
-          ...style,
-          alignItems: "center",
-          background: "#101010",
-          border: "1px solid #262626",
-          borderRadius: "12px",
-          display: "inline-flex",
-          height: "154px",
-          justifyContent: "center",
-          maxWidth: "260px",
-          overflow: "hidden",
-          padding: "10px",
-          width: "100%"
-        }}
-      >
-        {image}
-      </div>
-    );
-  }
-
-  return <div style={style}>{image}</div>;
 }
 
 export default function TextTrainingCard({
@@ -125,7 +114,14 @@ export default function TextTrainingCard({
   const [draft, setDraft] = useState("");
   const [result, setResult] = useState("idle");
   const missedCompletionSubmittedRef = useRef(false);
-  const mediaSrc = resolveMediaUrl(q.media);
+  // One image from the question's pool for this presentation; a new card mount
+  // re-picks so successive trainings vary the picture.
+  const questionMedia = useMemo(
+    () => pickReviewMedia(q.question_id ?? q.id, mediaPoolFrom(q)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [q.question_id ?? q.id]
+  );
+  const mediaSrc = resolveMediaUrl(questionMedia);
   const typeStyle = getQuestionTypeChipStyle(q.type_q);
   const expectedAnswer = textAnswerValues(q)[0] || "";
   const missed = result === "wrong" || result === "skipped";
@@ -253,11 +249,11 @@ export default function TextTrainingCard({
             marginBottom: mediaSrc ? "24px" : "0"
           }}
         >
-          {q.question}
+          <RichText>{q.question}</RichText>
         </div>
 
         <TrainingMedia
-          media={q.media}
+          media={questionMedia}
           label="image de la question"
           boxed
           style={{ marginTop: "18px" }}
@@ -312,11 +308,11 @@ export default function TextTrainingCard({
               }}
             >
               <strong style={{ color: "#ffcc7a" }}>{statusCopy}</strong>
-              <span>{expectedAnswer}</span>
+              <RichText as="span">{expectedAnswer}</RichText>
               <TrainingMedia
                 media={q.answer_media}
                 label="image de la réponse"
-                style={{ marginTop: "4px" }}
+                style={{ marginTop: "4px", textAlign: "center" }}
               />
             </div>
           )}

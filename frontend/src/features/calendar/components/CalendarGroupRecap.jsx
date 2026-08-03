@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import SvgMap from "../../map/components/SvgMap";
 import { resolveMediaUrl } from "../../../shared/media";
 import { centerListItem } from "../../../shared/scroll";
+import { useTagLabels } from "../../../shared/tagLabels";
 
 const compactDateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -100,20 +101,16 @@ function getFocusedEvent(events, focusedQuestionId) {
 }
 
 function mergeTags(...tagLists) {
-  const tagsByKey = new Map();
+  const tagIds = new Set();
 
   tagLists.forEach((tagList) => {
     (tagList || []).forEach((tag) => {
       const value = String(tag || "").trim();
-      const key = value.toLowerCase();
-
-      if (value && !tagsByKey.has(key)) {
-        tagsByKey.set(key, value);
-      }
+      if (value) tagIds.add(value);
     });
   });
 
-  return [...tagsByKey.values()];
+  return [...tagIds];
 }
 
 export default function CalendarGroupRecap({
@@ -126,6 +123,7 @@ export default function CalendarGroupRecap({
   showHeader = true,
   todayKey
 }) {
+  const labelFor = useTagLabels();
   const listRef = useRef(null);
   const rowRefs = useRef(new Map());
   const [selectedCode, setSelectedCode] = useState(null);
@@ -221,7 +219,9 @@ export default function CalendarGroupRecap({
             {groupTags.length > 0 && (
               <div style={chipRowStyle}>
                 {groupTags.slice(0, 3).map((tag) => (
-                  <span key={tag} title={tag} style={tagChipStyle}>#{tag}</span>
+                  <span key={tag} title={labelFor(tag)} style={tagChipStyle}>
+                    #{labelFor(tag)}
+                  </span>
                 ))}
                 {groupTags.length > 3 && (
                   <span style={infoChipStyle}>+{groupTags.length - 3}</span>
@@ -265,6 +265,7 @@ export default function CalendarGroupRecap({
         <div style={{ ...mapPanelStyle, ...(expanded ? expandedMapPanelStyle : {}) }}>
           <SvgMap
             svgPath={mapPath}
+            mapManifest={group.map || group.data?.map}
             found={highlightedCodes}
             dueItems={dueCodes}
             selected={activeCode}
@@ -353,7 +354,7 @@ export default function CalendarGroupRecap({
               {shouldShowQuestionTags && (
                 <div style={chipRowStyle}>
                   {(question.tags || []).slice(0, 3).map((tag) => (
-                    <span key={tag} style={tagChipStyle}>#{tag}</span>
+                    <span key={tag} style={tagChipStyle}>#{labelFor(tag)}</span>
                   ))}
                 </div>
               )}
@@ -368,7 +369,7 @@ export default function CalendarGroupRecap({
                   }}
                   style={manageButtonStyle}
                 >
-                  Ouvrir dans le gestionnaire ↗
+                  Éditer ↗
                 </button>
               </div>
             </div>

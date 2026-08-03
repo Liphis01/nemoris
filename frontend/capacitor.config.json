@@ -1,0 +1,14 @@
+{
+  "appId": "com.nemoris.mobile",
+  "appName": "Nemoris",
+  "webDir": "dist-mobile",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true
+    }
+  }
+}
+

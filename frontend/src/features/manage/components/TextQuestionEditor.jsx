@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import {
   EditorSection,
   ImageMediaField,
+  MediaPoolField,
   QuestionEditorActions,
   QuestionEditorShell,
   TagEditor
 } from "./QuestionEditorPrimitives";
 import { inputStyle } from "./QuestionEditorStyles";
+import { normalizeMediaPool } from "../../../shared/media";
 
 const MEDIA_LABELS = {
   import: "Ajouter un média",
@@ -46,7 +48,6 @@ export default function TextQuestionEditor({
   onDelete,
   onUploadFile,
   onImportMediaUrl,
-  onRemoveMedia,
   onUploadAnswerFile,
   onImportAnswerMediaUrl,
   onRemoveAnswerMedia,
@@ -71,6 +72,33 @@ export default function TextQuestionEditor({
     commit({
       ...textDraft,
       [field]: value
+    });
+  }
+
+  // The question can carry several images; `media` mirrors the cover and the
+  // full list lives in data.media_pool (stored only when there are >= 2).
+  const questionMediaPool = normalizeMediaPool(
+    textDraft.data?.media_pool?.length
+      ? textDraft.data.media_pool
+      : textDraft.media
+        ? [textDraft.media]
+        : []
+  );
+
+  function setQuestionMediaPool(pool) {
+    const cleaned = normalizeMediaPool(pool);
+    const nextData = { ...(textDraft.data || {}) };
+
+    if (cleaned.length >= 2) {
+      nextData.media_pool = cleaned;
+    } else {
+      delete nextData.media_pool;
+    }
+
+    commit({
+      ...textDraft,
+      media: cleaned[0] || "",
+      data: nextData
     });
   }
 
@@ -117,12 +145,11 @@ export default function TextQuestionEditor({
           style={{ ...sectionTextareaStyle, minHeight: "94px" }}
         />
 
-        <ImageMediaField
-          media={textDraft.media}
-          onMediaChange={(media) => setField("media", media)}
+        <MediaPoolField
+          pool={questionMediaPool}
+          onPoolChange={setQuestionMediaPool}
           onUploadFile={onUploadFile}
           onImportMediaUrl={onImportMediaUrl}
-          onRemoveMedia={onRemoveMedia}
           accept="image/*,audio/*,video/*"
           labels={MEDIA_LABELS}
         />

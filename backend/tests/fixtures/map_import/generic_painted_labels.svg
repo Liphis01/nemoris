@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 50">
+  <path id="path1" fill="#d95f59" stroke="#fff"
+        d="M0 0 L80 0 L80 40 L0 40"/>
+  <path id="path2" fill="#61a96b" stroke="#fff"
+        d="M40 0 L60 0 L60 40 L40 40"/>
+  <path id="path3" fill="#6689cc" stroke="#fff"
+        d="M80 0 L110 0 L110 40 L80 40"/>
+  <path id="path4" fill="#999" stroke="none"
+        d="M0 45 H110"/>
+  <text x="10" y="22">Alpha</text>
+  <text x="45" y="22">Beta</text>
+  <text x="100" y="22">Gamma</text>
+</svg>

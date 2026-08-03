@@ -4,14 +4,18 @@ import "./DesktopTitleBar.css";
 
 const TITLEBAR_HEIGHT = "36px";
 
+async function setWindowResizable(win, resizable) {
+  if ((await win.isResizable()) !== resizable) {
+    await win.setResizable(resizable);
+  }
+}
+
 async function syncResizableState(win, setMaximized) {
+  const isMinimized = await win.isMinimized();
   const isMaximized = await win.isMaximized();
   setMaximized(isMaximized);
 
-  const shouldBeResizable = !isMaximized;
-  if ((await win.isResizable()) !== shouldBeResizable) {
-    await win.setResizable(shouldBeResizable);
-  }
+  await setWindowResizable(win, isMinimized || !isMaximized);
 
   return isMaximized;
 }
@@ -63,7 +67,13 @@ function DesktopTitleBar() {
     };
   }, [ready]);
 
-  const minimize = useCallback(() => getCurrentWindow().minimize(), []);
+  const minimize = useCallback(() => {
+    (async () => {
+      const win = getCurrentWindow();
+      await win.setResizable(true);
+      await win.minimize();
+    })().catch(console.error);
+  }, []);
   const toggleMaximize = useCallback(() => {
     (async () => {
       const win = getCurrentWindow();

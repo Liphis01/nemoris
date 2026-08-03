@@ -18,7 +18,7 @@ const questionCreationTypes = [
 
 export default function QuestionCreationTypeChooser({ onSelect, onCancel }) {
   return (
-    <div style={panelStyle}>
+    <div className="app-scrollbar" style={panelStyle}>
       <div style={{ marginBottom: "22px", color: "#888" }}>
         Nouvelle question
       </div>

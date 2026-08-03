@@ -1,0 +1,104 @@
+/* Sized and eased to match .favorite-toggle so the two controls on a card read
+   as one system. The accent differs -- amber for suspended, gold for
+   favourite -- because they mean different things. */
+.suspend-toggle {
+  align-items: center;
+  appearance: none;
+  background: #181818;
+  border: 1px solid #303030;
+  border-radius: 999px;
+  color: #6b6b6b;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 9px;
+  height: 24px;
+  justify-content: center;
+  letter-spacing: -1px;
+  line-height: 1;
+  padding: 0;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.12s ease;
+  width: 24px;
+}
+
+.suspend-toggle-icon {
+  display: inline-flex;
+  transition: transform 0.18s ease;
+}
+
+.suspend-toggle:hover:not(:disabled),
+.suspend-toggle:focus-visible {
+  background: #23201c;
+  border-color: rgba(224, 160, 92, 0.6);
+  color: #e0a05c;
+  transform: translateY(-1px);
+}
+
+.suspend-toggle:hover .suspend-toggle-icon {
+  transform: scale(1.18);
+}
+
+.suspend-toggle:focus-visible {
+  outline: 2px solid rgba(224, 160, 92, 0.65);
+  outline-offset: 2px;
+}
+
+/* Press feedback: the button dips, so a click feels acknowledged even before
+   the request that follows it resolves. */
+.suspend-toggle:active:not(:disabled) {
+  transform: translateY(0) scale(0.88);
+  transition-duration: 0.06s;
+}
+
+.suspend-toggle:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Suspended and mixed states stay legible without a hover. */
+.suspend-toggle-on {
+  background: #2b2118;
+  border-color: rgba(224, 160, 92, 0.5);
+  color: #e0a05c;
+}
+
+.suspend-toggle-mixed {
+  background: #221e19;
+  border-color: rgba(224, 160, 92, 0.32);
+  color: #b98a54;
+}
+
+/* Fired once per toggle so the state change is visible even when the row sits
+   still: a ring expands out of the button and fades. */
+.suspend-toggle-pulse {
+  animation: suspend-toggle-pulse 0.45s ease-out;
+}
+
+@keyframes suspend-toggle-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgba(224, 160, 92, 0.55);
+  }
+  to {
+    box-shadow: 0 0 0 11px rgba(224, 160, 92, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suspend-toggle,
+  .suspend-toggle-icon {
+    transition-duration: 0.01ms;
+  }
+
+  .suspend-toggle-pulse {
+    animation: none;
+  }
+
+  .suspend-toggle:active:not(:disabled) {
+    transform: none;
+  }
+}

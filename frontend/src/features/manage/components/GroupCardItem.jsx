@@ -1,4 +1,5 @@
 import { useManageTextPreview } from "./ManageTextPreview";
+import { useTagLabels } from "../../../shared/tagLabels";
 
 export default function GroupCardItem({
   group,
@@ -12,6 +13,7 @@ export default function GroupCardItem({
   deleteGroup
 }) {
   const tags = group.tags || [];
+  const labelFor = useTagLabels();
   const cardBackground = selected
     ? "#222"
     : isHighlighted
@@ -34,7 +36,7 @@ export default function GroupCardItem({
     },
     {
       label: "Tags",
-      value: tags.map(tag => `#${tag}`).join(" "),
+      value: tags.map(tag => `#${labelFor(tag)}`).join(" "),
       tone: "#999"
     }
   ]);
@@ -160,7 +162,7 @@ export default function GroupCardItem({
             {tags.slice(0, 3).map(tag => (
               <span
                 key={tag}
-                title={tag}
+                title={labelFor(tag)}
                 style={{
                   background: "#242424",
                   borderRadius: "999px",
@@ -174,7 +176,7 @@ export default function GroupCardItem({
                   whiteSpace: "nowrap"
                 }}
               >
-                #{tag}
+                #{labelFor(tag)}
               </span>
             ))}
             {tags.length > 3 && (

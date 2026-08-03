@@ -13,6 +13,7 @@ from sqlalchemy import or_
 
 from ..config import STATIC_DIR
 from ..models import MediaFile, Question, QuestionGroup
+from .media_pool import question_media_refs
 from .tombstones import record_tombstone
 
 
@@ -312,7 +313,8 @@ def store_media_bytes(
     static_dir: Path | None = None,
     storage_subdir: str | Path | None = None,
     allow_audio_video: bool = False,
-    db=None
+    db=None,
+    commit=True
 ):
     media_kind = detect_media_kind(data, allow_audio_video=allow_audio_video)
 
@@ -348,7 +350,9 @@ def store_media_bytes(
             return {
                 "url": f"{STATIC_URL_PREFIX}{existing.path}",
                 "sha256": digest,
-                "deduplicated": True
+                "deduplicated": True,
+                "created_file": False,
+                "stored_path": existing.path
             }
 
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -373,9 +377,15 @@ def store_media_bytes(
             sha256=digest,
             byte_size=len(data)
         ))
-        db.commit()
+        if commit:
+            db.commit()
 
-    return {"url": f"{STATIC_URL_PREFIX}{relative_url_path}", "sha256": digest}
+    return {
+        "url": f"{STATIC_URL_PREFIX}{relative_url_path}",
+        "sha256": digest,
+        "created_file": True,
+        "stored_path": relative_url_path
+    }
 
 
 def store_uploaded_image(
@@ -542,20 +552,41 @@ def media_points_to_same_static_file(left, right):
     )
 
 
+def removed_media_refs(old_refs, new_refs):
+    # Which of a question's old media refs are no longer pointed at by the new
+    # set, so a replaced/removed pool image can be garbage-collected.
+    return [
+        old
+        for old in old_refs
+        if not any(
+            media_points_to_same_static_file(old, new)
+            for new in new_refs
+        )
+    ]
+
+
 def is_static_media_referenced(db, relative_path):
     if not relative_path:
         return False
 
+    # Pool images live in Question.data["media_pool"], so the scan has to reach
+    # into data too or a still-referenced pool image would be pruned.
     question_media_rows = (
-        db.query(Question.media, Question.answer_media)
-        .filter(or_(Question.media.isnot(None), Question.answer_media.isnot(None)))
+        db.query(Question.media, Question.answer_media, Question.data)
+        .filter(
+            or_(
+                Question.media.isnot(None),
+                Question.answer_media.isnot(None),
+                Question.data.isnot(None)
+            )
+        )
         .all()
     )
 
     if any(
-        static_relative_path_from_media(media) == relative_path or
-        static_relative_path_from_media(answer_media) == relative_path
-        for (media, answer_media) in question_media_rows
+        static_relative_path_from_media(ref) == relative_path
+        for (media, answer_media, data) in question_media_rows
+        for ref in question_media_refs(media, answer_media, data)
     ):
         return True
 

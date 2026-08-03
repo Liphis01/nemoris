@@ -1,0 +1,53 @@
+{
+  "format": "nemoris-svg-m3a-local-audit-v1",
+  "assets_redistributed": false,
+  "cases": [
+    {
+      "identity": "user-upload-spain-provinces",
+      "sha256": "0b8f7403229b44eef845d88b6451bbdf5dda50f699dbe517c29979a7f80b63fe",
+      "expected_zone_count": 52,
+      "initial_repair_summary": {
+        "zone_count": 52,
+        "assigned_shape_count": 52,
+        "required_unresolved_count": 0,
+        "optional_unresolved_count": 25,
+        "decoration_count": 28,
+        "label_count": 0,
+        "excluded_count": 0,
+        "multipart_zone_count": 0
+      },
+      "repair_script": [],
+      "repair_action_count": 0,
+      "expected_canonical_view_box": "0 0 569 392",
+      "ready_after_script_and_acknowledgements": true
+    },
+    {
+      "identity": "user-upload-colombia-departments",
+      "sha256": "82c1f5d98a4ba010476ec143d4c90560efc58a9b4d35ca62e4e30776e39522ad",
+      "expected_zone_count": 34,
+      "initial_repair_summary": {
+        "zone_count": 34,
+        "assigned_shape_count": 34,
+        "required_unresolved_count": 3,
+        "optional_unresolved_count": 0,
+        "decoration_count": 0,
+        "label_count": 34,
+        "excluded_count": 0,
+        "multipart_zone_count": 0
+      },
+      "repair_script": [
+        {
+          "type": "set_role",
+          "select": {
+            "layer": "points",
+            "risk": "required"
+          },
+          "role": "decoration"
+        }
+      ],
+      "repair_action_count": 1,
+      "expected_canonical_view_box": "0 0 1000 738",
+      "ready_after_script_and_acknowledgements": true
+    }
+  ]
+}

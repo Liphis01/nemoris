@@ -2,48 +2,34 @@
 
 
 ## vérifier
-- l'ordre aléatoire des images est louche : quand je quitte la review pour revenir dedans j'ai le même ordre
-- question timeline ratée à un jour près mais "dur" ?? -> corriger et laisser la possibilité de modifier la qualité
 
 ## Urgent
-- ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
-- ne pas nécessairement reset les records après un edit
-- intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
-- do you have any suggestion to improve my setup/workflow as a developper in this project? (ex: faster way to run, test new features, etc.)
-- créer de nouveaux modes timeline (et revoir la création ?)
-- faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
-- il faudrait autoriser plusieurs images pour une même question pour varier
-- le mode plein écran n'est pas parfait (resize)
-- site de quiz en ligne relié
+- il reste un dossier qui s'appelle blueprint
+- bouton synchroniser depuis le menu (push pull)
+- quand on a modifié localement un groupe, proposer de reupdate le pack associé
 
 
 ## quick fixes
 
+- faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
 - ajouter le timer final dans la recap d'entrainement de maps
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
-- faire un bouton toggle pour l'era dans la preview
-- ajouter bouton annuler dans les autres types
-- tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
 - scroll automatique à enlever quand on quitte la preview d'une image de 
-- changer le message des questions déplacées pour préciser si c'est des questions oubliées ou des questions futures déplacées
-- mettre une ou deux stats dans les gros boutons de qualité des modes qcm
+- pouvoir zoomer sur les images pour les questions isolées
+- ne pas nécessairement reset les records après un edit (et s'interroger sur comment gérer les records sur les packs importés (leaderboard possible ?))
 
 ## bugs
 
-- recentrer les svg
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
-- les tags marchent pas bien
-- parfois on peut scroll la page alors qu'il n'y a rien en dessous
-- dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
+- type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
 
 ## to do when i have more time
 
 - aller voir l'historique d'une seule question
 - heatmap des zones les plus durs pour les maps
 - trouver un meilleur agencement pour les aliases dans map preview
-- mettre des groupes en favoris pour les faire réapparaître plus souvent (qui se met sur toutes les questions du groupe)
 - supprimer une question appelle le rebalancing ?
 - permettre d'accepter une réponse fausse si faute de frappe
 - ajouter une barre de progression qui montre la maîtrise d'une question dans manage (et éventuellement un historique de la progression en fonction du temps)
@@ -52,20 +38,24 @@
 - uniformiser le style partout
 - augmenter la difficulté des qcm en proposant des réponses plus proches
 - essayer de deviner la mode_difficulty (je sais pas comment ça s'appelle) d'un qcm en fonction des propals
-- make the network of tags lively by moving them around very slightly
 - faire les modes en fonctions des gaps dans le calendrier ?
 - faire un truc automatique pour importer les maps svg (data-code, les shapes pour les zones trop petites)
-- faire un sytème automatique pour ajouter progressivement un groupe au schedule (ex: avoir en permanence une dizaine de questions non maîtrisées dans le schedule, et quand on en maîtrise une, en ajouter une autre du groupe)
+- un mode où je dois pointer sur une map le plus proche possible
+- site de quiz en ligne relié
+- ajouter type liste (ordonné et désordonné ? alphabet grec / albums d'asterix)
+- créer de nouveaux modes timeline (et revoir la création ?)
+- leaderboard des packs
+- suivre des amis
+- faire des packs publics/amis only/privés
+- challenge des amis sur des packs
+- quels sont les principes à respecter pour un rendu graphique idéal ? vérifie que c'est appliqué partout
 
 ## refactors
 
 ## ideas
 
-- daily habit mechanics: streaks, reminders, rewards, but keep them separate from core review so they do not distort scheduling.
-- faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - ia pour proposer des qcm si on a pas la réponse (à la TLMVPSP)
-- faire un executable
 - faire une extension pour chrome pour facilement créer des questions à partir de n'importe quelle page web (ex : pour faire une question sur une ville, aller sur la page wikipedia de la ville et créer la question à partir de là en sélectionnant la zone de la carte) (avec de l'ia éventuellement pour suggérer la question et les réponses à partir du contenu de la page)
 - quand on vient d'ajouter une question, ajouter un indicateur et on doit passer la souris sur la card dans la liste pour enlever l'indicateur (à la LoL)
 - systeme de mmr
@@ -76,6 +66,16 @@
 - les questions ratées réapparaissent avec un mode différent (si disponible pour le type de question)
 - un module pour entrainer à bien écrire les caractères spéciaux (dessiner et reconnaître les kanjis ou autre)
 ----> peut aussi servir pour dessiner des drapeaux, des symboles, des logos (soit self evaluation, soit reconnaissance par l'ia)
+- organiser la section tags de training en arborescence conformément à l'arborescence des tags dans manage
+- autoriser l'italique, le gras, le souligné
+- faire un truc cooperatif à la git pour les packs
+- quand on change de preview dans manage, garder l'état en mémoire et attendre pour enregistrer ou annuler
+- peut être avoir plein de templates de maps à disposition pour aider les gens à faire leurs custom svg
+- faire des modes de jeu infinis et fun (mini jeux)
+- si c'est la même map, permettre de combiner des trainings de deux trucs différents (pays + capitales du monde par exemple)
+- un mode 1v1 (ou plus) sur un pack en particulier ou sur un pack aléatoire ou sur un pack aléatoire en commun ? sur un tirage aléatoire du pack (pour pas faire tout le pack) ex: chacun son tour remplir une map, le dernier gagne
+- enlever le truc des versions de packs et juste permettre d'éditer un pack
+
 
 ## Conseils/idées issus de la littérature scientifique
 

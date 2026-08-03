@@ -15,9 +15,6 @@ from app.routers.review import (
     answer_map,
     answer_question,
     answer_timeline,
-    get_bonus_groups,
-    get_bonus_items,
-    get_bonus_status,
     get_review,
     get_summary,
     get_settings,
@@ -26,6 +23,7 @@ from app.routers.review import (
     revise_answer_question,
     update_settings
 )
+from app.services.review import _new_question_ids
 from app.services.startup import run_startup_rebalance
 from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
 from app.scheduler import (
@@ -1514,7 +1512,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             35
         )
 
-    def test_review_defaults_to_started_due_and_blocks_new_until_clear(self):
+    def test_review_mixes_due_and_new_questions(self):
+        # New questions no longer wait for an empty queue: intake tops the
+        # session up alongside whatever is due.
         today = date.today()
         self.add_question(1)
         self.add_progress(1, today, reps=1)
@@ -1524,18 +1524,13 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.db.commit()
 
         response = get_review(db=self.db)
-        bonus_response = get_review(include_new=True, db=self.db)
 
         self.assertEqual(
-            [item["question_id"] for item in response],
-            [1]
-        )
-        self.assertEqual(
-            [item["question_id"] for item in bonus_response],
-            [1]
+            sorted(item["question_id"] for item in response),
+            [1, 2, 3]
         )
 
-    def test_bonus_review_returns_new_questions_when_due_work_is_clear(self):
+    def test_review_serves_new_questions_when_nothing_is_due(self):
         today = date.today()
         self.add_question(1)
         self.add_question(2)
@@ -1545,11 +1540,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.db.commit()
 
         response = get_review(db=self.db)
-        bonus_response = get_review(include_new=True, db=self.db)
 
-        self.assertEqual(response, [])
         self.assertEqual(
-            [item["question_id"] for item in bonus_response],
+            sorted(item["question_id"] for item in response),
             [1, 2]
         )
 
@@ -1569,230 +1562,43 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(summary["due_count"], 2)
         self.assertTrue(summary["has_due"])
+        # Question 3 is unstarted, so it is intake's to introduce, not due.
+        self.assertEqual(summary["new_count"], 1)
+        self.assertEqual(summary["session_count"], 3)
 
-    def test_bonus_status_allows_bonus_when_new_questions_exist(self):
-        update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
-        self.add_question(1)
-        self.db.commit()
+    def test_review_caps_new_questions_at_the_daily_ceiling(self):
+        # Régulier: 20/day -> ceiling ceil(20 * 0.35) = 7 introductions.
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
 
-        status = get_bonus_status(db=self.db)
-
-        self.assertTrue(status["allowed"])
-        self.assertEqual(status["new_count"], 1)
-        self.assertEqual(status["available_bonus_question_count"], 1)
-
-    def test_bonus_status_counts_available_same_group_questions(self):
-        today = date.today()
-        update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
-        first_group = self.add_group(1)
-        second_group = self.add_group(2)
-        same_group_bonus = self.add_question(1, type_q="media")
-        same_group_bonus.group = first_group
-        started_same_group = self.add_question(2, type_q="media")
-        started_same_group.group = first_group
-        other_group_bonus = self.add_question(3, type_q="media")
-        other_group_bonus.group = second_group
-        self.add_progress(2, today + timedelta(days=3), reps=1)
-        self.db.commit()
-
-        status = get_bonus_status(group_ids="1", db=self.db)
-
-        self.assertTrue(status["allowed"])
-        self.assertTrue(status["same_group_filter_applied"])
-        self.assertEqual(status["same_group_ids"], [1])
-        self.assertEqual(status["new_count"], 2)
-        self.assertEqual(status["same_group_new_count"], 1)
-        self.assertEqual(status["same_group_bonus_question_count"], 1)
-        self.assertEqual(status["available_bonus_question_count"], 1)
-
-    def test_bonus_status_disallows_when_same_group_is_empty(self):
-        update_settings(ReviewSettings(catchup_daily_target=10), db=self.db)
-        first_group = self.add_group(1)
-        second_group = self.add_group(2)
-        same_group_started = self.add_question(1, type_q="media")
-        same_group_started.group = first_group
-        other_group_bonus = self.add_question(2, type_q="media")
-        other_group_bonus.group = second_group
-        self.add_progress(1, date.today() + timedelta(days=3), reps=1)
-        self.db.commit()
-
-        status = get_bonus_status(group_ids="1", db=self.db)
-
-        self.assertFalse(status["allowed"])
-        self.assertEqual(status["new_count"], 1)
-        self.assertEqual(status["same_group_new_count"], 0)
-        self.assertEqual(status["same_group_bonus_question_count"], 0)
-        self.assertEqual(status["available_bonus_question_count"], 0)
-
-    def test_bonus_allowed_and_included_when_new_questions_remain(self):
-        # Bonus review is no longer capped by a forecast: as long as new
-        # questions exist and nothing is due, they are offered and included.
-        today = date.today()
-        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
-        self.add_question(1)
-
-        for offset in range(13):
-            question_id = 100 + offset
+        for question_id in range(1, 31):
             self.add_question(question_id)
-            self.add_progress(
-                question_id,
-                today + timedelta(days=(offset % 6) + 1),
-                reps=1
-            )
 
         self.db.commit()
 
-        status = get_bonus_status(db=self.db)
+        response = get_review(db=self.db)
 
-        self.assertTrue(status["allowed"])
-        self.assertEqual(status["new_count"], 1)
-        self.assertEqual(status["available_bonus_question_count"], 1)
-
-        # No 409 anymore: the endpoint returns items instead of blocking.
-        response = get_review(include_new=True, db=self.db)
-        self.assertEqual([item["question_id"] for item in response], [1])
-
-    def test_bonus_groups_lists_every_available_group_without_capacity_cap(self):
-        # A tiny daily target keeps bonus capacity small, but the selection list
-        # must still surface every group / loose question that has new questions.
-        today = date.today()
-        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
-        media_group = self.add_group(1, type_group="media")
-
-        for question_id in range(10, 20):
-            media_question = self.add_question(question_id, type_q="media")
-            media_question.group = media_group
-
-        started = self.add_question(20, type_q="media")
-        started.group = media_group
-        self.add_progress(20, today + timedelta(days=3), reps=1)
-
-        self.add_question(30, type_q="text")
-        self.add_question(31, type_q="text")
-        self.db.commit()
-
-        entries = get_bonus_groups(db=self.db)
-        by_key = {entry["key"]: entry for entry in entries}
-
-        # The group appears once, counts only its new questions, and is uncapped.
-        self.assertIn("group:1", by_key)
-        self.assertEqual(by_key["group:1"]["item_count"], 10)
-        self.assertEqual(by_key["group:1"]["type_q"], "media")
-        self.assertTrue(by_key["group:1"]["is_container"])
-
-        # Loose questions each get their own selectable entry.
-        self.assertIn("q:30", by_key)
-        self.assertIn("q:31", by_key)
-        self.assertFalse(by_key["q:30"]["is_container"])
-
-    def test_bonus_groups_collapses_text_groups_into_one_entry(self):
-        # Text groups are reviewed on a single screen like maps and media, so the
-        # bonus menu must offer them as one container instead of one entry per item.
-        text_group = self.add_group(1, type_group="text")
-
-        for question_id in range(10, 14):
-            text_question = self.add_question(question_id, type_q="text")
-            text_question.group = text_group
-
-        self.db.commit()
-
-        by_key = {entry["key"]: entry for entry in get_bonus_groups(db=self.db)}
-
-        self.assertEqual(list(by_key), ["group:1"])
-        self.assertEqual(by_key["group:1"]["item_count"], 4)
-        self.assertEqual(by_key["group:1"]["type_q"], "text")
-        self.assertTrue(by_key["group:1"]["is_container"])
-
-        payload = get_bonus_items(key="group:1", db=self.db)
-        text_groups = [item for item in payload if item.get("type_q") == "text"]
-
-        self.assertTrue(text_groups)
-        self.assertEqual(sum(len(item["items"]) for item in text_groups), 4)
-
-    def test_bonus_items_returns_full_payload_for_one_picked_group(self):
-        media_group = self.add_group(1, type_group="media")
-
-        for question_id in range(10, 13):
-            media_question = self.add_question(question_id, type_q="media")
-            media_question.group = media_group
-
-        self.db.commit()
-
-        payload = get_bonus_items(key="group:1", db=self.db)
-
-        media_groups = [item for item in payload if item.get("type_q") == "media"]
-        self.assertTrue(media_groups)
-        total_items = sum(len(item["items"]) for item in media_groups)
-        self.assertEqual(total_items, 3)
-
-        # Unknown / malformed keys are ignored rather than raising.
-        self.assertEqual(get_bonus_items(key="nope", db=self.db), [])
-
-    def test_bonus_items_caps_a_group_to_the_chosen_count(self):
-        text_group = self.add_group(1, type_group="text")
-
-        for question_id in range(10, 18):  # eight available questions
-            text_question = self.add_question(question_id, type_q="text")
-            text_question.group = text_group
-
-        self.db.commit()
-
-        def picked_count(payload):
-            return sum(
-                len(item["items"])
-                for item in payload
-                if item.get("type_q") == "text"
-            )
-
-        # A count caps the group to that many questions, drawn from its pool.
+        self.assertEqual(len(response), 7)
         self.assertEqual(
-            picked_count(get_bonus_items(key="group:1", count=3, db=self.db)),
-            3
+            sorted(item["question_id"] for item in response),
+            list(range(1, 8))
         )
 
-        # A count at/above the pool size returns every available question.
-        self.assertEqual(
-            picked_count(get_bonus_items(key="group:1", count=50, db=self.db)),
-            8
-        )
-
-        # No count still returns the whole entry (backward compatible).
-        self.assertEqual(
-            picked_count(get_bonus_items(key="group:1", db=self.db)),
-            8
-        )
-
-        # A non-positive count yields nothing.
-        self.assertEqual(get_bonus_items(key="group:1", count=0, db=self.db), [])
-
-    def test_bonus_review_returns_all_new_questions_without_capacity_cap(self):
-        today = date.today()
-        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+    def test_review_serves_a_small_pool_entirely(self):
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
 
         for question_id in range(1, 5):
             self.add_question(question_id)
 
-        for offset in range(11):
-            question_id = 100 + offset
-            self.add_question(question_id)
-            self.add_progress(
-                question_id,
-                today + timedelta(days=(offset % 6) + 1),
-                reps=1
-            )
-
         self.db.commit()
 
-        status = get_bonus_status(db=self.db)
-        response = get_review(include_new=True, db=self.db)
+        response = get_review(db=self.db)
 
-        self.assertEqual(status["available_bonus_question_count"], 4)
         self.assertEqual(
             sorted(item["question_id"] for item in response),
             [1, 2, 3, 4]
         )
 
-    def test_failed_bonus_text_answer_enters_the_normal_review(self):
+    def test_failed_new_question_enters_the_normal_review(self):
         today = date.today()
         self.add_question(1)
         self.add_question(2)
@@ -1818,16 +1624,30 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.lapses, 1)
         self.assertEqual(progress.next_review, today)
 
-        # The failed question is now due work, and it has left the bonus pool.
+        # The failed question is now due work and has left the new pool; the
+        # session still carries it, alongside whatever intake introduces.
         due_response = get_review(db=self.db)
-        self.assertEqual(
-            [item["question_id"] for item in due_response],
-            [1]
-        )
-        self.assertEqual(
-            get_bonus_status(db=self.db)["available_bonus_question_count"],
-            1
-        )
+        self.assertIn(1, [item["question_id"] for item in due_response])
+        self.assertNotIn(1, _new_question_ids(self.db))
+        self.assertIn(2, _new_question_ids(self.db))
+
+    def test_relearning_retries_are_shown_after_the_rest_of_the_queue(self):
+        # Question 1's lower id would otherwise sort it first; failing it must
+        # not let the same-day retry jump ahead of ordinary due work when the
+        # session is resumed (get_review is a fresh fetch, same as reopening
+        # the review after leaving it).
+        today = date.today()
+        self.add_question(1)
+        self.add_progress(1, today, reps=1)
+        self.add_question(2)
+        self.add_progress(2, today, reps=1)
+        self.db.commit()
+
+        answer_question(AnswerRequest(question_id=1, quality=0), db=self.db)
+
+        response = get_review(db=self.db)
+
+        self.assertEqual([item["question_id"] for item in response], [2, 1])
 
     def test_failed_bonus_grouped_answers_enter_the_normal_review(self):
         today = date.today()

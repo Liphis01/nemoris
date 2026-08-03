@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+  <style>
+    @import url("https://example.com/tracker.css");
+    .zone { fill: url("https://example.com/paint.svg"); stroke: #fff }
+  </style>
+  <path class="zone" data-code="A" onclick="alert(1)" d="M0 0h10v10H0z"/>
+</svg>

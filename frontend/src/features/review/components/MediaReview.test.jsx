@@ -524,7 +524,9 @@ describe("MediaReview answer label preview", () => {
       minHeight: "0",
       overflow: "hidden"
     });
-    expect(header).toHaveTextContent("Flags");
+    // The group name already lives in the session bar above this card, so the
+    // compact header itself carries no title chrome at all — just the count.
+    expect(header).not.toHaveTextContent("Flags");
     expect(header).not.toHaveTextContent("Progression");
     expect(header).not.toHaveTextContent("IMAGE");
     expect(header).not.toHaveTextContent("Tout taper");
@@ -1598,6 +1600,214 @@ describe("MediaReview answer label preview", () => {
       expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalled();
     });
     expect(document.activeElement).toBe(input);
+  });
+
+  it("wraps Tab from the last incomplete row back to the first", async () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3, { isFound: true, quality: 2 }),
+      imageGridRow(4, { isFound: true, quality: 2 }),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows, foundQuestionIds: [3, 4] })
+    );
+    const scrollArea = container.querySelector("[data-image-grid-scroll]");
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    // Simulate already being scrolled to the last incomplete row (row 5/6).
+    scrollArea.scrollTop = 400;
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalled();
+    });
+    expect(tileFor(container, 5).scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("wraps Shift+Tab from the first incomplete row back to the last", async () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3, { isFound: true, quality: 2 }),
+      imageGridRow(4, { isFound: true, quality: 2 }),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows, foundQuestionIds: [3, 4] })
+    );
+    const scrollArea = container.querySelector("[data-image-grid-scroll]");
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    // Already scrolled to the top, sitting on the first incomplete row.
+    scrollArea.scrollTop = 0;
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "Tab", shiftKey: true })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 5).scrollIntoView).toHaveBeenCalled();
+    });
+    expect(tileFor(container, 1).scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("wraps to the first row instead of getting stuck once scrollTop hits its real maximum", async () => {
+    // A scroll container can never reach `scrollTop === lastRow.top` when the
+    // last row doesn't fill a full viewport height below it — scrollTop caps
+    // out at scrollHeight - clientHeight, which sits short of that row's own
+    // offset. Reproduces the reported "spam Tab, stuck at the bottom" bug.
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows })
+    );
+    const scrollArea = container.querySelector("[data-image-grid-scroll]");
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    // maxScrollTop (204) sits short of row 5/6's top (400), the physically
+    // unreachable last row, but ALSO clears row 3/4's top (200) — so the old
+    // top-comparison scan masked the true last row behind the one before it
+    // and could never anchor on the actual bottom.
+    Object.defineProperties(scrollArea, {
+      clientHeight: { configurable: true, value: 396 },
+      scrollHeight: { configurable: true, value: 600 }
+    });
+    scrollArea.scrollTop = 204;
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "Tab" })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 1).scrollIntoView).toHaveBeenCalled();
+    });
+  });
+
+  it("uses Tab to scroll between type_all rows even when a thumbnail has focus", async () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows })
+    );
+    const input = screen.getByPlaceholderText("Tape une image...");
+    const thumbnail = tileFor(container, 1).querySelector('[tabindex="0"]');
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    thumbnail.focus();
+    expect(document.activeElement).toBe(thumbnail);
+
+    expect(fireEvent.keyDown(thumbnail, { key: "Tab" })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 3).scrollIntoView).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+  });
+
+  it("uses Tab to scroll between type_all rows when focus sits on a tile", async () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3),
+      imageGridRow(4),
+      imageGridRow(5),
+      imageGridRow(6)
+    ];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows })
+    );
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    setTileLayout(container, {
+      1: { left: 0, top: 0 },
+      2: { left: 160, top: 0 },
+      3: { left: 0, top: 200 },
+      4: { left: 160, top: 200 },
+      5: { left: 0, top: 400 },
+      6: { left: 160, top: 400 }
+    });
+
+    // A click inside a tile leaves focus on the grid rather than the input.
+    expect(fireEvent.keyDown(tileFor(container, 1), { key: "Tab" })).toBe(false);
+
+    await waitFor(() => {
+      expect(tileFor(container, 3).scrollIntoView).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+  });
+
+  it("leaves type_all tiles out of the tab order entirely", () => {
+    const rows = [imageGridRow(1), imageGridRow(2)];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows })
+    );
+
+    expect(tileFor(container, 1).hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("suppresses the default mousedown focus so clicking a thumbnail leaves no focus ring", () => {
+    const rows = [imageGridRow(1), imageGridRow(2)];
+    const { container } = renderMediaReviewWithState(
+      typeAllHookState({ rows })
+    );
+    const thumbnail = tileFor(container, 1).querySelector('[tabindex="0"]');
+
+    expect(fireEvent.mouseDown(thumbnail)).toBe(false);
   });
 
   it("does not auto-scroll for wrong or duplicate type_all answers", async () => {

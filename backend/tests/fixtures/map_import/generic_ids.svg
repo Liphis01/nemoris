@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 10">
+  <path id="west-zone" d="M0 0H10V10H0Z" fill="#ddd">
+    <title>Zone occidentale</title>
+  </path>
+  <path id="east-zone" d="M20 0H30V10H20Z" fill="#ddd" aria-label="Zone orientale"/>
+  <path id="path123" d="M10 0H20V10H10Z" fill="none" stroke="#222"/>
+</svg>

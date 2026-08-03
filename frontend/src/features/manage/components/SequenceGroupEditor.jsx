@@ -3,9 +3,13 @@ import {
   getSequenceGroupItems,
   patchSequenceGroupItems
 } from "../../../api/sequenceGroups";
+import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
 import {
+  cancelButtonStyle,
   dangerButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   inputStyle,
   pendingSaveButtonStyle,
@@ -35,7 +39,8 @@ function normalizeItem(item) {
     tags: item?.tags || [],
     group_id: item?.group_id || null,
     data,
-    aliases: item?.aliases || data.aliases || []
+    aliases: item?.aliases || data.aliases || [],
+    suspended: Boolean(item?.suspended)
   };
 }
 
@@ -114,6 +119,7 @@ const SequenceItemRow = memo(function SequenceItemRow({
   onMove,
   onRemoveItem,
   onToggleFavorite,
+  onToggleSuspended,
   onUpdateItem,
   selected
 }) {
@@ -186,8 +192,14 @@ const SequenceItemRow = memo(function SequenceItemRow({
         </button>
 
         <FavoriteToggleButton
-          active={Boolean(item.data?.favorite)}
-          onClick={() => onToggleFavorite(item)}
+          favorite={Boolean(item.data?.favorite)}
+          onToggle={() => onToggleFavorite(item)}
+        />
+
+        <SuspendToggleButton
+          suspended={Boolean(item.suspended)}
+          disabled={!item.id}
+          onToggle={() => onToggleSuspended(item)}
         />
 
         <button
@@ -209,7 +221,8 @@ export default function SequenceGroupEditor({
   onSave,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction
+  headerAction,
+  updateQuestion
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -225,6 +238,7 @@ export default function SequenceGroupEditor({
   const currentGroupRef = useRef(group);
   const saveItemsRef = useRef(null);
   const dragTempIdRef = useRef(null);
+  const savedStateRef = useRef(null);
   const groupId = group?.id;
   const selectedItemId = selectedItem?.id ?? null;
 
@@ -246,6 +260,11 @@ export default function SequenceGroupEditor({
       setInitialSignature(
         buildSignature(currentGroupRef.current, [], [], [])
       );
+      savedStateRef.current = {
+        group: currentGroupRef.current,
+        tags: [],
+        items: []
+      };
 
       return undefined;
     }
@@ -275,6 +294,11 @@ export default function SequenceGroupEditor({
           normalizedItems,
           []
         ));
+        savedStateRef.current = {
+          group: selectedGroup,
+          tags: selectedGroup.tags || [],
+          items: normalizedItems
+        };
       })
       .catch((error) => {
         console.error(error);
@@ -411,6 +435,22 @@ export default function SequenceGroupEditor({
     updateItem(item.tempId, { data });
   }, [updateItem]);
 
+  const toggleSuspended = useCallback(async (item) => {
+    if (!item.id) return;
+
+    const nextSuspended = !item.suspended;
+
+    try {
+      await updateQuestion?.(item.id, { suspended: nextSuspended });
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Impossible de suspendre la question.");
+      return;
+    }
+
+    updateItem(item.tempId, { suspended: nextSuspended });
+  }, [updateItem, updateQuestion]);
+
   const addTag = useCallback((selectedTag) => {
     const value = String(selectedTag ?? tagInput).trim();
 
@@ -422,6 +462,18 @@ export default function SequenceGroupEditor({
 
   const removeTag = useCallback((tag) => {
     setSharedTags(prev => prev.filter(item => item !== tag));
+  }, []);
+
+  const cancelChanges = useCallback(() => {
+    const snapshot = savedStateRef.current;
+    if (!snapshot) return;
+
+    setEditableGroup(snapshot.group);
+    setSharedTags(snapshot.tags);
+    setItems(snapshot.items);
+    setDeletedItemIds([]);
+    setTagInput("");
+    setSaveStatus("");
   }, []);
 
   async function saveSequenceItems({ autosave = false } = {}) {
@@ -476,7 +528,13 @@ export default function SequenceGroupEditor({
         savedItems,
         []
       ));
+      savedStateRef.current = {
+        group: savedGroup,
+        tags: savedGroup.tags || sharedTags || [],
+        items: savedItems
+      };
       setSaveStatus("Enregistré");
+      invalidateTags().catch(() => {});
 
       await onSave?.(saveResult);
 
@@ -547,6 +605,19 @@ export default function SequenceGroupEditor({
 
           <div style={{ alignItems: "center", display: "flex", gap: "10px" }}>
             {headerAction}
+            <button
+              type="button"
+              onClick={cancelChanges}
+              disabled={!hasUnsavedChanges}
+              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
+              style={
+                hasUnsavedChanges
+                  ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }
+                  : { ...disabledCancelButtonStyle, ...compactHeaderButtonStyle }
+              }
+            >
+              Annuler
+            </button>
             <button
               type="button"
               onClick={() => saveSequenceItems()}
@@ -676,6 +747,7 @@ export default function SequenceGroupEditor({
             onMove={moveItem}
             onRemoveItem={removeItem}
             onToggleFavorite={toggleFavorite}
+            onToggleSuspended={toggleSuspended}
             onUpdateItem={updateItem}
             selected={Boolean(item.id) && item.id === selectedItemId}
           />

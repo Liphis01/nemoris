@@ -1,8 +1,13 @@
-from .scheduler import preview_intervals, progress_in_relearning
+from .scheduler import (
+    preview_intervals,
+    progress_in_relearning,
+    relearning_graduate_interval
+)
 from .services.image_modes import (
     DEFAULT_IMAGE_MODE,
     normalize_image_mode
 )
+from .services.media_pool import read_media_pool
 from .services.map_modes import (
     DEFAULT_MAP_MODE,
     normalize_map_mode
@@ -84,10 +89,12 @@ def serialize_manage_question(question):
         "question": question.question,
         "answer": question.answer,
         "media": question.media,
+        "media_pool": read_media_pool(question.media, question.data),
         "answer_media": question.answer_media,
         "tags": question.tags or [],
         "data": question.data or {},
         "group_id": question.group_id,
+        "suspended": bool(question.suspended),
         "progress": serialize_progress(question.progress),
         "group":
             {
@@ -95,6 +102,8 @@ def serialize_manage_question(question):
                 "type_group": question.group.type_group,
                 "name": question.group.name,
                 "media": question.group.media,
+                "data": question.group.data or {},
+                "map": (question.group.data or {}).get("map"),
                 "tags": (
                     question.tags or []
                     if question.group.type_group in {
@@ -131,13 +140,22 @@ def serialize_review_question_item(question):
 
         "media": question.media,
 
+        "media_pool": read_media_pool(question.media, question.data),
+
         "answer_media": question.answer_media,
 
         "tags": question.tags or [],
 
         "progress": serialize_progress(
             question.progress
-        )
+        ),
+
+        "projected_intervals": preview_intervals(
+            question.progress,
+            favorite=bool((question.data or {}).get("favorite"))
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 
@@ -152,6 +170,8 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
         "name": group.name,
 
         "media": group.media,
+
+        "map": (group.data or {}).get("map"),
 
         "tags": tags or [],
 
@@ -189,7 +209,9 @@ def serialize_map_review_zone(
             favorite=bool((question.data or {}).get("favorite")),
             mode_difficulty=mode_difficulty,
             scheduler_tuning=scheduler_tuning
-        )
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 
@@ -231,6 +253,8 @@ def serialize_media_review_item(
 
         "media": question.media,
 
+        "media_pool": read_media_pool(question.media, question.data),
+
         "tags": question.tags or [],
 
         "aliases": question.data.get("aliases", []) if question.data else [],
@@ -244,7 +268,9 @@ def serialize_media_review_item(
             favorite=bool((question.data or {}).get("favorite")),
             mode_difficulty=mode_difficulty,
             scheduler_tuning=scheduler_tuning
-        )
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 
@@ -297,7 +323,9 @@ def serialize_text_review_item(
             favorite=bool((question.data or {}).get("favorite")),
             mode_difficulty=mode_difficulty,
             scheduler_tuning=scheduler_tuning
-        )
+        ),
+
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
 

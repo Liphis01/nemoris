@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Menu from "./features/menu/Menu";
 import ReviewSession from "./features/review/components/ReviewSession";
 import Manage from "./features/manage/components/Manage";
 import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
-import Stats from "./features/stats/components/Stats";
+import Profile from "./features/profile/components/Profile";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
 import BrowsePacks from "./features/packs/components/BrowsePacks";
-import DesktopTitleBar from "./shared/DesktopTitleBar";
+import DesktopStartupGate from "./shared/DesktopStartupGate";
 import UpdateBanner from "./features/update/UpdateBanner";
 import AutoSyncBanner from "./features/sync/AutoSyncBanner";
 import { getReviewSummary, getStartupRebalanceNotice } from "./api/review";
@@ -20,11 +20,16 @@ function startupNoticeStorageKey(notice) {
   return `startup-rebalance-notice:${notice.id}`;
 }
 
+const BACK_MOUSE_BUTTON = 3;
+const FORWARD_MOUSE_BUTTON = 4;
 
-function App() {
+
+function AppContent() {
   // Top-level mode switching is intentionally simple: each feature owns its
   // internal state through hooks, while App only coordinates cross-feature jumps.
   const [mode, setMode] = useState("menu");
+  const backStackRef = useRef([]);
+  const forwardStackRef = useRef([]);
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [manageOpenGroupId, setManageOpenGroupId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
@@ -32,6 +37,8 @@ function App() {
   const [reviewSummary, setReviewSummary] = useState(null);
   const [reviewSummaryLoading, setReviewSummaryLoading] = useState(false);
   const [reviewSummaryError, setReviewSummaryError] = useState("");
+  const [settingsScrollTarget, setSettingsScrollTarget] = useState(null);
+  const [packOpenTarget, setPackOpenTarget] = useState(null);
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
   const autoSync = useAutoSync();
@@ -46,7 +53,20 @@ function App() {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    boxSizing: "border-box"
+    boxSizing: "border-box",
+    position: "relative"
+  };
+
+  const bannerOverlayStyle = {
+    position: "absolute",
+    top: "24px",
+    left: "24px",
+    right: "24px",
+    zIndex: 20,
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    pointerEvents: "none"
   };
 
   const routeSlotStyle = {
@@ -60,6 +80,89 @@ function App() {
   useEffect(() => {
     document.body.style.overflow = "hidden";
   }, []);
+
+  const navigateMode = useCallback((nextModeOrUpdater) => {
+    setMode((currentMode) => {
+      const nextMode = typeof nextModeOrUpdater === "function"
+        ? nextModeOrUpdater(currentMode)
+        : nextModeOrUpdater;
+
+      if (!nextMode || nextMode === currentMode) {
+        return currentMode;
+      }
+
+      backStackRef.current.push(currentMode);
+      forwardStackRef.current = [];
+      return nextMode;
+    });
+  }, []);
+
+  const goBack = useCallback(() => {
+    setMode((currentMode) => {
+      let previousMode = backStackRef.current.pop();
+      while (previousMode === currentMode) {
+        previousMode = backStackRef.current.pop();
+      }
+
+      if (!previousMode) {
+        return currentMode;
+      }
+
+      forwardStackRef.current.push(currentMode);
+      return previousMode;
+    });
+  }, []);
+
+  const goForward = useCallback(() => {
+    setMode((currentMode) => {
+      let nextMode = forwardStackRef.current.pop();
+      while (nextMode === currentMode) {
+        nextMode = forwardStackRef.current.pop();
+      }
+
+      if (!nextMode) {
+        return currentMode;
+      }
+
+      backStackRef.current.push(currentMode);
+      return nextMode;
+    });
+  }, []);
+
+  useEffect(() => {
+    function interceptBrowserMouseNavigation(event) {
+      if (event.button !== BACK_MOUSE_BUTTON && event.button !== FORWARD_MOUSE_BUTTON) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function handleBrowserMouseNavigation(event) {
+      if (event.button !== BACK_MOUSE_BUTTON && event.button !== FORWARD_MOUSE_BUTTON) {
+        return;
+      }
+
+      interceptBrowserMouseNavigation(event);
+
+      if (event.button === BACK_MOUSE_BUTTON) {
+        goBack();
+      } else {
+        goForward();
+      }
+    }
+
+    window.addEventListener("mousedown", handleBrowserMouseNavigation, true);
+    window.addEventListener("mouseup", interceptBrowserMouseNavigation, true);
+    window.addEventListener("auxclick", interceptBrowserMouseNavigation, true);
+
+    return () => {
+      window.removeEventListener("mousedown", handleBrowserMouseNavigation, true);
+      window.removeEventListener("mouseup", interceptBrowserMouseNavigation, true);
+      window.removeEventListener("auxclick", interceptBrowserMouseNavigation, true);
+    };
+  }, [goBack, goForward]);
 
   useEffect(() => {
     getStartupRebalanceNotice()
@@ -136,7 +239,7 @@ function App() {
     manageLibrary.setSelectedItem(null);
     setManageOpenGroupId(null);
     setManageOpenQuestionId(questionId);
-    setMode("manage");
+    navigateMode("manage");
   }
 
   function openGroupIdInManage(groupId) {
@@ -149,47 +252,71 @@ function App() {
     manageLibrary.setSelectedItem(null);
     setManageOpenQuestionId(null);
     setManageOpenGroupId(groupId);
-    setMode("manage");
+    navigateMode("manage");
   }
 
   function openQuestionInCalendar(question) {
     // Manage -> Calendar navigation keeps the selected question highlighted
     // after the calendar screen mounts.
     setCalendarOpenQuestionId(question.id);
-    setMode("calendar");
+    navigateMode("calendar");
   }
+
+  const openSettingsSection = useCallback((sectionId) => {
+    setSettingsScrollTarget(sectionId || null);
+    navigateMode("settings");
+  }, [navigateMode]);
+
+  const clearSettingsScrollTarget = useCallback(() => {
+    setSettingsScrollTarget(null);
+  }, []);
+
+  const openPackInCatalog = useCallback((pack) => {
+    setPackOpenTarget({
+      guid: pack?.pack_guid || null,
+      search: pack?.name || ""
+    });
+    navigateMode("packs");
+  }, [navigateMode]);
+
+  const clearPackOpenTarget = useCallback(() => {
+    setPackOpenTarget(null);
+  }, []);
 
   return (
     <div style={appStyle}>
-      <DesktopTitleBar />
-      <UpdateBanner />
-      <AutoSyncBanner {...autoSync} />
+      <div style={bannerOverlayStyle}>
+        <UpdateBanner />
+        <AutoSyncBanner {...autoSync} />
+      </div>
       <div style={routeSlotStyle}>
         {mode === "menu" && (
           <Menu
-            setMode={setMode}
+            setMode={navigateMode}
             startupNotice={startupNotice}
             onDismissStartupNotice={dismissStartupNotice}
             reviewSummary={reviewSummary}
             reviewSummaryLoading={reviewSummaryLoading}
             reviewSummaryError={reviewSummaryError}
+            onOpenSettingsSection={openSettingsSection}
+            onOpenPack={openPackInCatalog}
           />
         )}
 
         {mode === "quiz" && (
           <ReviewSession
-            setMode={setMode}
+            setMode={navigateMode}
             {...reviewSession}
           />
         )}
 
         {mode === "training" && (
-          <TrainingSession setMode={setMode} />
+          <TrainingSession setMode={navigateMode} />
         )}
 
         {mode === "manage" && (
           <Manage
-            setMode={setMode}
+            setMode={navigateMode}
             {...manageLibrary}
             openQuestionId={manageOpenQuestionId}
             clearOpenQuestionId={() => setManageOpenQuestionId(null)}
@@ -201,33 +328,49 @@ function App() {
 
         {mode === "calendar" && (
           <ReviewCalendar
-            setMode={setMode}
+            setMode={navigateMode}
             questions={manageLibrary.allQuestions}
             onOpenQuestion={openQuestionInManage}
+            onOpenGroupInManage={openGroupIdInManage}
             openQuestionId={calendarOpenQuestionId}
             clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
           />
         )}
 
-        {mode === "stats" && (
-          <Stats
-            setMode={setMode}
-            onOpenQuestion={openQuestionIdInManage}
+        {mode === "profile" && (
+          <Profile
+            setMode={navigateMode}
+            onOpenSettingsSection={openSettingsSection}
           />
         )}
 
         {mode === "settings" && (
-          <Settings setMode={setMode} />
+          <Settings
+            setMode={navigateMode}
+            initialSection={settingsScrollTarget}
+            onInitialSectionHandled={clearSettingsScrollTarget}
+          />
         )}
 
         {mode === "packs" && (
           <BrowsePacks
-            setMode={setMode}
+            setMode={navigateMode}
             onOpenGroup={openGroupIdInManage}
+            initialPackGuid={packOpenTarget?.guid || null}
+            initialSearch={packOpenTarget?.search || ""}
+            onInitialPackHandled={clearPackOpenTarget}
           />
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <DesktopStartupGate>
+      <AppContent />
+    </DesktopStartupGate>
   );
 }
 

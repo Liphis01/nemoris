@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMapZones, patchMapZones } from "../../../api/maps";
+import { invalidateTags } from "../../../shared/tagLabels";
 
 
 export function getZoneCode(zone) {
@@ -25,20 +26,16 @@ function arraysMatch(left = [], right = []) {
 
 
 function mergeTagsFromZones(zones = []) {
-  const tagsByKey = new Map();
+  const tagIds = new Set();
 
   zones.forEach((zone) => {
     (zone.tags || []).forEach((tag) => {
       const value = String(tag || "").trim();
-      const key = value.toLowerCase();
-
-      if (value && !tagsByKey.has(key)) {
-        tagsByKey.set(key, value);
-      }
+      if (value) tagIds.add(value);
     });
   });
 
-  return [...tagsByKey.values()];
+  return [...tagIds];
 }
 
 
@@ -47,7 +44,9 @@ function buildEditableGroup(group, zones = []) {
     name: group.name || "",
     type_group: group.type_group || "map",
     media: group.media || "",
-    tags: Array.isArray(group.tags) ? group.tags : mergeTagsFromZones(zones)
+    tags: Array.isArray(group.tags) ? group.tags : mergeTagsFromZones(zones),
+    data: group.data || {},
+    map: group.map || group.data?.map || null
   };
 }
 
@@ -72,6 +71,8 @@ export function normalizeZone(zone, group) {
       type_group: zoneGroup.type_group || group.type_group || "map",
       name: zoneGroup.name || group.name,
       media: zoneGroup.media || group.media,
+      data: zoneGroup.data || group.data || {},
+      map: zoneGroup.map || group.map || group.data?.map || null,
       tags: Array.isArray(zoneGroup.tags) ? zoneGroup.tags : group.tags || []
     },
     data: {
@@ -149,7 +150,10 @@ export function useMapZones(group) {
   }, []);
 
   const foundCodes = useMemo(
-    () => zones.map(getZoneCode).filter(Boolean),
+    () => zones
+      .filter(zone => String(zone.answer || "").trim())
+      .map(getZoneCode)
+      .filter(Boolean),
     [zones]
   );
 
@@ -235,6 +239,16 @@ export function useMapZones(group) {
     return dirtyZoneCodesRef.current.size > 0 || groupDiffersFromSaved();
   }
 
+  const cancelChanges = useCallback(() => {
+    const revertedZones = initialZonesRef.current;
+
+    setZones(revertedZones);
+    setEditableGroup(initialGroupRef.current);
+    clearAllDirty();
+
+    return revertedZones;
+  }, [clearAllDirty]);
+
   async function saveMapZones({ zonesToSave, changedZones }) {
     // Send only changed zones, but rebuild local state from the server response
     // so newly created rows get their real database ids/progress.
@@ -277,6 +291,7 @@ export function useMapZones(group) {
 
     setEditableGroup(nextGroup);
     initialGroupRef.current = nextGroup;
+    invalidateTags().catch(() => {});
 
     return {
       delta: newCount - initialCount,
@@ -287,6 +302,7 @@ export function useMapZones(group) {
   }
 
   return {
+    cancelChanges,
     clearDirty,
     dirtyZoneCodes,
     dirtyZoneCodesRef,

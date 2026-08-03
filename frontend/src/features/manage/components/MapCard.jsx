@@ -2,6 +2,8 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
+import RichText from "../../../shared/RichText";
 
 export default function MapCard({
   q,
@@ -13,9 +15,11 @@ export default function MapCard({
   onDeleteOpen,
   closeDelete,
   deleteQuestion,
-  onToggleFavorite
+  onToggleFavorite,
+  onToggleSuspended
 }) {
   const mapTypeStyle = questionTypeChipStyles.map;
+  const isDisabled = !String(q.answer || "").trim();
   const cardBackground = selected
     ? "#252525"
     : isHighlighted
@@ -33,7 +37,7 @@ export default function MapCard({
   } = useManageTextPreview([
     {
       label: "Zone",
-      value: q.answer || "Unnamed zone",
+      value: q.answer || "Zone à nommer (désactivée)",
       tone: mapTypeStyle.color
     },
     {
@@ -48,7 +52,9 @@ export default function MapCard({
       <div
         ref={setAnchorElement}
         {...triggerProps}
+        className="manage-card"
         data-delete-card-id={q.id}
+        data-map-zone-ready={isDisabled ? "false" : "true"}
         onClick={() => {
           if (deleteOpen) {
             closeDelete?.();
@@ -76,7 +82,11 @@ export default function MapCard({
           gap: "6px",
           overflow: "hidden",
           transform: isRemoving ? "scaleY(0.95)" : "scaleY(1)",
-          opacity: isRemoving ? 0 : 1,
+          opacity: isRemoving
+            ? 0
+            : isDisabled || q.suspended
+              ? 0.55
+              : 1,
           transformOrigin: "top"
         }}
         onMouseEnter={(e) => {
@@ -163,7 +173,7 @@ export default function MapCard({
             style={{
               flex: 1,
               textAlign: "center",
-              color: "#e5e5e5",
+              color: isDisabled ? "#999" : "#e5e5e5",
               fontWeight: "600",
               fontSize: "14px",
               overflow: "hidden",
@@ -172,12 +182,19 @@ export default function MapCard({
               padding: "0 4px"
             }}
           >
-            {q.answer || "Unnamed zone"}
+            <RichText compact style={{ whiteSpace: "inherit" }}>
+              {q.answer || "Zone à nommer"}
+            </RichText>
           </div>
 
           <FavoriteToggleButton
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
+          />
+
+          <SuspendToggleButton
+            suspended={Boolean(q.suspended)}
+            onToggle={onToggleSuspended}
           />
         </div>
 
@@ -193,7 +210,9 @@ export default function MapCard({
             paddingLeft: "2px"
           }}
         >
-          {q.group?.name || "Map group"}
+          <RichText compact style={{ whiteSpace: "inherit" }}>
+            {q.group?.name || "Map group"}
+          </RichText>
         </div>
 
         {/* BOTTOM */}
@@ -207,7 +226,21 @@ export default function MapCard({
           }}
         >
           {/* REVIEW */}
-          <ReviewBadge progress={q.progress} />
+          {isDisabled ? (
+            <span style={{
+              background: "#2b2b2b",
+              border: "1px solid #444",
+              borderRadius: "999px",
+              color: "#aaa",
+              fontSize: "10px",
+              fontWeight: 700,
+              padding: "3px 7px"
+            }}>
+              Désactivée
+            </span>
+          ) : (
+            <ReviewBadge progress={q.progress} />
+          )}
 
         </div>
 

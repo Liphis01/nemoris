@@ -177,7 +177,7 @@ class MediaGroupTests(unittest.TestCase):
                 group={
                     "name": "European flags",
                     "media": "cover-new.png",
-                    "tags": ["geo", "flags"]
+                    "tags": ["core:geography", "core:history"]
                 },
                 items=[
                     {
@@ -198,7 +198,10 @@ class MediaGroupTests(unittest.TestCase):
         )
 
         self.assertEqual(response["group"]["name"], "European flags")
-        self.assertEqual(response["group"]["tags"], ["geo", "flags"])
+        self.assertEqual(
+            response["group"]["tags"],
+            ["core:geography", "core:history"]
+        )
         self.assertEqual(response["question_count"], 2)
         self.assertEqual(response["deletedQuestionIds"], [deleted.id])
         self.assertEqual(len(response["createdQuestionIds"]), 1)
@@ -211,7 +214,10 @@ class MediaGroupTests(unittest.TestCase):
             .all()
         )
         self.assertEqual([question.answer for question in questions], ["France", "Spain"])
-        self.assertTrue(all(question.tags == ["geo", "flags"] for question in questions))
+        self.assertTrue(all(
+            question.tags == ["core:geography", "core:history"]
+            for question in questions
+        ))
         self.assertEqual(questions[0].question, "European flags - France")
         self.assertEqual(questions[0].data["aliases"], ["French Republic"])
         self.assertTrue(questions[0].data["favorite"])
@@ -230,7 +236,7 @@ class MediaGroupTests(unittest.TestCase):
             question="Flags - France",
             answer="France",
             media="/static/france.png",
-            tags=["flags"],
+            tags=["core:history"],
             data={"aliases": ["FR"], "favorite": True},
             group=group
         )
@@ -239,7 +245,7 @@ class MediaGroupTests(unittest.TestCase):
             question="Flags - Germany",
             answer="Germany",
             media="/static/germany.png",
-            tags=["flags"],
+            tags=["core:history"],
             data={"aliases": ["DE"]},
             group=group
         )
@@ -259,7 +265,7 @@ class MediaGroupTests(unittest.TestCase):
                 group={
                     "name": "Flags",
                     "media": None,
-                    "tags": ["flags"]
+                    "tags": ["core:history"]
                 },
                 items=[
                     {
@@ -329,7 +335,7 @@ class MediaGroupTests(unittest.TestCase):
                 group={
                     "name": "European flags",
                     "media": "cover-new.png",
-                    "tags": ["geo"]
+                    "tags": ["core:geography"]
                 },
                 items=[
                     {

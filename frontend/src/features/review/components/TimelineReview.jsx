@@ -23,6 +23,7 @@ import {
 import TimelineCascade from "./TimelineCascade";
 import TimelineGlobalTrack from "./TimelineGlobalTrack";
 import useTimelineReview from "../hooks/useTimelineReview";
+import { GOT_IT_QUALITY, STILL_LEARNING_QUALITY } from "../relearningGrades";
 
 const emptyAnchors = [];
 
@@ -128,6 +129,21 @@ function isEditableTarget(target) {
   return Boolean(target.closest("input, textarea, select, [contenteditable]"));
 }
 
+function projectedIntervalLabel(item, quality) {
+  const value = item?.projected_intervals?.[quality];
+
+  return Number(value) > 0 ? `≈ ${value} j` : null;
+}
+
+// A relearning retry never re-grades FSRS: Encore and Acquis lead to the same
+// already-frozen interval, so both buttons show that one value rather than a
+// per-grade estimate that would wrongly suggest the choice changes anything.
+function relearningIntervalLabel(item) {
+  const value = item?.relearning_interval;
+
+  return Number(value) > 0 ? `≈ ${value} j` : null;
+}
+
 function qualityColor(quality) {
   if (quality === 2) return "#7ee2a8";
   if (quality === 1) return "#f3d36a";
@@ -142,6 +158,14 @@ const qualityRatingOptions = [
   { value: 1, label: "Dur", color: "#f3d36a", activeBg: "#35311f" },
   { value: 2, label: "Bon", color: "#8fc7ff", activeBg: "#1f2f3a" },
   { value: 3, label: "Facile", color: "#7ee2a8", activeBg: "#183a24" }
+];
+
+// A relearning retry never re-grades FSRS, so the Dur/Bon/Facile nuance above
+// is meaningless there — it collapses to the same binary Encore/Acquis choice
+// every other question type uses for relearning. See relearningGrades.js.
+const relearningRatingOptions = [
+  { value: STILL_LEARNING_QUALITY, label: "Encore", color: "#ff9aa5", activeBg: "#3a1f24" },
+  { value: GOT_IT_QUALITY, label: "Acquis", color: "#7ee2a8", activeBg: "#1d3a2b" }
 ];
 
 // The backend returns an unsigned distance; the direction is ours to work out,
@@ -204,10 +228,13 @@ export default function TimelineReview({
   onAnsweringComplete,
   onComplete,
   submitAnswer = sendTimelineAnswer,
+  graduateAnswer,
+  showQualityControls = true,
   fillAvailableHeight = false
 }) {
   const {
     activeItem,
+    activeItemRelearning,
     activeTimeline,
     adjustQuality,
     answer,
@@ -234,11 +261,14 @@ export default function TimelineReview({
     validate
   } = useTimelineReview({
     group,
+    graduateAnswer,
     onAnsweringComplete,
     onComplete,
     reviewItems,
+    showQualityControls,
     submitAnswer
   });
+  const activeQualityOptions = activeItemRelearning ? relearningRatingOptions : qualityRatingOptions;
 
   const displayRange = useMemo(() => buildDisplayRange(range), [range]);
   const bounds = useMemo(() => yearBoundsFromRange(displayRange), [displayRange]);
@@ -697,8 +727,11 @@ export default function TimelineReview({
                 data-timeline-quality-bar
                 style={{ alignItems: "center", display: "flex", gap: "6px", marginLeft: "auto" }}
               >
-                {qualityRatingOptions.map(option => {
+                {activeQualityOptions.map(option => {
                   const active = selectedQuality === option.value;
+                  const intervalLabel = activeItemRelearning
+                    ? relearningIntervalLabel(activeItem)
+                    : projectedIntervalLabel(activeItem, option.value);
 
                   return (
                     <button
@@ -720,6 +753,11 @@ export default function TimelineReview({
                       }}
                     >
                       {option.value} {option.label}
+                      {intervalLabel && (
+                        <span style={{ fontWeight: 600, marginLeft: "5px", opacity: 0.75 }}>
+                          {intervalLabel}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -755,10 +793,16 @@ export default function TimelineReview({
         <div style={{ color: "#5f5f5f", fontSize: "11px", fontWeight: 700 }}>
           {revealed ? (
             canAdjustQuality ? (
-              <>
-                <span style={keycapStyle}>1</span>/<span style={keycapStyle}>2</span>/
-                <span style={keycapStyle}>3</span> difficulté · <span style={keycapStyle}>↵</span> continuer
-              </>
+              activeItemRelearning ? (
+                <>
+                  <span style={keycapStyle}>1</span> acquis · <span style={keycapStyle}>↵</span> continuer
+                </>
+              ) : (
+                <>
+                  <span style={keycapStyle}>1</span>/<span style={keycapStyle}>2</span>/
+                  <span style={keycapStyle}>3</span> difficulté · <span style={keycapStyle}>↵</span> continuer
+                </>
+              )
             ) : (
               <><span style={keycapStyle}>↵</span> continuer</>
             )

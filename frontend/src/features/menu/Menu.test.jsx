@@ -1,6 +1,38 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Menu from "./Menu";
+import { getProfile } from "../../api/profile";
+
+vi.mock("../../api/stats", () => ({
+  getStats: vi.fn(() => Promise.resolve({
+    counts: {
+      total: 12,
+      mastered: 3
+    }
+  }))
+}));
+
+vi.mock("../../api/profile", () => ({
+  getProfile: vi.fn(() => Promise.resolve({
+    signed_in: false,
+    account_email: null,
+    profile: null
+  }))
+}));
+
+vi.mock("../../api/packs", () => ({
+  searchPackCatalog: vi.fn(() => Promise.resolve({
+    packs: [
+      {
+        pack_guid: "pack-1",
+        name: "Capitales du monde",
+        description: "Un pack pour réviser les capitales.",
+        question_count: 50,
+        download_count: 8
+      }
+    ]
+  }))
+}));
 
 describe("Menu", () => {
   afterEach(() => {
@@ -32,12 +64,16 @@ describe("Menu", () => {
       expect.stringContaining("Gestionnaire"),
       expect.stringContaining("Entrainement"),
       expect.stringContaining("Calendrier"),
-      expect.stringContaining("Statistiques"),
+      expect.stringContaining("Profil"),
       expect.stringContaining("Packs"),
       expect.stringContaining("Réglages")
     ]);
     expect(screen.getAllByText("4").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("À revoir").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: /Révision du jour: 4 questions, À faire/
+      })
+    ).toBeInTheDocument();
   });
 
   it("shows an empty review count", () => {
@@ -51,7 +87,71 @@ describe("Menu", () => {
     );
 
     expect(screen.getAllByText("0").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("À jour").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: /Session terminée: 0 questions, À jour/
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("counts new questions as part of the session, not as a finished day", () => {
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{
+          due_count: 0,
+          has_due: false,
+          new_count: 3,
+          session_count: 3
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /Révision du jour: 3 questions, À faire/
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("shows the signed-in user's username and avatar in the account chip, not their email", async () => {
+    getProfile.mockResolvedValueOnce({
+      signed_in: true,
+      account_email: "louis@example.com",
+      profile: { username: "Louis", avatar_emoji: "🦉", avatar_color: "teal" }
+    });
+
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 4, has_due: true }}
+      />
+    );
+
+    expect(await screen.findByText("Louis")).toBeInTheDocument();
+    expect(screen.queryByText("louis@example.com")).not.toBeInTheDocument();
+  });
+
+  it("navigates to the profile screen when the account chip is clicked", async () => {
+    const setMode = vi.fn();
+
+    render(
+      <Menu
+        setMode={setMode}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 0, has_due: false }}
+      />
+    );
+
+    const chip = await screen.findByRole("button", { name: "Ouvrir le profil" });
+    fireEvent.click(chip);
+
+    await waitFor(() => expect(setMode).toHaveBeenCalledWith("profile"));
   });
 
   it("shows the startup rebalance notice when provided", () => {

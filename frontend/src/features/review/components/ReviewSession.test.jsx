@@ -15,16 +15,8 @@ const baseProps = {
   handleSequenceComplete: vi.fn(),
   canReturnToLastQuestion: false,
   returnToLastQuestion: vi.fn(),
-  canStartBonusReview: false,
-  startBonusReview: vi.fn(),
-  bonusReviewActive: false,
-  bonusReviewStatus: null,
-  bonusReviewLoading: false,
-  bonusStatusLoading: false,
-  bonusMenuOpen: false,
-  bonusMenuEntries: [],
-  selectBonusItem: vi.fn(),
-  returnToBonusMenu: vi.fn(),
+  sessionComplete: false,
+  skipToSessionEnd: vi.fn(),
   reviewLoading: false,
   reviewError: "",
   submitMapAnswer: vi.fn(),
@@ -42,90 +34,10 @@ function renderReviewSession(props = {}) {
   );
 }
 
-function renderFinishedReview() {
-  return renderReviewSession({
-    questions: [
-      {
-        question_id: 1,
-        type_q: "text",
-        question: "Question",
-        answer: "Answer"
-      }
-    ],
-    currentIndex: 1
-  });
-}
-
 describe("ReviewSession", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-  });
-
-  it("shows a clear empty review panel with bonus review action", () => {
-    const startBonusReview = vi.fn();
-    const { container } = renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      canStartBonusReview: true,
-      startBonusReview,
-      bonusReviewStatus: { allowed: true }
-    });
-
-    const panel = container.querySelector("[data-review-outcome='empty']");
-
-    expect(panel).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Aucune question pour aujourd’hui" }))
-      .toBeInTheDocument();
-    expect(screen.getByText("Planning à jour")).toBeInTheDocument();
-    expect(screen.getByText("0 question à revoir")).toBeInTheDocument();
-    expect(screen.getByText("Bonus disponible")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Faire des questions bonus" }))
-      .toBeInTheDocument();
-  });
-
-  it("hides the bonus action when no bonus questions are available", () => {
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewStatus: { allowed: false }
-    });
-
-    expect(screen.getByText("Aucun bonus")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Faire des questions bonus" }))
-      .not.toBeInTheDocument();
-  });
-
-  it("shows the available same-group bonus count at the end", () => {
-    renderReviewSession({
-      questions: [
-        {
-          group_id: 12,
-          type_q: "media",
-          name: "Images",
-          items: [{ question_id: 1 }]
-        }
-      ],
-      currentIndex: 1,
-      bonusReviewStatus: {
-        allowed: true,
-        same_group_filter_applied: true,
-        same_group_bonus_question_count: 2
-      },
-      canStartBonusReview: true
-    });
-
-    expect(screen.getByText("2 questions bonus")).toBeInTheDocument();
-    expect(screen.getByText("Même groupe")).toBeInTheDocument();
-  });
-
-  it("shows a polished finish panel without daily habit content", () => {
-    renderFinishedReview();
-
-    expect(screen.getByText("Session terminée")).toBeInTheDocument();
-    expect(screen.getByText("Toutes les questions ont été révisées.")).toBeInTheDocument();
-    expect(screen.getByText("Journée bouclée")).toBeInTheDocument();
-    expect(screen.getByText("1 question revue")).toBeInTheDocument();
   });
 
   it("uses the compact visual shell for active image review", () => {
@@ -170,8 +82,10 @@ describe("ReviewSession", () => {
     expect(renderer.style.flex).toBe("1 1 0%");
     expect(actions).toContainElement(screen.getByRole("button", { name: /Retour/ }));
     expect(status).toHaveTextContent("Révision");
+    // The group name now lives in the session bar's status block, once,
+    // instead of being repeated inside MediaReview's own compact header.
+    expect(status).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("Question 1 / 1");
-    expect(status).not.toHaveTextContent("Flags");
     expect(shell).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("#Geo");
     expect(bar).not.toHaveTextContent("Image");
@@ -197,126 +111,6 @@ describe("ReviewSession", () => {
     expect(screen.getByRole("heading", { name: "Révision" }))
       .toBeInTheDocument();
     expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
-  });
-
-  it("starts a single bonus question on click but opens a count slider for a group", () => {
-    const selectBonusItem = vi.fn();
-    const textEntry = {
-      key: "q:11",
-      label: "Bonus text",
-      typeLabel: "Question",
-      isContainer: false,
-      itemCount: 1,
-      tags: ["Geo"]
-    };
-    const imagesEntry = {
-      key: "group:5",
-      label: "Bonus images",
-      typeLabel: "Images",
-      isContainer: true,
-      itemCount: 30,
-      tags: []
-    };
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      bonusMenuOpen: true,
-      bonusMenuEntries: [textEntry, imagesEntry],
-      selectBonusItem
-    });
-
-    expect(screen.getByRole("heading", { name: "Choisis une question à réviser" }))
-      .toBeInTheDocument();
-    expect(screen.getByText("Bonus text")).toBeInTheDocument();
-    expect(screen.getByText("Bonus images")).toBeInTheDocument();
-
-    // A single loose question has nothing to choose — it starts on click.
-    fireEvent.click(screen.getByRole("button", { name: /Bonus text/ }));
-    expect(selectBonusItem).toHaveBeenCalledWith(textEntry);
-    selectBonusItem.mockClear();
-
-    // A multi-question group opens a slider instead of starting immediately.
-    fireEvent.click(screen.getByRole("button", { name: /Bonus images/ }));
-    expect(selectBonusItem).not.toHaveBeenCalled();
-
-    const slider = screen.getByRole("slider", { name: /Bonus images/ });
-    expect(slider).toHaveAttribute("min", "1");
-    expect(slider).toHaveAttribute("max", "30");
-    // Default is min(20, available).
-    expect(screen.getByText("20 questions bonus")).toBeInTheDocument();
-
-    fireEvent.change(slider, { target: { value: "5" } });
-    expect(screen.getByText("5 questions bonus")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Commencer/ }));
-    expect(selectBonusItem).toHaveBeenCalledWith(imagesEntry, 5);
-  });
-
-  it("shows a completion state when no bonus items remain", () => {
-    renderReviewSession({
-      questions: [],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      bonusMenuOpen: true,
-      bonusMenuEntries: []
-    });
-
-    expect(screen.getByRole("heading", { name: "Bonus terminés" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retour au menu" }))
-      .toBeInTheDocument();
-  });
-
-  it("shows a return-to-bonus-menu button during an active bonus item", () => {
-    const returnToBonusMenu = vi.fn();
-    renderReviewSession({
-      questions: [
-        {
-          id: 1,
-          type_q: "text",
-          question: "Capital?",
-          answer: "Paris"
-        }
-      ],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      returnToBonusMenu
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "← Menu bonus" }));
-
-    expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a return-to-bonus-menu button in compact visual review", () => {
-    const returnToBonusMenu = vi.fn();
-    renderReviewSession({
-      questions: [
-        {
-          type_q: "timeline",
-          name: "Dates",
-          items: [
-            {
-              question_id: 1,
-              answer: "1900",
-              timeline: {
-                kind: "point",
-                start: { year: 1900 },
-                precision: "year"
-              }
-            }
-          ]
-        }
-      ],
-      currentIndex: 0,
-      bonusReviewActive: true,
-      returnToBonusMenu
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "← Menu bonus" }));
-
-    expect(returnToBonusMenu).toHaveBeenCalledTimes(1);
   });
 
   it("marks a re-queued text question as relearning", () => {
@@ -459,5 +253,83 @@ describe("ReviewSession", () => {
     expect(screen.getByText("Question 1 / 2")).toBeInTheDocument();
     expect(container.querySelector("[data-relearning-count]"))
       .not.toBeInTheDocument();
+  });
+
+  it("shows the end-of-session panel once the session is complete", () => {
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      sessionComplete: true
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Session terminée" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Retour au menu" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the revise-last-answer action reachable once the session ends", () => {
+    const returnToLastQuestion = vi.fn();
+    renderReviewSession({
+      questions: [],
+      currentIndex: 0,
+      sessionComplete: true,
+      canReturnToLastQuestion: true,
+      returnToLastQuestion
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Modifier la dernière réponse" })
+    );
+
+    expect(returnToLastQuestion).toHaveBeenCalled();
+  });
+
+  it("offers an early exit once only relearning questions remain", () => {
+    const skipToSessionEnd = vi.fn();
+    renderReviewSession({
+      questions: [
+        {
+          question_id: 4,
+          type_q: "text",
+          question: "Retry",
+          answer: "Answer",
+          _reviewRetryOfIndex: 0
+        }
+      ],
+      currentIndex: 0,
+      skipToSessionEnd
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer →" }));
+
+    expect(skipToSessionEnd).toHaveBeenCalled();
+  });
+
+  it("hides the early exit while any question ahead is still fresh", () => {
+    renderReviewSession({
+      questions: [
+        {
+          question_id: 4,
+          type_q: "text",
+          question: "Retry",
+          answer: "Answer",
+          _reviewRetryOfIndex: 0
+        },
+        {
+          question_id: 5,
+          type_q: "text",
+          question: "Fresh",
+          answer: "Answer"
+        }
+      ],
+      currentIndex: 0
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Terminer →" })
+    ).not.toBeInTheDocument();
   });
 });

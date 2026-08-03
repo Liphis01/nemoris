@@ -16,20 +16,16 @@ export function getQuestionGroupId(question) {
 
 
 function mergeTags(...tagLists) {
-  const tagsByKey = new Map();
+  const tagIds = new Set();
 
   tagLists.forEach((tagList) => {
     (tagList || []).forEach((tag) => {
       const value = String(tag || "").trim();
-      const key = value.toLowerCase();
-
-      if (value && !tagsByKey.has(key)) {
-        tagsByKey.set(key, value);
-      }
+      if (value) tagIds.add(value);
     });
   });
 
-  return [...tagsByKey.values()];
+  return [...tagIds];
 }
 
 

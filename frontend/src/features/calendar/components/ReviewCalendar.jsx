@@ -4,6 +4,7 @@ import {
   questionTypeChipStyles
 } from "../../../shared/questionTypes";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import { useTagLabels } from "../../../shared/tagLabels";
 import CalendarGroupRecap from "./CalendarGroupRecap";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 
@@ -178,20 +179,16 @@ function getQuestionGroupId(question) {
 }
 
 function mergeTags(...tagLists) {
-  const tagsByKey = new Map();
+  const tagIds = new Set();
 
   tagLists.forEach((tagList) => {
     (tagList || []).forEach((tag) => {
       const value = String(tag || "").trim();
-      const key = value.toLowerCase();
-
-      if (value && !tagsByKey.has(key)) {
-        tagsByKey.set(key, value);
-      }
+      if (value) tagIds.add(value);
     });
   });
 
-  return [...tagsByKey.values()];
+  return [...tagIds];
 }
 
 function getEventGroup(event, groupId) {
@@ -480,6 +477,7 @@ function EventCard({
   const isHistory = event.kind === "history";
   const mediaSrc = resolveMediaUrl(question.media);
   const mediaKind = getMediaKind(question.media);
+  const labelFor = useTagLabels();
   const tags = question.tags || [];
   const visibleTags = isSelected ? tags : tags.slice(0, 3);
   const reviewStats = getQuestionReviewStats(question);
@@ -724,7 +722,7 @@ function EventCard({
                 fontWeight: "700"
               }}
             >
-              #{tag}
+              #{labelFor(tag)}
             </span>
           ))}
           {!isSelected && tags.length > visibleTags.length && (
@@ -743,7 +741,7 @@ function EventCard({
           }}
           style={cardActionButtonStyle}
         >
-          Ouvrir dans le gestionnaire ↗
+          Éditer ↗
         </button>
       </div>
     </div>
@@ -794,16 +792,33 @@ function GroupEventCard({
   cardRef,
   isSelected,
   onOpenGroup,
+  onOpenGroupInManage,
   row,
   todayKey
 }) {
   const group = row.group || {};
   const groupType = group.type_group || row.events[0]?.question.type_q || "groupe";
   const tags = row.tags || group.tags || [];
+  const labelFor = useTagLabels();
+
+  function selectGroup() {
+    onOpenGroup?.(row);
+  }
 
   return (
     <div
       ref={cardRef}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
+      onClick={selectGroup}
+      onKeyDown={(keyboardEvent) => {
+        if (keyboardEvent.target !== keyboardEvent.currentTarget) return;
+        if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") return;
+
+        keyboardEvent.preventDefault();
+        selectGroup();
+      }}
       style={{
         width: "100%",
         boxSizing: "border-box",
@@ -817,6 +832,7 @@ function GroupEventCard({
         boxShadow: isSelected
           ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
           : "none",
+        cursor: "pointer",
         marginBottom: "8px",
         textAlign: "left",
         font: "inherit",
@@ -890,7 +906,7 @@ function GroupEventCard({
           {tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              title={tag}
+              title={labelFor(tag)}
               style={{
                 background: "#242424",
                 borderRadius: "999px",
@@ -904,7 +920,7 @@ function GroupEventCard({
                 whiteSpace: "nowrap"
               }}
             >
-              #{tag}
+              #{labelFor(tag)}
             </span>
           ))}
           {tags.length > 3 && (
@@ -929,10 +945,13 @@ function GroupEventCard({
         <span style={cardHintStyle}>Groupe #{row.groupId}</span>
         <button
           type="button"
-          onClick={() => onOpenGroup?.(row)}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+            onOpenGroupInManage?.(row.groupId);
+          }}
           style={cardActionButtonStyle}
         >
-          Récap
+          Éditer ↗
         </button>
       </div>
     </div>
@@ -943,11 +962,13 @@ export default function ReviewCalendar({
   setMode,
   questions,
   onOpenQuestion,
+  onOpenGroupInManage,
   openQuestionId,
   clearOpenQuestionId
 }) {
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
+  const labelFor = useTagLabels();
   const calendarCardRef = useRef(null);
   const detailListRef = useRef(null);
   const highlightedQuestionRef = useRef(null);
@@ -1196,6 +1217,7 @@ export default function ReviewCalendar({
         cardRef={isSelected ? highlightedQuestionRef : null}
         isSelected={isSelected}
         onOpenGroup={openGroupRow}
+        onOpenGroupInManage={onOpenGroupInManage}
         row={row}
         todayKey={todayKey}
       />
@@ -1816,7 +1838,7 @@ export default function ReviewCalendar({
                         {activeGroupTags.slice(0, 3).map((tag) => (
                           <span
                             key={tag}
-                            title={tag}
+                            title={labelFor(tag)}
                             style={{
                               background: "#242424",
                               borderRadius: "999px",
@@ -1830,7 +1852,7 @@ export default function ReviewCalendar({
                               whiteSpace: "nowrap"
                             }}
                           >
-                            #{tag}
+                            #{labelFor(tag)}
                           </span>
                         ))}
                         {activeGroupTags.length > 3 && (

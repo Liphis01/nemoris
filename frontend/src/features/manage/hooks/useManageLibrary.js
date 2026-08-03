@@ -11,12 +11,19 @@ import {
 import {
   createGroup as createGroupRequest,
   deleteGroup as deleteGroupRequest,
-  listGroups
+  listGroups,
+  suspendGroup as suspendGroupRequest
 } from "../../../api/groups";
 import {
   importMediaGroupMediaUrl as importMediaGroupMediaUrlRequest,
   uploadMediaGroupMedia as uploadMediaGroupMediaRequest
 } from "../../../api/mediaGroups";
+import {
+  deleteCollection,
+  listCollections
+} from "../../../api/collections";
+import { getQuestionGroupId } from "../utils/manageRows";
+import { invalidateTags, useTagHierarchy } from "../../../shared/tagLabels";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
@@ -90,6 +97,9 @@ export function useManageLibrary(mode) {
   const [allGroups, setAllGroups] = useState([]);
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  // Filtering on a theme has to reach its descendants, and stored tags are
+  // opaque keys, so the filter needs the hierarchy rather than just the text.
+  const { parents: tagParents, labels: tagLabels } = useTagHierarchy();
   const [questionTypeFilter, setQuestionTypeFilter] = useState("");
   const [dueOnly, setDueOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -100,9 +110,11 @@ export function useManageLibrary(mode) {
   const [groupHasMediaOnly, setGroupHasMediaOnly] = useState(false);
   const [groupSortField, setGroupSortField] = useState("id");
   const [groupSortOrder, setGroupSortOrder] = useState("asc");
+  const [allPlaylists, setAllPlaylists] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [viewMode, setViewMode] = useState("questions");
   const [questionDraft, setQuestionDraft] = useState(() => createInitialQuestionDraft());
   const [groupDraft, setGroupDraft] = useState(initialGroupDraft);
@@ -117,6 +129,14 @@ export function useManageLibrary(mode) {
   const loadAllGroups = useCallback(async () => {
     const data = await listGroups();
     setAllGroups(data);
+    return data;
+  }, []);
+
+  const loadAllPlaylists = useCallback(async () => {
+    // Playlists are rules, so the server re-resolves membership on read --
+    // question_count here is always current, never a stale snapshot.
+    const data = await listCollections();
+    setAllPlaylists(data);
     return data;
   }, []);
 
@@ -139,9 +159,10 @@ export function useManageLibrary(mode) {
 
       if (mode === "manage") {
         loadAllGroups().catch(console.error);
+        loadAllPlaylists().catch(console.error);
       }
     }
-  }, [loadAllGroups, loadAllQuestions, mode]);
+  }, [loadAllGroups, loadAllPlaylists, loadAllQuestions, mode]);
 
   function resetQuestionDraft() {
     setQuestionDraft(createInitialQuestionDraft());
@@ -169,6 +190,10 @@ export function useManageLibrary(mode) {
   async function updateQuestion(id, updatedFields) {
     await updateQuestionRequest(id, updatedFields);
 
+    if (Object.prototype.hasOwnProperty.call(updatedFields || {}, "tags")) {
+      invalidateTags().catch(() => {});
+    }
+
     // Optimistic local patch keeps spreadsheet interactions quick. For fields
     // that require server-calculated shape, callers can reload or patch richer
     // data afterward.
@@ -178,8 +203,47 @@ export function useManageLibrary(mode) {
     });
   }
 
+  async function setGroupSuspended(groupId, suspended) {
+    try {
+      await suspendGroupRequest(groupId, suspended);
+    } catch (error) {
+      // A bulk action that silently does nothing reads as a broken button, so
+      // say so rather than leaving the card unchanged with only a console log.
+      console.error(error);
+      alert(
+        error.message ||
+        "Impossible de mettre le groupe en pause."
+      );
+      return;
+    }
+
+    // The server applied one bulk update; mirror it locally so the whole group
+    // repaints at once instead of question by question.
+    //
+    // Matched through getQuestionGroupId, not a raw `group_id ===`: row ids are
+    // normalised to strings, and a question may carry only nested group.id --
+    // comparing the raw field misses both cases and the repaint never happens.
+    const targetGroupId = String(groupId);
+    const belongsToGroup = (question) => (
+      getQuestionGroupId(question) === targetGroupId
+    );
+
+    setAllQuestions(prev => prev.map(question =>
+      belongsToGroup(question)
+        ? { ...question, suspended }
+        : question
+    ));
+
+    setSelectedItem(prev =>
+      prev && !prev.type_group && belongsToGroup(prev)
+        ? { ...prev, suspended }
+        : prev
+    );
+  }
+
   async function deleteQuestion(id) {
     await deleteQuestionRequest(id);
+    invalidateTags().catch(() => {});
 
     const deletedQuestion = allQuestions.find(question => question.id === id);
 
@@ -210,6 +274,7 @@ export function useManageLibrary(mode) {
   async function deleteGroup(id) {
     try {
       await deleteGroupRequest(id);
+      invalidateTags().catch(() => {});
       setAllGroups(prev => prev.filter(group => group.id !== id));
       setAllQuestions(prev =>
         prev.filter(question => getItemGroupId(question) !== id)
@@ -224,6 +289,25 @@ export function useManageLibrary(mode) {
     }
   }
 
+  async function deletePlaylist(id) {
+    try {
+      await deleteCollection(id);
+      setAllPlaylists(prev => prev.filter(playlist => playlist.id !== id));
+      setSelectedItem(prev => (
+        prev?.isPlaylist && prev.id === id ? null : prev
+      ));
+    } catch (error) {
+      alert(error.message || "Impossible de supprimer la playlist.");
+    }
+  }
+
+  function startCreatePlaylist() {
+    setIsCreatingPlaylist(true);
+    setIsCreatingQuestion(false);
+    setIsCreatingGroup(false);
+    setSelectedItem(null);
+  }
+
   async function createQuestion(draftOverride) {
     const payload = questionMutationPayload(draftOverride || questionDraft);
 
@@ -233,6 +317,8 @@ export function useManageLibrary(mode) {
     }
 
     const created = await createQuestionRequest(payload);
+
+    if ((payload.tags || []).length) invalidateTags().catch(() => {});
 
     setAllQuestions(prev => [...prev, created]);
     resetQuestionDraft();
@@ -414,6 +500,8 @@ export function useManageLibrary(mode) {
         questions: allQuestions,
         search,
         tagFilter,
+        tagParents,
+        tagLabels,
         questionTypeFilter,
         dueOnly,
         favoritesOnly,
@@ -426,6 +514,8 @@ export function useManageLibrary(mode) {
       favoritesOnly,
       questionTypeFilter,
       tagFilter,
+      tagParents,
+      tagLabels,
       search,
       sortField,
       sortOrder
@@ -454,8 +544,15 @@ export function useManageLibrary(mode) {
 
   return {
     allGroups,
+    allPlaylists,
     allQuestions,
     createGroup,
+    deletePlaylist,
+    isCreatingPlaylist,
+    loadAllPlaylists,
+    setAllPlaylists,
+    setIsCreatingPlaylist,
+    startCreatePlaylist,
     createQuestion,
     deleteGroup,
     removeQuestionMedia,
@@ -473,8 +570,10 @@ export function useManageLibrary(mode) {
     handleSort,
     importQuestionMediaUrl,
     importMediaGroupMediaUrl,
+    importMediaUrl,
     uploadQuestionMedia,
     uploadMediaGroupMedia,
+    uploadMedia,
     isCreatingQuestion,
     isCreatingGroup,
     loadAllGroups,
@@ -515,6 +614,7 @@ export function useManageLibrary(mode) {
     toggleGroupSortOrder,
     toggleSortOrder,
     updateQuestion,
+    setGroupSuspended,
     patchQuestionInCache,
     viewMode
   };

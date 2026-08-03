@@ -860,6 +860,176 @@ describe("useTrainingSession", () => {
     expect(recordGroupTrainingAttempt).toHaveBeenCalledTimes(1);
   });
 
+  it("pauses and resumes the run clock, excluding paused time from elapsed", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    expect(result.current.pausesRemaining).toBe(3);
+    expect(result.current.canPause).toBe(true);
+
+    // 3 seconds elapse, then the run is paused.
+    performanceNowSpy.mockReturnValue(4000);
+
+    act(() => {
+      result.current.pauseRun();
+    });
+
+    expect(result.current.isPaused).toBe(true);
+    expect(result.current.elapsedMs).toBe(3000);
+    expect(result.current.pausesRemaining).toBe(2);
+
+    // Time passes while paused; it must not be counted.
+    performanceNowSpy.mockReturnValue(20000);
+
+    expect(result.current.elapsedMs).toBe(3000);
+
+    act(() => {
+      result.current.resumeRun();
+    });
+
+    expect(result.current.isPaused).toBe(false);
+    expect(result.current.pausesRemaining).toBe(2);
+
+    // 2 more seconds elapse after resuming.
+    performanceNowSpy.mockReturnValue(22000);
+
+    act(() => {
+      result.current.handleMapComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 5000,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT
+      });
+    });
+  });
+
+  it("caps pauses at the configured maximum for a run", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    expect(result.current.maxPauses).toBe(3);
+
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        result.current.pauseRun();
+      });
+      expect(result.current.isPaused).toBe(true);
+      act(() => {
+        result.current.resumeRun();
+      });
+      expect(result.current.isPaused).toBe(false);
+    }
+
+    expect(result.current.pausesRemaining).toBe(0);
+    expect(result.current.canPause).toBe(false);
+
+    // A 4th pause attempt is a no-op past the limit.
+    act(() => {
+      result.current.pauseRun();
+    });
+
+    expect(result.current.isPaused).toBe(false);
+    expect(result.current.pausesRemaining).toBe(0);
+  });
+
+  it("resets the pause budget when a run restarts", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        question_count: 2
+      });
+    });
+
+    act(() => {
+      result.current.pauseRun();
+    });
+
+    expect(result.current.pausesRemaining).toBe(2);
+    expect(result.current.isPaused).toBe(true);
+
+    act(() => {
+      result.current.restartFullScope();
+    });
+
+    expect(result.current.isPaused).toBe(false);
+    expect(result.current.pausesRemaining).toBe(3);
+  });
+
   it("restarts full group attempts as record-eligible runs", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {

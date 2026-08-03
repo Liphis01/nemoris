@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
 from .map_zones import merge_tags
+from .tag_hierarchy import ensure_tag_ids
 from .questions import delete_question_dependents
 from .sequence import dense_positions
 
@@ -44,7 +45,8 @@ def serialize_sequence_item_for_editor(question, position):
         "group_id": question.group_id,
         "data": question.data or {},
         "aliases": question.data.get("aliases", []) if question.data else [],
-        "progress": serialize_progress(question.progress)
+        "progress": serialize_progress(question.progress),
+        "suspended": bool(question.suspended)
     }
 
 
@@ -117,7 +119,7 @@ def save_sequence_group_items(db, group_id: int, payload):
 
         if "tags" in group_updates:
             shared_tags_provided = True
-            shared_tags = group_updates.get("tags") or []
+            shared_tags = ensure_tag_ids(db, group_updates.get("tags"))
 
     existing_items = (
         db.query(Question)

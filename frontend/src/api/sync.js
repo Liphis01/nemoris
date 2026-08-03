@@ -5,14 +5,6 @@ export function getSyncStatus() {
   return requestJson("/sync/status");
 }
 
-export function setSyncServerUrl(url, key) {
-  return requestJson("/sync/server-url", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, key })
-  });
-}
-
 export function setSyncPreferences(payload) {
   return requestJson("/sync/preferences", {
     method: "PUT",

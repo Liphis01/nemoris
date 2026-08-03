@@ -44,4 +44,27 @@ describe("requestJson collection mutation events", () => {
 
     window.removeEventListener(COLLECTION_MUTATION_EVENT, listener);
   });
+
+  it("emits for transactional tag actions", async () => {
+    const listener = vi.fn();
+    window.addEventListener(COLLECTION_MUTATION_EVENT, listener);
+
+    await requestJson("/tags/actions", { method: "POST" });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(COLLECTION_MUTATION_EVENT, listener);
+  });
+
+  it("preserves an HTTP conflict status and fresh tag snapshot", async () => {
+    const snapshot = { revision: 12, nodes: [] };
+    globalThis.fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      detail: { message: "stale", snapshot }
+    }), {
+      status: 409,
+      headers: { "Content-Type": "application/json" }
+    }));
+
+    await expect(requestJson("/tags/actions", { method: "POST" }))
+      .rejects.toMatchObject({ status: 409, message: "stale", snapshot });
+  });
 });

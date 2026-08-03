@@ -4,14 +4,28 @@ from sqlalchemy.orm import joinedload
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
 from .map_zones import merge_tags
+from .tag_hierarchy import ensure_tag_ids
 from .media import (
     MEDIA_UPLOAD_MAX_BYTES,
     delete_unreferenced_media_files,
     media_points_to_same_static_file,
+    removed_media_refs,
     store_remote_image,
     store_uploaded_image
 )
+from .media_pool import pool_media_and_data, read_media_pool
 from .questions import delete_question_dependents
+
+
+def desired_media_pool(item_payload):
+    # A client that sends media_pool is authoritative; an older client that only
+    # sends `media` still works (its single image becomes a one-entry pool).
+    if item_payload.media_pool is not None:
+        return item_payload.media_pool
+
+    single = str(item_payload.media or "").strip()
+
+    return [single] if single else []
 
 
 def derive_media_group_tags(questions):
@@ -46,11 +60,13 @@ def serialize_media_item_for_editor(question):
         "answer": question.answer,
         "label": question.answer,
         "media": question.media,
+        "media_pool": read_media_pool(question.media, question.data),
         "tags": question.tags or [],
         "group_id": question.group_id,
         "data": question.data or {},
         "aliases": question.data.get("aliases", []) if question.data else [],
-        "progress": serialize_progress(question.progress)
+        "progress": serialize_progress(question.progress),
+        "suspended": bool(question.suspended)
     }
 
 
@@ -152,7 +168,7 @@ def save_media_group_items(db, group_id: int, payload):
 
         if "tags" in group_updates:
             shared_tags_provided = True
-            shared_tags = group_updates.get("tags") or []
+            shared_tags = ensure_tag_ids(db, group_updates.get("tags"))
 
     existing_items = (
         db.query(Question)
@@ -188,7 +204,11 @@ def save_media_group_items(db, group_id: int, payload):
             existing_by_id[item_id]
             for item_id in deleted_item_ids
         ]
-        media_to_delete.extend(item.media for item in deleted_items)
+        media_to_delete.extend(
+            ref
+            for item in deleted_items
+            for ref in read_media_pool(item.media, item.data)
+        )
 
         if deleted_item_ids:
             delete_question_dependents(db, deleted_item_ids_list)
@@ -223,18 +243,26 @@ def save_media_group_items(db, group_id: int, payload):
                         f"Media item {item_payload.id} not found"
                     )
 
+            # Fold the item's image pool into (cover media, data): media mirrors
+            # the cover, and data.media_pool holds the full list only when >= 2.
+            base_data = build_media_item_data(
+                item.data if item else {},
+                item_payload.data or {},
+                aliases
+            )
+            desired_media, desired_data = pool_media_and_data(
+                base_data,
+                desired_media_pool(item_payload)
+            )
+
             if not item:
                 item = Question(
                     type_q="media",
                     question=build_media_question_text(group, item_payload.answer),
                     answer=item_payload.answer or "",
-                    media=item_payload.media or "",
+                    media=desired_media,
                     tags=shared_tags if shared_tags_provided else [],
-                    data=build_media_item_data(
-                        {},
-                        item_payload.data or {},
-                        aliases
-                    ),
+                    data=desired_data,
                     group_id=group_id
                 )
 
@@ -244,19 +272,13 @@ def save_media_group_items(db, group_id: int, payload):
                 created_ids.append(item.id)
             else:
                 desired_answer = item_payload.answer or ""
-                desired_media = item_payload.media or ""
-                desired_data = build_media_item_data(
-                    item.data or {},
-                    item_payload.data or {},
-                    aliases
-                )
                 payload_changed = media_item_payload_changed(
                     item,
                     desired_answer,
                     desired_media,
                     desired_data
                 )
-                old_media = item.media
+                old_refs = read_media_pool(item.media, item.data)
                 item.answer = desired_answer
                 item.question = build_media_question_text(group, item.answer)
                 item.media = desired_media
@@ -265,8 +287,8 @@ def save_media_group_items(db, group_id: int, payload):
                 if shared_tags_provided:
                     item.tags = shared_tags
 
-                if not media_points_to_same_static_file(old_media, item.media):
-                    media_to_delete.append(old_media)
+                new_refs = read_media_pool(item.media, item.data)
+                media_to_delete.extend(removed_media_refs(old_refs, new_refs))
 
                 if payload_changed:
                     updated_ids.append(item.id)

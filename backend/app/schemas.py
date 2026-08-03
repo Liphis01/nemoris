@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Annotated, Optional, List, Literal, Any, Dict
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Annotated, Optional, List, Literal, Any, Dict, Union
 from datetime import date
+
+from .services.svg_maps.contracts import MapImportOntology, validate_map_package
 
 
 QuestionType = Literal[
@@ -77,6 +79,13 @@ class GroupCreate(BaseModel):
         default_factory=dict
     )
 
+    @field_validator("data")
+    @classmethod
+    def validate_map_data(cls, value):
+        if isinstance(value, dict) and value.get("map") is not None:
+            validate_map_package(value["map"])
+        return value
+
 
 class GroupUpdate(BaseModel):
 
@@ -85,6 +94,13 @@ class GroupUpdate(BaseModel):
     media: Optional[str] = None
 
     data: Optional[dict[str, Any]] = None
+
+    @field_validator("data")
+    @classmethod
+    def validate_map_data(cls, value):
+        if isinstance(value, dict) and value.get("map") is not None:
+            validate_map_package(value["map"])
+        return value
 
 
 class GroupOut(BaseModel):
@@ -101,6 +117,10 @@ class GroupOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class GroupSuspend(BaseModel):
+    suspended: bool
 
 
 class GroupMini(BaseModel):
@@ -156,6 +176,9 @@ class QuestionUpdate(BaseModel):
 
     collection_ids: Optional[List[int]] = None
 
+    # Set aside by the user: excluded from reviews and from automatic intake.
+    suspended: Optional[bool] = None
+
 
 class QuestionOut(BaseModel):
 
@@ -177,6 +200,8 @@ class QuestionOut(BaseModel):
 
     data: Optional[dict[str, Any]] = None
 
+    suspended: bool = False
+
     class Config:
         from_attributes = True
 
@@ -187,6 +212,80 @@ class SetCollections(BaseModel):
 
 class MediaUrlImport(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
+
+
+class MapImportUrlRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+    expected_zone_count: Optional[int] = Field(default=None, ge=1, le=50000)
+    name: Optional[str] = Field(default=None, max_length=100)
+    ontology: MapImportOntology = "auto"
+
+
+class MapImportPatchRequest(BaseModel):
+    expected_zone_count: Optional[int] = Field(default=None, ge=1, le=50000)
+    acknowledgements: Optional[List[str]] = None
+    ontology: Optional[MapImportOntology] = None
+    selected_interpretation_id: Optional[str] = Field(
+        default=None, max_length=64
+    )
+
+
+class MapImportCommitRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+
+
+class MapRepairInitializeRequest(BaseModel):
+    interpretation_id: str = Field(min_length=1, max_length=64)
+
+
+class MapRepairCreateZoneAction(BaseModel):
+    type: Literal["create_zone"]
+    shape_refs: List[str] = Field(min_length=1, max_length=50000)
+
+
+class MapRepairAssignToZoneAction(BaseModel):
+    type: Literal["assign_to_zone"]
+    shape_refs: List[str] = Field(min_length=1, max_length=50000)
+    zone_id: str = Field(min_length=1, max_length=32)
+
+
+class MapRepairSetRoleAction(BaseModel):
+    type: Literal["set_role"]
+    shape_refs: List[str] = Field(min_length=1, max_length=50000)
+    role: Literal["unresolved", "decoration", "label", "excluded"]
+
+
+class MapRepairMergeZonesAction(BaseModel):
+    type: Literal["merge_zones"]
+    zone_ids: List[str] = Field(min_length=2, max_length=50000)
+    primary_zone_id: str = Field(min_length=1, max_length=32)
+
+
+class MapRepairExplodeZoneAction(BaseModel):
+    type: Literal["explode_zone"]
+    zone_id: str = Field(min_length=1, max_length=32)
+
+
+class MapRepairHistoryAction(BaseModel):
+    type: Literal["undo", "redo", "reset_branch"]
+
+
+MapRepairAction = Annotated[
+    Union[
+        MapRepairCreateZoneAction,
+        MapRepairAssignToZoneAction,
+        MapRepairSetRoleAction,
+        MapRepairMergeZonesAction,
+        MapRepairExplodeZoneAction,
+        MapRepairHistoryAction,
+    ],
+    Field(discriminator="type"),
+]
+
+
+class MapRepairActionRequest(BaseModel):
+    base_revision: int = Field(ge=0)
+    action: MapRepairAction
 
 
 class PackExportRequest(BaseModel):
@@ -201,9 +300,22 @@ class PackPublishDraftRequest(PackExportRequest):
     themes: List[str] = Field(default_factory=list, max_length=12)
 
 
-class PackCatalogSettings(BaseModel):
-    url: str = Field(default="", max_length=2048)
-    key: str = Field(default="", max_length=4096)
+class PackInstallRecordRequest(BaseModel):
+    installed_version: int = Field(default=1, ge=1)
+
+
+class PackRatingRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+
+
+class PackCommentCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class ProfileUpdateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=20)
+    avatar_emoji: str = Field(min_length=1, max_length=16)
+    avatar_color: str = Field(min_length=1, max_length=20)
 
 
 AnswerQuality = Annotated[int, Field(ge=0, le=3)]
@@ -224,11 +336,33 @@ class RelearningGraduateRequest(BaseModel):
     review_date: Optional[date] = None
 
 
+PaceTier = Literal[
+    "leger",
+    "regulier",
+    "soutenu",
+    "intensif"
+]
+
+
 class ReviewSettings(BaseModel):
-    catchup_daily_target: int = Field(
+    # Either form is accepted: a tier (which sets the number) or the raw number
+    # kept for users predating the tiers. Both optional so the older payload
+    # shape still validates; at least one must be present.
+    catchup_daily_target: Optional[int] = Field(
+        default=None,
         ge=1,
         le=10000
     )
+    pace_tier: Optional[PaceTier] = None
+
+    @model_validator(mode="after")
+    def require_a_target(self):
+        if self.catchup_daily_target is None and self.pace_tier is None:
+            raise ValueError(
+                "catchup_daily_target or pace_tier is required"
+            )
+
+        return self
 
 
 class SyncPreferences(BaseModel):
@@ -348,6 +482,11 @@ class MediaGroupItemBulkItem(BaseModel):
 
     media: Optional[str] = ""
 
+    # Ordered list of images for this item, cover first. None means "not sent"
+    # (fall back to the single `media`); an item with several images picks one at
+    # ask time so the picture cannot be rote-memorised.
+    media_pool: Optional[List[str]] = None
+
     aliases: List[str] = Field(
         default_factory=list
     )
@@ -453,6 +592,41 @@ class SequenceGroupItemsBulkUpdate(BaseModel):
     )
 
 
+class CollectionRuleClause(BaseModel):
+    """One clause of a playlist rule, e.g. "tag = drapeaux".
+
+    Only the field matching `kind` is read; the rest stay None. Keeping them
+    on one flat model avoids a discriminated union for what the UI edits as a
+    single row.
+    """
+
+    kind: Literal["group", "tag", "type", "difficulty"]
+
+    group_id: Optional[int] = None
+    tag: Optional[str] = None
+    type_q: Optional[str] = None
+    gte: Optional[float] = None
+
+
+class CollectionRules(BaseModel):
+
+    match: Literal["any", "all"] = "any"
+
+    clauses: List[CollectionRuleClause] = Field(default_factory=list)
+
+
+class CollectionPreview(BaseModel):
+    """Resolve a rule without saving it, so the builder can show live counts."""
+
+    rules: Optional[CollectionRules] = None
+
+    question_ids: List[int] = Field(default_factory=list)
+
+    excluded_question_ids: List[int] = Field(default_factory=list)
+
+    limit: int = Field(default=40, ge=1, le=200)
+
+
 class CollectionCreate(BaseModel):
 
     name: str = Field(
@@ -460,7 +634,13 @@ class CollectionCreate(BaseModel):
         max_length=100
     )
 
+    # Manually pinned questions. With rules in play these are additions on
+    # top of what the rules already match, not the whole membership.
     question_ids: List[int] = Field(default_factory=list)
+
+    rules: Optional[CollectionRules] = None
+
+    excluded_question_ids: List[int] = Field(default_factory=list)
 
 
 class CollectionUpdate(BaseModel):
@@ -473,6 +653,10 @@ class CollectionUpdate(BaseModel):
 
     question_ids: Optional[List[int]] = None
 
+    rules: Optional[CollectionRules] = None
+
+    excluded_question_ids: Optional[List[int]] = None
+
 
 class TagPosition(BaseModel):
 
@@ -483,8 +667,57 @@ class TagPosition(BaseModel):
 
 class TagHierarchyUpdate(BaseModel):
 
+    # Compatibility clients must still participate in optimistic locking;
+    # current clients use the narrower /tags/actions endpoint.
+    revision: int = Field(ge=0)
+
     parents: Dict[str, List[str]] = Field(default_factory=dict)
 
     labels: Dict[str, str] = Field(default_factory=dict)
 
     positions: Dict[str, TagPosition] = Field(default_factory=dict)
+
+
+class TagAction(BaseModel):
+
+    type: Literal[
+        "create",
+        "set_label",
+        "remove_label",
+        "set_parents",
+        "hide_root",
+        "unfile",
+        "accept_root",
+        "remove_assignments",
+        "delete",
+        "merge"
+    ]
+    tag_id: Optional[str] = None
+    target_id: Optional[str] = None
+    label: Optional[str] = None
+    locale: str = "fr"
+    suggestion_key: Optional[str] = None
+    parent_ids: List[str] = Field(default_factory=list)
+    hidden: Optional[bool] = None
+
+
+class TagActionsRequest(BaseModel):
+
+    base_revision: int = Field(ge=0)
+    actions: List[TagAction] = Field(min_length=1)
+
+
+class TagInboxResolution(BaseModel):
+
+    pack_guid: str
+    tag_id: str
+    action: Literal["place", "merge", "keep_root", "defer"]
+    parent_id: Optional[str] = None
+    target_id: Optional[str] = None
+
+
+class TagConflictResolution(BaseModel):
+
+    pack_guid: str
+    conflict_id: str
+    choice: Literal["local", "pack"]

@@ -44,7 +44,9 @@ class StatsServiceTests(unittest.TestCase):
         history=None,
         reps=None,
         lapses=None,
-        difficulty=5.0
+        difficulty=5.0,
+        interval=0,
+        stability=1.0
     ):
         item = Question(
             id=question_id,
@@ -58,13 +60,13 @@ class StatsServiceTests(unittest.TestCase):
 
         if next_review is not None or history is not None or reps is not None:
             item.progress = Progress(
-                stability=1.0,
+                stability=stability,
                 difficulty=difficulty,
                 reps=reps if reps is not None else len(history or []),
                 lapses=lapses if lapses is not None else sum(
                     1 for entry in history or [] if entry.get("quality") == 0
                 ),
-                interval=0,
+                interval=interval,
                 last_review=None,
                 next_review=next_review,
                 history=history or []
@@ -164,6 +166,7 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["counts"]["due_total"], 2)
         self.assertEqual(stats["counts"]["overdue"], 1)
         self.assertEqual(stats["counts"]["due_today"], 1)
+        self.assertEqual(stats["counts"]["mastered"], 0)
         self.assertEqual(stats["counts"]["by_type"]["text"]["total"], 3)
         self.assertEqual(stats["counts"]["by_type"]["timeline"]["due"], 1)
         self.assertEqual(stats["counts"]["by_type"]["media"]["total"], 0)
@@ -236,6 +239,48 @@ class StatsServiceTests(unittest.TestCase):
         self.assertEqual(stats["counts"]["due_total"], 0)
         self.assertEqual(stats["counts"]["due_today"], 0)
         self.assertEqual(stats["load_by_type"][0]["total"], 0)
+
+    def test_mastered_count_uses_stability_and_reps_threshold(self):
+        today = date(2026, 1, 15)
+        # Mastery reads FSRS stability, never the smoothed `interval`: question 1
+        # qualifies on stability alone even though its interval was shifted well
+        # below the bar by calendar smoothing.
+        self.add_question(
+            1,
+            type_q="text",
+            next_review=today + timedelta(days=90),
+            history=[history_entry(today - timedelta(days=1), 3)],
+            reps=3,
+            interval=12,
+            stability=60.0
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            next_review=today + timedelta(days=90),
+            history=[history_entry(today - timedelta(days=1), 3)],
+            reps=2,
+            interval=90,
+            stability=90.0
+        )
+        self.add_question(
+            3,
+            type_q="timeline",
+            next_review=today + timedelta(days=90),
+            history=[history_entry(today - timedelta(days=1), 3)],
+            reps=4,
+            interval=90,
+            stability=30.0
+        )
+        self.add_question(4, type_q="text")
+        self.db.commit()
+
+        stats = build_stats(self.db, today=today)
+
+        self.assertEqual(stats["counts"]["mastered"], 1)
+        self.assertEqual(stats["counts"]["by_type"]["text"]["mastered"], 1)
+        self.assertEqual(stats["counts"]["by_type"]["map"]["mastered"], 0)
+        self.assertEqual(stats["counts"]["by_type"]["timeline"]["mastered"], 0)
 
 
 if __name__ == "__main__":

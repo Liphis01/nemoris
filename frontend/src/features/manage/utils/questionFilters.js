@@ -1,3 +1,6 @@
+import { descendants } from "../../../shared/tagGraph";
+
+
 export function getNextReview(question) {
   // Manage receives next_review either inside progress or flattened by some
   // older responses, so keep both supported.
@@ -112,7 +115,7 @@ function matchesType(question, questionTypeFilter) {
 }
 
 
-function matchesSearch(question, search) {
+export function matchesSearch(question, search) {
   const normalizedSearch = normalizeSearchText(search);
   const directAliases = Array.isArray(question?.aliases) ? question.aliases : [];
   const dataAliases = Array.isArray(question?.data?.aliases)
@@ -131,14 +134,26 @@ function matchesSearch(question, search) {
 }
 
 
-function matchesTag(question, tagFilter) {
-  if (!tagFilter) return true;
+// Resolve the tag filter once per pass rather than per question: expanding a
+// hierarchy node walks the whole graph, which is wasteful to redo 1600 times.
+export function buildTagMatcher(tagFilter, tagParents) {
+  const filterId = String(tagFilter || "").trim();
 
-  const normalizedFilter = tagFilter.toLowerCase();
+  if (!filterId) return null;
 
-  return (question.tags || []).some(tag =>
-    tag.toLowerCase().includes(normalizedFilter)
-  );
+  const parents = tagParents || {};
+  // The picker resolves human text to a tag ID before setting this filter.
+  // Identity comparisons stay exact; normalization belongs to picker search,
+  // never to references stored on questions.
+  const subtree = descendants(filterId, parents);
+  return tag => subtree.has(String(tag || "").trim());
+}
+
+
+function matchesTag(question, tagMatcher) {
+  if (!tagMatcher) return true;
+
+  return (question.tags || []).some(tagMatcher);
 }
 
 
@@ -166,18 +181,22 @@ export function filterAndSortQuestions({
   questions,
   search,
   tagFilter,
+  tagParents,
+  tagLabels,
   questionTypeFilter,
   dueOnly,
   favoritesOnly,
   sortField,
   sortOrder
 }) {
+  const tagMatcher = buildTagMatcher(tagFilter, tagParents, tagLabels);
+
   // Filtering stays pure and deterministic so Manage can recompute visible rows
   // from local state after edits without refetching.
   return questions
     .filter(question =>
       matchesSearch(question, search) &&
-      matchesTag(question, tagFilter) &&
+      matchesTag(question, tagMatcher) &&
       matchesType(question, questionTypeFilter) &&
       matchesDue(question, dueOnly) &&
       matchesFavorite(question, favoritesOnly)

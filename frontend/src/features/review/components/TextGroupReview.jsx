@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import RichText from "../../../shared/RichText";
 import { normalizeTextMode, TEXT_MODE_MATCH } from "../textModes";
 import {
   GOT_IT_QUALITY,
@@ -392,6 +393,12 @@ export default function TextGroupReview({
             const rowButtonColors = relearning
               ? relearningButtonColors
               : qualityButtonColors;
+            // A relearning retry never re-grades FSRS: Encore and Acquis lead to
+            // the same already-frozen interval, so both show that one value
+            // rather than a per-grade estimate that would imply a difference.
+            const projectedInterval = relearning
+              ? (item.relearning_interval ?? 0)
+              : (item.projected_intervals?.[quality] ?? item.progress?.interval ?? 0);
 
             return (
               <div
@@ -410,17 +417,20 @@ export default function TextGroupReview({
                   cursor: "pointer",
                   display: "grid",
                   gap: "10px",
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
                   padding: "10px 12px"
                 }}
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ color: "#eee", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.question}
+                    <RichText>{item.question}</RichText>
                   </div>
                   <div style={{ color: "#8fc7ff", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.answer}
+                    <RichText>{item.answer}</RichText>
                   </div>
+                </div>
+                <div style={{ color: "#8a8a8a", fontSize: "12px", fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>
+                  {projectedInterval > 0 ? `${projectedInterval} j` : "—"}
                 </div>
                 <div style={{ display: "flex", gap: "5px" }}>
                   {rowQualityOptions.map(option => {
@@ -594,7 +604,7 @@ export default function TextGroupReview({
                       transition: "opacity 60ms ease, box-shadow 60ms ease"
                     }}
                   >
-                    {item.question}
+                    <RichText>{item.question}</RichText>
                   </button>
                 );
               })}
@@ -629,7 +639,7 @@ export default function TextGroupReview({
                       transition: "opacity 60ms ease, box-shadow 60ms ease"
                     }}
                   >
-                    {item.answer}
+                    <RichText>{item.answer}</RichText>
                   </button>
                 );
               })}
@@ -680,11 +690,11 @@ export default function TextGroupReview({
                   whiteSpace: "nowrap"
                 }}
               >
-                {item.question}
+                <RichText>{item.question}</RichText>
               </div>
               {found ? (
                 <div style={{ color: "#7ee2a8", fontWeight: 700 }}>
-                  {item.answer}
+                  <RichText>{item.answer}</RichText>
                 </div>
               ) : (
                 <input

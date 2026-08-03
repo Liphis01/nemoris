@@ -75,18 +75,21 @@ python manage_data.py migrate
 
 The desktop app is a Tauri shell (`frontend/src-tauri`) that owns a frameless
 window and runs the FastAPI backend as a **sidecar**: on launch, Rust picks a
-free port, starts the packaged backend on it, waits for it to answer, and
-injects the URL into the frontend. Window drag, restored-window edge resize,
-and snap are native to Tauri. The host keeps maximized windows non-resizable so
-Windows does not expose resize handles at the screen edge; the styled title bar
-in `frontend/src/shared/DesktopTitleBar.jsx` mirrors that state for its custom
+free port, starts the packaged backend on it, and injects the URL into the
+frontend. The window is created immediately and shows a startup screen until
+the backend answers. Window drag, restored-window edge resize, and snap are
+native to Tauri. The host keeps the active maximized window non-resizable so
+Windows does not expose resize handles at the screen edge, but it re-enables
+resizing before minimize/focus-loss transitions so taskbar restore stays
+reliable. The styled title bar in
+`frontend/src/shared/DesktopTitleBar.jsx` mirrors that state for its custom
 controls.
 
 ### Release build (CI)
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the
-backend sidecar (PyInstaller onefile), then `tauri-action` bundles the Windows
-NSIS installer and attaches it to the release. Keep `version` in
+backend sidecar (PyInstaller onedir), smoke-tests it, then `tauri-action`
+bundles the Windows NSIS installer and attaches it to the release. Keep `version` in
 `frontend/src-tauri/tauri.conf.json` in sync with the tag.
 
 ### Local build / iteration
@@ -95,21 +98,29 @@ Prerequisites: Node.js, Python 3.12, the Rust toolchain, and Tauri's system
 libraries (on Ubuntu: `libwebkit2gtk-4.1-dev`, `librsvg2-dev`, plus the usual
 build tools).
 
-Build the sidecar once, place it where Tauri expects it, then run:
+Build the sidecar once, then run Tauri. PyInstaller's complete onedir output is
+bundled as the `backend/` resource; do not copy only its executable because it
+needs the adjacent `_internal/` directory.
+
+On Linux:
 
 ```bash
-# 1. Build the backend as a single-file sidecar
 cd backend
-./venv/bin/pyinstaller --name nemoris-backend --onefile --noconfirm \
-  --add-data "questions.db:seed" run_sidecar.py
+./venv/bin/pyinstaller --name nemoris-backend --onedir --clean --noconfirm \
+  --add-data "questions.db:seed" --collect-data countryinfo run_sidecar.py
 
-# 2. Place it under the target triple Tauri resolves at runtime
-TRIPLE=$(rustc -vV | sed -n 's/host: //p')
-mkdir -p ../frontend/src-tauri/binaries
-cp dist/nemoris-backend "../frontend/src-tauri/binaries/nemoris-backend-$TRIPLE"
-
-# 3. Dev (HMR window) or a full bundle
 cd ../frontend
+npm run tauri dev      # or: npm run tauri build
+```
+
+On Windows PowerShell, use `;` as PyInstaller's data separator:
+
+```powershell
+cd backend
+.\venv\Scripts\pyinstaller.exe --name nemoris-backend --onedir --clean --noconfirm `
+  --add-data "questions.db;seed" --collect-data countryinfo run_sidecar.py
+
+cd ..\frontend
 npm run tauri dev      # or: npm run tauri build
 ```
 
@@ -123,7 +134,7 @@ stale packaged sidecar is stopped before Vite/Tauri rebuilds or replaces files.
 
 - `backend/questions.db` is local dev data and is ignored by git. The desktop
   release seeds a fresh copy from `backend/questions.csv` and bundles it in the
-  sidecar; on first launch it is copied into the user's app-data dir
+  backend resource; on first launch it is copied into the user's app-data dir
   (`%APPDATA%\Nemoris` / `~/.local/share/nemoris`), never next to the binary.
 - `backend/static/` contains uploaded media (dev). Installed apps store media
   under the same app-data dir.

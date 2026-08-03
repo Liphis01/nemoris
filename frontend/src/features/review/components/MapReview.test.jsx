@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MapReview from "./MapReview";
 
@@ -90,7 +90,7 @@ describe("MapReview recap map focus", () => {
       });
       expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-code", "");
 
-      fireEvent.click(screen.getByTitle("Voir Beta sur la carte"));
+      fireEvent.click(screen.getByRole("button", { name: /Beta/ }));
 
       await waitFor(() => {
         expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-code", "beta");
@@ -149,7 +149,9 @@ describe("MapReview recap map focus", () => {
       minHeight: "0",
       overflow: "hidden"
     });
-    expect(header).toHaveTextContent("Europe");
+    // The group name already lives in the session bar above this card, so the
+    // compact header itself carries no title chrome at all — just the count.
+    expect(header).not.toHaveTextContent("Europe");
     expect(header).not.toHaveTextContent("Progression");
     expect(header).not.toHaveTextContent("MAP");
     expect(header).not.toHaveTextContent("Cliquer");
@@ -642,5 +644,34 @@ describe("MapReview recap map focus", () => {
     expect(missedStatus.style.background).toContain("repeating-linear-gradient");
     expect(missedStatus.closest(".map-recap-row").style.background)
       .toContain("repeating-linear-gradient");
+  });
+
+  it("collapses the bulk 'found zones' row to Encore/Acquis when every found zone is relearning", async () => {
+    renderMapReview(true, {
+      mode: "type_all",
+      reviewZones: reviewZones.map(zone => ({
+        ...zone,
+        progress: { relearning: true }
+      }))
+    });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+
+    await screen.findByRole("button", { name: "Valider" });
+
+    const bulkRow = screen.getByText("Zones trouvées").closest(".map-recap-bulk-row");
+    const bulkButtons = within(bulkRow).getAllByRole("button");
+
+    // Only the binary relearning choice is offered, never the four-way
+    // Faux/Dur/Bon/Facile scale — none of that nuance is ever re-sent as a grade.
+    expect(bulkButtons.map(button => button.title)).toEqual([
+      "Appliquer aux zones trouvées : Encore",
+      "Appliquer aux zones trouvées : Acquis"
+    ]);
+    expect(bulkButtons.every(button => !button.disabled)).toBe(true);
   });
 });

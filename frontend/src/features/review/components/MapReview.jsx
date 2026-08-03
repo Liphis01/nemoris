@@ -105,6 +105,13 @@ const qualityOptions = [
 // which is exactly how many slots the three decoys free up.
 const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
 
+// A relearning zone never re-grades: FSRS is frozen for the day, so any success
+// graduates it identically. The three "how easy" grades collapse to the single
+// "Acquis" from relearningQualityOptions. See relearningGrades.js.
+const acquisOnlyOptions = relearningQualityOptions.filter(
+  option => option.value === GOT_IT_QUALITY
+);
+
 const unansweredQualityOption = {
   value: MAP_RECAP_UNANSWERED,
   icon: "NR",
@@ -404,17 +411,27 @@ export default function MapReview({
             ? "Choisis la réponse."
             : "Tape le nom de la zone.";
   const feedbackCopy = fillAvailableHeight && !feedbackTone ? "" : baseFeedbackCopy;
+  // When every found zone is a relearning retry, the bulk row collapses to the
+  // same binary Encore/Acquis choice as its individual rows — the Dur/Bon/Facile
+  // split is meaningless there since none of it is ever re-sent as an FSRS grade.
+  const allFoundRelearning = useMemo(() => {
+    const foundRows = recapRows.filter(row => row.isFound);
+
+    return foundRows.length > 0 && foundRows.every(row => isRelearningGroupItem(group, row.item));
+  }, [group, recapRows]);
+  const bulkQualityOptions = allFoundRelearning ? relearningQualityOptions : qualityOptions;
+  const bulkQualityDefault = allFoundRelearning ? GOT_IT_QUALITY : 2;
   const foundBulkQuality = useMemo(() => {
     if (foundQuestionIds.length === 0) return null;
 
-    const firstQuality = qualityByQuestionId[foundQuestionIds[0]] ?? 2;
+    const firstQuality = qualityByQuestionId[foundQuestionIds[0]] ?? bulkQualityDefault;
 
     return foundQuestionIds.every(
-      questionId => (qualityByQuestionId[questionId] ?? 2) === firstQuality
+      questionId => (qualityByQuestionId[questionId] ?? bulkQualityDefault) === firstQuality
     )
       ? firstQuality
       : null;
-  }, [foundQuestionIds, qualityByQuestionId]);
+  }, [bulkQualityDefault, foundQuestionIds, qualityByQuestionId]);
   const foundZoneLabels = useMemo(() => {
     const labels = {};
     const activeMissedCodeSet = new Set(activeMissedCodes);
@@ -786,30 +803,7 @@ export default function MapReview({
             }}
           >
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-              {fillAvailableHeight ? (
-                <div
-                  style={{
-                    boxSizing: "border-box",
-                    color: "#f3f3f3",
-                    fontSize: "16px",
-                    fontWeight: 900,
-                    left: "50%",
-                    lineHeight: 1.1,
-                    maxWidth: "min(460px, calc(100% - 180px))",
-                    overflow: "hidden",
-                    pointerEvents: "none",
-                    position: "absolute",
-                    textAlign: "center",
-                    textOverflow: "ellipsis",
-                    top: "50%",
-                    transform: "translate(-50%, -50%)",
-                    whiteSpace: "nowrap",
-                    width: "100%"
-                  }}
-                >
-                  {group.name || group.media}
-                </div>
-              ) : (
+              {!fillAvailableHeight && (
                 <>
                   <div style={typeBadgeStyle}>
                     MAP · {mapModeLabels[mode]}
@@ -970,6 +964,7 @@ export default function MapReview({
           >
             <SvgMap
               svgPath={resolveMediaUrl(group.media)}
+              mapManifest={group.map || group.data?.map}
               found={foundCodes}
               missed={activeMissedCodes}
               dueItems={dueCodes}
@@ -1117,19 +1112,42 @@ export default function MapReview({
               ))}
 
               {showChoiceRating && (choiceFeedback.isCorrect
-                ? choiceQualityOptions.map(option => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    title={option.title}
-                    data-map-choice-quality={option.value}
-                    onClick={() => rateChoice(option.value)}
-                    style={choiceQualityButtonStyle()}
-                  >
-                    <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
-                    <span>{option.icon} {option.title}</span>
-                  </button>
-                ))
+                ? (() => {
+                  const correctChoice = revealedChoices.find(
+                    choice => choice.question_id === correctChoiceId
+                  );
+                  const correctChoiceRelearning = Boolean(
+                    correctChoice && isRelearningGroupItem(group, correctChoice)
+                  );
+                  const ratingOptions = correctChoiceRelearning
+                    ? acquisOnlyOptions
+                    : choiceQualityOptions;
+
+                  return ratingOptions.map(option => {
+                    // A relearning retry never re-grades FSRS: whichever grade is
+                    // picked, the zone lands on the same already-frozen interval.
+                    const interval = correctChoiceRelearning
+                      ? correctChoice?.relearning_interval
+                      : correctChoice?.projected_intervals?.[option.value];
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        title={option.title}
+                        data-map-choice-quality={option.value}
+                        onClick={() => rateChoice(option.value)}
+                        style={choiceQualityButtonStyle()}
+                      >
+                        <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
+                        <span>{option.icon} {option.title}</span>
+                        {Number(interval) > 0 && (
+                          <span style={{ opacity: 0.7 }}>≈ {interval} j</span>
+                        )}
+                      </button>
+                    );
+                  });
+                })()
                 : (
                   <button
                     type="button"
@@ -1304,6 +1322,7 @@ export default function MapReview({
               <div style={recapMapPanelStyle}>
                 <SvgMap
                   svgPath={resolveMediaUrl(group.media)}
+                  mapManifest={group.map || group.data?.map}
                   found={foundCodes}
                   missed={missedCodes}
                   dueItems={[]}
@@ -1399,8 +1418,8 @@ export default function MapReview({
                       </div>
 
                       <div style={recapBulkQualityControlsStyle}>
-                        {qualityOptions.map(({ value: qVal, icon, title }) => {
-                          const disabled = qVal === 0;
+                        {bulkQualityOptions.map(({ value: qVal, icon, title }) => {
+                          const disabled = !allFoundRelearning && qVal === 0;
                           const selected = !disabled && foundBulkQuality === qVal;
                           const activeStyle = qualityButtonStyles[qVal];
 
@@ -1454,13 +1473,18 @@ export default function MapReview({
                     const recapStatusLabel = isUnanswered
                       ? "Non répondu"
                       : isFound ? "Trouvée" : "À revoir";
+                    // A relearning zone never re-grades FSRS: Encore and Acquis
+                    // lead to the same already-frozen interval, so it stays fixed
+                    // no matter which one is selected.
                     const projectedInterval = isUnanswered
                       ? null
-                      : (
-                        item.projected_intervals?.[selectedQuality] ??
-                        item.progress?.interval ??
-                        0
-                      );
+                      : rowRelearning
+                        ? (item.relearning_interval ?? 0)
+                        : (
+                          item.projected_intervals?.[selectedQuality] ??
+                          item.progress?.interval ??
+                          0
+                        );
                     // A relearning zone collapses to the binary Encore/Acquis
                     // choice; the grade is never re-applied to FSRS.
                     const rowQualityOptions = rowRelearning
@@ -1516,7 +1540,6 @@ export default function MapReview({
                                 ? "3px solid #737373"
                                 : "3px solid #f59e0b"
                           }}
-                          title={item.code ? `Voir ${item.label} sur la carte` : item.label}
                         >
                           <div style={recapAnswerCellStyle}>
                             <span

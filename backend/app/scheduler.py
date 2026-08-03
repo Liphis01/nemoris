@@ -1139,6 +1139,18 @@ def update_progress(
     return scheduling
 
 
+def relearning_graduate_interval(progress):
+    # Mirrors graduate_relearning's math (services/progress.py): "Acquis" carries
+    # no grade, so the interval it gets is a pure function of the stability the
+    # original miss already froze -- the same value no matter which grade, or how
+    # many retries, got the card there. Shown for both relearning buttons so the
+    # user can see picking one over the other changes nothing.
+    scheduler = create_fsrs_scheduler(enable_fuzzing=False)
+    stability = (progress.stability if progress else None) or MIN_STABILITY
+
+    return scheduler._next_interval(stability=stability)
+
+
 def preview_intervals(
     progress,
     favorite=False,

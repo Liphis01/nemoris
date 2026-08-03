@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import AutocompleteInput from "../../../shared/AutocompleteInput";
+import TagPicker from "../../../shared/TagPicker";
+import { useTagLabels } from "../../../shared/tagLabels";
 import { resolveMediaUrl } from "../../../shared/media";
+import { apiUrl } from "../../../api/config";
 import {
+  cancelMapImport,
+  commitMapImport,
+  createMapUpgradeDraft,
+  patchMapImport
+} from "../../../api/maps";
+import {
+  cancelButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   pendingSaveDotStyle,
   pendingSaveButtonStyle
@@ -37,12 +47,17 @@ export default function MapEditor({
   const [mapFocusCode, setMapFocusCode] = useState(null);
   const [aliasInput, setAliasInput] = useState("");
   const [groupTagInput, setGroupTagInput] = useState("");
+  const [upgradeDraft, setUpgradeDraft] = useState(null);
+  const [upgradeError, setUpgradeError] = useState("");
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const labelForTag = useTagLabels();
   const labelInputRef = useRef(null);
   const aliasInputRef = useRef(null);
   const focusLabelAfterZoneChangeRef = useRef(false);
   const saveMapEditsRef = useRef(null);
   const suppressFocusForCodeRef = useRef(null);
   const {
+    cancelChanges,
     clearDirty,
     dirtyZoneCodes,
     dirtyZoneCodesRef,
@@ -50,7 +65,6 @@ export default function MapEditor({
     foundCodes,
     handleCodesLoaded,
     hasDirtyChanges,
-    savedQuestionCount,
     saveMapZones,
     setZones,
     syncDirtyForZone,
@@ -84,8 +98,11 @@ export default function MapEditor({
   }, [group, selectedZone, setZones]);
 
   const totalCodeCount = svgCodes.length;
+  const namedZoneCount = zones.filter(
+    zone => String(zone.answer || "").trim()
+  ).length;
   const assignmentRatio = totalCodeCount
-    ? Math.min(savedQuestionCount / totalCodeCount, 1)
+    ? Math.min(namedZoneCount / totalCodeCount, 1)
     : 0;
   const assignmentDegrees = Math.round(assignmentRatio * 360);
   const hasPendingMapChanges = hasDirtyChanges();
@@ -103,6 +120,66 @@ export default function MapEditor({
 
     return labels;
   }, [zones]);
+
+  async function analyzeLegacyUpgrade() {
+    setUpgradeBusy(true);
+    setUpgradeError("");
+    try {
+      setUpgradeDraft(await createMapUpgradeDraft(group.id));
+    } catch (error) {
+      setUpgradeError(String(error.message || error));
+    } finally {
+      setUpgradeBusy(false);
+    }
+  }
+
+  async function acknowledgeUpgradeWarnings() {
+    setUpgradeBusy(true);
+    setUpgradeError("");
+    try {
+      const acknowledgements = upgradeDraft.diagnostics
+        .filter(item => item.requires_acknowledgement)
+        .map(item => item.code);
+      setUpgradeDraft(await patchMapImport(upgradeDraft.draft_id, {
+        acknowledgements
+      }));
+    } catch (error) {
+      setUpgradeError(String(error.message || error));
+    } finally {
+      setUpgradeBusy(false);
+    }
+  }
+
+  async function applyLegacyUpgrade() {
+    setUpgradeBusy(true);
+    setUpgradeError("");
+    try {
+      const result = await commitMapImport(
+        upgradeDraft.draft_id, editableGroup.name
+      );
+      setUpgradeDraft(null);
+      await onSave?.(0, {
+        group: result.group,
+        zones: result.zones,
+        createdQuestionIds: result.createdQuestionIds
+      });
+    } catch (error) {
+      setUpgradeError(String(error.message || error));
+    } finally {
+      setUpgradeBusy(false);
+    }
+  }
+
+  async function closeLegacyUpgrade() {
+    const draftId = upgradeDraft?.draft_id;
+    setUpgradeDraft(null);
+    if (!draftId) return;
+    try {
+      await cancelMapImport(draftId);
+    } catch {
+      // Expiry is the fallback if the backend already removed the draft.
+    }
+  }
 
   function createTemporaryZone(code) {
     return {
@@ -422,6 +499,20 @@ export default function MapEditor({
     return { saved: true };
   }
 
+  function cancelMapEdits() {
+    // Revert the group and zone list to the last saved state, then re-point the
+    // open editing panel at that zone's reverted values (or close it, if it was
+    // an unsaved temporary zone that no longer exists in the reverted list).
+    const code = getZoneCode(editingZone);
+    const revertedZones = cancelChanges();
+    setAliasInput("");
+    setEditingZone(
+      code
+        ? revertedZones.find(zone => getZoneCode(zone) === code) || null
+        : null
+    );
+  }
+
   useEffect(() => {
     saveMapEditsRef.current = saveMapEdits;
   });
@@ -544,17 +635,30 @@ export default function MapEditor({
               Media
             </label>
 
-            <MapMediaInput
-              value={editableGroup.media}
-              onChange={(url) => updateGroupField("media", url)}
-              style={{
+            {editableGroup.map ? (
+              <div style={{
                 padding: "10px",
                 background: "#111",
-                color: "#eee",
+                color: "#8fd9ad",
                 border: "1px solid #333",
-                borderRadius: "8px"
-              }}
-            />
+                borderRadius: "8px",
+                fontSize: "13px"
+              }}>
+                SVG canonique · format v2
+              </div>
+            ) : (
+              <MapMediaInput
+                value={editableGroup.media}
+                onChange={(url) => updateGroupField("media", url)}
+                style={{
+                  padding: "10px",
+                  background: "#111",
+                  color: "#eee",
+                  border: "1px solid #333",
+                  borderRadius: "8px"
+                }}
+              />
+            )}
             </div>
 
             {/* TAGS */}
@@ -620,7 +724,7 @@ export default function MapEditor({
                         }}
                       >
                         <span
-                          title={tag}
+                          title={labelForTag(tag)}
                           style={{
                             minWidth: 0,
                             overflow: "hidden",
@@ -628,11 +732,11 @@ export default function MapEditor({
                             whiteSpace: "nowrap"
                           }}
                         >
-                          #{tag}
+                          #{labelForTag(tag)}
                         </span>
                         <button
                           type="button"
-                          aria-label={`Retirer le tag ${tag}`}
+                          aria-label={`Retirer le tag ${labelForTag(tag)}`}
                           onClick={() => removeGroupTag(tag)}
                           style={{
                             background: "transparent",
@@ -664,28 +768,16 @@ export default function MapEditor({
                 </div>
               )}
 
-              <div
-                style={{
-                  display: "grid",
-                  gap: "6px",
-                  gridTemplateColumns: "minmax(0, 1fr) 32px"
-                }}
-              >
-                <AutocompleteInput
+              <div>
+                <TagPicker
+                  tags={editableGroup.tags || []}
                   value={groupTagInput}
-                  onChange={(event) => setGroupTagInput(event.target.value)}
-                  onSuggestionSelect={addGroupTag}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addGroupTag();
-                    }
-                  }}
+                  onChange={setGroupTagInput}
+                  onAdd={addGroupTag}
                   placeholder="Tag"
-                  suggestions={availableTags.filter(tag =>
-                    !(editableGroup.tags || []).includes(tag)
-                  )}
-                  style={{
+                  extraKeys={availableTags}
+                  showChips={false}
+                  inputStyle={{
                     padding: "8px 9px",
                     background: "#111",
                     color: "#eee",
@@ -694,23 +786,6 @@ export default function MapEditor({
                     fontSize: "13px"
                   }}
                 />
-                <button
-                  type="button"
-                  onClick={() => addGroupTag()}
-                  title="Ajouter le tag"
-                  style={{
-                    background: "#242424",
-                    border: "1px solid #333",
-                    borderRadius: "8px",
-                    color: "#ddd",
-                    cursor: "pointer",
-                    fontSize: "18px",
-                    lineHeight: 1,
-                    padding: 0
-                  }}
-                >
-                  +
-                </button>
               </div>
             </div>
 
@@ -723,9 +798,26 @@ export default function MapEditor({
               flexShrink: 0
             }}
           >
+            {!editableGroup.map && (
+              <button
+                type="button"
+                disabled={upgradeBusy}
+                onClick={analyzeLegacyUpgrade}
+                style={{
+                  background: "#173826",
+                  border: "1px solid #2b7650",
+                  borderRadius: "8px",
+                  color: "#b8f7d2",
+                  cursor: upgradeBusy ? "wait" : "pointer",
+                  padding: "9px 11px"
+                }}
+              >
+                Mettre à niveau
+              </button>
+            )}
             {/* INFOS */}
             <div
-              title={`${savedQuestionCount} saved questions out of ${totalCodeCount} unique SVG codes`}
+              title={`${namedZoneCount} named zones out of ${totalCodeCount} unique SVG zones`}
               style={{
                 width: "54px",
                 height: "54px",
@@ -757,7 +849,7 @@ export default function MapEditor({
                     fontWeight: 700
                   }}
                 >
-                  {savedQuestionCount}
+                  {namedZoneCount}
                 </span>
                 <span
                   style={{
@@ -775,6 +867,64 @@ export default function MapEditor({
           </div>
 
         </div>
+
+        {upgradeDraft && (
+          <div style={{
+            background: "#171d19",
+            borderBottom: "1px solid #31543e",
+            display: "grid",
+            gap: "12px",
+            gridTemplateColumns: "180px 1fr auto",
+            padding: "12px 18px"
+          }}>
+            <img
+              src={apiUrl(upgradeDraft.preview_url)}
+              alt="Aperçu de la mise à niveau"
+              style={{
+                background: "#111",
+                height: "100px",
+                objectFit: "contain",
+                width: "180px"
+              }}
+            />
+            <div style={{ color: "#ccc", fontSize: "12px" }}>
+              <div style={{ color: "#b8f7d2", fontWeight: 700 }}>
+                {upgradeDraft.summary.zone_count} zones détectées
+              </div>
+              <div>
+                La mise à niveau conserve les réponses, identifiants et progrès,
+                puis crée une ligne vide pour chaque nouvelle zone.
+              </div>
+              {upgradeDraft.diagnostics.map((item, index) => (
+                <div key={`${item.code}-${index}`} style={{
+                  color: item.severity === "error" ? "#fca5a5" : "#fbbf24"
+                }}>
+                  {item.code}
+                </div>
+              ))}
+              {upgradeError && <div style={{ color: "#fca5a5" }}>{upgradeError}</div>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {!upgradeDraft.can_commit && upgradeDraft.diagnostics.some(
+                item => item.requires_acknowledgement
+              ) && (
+                <button type="button" onClick={acknowledgeUpgradeWarnings}>
+                  Accepter les avertissements
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={!upgradeDraft.can_commit || upgradeBusy}
+                onClick={applyLegacyUpgrade}
+              >
+                Confirmer
+              </button>
+              <button type="button" onClick={closeLegacyUpgrade}>
+                Fermer
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* MAP */}
         <div
@@ -795,6 +945,7 @@ export default function MapEditor({
           >
             <SvgMap
               svgPath={resolveMediaUrl(editableGroup.media)}
+              mapManifest={editableGroup.map}
               found={foundCodes}
               unsaved={dirtyZoneCodes}
               selected={getZoneCode(editingZone)}
@@ -972,7 +1123,23 @@ export default function MapEditor({
               Sélectionner une zone
             </div>
           )}
-          <div style={{ marginTop: "15px" }}>
+          <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
+            <button
+              type="button"
+              disabled={!hasPendingMapChanges}
+              onClick={cancelMapEdits}
+              title={hasPendingMapChanges ? undefined : "Aucune modification à annuler"}
+              style={{
+                ...(hasPendingMapChanges
+                  ? cancelButtonStyle
+                  : disabledCancelButtonStyle),
+                flex: 1,
+                padding: "12px",
+                borderRadius: "8px"
+              }}
+            >
+              Annuler
+            </button>
             <button
               type="button"
               disabled={!hasPendingMapChanges}
@@ -982,7 +1149,7 @@ export default function MapEditor({
                 ...(hasPendingMapChanges
                   ? pendingSaveButtonStyle
                   : disabledSaveButtonStyle),
-                width: "100%",
+                flex: 1,
                 padding: "12px",
                 borderRadius: "8px"
               }}

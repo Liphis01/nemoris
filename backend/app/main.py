@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .bootstrap import init_database
@@ -10,9 +10,11 @@ from .routers import (
     packs,
     collections,
     groups,
+    map_imports,
     maps,
     media_groups,
     meta,
+    profile,
     questions,
     review,
     sequence_groups,
@@ -24,6 +26,7 @@ from .routers import (
     uploads
 )
 from .services.startup import run_startup_rebalance_with_session
+from .services.tag_hierarchy import TagValidationError
 from .services.sync_state import (
     mark_collection_changed,
     should_mark_collection_changed
@@ -37,6 +40,10 @@ def create_app():
     run_startup_rebalance_with_session()
 
     app = FastAPI()
+
+    @app.exception_handler(TagValidationError)
+    async def tag_validation_error_handler(_request, error):
+        return JSONResponse(status_code=422, content={"detail": str(error)})
 
     app.add_middleware(
         CORSMiddleware,
@@ -74,6 +81,7 @@ def create_app():
     app.include_router(tags.router)
     app.include_router(training.router)
     app.include_router(maps.router)
+    app.include_router(map_imports.router)
     app.include_router(media_groups.router)
     app.include_router(text_groups.router)
     app.include_router(sequence_groups.router)
@@ -81,6 +89,7 @@ def create_app():
     app.include_router(backup.router)
     app.include_router(meta.router)
     app.include_router(packs.router)
+    app.include_router(profile.router)
     app.include_router(sync.router)
 
     if FRONTEND_DIST_DIR.exists():

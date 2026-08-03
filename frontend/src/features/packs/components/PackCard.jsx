@@ -1,5 +1,5 @@
-import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
-import { formatSize } from "./packFormatting";
+import { getPackTypeChipStyle } from "../../../shared/questionTypes";
+import { formatRatingLabel, formatSize } from "./packFormatting";
 
 function questionCountLabel(count) {
   if (count === null || count === undefined) {
@@ -69,10 +69,11 @@ export default function PackCard({
     localGroupId,
     action
   } = item;
-  const typeStyle = getQuestionTypeChipStyle(entry.type_group);
+  const typeStyle = getPackTypeChipStyle(entry.type_group);
   const busy = Boolean(action.busy);
   const sizeLabel = formatSize(entry.size_bytes);
   const downloadLabel = downloadCountLabel(entry.download_count);
+  const ratingLabel = formatRatingLabel(entry.avg_rating, entry.rating_count);
   const canAct = status === "not_installed" || status === "update_available";
   const canOpenGroup = Boolean(localGroupId && onOpenGroup);
 
@@ -140,6 +141,7 @@ export default function PackCard({
           <span>{questionCountLabel(entry.question_count)}</span>
           {sizeLabel && <span>{sizeLabel}</span>}
           {downloadLabel && <span>{downloadLabel}</span>}
+          {ratingLabel && <span>{ratingLabel}</span>}
           {entry.license && <span>{entry.license}</span>}
         </div>
       </button>

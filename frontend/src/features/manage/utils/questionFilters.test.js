@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterAndSortQuestions } from "./questionFilters";
+import { buildTagMatcher, filterAndSortQuestions } from "./questionFilters";
 
 describe("questionFilters", () => {
   const questions = [
@@ -44,7 +44,9 @@ describe("questionFilters", () => {
     expect(filterAndSortQuestions({
       questions,
       search: "d day",
-      tagFilter: "hist",
+      tagFilter: "history",
+      tagParents: {},
+      tagLabels: { history: "Histoire" },
       questionTypeFilter: "timeline",
       dueOnly: true,
       sortField: "id",
@@ -121,5 +123,101 @@ describe("questionFilters", () => {
       sortField: "id",
       sortOrder: "asc"
     }).map(question => question.id)).toEqual([4]);
+  });
+});
+
+
+describe("hierarchy-aware tag filtering", () => {
+  // Mirrors the stored hierarchy shape: { child: [parent, ...] }.
+  const parents = {
+    informatique: ["technologie"],
+    technologie: ["sciences"],
+    linux: ["informatique"],
+    biologie: ["sciences"],
+    europe: ["géographie"]
+  };
+
+  const questions = [
+    { id: 1, question: "a", tags: ["linux"] },
+    { id: 2, question: "b", tags: ["sciences"] },
+    { id: 3, question: "c", tags: ["biologie"] },
+    { id: 4, question: "d", tags: ["europe"] },
+    { id: 5, question: "e", tags: [] },
+    { id: 6, question: "f", tags: ["Géographie"] }
+  ];
+
+  const labels = {
+    geography: "Géographie",
+    "united-states": "États-Unis"
+  };
+
+  function filterByTag(tagFilter, tagParents = parents, tagLabels = labels) {
+    return filterAndSortQuestions({
+      questions,
+      search: "",
+      tagFilter,
+      tagParents,
+      tagLabels,
+      questionTypeFilter: "",
+      dueOnly: false,
+      favoritesOnly: false,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id);
+  }
+
+  it("has no matcher when nothing is being filtered", () => {
+    expect(buildTagMatcher("", parents)).toBe(null);
+    expect(buildTagMatcher("   ", parents)).toBe(null);
+  });
+
+  it("recognizes a node that only ever appears as a parent", () => {
+    // "géographie" is nobody's child, so it exists only in the parent lists.
+    expect(buildTagMatcher("géographie", parents)("europe")).toBe(true);
+  });
+
+  it("surfaces descendants when filtering on a theme", () => {
+    // The point of the hierarchy: looking up "sciences" must reach a question
+    // only ever tagged "linux", three levels down.
+    expect(filterByTag("sciences")).toEqual([1, 2, 3]);
+  });
+
+  it("scopes to the branch rather than the whole tree", () => {
+    expect(filterByTag("informatique")).toEqual([1]);
+  });
+
+  it("uses the selected identity rather than a localized spelling", () => {
+    expect(filterByTag("géographie")).toEqual([4]);
+    expect(filterByTag("GÉOGRAPHIE")).toEqual([]);
+  });
+
+  it("does not treat a partial label as identity", () => {
+    expect(filterByTag("bio")).toEqual([]);
+  });
+
+  it("returns everything when the filter is empty", () => {
+    expect(filterByTag("")).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("keeps exact identity matching available before the hierarchy loads", () => {
+    expect(filterByTag("linux", {}, {})).toEqual([1]);
+    expect(filterByTag("sciences", {}, {})).toEqual([2]);
+  });
+
+  it("never treats a localized label as a stored identity", () => {
+    const byLabel = filterAndSortQuestions({
+      questions: [{ id: 9, question: "x", tags: ["united-states"] }],
+      search: "",
+      tagFilter: "États",
+      tagParents: {},
+      tagLabels: labels,
+      questionTypeFilter: "",
+      dueOnly: false,
+      favoritesOnly: false,
+      sortField: "id",
+      sortOrder: "asc"
+    });
+
+    expect(byLabel.map(question => question.id)).toEqual([]);
   });
 });

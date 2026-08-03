@@ -1,5 +1,6 @@
 import AutocompleteInput from "../../../shared/AutocompleteInput";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import TagFilterControl from "./TagFilterControl";
 
 const sortOptions = [
   { value: "id", label: "Ajout" },
@@ -66,13 +67,13 @@ export default function ManageSidebar({
   setSelectedItem,
   startCreateQuestion,
   startCreateGroup,
+  startCreatePlaylist,
   viewMode,
   setViewMode,
   requestManageTransition,
   availableTags = [],
   onOpenTagTree
 }) {
-
   const inputStyle = {
     width: "100%",
     padding: "11px 12px",
@@ -129,10 +130,12 @@ export default function ManageSidebar({
     justifyContent: "center"
   };
 
+  // Three toggles have to share a 260px rail, so these stay tight: with the
+  // old 13px/8px padding the third label was clipped off the edge.
   const toggleButtonStyle = (active, color) => ({
     flex: 1,
     minWidth: 0,
-    padding: "10px 8px",
+    padding: "10px 4px",
     borderRadius: "10px",
     border: active
       ? `1px solid ${color}`
@@ -146,11 +149,11 @@ export default function ManageSidebar({
     cursor: "pointer",
     transition: "all 0.15s ease",
     fontWeight: "600",
-    fontSize: "13px",
+    fontSize: "12px",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: "6px",
+    gap: "5px",
     whiteSpace: "nowrap"
   });
 
@@ -290,6 +293,7 @@ export default function ManageSidebar({
       style={{
         width: "100%",
         height: "100%",
+        minHeight: 0,
         borderRight: "1px solid #262626",
         background: "#151515",
         display: "flex",
@@ -305,6 +309,7 @@ export default function ManageSidebar({
           borderBottom: "1px solid #262626",
           display: "flex",
           flexDirection: "column",
+          flexShrink: 0,
           gap: "14px"
         }}
       >
@@ -381,7 +386,6 @@ export default function ManageSidebar({
               "#b69cff"
             )}
           >
-            <span aria-hidden="true">📋</span>
             <span>Questions</span>
           </button>
 
@@ -395,14 +399,43 @@ export default function ManageSidebar({
               "#ffcc7a"
             )}
           >
-            <span aria-hidden="true">📁</span>
             <span>Groupes</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (viewMode === "playlists") return;
+              runManageTransition(() => setViewMode("playlists"));
+            }}
+            style={toggleButtonStyle(
+              viewMode === "playlists",
+              "#7fe3c4"
+            )}
+          >
+            <span>Playlists</span>
           </button>
 
         </div>
 
         {/* CREATE BUTTON */}
-        {viewMode === "questions" ? (
+        {viewMode === "playlists" ? (
+          <button
+            onClick={() => runManageTransition(() => startCreatePlaylist?.())}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "12px",
+              border: "1px solid #1f5348",
+              background: "#123a33",
+              color: "#8ceccd",
+              cursor: "pointer",
+              fontWeight: "700",
+              fontSize: "14px"
+            }}
+          >
+            ＋ Nouvelle playlist
+          </button>
+        ) : viewMode === "questions" ? (
           <button
             onClick={() => runManageTransition(() => startCreateQuestion?.())}
             style={{
@@ -442,12 +475,17 @@ export default function ManageSidebar({
 
       {/* FILTERS */}
       <div
+        className="app-scrollbar"
         style={{
           padding: "18px",
           borderBottom: "1px solid #262626",
           display: "flex",
           flexDirection: "column",
-          gap: "12px"
+          flex: "1 1 auto",
+          gap: "12px",
+          minHeight: 0,
+          overflowY: "auto",
+          scrollbarGutter: "stable"
         }}
       >
 
@@ -468,15 +506,13 @@ export default function ManageSidebar({
               ariaLabel: "Effacer la recherche"
             })}
 
-            {renderClearableInput({
-              value: tagFilter,
-              onChange: setTagFilter,
-              onClear: () => setTagFilter(""),
-              placeholder: "Tags...",
-              ariaLabel: "Effacer les tags",
-              suggestions: availableTags,
-              onSuggestionSelect: setTagFilter
-            })}
+            {/* Picking a theme here filters by its whole subtree, so
+                "Sciences" also lists questions tagged only "Linux". */}
+            <TagFilterControl
+              value={tagFilter}
+              onChange={setTagFilter}
+              availableTags={availableTags}
+            />
 
             <select
               value={questionTypeFilter}
@@ -569,8 +605,8 @@ export default function ManageSidebar({
                 gap: "8px"
               }}
             >
-              <span aria-hidden="true">🌐</span>
-              <span>Réseau de tags</span>
+              <span aria-hidden="true">🏷️</span>
+              <span>Gérer les tags</span>
             </button>
 
           </>

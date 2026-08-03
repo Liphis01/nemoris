@@ -4,6 +4,7 @@ import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
 import MediaGroupEditor from "./MediaGroupEditor";
 import TextGroupEditor from "./TextGroupEditor";
 import SequenceGroupEditor from "./SequenceGroupEditor";
+import PlaylistBuilder from "./PlaylistBuilder";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
 import { getQuestionEditorAdapter } from "./questionEditorAdapters";
@@ -33,6 +34,12 @@ export default function ManageInspector({
   uploadQuestionMedia,
   uploadMediaGroupMedia,
   importMediaGroupMediaUrl,
+  uploadMedia,
+  importMediaUrl,
+  isCreatingPlaylist,
+  setIsCreatingPlaylist,
+  loadAllPlaylists,
+  deletePlaylist,
   isCreatingQuestion,
   setIsCreatingQuestion,
   isCreatingGroup,
@@ -42,7 +49,6 @@ export default function ManageInspector({
   groupDraft,
   setGroupDraft,
   createQuestion,
-  createGroup,
   createGroupSilently,
   editingZone,
   setViewMode,
@@ -52,6 +58,7 @@ export default function ManageInspector({
   registerPendingSaveHandler,
   requestManageTransition,
   requestQuestionScroll,
+  onOpenMapImport,
   availableTags = []
 }) {
   const {
@@ -165,6 +172,34 @@ export default function ManageInspector({
     };
   }
 
+  // Playlists have their own editor and share none of the group/question
+  // draft machinery, so they branch before any of it.
+  if (isCreatingPlaylist || selectedItem?.isPlaylist) {
+    const editing = selectedItem?.isPlaylist ? selectedItem : null;
+
+    return (
+      <PlaylistBuilder
+        key={editing?.id || "new-playlist"}
+        playlist={editing}
+        groups={allGroups}
+        availableTags={availableTags}
+        onSaved={async (saved) => {
+          await loadAllPlaylists?.();
+          setIsCreatingPlaylist?.(false);
+          setSelectedItem?.({ ...saved, isPlaylist: true });
+        }}
+        onCancel={() => {
+          setIsCreatingPlaylist?.(false);
+          setSelectedItem?.(null);
+        }}
+        onDelete={async (target) => {
+          await deletePlaylist?.(target.id);
+          setSelectedItem?.(null);
+        }}
+      />
+    );
+  }
+
   if (mode === "createGroup") {
     if (!groupDraft.type_group) {
       return (
@@ -193,6 +228,7 @@ export default function ManageInspector({
         <div
           style={{
             height: "100%",
+            minHeight: 0,
             overflow: "hidden",
             display: "flex",
             flexDirection: "column"
@@ -202,6 +238,11 @@ export default function ManageInspector({
             group={pendingGroup}
             selectedItem={null}
             availableTags={availableTags}
+            // The group doesn't exist server-side yet, so media can't be scoped
+            // to a group id: fall back to the generic upload endpoints (same
+            // ones "new" questions use) and let the save flow adopt the files.
+            onUploadFile={groupDraft.type_group === "media" ? uploadMedia : undefined}
+            onImportMediaUrl={groupDraft.type_group === "media" ? importMediaUrl : undefined}
             ensurePersistedGroup={async ({ name, itemCount }) => {
               const trimmedName = String(name || "").trim();
 
@@ -223,6 +264,7 @@ export default function ManageInspector({
             onSave={buildGroupSaveHandler({ finishCreate: true })}
             registerPendingSaveHandler={registerPendingSaveHandler}
             headerAction={null}
+            updateQuestion={updateQuestion}
           />
         </div>
       );
@@ -232,7 +274,12 @@ export default function ManageInspector({
       <CreateMapGroupEditor
         groupDraft={groupDraft}
         onCancel={cancelCreateGroup}
-        onCreate={createGroup}
+        onAnalyzed={(draft, name) => {
+          onOpenMapImport?.("result", draft, name);
+        }}
+        onOpenRepair={(draft, name) => {
+          onOpenMapImport?.("repair", draft, name);
+        }}
         setGroupDraft={setGroupDraft}
       />
     );
@@ -290,7 +337,7 @@ export default function ManageInspector({
           fontSize: "18px"
         }}
       >
-        Sélectionner une question ou un groupe
+        Sélectionner une question, un groupe ou une playlist
       </div>
     );
   }
@@ -330,7 +377,7 @@ export default function ManageInspector({
             fontSize: "18px"
           }}
         >
-          Sélectionner une question ou un groupe
+          Sélectionner une question, un groupe ou une playlist
         </div>
       );
     }
@@ -339,6 +386,7 @@ export default function ManageInspector({
       <div
         style={{
           height: "100%",
+          minHeight: 0,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column"
@@ -446,7 +494,7 @@ export default function ManageInspector({
             fontSize: "18px"
           }}
         >
-          Sélectionner une question ou un groupe
+          Sélectionner une question, un groupe ou une playlist
         </div>
       );
     }
@@ -455,6 +503,7 @@ export default function ManageInspector({
       <div
         style={{
           height: "100%",
+          minHeight: 0,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column"
@@ -516,6 +565,7 @@ export default function ManageInspector({
             }
           }}
           registerPendingSaveHandler={registerPendingSaveHandler}
+          updateQuestion={updateQuestion}
           headerAction={
             selectedIsImageItem ? (
               <ReviewCalendarAction
@@ -560,7 +610,7 @@ export default function ManageInspector({
             fontSize: "18px"
           }}
         >
-          Sélectionner une question ou un groupe
+          Sélectionner une question, un groupe ou une playlist
         </div>
       );
     }
@@ -569,6 +619,7 @@ export default function ManageInspector({
       <div
         style={{
           height: "100%",
+          minHeight: 0,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column"
@@ -582,6 +633,7 @@ export default function ManageInspector({
             selectedGroupItem: selectedIsGroupItem ? selectedItem : null
           })}
           registerPendingSaveHandler={registerPendingSaveHandler}
+          updateQuestion={updateQuestion}
           headerAction={
             selectedIsGroupItem ? (
               <ReviewCalendarAction

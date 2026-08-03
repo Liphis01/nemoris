@@ -3,6 +3,7 @@ import io
 import json
 import tempfile
 import unittest
+import uuid
 from datetime import date
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -18,6 +19,7 @@ import app.services.packs as packs_service
 from app.migrations import MIGRATIONS
 from app.models import (
     Base,
+    Collection,
     PackSubscription,
     MediaFile,
     Progress,
@@ -25,18 +27,15 @@ from app.models import (
     QuestionGroup
 )
 from app.routers.packs import (
-    export_group_pack,
-    get_pack_catalog,
     import_pack_zip,
     list_pack_subscriptions,
     unsubscribe_pack_subscription,
-    update_pack_catalog,
     update_pack_zip
 )
-from app.schemas import PackCatalogSettings, PackExportRequest
 from app.services.packs import (
     content_hash,
     export_pack,
+    export_playlist_pack,
     import_pack,
     unsubscribe_pack,
     update_pack
@@ -129,7 +128,7 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
             content = json.loads(zip_file.read("content.json"))
             names = zip_file.namelist()
 
-        self.assertEqual(manifest["format"], 1)
+        self.assertEqual(manifest["format"], 4)
         self.assertEqual(manifest["pack_guid"], group.guid)
         self.assertEqual(manifest["version"], 1)
         self.assertEqual(manifest["name"], "Countries of the world")
@@ -138,13 +137,27 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
             manifest["minimum_schema_version"], MIGRATIONS[-1].version
         )
 
-        self.assertEqual(content["group"]["guid"], group.guid)
-        self.assertEqual(content["group"]["type_group"], "map")
-        self.assertEqual(content["group"]["data"], {"projection": "mercator"})
+        # A group source is a one-group pack of a single type.
+        self.assertEqual(manifest["source_kind"], "group")
+        self.assertEqual(manifest["type_group"], "map")
+        self.assertEqual(manifest["group_count"], 1)
+
+        self.assertEqual(len(content["groups"]), 1)
+        group_entry = content["groups"][0]
+        self.assertEqual(group_entry["guid"], group.guid)
+        self.assertEqual(group_entry["type_group"], "map")
+        self.assertEqual(group_entry["data"], {"projection": "mercator"})
 
         group_sha = hashlib.sha256(SVG_BYTES).hexdigest()
         answer_sha = hashlib.sha256(OTHER_SVG_BYTES).hexdigest()
-        self.assertEqual(content["group"]["media"], {"sha256": group_sha})
+        self.assertEqual(group_entry["media"], {"sha256": group_sha})
+
+        # Every question names its owning group, so a multi-group pack can
+        # place them without relying on ordering.
+        self.assertEqual(
+            {entry["group_guid"] for entry in content["questions"]},
+            {group.guid}
+        )
 
         questions_by_guid = {
             entry["guid"]: entry for entry in content["questions"]
@@ -153,7 +166,13 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
 
         first_entry = questions_by_guid[first.guid]
         self.assertEqual(first_entry["question"], "Q1")
-        self.assertEqual(first_entry["tags"], ["europe"])
+        self.assertEqual(len(first_entry["tags"]), 1)
+        tag_id = first_entry["tags"][0]
+        self.assertEqual(str(uuid.UUID(tag_id)), tag_id)
+        self.assertEqual(
+            manifest["tag_hierarchy"]["nodes"][tag_id]["labels"]["fr"],
+            "europe"
+        )
         self.assertEqual(
             first_entry["data"], {"code": "fr", "aliases": ["france"]}
         )
@@ -398,7 +417,8 @@ class ImportPackTests(PackFixtureMixin, unittest.TestCase):
 
         imported_first = imported_questions[first.guid]
         self.assertEqual(imported_first.question, "Q1")
-        self.assertEqual(imported_first.tags, ["europe"])
+        self.assertEqual(len(imported_first.tags), 1)
+        self.assertEqual(str(uuid.UUID(imported_first.tags[0])), imported_first.tags[0])
         self.assertEqual(imported_first.pack_version, 1)
 
         # content_hash is independently reproducible from the imported row.
@@ -460,27 +480,74 @@ class ImportPackTests(PackFixtureMixin, unittest.TestCase):
             target_db.query(PackSubscription).count(), subscription_count
         )
 
-    def test_local_guid_collision_is_rejected(self):
+    def test_existing_group_guid_is_adopted_not_rejected(self):
+        # A shared group guid means shared lineage, not a collision: the
+        # receiver already has this group (typically from another pack that
+        # ships it too), so the pack's questions join it rather than the
+        # whole install failing.
         zip_path, source_db, group, first, second = self.export_zip()
         target_db = make_db()
         target_db.add(QuestionGroup(guid=group.guid, type_group="map", name="X"))
         target_db.commit()
 
         group_count = target_db.query(QuestionGroup).count()
-        question_count = target_db.query(Question).count()
-        subscription_count = target_db.query(PackSubscription).count()
 
-        with self.assertRaises(ValueError):
-            import_pack(
-                target_db, zip_path, static_dir=self.make_static_dir()
-            )
-
-        # Rejected import must leave zero partial/duplicate writes.
-        self.assertEqual(target_db.query(QuestionGroup).count(), group_count)
-        self.assertEqual(target_db.query(Question).count(), question_count)
-        self.assertEqual(
-            target_db.query(PackSubscription).count(), subscription_count
+        result = import_pack(
+            target_db, zip_path, static_dir=self.make_static_dir()
         )
+
+        self.assertEqual(result["status"], "imported")
+        self.assertEqual(
+            [entry["status"] for entry in result["groups"]], ["adopted"]
+        )
+
+        # Adopted, so no new group row and the existing one keeps its own
+        # name and ownership -- this pack never claims a row it did not create.
+        self.assertEqual(target_db.query(QuestionGroup).count(), group_count)
+        adopted = (
+            target_db.query(QuestionGroup)
+            .filter(QuestionGroup.guid == group.guid)
+            .one()
+        )
+        self.assertEqual(adopted.name, "X")
+        self.assertIsNone(adopted.pack_guid)
+
+        # The questions still land, attached to the adopted group.
+        self.assertEqual(result["questions_imported"], 2)
+        self.assertEqual(
+            target_db.query(Question)
+            .filter(Question.group_id == adopted.id)
+            .count(),
+            2
+        )
+        self.assertEqual(target_db.query(PackSubscription).count(), 1)
+
+    def test_duplicate_question_guids_are_reported_as_conflicts(self):
+        zip_path, source_db, group, first, second = self.export_zip()
+        target_db = make_db()
+        existing_group = QuestionGroup(
+            guid=group.guid, type_group="map", name="X"
+        )
+        target_db.add(existing_group)
+        target_db.flush()
+        target_db.add(Question(
+            guid=first.guid,
+            type_q="map",
+            question="already here",
+            answer="a",
+            group_id=existing_group.id
+        ))
+        target_db.commit()
+
+        result = import_pack(
+            target_db, zip_path, static_dir=self.make_static_dir()
+        )
+
+        # The duplicate is skipped rather than blowing up the whole install
+        # on a unique-constraint violation.
+        self.assertEqual(result["conflicts"], [first.guid])
+        self.assertEqual(result["questions_imported"], 1)
+        self.assertEqual(target_db.query(Question).count(), 2)
 
     def test_media_dedup_on_import_reuses_existing_file(self):
         zip_path, source_db, group, first, second = self.export_zip()
@@ -1005,14 +1072,6 @@ class UnsubscribePackTests(PackFixtureMixin, unittest.TestCase):
 
 
 class PackRouterTests(PackFixtureMixin, unittest.TestCase):
-    def test_export_endpoint_returns_zip_and_404s_on_missing_group(self):
-        db, static_dir, group, first, second = self.build_source()
-        payload = PackExportRequest(version=1, name="Pack")
-
-        with self.assertRaises(HTTPException) as missing:
-            export_group_pack(999, payload, db)
-        self.assertEqual(missing.exception.status_code, 404)
-
     def test_import_endpoint_round_trips_upload(self):
         db, static_dir, group, first, second = self.build_source()
         pack_dir = self.make_static_dir()
@@ -1165,33 +1224,376 @@ class PackRouterTests(PackFixtureMixin, unittest.TestCase):
         self.assertIsNotNone(rows[0]["subscribed_at"])
         self.assertIsNone(rows[0]["updated_at"])
 
-    def test_catalog_settings_endpoints_round_trip(self):
+
+def rewrite_as_format_1(source_zip, dest_zip):
+    """Rebuild a pack zip in the retired format 1 layout.
+
+    Format 1 carried a single "group" and no group_guid on questions. Real
+    users have such packs installed and the live catalog still serves them,
+    so they are rebuilt here rather than assumed away.
+    """
+    with ZipFile(source_zip) as source:
+        manifest = json.loads(source.read("manifest.json"))
+        content = json.loads(source.read("content.json"))
+        blobs = {
+            name: source.read(name)
+            for name in source.namelist()
+            if name.startswith("media/")
+        }
+
+    manifest["format"] = 1
+
+    for key in ("source_kind", "type_group", "group_count"):
+        manifest.pop(key, None)
+
+    downgraded = {
+        "group": content["groups"][0],
+        "questions": [
+            {
+                key: value
+                for key, value in entry.items()
+                if key != "group_guid"
+            }
+            for entry in content["questions"]
+        ]
+    }
+
+    with ZipFile(dest_zip, "w", compression=ZIP_DEFLATED) as out:
+        out.writestr(
+            "manifest.json", json.dumps(manifest, indent=2, sort_keys=True)
+        )
+        out.writestr(
+            "content.json", json.dumps(downgraded, indent=2, sort_keys=True)
+        )
+
+        for name, blob in blobs.items():
+            out.writestr(name, blob)
+
+    return dest_zip
+
+
+class PackFormatV1CompatTests(PackFixtureMixin, unittest.TestCase):
+    def make_v1_zip(self, version=1):
+        db, static_dir, group, first, second = self.build_source()
+        pack_dir = self.make_static_dir()
+        v2_zip = export_pack(
+            db,
+            group.id,
+            version=version,
+            name="Countries",
+            static_dir=static_dir,
+            pack_dir=pack_dir
+        )
+        v1_zip = rewrite_as_format_1(
+            v2_zip, pack_dir / f"legacy-v{version}.zip"
+        )
+
+        return db, static_dir, pack_dir, group, first, second, v1_zip
+
+    def test_format_1_pack_still_installs(self):
+        _, _, _, group, first, second, v1_zip = self.make_v1_zip()
+        target_db = make_db()
+
+        result = import_pack(
+            target_db, v1_zip, static_dir=self.make_static_dir()
+        )
+
+        self.assertEqual(result["status"], "imported")
+        self.assertEqual(result["questions_imported"], 2)
+        self.assertEqual(
+            [entry["status"] for entry in result["groups"]], ["created"]
+        )
+
+        imported = (
+            target_db.query(QuestionGroup)
+            .filter(QuestionGroup.guid == group.guid)
+            .one()
+        )
+        self.assertEqual(imported.type_group, "map")
+        self.assertEqual(imported.pack_guid, group.guid)
+        self.assertEqual(
+            target_db.query(Question)
+            .filter(Question.group_id == imported.id)
+            .count(),
+            2
+        )
+
+    def test_v1_install_updates_from_v2_zip_without_spurious_changes(self):
+        # The load-bearing regression: adding group_guid to question entries
+        # must not perturb content_hash, or every already-installed pack
+        # would report its entire contents as "updated" on the next update.
+        db, static_dir, pack_dir, group, first, second, v1_zip = (
+            self.make_v1_zip(version=1)
+        )
+        target_db = make_db()
+        target_static = self.make_static_dir()
+        import_pack(target_db, v1_zip, static_dir=target_static)
+
+        # Same content, exported fresh as format 2 at a higher version.
+        v2_zip = export_pack(
+            db,
+            group.id,
+            version=2,
+            name="Countries",
+            static_dir=static_dir,
+            pack_dir=pack_dir
+        )
+
+        result = update_pack(target_db, v2_zip, static_dir=target_static)
+
+        self.assertEqual(result["version"], 2)
+        self.assertEqual(result["added"], [])
+        self.assertEqual(result["updated"], [])
+        self.assertEqual(result["forked"], [])
+        self.assertEqual(result["removed"], [])
+        self.assertFalse(result["group_updated"])
+        self.assertEqual(result["groups_added"], [])
+        self.assertEqual(result["groups_forked"], [])
+
+    def test_unsupported_format_is_still_rejected(self):
+        # Widening to a tuple of supported formats must not turn the check
+        # into "accept anything" -- a future format still has to fail loudly.
+        _, _, pack_dir, _, _, _, v1_zip = self.make_v1_zip()
+
+        with ZipFile(v1_zip) as source:
+            manifest = json.loads(source.read("manifest.json"))
+            content = source.read("content.json")
+
+        manifest["format"] = 99
+
+        future_zip = pack_dir / "future-99.zip"
+
+        with ZipFile(future_zip, "w", compression=ZIP_DEFLATED) as out:
+            out.writestr("manifest.json", json.dumps(manifest))
+            out.writestr("content.json", content)
+
+        with self.assertRaises(ValueError):
+            import_pack(
+                make_db(), future_zip, static_dir=self.make_static_dir()
+            )
+
+
+class PlaylistPackTests(PackFixtureMixin, unittest.TestCase):
+    def build_playlist_source(self):
+        """A playlist spanning a map group and a text group.
+
+        This is the case a single group cannot express -- type_group is
+        immutable, so mixed content is exactly why format 2 exists.
+        """
         db = make_db()
+        static_dir = self.make_static_dir()
 
-        self.assertEqual(get_pack_catalog(db=db), {"url": "", "key": ""})
+        map_media = self.write_media(static_dir, "flags.svg", SVG_BYTES)
+        map_group = QuestionGroup(
+            type_group="map",
+            name="Drapeaux du monde",
+            media=map_media,
+            data={"projection": "mercator"}
+        )
+        text_group = QuestionGroup(
+            type_group="text", name="Geographie", data={}
+        )
+        db.add_all([map_group, text_group])
+        db.flush()
 
-        saved = update_pack_catalog(
-            PackCatalogSettings(
-                url="https://example.supabase.co/rest/v1",
-                key="sb_publishable_test"
-            ),
-            db=db
+        picked_map = Question(
+            type_q="map",
+            question="Drapeau du Bresil",
+            answer="BR",
+            media=map_media,
+            tags=["drapeaux"],
+            data={},
+            group_id=map_group.id
+        )
+        left_out = Question(
+            type_q="map",
+            question="Drapeau du Perou",
+            answer="PE",
+            tags=["drapeaux"],
+            data={},
+            group_id=map_group.id
+        )
+        picked_text = Question(
+            type_q="text",
+            question="Capitale du Bresil",
+            answer="Brasilia",
+            tags=["drapeaux"],
+            data={},
+            group_id=text_group.id
+        )
+        db.add_all([picked_map, left_out, picked_text])
+        db.flush()
+
+        playlist = Collection(
+            name="Drapeaux mix",
+            data={},
+            questions=[picked_map, picked_text]
+        )
+        db.add(playlist)
+        db.commit()
+
+        return (
+            db, static_dir, playlist, map_group, text_group,
+            picked_map, left_out, picked_text
+        )
+
+    def test_mixed_playlist_exports_every_contributing_group(self):
+        (
+            db, static_dir, playlist, map_group, text_group,
+            picked_map, left_out, picked_text
+        ) = self.build_playlist_source()
+
+        zip_path = export_playlist_pack(
+            db,
+            playlist.id,
+            version=1,
+            name="Drapeaux mix",
+            static_dir=static_dir,
+            pack_dir=self.make_static_dir()
+        )
+
+        with ZipFile(zip_path) as zip_file:
+            manifest = json.loads(zip_file.read("manifest.json"))
+            content = json.loads(zip_file.read("content.json"))
+            names = zip_file.namelist()
+
+        self.assertEqual(manifest["pack_guid"], playlist.guid)
+        self.assertEqual(manifest["source_kind"], "playlist")
+        self.assertEqual(manifest["group_count"], 2)
+        # Not a dominant type: the installer really does receive both.
+        self.assertEqual(manifest["type_group"], "mixed")
+
+        self.assertEqual(
+            {entry["type_group"] for entry in content["groups"]},
+            {"map", "text"}
+        )
+
+        # Only the playlist's own questions travel...
+        self.assertEqual(
+            {entry["question"] for entry in content["questions"]},
+            {"Drapeau du Bresil", "Capitale du Bresil"}
+        )
+
+        # ...but the map group still ships its SVG, or its questions would
+        # arrive unrenderable.
+        groups_by_type = {
+            entry["type_group"]: entry for entry in content["groups"]
+        }
+        group_sha = hashlib.sha256(SVG_BYTES).hexdigest()
+        self.assertEqual(
+            groups_by_type["map"]["media"], {"sha256": group_sha}
         )
         self.assertEqual(
-            saved,
-            {
-                "url": "https://example.supabase.co/rest/v1",
-                "key": "sb_publishable_test"
-            }
+            groups_by_type["map"]["data"], {"projection": "mercator"}
+        )
+        self.assertIn(f"media/{group_sha}.svg", names)
+
+    def test_mixed_playlist_round_trips_into_a_fresh_database(self):
+        (
+            db, static_dir, playlist, map_group, text_group,
+            picked_map, left_out, picked_text
+        ) = self.build_playlist_source()
+
+        zip_path = export_playlist_pack(
+            db,
+            playlist.id,
+            version=1,
+            name="Drapeaux mix",
+            static_dir=static_dir,
+            pack_dir=self.make_static_dir()
         )
 
+        target_db = make_db()
+        target_static = self.make_static_dir()
+        result = import_pack(target_db, zip_path, static_dir=target_static)
+
+        self.assertEqual(result["questions_imported"], 2)
+        self.assertEqual(len(result["groups"]), 2)
         self.assertEqual(
-            get_pack_catalog(db=db),
-            {
-                "url": "https://example.supabase.co/rest/v1",
-                "key": "sb_publishable_test"
-            }
+            {entry["status"] for entry in result["groups"]}, {"created"}
         )
+
+        groups = {
+            group.type_group: group
+            for group in target_db.query(QuestionGroup).all()
+        }
+        self.assertEqual(set(groups), {"map", "text"})
+
+        # Both groups are stamped with the playlist's guid -- that stamp,
+        # not guid equality, is what ties them to the subscription.
+        for group in groups.values():
+            self.assertEqual(group.pack_guid, playlist.guid)
+
+        self.assertEqual(groups["map"].name, "Drapeaux du monde")
+        self.assertEqual(
+            groups["map"].data, {"projection": "mercator"}
+        )
+
+        # The excluded question stayed behind.
+        self.assertEqual(target_db.query(Question).count(), 2)
+        self.assertEqual(
+            target_db.query(Question)
+            .filter(Question.group_id == groups["text"].id)
+            .one()
+            .question,
+            "Capitale du Bresil"
+        )
+
+        # The map SVG was materialized on the receiving side.
+        imported_media = groups["map"].media
+        self.assertTrue(imported_media)
+        self.assertTrue(
+            (target_static / Path(imported_media).name).exists()
+        )
+
+    def test_unsubscribing_a_playlist_pack_removes_all_its_groups(self):
+        (
+            db, static_dir, playlist, map_group, text_group,
+            picked_map, left_out, picked_text
+        ) = self.build_playlist_source()
+
+        zip_path = export_playlist_pack(
+            db,
+            playlist.id,
+            version=1,
+            name="Drapeaux mix",
+            static_dir=static_dir,
+            pack_dir=self.make_static_dir()
+        )
+        target_db = make_db()
+        target_static = self.make_static_dir()
+        import_pack(target_db, zip_path, static_dir=target_static)
+
+        result = unsubscribe_pack(
+            target_db,
+            playlist.guid,
+            delete_content=True,
+            static_dir=target_static,
+            backup_dir=self.make_static_dir(),
+            database_file=target_static / "app.db"
+        )
+
+        self.assertEqual(result["deleted_questions"], 2)
+        self.assertEqual(len(result["groups_deleted"]), 2)
+        self.assertEqual(target_db.query(QuestionGroup).count(), 0)
+        self.assertEqual(target_db.query(Question).count(), 0)
+        self.assertEqual(target_db.query(PackSubscription).count(), 0)
+
+    def test_empty_playlist_cannot_be_exported(self):
+        db = make_db()
+        playlist = Collection(name="Vide", data={}, questions=[])
+        db.add(playlist)
+        db.commit()
+
+        with self.assertRaises(ValueError):
+            export_playlist_pack(
+                db,
+                playlist.id,
+                version=1,
+                name="Vide",
+                static_dir=self.make_static_dir(),
+                pack_dir=self.make_static_dir()
+            )
 
 
 if __name__ == "__main__":

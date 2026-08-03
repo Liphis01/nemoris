@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fadeInStyle } from "../../../shared/styles";
-import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import RichText from "../../../shared/RichText";
+import {
+    getMediaKind,
+    mediaPoolFrom,
+    pickReviewMedia,
+    resolveMediaUrl
+} from "../../../shared/media";
+import { MediaZoomOverlay, ZoomableImageThumb } from "../../../shared/MediaZoom";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import {
     GOT_IT_QUALITY,
@@ -78,7 +84,18 @@ const relearningOptions = [
     }
 ];
 
-const previewShortcutKeys = new Set(["Enter", "0", "1", "2", "3"]);
+function projectedIntervalLabel(projectedIntervals, quality) {
+    const value = projectedIntervals?.[quality];
+
+    return Number(value) > 0 ? `≈ ${value} j` : null;
+}
+
+// A relearning retry never re-grades FSRS, so Encore and Acquis lead to the
+// same already-frozen interval — shown identically on both buttons so it is
+// obvious that the choice itself changes nothing.
+function relearningIntervalLabel(relearningInterval) {
+    return Number(relearningInterval) > 0 ? `≈ ${relearningInterval} j` : null;
+}
 
 function getAnswerButtonStyle(option, displayQuality, isAnswering) {
     const isSelected = displayQuality === option.value;
@@ -99,117 +116,6 @@ function getAnswerButtonStyle(option, displayQuality, isAnswering) {
                 ? "scale(0.985)"
                 : "scale(1)"
     };
-}
-
-function TextMediaPreview({ src, alt, onClose }) {
-    useEffect(() => {
-        function handleKeyDown(event) {
-            const isInsidePreview = Boolean(
-                event.target?.closest?.("[data-text-media-preview]")
-            );
-
-            if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onClose();
-                return;
-            }
-
-            if (!isInsidePreview && previewShortcutKeys.has(event.key)) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-        }
-
-        window.addEventListener("keydown", handleKeyDown, true);
-
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown, true);
-        };
-    }, [onClose]);
-
-    if (typeof document === "undefined") {
-        return null;
-    }
-
-    return createPortal(
-        <div
-            role="presentation"
-            onClick={onClose}
-            style={{
-                alignItems: "center",
-                background: "rgba(0, 0, 0, 0.82)",
-                display: "flex",
-                inset: "var(--shell-top, 0px) 0 0 0",
-                justifyContent: "center",
-                padding: "28px",
-                position: "fixed",
-                zIndex: 1000
-            }}
-        >
-            <div
-                aria-label="Image agrandie"
-                aria-modal="true"
-                data-text-media-preview
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-                role="dialog"
-                style={{
-                    background: "#111",
-                    border: "1px solid #333",
-                    borderRadius: "12px",
-                    boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
-                    boxSizing: "border-box",
-                    maxHeight: "86vh",
-                    overflow: "hidden",
-                    padding: "14px",
-                    position: "relative",
-                    width: "min(82vw, 900px)"
-                }}
-            >
-                <button
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Fermer l'image agrandie"
-                    style={{
-                        alignItems: "center",
-                        background: "#1f1f1f",
-                        border: "1px solid #3a3a3a",
-                        borderRadius: "999px",
-                        color: "#ddd",
-                        cursor: "pointer",
-                        display: "flex",
-                        fontSize: "20px",
-                        height: "34px",
-                        justifyContent: "center",
-                        lineHeight: 1,
-                        position: "absolute",
-                        right: "12px",
-                        top: "12px",
-                        width: "34px",
-                        zIndex: 1
-                    }}
-                >
-                    ×
-                </button>
-
-                <img
-                    src={src}
-                    alt={alt}
-                    style={{
-                        background: "#0d0d0d",
-                        borderRadius: "8px",
-                        display: "block",
-                        height: "68vh",
-                        maxHeight: "620px",
-                        objectFit: "contain",
-                        width: "100%"
-                    }}
-                />
-            </div>
-        </div>,
-        document.body
-    );
 }
 
 // Renders a review item's media by kind: image as a clickable thumbnail with a
@@ -258,41 +164,15 @@ function ReviewMedia({ media, label = "média", style }) {
 
     return (
         <div style={wrapperStyle}>
-            <button
-                type="button"
-                aria-label={`Agrandir l'image de la ${label}`}
-                onClick={() => setPreviewOpen(true)}
-                onKeyDown={(event) => event.stopPropagation()}
-                style={{
-                    alignItems: "center",
-                    background: "#101010",
-                    border: "1px solid #262626",
-                    borderRadius: "12px",
-                    cursor: "zoom-in",
-                    display: "inline-flex",
-                    height: "154px",
-                    justifyContent: "center",
-                    maxWidth: "260px",
-                    overflow: "hidden",
-                    padding: "10px",
-                    width: "100%"
-                }}
-            >
-                <img
-                    src={src}
-                    alt={label}
-                    style={{
-                        borderRadius: "8px",
-                        display: "block",
-                        maxHeight: "132px",
-                        maxWidth: "100%",
-                        objectFit: "contain"
-                    }}
-                />
-            </button>
+            <ZoomableImageThumb
+                src={src}
+                alt={label}
+                ariaLabel={`Agrandir l'image de la ${label}`}
+                onOpen={() => setPreviewOpen(true)}
+            />
 
             {previewOpen && (
-                <TextMediaPreview
+                <MediaZoomOverlay
                     src={src}
                     alt={label}
                     onClose={() => setPreviewOpen(false)}
@@ -315,7 +195,14 @@ export default function TextReviewCard({
     const answerActionsRef = useRef(null);
     const isAnswering = selectedQuality !== null;
     const displayQuality = selectedQuality ?? currentQuality;
-    const hasQuestionMedia = Boolean(q.media);
+    // Pick one image from the question's pool for this presentation (stable for
+    // the card's lifetime; a new card mount re-picks, avoiding a repeat).
+    const questionMedia = useMemo(
+        () => pickReviewMedia(q.question_id ?? q.id, mediaPoolFrom(q)),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [q.question_id ?? q.id]
+    );
+    const hasQuestionMedia = Boolean(questionMedia);
     const typeStyle = getQuestionTypeChipStyle(q.type_q);
     const relearning = isRelearningQuestion(q);
     const gradeOptions = relearning ? relearningOptions : answerOptions;
@@ -412,12 +299,12 @@ export default function TextReviewCard({
                         marginBottom: hasQuestionMedia ? "24px" : "0"
                     }}
                 >
-                    {q.question}
+                    <RichText>{q.question}</RichText>
                 </div>
 
                 {/* QUESTION MEDIA */}
                 <ReviewMedia
-                    media={q.media}
+                    media={questionMedia}
                     label="question"
                     style={{ marginTop: "18px", marginBottom: 0 }}
                 />
@@ -477,10 +364,14 @@ export default function TextReviewCard({
                                 marginBottom: q.answer_media ? "20px" : "34px"
                             }}
                         >
-                            {q.answer}
+                            <RichText>{q.answer}</RichText>
                         </div>
 
-                        <ReviewMedia media={q.answer_media} label="réponse" />
+                        <ReviewMedia
+                            media={q.answer_media}
+                            label="réponse"
+                            style={{ textAlign: "center" }}
+                        />
 
                         {showQualityButtons ? (
                             <div
@@ -492,21 +383,35 @@ export default function TextReviewCard({
                                 }}
                             >
 
-                                {gradeOptions.map(option => (
-                                    <button
-                                        key={option.value}
-                                        aria-pressed={displayQuality === option.value}
-                                        disabled={isAnswering}
-                                        onClick={() => handleAnswer(option.value)}
-                                        style={getAnswerButtonStyle(
-                                            option,
-                                            displayQuality,
-                                            isAnswering
-                                        )}
-                                    >
-                                        {option.label}
-                                    </button>
-                                ))}
+                                {gradeOptions.map(option => {
+                                    const intervalLabel = relearning
+                                        ? relearningIntervalLabel(q.relearning_interval)
+                                        : projectedIntervalLabel(
+                                            q.projected_intervals,
+                                            option.value
+                                        );
+
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            aria-pressed={displayQuality === option.value}
+                                            disabled={isAnswering}
+                                            onClick={() => handleAnswer(option.value)}
+                                            style={getAnswerButtonStyle(
+                                                option,
+                                                displayQuality,
+                                                isAnswering
+                                            )}
+                                        >
+                                            <div>{option.label}</div>
+                                            {intervalLabel && (
+                                                <div style={{ fontSize: "12px", fontWeight: "500", opacity: 0.75, marginTop: "2px" }}>
+                                                    {intervalLabel}
+                                                </div>
+                                            )}
+                                        </button>
+                                    );
+                                })}
 
                             </div>
                         ) : (

@@ -122,8 +122,7 @@
   background: #111111;
   border: 1px solid #2d2d2d;
   border-radius: 8px;
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  display: inline-flex;
   padding: 3px;
 }
 
@@ -133,10 +132,12 @@
 .pack-primary-button,
 .pack-secondary-button,
 .pack-danger-button,
+.pack-rail-filter button,
 .pack-card-action,
 .pack-card-body,
 .pack-export-group,
-.pack-publication-item {
+.pack-publication-item,
+.pack-source-summary {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
   border-radius: 8px;
@@ -155,6 +156,7 @@
   background: transparent;
   border: 0;
   color: #a8a8a8;
+  flex: 1 1 88px;
   font-size: 13px;
   font-weight: 900;
   min-height: 34px;
@@ -175,22 +177,14 @@
   padding: 0 13px;
 }
 
-.pack-import-layout,
-.pack-export-layout {
+.pack-import-layout {
   align-items: stretch;
   display: grid;
   flex: 1 1 0;
   gap: 16px;
+  grid-template-columns: 248px minmax(0, 1fr) 360px;
   min-height: 0;
   overflow: hidden;
-}
-
-.pack-import-layout {
-  grid-template-columns: 248px minmax(0, 1fr) 360px;
-}
-
-.pack-export-layout {
-  grid-template-columns: 320px minmax(420px, 1fr) 320px;
 }
 
 .pack-panel,
@@ -450,6 +444,7 @@
 .pack-primary-button:focus-visible,
 .pack-secondary-button:focus-visible,
 .pack-danger-button:focus-visible,
+.pack-rail-filter button:focus-visible,
 .pack-card-action:focus-visible,
 .pack-back:focus-visible,
 .pack-toolbar-search input:focus-visible,
@@ -590,18 +585,32 @@
   width: 100%;
 }
 
-.pack-card-action,
-.pack-primary-button {
+.pack-card-action {
   background: #1f2d24;
   border: 1px solid #385544;
   color: #d7f5df;
 }
 
-.pack-screen .pack-card-action:not(:disabled),
-.pack-screen .pack-primary-button:not(:disabled) {
+/* The one action on this screen that actually ships a pack -- give it the
+   full accent color instead of the same muted tint as every other button,
+   so it reads as the obvious next step rather than one option among many. */
+.pack-primary-button {
+  background: #5eead4;
+  border: 1px solid #5eead4;
+  color: #06231e;
+  font-weight: 900;
+}
+
+.pack-screen .pack-card-action:not(:disabled) {
   background-color: #1f2d24 !important;
   border-color: #385544 !important;
   color: #d7f5df !important;
+}
+
+.pack-screen .pack-primary-button:not(:disabled) {
+  background-color: #5eead4 !important;
+  border-color: #5eead4 !important;
+  color: #06231e !important;
 }
 
 .pack-secondary-button {
@@ -627,13 +636,19 @@
   transform: none;
 }
 
+.pack-screen .pack-primary-button:not(:disabled):hover {
+  background-color: #85f2e0 !important;
+  border-color: #85f2e0 !important;
+}
+
 .pack-card-action:not(:disabled):hover,
 .pack-primary-button:not(:disabled):hover,
 .pack-secondary-button:not(:disabled):hover,
 .pack-danger-button:not(:disabled):hover,
 .pack-theme-button:hover,
 .pack-export-group:hover,
-.pack-publication-item:hover {
+.pack-publication-item:hover,
+.pack-source-summary:hover {
   border-color: #444444;
   transform: translateY(-1px);
 }
@@ -685,8 +700,7 @@
 }
 
 .pack-detail-stat,
-.pack-export-preview,
-.pack-publish-current {
+.pack-export-preview {
   background: #111111;
   border: 1px solid #282828;
   border-radius: 8px;
@@ -696,8 +710,7 @@
 
 .pack-detail-stat span,
 .pack-export-preview span,
-.pack-publish-current span,
-.pack-publication-item span {
+.pack-publication-item span:not(.pack-status-pill) {
   color: #858585;
   display: block;
   font-size: 11px;
@@ -708,7 +721,6 @@
 
 .pack-detail-stat strong,
 .pack-export-preview strong,
-.pack-publish-current strong,
 .pack-publication-item strong {
   color: #f1f1f1;
   display: block;
@@ -741,10 +753,154 @@
   padding: 9px 11px;
 }
 
+/* This targeted a <form> element that the markup never used, so the fields
+   it wraps had no gap at all and sat flush against each other. */
+.pack-publish-form {
+  display: grid;
+  gap: 18px;
+}
+
 .pack-form-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.pack-source-summary {
+  align-items: center;
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 9px 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.pack-source-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pack-source-summary-text > span:last-child {
+  color: #d4d4d4;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pack-source-summary strong {
+  color: #f1f1f1;
+}
+
+.pack-source-summary.pack-source-summary-static {
+  cursor: default;
+}
+
+.pack-source-summary.pack-source-summary-static:hover {
+  border-color: #282828;
+  transform: none;
+}
+
+.pack-source-summary-change {
+  align-items: center;
+  background: rgba(94, 234, 212, 0.1);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 999px;
+  color: #5eead4;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 26px;
+  padding: 0 10px;
+}
+
+.pack-source-summary-change.is-static {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: #cbd5e1;
+}
+
+.pack-release-preview {
+  background: #111111;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.pack-release-preview-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.pack-release-preview-head strong {
+  color: #f1f1f1;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.pack-release-preview-head span,
+.pack-release-preview p {
+  color: #9d9d9d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.pack-release-diff-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pack-release-diff-stat {
+  background: #171717;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.pack-release-diff-stat span {
+  color: #858585;
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.pack-release-diff-stat strong {
+  color: #f1f1f1;
+  display: block;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  margin-top: 8px;
+}
+
+.pack-release-warning {
+  background: rgba(255, 204, 122, 0.08);
+  border: 1px solid rgba(255, 204, 122, 0.26);
+  border-radius: 8px;
+  color: #ffcc7a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 8px 10px;
 }
 
 .pack-export-group {
@@ -754,9 +910,7 @@
   padding: 11px;
 }
 
-.pack-export-group small,
-.pack-publication-item small,
-.pack-publish-current small {
+.pack-export-group small {
   background: var(--pack-type-bg, #163b63);
   border-radius: 999px;
   color: var(--pack-type-color, #5eb6ff);
@@ -764,6 +918,15 @@
   font-weight: 800;
   line-height: 1;
   padding: 6px 8px;
+}
+
+/* Rail rows carry facts, not badges: a solid colour pill on every row would
+   drown out the one thing that should stand out per row, the pack name. */
+.pack-publication-item small {
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .pack-publish-auth {
@@ -818,11 +981,6 @@
   justify-content: flex-start;
 }
 
-.pack-publish-current {
-  border-color: rgba(94, 234, 212, 0.22);
-  padding: 11px;
-}
-
 .pack-publication-item {
   align-items: flex-start;
   flex-direction: column;
@@ -830,10 +988,6 @@
   min-height: 86px;
   padding: 12px;
   text-align: left;
-}
-
-.pack-publication-item span {
-  color: #5eead4;
 }
 
 .pack-publication-item strong {
@@ -875,6 +1029,209 @@
   line-height: 1.45;
   margin: 0;
   max-width: 520px;
+}
+
+.pack-manage-layout {
+  align-items: stretch;
+  display: grid;
+  flex: 1 1 0;
+  gap: 16px;
+  grid-template-columns: 360px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Rail rows have no nested action buttons anymore -- those live in the
+   detail pane for whichever pack is selected -- so let them size to a
+   single compact card instead of the old fixed min-height. */
+.pack-manage-layout .pack-publication-item {
+  min-height: 0;
+}
+
+.pack-manage-layout .pack-export-group-list {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+/* The rail's title and "+ Nouveau pack" button stay put; only the pack
+   list below them scrolls. */
+.pack-rail-panel {
+  overflow-y: hidden;
+}
+
+.pack-rail-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 -16px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px;
+  scrollbar-gutter: stable;
+}
+
+.pack-rail-new {
+  align-items: center;
+  background: rgba(94, 234, 212, 0.08);
+  border: 1px dashed rgba(94, 234, 212, 0.4);
+  border-radius: 8px;
+  color: #5eead4;
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 40px;
+  width: 100%;
+}
+
+.pack-rail-new:hover {
+  background: rgba(94, 234, 212, 0.13);
+  border-color: rgba(94, 234, 212, 0.7);
+}
+
+.pack-rail-new.is-active {
+  background: rgba(94, 234, 212, 0.16);
+  border-style: solid;
+}
+
+.pack-rail-filter {
+  background: #111111;
+  border: 1px solid #2d2d2d;
+  border-radius: 8px;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 3px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+}
+
+.pack-rail-filter button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #9d9d9d;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 6px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.pack-rail-filter button.is-active {
+  background: rgba(94, 234, 212, 0.12);
+  color: #5eead4;
+}
+
+.pack-rail-filter button:disabled {
+  color: #5f5f5f;
+  cursor: default;
+}
+
+.pack-rail-filter span {
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.74;
+}
+
+.pack-manage-item-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.pack-reviews {
+  border-top: 1px solid #282828;
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.pack-reviews-form {
+  display: grid;
+  gap: 10px;
+}
+
+.pack-reviews-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.pack-star-button {
+  appearance: none;
+  background: #111111;
+  border: 1px solid #303030;
+  border-radius: 6px;
+  color: #4a4a4a;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  min-height: 34px;
+  min-width: 34px;
+}
+
+.pack-star-button.is-filled {
+  border-color: rgba(255, 204, 122, 0.42);
+  color: #ffcc7a;
+}
+
+.pack-star-button:disabled {
+  cursor: default;
+}
+
+.pack-reviews-comment-form {
+  display: grid;
+  gap: 8px;
+}
+
+.pack-reviews-comment-form textarea {
+  appearance: none;
+  background: #111111;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #eeeeee;
+  font: inherit;
+  font-size: 14px;
+  min-height: 60px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.pack-comment-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pack-comment-item {
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.pack-comment-item strong {
+  color: #cfcfcf;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pack-comment-item p {
+  color: #d4d4d4;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 4px 0 0;
 }
 
 @media (max-width: 1260px) {
@@ -923,12 +1280,8 @@
   }
 
   .pack-import-layout,
-  .pack-export-layout {
+  .pack-manage-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .pack-export-layout {
-    grid-template-rows: 76px minmax(0, 1fr) 76px;
   }
 
   .pack-panel,
@@ -939,7 +1292,8 @@
   }
 
   .pack-search-toolbar,
-  .pack-detail-stat-grid {
+  .pack-detail-stat-grid,
+  .pack-release-diff-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -968,4 +1322,19 @@
   .pack-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Creator dashboard: source link and the orphaned-pack warning. */
+.pack-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #8ecbff;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.pack-inline-link:hover {
+  color: #b9dfff;
 }

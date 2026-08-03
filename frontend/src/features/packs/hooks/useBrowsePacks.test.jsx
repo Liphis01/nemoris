@@ -6,21 +6,25 @@ import {
   useBrowsePacks
 } from "./useBrowsePacks";
 import {
-  getPackCatalogSettings,
   installPackFromCatalog,
   listInstalledPacks,
+  recordPackInstall,
   searchPackCatalog,
   unsubscribePack,
   updatePackFromCatalog
 } from "../../../api/packs";
 
 vi.mock("../../../api/packs", () => ({
-  getPackCatalogSettings: vi.fn(),
   installPackFromCatalog: vi.fn(),
   listInstalledPacks: vi.fn(),
+  recordPackInstall: vi.fn(),
   searchPackCatalog: vi.fn(),
   unsubscribePack: vi.fn(),
   updatePackFromCatalog: vi.fn()
+}));
+
+vi.mock("../../../shared/tagLabels", () => ({
+  invalidateTags: vi.fn(() => Promise.resolve())
 }));
 
 describe("packStatus", () => {
@@ -62,10 +66,6 @@ describe("useBrowsePacks", () => {
   };
 
   beforeEach(() => {
-    getPackCatalogSettings.mockResolvedValue({
-      url: "https://project.supabase.co",
-      key: "sb_publishable_test"
-    });
     searchPackCatalog.mockResolvedValue({
       packs: [entryA, entryB],
       facets: {
@@ -86,26 +86,12 @@ describe("useBrowsePacks", () => {
       removed: []
     });
     unsubscribePack.mockResolvedValue({ status: "kept" });
+    recordPackInstall.mockResolvedValue({ recorded: true });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-  });
-
-  it("reports no catalog configured without searching anything else", async () => {
-    getPackCatalogSettings.mockResolvedValue({ url: "", key: "" });
-
-    const { result } = renderHook(() => useBrowsePacks());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.catalogUrl).toBeNull();
-    expect(result.current.items).toEqual([]);
-    expect(searchPackCatalog).not.toHaveBeenCalled();
-    expect(listInstalledPacks).not.toHaveBeenCalled();
   });
 
   it("searches the catalogue with server-side filters", async () => {
@@ -293,6 +279,41 @@ describe("useBrowsePacks", () => {
     expect(byGuid["guid-a"].action.pendingRemoval).toEqual([
       "some-question-guid"
     ]);
+  });
+
+  it("install() records the install best-effort, keyed by guid and version", async () => {
+    const { result } = renderHook(() => useBrowsePacks());
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.install(entryB);
+    });
+
+    expect(recordPackInstall).toHaveBeenCalledWith(
+      entryB.pack_guid,
+      entryB.version
+    );
+  });
+
+  it("never surfaces a failed install-record into action state or delays busy clearing", async () => {
+    recordPackInstall.mockRejectedValue(new Error("not signed in"));
+
+    const { result } = renderHook(() => useBrowsePacks());
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.install(entryB);
+    });
+
+    expect(installPackFromCatalog).toHaveBeenCalledWith(entryB);
+
+    const byGuid = Object.fromEntries(
+      result.current.items.map((item) => [item.entry.pack_guid, item])
+    );
+    expect(byGuid["guid-b"].action.busy).toBe(false);
+    expect(byGuid["guid-b"].action.error).toBe("");
   });
 
   it("surfaces an inline error when an action fails, without crashing", async () => {

@@ -1,9 +1,11 @@
 export const panelStyle = {
   padding: "28px",
-  overflow: "overlay",
+  overflow: "auto",
   background: "#141414",
   height: "100%",
-  boxSizing: "border-box"
+  boxSizing: "border-box",
+  minHeight: 0,
+  scrollbarGutter: "stable"
 };
 
 export const labelStyle = {

@@ -19,11 +19,13 @@ from app.routers.collections import (
     delete_collection,
     get_collection_question_candidates,
     get_collection_questions,
+    preview_collection,
     update_collection
 )
 from app.schemas import (
     AnswerRequest,
     CollectionCreate,
+    CollectionPreview,
     CollectionUpdate,
     TrainingAttemptRecordRequest
 )
@@ -33,6 +35,7 @@ from app.services.collections import (
     AUTO_HARD_COLLECTION_NAME,
     AUTO_HARD_COLLECTION_THRESHOLD,
     find_generated_hard_collection,
+    sync_collection_membership,
     sync_generated_hard_collection
 )
 from app.services.training import (
@@ -40,6 +43,11 @@ from app.services.training import (
     get_training_items,
     list_training_scopes,
     record_collection_training_attempt
+)
+from app.services.tag_hierarchy import (
+    TagValidationError,
+    apply_tag_actions,
+    load_tag_hierarchy
 )
 
 
@@ -660,6 +668,320 @@ class CollectionTests(unittest.TestCase):
             )
 
         self.assertEqual(invalid_found.exception.status_code, 400)
+
+
+class PlaylistRuleTests(unittest.TestCase):
+    """A playlist is a rule, not a snapshot."""
+
+    def setUp(self):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
+        self.db = Session()
+
+    def tearDown(self):
+        self.db.close()
+
+    def add_question(self, question_id, tags=None, type_q="text", group=None):
+        item = Question(
+            id=question_id,
+            type_q=type_q,
+            question=f"Question {question_id}",
+            answer=f"Answer {question_id}",
+            tags=tags or [],
+            data={},
+            group=group
+        )
+        self.db.add(item)
+        return item
+
+    def test_parent_scope_resolves_identically_in_preview_saved_playlist_and_training(self):
+        parent_id = "11111111-1111-4111-8111-111111111111"
+        child_id = "22222222-2222-4222-8222-222222222222"
+        hierarchy = load_tag_hierarchy(self.db)
+        apply_tag_actions(self.db, hierarchy["revision"], [
+            {
+                "type": "create",
+                "tag_id": parent_id,
+                "label": "Europe locale",
+                "parent_ids": ["core:geography"]
+            },
+            {
+                "type": "create",
+                "tag_id": child_id,
+                "label": "France locale",
+                "parent_ids": [parent_id]
+            }
+        ])
+        self.add_question(1, tags=[child_id])
+        self.add_question(2, tags=["core:history"])
+        self.db.commit()
+
+        candidates = get_collection_question_candidates(
+            tag=parent_id, limit=10, offset=0, db=self.db
+        )
+        rules = {
+            "match": "any",
+            "clauses": [{"kind": "tag", "tag": parent_id}]
+        }
+        preview = preview_collection(
+            CollectionPreview(rules=rules), db=self.db
+        )
+        saved = create_collection(
+            CollectionCreate(name="Europe", rules=rules), db=self.db
+        )
+        trained = get_training_items(
+            self.db, scope_type="tag", tag=parent_id
+        )
+
+        self.assertEqual([item["id"] for item in candidates["items"]], [1])
+        self.assertEqual([item["id"] for item in preview["items"]], [1])
+        self.assertEqual(saved["question_ids"], [1])
+        self.assertEqual(
+            [item["question_id"] for item in trained if item["type_q"] == "text"],
+            [1]
+        )
+        self.assertEqual(saved["rules"]["clauses"][0]["tag"], parent_id)
+
+    def test_new_playlist_rules_reject_unknown_tag_ids(self):
+        with self.assertRaises(TagValidationError):
+            create_collection(
+                CollectionCreate(
+                    name="Invalide",
+                    rules={
+                        "match": "any",
+                        "clauses": [{
+                            "kind": "tag",
+                            "tag": "99999999-9999-4999-8999-999999999999"
+                        }]
+                    }
+                ),
+                db=self.db
+            )
+
+    def test_legacy_playlist_without_rules_keeps_its_membership(self):
+        # The data-loss guard: playlists saved before rules existed store
+        # their membership only in the association table. Resolving one must
+        # never read that as "no rules matched, so it is empty".
+        first = self.add_question(1)
+        second = self.add_question(2)
+        self.add_question(3)
+        self.db.flush()
+
+        legacy = Collection(name="Ancienne", data={}, questions=[first, second])
+        self.db.add(legacy)
+        self.db.commit()
+
+        sync_collection_membership(self.db, legacy, commit=True)
+
+        self.assertEqual(
+            sorted(question.id for question in legacy.questions), [1, 2]
+        )
+
+    def test_tag_rule_picks_up_questions_tagged_later(self):
+        self.add_question(1, tags=["drapeaux"])
+        self.add_question(2, tags=["autre"])
+        self.db.flush()
+
+        playlist = Collection(
+            name="Drapeaux",
+            data={
+                "rules": {
+                    "match": "any",
+                    "clauses": [{"kind": "tag", "tag": "drapeaux"}]
+                }
+            },
+            questions=[]
+        )
+        self.db.add(playlist)
+        self.db.commit()
+
+        sync_collection_membership(self.db, playlist, commit=True)
+        self.assertEqual([q.id for q in playlist.questions], [1])
+
+        # A question tagged after the playlist was built joins on next read,
+        # which a snapshot-based collection could never do.
+        self.add_question(3, tags=["drapeaux"])
+        self.db.commit()
+
+        sync_collection_membership(self.db, playlist, commit=True)
+        self.assertEqual([q.id for q in playlist.questions], [1, 3])
+
+    def test_resolution_is_rules_union_pinned_minus_excluded(self):
+        self.add_question(1, tags=["drapeaux"])
+        self.add_question(2, tags=["drapeaux"])
+        self.add_question(3, tags=["autre"])
+        self.db.flush()
+
+        playlist = Collection(
+            name="Mix",
+            data={
+                "rules": {
+                    "match": "any",
+                    "clauses": [{"kind": "tag", "tag": "drapeaux"}]
+                },
+                # 3 does not match the rule but is pinned in by hand.
+                "pinned_question_ids": [3],
+                # 2 matches the rule but is explicitly excluded.
+                "excluded_question_ids": [2]
+            },
+            questions=[]
+        )
+        self.db.add(playlist)
+        self.db.commit()
+
+        sync_collection_membership(self.db, playlist, commit=True)
+
+        self.assertEqual([q.id for q in playlist.questions], [1, 3])
+
+    def test_match_all_requires_every_clause(self):
+        group = QuestionGroup(type_group="media", name="Drapeaux du monde")
+        self.db.add(group)
+        self.db.flush()
+
+        self.add_question(1, tags=["drapeaux"], type_q="media", group=group)
+        self.add_question(2, tags=["drapeaux"])
+        self.add_question(3, type_q="media", group=group)
+        self.db.flush()
+
+        rules = {
+            "match": "all",
+            "clauses": [
+                {"kind": "tag", "tag": "drapeaux"},
+                {"kind": "group", "group_id": group.id}
+            ]
+        }
+        playlist = Collection(name="Strict", data={"rules": rules}, questions=[])
+        self.db.add(playlist)
+        self.db.commit()
+
+        sync_collection_membership(self.db, playlist, commit=True)
+
+        # Only question 1 is both tagged and in the group.
+        self.assertEqual([q.id for q in playlist.questions], [1])
+
+    def test_blank_clause_selects_nothing_rather_than_everything(self):
+        self.add_question(1, tags=["drapeaux"])
+        self.add_question(2)
+        self.db.flush()
+
+        playlist = Collection(
+            name="Vide",
+            data={
+                "rules": {"match": "any", "clauses": [{"kind": "tag", "tag": ""}]},
+                "pinned_question_ids": []
+            },
+            questions=[]
+        )
+        self.db.add(playlist)
+        self.db.commit()
+
+        sync_collection_membership(self.db, playlist, commit=True)
+
+        self.assertEqual(list(playlist.questions), [])
+
+    def test_create_and_update_round_trip_rules_through_the_api(self):
+        self.add_question(1, tags=["drapeaux"])
+        self.add_question(2, tags=["drapeaux"])
+        self.add_question(3)
+        self.db.commit()
+
+        created = create_collection(
+            CollectionCreate(
+                name="Drapeaux",
+                rules={
+                    "match": "any",
+                    "clauses": [{"kind": "tag", "tag": "drapeaux"}]
+                }
+            ),
+            db=self.db
+        )
+
+        self.assertEqual(created["question_ids"], [1, 2])
+        stored_tag_id = created["rules"]["clauses"][0]["tag"]
+        self.assertNotEqual(stored_tag_id, "drapeaux")
+
+        updated = update_collection(
+            created["id"],
+            CollectionUpdate(question_ids=[3], excluded_question_ids=[2]),
+            db=self.db
+        )
+
+        # Rule still applies, plus the pin, minus the exclusion.
+        self.assertEqual(updated["question_ids"], [1, 3])
+        self.assertEqual(updated["pinned_question_ids"], [3])
+        self.assertEqual(updated["excluded_question_ids"], [2])
+        self.assertEqual(
+            updated["rules"]["clauses"][0]["tag"], stored_tag_id
+        )
+
+    def test_preview_resolves_a_rule_without_saving_anything(self):
+        group = QuestionGroup(type_group="media", name="Drapeaux du monde")
+        self.db.add(group)
+        self.db.flush()
+        self.add_question(1, tags=["drapeaux"], type_q="media", group=group)
+        self.add_question(2, tags=["drapeaux"])
+        self.add_question(3)
+        self.db.commit()
+
+        result = preview_collection(
+            CollectionPreview(
+                rules={
+                    "match": "any",
+                    "clauses": [
+                        {"kind": "tag", "tag": "drapeaux"},
+                        {"kind": "group", "group_id": group.id}
+                    ]
+                },
+                excluded_question_ids=[2]
+            ),
+            db=self.db
+        )
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["group_count"], 1)
+        # Per-rule contribution, before the exclusion is applied.
+        self.assertEqual(result["clause_counts"], [2, 1])
+        self.assertEqual([item["id"] for item in result["items"]], [1])
+
+        # Nothing was persisted.
+        self.assertEqual(self.db.query(Collection).count(), 0)
+
+    def test_generated_hard_collection_uses_the_shared_resolver(self):
+        easy = self.add_question(1)
+        hard = self.add_question(2)
+        self.db.flush()
+        self.db.add(Progress(
+            question_id=easy.id,
+            stability=1.0,
+            difficulty=2.0,
+            reps=1,
+            lapses=0,
+            interval=1,
+            next_review=None,
+            history=[]
+        ))
+        self.db.add(Progress(
+            question_id=hard.id,
+            stability=1.0,
+            difficulty=AUTO_HARD_COLLECTION_THRESHOLD + 0.5,
+            reps=1,
+            lapses=0,
+            interval=1,
+            next_review=None,
+            history=[]
+        ))
+        self.db.commit()
+
+        collection = sync_generated_hard_collection(self.db)
+
+        self.assertEqual([q.id for q in collection.questions], [2])
+        # It is now expressed as an ordinary difficulty rule rather than a
+        # second hand-rolled query.
+        self.assertEqual(
+            collection.data["rules"]["clauses"],
+            [{"kind": "difficulty", "gte": AUTO_HARD_COLLECTION_THRESHOLD}]
+        )
 
 
 if __name__ == "__main__":

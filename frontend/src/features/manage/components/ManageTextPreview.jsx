@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
+import RichText from "../../../shared/RichText";
 
 const LONG_TEXT_LENGTH = 48;
 const CLOSE_DELAY_MS = 140;
@@ -297,7 +298,7 @@ export function useManageTextPreview(items, options = {}) {
                     overflowWrap: "anywhere"
                   }}
                 >
-                  {item.value}
+                  <RichText>{item.value}</RichText>
                 </span>
               </span>
             </div>

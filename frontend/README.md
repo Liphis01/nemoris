@@ -39,10 +39,21 @@ npm run test:run # Vitest single run
 npm run test:e2e # Playwright critical browser flows
 ```
 
+Mobile companion scripts:
+
+```bash
+npm run mobile:dev    # Mobile Vite entry on port 5174
+npm run mobile:build  # Mobile web assets in dist-mobile/
+npm run cap:sync      # Build mobile assets and sync the Android project
+npm run cap:android   # Build and run on a connected Android device/emulator
+```
+
 ## Source Layout
 
 - `src/App.jsx` coordinates top-level modes: menu, review, manage, and
   calendar.
+- `src/mobile/` contains the Capacitor mobile companion shell and local
+  TypeScript sync/review services.
 - `src/api/` wraps backend endpoints and centralizes API URL handling.
 - `src/features/review/` renders backend-prepared review payloads for text,
   map, and timeline questions.
@@ -74,4 +85,5 @@ npm run test:e2e # Playwright critical browser flows
 - `../docs/architecture.md` for product and data-model rules.
 - `../docs/review-flow.md` for review payload and scheduling flow.
 - `../docs/build.md` for production and portable build instructions.
+- `../docs/mobile.md` for the mobile companion contract.
 - `../docs/roadmap.md` for TODOs and longer-term ideas.

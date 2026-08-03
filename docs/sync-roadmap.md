@@ -708,6 +708,30 @@ verified; only 2.5 (N/A until M3) is intentionally skipped. What remains is
 purely observational, not code: letting it run for real across devices over
 time to confirm the "a week without loss" bar in practice.
 
+### Slice 4 — done (2026-07-31): the cloud project ships with the app
+
+Sync and the catalogue always pointed at the *same single* Supabase project,
+yet the user had to discover and retype the same two values in two different
+places (Settings → Synchronisation, Settings → Packs) before anything worked.
+A device pointed at its own project would only ever see an empty catalogue
+with nobody to publish to, so there was never more than one correct answer.
+
+- `config.CLOUD_URL` / `config.CLOUD_KEY` hold the project, overridable via
+  `NEMORIS_SUPABASE_URL` / `NEMORIS_SUPABASE_KEY`; `frontend/src/shared/cloud.js`
+  mirrors them for the mobile build (`VITE_SUPABASE_URL` / `VITE_SUPABASE_KEY`),
+  which talks to Supabase directly instead of through the backend. Bundling the
+  key is safe by design: it is publishable, security is RLS + the auth token.
+- `sync_state` and the mobile state seed from those, and a stored *blank*
+  server adopts the bundled one (the url/key pair migrates atomically, so a
+  state file naming its own server keeps its own key).
+- Deleted: `PUT /sync/server-url`, `GET`/`PUT /packs/catalog-settings`, the
+  `pack_catalog` `AppSetting` writer (the key stays in `DEVICE_SETTING_KEYS`
+  so legacy rows still never sync), both Settings field pairs, the mobile
+  "Save Server" form, and the catalogue's "non configuré" UI states —
+  unreachable once the catalogue always has a project.
+- Self-hosting (`sync_server/`) survives through the environment variables
+  only; an empty key still selects the reference protocol over Supabase.
+
 ---
 
 ## M3 — Incremental sync (later, if needed)

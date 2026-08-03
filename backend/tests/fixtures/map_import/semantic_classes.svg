@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 10">
+  <path class="islands-a" d="M0 0H5V5H0Z"/>
+  <path class="islands-a" d="M6 0H10V5H6Z"/>
+  <path class="region-b" d="M20 0H30V10H20Z"/>
+</svg>

@@ -27,7 +27,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/nemoris-backend"],
+    "resources": {
+      "../../backend/dist/nemoris-backend/": "backend"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser"

@@ -2,6 +2,9 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
+import RichText from "../../../shared/RichText";
+import { useTagLabels } from "../../../shared/tagLabels";
 
 export default function QuestionCard({
   q,
@@ -13,8 +16,11 @@ export default function QuestionCard({
   onDeleteOpen,
   closeDelete,
   deleteQuestion,
-  onToggleFavorite
+  onToggleFavorite,
+  onToggleSuspended,
+  playlistNames = []
 }) {
+  const labelFor = useTagLabels();
   const cardBackground = selected
     ? "#252525"
     : isHighlighted
@@ -48,6 +54,7 @@ export default function QuestionCard({
       <div
         ref={setAnchorElement}
         {...triggerProps}
+        className="manage-card"
         data-delete-card-id={q.id}
         onClick={() => {
           if (deleteOpen) {
@@ -76,7 +83,7 @@ export default function QuestionCard({
           gap: "6px",
           overflow: "hidden",
           transform: isRemoving ? "scaleY(0.95)" : "scaleY(1)",
-          opacity: isRemoving ? 0 : 1,
+          opacity: isRemoving ? 0 : q.suspended ? 0.55 : 1,
           transformOrigin: "top"
         }}
         onMouseEnter={(e) => {
@@ -171,7 +178,7 @@ export default function QuestionCard({
               flex: 1
             }}
           >
-            {q.question}
+            <RichText compact style={{ whiteSpace: "inherit" }}>{q.question}</RichText>
           </div>
 
           {q.media && (
@@ -196,6 +203,11 @@ export default function QuestionCard({
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
           />
+
+          <SuspendToggleButton
+            suspended={Boolean(q.suspended)}
+            onToggle={onToggleSuspended}
+          />
         </div>
 
         {/* ANSWER */}
@@ -210,7 +222,7 @@ export default function QuestionCard({
             paddingLeft: "2px"
           }}
         >
-          {q.answer || "—"}
+          <RichText compact style={{ whiteSpace: "inherit" }}>{q.answer || "—"}</RichText>
         </div>
 
         {/* BOTTOM */}
@@ -237,7 +249,7 @@ export default function QuestionCard({
             {(q.tags || []).slice(0, 3).map(tag => (
               <div
                 key={tag}
-                title={tag}
+                title={labelFor(tag)}
                 style={{
                   maxWidth: "80px",
                   padding: "1px 6px",
@@ -251,7 +263,7 @@ export default function QuestionCard({
                   flexShrink: 0
                 }}
               >
-                #{tag}
+                #{labelFor(tag)}
               </div>
             ))}
 
@@ -264,6 +276,33 @@ export default function QuestionCard({
                 }}
               >
                 +{q.tags.length - 3}
+              </div>
+            )}
+
+            {/*
+              A question sits in exactly one group but any number of playlists.
+              Showing both together is what makes that asymmetry legible --
+              it teaches the difference better than any label could.
+            */}
+            {playlistNames.length > 0 && (
+              <div
+                title={`Playlists : ${playlistNames.join(", ")}`}
+                style={{
+                  maxWidth: "130px",
+                  padding: "1px 6px",
+                  borderRadius: "999px",
+                  background: "#123a33",
+                  color: "#7fe3c4",
+                  fontSize: "10px",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  flexShrink: 0
+                }}
+              >
+                🎧 {playlistNames.length === 1
+                  ? playlistNames[0]
+                  : `${playlistNames.length} playlists`}
               </div>
             )}
           </div>

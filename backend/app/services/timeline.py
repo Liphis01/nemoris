@@ -3,7 +3,7 @@ import random
 from fastapi import HTTPException
 
 from ..models import Progress, Question
-from ..scheduler import preview_intervals
+from ..scheduler import preview_intervals, relearning_graduate_interval
 from ..serializers import serialize_progress
 
 
@@ -12,10 +12,14 @@ VALID_KINDS = {"point", "interval"}
 MIN_YEAR = -9999
 MAX_YEAR = 9999
 
-# A timeline card becomes a landmark anchor once it is well retained: a long
-# interval and several successful reviews. Anchors are capped so a large mastered
-# library does not bloat the review payload.
-MASTERED_ANCHOR_MIN_INTERVAL_DAYS = 60
+# A timeline card becomes a landmark anchor once it is well retained: high FSRS
+# stability and several successful reviews. Anchors are capped so a large
+# mastered library does not bloat the review payload.
+#
+# Stability rather than `interval`, matching stats' MASTERED_* bar: interval is
+# smoothed for calendar load, so it would make a card drift in and out of the
+# anchor layer for reasons that have nothing to do with how well it is known.
+MASTERED_ANCHOR_MIN_STABILITY_DAYS = 60
 MASTERED_ANCHOR_MIN_REPS = 3
 MAX_TIMELINE_ANCHORS = 40
 
@@ -276,7 +280,8 @@ def serialize_timeline_review_item(question):
         "projected_intervals": preview_intervals(
             question.progress,
             favorite=bool((question.data or {}).get("favorite"))
-        )
+        ),
+        "relearning_interval": relearning_graduate_interval(question.progress)
     }
 
     item["start_value"] = date_center_value(timeline["start"])
@@ -334,7 +339,7 @@ def build_mastered_timeline_anchors(db, exclude_ids=None, reference_value=None):
         db.query(Question)
         .join(Progress, Question.id == Progress.question_id)
         .filter(Question.type_q == "timeline")
-        .filter(Progress.interval >= MASTERED_ANCHOR_MIN_INTERVAL_DAYS)
+        .filter(Progress.stability >= MASTERED_ANCHOR_MIN_STABILITY_DAYS)
         .filter(Progress.reps >= MASTERED_ANCHOR_MIN_REPS)
     )
     anchors = []

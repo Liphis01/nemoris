@@ -66,7 +66,6 @@ def _status_payload():
         "signed_in": is_signed_in(state),
         "account_email": state.get("account_email"),
         "server_url": state.get("server_url", ""),
-        "server_key": state.get("server_key", ""),
         "last_server_version": state.get("last_server_version", 0),
         "auto_sync_enabled": bool(state.get("auto_sync_enabled")),
         "local_change_seq": state.get("local_change_seq", 0),
@@ -100,19 +99,6 @@ def sync_status():
 @router.put("/sync/preferences")
 def set_sync_preferences(payload: SyncPreferences):
     save_auto_sync_preferences(payload.auto_sync_enabled)
-
-    return _status_payload()
-
-
-@router.put("/sync/server-url")
-def set_sync_server_url(payload: dict = Body(...)):
-    state = load_sync_state()
-    state["server_url"] = str(payload.get("url") or "").strip().rstrip("/")
-
-    if "key" in payload:
-        state["server_key"] = str(payload.get("key") or "").strip()
-
-    save_sync_state(state)
 
     return _status_payload()
 

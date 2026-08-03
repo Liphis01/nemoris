@@ -6,6 +6,11 @@ import {
   gradeTimelineGuess,
   normalizeTimeline
 } from "../../timeline/timelineUtils";
+import {
+  GOT_IT_QUALITY,
+  isRelearningGroupItem,
+  STILL_LEARNING_QUALITY
+} from "../relearningGrades";
 
 function sortReviewItems(items) {
   return [...items].sort((a, b) => {
@@ -76,8 +81,10 @@ export default function useTimelineReview({
   reviewItems,
   group,
   submitAnswer,
+  graduateAnswer,
   onAnsweringComplete,
-  onComplete
+  onComplete,
+  showQualityControls = true
 }) {
   const sortedItems = useMemo(() => sortReviewItems(reviewItems || []), [reviewItems]);
   const [orderedIds, setOrderedIds] = useState(() => sortedItems.map(item => item.question_id));
@@ -105,6 +112,9 @@ export default function useTimelineReview({
   );
 
   const activeItem = itemById.get(activeId) || null;
+  // A relearning retry (in-session or from persisted progress) never re-grades
+  // FSRS, so its quality collapses to the binary Encore/Acquis choice.
+  const activeItemRelearning = isRelearningGroupItem(group, activeItem);
   const activeTimeline = useMemo(
     () => (activeItem ? normalizeTimeline(activeItem.timeline) : null),
     [activeItem]
@@ -194,7 +204,13 @@ export default function useTimelineReview({
     const nextDone = new Set(doneIds);
     nextDone.add(activeItem.question_id);
     setDoneIds(nextDone);
-    setSelectedQuality(graded.quality);
+    // A relearning hit defaults to "Acquis" — the Dur/Bon/Facile nuance the auto
+    // grade carries is never sent anywhere for these, so it collapses to binary.
+    setSelectedQuality(
+      activeItemRelearning
+        ? (graded.quality > 0 ? GOT_IT_QUALITY : STILL_LEARNING_QUALITY)
+        : graded.quality
+    );
     setPendingGuess(guess);
     setResult({
       question_id: activeItem.question_id,
@@ -214,6 +230,7 @@ export default function useTimelineReview({
     }
   }, [
     activeItem,
+    activeItemRelearning,
     activeTimeline,
     answer,
     doneIds,
@@ -225,13 +242,17 @@ export default function useTimelineReview({
     sortedItems.length
   ]);
 
-  // Only a hit is adjustable (Hard/Good/Easy); a miss stays Again.
-  const canAdjustQuality = revealed && result?.quality > 0;
+  // Only a hit is adjustable (Hard/Good/Easy, or Encore/Acquis in relearning);
+  // a miss stays Again. Training has no use for the rating (nothing is
+  // scheduled from it), so it's suppressed there.
+  const canAdjustQuality = showQualityControls && revealed && result?.quality > 0;
   const adjustQuality = useCallback((quality) => {
     if (!result || result.quality === 0) return;
 
-    setSelectedQuality(Math.max(1, Math.min(3, quality)));
-  }, [result]);
+    setSelectedQuality(activeItemRelearning
+      ? Math.max(0, Math.min(1, quality))
+      : Math.max(1, Math.min(3, quality)));
+  }, [activeItemRelearning, result]);
 
   // Records the card with its final quality, then advances. This is where the
   // schedule is written — deferred to here so the learner's quality choice is
@@ -245,9 +266,20 @@ export default function useTimelineReview({
       setIsSubmitting(true);
 
       try {
-        await submitAnswer({
-          [questionId]: { ...pendingGuess, quality: selectedQuality }
-        });
+        // Relearning never re-grades FSRS: "Acquis" graduates it through the
+        // dedicated endpoint, "Encore" sends nothing and just loops the card
+        // back into the queue (same as a genuine miss).
+        if (activeItemRelearning) {
+          if (selectedQuality >= GOT_IT_QUALITY) {
+            await graduateAnswer?.([questionId]);
+          } else if (!failedIdsRef.current.includes(questionId)) {
+            failedIdsRef.current = [...failedIdsRef.current, questionId];
+          }
+        } else {
+          await submitAnswer({
+            [questionId]: { ...pendingGuess, quality: selectedQuality }
+          });
+        }
       } catch (requestError) {
         setError(requestError.message || "Impossible d'enregistrer cette réponse.");
         setIsSubmitting(false);
@@ -273,7 +305,9 @@ export default function useTimelineReview({
     setActiveId(nextId);
   }, [
     activeItem,
+    activeItemRelearning,
     doneIds,
+    graduateAnswer,
     isSubmitting,
     onComplete,
     orderedIds,
@@ -305,6 +339,7 @@ export default function useTimelineReview({
 
   return {
     activeItem,
+    activeItemRelearning,
     activeTimeline,
     adjustQuality,
     answer,

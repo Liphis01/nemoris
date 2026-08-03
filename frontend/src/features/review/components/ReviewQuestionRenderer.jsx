@@ -115,6 +115,7 @@ export default function ReviewQuestionRenderer({
                 onComplete={handleTimelineComplete}
                 submitAnswer={submitTimelineAnswer}
                 graduateAnswer={graduateGroupedAnswer}
+                showQualityControls={!trainingMode}
                 fillAvailableHeight={compactVisualLayout}
             />
         );

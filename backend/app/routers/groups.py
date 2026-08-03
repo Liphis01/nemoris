@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..dependencies import get_db
 from ..models import Question, QuestionGroup
-from ..schemas import GroupCreate, GroupOut, GroupUpdate
+from ..schemas import GroupCreate, GroupOut, GroupUpdate, GroupSuspend
 from ..services.map_zones import merge_tags
 from ..services.media import delete_unreferenced_media_file, media_points_to_same_static_file
 from ..services.questions import delete_question_dependents
@@ -69,6 +69,7 @@ def get_groups(db: Session = Depends(get_db)):
             "type_group": group.type_group,
             "name": group.name,
             "media": group.media,
+            "data": group.data or {},
             "tags": tags_by_group_id.get(group.id, []),
             "question_count": question_count
         }
@@ -149,6 +150,45 @@ def update_group(
         delete_unreferenced_media_file(db, old_media)
 
     return group
+
+
+@router.post("/groups/{group_id}/suspend")
+def suspend_group(
+    group_id: int,
+    payload: GroupSuspend,
+    db: Session = Depends(get_db)
+):
+    """Suspend or resume every question in a group in one statement.
+
+    Groups can hold hundreds of questions, so this is a single bulk UPDATE
+    rather than a request per question. Suspension lives on the questions
+    themselves -- there is no group-level flag -- so there is only ever one
+    source of truth about what is eligible for review.
+    """
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    updated = (
+        db.query(Question)
+        .filter(Question.group_id == group_id)
+        .update(
+            {Question.suspended: payload.suspended},
+            synchronize_session=False
+        )
+    )
+    db.commit()
+
+    return {
+        "group_id": group_id,
+        "suspended": payload.suspended,
+        "updated_count": updated
+    }
 
 
 @router.delete("/groups/{group_id}")

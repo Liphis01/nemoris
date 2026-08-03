@@ -31,12 +31,16 @@ from .sequence_modes import (
     normalize_sequence_mode
 )
 from .map_zones import merge_tags
+from .map_eligibility import reviewable_question_filter
 from .review import serialize_review_items
 from .tag_hierarchy import (
-    ancestors,
     descendants,
+    ensure_stored_tag_ids,
+    label_for_tag,
     load_tag_hierarchy,
-    parent_map
+    parent_map,
+    resolve_tag_id,
+    tag_usage_counts
 )
 from .timeline import grade_timeline_answer, validate_timeline_data
 
@@ -57,7 +61,9 @@ MODE_GROUP_TYPES = {"map", "media", "text", "sequence"}
 
 
 def normalize_scope_tag(value):
-    return str(value or "").strip().casefold()
+    # Questions store language-neutral IDs. Labels are deliberately not used
+    # as identity here; the request boundary resolves legacy/root aliases once.
+    return str(value or "").strip()
 
 
 def question_has_exact_tag(question, normalized_tag):
@@ -90,6 +96,7 @@ def _training_question_query(db):
             .selectinload(QuestionGroup.questions)
             .selectinload(Question.progress)
         )
+        .filter(reviewable_question_filter())
         .order_by(Question.id)
     )
 
@@ -220,7 +227,8 @@ def training_fingerprints_for_groups(db, groups):
             db.query(Question)
             .filter(
                 Question.group_id.in_(group_ids),
-                Question.type_q.in_(["map", "media", "text", "sequence"])
+                Question.type_q.in_(["map", "media", "text", "sequence"]),
+                reviewable_question_filter(),
             )
             .order_by(Question.id)
             .all()
@@ -426,6 +434,7 @@ def serialize_training_records(data, content_fingerprint=None, group_type="map")
 
 
 def list_training_scopes(db):
+    ensure_stored_tag_ids(db)
     sync_generated_hard_collection(db)
 
     groups = (
@@ -434,6 +443,7 @@ def list_training_scopes(db):
             func.count(Question.id).label("question_count")
         )
         .outerjoin(Question)
+        .filter(reviewable_question_filter())
         .group_by(QuestionGroup.id)
         .order_by(QuestionGroup.id)
         .all()
@@ -481,8 +491,6 @@ def list_training_scopes(db):
 
     hierarchy = load_tag_hierarchy(db)
     pmap = parent_map(hierarchy)
-    hierarchy_labels = hierarchy.get("labels", {})
-
     tag_names_by_key = {}
     tag_counts_by_key = {}
 
@@ -494,36 +502,19 @@ def list_training_scopes(db):
         for parent in parent_list
     }
 
-    for key in set(hierarchy_labels) | set(pmap) | all_parent_keys:
+    for key in set(hierarchy.get("nodes", {})) | set(pmap) | all_parent_keys:
         if key:
-            tag_names_by_key.setdefault(key, hierarchy_labels.get(key, key))
+            tag_names_by_key.setdefault(key, label_for_tag(hierarchy, key))
             tag_counts_by_key.setdefault(key, 0)
 
-    for (tags,) in db.query(Question.tags).all():
-        seen_for_question = set()
+    # Rolled up through the hierarchy, so parent themes total their descendants.
+    usage_counts, usage_displays = tag_usage_counts(db, pmap)
 
-        for tag in tags or []:
-            display_name = str(tag or "").strip()
-            key = normalize_scope_tag(display_name)
+    for key, count in usage_counts.items():
+        tag_counts_by_key[key] = tag_counts_by_key.get(key, 0) + count
 
-            if not key:
-                continue
-
-            # A question counts toward its own tags and all of their ancestors,
-            # so parent themes show rolled-up totals.
-            for effective_key in ancestors(key, pmap):
-                tag_names_by_key.setdefault(
-                    effective_key,
-                    hierarchy_labels.get(effective_key, display_name)
-                )
-
-                if effective_key in seen_for_question:
-                    continue
-
-                seen_for_question.add(effective_key)
-                tag_counts_by_key[effective_key] = (
-                    tag_counts_by_key.get(effective_key, 0) + 1
-                )
+    for key, display_name in usage_displays.items():
+        tag_names_by_key.setdefault(key, label_for_tag(hierarchy, key) or display_name)
 
     return {
         "groups": [
@@ -532,6 +523,7 @@ def list_training_scopes(db):
                 "type_group": group.type_group,
                 "name": group.name,
                 "media": group.media,
+                "map": (group.data or {}).get("map"),
                 "tags": tags_by_group_id.get(group.id, []),
                 "question_count": question_count,
                 "training_record": serialize_training_record(
@@ -565,11 +557,17 @@ def list_training_scopes(db):
         ],
         "tags": [
             {
+                "id": key,
+                "key": key,
+                "label": tag_names_by_key[key],
+                # Kept during the frontend transition; unlike before it is a
+                # display alias and never sent back as identity.
                 "name": tag_names_by_key[key],
                 "count": tag_counts_by_key[key]
             }
             for key in sorted(tag_names_by_key)
             if tag_counts_by_key.get(key, 0) > 0
+            and key not in set(hierarchy.get("hidden_core_roots") or [])
         ]
     }
 
@@ -867,6 +865,7 @@ def get_training_items(
     text_mode=None,
     sequence_mode=None
 ):
+    ensure_stored_tag_ids(db)
     if scope_type == "group":
         if group_id is None:
             raise HTTPException(
@@ -980,7 +979,8 @@ def get_training_items(
         return _shuffled_training_items(items)
 
     if scope_type == "tag":
-        normalized_tag = normalize_scope_tag(tag)
+        hierarchy = load_tag_hierarchy(db)
+        normalized_tag = resolve_tag_id(hierarchy, tag)
 
         if not normalized_tag:
             raise HTTPException(

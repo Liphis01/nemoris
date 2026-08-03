@@ -1,15 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  createCollection,
-  deleteCollection,
-  getCollection,
-  listCollectionQuestionCandidates,
-  listCollectionQuestions,
-  updateCollection
-} from "../../../api/collections";
+import { useEffect, useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import TrainingTimerPanel from "../../review/components/TrainingTimerPanel";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { useTagLabels } from "../../../shared/tagLabels";
 import { useTrainingSession } from "../hooks/useTrainingSession";
 import {
   formatDuration,
@@ -104,9 +97,6 @@ const recordBadgeStyle = {
   fontWeight: "800",
   padding: "8px 12px"
 };
-
-const COLLECTION_CANDIDATE_PAGE_SIZE = 50;
-
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
@@ -277,82 +267,6 @@ function collectionPercent(collection) {
 }
 
 
-function questionTypeLabel(type) {
-  if (type === "map") return "Map";
-  if (type === "media") return "Média";
-  if (type === "timeline") return "Timeline";
-  if (type === "sequence") return "Séquence";
-  return "Texte";
-}
-
-
-function questionTitle(question) {
-  if (question?.title) {
-    return question.title;
-  }
-
-  if (question?.type_q === "map" || question?.type_q === "media") {
-    return question.answer || question.question || `Question #${question.id}`;
-  }
-
-  return question?.question || question?.answer || `Question #${question?.id}`;
-}
-
-
-function sectionKeyForQuestion(question) {
-  const groupId = question?.group?.id ?? question?.group_id;
-
-  if (groupId !== undefined && groupId !== null) {
-    return `group-${groupId}`;
-  }
-
-  const groupName = question?.group?.name || question?.group_name;
-
-  if (groupName) {
-    return `group-name-${normalizeText(groupName)}`;
-  }
-
-  return "ungrouped";
-}
-
-
-function sectionTitleForQuestion(question) {
-  return question?.group?.name || question?.group_name || "Sans groupe";
-}
-
-
-function questionAnswerPreview(question) {
-  return question?.answer_preview || question?.answer || "";
-}
-
-
-function buildQuestionSections(questions, sortByTitle = false) {
-  const sectionMap = new Map();
-
-  questions.forEach(question => {
-    const key = sectionKeyForQuestion(question);
-
-    if (!sectionMap.has(key)) {
-      sectionMap.set(key, {
-        key,
-        title: sectionTitleForQuestion(question),
-        questions: []
-      });
-    }
-
-    sectionMap.get(key).questions.push(question);
-  });
-
-  const sections = [...sectionMap.values()];
-
-  if (sortByTitle) {
-    return sections.sort((a, b) => a.title.localeCompare(b.title));
-  }
-
-  return sections;
-}
-
-
 function RecordMetric({ label, value }) {
   return (
     <div className="training-record-metric">
@@ -410,18 +324,21 @@ function GroupTile({ group, onSelect, selected }) {
 
 
 function TagTile({ tag, startScope }) {
+  const label = tag.label || tag.name;
   return (
     <button
       type="button"
-      aria-label={`Démarrer le tag ${tag.name}`}
+      aria-label={`Démarrer le tag ${label}`}
       className="training-scope-tile training-tag-tile"
       onClick={() => startScope({
         type: "tag",
-        name: tag.name
+        id: tag.id || tag.key,
+        label,
+        name: label
       })}
     >
       <span className="training-scope-tile-main">
-        <strong>#{tag.name}</strong>
+        <strong>#{label}</strong>
         <span>{questionCountLabel(tag.count)}</span>
       </span>
 
@@ -460,16 +377,16 @@ function CollectionTile({ collection, onSelect, selected }) {
 }
 
 
+// Picker only: playlists are created, edited and deleted in the Gestionnaire,
+// next to groups. Training just chooses one to practise.
 function CollectionDetailPanel({
   collection,
-  onDelete,
-  onEdit,
   startScope
 }) {
   if (!collection) {
     return (
-      <aside className="training-detail-panel training-detail-empty" aria-label="Détails de la collection">
-        Sélectionne une collection.
+      <aside className="training-detail-panel training-detail-empty" aria-label="Détails de la playlist">
+        Sélectionne une playlist.
       </aside>
     );
   }
@@ -480,7 +397,7 @@ function CollectionDetailPanel({
   return (
     <aside
       className={`training-detail-panel training-detail-panel-collection${generated ? " is-generated" : ""}`}
-      aria-label="Détails de la collection"
+      aria-label="Détails de la playlist"
     >
       <div className="training-detail-head">
         <h2>{collection.name}</h2>
@@ -515,760 +432,14 @@ function CollectionDetailPanel({
           <span>{questionCountLabel(collection.question_count)}</span>
         </button>
 
-        {!generated && (
-          <>
-            <button
-              type="button"
-              className="training-secondary-button"
-              onClick={() => onEdit(collection)}
-            >
-              Modifier
-            </button>
-
-            <button
-              type="button"
-              className="training-secondary-button training-danger-button"
-              onClick={() => onDelete(collection)}
-            >
-              Supprimer
-            </button>
-          </>
-        )}
       </div>
     </aside>
   );
 }
 
 
-function ComposerQuestionRow({
-  question,
-  onRemove,
-  onToggle,
-  selected,
-  tray
-}) {
-  const preview = questionAnswerPreview(question);
 
-  if (tray) {
-    return (
-      <div className="training-composer-tray-row">
-        <span>
-          <strong>{questionTitle(question)}</strong>
-          <span>{questionTypeLabel(question.type_q)}</span>
-        </span>
-        <button
-          type="button"
-          aria-label={`Retirer ${questionTitle(question)}`}
-          className="training-composer-icon-button"
-          onClick={() => onRemove(question.id)}
-        >
-          x
-        </button>
-      </div>
-    );
-  }
 
-  return (
-    <label className="training-composer-result-row">
-      <input
-        aria-label={`Sélectionner ${questionTitle(question)}`}
-        checked={selected}
-        onChange={() => onToggle(question)}
-        type="checkbox"
-      />
-      <span className="training-composer-result-main">
-        <span className="training-composer-result-title">
-          <strong>{questionTitle(question)}</strong>
-          <span className="training-scope-badge training-scope-badge-neutral">
-            {questionTypeLabel(question.type_q)}
-          </span>
-        </span>
-        {preview && (
-          <span className="training-composer-preview">
-            {preview}
-          </span>
-        )}
-        <span className="training-composer-meta">
-          <span>{question.group?.name || "Sans groupe"}</span>
-          {(question.tags || []).slice(0, 4).map(tag => (
-            <span key={tag}>#{tag}</span>
-          ))}
-          {question.has_media && <span>media</span>}
-        </span>
-      </span>
-    </label>
-  );
-}
-
-
-function CollectionComposer({
-  collection,
-  filterGroups,
-  filterTags,
-  onCancel,
-  onSaved,
-  setSelectedCollectionId
-}) {
-  const editing = Boolean(collection?.id);
-  const [name, setName] = useState(collection?.name || "");
-  const [searchDraft, setSearchDraft] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [groupFilter, setGroupFilter] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
-  const [selectedOnly, setSelectedOnly] = useState(false);
-  const [selectedItemsById, setSelectedItemsById] = useState(() => new Map());
-  const [candidateItems, setCandidateItems] = useState([]);
-  const [candidateTotal, setCandidateTotal] = useState(0);
-  const [expandedResultSections, setExpandedResultSections] = useState(() => new Set());
-  const [expandedTraySections, setExpandedTraySections] = useState(() => new Set());
-  const prevHasActiveCollectionFilterRef = useRef(false);
-  const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [selectedLoading, setSelectedLoading] = useState(false);
-  const [candidateError, setCandidateError] = useState("");
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setName(collection?.name || "");
-    setSearchDraft("");
-    setDebouncedSearch("");
-    setTypeFilter("");
-    setGroupFilter("");
-    setTagFilter("");
-    setSelectedOnly(false);
-    setSelectedItemsById(new Map());
-    setExpandedResultSections(new Set());
-    setExpandedTraySections(new Set());
-    setCandidateItems([]);
-    setCandidateTotal(0);
-    setCandidateError("");
-    setError("");
-  }, [collection?.id, collection?.name]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(searchDraft.trim());
-    }, 250);
-
-    return () => window.clearTimeout(timer);
-  }, [searchDraft]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!editing) {
-      setSelectedLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setSelectedLoading(true);
-    setError("");
-
-    Promise.all([
-      getCollection(collection.id),
-      listCollectionQuestions(collection.id)
-    ])
-      .then(([collectionData, selectedQuestions]) => {
-        if (cancelled) return;
-
-        const nextSelected = new Map();
-
-        (selectedQuestions || []).forEach(question => {
-          nextSelected.set(question.id, question);
-        });
-
-        setName(collectionData?.name || "");
-        setSelectedItemsById(nextSelected);
-      })
-      .catch((loadError) => {
-        console.error(loadError);
-
-        if (!cancelled) {
-          setError(loadError.message || "Impossible de charger la collection.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSelectedLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [collection?.id, editing]);
-
-  useEffect(() => {
-    if (selectedOnly) {
-      setCandidatesLoading(false);
-      return undefined;
-    }
-
-    const controller = new AbortController();
-
-    setCandidatesLoading(true);
-    setCandidateError("");
-
-    listCollectionQuestionCandidates({
-      search: debouncedSearch,
-      type_q: typeFilter,
-      group_id: groupFilter,
-      tag: tagFilter,
-      limit: COLLECTION_CANDIDATE_PAGE_SIZE,
-      offset: 0,
-      sort: "recent"
-    }, { signal: controller.signal })
-      .then((data) => {
-        if (controller.signal.aborted) return;
-
-        setCandidateItems(data?.items || []);
-        setCandidateTotal(Number(data?.total) || 0);
-      })
-      .catch((loadError) => {
-        if (loadError.name === "AbortError" || controller.signal.aborted) {
-          return;
-        }
-
-        console.error(loadError);
-        setCandidateError(loadError.message || "Impossible de charger les questions.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setCandidatesLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [debouncedSearch, groupFilter, selectedOnly, tagFilter, typeFilter]);
-
-  const selectedItems = useMemo(
-    () => [...selectedItemsById.values()],
-    [selectedItemsById]
-  );
-  const selectedIds = useMemo(
-    () => new Set(selectedItemsById.keys()),
-    [selectedItemsById]
-  );
-  const resultItems = selectedOnly ? selectedItems : candidateItems;
-  const resultSections = useMemo(
-    () => buildQuestionSections(resultItems, selectedOnly),
-    [resultItems, selectedOnly]
-  );
-  const traySections = useMemo(
-    () => buildQuestionSections(selectedItems, true),
-    [selectedItems]
-  );
-  const hasMoreCandidates = !selectedOnly && candidateItems.length < candidateTotal;
-
-  useEffect(() => {
-    const hasFilter = Boolean(debouncedSearch || typeFilter || groupFilter || tagFilter);
-    const wasActive = prevHasActiveCollectionFilterRef.current;
-    prevHasActiveCollectionFilterRef.current = hasFilter;
-
-    if (wasActive && !hasFilter) {
-      setExpandedResultSections(new Set());
-      return;
-    }
-
-    if (!hasFilter) return;
-
-    const keys = resultSections.map((s) => s.key);
-    if (keys.length === 0) return;
-
-    setExpandedResultSections((prev) => {
-      const toAdd = keys.filter((k) => !prev.has(k));
-      if (toAdd.length === 0) return prev;
-      const next = new Set(prev);
-      toAdd.forEach((k) => next.add(k));
-      return next;
-    });
-  }, [resultSections, debouncedSearch, typeFilter, groupFilter, tagFilter]);
-
-  function toggleQuestion(question) {
-    setSelectedItemsById(prev => {
-      const next = new Map(prev);
-
-      if (next.has(question.id)) {
-        next.delete(question.id);
-      } else {
-        next.set(question.id, question);
-      }
-
-      return next;
-    });
-  }
-
-  function setQuestionsSelected(questions, selected) {
-    setSelectedItemsById(prev => {
-      const next = new Map(prev);
-
-      questions.forEach(question => {
-        if (selected) {
-          next.set(question.id, question);
-        } else {
-          next.delete(question.id);
-        }
-      });
-
-      return next;
-    });
-  }
-
-  function removeSelectedQuestion(questionId) {
-    setSelectedItemsById(prev => {
-      const next = new Map(prev);
-      next.delete(questionId);
-      return next;
-    });
-  }
-
-  function clearFilters() {
-    setSearchDraft("");
-    setTypeFilter("");
-    setGroupFilter("");
-    setTagFilter("");
-    setSelectedOnly(false);
-  }
-
-  function toggleSectionExpanded(sectionKey, target) {
-    const setter = target === "tray"
-      ? setExpandedTraySections
-      : setExpandedResultSections;
-
-    setter(prev => {
-      const next = new Set(prev);
-
-      if (next.has(sectionKey)) {
-        next.delete(sectionKey);
-      } else {
-        next.add(sectionKey);
-      }
-
-      return next;
-    });
-  }
-
-  async function loadMoreCandidates() {
-    if (loadingMore || !hasMoreCandidates) return;
-
-    setLoadingMore(true);
-    setCandidateError("");
-
-    try {
-      const data = await listCollectionQuestionCandidates({
-        search: debouncedSearch,
-        type_q: typeFilter,
-        group_id: groupFilter,
-        tag: tagFilter,
-        limit: COLLECTION_CANDIDATE_PAGE_SIZE,
-        offset: candidateItems.length,
-        sort: "recent"
-      });
-
-      setCandidateTotal(Number(data?.total) || 0);
-      setCandidateItems(prev => {
-        const next = [...prev];
-        const seen = new Set(prev.map(question => question.id));
-
-        (data?.items || []).forEach(question => {
-          if (!seen.has(question.id)) {
-            next.push(question);
-            seen.add(question.id);
-          }
-        });
-
-        return next;
-      });
-    } catch (loadError) {
-      console.error(loadError);
-      setCandidateError(loadError.message || "Impossible de charger la suite.");
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  async function handleSave(event) {
-    event.preventDefault();
-
-    const trimmedName = name.trim();
-
-    if (!trimmedName || selectedItemsById.size === 0) return;
-
-    setSaving(true);
-    setError("");
-
-    try {
-      const payload = {
-        name: trimmedName,
-        question_ids: [...selectedItemsById.keys()]
-      };
-      const saved = editing
-        ? await updateCollection(collection.id, payload)
-        : await createCollection(payload);
-
-      setSelectedCollectionId(saved.id);
-      await onSaved(saved);
-    } catch (saveError) {
-      console.error(saveError);
-      setError(saveError.message || "Impossible d'enregistrer la collection.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const saveDisabled = (
-    !name.trim() ||
-    selectedItemsById.size === 0 ||
-    saving ||
-    selectedLoading
-  );
-
-  return (
-    <div className="training-composer-screen">
-      <form className="training-composer-shell" onSubmit={handleSave}>
-        <header className="training-composer-savebar">
-          <div className="training-composer-title">
-            <div className="training-selector-overline">Collection</div>
-            <h1>{editing ? "Modifier la collection" : "Nouvelle collection"}</h1>
-          </div>
-
-          <label className="training-composer-name">
-            <span>Nom</span>
-            <input
-              aria-label="Nom de la collection"
-              className="training-search-input"
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Nom de la collection"
-              value={name}
-            />
-          </label>
-
-          <div className="training-composer-save-actions">
-            <span className="training-composer-count">
-              {questionCountLabel(selectedItemsById.size)}
-            </span>
-            <button
-              type="button"
-              className="training-secondary-button"
-              onClick={onCancel}
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="training-start-button training-composer-save-button"
-              disabled={saveDisabled}
-            >
-              <strong>{saving ? "Enregistrement..." : "Enregistrer"}</strong>
-              <span>{questionCountLabel(selectedItemsById.size)}</span>
-            </button>
-          </div>
-        </header>
-
-        {error && (
-          <div className="training-selector-error" role="alert">
-            {error}
-          </div>
-        )}
-
-        <div className="training-composer-layout">
-          <aside className="training-composer-filters app-scrollbar" aria-label="Filtres">
-            <div className="training-composer-filter-group">
-              <label>
-                <span>Recherche</span>
-                <input
-                  aria-label="Rechercher une question"
-                  className="training-search-input"
-                  onChange={(event) => setSearchDraft(event.target.value)}
-                  placeholder="Question, réponse, alias, tag, groupe..."
-                  value={searchDraft}
-                />
-              </label>
-            </div>
-
-            <div className="training-composer-filter-group">
-              <label>
-                <span>Type</span>
-                <select
-                  aria-label="Filtrer par type"
-                  className="training-search-input"
-                  onChange={(event) => setTypeFilter(event.target.value)}
-                  value={typeFilter}
-                >
-                  <option value="">Tous les types</option>
-                  <option value="text">Texte</option>
-                  <option value="map">Map</option>
-                  <option value="media">Média</option>
-                  <option value="text">Texte</option>
-                  <option value="timeline">Timeline</option>
-                </select>
-              </label>
-
-              <label>
-                <span>Groupe</span>
-                <select
-                  aria-label="Filtrer par groupe"
-                  className="training-search-input"
-                  onChange={(event) => setGroupFilter(event.target.value)}
-                  value={groupFilter}
-                >
-                  <option value="">Tous les groupes</option>
-                  {(filterGroups || []).map(group => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                <span>Tag</span>
-                <select
-                  aria-label="Filtrer par tag"
-                  className="training-search-input"
-                  onChange={(event) => setTagFilter(event.target.value)}
-                  value={tagFilter}
-                >
-                  <option value="">Tous les tags</option>
-                  {(filterTags || []).map(tag => (
-                    <option key={tag.name} value={tag.name}>
-                      #{tag.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <label className="training-composer-selected-toggle">
-              <input
-                checked={selectedOnly}
-                onChange={(event) => setSelectedOnly(event.target.checked)}
-                type="checkbox"
-              />
-              <span>Sélection seulement</span>
-            </label>
-
-            <button
-              type="button"
-              className="training-secondary-button"
-              onClick={clearFilters}
-            >
-              Réinitialiser les filtres
-            </button>
-          </aside>
-
-          <main className="training-composer-results app-scrollbar" aria-label="Questions disponibles">
-            <div className="training-composer-panel-head">
-              <div>
-                <strong>
-                  {selectedOnly ? "Questions sélectionnées" : "Résultats"}
-                </strong>
-                <span>
-                  {selectedOnly
-                    ? questionCountLabel(selectedItems.length)
-                    : `${candidateItems.length} / ${candidateTotal}`}
-                </span>
-              </div>
-            </div>
-
-            {selectedLoading && (
-              <div className="training-selector-state">
-                Chargement de la sélection...
-              </div>
-            )}
-
-            {candidatesLoading && !selectedOnly && (
-              <div className="training-selector-state">
-                Recherche...
-              </div>
-            )}
-
-            {candidateError && (
-              <div className="training-selector-error" role="alert">
-                {candidateError}
-              </div>
-            )}
-
-            {!selectedLoading && !candidatesLoading && !candidateError && (
-              resultSections.length === 0 ? (
-                <div className="training-composer-empty">
-                  <strong>
-                    {selectedOnly
-                      ? "Aucune question sélectionnée."
-                      : "Aucun résultat."}
-                  </strong>
-                  <button
-                    type="button"
-                    className="training-secondary-button"
-                    onClick={clearFilters}
-                  >
-                    Effacer les filtres
-                  </button>
-                </div>
-              ) : (
-                <div className="training-composer-section-list">
-                  {resultSections.map(section => {
-                    const expanded = expandedResultSections.has(section.key);
-                    const sectionIds = section.questions.map(question => question.id);
-                    const selectedCount = sectionIds.filter(id =>
-                      selectedIds.has(id)
-                    ).length;
-                    const allSelected = (
-                      section.questions.length > 0 &&
-                      selectedCount === section.questions.length
-                    );
-
-                    return (
-                      <section
-                        className="training-composer-section"
-                        key={section.key}
-                      >
-                        <div className="training-composer-section-head">
-                          <button
-                            type="button"
-                            aria-expanded={expanded}
-                            aria-label={`${expanded ? "Replier" : "Déplier"} ${section.title}`}
-                            className="training-composer-section-toggle"
-                            onClick={() => toggleSectionExpanded(section.key, "results")}
-                          >
-                            <span
-                              aria-hidden="true"
-                              className={`training-composer-section-caret${expanded ? " is-expanded" : ""}`}
-                            >
-                              &gt;
-                            </span>
-                            <span>
-                              <strong>{section.title}</strong>
-                              <span>{selectedCount} / {section.questions.length}</span>
-                            </span>
-                          </button>
-                          <div className="training-composer-section-actions">
-                            <button
-                              type="button"
-                              className="training-secondary-button"
-                              onClick={() => setQuestionsSelected(section.questions, !allSelected)}
-                            >
-                              {allSelected
-                                ? "Retirer le groupe visible"
-                                : "Ajouter le groupe visible"}
-                            </button>
-                          </div>
-                        </div>
-
-                        {expanded && (
-                          <div className="training-composer-result-list">
-                            {section.questions.map(question => (
-                              <ComposerQuestionRow
-                                key={question.id}
-                                onToggle={toggleQuestion}
-                                question={question}
-                                selected={selectedIds.has(question.id)}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    );
-                  })}
-                </div>
-              )
-            )}
-
-            {hasMoreCandidates && !candidatesLoading && !candidateError && (
-              <button
-                type="button"
-                className="training-secondary-button training-composer-load-more"
-                disabled={loadingMore}
-                onClick={loadMoreCandidates}
-              >
-                {loadingMore ? "Chargement..." : "Charger plus"}
-              </button>
-            )}
-          </main>
-
-          <aside className="training-composer-tray app-scrollbar" aria-label="Questions sélectionnées">
-            <div className="training-composer-panel-head">
-              <div>
-                <strong>Sélection</strong>
-                <span>{questionCountLabel(selectedItems.length)}</span>
-              </div>
-              <button
-                type="button"
-                className="training-secondary-button"
-                disabled={selectedItems.length === 0}
-                onClick={() => setSelectedItemsById(new Map())}
-              >
-                Vider
-              </button>
-            </div>
-
-            {traySections.length === 0 ? (
-              <div className="training-composer-empty">
-                <strong>Aucune question.</strong>
-              </div>
-            ) : (
-              <div className="training-composer-tray-list">
-                {traySections.map(section => (
-                  <section
-                    className="training-composer-tray-section"
-                    key={section.key}
-                  >
-                    <div className="training-composer-tray-section-head">
-                      <button
-                        type="button"
-                        aria-expanded={expandedTraySections.has(section.key)}
-                        aria-label={`${expandedTraySections.has(section.key) ? "Replier" : "Déplier"} ${section.title}`}
-                        className="training-composer-section-toggle"
-                        onClick={() => toggleSectionExpanded(section.key, "tray")}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`training-composer-section-caret${expandedTraySections.has(section.key) ? " is-expanded" : ""}`}
-                        >
-                          &gt;
-                        </span>
-                        <span>
-                          <strong>{section.title}</strong>
-                          <span>{questionCountLabel(section.questions.length)}</span>
-                        </span>
-                      </button>
-                      <div className="training-composer-section-actions">
-                        <button
-                          type="button"
-                          className="training-secondary-button"
-                          onClick={() => setQuestionsSelected(section.questions, false)}
-                        >
-                          Retirer le groupe
-                        </button>
-                      </div>
-                    </div>
-
-                    {expandedTraySections.has(section.key) && (
-                      <div className="training-composer-tray-items">
-                        {section.questions.map(question => (
-                          <ComposerQuestionRow
-                            key={question.id}
-                            onRemove={removeSelectedQuestion}
-                            question={question}
-                            tray
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                ))}
-              </div>
-            )}
-          </aside>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 
 function ModeAction({ config, group, mode, startScope }) {
@@ -1385,8 +556,6 @@ function ScopeSelector({
 }) {
   const [scopeType, setScopeType] = useState("group");
   const [search, setSearch] = useState("");
-  const [composerCollection, setComposerCollection] = useState(null);
-  const [composerOpen, setComposerOpen] = useState(false);
   const normalizedSearch = normalizeText(search);
   const groups = useMemo(
     () => (scopes.groups || []).filter(group =>
@@ -1402,7 +571,7 @@ function ScopeSelector({
   );
   const tags = useMemo(
     () => (scopes.tags || []).filter(tag =>
-      normalizeText(tag.name).includes(normalizedSearch)
+      normalizeText(tag.label || tag.name).includes(normalizedSearch)
     ),
     [normalizedSearch, scopes.tags]
   );
@@ -1437,7 +606,7 @@ function ScopeSelector({
   }, [groups, scopeType, setSelectedGroupId]);
 
   useEffect(() => {
-    if (scopeType !== "collection" || composerOpen) {
+    if (scopeType !== "collection") {
       return;
     }
 
@@ -1450,54 +619,12 @@ function ScopeSelector({
 
       return collections[0].id;
     });
-  }, [composerOpen, collections, scopeType, setSelectedCollectionId]);
+  }, [collections, scopeType, setSelectedCollectionId]);
 
-  function openNewCollection() {
-    setScopeType("collection");
-    setComposerCollection(null);
-    setComposerOpen(true);
-  }
 
-  function openEditCollection(collection) {
-    if (collection?.generated) {
-      return;
-    }
 
-    setComposerCollection(collection);
-    setComposerOpen(true);
-  }
 
-  async function handleCollectionSaved() {
-    await loadScopes();
-    setComposerOpen(false);
-    setComposerCollection(null);
-  }
 
-  async function handleDeleteCollection(collection) {
-    if (!window.confirm(`Supprimer la collection "${collection.name}" ?`)) {
-      return;
-    }
-
-    await deleteCollection(collection.id);
-    setSelectedCollectionId(null);
-    await loadScopes();
-  }
-
-  if (!scopesLoading && !scopesError && scopeType === "collection" && composerOpen) {
-    return (
-      <CollectionComposer
-        collection={composerCollection}
-        filterGroups={scopes.groups || []}
-        filterTags={scopes.tags || []}
-        onCancel={() => {
-          setComposerOpen(false);
-          setComposerCollection(null);
-        }}
-        onSaved={handleCollectionSaved}
-        setSelectedCollectionId={setSelectedCollectionId}
-      />
-    );
-  }
 
   return (
     <div className="training-selector-panel">
@@ -1539,7 +666,6 @@ function ScopeSelector({
                 aria-pressed={scopeType === "group"}
                 onClick={() => {
                   setScopeType("group");
-                  setComposerOpen(false);
                 }}
                 className={scopeType === "group" ? "is-active" : ""}
               >
@@ -1551,29 +677,19 @@ function ScopeSelector({
                 onClick={() => setScopeType("collection")}
                 className={scopeType === "collection" ? "is-active" : ""}
               >
-                Collections
+                Playlists
               </button>
               <button
                 type="button"
                 aria-pressed={scopeType === "tag"}
                 onClick={() => {
                   setScopeType("tag");
-                  setComposerOpen(false);
                 }}
                 className={scopeType === "tag" ? "is-active" : ""}
               >
                 Tags
               </button>
             </div>
-            {scopeType === "collection" && (
-              <button
-                type="button"
-                className="training-secondary-button"
-                onClick={openNewCollection}
-              >
-                Nouvelle collection
-              </button>
-            )}
             <input
               aria-label="Rechercher un entrainement"
               value={search}
@@ -1613,8 +729,8 @@ function ScopeSelector({
                 </>
               ) : scopeType === "collection" ? (
                 <>
-                  <section className="training-list-column app-scrollbar" aria-label="Liste des collections">
-                    <div className="training-scope-grid" aria-label="Collections d'entrainement">
+                  <section className="training-list-column app-scrollbar" aria-label="Liste des playlists">
+                    <div className="training-scope-grid" aria-label="Playlists d'entrainement">
                       {collections.map(collection => (
                         <CollectionTile
                           collection={collection}
@@ -1629,8 +745,6 @@ function ScopeSelector({
                   <div className="training-detail-column app-scrollbar">
                     <CollectionDetailPanel
                       collection={selectedCollection}
-                      onDelete={handleDeleteCollection}
-                      onEdit={openEditCollection}
                       startScope={startScope}
                     />
                   </div>
@@ -1640,7 +754,7 @@ function ScopeSelector({
                   <div className="training-scope-grid" aria-label="Tags d'entrainement">
                     {tags.map(tag => (
                       <TagTile
-                        key={tag.name}
+                        key={tag.id || tag.key || tag.name}
                         startScope={startScope}
                         tag={tag}
                       />
@@ -1657,8 +771,75 @@ function ScopeSelector({
 }
 
 
+function PauseResumeButton({ session, style }) {
+  if (session.isPaused) {
+    return (
+      <button
+        type="button"
+        onClick={session.resumeRun}
+        style={{ ...primaryButtonStyle, ...style }}
+      >
+        Reprendre
+      </button>
+    );
+  }
+
+  const disabled = !session.canPause;
+
+  return (
+    <button
+      type="button"
+      onClick={session.pauseRun}
+      disabled={disabled}
+      style={disabled ? { ...disabledButtonStyle, ...style } : { ...buttonStyle, ...style }}
+    >
+      Pause ({session.pausesRemaining}/{session.maxPauses})
+    </button>
+  );
+}
+
+function PauseOverlay({ session }) {
+  if (!session.isPaused) return null;
+
+  return (
+    <div
+      data-training-pause-overlay
+      style={{
+        alignItems: "center",
+        background: "rgba(8, 8, 8, 0.9)",
+        borderRadius: "8px",
+        bottom: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        justifyContent: "center",
+        left: 0,
+        position: "absolute",
+        right: 0,
+        top: 0,
+        zIndex: 5
+      }}
+    >
+      <div
+        style={{
+          color: "#f0c36a",
+          fontSize: "13px",
+          fontWeight: 900,
+          textTransform: "uppercase"
+        }}
+      >
+        Entraînement en pause
+      </div>
+      <button type="button" onClick={session.resumeRun} style={primaryButtonStyle}>
+        Reprendre
+      </button>
+    </div>
+  );
+}
+
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
+  const labelForTag = useTagLabels();
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const currentQuestion = session.questions[session.currentIndex];
@@ -1823,7 +1004,7 @@ export default function TrainingSession({ setMode }) {
                       padding: "3px 8px"
                     }}
                   >
-                    #{tag}
+                    #{labelForTag(tag)}
                   </span>
                 ))}
               </div>
@@ -1834,10 +1015,21 @@ export default function TrainingSession({ setMode }) {
               style={{
                 alignItems: "center",
                 display: "flex",
+                gap: "8px",
                 justifyContent: "flex-end",
                 minWidth: 0
               }}
             >
+              {compactTrainingElapsedMs !== null && (
+                <PauseResumeButton
+                  session={session}
+                  style={{
+                    borderRadius: "9px",
+                    fontSize: "13px",
+                    padding: "8px 11px"
+                  }}
+                />
+              )}
               {compactTrainingElapsedMs !== null ? (
                 <TrainingTimerPanel
                   elapsedMs={compactTrainingElapsedMs}
@@ -1868,7 +1060,8 @@ export default function TrainingSession({ setMode }) {
             style={{
               flex: 1,
               minHeight: 0,
-              overflow: "hidden"
+              overflow: "hidden",
+              position: "relative"
             }}
           >
             <ReviewQuestionRenderer
@@ -1894,6 +1087,7 @@ export default function TrainingSession({ setMode }) {
               trainingBestTimeMs={null}
               compactVisualLayout
             />
+            <PauseOverlay session={session} />
           </div>
         </div>
       </div>
@@ -2132,13 +1326,22 @@ export default function TrainingSession({ setMode }) {
                   style={{
                     alignItems: "center",
                     display: "flex",
+                    flexWrap: "wrap",
                     justifyContent: "space-between",
                     gap: "16px",
                     marginBottom: "18px"
                   }}
                 >
-                  <div style={{ color: "#888", fontSize: "14px" }}>
-                    Question {session.currentIndex + 1} / {session.questions.length}
+                  <div style={{ alignItems: "center", display: "flex", gap: "12px" }}>
+                    <div style={{ color: "#888", fontSize: "14px", whiteSpace: "nowrap" }}>
+                      Question {session.currentIndex + 1} / {session.questions.length}
+                    </div>
+                    {session.recordEligible && (
+                      <PauseResumeButton
+                        session={session}
+                        style={{ fontSize: "12px", padding: "7px 10px" }}
+                      />
+                    )}
                   </div>
 
                   <div
@@ -2161,34 +1364,37 @@ export default function TrainingSession({ setMode }) {
                           padding: "4px 10px"
                         }}
                       >
-                        #{tag}
+                        #{labelForTag(tag)}
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <ReviewQuestionRenderer
-                  q={currentQuestion}
-                  currentIndex={session.currentIndex}
-                  showAnswer={session.showAnswer}
-                  setShowAnswer={session.setShowAnswer}
-                  handleTextAnswer={session.handleTextAnswer}
-                  currentTextQuality={null}
-                  selectedTextQuality={null}
-                  handleMapComplete={session.handleMapComplete}
-                  handleImageComplete={session.handleImageComplete}
-                  handleTimelineComplete={session.handleTimelineComplete}
-                  handleSequenceComplete={session.handleSequenceComplete}
-                  onAnsweringComplete={session.markAnsweringComplete}
-                  submitMapAnswer={session.submitMapTrainingAnswer}
-                  submitMediaAnswer={session.submitMediaTrainingAnswer}
-                  submitTextAnswer={session.submitTextTrainingAnswer}
-                  submitTimelineAnswer={session.submitTimelineTrainingAnswer}
-                  submitSequenceAnswer={session.submitSequenceTrainingAnswer}
-                  trainingMode
-                  trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
-                  trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
-                />
+                <div style={{ position: "relative" }}>
+                  <ReviewQuestionRenderer
+                    q={currentQuestion}
+                    currentIndex={session.currentIndex}
+                    showAnswer={session.showAnswer}
+                    setShowAnswer={session.setShowAnswer}
+                    handleTextAnswer={session.handleTextAnswer}
+                    currentTextQuality={null}
+                    selectedTextQuality={null}
+                    handleMapComplete={session.handleMapComplete}
+                    handleImageComplete={session.handleImageComplete}
+                    handleTimelineComplete={session.handleTimelineComplete}
+                    handleSequenceComplete={session.handleSequenceComplete}
+                    onAnsweringComplete={session.markAnsweringComplete}
+                    submitMapAnswer={session.submitMapTrainingAnswer}
+                    submitMediaAnswer={session.submitMediaTrainingAnswer}
+                    submitTextAnswer={session.submitTextTrainingAnswer}
+                    submitTimelineAnswer={session.submitTimelineTrainingAnswer}
+                    submitSequenceAnswer={session.submitSequenceTrainingAnswer}
+                    trainingMode
+                    trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
+                    trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
+                  />
+                  <PauseOverlay session={session} />
+                </div>
               </>
             )}
           </>

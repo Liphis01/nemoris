@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 10">
+  <path id="zone-a" d="M0 0H10V10H0Z"/>
+  <path id="zone-b" d="M20 0H30V10H20Z"/>
+  <g id="answer-labels">
+    <path d="M12 2H18V8H12Z"/>
+  </g>
+</svg>

@@ -6,6 +6,7 @@ const windowApi = {
   toggleMaximize: vi.fn(),
   unmaximize: vi.fn(),
   close: vi.fn(),
+  isMinimized: vi.fn(() => Promise.resolve(false)),
   isMaximized: vi.fn(() => Promise.resolve(true)),
   isResizable: vi.fn(() => Promise.resolve(true)),
   setResizable: vi.fn(() => Promise.resolve()),
@@ -38,6 +39,7 @@ describe("DesktopTitleBar", () => {
   describe("inside the Tauri shell", () => {
     beforeEach(() => {
       window.__NEMORIS_BACKEND__ = "http://127.0.0.1:1234";
+      windowApi.isMinimized.mockResolvedValue(false);
       windowApi.isMaximized.mockResolvedValue(true);
       windowApi.isResizable.mockResolvedValue(true);
     });
@@ -66,7 +68,8 @@ describe("DesktopTitleBar", () => {
       await waitFor(() => expect(windowApi.isMaximized).toHaveBeenCalled());
 
       fireEvent.click(getByLabelText("Réduire"));
-      expect(windowApi.minimize).toHaveBeenCalled();
+      await waitFor(() => expect(windowApi.setResizable).toHaveBeenCalledWith(true));
+      await waitFor(() => expect(windowApi.minimize).toHaveBeenCalled());
 
       fireEvent.click(getByLabelText("Restaurer"));
       await waitFor(() => expect(windowApi.setResizable).toHaveBeenCalledWith(true));
@@ -74,6 +77,16 @@ describe("DesktopTitleBar", () => {
 
       fireEvent.click(getByLabelText("Fermer"));
       expect(windowApi.close).toHaveBeenCalled();
+    });
+
+    it("keeps minimized maximized windows resizable for taskbar restore", async () => {
+      windowApi.isMinimized.mockResolvedValue(true);
+      windowApi.isResizable.mockResolvedValue(false);
+
+      render(<DesktopTitleBar />);
+
+      await waitFor(() => expect(windowApi.isMinimized).toHaveBeenCalled());
+      await waitFor(() => expect(windowApi.setResizable).toHaveBeenCalledWith(true));
     });
 
     it("restores a maximized non-resizable window on titlebar double-click", async () => {

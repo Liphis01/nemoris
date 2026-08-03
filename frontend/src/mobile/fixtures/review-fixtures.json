@@ -1,0 +1,102 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "difficulty": 6.4133,
+        "fsrs_card": {
+          "card_id": 42,
+          "difficulty": 6.4133,
+          "due": "2026-07-29T12:00:00+00:00",
+          "last_review": "2026-07-28T12:00:00+00:00",
+          "stability": 0.212,
+          "state": 2,
+          "step": null
+        },
+        "fsrs_rating": 1,
+        "fsrs_state": 2,
+        "fsrs_version": "6.3.1",
+        "interval": 0,
+        "next_review": "2026-07-28",
+        "stability": 0.212
+      },
+      "name": "initial_quality_0",
+      "quality": 0,
+      "question_id": 42,
+      "today": "2026-07-28"
+    },
+    {
+      "expected": {
+        "difficulty": 5.112170705601056,
+        "fsrs_card": {
+          "card_id": 42,
+          "difficulty": 5.112170705601056,
+          "due": "2026-07-29T12:00:00+00:00",
+          "last_review": "2026-07-28T12:00:00+00:00",
+          "stability": 1.2931,
+          "state": 2,
+          "step": null
+        },
+        "fsrs_rating": 2,
+        "fsrs_state": 2,
+        "fsrs_version": "6.3.1",
+        "interval": 1,
+        "next_review": "2026-07-29",
+        "stability": 1.2931
+      },
+      "name": "initial_quality_1",
+      "quality": 1,
+      "question_id": 42,
+      "today": "2026-07-28"
+    },
+    {
+      "expected": {
+        "difficulty": 2.118103970459016,
+        "fsrs_card": {
+          "card_id": 42,
+          "difficulty": 2.118103970459016,
+          "due": "2026-07-30T12:00:00+00:00",
+          "last_review": "2026-07-28T12:00:00+00:00",
+          "stability": 2.3065,
+          "state": 2,
+          "step": null
+        },
+        "fsrs_rating": 3,
+        "fsrs_state": 2,
+        "fsrs_version": "6.3.1",
+        "interval": 2,
+        "next_review": "2026-07-30",
+        "stability": 2.3065
+      },
+      "name": "initial_quality_2",
+      "quality": 2,
+      "question_id": 42,
+      "today": "2026-07-28"
+    },
+    {
+      "expected": {
+        "difficulty": 1.0,
+        "fsrs_card": {
+          "card_id": 42,
+          "difficulty": 1.0,
+          "due": "2026-08-05T12:00:00+00:00",
+          "last_review": "2026-07-28T12:00:00+00:00",
+          "stability": 8.2956,
+          "state": 2,
+          "step": null
+        },
+        "fsrs_rating": 4,
+        "fsrs_state": 2,
+        "fsrs_version": "6.3.1",
+        "interval": 8,
+        "next_review": "2026-08-05",
+        "stability": 8.2956
+      },
+      "name": "initial_quality_3",
+      "quality": 3,
+      "question_id": 42,
+      "today": "2026-07-28"
+    }
+  ],
+  "fsrs_version": "6.3.1",
+  "schema": "nemoris-mobile-review-fixtures/v1"
+}

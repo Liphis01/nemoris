@@ -1,0 +1,210 @@
+{
+  "cases": [
+    {
+      "file": "clean_codes.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic",
+      "expected_count": 3,
+      "expected_route": "automatic",
+      "sha256": "5168947adb9545ed8d39087e9bdc6db3933dfc9cde8372cf0b3e940871b9057a",
+      "source_url": null
+    },
+    {
+      "file": "multipart_group_hit_css.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic",
+      "expected_count": 1,
+      "expected_route": "automatic",
+      "sha256": "1b27ef3b0b30a8387836d70411ea96c2b880d5109d16a14b6a60b7b3ec5af796",
+      "source_url": null
+    },
+    {
+      "file": "local_use.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "sha256": "83651d08ae709394c9c5bb22a0dbc7ceecd3a50b0de61e8f7ee94695fe2338c4",
+      "source_url": null
+    },
+    {
+      "file": "no_codes.svg",
+      "license": "CC0-1.0",
+      "ontology": "merged synthetic geometry",
+      "expected_count": null,
+      "expected_route": "assisted",
+      "sha256": "370b25b9f1c6ab8ad8fbd28faf08b61e7d538da2c61498f09a5fa85dcccca75e",
+      "source_url": null
+    },
+    {
+      "file": "raster_in_svg.svg",
+      "license": "CC0-1.0",
+      "ontology": "raster wrapper",
+      "expected_count": null,
+      "expected_route": "manual",
+      "sha256": "857c7b781f6bfdf98c098ed201a0a08429166bf451d6aaa55ad0e61f00b53d21",
+      "source_url": null
+    },
+    {
+      "file": "malicious.svg",
+      "license": "CC0-1.0",
+      "ontology": "security",
+      "expected_count": null,
+      "expected_route": "parser_failure",
+      "sha256": "5c91704a1cb66836ba7acd90df4123265b21997b5350729ce017cb7f7ca16562",
+      "source_url": null
+    },
+    {
+      "file": "unsupported_constructs.svg",
+      "license": "CC0-1.0",
+      "ontology": "unsupported filter, animation and foreignObject",
+      "expected_count": 1,
+      "expected_route": "automatic",
+      "sha256": "ddad398b54970e6313212b8fc371fdda12a7e631bee116d07eb472255c8a562c",
+      "source_url": null
+    },
+    {
+      "file": "unsafe_css.svg",
+      "license": "CC0-1.0",
+      "ontology": "malicious CSS and event attribute",
+      "expected_count": 1,
+      "expected_route": "automatic",
+      "sha256": "1470e53c9f41e29a1c690249e2ad6fc2813138fafebc4bc9d84aaae389af1773",
+      "source_url": null
+    }
+  ],
+  "m2_cases": [
+    {
+      "file": "generic_ids.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "sha256": "8a2fcb3694376726e4dfb93aa936102aa7f186502525f4b18e46e8e8e032e11d",
+      "source_url": null
+    },
+    {
+      "file": "generic_groups.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "sha256": "164be94b6232e39296c627c507997835ba76cc118ac0d1c51a1b9fdb0fe9be86",
+      "source_url": null
+    },
+    {
+      "file": "jetpunk_countries.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic JetPunk-compatible countries",
+      "expected_count": 3,
+      "expected_route": "automatic",
+      "sha256": "eca25948ec820ff4a5c5920ed6ae7ab6e4265bcf218bcef929947111f083fa58",
+      "source_url": "https://www.jetpunk.com/svg-guide/advanced-inkscape?device=desktop"
+    },
+    {
+      "file": "jetpunk_multilayer.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic JetPunk-compatible countries and capitals",
+      "expected_count": 2,
+      "expected_route": "assisted",
+      "sha256": "833361d53fb8f657f7e5b486635f09b0e16fbb73d7583a3ccef50c809375d788",
+      "source_url": "https://www.jetpunk.com/svg-guide/advanced-inkscape?device=desktop"
+    },
+    {
+      "file": "semantic_classes.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic multipart classes",
+      "expected_count": 2,
+      "expected_route": "assisted",
+      "sha256": "d637c84f6751a3e79c1d2ed635eef380c5527caef90d1449188bd2bfe41dda5a",
+      "source_url": null
+    },
+    {
+      "file": "geometry_layer.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic geometry only",
+      "expected_count": 3,
+      "expected_route": "assisted",
+      "sha256": "f5cf0f1bebed22bc23ded4a1507ad9c8ab6368ad278404dd336bed97a4c04d17",
+      "source_url": null
+    },
+    {
+      "file": "generic_painted_labels.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic painted layer with nearby text labels",
+      "expected_count": 3,
+      "expected_route": "assisted",
+      "sha256": "551eedf62501241e0b47021d026f98ee85d782efcebf586305935fe87be763e4",
+      "source_url": null
+    },
+    {
+      "file": "path_label_layer.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic IDs with path label layer",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "sha256": "eef4f37ff69e943550ffbc0f8ad2f1d01ac62f3436c91eef26352cee4685c029",
+      "source_url": null
+    },
+    {
+      "file": "dimensions_without_viewbox.svg",
+      "license": "CC0-1.0",
+      "ontology": "generic IDs with dimensions but no viewBox",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "sha256": "c57ce8ae6644bc78e849ace72880fb1ba4dff76d7694c1655400eb10c408a580",
+      "source_url": null
+    },
+    {
+      "file": "simplemaps_duplicate_labels.svg",
+      "license": "CC0-1.0",
+      "ontology": "SimpleMaps-style feature IDs, numeric points, and duplicate label anchors",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "sha256": "7e4ab703371379bf056d995a5cab2e753f2c650f3f17a6713ecc42d4981903c5",
+      "source_url": "https://simplemaps.com/resources/svg-license"
+    }
+  ],
+  "m3a_cases": [
+    {
+      "file": "layered_provinces_repair.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic generated-ID province layer with decoration",
+      "expected_count": 3,
+      "expected_route": "assisted",
+      "expected_initial_zone_count": 3,
+      "expected_required_unresolved_count": 0,
+      "maximum_repair_action_count": 0,
+      "sha256": "f34a2ae4b8af0dd3ad0533ce501365b6c2c3aa4a602fd8fb908750b3875f14cc",
+      "source_url": null
+    },
+    {
+      "file": "simplemaps_duplicate_labels.svg",
+      "license": "CC0-1.0",
+      "ontology": "synthetic SimpleMaps points and duplicate label anchors",
+      "expected_count": 2,
+      "expected_route": "automatic",
+      "expected_initial_zone_count": 2,
+      "expected_required_unresolved_count": 2,
+      "repair_script": [
+        {
+          "type": "set_role",
+          "select": {
+            "layer": "points",
+            "risk": "required"
+          },
+          "role": "decoration"
+        }
+      ],
+      "maximum_repair_action_count": 1,
+      "sha256": "7e4ab703371379bf056d995a5cab2e753f2c650f3f17a6713ecc42d4981903c5",
+      "source_url": "https://simplemaps.com/resources/svg-license"
+    }
+  ],
+  "jetpunk": {
+    "assets_committed": false,
+    "catalogue_urls": [],
+    "conventions_url": "https://www.jetpunk.com/svg-guide/advanced-inkscape?device=desktop",
+    "download_failures_are_importer_failures": false
+  }
+}

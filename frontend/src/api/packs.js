@@ -1,25 +1,8 @@
-import { requestJson, requestOk } from "./http";
+import { requestJson } from "./http";
 
 
 export function listInstalledPacks() {
   return requestJson("/packs");
-}
-
-export function getPackCatalogSettings() {
-  return requestJson("/packs/catalog-settings");
-}
-
-export function savePackCatalogSettings(settings) {
-  const payload = typeof settings === "string" ? { url: settings } : settings;
-
-  return requestJson("/packs/catalog-settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      url: payload?.url || "",
-      key: payload?.key || ""
-    })
-  });
 }
 
 export function searchPackCatalog(params = {}) {
@@ -83,6 +66,15 @@ export function savePackDraft(groupId, payload) {
 }
 
 
+export function savePlaylistDraft(collectionId, payload) {
+  return requestJson(`/packs/playlists/${collectionId}/publish/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+
 export function publishPackDraft(packGuid) {
   return requestJson(`/packs/catalog/publish/${packGuid}`, {
     method: "POST"
@@ -90,33 +82,30 @@ export function publishPackDraft(packGuid) {
 }
 
 
-function filenameFromDisposition(header) {
-  if (!header) {
-    return null;
-  }
-
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-
-  if (!match) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
+export function previewPackRelease(packGuid, payload) {
+  return requestJson(`/packs/catalog/publish/${packGuid}/release-preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 }
 
-function safeFilenameSlug(value) {
-  const slug = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 
-  return slug || "pack";
+/**
+ * Upload the pack and make it public in one step.
+ *
+ * There is no user-facing draft state: nothing happens between saving and
+ * publishing (no review, no moderation), and unpublishing is already a
+ * one-click reversible undo, so a separate "brouillon" step bought nothing.
+ */
+export async function publishPack(source, payload) {
+  const draft = source.collectionId
+    ? await savePlaylistDraft(source.collectionId, payload)
+    : await savePackDraft(source.groupId, payload);
+
+  return publishPackDraft(draft.publication.pack_guid);
 }
+
 
 // Plain fetch, not requestJson: these hit an external catalog URL, not this
 // app's own backend, so apiUrl()'s base-URL prefixing must not apply.
@@ -166,26 +155,58 @@ export function unsubscribePack(packGuid, { deleteContent = false } = {}) {
   );
 }
 
-export async function exportPackGroup(groupId, payload) {
-  const response = await requestOk(`/packs/${groupId}/export`, {
+
+export function unpublishPack(packGuid) {
+  return requestJson(`/packs/catalog/publish/${packGuid}/unpublish`, {
+    method: "POST"
+  });
+}
+
+
+export function deletePackPublication(packGuid) {
+  return requestJson(`/packs/catalog/publish/${packGuid}`, {
+    method: "DELETE"
+  });
+}
+
+
+export function recordPackInstall(packGuid, installedVersion) {
+  return requestJson(`/packs/catalog/${packGuid}/record-install`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ installed_version: installedVersion })
   });
-  const blob = await response.blob();
-  const fallback = `${safeFilenameSlug(payload?.name)}-v${payload?.version || 1}.zip`;
-  const filename =
-    filenameFromDisposition(response.headers.get("Content-Disposition")) ||
-    fallback;
+}
 
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
 
-  return filename;
+export function backfillPackInstalls() {
+  return requestJson("/packs/catalog/backfill-installs", { method: "POST" });
+}
+
+
+export function getMyPackStatus(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/my-status`);
+}
+
+
+export function listPackComments(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/comments`);
+}
+
+
+export function addPackComment(packGuid, body) {
+  return requestJson(`/packs/catalog/${packGuid}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body })
+  });
+}
+
+
+export function ratePack(packGuid, rating) {
+  return requestJson(`/packs/catalog/${packGuid}/rating`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating })
+  });
 }

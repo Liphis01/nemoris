@@ -15,8 +15,8 @@ const bannerStyle = {
   border: "1px solid #374151",
   borderRadius: "8px",
   padding: "10px 16px",
-  marginBottom: "16px",
-  fontSize: "14px"
+  fontSize: "14px",
+  pointerEvents: "auto"
 };
 
 export default function UpdateBanner() {

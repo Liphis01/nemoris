@@ -13,6 +13,24 @@ const svgMarkup = `
   </svg>
 `;
 
+const v2SvgMarkup = `
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+    <path data-nemoris-shape="s000001" data-code="ignored-source-answer" d="M0 0h10v10H0z" />
+    <path data-nemoris-shape="s000002" d="M10 0h10v10H10z" />
+  </svg>
+`;
+
+const v2Manifest = {
+  schema_version: 2,
+  canonicalizer_version: 1,
+  zones: [{
+    code: "logical",
+    shape_ids: ["s000001"],
+    hit_shape_ids: ["s000002"],
+    source_keys: ["data-code:logical"]
+  }]
+};
+
 function mockSvgFetch(markup = svgMarkup) {
   vi.stubGlobal(
     "fetch",
@@ -204,5 +222,54 @@ describe("SvgMap zone hover colors", () => {
 
     fireEvent.click(dueZone);
     expect(onSelect).toHaveBeenCalledWith("due");
+  });
+});
+
+describe("SvgMap package v2", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("binds canonical shape ids and ignores source semantics", async () => {
+    mockSvgFetch(v2SvgMarkup);
+    const onSelect = vi.fn();
+    const onCodesLoaded = vi.fn();
+    const { container } = renderTestMap({
+      mapManifest: v2Manifest,
+      onSelect,
+      onCodesLoaded
+    });
+
+    await waitFor(() => {
+      expect(onCodesLoaded).toHaveBeenCalledWith(["logical"]);
+    });
+    fireEvent.click(container.querySelector('[data-nemoris-shape="s000001"]'));
+    fireEvent.click(container.querySelector('[data-nemoris-shape="s000002"]'));
+
+    expect(onSelect).toHaveBeenNthCalledWith(1, "logical");
+    expect(onSelect).toHaveBeenNthCalledWith(2, "logical");
+    expect(onSelect).not.toHaveBeenCalledWith("ignored-source-answer");
+  });
+
+  it("fails closed when a manifest shape is missing", async () => {
+    mockSvgFetch(v2SvgMarkup);
+    const missingManifest = {
+      ...v2Manifest,
+      zones: [{
+        ...v2Manifest.zones[0],
+        shape_ids: ["s999999"],
+        hit_shape_ids: []
+      }]
+    };
+    const { container, findByRole } = renderTestMap({
+      mapManifest: missingManifest
+    });
+
+    expect(await findByRole("status")).toHaveTextContent(
+      "Map manifest does not match its SVG"
+    );
+    expect(container.querySelector("svg")).not.toBeInTheDocument();
   });
 });
