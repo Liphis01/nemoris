@@ -336,6 +336,23 @@ export default function ReviewSession({
                   Révision
                 </div>
               )}
+              {currentQuestion.name && (
+                <strong
+                  style={{
+                    color: "#f3f3f3",
+                    display: "block",
+                    fontSize: "17px",
+                    fontWeight: 900,
+                    lineHeight: 1.1,
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {currentQuestion.name}
+                </strong>
+              )}
               <div
                 style={{
                   color: "#888",
@@ -586,6 +603,8 @@ export default function ReviewSession({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                flexWrap: "wrap",
+                rowGap: "10px",
                 marginBottom: "18px"
               }}
             >
@@ -601,7 +620,8 @@ export default function ReviewSession({
                 <div
                   style={{
                     color: "#888",
-                    fontSize: "14px"
+                    fontSize: "14px",
+                    whiteSpace: "nowrap"
                   }}
                 >
                   Question {questionNumber} / {baseQuestionTotal}

@@ -82,8 +82,10 @@ describe("ReviewSession", () => {
     expect(renderer.style.flex).toBe("1 1 0%");
     expect(actions).toContainElement(screen.getByRole("button", { name: /Retour/ }));
     expect(status).toHaveTextContent("Révision");
+    // The group name now lives in the session bar's status block, once,
+    // instead of being repeated inside MediaReview's own compact header.
+    expect(status).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("Question 1 / 1");
-    expect(status).not.toHaveTextContent("Flags");
     expect(shell).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("#Geo");
     expect(bar).not.toHaveTextContent("Image");

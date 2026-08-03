@@ -20,7 +20,6 @@
 - mettre une ou deux stats dans les gros boutons de qualité des modes qcm
 - pouvoir zoomer sur les images pour les questions isolées
 - ne pas nécessairement reset les records après un edit (et s'interroger sur comment gérer les records sur les packs importés (leaderboard possible ?))
-- Le header de certaines questions est rempli et déborde
 
 ## bugs
 

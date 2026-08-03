@@ -105,3 +105,33 @@
     font-size: 25px;
   }
 }
+
+/* The compact session bar (map/media/sequence/text-group review) is a fixed
+   3-column grid with a 280px-minimum center column, and the status block is
+   centered over the whole bar regardless of column widths. Below this width
+   the side columns no longer have room for their content (back/skip buttons),
+   which starts overlapping the centered title instead of shrinking. Stack
+   everything into full-width rows instead. */
+@media (max-width: 720px) {
+  [data-visual-session-bar] {
+    grid-template-columns: minmax(0, 1fr) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 10px !important;
+  }
+
+  [data-visual-session-status] {
+    left: auto !important;
+    max-width: none !important;
+    pointer-events: auto !important;
+    position: static !important;
+    top: auto !important;
+    transform: none !important;
+    width: 100% !important;
+  }
+
+  [data-visual-session-actions],
+  [data-visual-session-secondary] {
+    justify-content: center !important;
+  }
+}

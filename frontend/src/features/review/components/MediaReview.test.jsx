@@ -524,7 +524,9 @@ describe("MediaReview answer label preview", () => {
       minHeight: "0",
       overflow: "hidden"
     });
-    expect(header).toHaveTextContent("Flags");
+    // The group name already lives in the session bar above this card, so the
+    // compact header itself carries no title chrome at all — just the count.
+    expect(header).not.toHaveTextContent("Flags");
     expect(header).not.toHaveTextContent("Progression");
     expect(header).not.toHaveTextContent("IMAGE");
     expect(header).not.toHaveTextContent("Tout taper");

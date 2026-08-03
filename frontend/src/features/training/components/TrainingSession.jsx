@@ -1326,13 +1326,14 @@ export default function TrainingSession({ setMode }) {
                   style={{
                     alignItems: "center",
                     display: "flex",
+                    flexWrap: "wrap",
                     justifyContent: "space-between",
                     gap: "16px",
                     marginBottom: "18px"
                   }}
                 >
                   <div style={{ alignItems: "center", display: "flex", gap: "12px" }}>
-                    <div style={{ color: "#888", fontSize: "14px" }}>
+                    <div style={{ color: "#888", fontSize: "14px", whiteSpace: "nowrap" }}>
                       Question {session.currentIndex + 1} / {session.questions.length}
                     </div>
                     {session.recordEligible && (
