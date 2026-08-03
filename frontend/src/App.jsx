@@ -331,6 +331,7 @@ function AppContent() {
             setMode={navigateMode}
             questions={manageLibrary.allQuestions}
             onOpenQuestion={openQuestionInManage}
+            onOpenGroupInManage={openGroupIdInManage}
             openQuestionId={calendarOpenQuestionId}
             clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
           />

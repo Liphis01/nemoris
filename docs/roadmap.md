@@ -19,23 +19,16 @@
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - mettre une ou deux stats dans les gros boutons de qualité des modes qcm
 - pouvoir zoomer sur les images pour les questions isolées
-- ne pas nécessairement reset les records après un edit
-- intercepter le bouton retour arrière pour revenir au menu d'avant (et inversement)
+- ne pas nécessairement reset les records après un edit (et s'interroger sur comment gérer les records sur les packs importés (leaderboard possible ?))
 - ajouter bouton annuler dans les autres types
-- répondre faux à une question bonus n'a pas le comportement attendu
-- il ne faudrait pas être bloqué par les questions bonus ratées quand je veux retourner dans le menu bonus
 - il faudrait pouvoir naviguer les suggestions de tags avec les flèches du clavier
 - bouton annuler dans le manage de groupes
 - Le header de certaines questions est rempli et déborde
 
 ## bugs
 
-- recentrer les svg
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
-- les tags marchent pas bien
-- parfois on peut scroll la page alors qu'il n'y a rien en dessous
 - dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
-- le pop up de synchronisation automatique décale toute la page vers le bas brièvement
 - type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
 - en entrainement, on ne peut pas zoomer les questions isolées et les images dans les réponses ne sont pas centrées
 - bug menu bonus vide

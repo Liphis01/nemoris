@@ -369,7 +369,7 @@ export default function CalendarGroupRecap({
                   }}
                   style={manageButtonStyle}
                 >
-                  Ouvrir dans le gestionnaire ↗
+                  Éditer ↗
                 </button>
               </div>
             </div>

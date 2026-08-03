@@ -741,7 +741,7 @@ function EventCard({
           }}
           style={cardActionButtonStyle}
         >
-          Ouvrir dans le gestionnaire ↗
+          Éditer ↗
         </button>
       </div>
     </div>
@@ -792,6 +792,7 @@ function GroupEventCard({
   cardRef,
   isSelected,
   onOpenGroup,
+  onOpenGroupInManage,
   row,
   todayKey
 }) {
@@ -800,9 +801,24 @@ function GroupEventCard({
   const tags = row.tags || group.tags || [];
   const labelFor = useTagLabels();
 
+  function selectGroup() {
+    onOpenGroup?.(row);
+  }
+
   return (
     <div
       ref={cardRef}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
+      onClick={selectGroup}
+      onKeyDown={(keyboardEvent) => {
+        if (keyboardEvent.target !== keyboardEvent.currentTarget) return;
+        if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") return;
+
+        keyboardEvent.preventDefault();
+        selectGroup();
+      }}
       style={{
         width: "100%",
         boxSizing: "border-box",
@@ -816,6 +832,7 @@ function GroupEventCard({
         boxShadow: isSelected
           ? "0 0 0 4px rgba(126, 226, 168, 0.1), 0 0 24px rgba(126, 226, 168, 0.14)"
           : "none",
+        cursor: "pointer",
         marginBottom: "8px",
         textAlign: "left",
         font: "inherit",
@@ -928,10 +945,13 @@ function GroupEventCard({
         <span style={cardHintStyle}>Groupe #{row.groupId}</span>
         <button
           type="button"
-          onClick={() => onOpenGroup?.(row)}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+            onOpenGroupInManage?.(row.groupId);
+          }}
           style={cardActionButtonStyle}
         >
-          Récap
+          Éditer ↗
         </button>
       </div>
     </div>
@@ -942,6 +962,7 @@ export default function ReviewCalendar({
   setMode,
   questions,
   onOpenQuestion,
+  onOpenGroupInManage,
   openQuestionId,
   clearOpenQuestionId
 }) {
@@ -1196,6 +1217,7 @@ export default function ReviewCalendar({
         cardRef={isSelected ? highlightedQuestionRef : null}
         isSelected={isSelected}
         onOpenGroup={openGroupRow}
+        onOpenGroupInManage={onOpenGroupInManage}
         row={row}
         todayKey={todayKey}
       />
