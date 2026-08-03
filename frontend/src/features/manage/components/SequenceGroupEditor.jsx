@@ -5,6 +5,7 @@ import {
 } from "../../../api/sequenceGroups";
 import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
 import {
   cancelButtonStyle,
   dangerButtonStyle,
@@ -38,7 +39,8 @@ function normalizeItem(item) {
     tags: item?.tags || [],
     group_id: item?.group_id || null,
     data,
-    aliases: item?.aliases || data.aliases || []
+    aliases: item?.aliases || data.aliases || [],
+    suspended: Boolean(item?.suspended)
   };
 }
 
@@ -117,6 +119,7 @@ const SequenceItemRow = memo(function SequenceItemRow({
   onMove,
   onRemoveItem,
   onToggleFavorite,
+  onToggleSuspended,
   onUpdateItem,
   selected
 }) {
@@ -189,8 +192,14 @@ const SequenceItemRow = memo(function SequenceItemRow({
         </button>
 
         <FavoriteToggleButton
-          active={Boolean(item.data?.favorite)}
-          onClick={() => onToggleFavorite(item)}
+          favorite={Boolean(item.data?.favorite)}
+          onToggle={() => onToggleFavorite(item)}
+        />
+
+        <SuspendToggleButton
+          suspended={Boolean(item.suspended)}
+          disabled={!item.id}
+          onToggle={() => onToggleSuspended(item)}
         />
 
         <button
@@ -212,7 +221,8 @@ export default function SequenceGroupEditor({
   onSave,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction
+  headerAction,
+  updateQuestion
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -424,6 +434,22 @@ export default function SequenceGroupEditor({
 
     updateItem(item.tempId, { data });
   }, [updateItem]);
+
+  const toggleSuspended = useCallback(async (item) => {
+    if (!item.id) return;
+
+    const nextSuspended = !item.suspended;
+
+    try {
+      await updateQuestion?.(item.id, { suspended: nextSuspended });
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Impossible de suspendre la question.");
+      return;
+    }
+
+    updateItem(item.tempId, { suspended: nextSuspended });
+  }, [updateItem, updateQuestion]);
 
   const addTag = useCallback((selectedTag) => {
     const value = String(selectedTag ?? tagInput).trim();
@@ -721,6 +747,7 @@ export default function SequenceGroupEditor({
             onMove={moveItem}
             onRemoveItem={removeItem}
             onToggleFavorite={toggleFavorite}
+            onToggleSuspended={toggleSuspended}
             onUpdateItem={updateItem}
             selected={Boolean(item.id) && item.id === selectedItemId}
           />

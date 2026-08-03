@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMediaGroupItems, patchMediaGroupItems } from "../../../api/mediaGroups";
 import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
+import SuspendToggleButton from "./SuspendToggleButton";
 import {
   buttonStyle,
   cancelButtonStyle,
@@ -131,7 +132,8 @@ function normalizeItem(item) {
     data,
     aliases: item?.aliases || data.aliases || [],
     progress: item?.progress || null,
-    group: item?.group || null
+    group: item?.group || null,
+    suspended: Boolean(item?.suspended)
   };
 }
 
@@ -208,6 +210,7 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
   onRemoveAlias,
   onRemoveItem,
   onToggleFavorite,
+  onToggleSuspended,
   onUpdateAliasInput,
   onUpdateItem,
   onUploadFile,
@@ -397,14 +400,19 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
       <div
         style={{
           alignItems: "center",
+          alignSelf: "center",
           display: "flex",
-          flexDirection: "column",
           gap: "8px"
         }}
       >
         <FavoriteToggleButton
           favorite={Boolean(item.data?.favorite)}
           onToggle={() => onToggleFavorite(item)}
+        />
+        <SuspendToggleButton
+          suspended={Boolean(item.suspended)}
+          disabled={!item.id}
+          onToggle={() => onToggleSuspended(item)}
         />
         <button
           type="button"
@@ -430,7 +438,8 @@ export default function MediaGroupEditor({
   onImportMediaUrl,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction
+  headerAction,
+  updateQuestion
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -772,6 +781,22 @@ export default function MediaGroupEditor({
 
     updateItem(item.tempId, { data });
   }, [updateItem]);
+
+  const toggleSuspended = useCallback(async (item) => {
+    if (!item.id) return;
+
+    const nextSuspended = !item.suspended;
+
+    try {
+      await updateQuestion?.(item.id, { suspended: nextSuspended });
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Impossible de suspendre la question.");
+      return;
+    }
+
+    updateItem(item.tempId, { suspended: nextSuspended });
+  }, [updateItem, updateQuestion]);
 
   const cancelChanges = useCallback(() => {
     const snapshot = savedStateRef.current;
@@ -1253,6 +1278,7 @@ export default function MediaGroupEditor({
                     onRemoveAlias={removeAlias}
                     onRemoveItem={removeItem}
                     onToggleFavorite={toggleFavorite}
+                    onToggleSuspended={toggleSuspended}
                     onUpdateAliasInput={updateAliasInput}
                     onUpdateItem={updateItem}
                     onUploadFile={onUploadFile}

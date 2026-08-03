@@ -43,7 +43,8 @@ def serialize_text_item_for_editor(question):
         "group_id": question.group_id,
         "data": question.data or {},
         "aliases": question.data.get("aliases", []) if question.data else [],
-        "progress": serialize_progress(question.progress)
+        "progress": serialize_progress(question.progress),
+        "suspended": bool(question.suspended)
     }
 
 

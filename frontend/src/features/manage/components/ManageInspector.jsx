@@ -264,6 +264,7 @@ export default function ManageInspector({
             onSave={buildGroupSaveHandler({ finishCreate: true })}
             registerPendingSaveHandler={registerPendingSaveHandler}
             headerAction={null}
+            updateQuestion={updateQuestion}
           />
         </div>
       );
@@ -564,6 +565,7 @@ export default function ManageInspector({
             }
           }}
           registerPendingSaveHandler={registerPendingSaveHandler}
+          updateQuestion={updateQuestion}
           headerAction={
             selectedIsImageItem ? (
               <ReviewCalendarAction
@@ -631,6 +633,7 @@ export default function ManageInspector({
             selectedGroupItem: selectedIsGroupItem ? selectedItem : null
           })}
           registerPendingSaveHandler={registerPendingSaveHandler}
+          updateQuestion={updateQuestion}
           headerAction={
             selectedIsGroupItem ? (
               <ReviewCalendarAction
