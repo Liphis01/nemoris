@@ -90,7 +90,7 @@ describe("MapReview recap map focus", () => {
       });
       expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-code", "");
 
-      fireEvent.click(screen.getByTitle("Voir Beta sur la carte"));
+      fireEvent.click(screen.getByRole("button", { name: /Beta/ }));
 
       await waitFor(() => {
         expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-code", "beta");

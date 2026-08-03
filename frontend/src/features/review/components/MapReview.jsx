@@ -1563,7 +1563,6 @@ export default function MapReview({
                                 ? "3px solid #737373"
                                 : "3px solid #f59e0b"
                           }}
-                          title={item.code ? `Voir ${item.label} sur la carte` : item.label}
                         >
                           <div style={recapAnswerCellStyle}>
                             <span
