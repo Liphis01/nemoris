@@ -28,9 +28,7 @@
 - répondre faux à une question bonus n'a pas le comportement attendu
 - il ne faudrait pas être bloqué par les questions bonus ratées quand je veux retourner dans le menu bonus
 - il faudrait pouvoir naviguer les suggestions de tags avec les flèches du clavier
-- dans le menu bonus, séparer les questions timeline
 - bouton annuler dans le manage de groupes
-- pour les questions relearning, vérifier l'heure pour décider si on le montre en premier ou pas si on retourne dans la review et qu'il reste des questions normales
 
 ## bugs
 

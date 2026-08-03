@@ -152,9 +152,14 @@ export default function TagPicker({
     setBranch(null);
   }
 
+  // onAdd fires last: consumers that keep tags and the pending query in one
+  // draft object (TextQuestionEditor, TimelineQuestionEditor) resolve both in
+  // a single commit inside their onAdd handler. Firing onChange("") first
+  // means its state update — read from the same pre-click snapshot — gets
+  // superseded by onAdd's instead of racing ahead of it and erasing the tag.
   function applyTag(key) {
-    onAdd?.(key);
     onChange?.("");
+    onAdd?.(key);
     setHighlight(0);
   }
 
