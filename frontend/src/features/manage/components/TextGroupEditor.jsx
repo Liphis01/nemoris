@@ -3,7 +3,9 @@ import { getTextGroupItems, patchTextGroupItems } from "../../../api/textGroups"
 import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
+  cancelButtonStyle,
   dangerButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   inputStyle,
   labelStyle,
@@ -285,6 +287,7 @@ export default function TextGroupEditor({
   const aliasInputRefs = useRef({});
   const currentGroupRef = useRef(group);
   const saveItemsRef = useRef(null);
+  const savedStateRef = useRef(null);
   const groupId = group?.id;
   const selectedItemId = selectedItem?.id ?? null;
 
@@ -306,6 +309,11 @@ export default function TextGroupEditor({
       setInitialSignature(
         buildSignature(currentGroupRef.current, [], [], [])
       );
+      savedStateRef.current = {
+        group: currentGroupRef.current,
+        tags: [],
+        items: []
+      };
 
       return undefined;
     }
@@ -335,6 +343,11 @@ export default function TextGroupEditor({
           normalizedItems,
           []
         ));
+        savedStateRef.current = {
+          group: selectedGroup,
+          tags: selectedGroup.tags || [],
+          items: normalizedItems
+        };
       })
       .catch((error) => {
         console.error(error);
@@ -462,6 +475,20 @@ export default function TextGroupEditor({
     setSharedTags(prev => prev.filter(item => item !== tag));
   }, []);
 
+  const cancelChanges = useCallback(() => {
+    const snapshot = savedStateRef.current;
+    if (!snapshot) return;
+
+    setEditableGroup(snapshot.group);
+    setSharedTags(snapshot.tags);
+    setItems(snapshot.items);
+    setDeletedItemIds([]);
+    setTagInput("");
+    setAliasInputByTempId({});
+    aliasInputRefs.current = {};
+    setSaveStatus("");
+  }, []);
+
   async function saveTextItems({ autosave = false } = {}) {
     if (!hasUnsavedChanges) {
       return { saved: false };
@@ -514,6 +541,11 @@ export default function TextGroupEditor({
         savedItems,
         []
       ));
+      savedStateRef.current = {
+        group: savedGroup,
+        tags: savedGroup.tags || sharedTags || [],
+        items: savedItems
+      };
       setSaveStatus("Enregistré");
       invalidateTags().catch(() => {});
 
@@ -586,6 +618,19 @@ export default function TextGroupEditor({
 
           <div style={{ alignItems: "center", display: "flex", gap: "10px" }}>
             {headerAction}
+            <button
+              type="button"
+              onClick={cancelChanges}
+              disabled={!hasUnsavedChanges}
+              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
+              style={
+                hasUnsavedChanges
+                  ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }
+                  : { ...disabledCancelButtonStyle, ...compactHeaderButtonStyle }
+              }
+            >
+              Annuler
+            </button>
             <button
               type="button"
               onClick={() => saveTextItems()}

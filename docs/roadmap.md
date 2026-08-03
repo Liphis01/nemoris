@@ -21,8 +21,6 @@
 - pouvoir zoomer sur les images pour les questions isolées
 - ne pas nécessairement reset les records après un edit (et s'interroger sur comment gérer les records sur les packs importés (leaderboard possible ?))
 - ajouter bouton annuler dans les autres types
-- il faudrait pouvoir naviguer les suggestions de tags avec les flèches du clavier
-- bouton annuler dans le manage de groupes
 - Le header de certaines questions est rempli et déborde
 
 ## bugs
@@ -59,8 +57,6 @@
 
 ## ideas
 
-- daily habit mechanics: streaks, reminders, rewards, but keep them separate from core review so they do not distort scheduling.
-- faire un mode "challenge" où on a une question et on doit répondre le plus vite possible
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - ia pour proposer des qcm si on a pas la réponse (à la TLMVPSP)
 - faire un executable
@@ -83,6 +79,7 @@
 - faire des modes de jeu infinis et fun (mini jeux)
 - si c'est la même map, permettre de combiner des trainings de deux trucs différents (pays + capitales du monde par exemple)
 - un mode 1v1 (ou plus) sur un pack en particulier ou sur un pack aléatoire ou sur un pack aléatoire en commun ? sur un tirage aléatoire du pack (pour pas faire tout le pack)
+- enlever le truc des versions de packs et juste permettre d'éditer un pack
 
 
 ## Conseils/idées issus de la littérature scientifique

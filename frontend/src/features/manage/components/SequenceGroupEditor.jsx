@@ -6,7 +6,9 @@ import {
 import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import {
+  cancelButtonStyle,
   dangerButtonStyle,
+  disabledCancelButtonStyle,
   disabledSaveButtonStyle,
   inputStyle,
   pendingSaveButtonStyle,
@@ -226,6 +228,7 @@ export default function SequenceGroupEditor({
   const currentGroupRef = useRef(group);
   const saveItemsRef = useRef(null);
   const dragTempIdRef = useRef(null);
+  const savedStateRef = useRef(null);
   const groupId = group?.id;
   const selectedItemId = selectedItem?.id ?? null;
 
@@ -247,6 +250,11 @@ export default function SequenceGroupEditor({
       setInitialSignature(
         buildSignature(currentGroupRef.current, [], [], [])
       );
+      savedStateRef.current = {
+        group: currentGroupRef.current,
+        tags: [],
+        items: []
+      };
 
       return undefined;
     }
@@ -276,6 +284,11 @@ export default function SequenceGroupEditor({
           normalizedItems,
           []
         ));
+        savedStateRef.current = {
+          group: selectedGroup,
+          tags: selectedGroup.tags || [],
+          items: normalizedItems
+        };
       })
       .catch((error) => {
         console.error(error);
@@ -425,6 +438,18 @@ export default function SequenceGroupEditor({
     setSharedTags(prev => prev.filter(item => item !== tag));
   }, []);
 
+  const cancelChanges = useCallback(() => {
+    const snapshot = savedStateRef.current;
+    if (!snapshot) return;
+
+    setEditableGroup(snapshot.group);
+    setSharedTags(snapshot.tags);
+    setItems(snapshot.items);
+    setDeletedItemIds([]);
+    setTagInput("");
+    setSaveStatus("");
+  }, []);
+
   async function saveSequenceItems({ autosave = false } = {}) {
     if (!hasUnsavedChanges) {
       return { saved: false };
@@ -477,6 +502,11 @@ export default function SequenceGroupEditor({
         savedItems,
         []
       ));
+      savedStateRef.current = {
+        group: savedGroup,
+        tags: savedGroup.tags || sharedTags || [],
+        items: savedItems
+      };
       setSaveStatus("Enregistré");
       invalidateTags().catch(() => {});
 
@@ -549,6 +579,19 @@ export default function SequenceGroupEditor({
 
           <div style={{ alignItems: "center", display: "flex", gap: "10px" }}>
             {headerAction}
+            <button
+              type="button"
+              onClick={cancelChanges}
+              disabled={!hasUnsavedChanges}
+              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
+              style={
+                hasUnsavedChanges
+                  ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }
+                  : { ...disabledCancelButtonStyle, ...compactHeaderButtonStyle }
+              }
+            >
+              Annuler
+            </button>
             <button
               type="button"
               onClick={() => saveSequenceItems()}
