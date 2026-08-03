@@ -71,6 +71,7 @@
 - suivre des amis
 - faire des packs publics/amis only/privés
 - challenge des amis sur des packs
+- autoriser les pauses en training
 
 ## refactors
 
@@ -98,6 +99,8 @@
 - régler le problème que quand on importe un pack, on n'a pas forcément envie de tout travailler et pour l'instant le seul moyen c'est de supprimer des questions
 - peut être avoir plein de templates de maps à disposition pour aider les gens à faire leurs custom svg
 - faire des modes de jeu infinis et fun (mini jeux)
+- si c'est la même map, permettre de combiner des trainings de deux trucs différents (pays + capitales du monde par exemple)
+- un mode 1v1 (ou plus) sur un pack en particulier ou sur un pack aléatoire ou sur un pack aléatoire en commun ? sur un tirage aléatoire du pack (pour pas faire tout le pack)
 
 
 ## Conseils/idées issus de la littérature scientifique

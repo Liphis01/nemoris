@@ -1631,6 +1631,24 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertNotIn(1, _new_question_ids(self.db))
         self.assertIn(2, _new_question_ids(self.db))
 
+    def test_relearning_retries_are_shown_after_the_rest_of_the_queue(self):
+        # Question 1's lower id would otherwise sort it first; failing it must
+        # not let the same-day retry jump ahead of ordinary due work when the
+        # session is resumed (get_review is a fresh fetch, same as reopening
+        # the review after leaving it).
+        today = date.today()
+        self.add_question(1)
+        self.add_progress(1, today, reps=1)
+        self.add_question(2)
+        self.add_progress(2, today, reps=1)
+        self.db.commit()
+
+        answer_question(AnswerRequest(question_id=1, quality=0), db=self.db)
+
+        response = get_review(db=self.db)
+
+        self.assertEqual([item["question_id"] for item in response], [2, 1])
+
     def test_failed_bonus_grouped_answers_enter_the_normal_review(self):
         today = date.today()
 

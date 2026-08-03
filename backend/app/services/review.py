@@ -860,6 +860,31 @@ def _item_question_ids(item):
     return ids
 
 
+def _item_is_relearning(item):
+    if not isinstance(item, dict):
+        return False
+
+    if (item.get("progress") or {}).get("relearning"):
+        return True
+
+    return any(
+        isinstance(entry, dict) and (entry.get("progress") or {}).get("relearning")
+        for entry in item.get("items") or []
+    )
+
+
+def defer_relearning_items(review_items):
+    """Push same-day relearning retries to the end of the session.
+
+    Mid-session, a retry is appended live to the tail of the queue (see
+    isRelearningQuestion() / useReviewSession.js). A resumed session re-fetches
+    from here instead, so without this it would fall back to whatever
+    Question.id happened to sort first, surfacing relearning retries before
+    unrelated due cards. Stable sort: order is otherwise unchanged.
+    """
+    return sorted(review_items, key=_item_is_relearning)
+
+
 def get_review_items(db, today=None, intake_quota=None):
     today = today or date.today()
     scheduler_tuning = load_scheduler_tuning_settings(db)
@@ -882,7 +907,7 @@ def get_review_items(db, today=None, intake_quota=None):
         timeline_anchors=_timeline_anchors_for(db, questions)
     )
 
-    return spread_new_items(
+    return defer_relearning_items(spread_new_items(
         items,
         {question.id for question in new_questions}
-    )
+    ))

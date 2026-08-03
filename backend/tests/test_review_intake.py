@@ -27,7 +27,11 @@ from app.services.progress import (
     in_flight_progress_filter,
     progress_in_flight
 )
-from app.services.review import _new_question_ids, spread_new_items
+from app.services.review import (
+    _new_question_ids,
+    defer_relearning_items,
+    spread_new_items
+)
 from app.services.settings import (
     INTAKE_SETTINGS_KEY,
     load_intake_settings,
@@ -675,6 +679,39 @@ class IntakeSessionTests(IntakeTestCase):
         )
         # Interior placement: neither new card is parked at the tail.
         self.assertTrue(all(position < len(spread) - 1 for position in positions))
+
+    def test_relearning_items_are_deferred_to_the_end(self):
+        items = [
+            {"question_id": 1, "progress": {"relearning": True}},
+            {"question_id": 2, "progress": {"relearning": False}},
+            {"question_id": 3, "progress": {"relearning": True}},
+            {"question_id": 4, "progress": {"relearning": False}}
+        ]
+
+        deferred = defer_relearning_items(items)
+
+        self.assertEqual(
+            [item["question_id"] for item in deferred],
+            [2, 4, 1, 3]
+        )
+
+    def test_relearning_group_items_are_deferred_to_the_end(self):
+        # A group is relearning if any of its items is, mirroring
+        # isRelearningQuestion() on the frontend.
+        items = [
+            {
+                "question_id": None,
+                "items": [{"progress": {"relearning": True}}]
+            },
+            {"question_id": 2, "progress": {"relearning": False}}
+        ]
+
+        deferred = defer_relearning_items(items)
+
+        self.assertEqual(
+            [item["question_id"] for item in deferred],
+            [2, None]
+        )
 
 
 if __name__ == "__main__":
