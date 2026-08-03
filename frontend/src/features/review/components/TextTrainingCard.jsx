@@ -7,6 +7,7 @@ import {
   pickReviewMedia,
   resolveMediaUrl
 } from "../../../shared/media";
+import { MediaZoomOverlay, ZoomableImageThumb } from "../../../shared/MediaZoom";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import {
   matchesTextTrainingAnswer,
@@ -49,8 +50,10 @@ const primaryButtonStyle = {
 
 // Renders a training item's media by kind. `boxed` frames images in a thumbnail
 // (used for the question prompt); the plain form is used inline in the answer
-// reveal. Used for both the question media and the answer media.
+// reveal. Both forms let the user click the image to zoom it, same as review
+// mode. Used for both the question media and the answer media.
 function TrainingMedia({ media, label = "média", boxed = false, style }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
   const src = resolveMediaUrl(media);
 
   if (!src) return null;
@@ -82,44 +85,24 @@ function TrainingMedia({ media, label = "média", boxed = false, style }) {
     );
   }
 
-  const image = (
-    <img
-      src={src}
-      alt={label}
-      style={{
-        borderRadius: "8px",
-        display: "block",
-        maxHeight: boxed ? "132px" : "180px",
-        maxWidth: "100%",
-        objectFit: "contain"
-      }}
-    />
+  return (
+    <div style={style}>
+      <ZoomableImageThumb
+        src={src}
+        alt={label}
+        boxed={boxed}
+        onOpen={() => setPreviewOpen(true)}
+      />
+
+      {previewOpen && (
+        <MediaZoomOverlay
+          src={src}
+          alt={label}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+    </div>
   );
-
-  if (boxed) {
-    return (
-      <div
-        style={{
-          ...style,
-          alignItems: "center",
-          background: "#101010",
-          border: "1px solid #262626",
-          borderRadius: "12px",
-          display: "inline-flex",
-          height: "154px",
-          justifyContent: "center",
-          maxWidth: "260px",
-          overflow: "hidden",
-          padding: "10px",
-          width: "100%"
-        }}
-      >
-        {image}
-      </div>
-    );
-  }
-
-  return <div style={style}>{image}</div>;
 }
 
 export default function TextTrainingCard({

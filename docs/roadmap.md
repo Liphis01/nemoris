@@ -7,7 +7,6 @@
 - il reste un dossier qui s'appelle blueprint
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
-- demander conseil pour le truc des questions bonus
 
 
 ## quick fixes
@@ -15,7 +14,6 @@
 - faire en sorte que les interfaces des menus soient bien positionnées sur l'écran
 - ajouter le timer final dans la recap d'entrainement de maps
 - ajouter un chip reconnaissable pour le type image au dessus du titre dans la preview de groupe (et décaler les chips pour qu'elles hug le bord gauche)
-- tab pour skip dans nommer
 - ajouter des raccourcis clavier pour les nouveaux modes
 - mettre une petite loupe plutôt que le + pour la preview des images
 - scroll automatique à enlever quand on quitte la preview d'une image de 
