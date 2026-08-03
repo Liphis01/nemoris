@@ -23,6 +23,8 @@ from app.services.training import (
     group_training_fingerprint,
     list_training_scopes,
     record_training_attempt,
+    serialize_previous_training_record,
+    serialize_previous_training_records,
     serialize_training_record
 )
 
@@ -492,6 +494,8 @@ class TrainingTests(unittest.TestCase):
         response = list_training_scopes(self.db)
 
         self.assertIsNone(response["groups"][0]["training_record"])
+        self.assertIsNone(response["groups"][0]["previous_training_record"])
+        self.assertEqual(response["groups"][0]["previous_training_records"], {})
 
     def test_first_clean_attempt_saves_best_percent_and_time(self):
         group = QuestionGroup(
@@ -939,6 +943,17 @@ class TrainingTests(unittest.TestCase):
 
         fingerprint = group_training_fingerprint(self.db, group)
         self.assertIsNotNone(serialize_training_record(group.data, fingerprint))
+        self.assertIsNone(
+            serialize_previous_training_record(group.data, fingerprint)
+        )
+        self.assertEqual(
+            serialize_previous_training_records(
+                group.data,
+                fingerprint,
+                group.type_group
+            ),
+            {}
+        )
         self.assertIn("training_record", group.data)
         self.assertIn("training_records", group.data)
         self.assertEqual(group.data["theme"], "blue")
@@ -969,6 +984,116 @@ class TrainingTests(unittest.TestCase):
         # membership fingerprint, so the stored record no longer matches.
         fingerprint = group_training_fingerprint(self.db, group)
         self.assertIsNone(serialize_training_record(group.data, fingerprint))
+        previous = serialize_previous_training_record(group.data, fingerprint)
+        self.assertIsNotNone(previous)
+        self.assertEqual(previous["best_found_count"], 2)
+
+        scopes = list_training_scopes(self.db)
+        served_group = next(
+            item for item in scopes["groups"] if item["id"] == group.id
+        )
+        self.assertIsNone(served_group["training_record"])
+        self.assertEqual(
+            served_group["previous_training_record"]["best_found_count"],
+            2
+        )
+        self.assertEqual(
+            served_group["previous_training_records"]["type_all"][
+                "best_found_count"
+            ],
+            2
+        )
+
+    def test_new_group_attempt_clears_previous_record_for_mode(self):
+        group = QuestionGroup(
+            id=49,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+        first = self.add_question(1, type_q="map", group=group)
+        self.add_question(2, type_q="map", group=group)
+        self.db.commit()
+        self.seed_training_record(group, {
+            "best_found_percent": 100,
+            "best_found_count": 2,
+            "best_found_elapsed_ms": 5000,
+            "best_found_at": "2026-06-01T10:00:00+00:00",
+            "best_time_ms": 5000,
+            "best_time_at": "2026-06-01T10:00:00+00:00",
+            "question_count": 2
+        })
+
+        delete_question(self.db, first.id)
+        stale_fingerprint = group_training_fingerprint(self.db, group)
+        self.assertIsNotNone(
+            serialize_previous_training_record(group.data, stale_fingerprint)
+        )
+
+        response = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(group, 3000, 1, 1, mode="type_all")
+        )
+
+        self.assertEqual(response["training_record"]["question_count"], 1)
+        self.assertEqual(
+            response["training_records"]["type_all"]["best_time_ms"],
+            3000
+        )
+        self.assertIsNone(response["previous_training_record"])
+        self.assertEqual(response["previous_training_records"], {})
+
+    def test_new_mode_attempt_keeps_other_stale_modes(self):
+        group = QuestionGroup(
+            id=50,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(1, type_q="map", group=group)
+        self.add_question(2, type_q="map", group=group)
+        self.db.commit()
+        record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(group, 5000, 2, 2, mode="type_all")
+        )
+        record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(group, 4000, 2, 2, mode="click_prompt")
+        )
+        self.add_question(3, type_q="map", group=group)
+        self.db.commit()
+
+        stale_records = serialize_previous_training_records(
+            group.data,
+            group_training_fingerprint(self.db, group),
+            group.type_group
+        )
+        self.assertIn("type_all", stale_records)
+        self.assertIn("click_prompt", stale_records)
+
+        response = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(group, 3500, 3, 3, mode="click_prompt")
+        )
+
+        self.assertEqual(
+            response["training_records"]["click_prompt"]["question_count"],
+            3
+        )
+        self.assertNotIn("click_prompt", response["previous_training_records"])
+        self.assertEqual(
+            response["previous_training_records"]["type_all"]["question_count"],
+            2
+        )
 
     def test_training_timeline_grading_does_not_mutate_progress(self):
         history = [{

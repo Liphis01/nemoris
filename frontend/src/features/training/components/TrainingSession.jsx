@@ -181,6 +181,20 @@ function recordForMode(group, mode) {
 }
 
 
+function previousRecordForMode(group, mode) {
+  const config = modeConfigForGroup(group);
+  const records = group?.previous_training_records;
+
+  if (records && typeof records === "object") {
+    return records[mode] || null;
+  }
+
+  return mode === config?.defaultMode
+    ? group?.previous_training_record || null
+    : null;
+}
+
+
 function isVisualQuestion(question) {
   return (
     ["media", "map", "timeline"].includes(question?.type_q) ||
@@ -444,6 +458,9 @@ function CollectionDetailPanel({
 
 function ModeAction({ config, group, mode, startScope }) {
   const record = recordForMode(group, mode);
+  const previousRecord = record ? null : previousRecordForMode(group, mode);
+  const displayRecord = record || previousRecord;
+  const hasPreviousRecord = Boolean(previousRecord);
   const complete = record?.best_found_percent >= 100;
 
   return (
@@ -465,9 +482,12 @@ function ModeAction({ config, group, mode, startScope }) {
         <span>{config.details[mode]}</span>
       </span>
 
-      <span className="training-mode-record">
-        <strong>{formatRecordPercent(record)}</strong>
-        <span>{recordTimeLabel(record)}</span>
+      <span
+        className={`training-mode-record${hasPreviousRecord ? " is-previous" : ""}`}
+      >
+        {hasPreviousRecord && <small>Ancien</small>}
+        <strong>{formatRecordPercent(displayRecord)}</strong>
+        <span>{recordTimeLabel(displayRecord)}</span>
       </span>
     </button>
   );

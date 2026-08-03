@@ -404,6 +404,32 @@ def _serialize_record(record, content_fingerprint=None):
     }
 
 
+def _serialize_previous_record(record, content_fingerprint=None):
+    if not isinstance(record, dict):
+        return None
+
+    record_fingerprint = record.get("content_fingerprint")
+
+    if not record_fingerprint or content_fingerprint is None:
+        return None
+
+    if record_fingerprint == content_fingerprint:
+        return None
+
+    return {
+        key: record[key]
+        for key in TRAINING_RECORD_FIELDS
+        if key in record
+    }
+
+
+def serialize_previous_training_record(data, content_fingerprint=None):
+    return _serialize_previous_record(
+        (data or {}).get(TRAINING_RECORD_KEY),
+        content_fingerprint
+    )
+
+
 def serialize_training_records(data, content_fingerprint=None, group_type="map"):
     data = data or {}
     raw_records = data.get(TRAINING_RECORDS_KEY)
@@ -428,6 +454,55 @@ def serialize_training_records(data, content_fingerprint=None, group_type="map")
     legacy_record = serialize_training_record(data, content_fingerprint)
 
     if legacy_record and default_mode and default_mode not in records:
+        records[default_mode] = legacy_record
+
+    return records
+
+
+def serialize_previous_training_records(
+    data,
+    content_fingerprint=None,
+    group_type="map"
+):
+    data = data or {}
+    raw_records = data.get(TRAINING_RECORDS_KEY)
+    records = {}
+    default_mode = default_training_mode_for_group_type(group_type)
+
+    if isinstance(raw_records, dict):
+        for mode, record in raw_records.items():
+            normalized_mode = normalize_training_mode_for_group_type(
+                group_type,
+                mode
+            )
+
+            if normalized_mode != mode:
+                continue
+
+            serialized = _serialize_previous_record(
+                record,
+                content_fingerprint
+            )
+
+            if serialized:
+                records[normalized_mode] = serialized
+
+    current_records = serialize_training_records(
+        data,
+        content_fingerprint,
+        group_type
+    )
+    legacy_record = serialize_previous_training_record(
+        data,
+        content_fingerprint
+    )
+
+    if (
+        legacy_record and
+        default_mode and
+        default_mode not in current_records and
+        default_mode not in records
+    ):
         records[default_mode] = legacy_record
 
     return records
@@ -532,6 +607,23 @@ def list_training_scopes(db):
                 ),
                 "training_records": (
                     serialize_training_records(
+                        group.data,
+                        fingerprints_by_group_id.get(group.id),
+                        group.type_group
+                    )
+                    if group.type_group in MODE_GROUP_TYPES
+                    else {}
+                ),
+                "previous_training_record": (
+                    serialize_previous_training_record(
+                        group.data,
+                        fingerprints_by_group_id.get(group.id)
+                    )
+                    if group.type_group in MODE_GROUP_TYPES
+                    else None
+                ),
+                "previous_training_records": (
+                    serialize_previous_training_records(
                         group.data,
                         fingerprints_by_group_id.get(group.id),
                         group.type_group
@@ -746,6 +838,15 @@ def record_training_attempt(db, group_id, payload):
         if group.type_group in MODE_GROUP_TYPES
         else {}
     )
+    previous_training_records = (
+        serialize_previous_training_records(
+            group.data,
+            content_fingerprint,
+            group.type_group
+        )
+        if group.type_group in MODE_GROUP_TYPES
+        else {}
+    )
 
     return {
         "training_record": (
@@ -754,6 +855,15 @@ def record_training_attempt(db, group_id, payload):
             else serialize_training_record(group.data, content_fingerprint)
         ),
         "training_records": training_records,
+        "previous_training_record": (
+            serialize_previous_training_record(
+                group.data,
+                content_fingerprint
+            )
+            if group.type_group in MODE_GROUP_TYPES
+            else None
+        ),
+        "previous_training_records": previous_training_records,
         "is_new_best_percent": is_new_best_percent,
         "is_new_best_time": is_new_best_time
     }

@@ -12,6 +12,7 @@ from app.services.map_zones import save_map_group_zones
 from app.services.tag_hierarchy import apply_tag_actions, load_tag_hierarchy
 from app.services.training import (
     group_training_fingerprint,
+    serialize_previous_training_record,
     serialize_training_record
 )
 
@@ -220,6 +221,12 @@ class MapTagTests(unittest.TestCase):
             )
         )
         self.assertIsNone(self.served_record(group))
+        self.assertIsNotNone(
+            serialize_previous_training_record(
+                group.data,
+                group_training_fingerprint(self.db, group)
+            )
+        )
 
         # Re-seed against the current content, then add a zone: membership
         # changes, so the record is retired again.
@@ -256,6 +263,12 @@ class MapTagTests(unittest.TestCase):
             )
         )
         self.assertIsNone(self.served_record(group))
+        self.assertIsNotNone(
+            serialize_previous_training_record(
+                group.data,
+                group_training_fingerprint(self.db, group)
+            )
+        )
 
     def test_review_map_group_includes_shared_tags(self):
         group = QuestionGroup(

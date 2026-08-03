@@ -619,10 +619,26 @@
   font-weight: 900;
 }
 
+.training-mode-record small {
+  color: #727272;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .training-mode-record span {
   color: #cfcfcf;
   font-size: 15px;
   font-weight: 900;
+}
+
+.training-mode-record.is-previous strong {
+  color: #8a8a8a;
+}
+
+.training-mode-record.is-previous span {
+  color: #777777;
 }
 
 .training-mode-action.is-complete .training-mode-record strong {

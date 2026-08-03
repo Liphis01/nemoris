@@ -658,6 +658,107 @@ describe("useTrainingSession", () => {
     expect(result.current.activeScope.training_records.multiple_choice.best_time_ms).toBe(5500);
   });
 
+  it("clears stale mode records when a current attempt is saved", async () => {
+    listTrainingScopes.mockResolvedValueOnce({
+      groups: [{
+        id: 5,
+        name: "Europe",
+        type_group: "map",
+        question_count: 2,
+        training_record: null,
+        training_records: {},
+        previous_training_record: null,
+        previous_training_records: {
+          multiple_choice: {
+            best_found_percent: 100,
+            best_found_count: 2,
+            best_found_elapsed_ms: 9000,
+            best_found_at: "2026-06-01T10:00:00+00:00",
+            best_time_ms: 9000,
+            best_time_at: "2026-06-01T10:00:00+00:00",
+            question_count: 2
+          }
+        }
+      }],
+      collections: [],
+      tags: []
+    });
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        mode: "multiple_choice",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          { question_id: 10, code: "fr", label: "France" },
+          { question_id: 11, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    recordGroupTrainingAttempt.mockResolvedValueOnce({
+      training_record: {
+        best_found_percent: 100,
+        best_found_count: 2,
+        best_found_elapsed_ms: 5500,
+        best_found_at: "2026-06-02T10:00:00+00:00",
+        best_time_ms: 5500,
+        best_time_at: "2026-06-02T10:00:00+00:00",
+        question_count: 2
+      },
+      training_records: {
+        multiple_choice: {
+          best_found_percent: 100,
+          best_found_count: 2,
+          best_found_elapsed_ms: 5500,
+          best_found_at: "2026-06-02T10:00:00+00:00",
+          best_time_ms: 5500,
+          best_time_at: "2026-06-02T10:00:00+00:00",
+          question_count: 2
+        }
+      },
+      previous_training_record: null,
+      previous_training_records: {},
+      is_new_best_percent: true,
+      is_new_best_time: true
+    });
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope(
+        {
+          ...result.current.scopes.groups[0],
+          type: "group"
+        },
+        "multiple_choice"
+      );
+    });
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      result.current.markAnsweringComplete([]);
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 5500,
+        question_count: 2,
+        found_count: 2,
+        content_fingerprint: TRAINING_FINGERPRINT,
+        mode: "multiple_choice"
+      });
+      expect(result.current.activeScope.previous_training_records).toEqual({});
+    });
+    expect(result.current.activeScope.previous_training_record).toBeNull();
+    expect(result.current.scopes.groups[0].previous_training_records).toEqual({});
+  });
+
   it("passes selected image mode through training fetch and record save", async () => {
     getTrainingItems.mockResolvedValueOnce([
       {

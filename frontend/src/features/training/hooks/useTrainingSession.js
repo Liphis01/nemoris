@@ -37,6 +37,13 @@ function getTrainingFingerprint(items) {
 }
 
 
+function responseField(response, key, fallback) {
+  return Object.prototype.hasOwnProperty.call(response || {}, key)
+    ? response[key]
+    : fallback;
+}
+
+
 function shuffledTrainingList(items, random = Math.random) {
   const shuffled = [...(items || [])];
 
@@ -518,7 +525,21 @@ export function useTrainingSession(active = true) {
             ? {
               ...prev,
               training_record: response.training_record,
-              training_records: response.training_records || prev.training_records
+              training_records: responseField(
+                response,
+                "training_records",
+                prev.training_records
+              ),
+              previous_training_record: responseField(
+                response,
+                "previous_training_record",
+                prev.previous_training_record
+              ),
+              previous_training_records: responseField(
+                response,
+                "previous_training_records",
+                prev.previous_training_records
+              )
             }
             : prev
         ));
@@ -529,7 +550,21 @@ export function useTrainingSession(active = true) {
               ? {
                 ...group,
                 training_record: response.training_record,
-                training_records: response.training_records || group.training_records
+                training_records: responseField(
+                  response,
+                  "training_records",
+                  group.training_records
+                ),
+                previous_training_record: responseField(
+                  response,
+                  "previous_training_record",
+                  group.previous_training_record
+                ),
+                previous_training_records: responseField(
+                  response,
+                  "previous_training_records",
+                  group.previous_training_records
+                )
               }
               : group
           ),

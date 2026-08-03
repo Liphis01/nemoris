@@ -13,7 +13,8 @@ from app.schemas import (
     SequenceAnswerItem,
     SequenceAnswerRequest,
     SequenceGroupItemBulkItem,
-    SequenceGroupItemsBulkUpdate
+    SequenceGroupItemsBulkUpdate,
+    TrainingAttemptRecordRequest
 )
 from app.services.mode_difficulty import click_prompt_base_difficulty
 from app.services.mode_selection import CHOICE_MODE_MIN_CONTEXT
@@ -38,7 +39,9 @@ from app.services.sequence_modes import (
 )
 from app.services.training import (
     grade_training_sequence,
-    group_training_fingerprint
+    group_training_fingerprint,
+    record_training_attempt,
+    serialize_previous_training_record
 )
 
 
@@ -570,6 +573,17 @@ class SequenceTrainingTests(SequenceTestCase):
             for item in saved["items"]
         }
         before = group_training_fingerprint(self.db, group.id)
+        record_training_attempt(
+            self.db,
+            group.id,
+            TrainingAttemptRecordRequest(
+                elapsed_ms=5000,
+                question_count=3,
+                found_count=3,
+                content_fingerprint=before,
+                mode=SEQUENCE_MODE_TYPE_POSITION
+            )
+        )
 
         save_sequence_group_items(
             self.db,
@@ -584,7 +598,14 @@ class SequenceTrainingTests(SequenceTestCase):
             )
         )
 
-        self.assertNotEqual(before, group_training_fingerprint(self.db, group.id))
+        after = group_training_fingerprint(self.db, group.id)
+        self.assertNotEqual(before, after)
+        self.assertEqual(
+            serialize_previous_training_record(group.data, after)[
+                "best_time_ms"
+            ],
+            5000
+        )
 
     def test_training_grading_never_schedules(self):
         group = self.add_group()

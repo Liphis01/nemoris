@@ -201,6 +201,57 @@ describe("TrainingSession", () => {
     expect(within(zodiaqueTile).queryByText("80%")).not.toBeInTheDocument();
   });
 
+  it("shows stale mode records as old without counting them", async () => {
+    listTrainingScopes.mockResolvedValue({
+      groups: [
+        {
+          id: 7,
+          type_group: "map",
+          name: "Europe modifiée",
+          media: "europe.svg",
+          tags: ["Geo"],
+          question_count: 8,
+          training_record: null,
+          training_records: {},
+          previous_training_record: null,
+          previous_training_records: {
+            multiple_choice: {
+              best_found_percent: 100,
+              best_found_count: 6,
+              best_found_elapsed_ms: 42000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              best_time_ms: 40000,
+              best_time_at: "2026-06-02T10:00:00+00:00",
+              question_count: 6
+            }
+          }
+        }
+      ],
+      collections: [],
+      tags: []
+    });
+
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    const tile = await screen.findByRole("button", {
+      name: "Sélectionner Europe modifiée"
+    });
+    expect(within(tile).getByText("0%")).toBeInTheDocument();
+
+    fireEvent.click(tile);
+
+    const qcmAction = screen.getByRole("button", {
+      name: "Démarrer QCM pour Europe modifiée"
+    });
+
+    expect(qcmAction).toHaveTextContent("Ancien");
+    expect(qcmAction).toHaveTextContent("100%");
+    expect(qcmAction).toHaveTextContent("40s");
+    expect(qcmAction).not.toHaveClass("is-complete");
+    expect(qcmAction.querySelector(".training-mode-record"))
+      .toHaveClass("is-previous");
+  });
+
   it("opens side-panel mode lists for map and image groups", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
@@ -326,6 +377,69 @@ describe("TrainingSession", () => {
     expect(imageHeader).not.toHaveTextContent("Temps");
     expect(screen.queryByRole("heading", { name: "Flags" }))
       .not.toBeInTheDocument();
+  });
+
+  it("does not use a stale mode time as the active best timer", async () => {
+    listTrainingScopes.mockResolvedValue({
+      groups: [
+        {
+          id: 6,
+          type_group: "media",
+          name: "Flags",
+          media: null,
+          tags: ["Geo"],
+          question_count: 5,
+          training_record: null,
+          training_records: {},
+          previous_training_record: null,
+          previous_training_records: {
+            type_prompt: {
+              best_found_percent: 100,
+              best_found_count: 5,
+              best_found_elapsed_ms: 31000,
+              best_found_at: "2026-06-02T10:00:00+00:00",
+              best_time_ms: 31000,
+              best_time_at: "2026-06-02T10:00:00+00:00",
+              question_count: 5
+            }
+          }
+        }
+      ],
+      collections: [],
+      tags: []
+    });
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        type_q: "media",
+        name: "Flags",
+        mode: "type_prompt",
+        tags: ["Geo"],
+        items: [
+          {
+            question_id: 11,
+            answer: "France",
+            label: "France",
+            media: "/static/france.png"
+          }
+        ]
+      }
+    ]);
+
+    const { container } = render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Flags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer Nommer pour Flags" }));
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-visual-session-secondary]"))
+        .toBeInTheDocument();
+    });
+
+    const secondary = container.querySelector("[data-visual-session-secondary]");
+
+    expect(secondary).toHaveTextContent("Temps");
+    expect(secondary).not.toHaveTextContent("Meilleur");
+    expect(secondary).not.toHaveTextContent("31s");
   });
 
   it("starts tag training directly from a compact tile", async () => {
