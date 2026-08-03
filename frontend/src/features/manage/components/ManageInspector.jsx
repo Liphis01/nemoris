@@ -34,6 +34,8 @@ export default function ManageInspector({
   uploadQuestionMedia,
   uploadMediaGroupMedia,
   importMediaGroupMediaUrl,
+  uploadMedia,
+  importMediaUrl,
   isCreatingPlaylist,
   setIsCreatingPlaylist,
   loadAllPlaylists,
@@ -236,6 +238,11 @@ export default function ManageInspector({
             group={pendingGroup}
             selectedItem={null}
             availableTags={availableTags}
+            // The group doesn't exist server-side yet, so media can't be scoped
+            // to a group id: fall back to the generic upload endpoints (same
+            // ones "new" questions use) and let the save flow adopt the files.
+            onUploadFile={groupDraft.type_group === "media" ? uploadMedia : undefined}
+            onImportMediaUrl={groupDraft.type_group === "media" ? importMediaUrl : undefined}
             ensurePersistedGroup={async ({ name, itemCount }) => {
               const trimmedName = String(name || "").trim();
 

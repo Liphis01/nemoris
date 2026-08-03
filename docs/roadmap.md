@@ -28,11 +28,7 @@
 ## bugs
 
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
-- dans calendrier, quand je mets ma souris sur trier, il y a un gros truc blanc qui apparaît sur le côté droit
 - type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
-- en entrainement, on ne peut pas zoomer les questions isolées et les images dans les réponses ne sont pas centrées
-- bug menu bonus vide
-- je ne peux pas ajouter d'image à un groupe tant qu'il n'est pas enregistré
 
 ## to do when i have more time
 
