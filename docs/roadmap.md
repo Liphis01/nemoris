@@ -56,7 +56,6 @@
 
 - faire un mode "compétition" où on peut jouer contre d'autres personnes en temps réel
 - ia pour proposer des qcm si on a pas la réponse (à la TLMVPSP)
-- faire un executable
 - faire une extension pour chrome pour facilement créer des questions à partir de n'importe quelle page web (ex : pour faire une question sur une ville, aller sur la page wikipedia de la ville et créer la question à partir de là en sélectionnant la zone de la carte) (avec de l'ia éventuellement pour suggérer la question et les réponses à partir du contenu de la page)
 - quand on vient d'ajouter une question, ajouter un indicateur et on doit passer la souris sur la card dans la liste pour enlever l'indicateur (à la LoL)
 - systeme de mmr
