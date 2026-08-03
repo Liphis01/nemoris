@@ -312,7 +312,7 @@ export default function TextTrainingCard({
               <TrainingMedia
                 media={q.answer_media}
                 label="image de la réponse"
-                style={{ marginTop: "4px" }}
+                style={{ marginTop: "4px", textAlign: "center" }}
               />
             </div>
           )}

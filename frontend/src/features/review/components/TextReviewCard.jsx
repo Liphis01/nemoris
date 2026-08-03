@@ -367,7 +367,11 @@ export default function TextReviewCard({
                             <RichText>{q.answer}</RichText>
                         </div>
 
-                        <ReviewMedia media={q.answer_media} label="réponse" />
+                        <ReviewMedia
+                            media={q.answer_media}
+                            label="réponse"
+                            style={{ textAlign: "center" }}
+                        />
 
                         {showQualityButtons ? (
                             <div
