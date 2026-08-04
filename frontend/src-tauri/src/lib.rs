@@ -1,4 +1,5 @@
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -31,6 +32,10 @@ struct BackendStatus {
 struct BackendRuntime {
     child: Mutex<Option<CommandChild>>,
     status: Mutex<BackendStatus>,
+    // Set right before we kill our own backend on purpose (app quit, or an
+    // update handing off to the platform installer). Lets the CommandEvent
+    // reader tell "we did this" apart from "it crashed on its own".
+    shutting_down: AtomicBool,
 }
 
 impl BackendRuntime {
@@ -40,6 +45,7 @@ impl BackendRuntime {
             status: Mutex::new(BackendStatus {
                 phase: BackendPhase::Starting,
             }),
+            shutting_down: AtomicBool::new(false),
         }
     }
 }
@@ -48,8 +54,19 @@ impl BackendRuntime {
 // hook: on Windows the updater calls std::process::exit() directly to hand
 // off to the new installer, bypassing RunEvent entirely, so both paths must
 // call this explicitly or the sidecar is left holding its own exe file open.
+//
+// Marking shutting_down first matters because killing the child races the
+// process's own exit: the CommandEvent::Terminated this triggers can reach
+// the reader loop while the window is still alive for a few more
+// milliseconds. Without the flag that loop reports it as a crash, which
+// flashes the startup gate's failure screen over a perfectly healthy update
+// handoff — and clicking its retry button there relaunches the still-old
+// process, short-circuiting the installer instead of letting it finish.
 fn kill_backend(app: &tauri::AppHandle) {
-    if let Some(child) = app.state::<BackendRuntime>().child.lock().unwrap().take() {
+    let runtime = app.state::<BackendRuntime>();
+    runtime.shutting_down.store(true, Ordering::SeqCst);
+    let child = runtime.child.lock().unwrap().take();
+    if let Some(child) = child {
         let _ = child.kill();
     }
 }
@@ -223,11 +240,23 @@ pub fn run() {
                                 }
                                 CommandEvent::Terminated(payload) => {
                                     log::warn!("backend process terminated: {payload:?}");
-                                    set_backend_phase(&app_for_output, BackendPhase::Failed, None);
+                                    if !app_for_output
+                                        .state::<BackendRuntime>()
+                                        .shutting_down
+                                        .load(Ordering::SeqCst)
+                                    {
+                                        set_backend_phase(&app_for_output, BackendPhase::Failed, None);
+                                    }
                                 }
                                 CommandEvent::Error(error) => {
                                     log::error!("backend process error: {error}");
-                                    set_backend_phase(&app_for_output, BackendPhase::Failed, None);
+                                    if !app_for_output
+                                        .state::<BackendRuntime>()
+                                        .shutting_down
+                                        .load(Ordering::SeqCst)
+                                    {
+                                        set_backend_phase(&app_for_output, BackendPhase::Failed, None);
+                                    }
                                 }
                                 _ => {}
                             }

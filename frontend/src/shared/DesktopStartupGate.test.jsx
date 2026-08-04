@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DesktopStartupGate from "./DesktopStartupGate";
+import { hasPostUpdateRelaunchFlag, markPostUpdateRelaunch } from "./updateRelaunchFlag";
 
 const tauri = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -20,6 +21,7 @@ let stopListening;
 
 beforeEach(() => {
   delete window.__NEMORIS_BACKEND__;
+  window.localStorage.clear();
   statusListener = null;
   stopListening = vi.fn();
   tauri.invoke.mockReset();
@@ -36,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   delete window.__NEMORIS_BACKEND__;
+  window.localStorage.clear();
 });
 
 describe("DesktopStartupGate", () => {
@@ -106,6 +109,43 @@ describe("DesktopStartupGate", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Relancer Nemoris" }));
     expect(tauri.relaunch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reassures instead of alarming when the failure follows an update install", async () => {
+    window.__NEMORIS_BACKEND__ = "http://127.0.0.1:1234";
+    markPostUpdateRelaunch();
+    tauri.invoke.mockResolvedValue({ phase: "failed" });
+
+    render(
+      <DesktopStartupGate>
+        <div>Application prête</div>
+      </DesktopStartupGate>
+    );
+
+    expect(await screen.findByText("Nemoris n’a pas pu démarrer")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "La mise à jour est installée, vos données n’ont pas été modifiées : c’est seulement le redémarrage qui a besoin d’un second essai."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Le service interne ne répond pas. Vos données n’ont pas été modifiées.")).not.toBeInTheDocument();
+  });
+
+  it("clears the post-update flag once the backend reports ready", async () => {
+    window.__NEMORIS_BACKEND__ = "http://127.0.0.1:1234";
+    markPostUpdateRelaunch();
+
+    render(
+      <DesktopStartupGate>
+        <div>Application prête</div>
+      </DesktopStartupGate>
+    );
+
+    await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith("backend_status"));
+    act(() => statusListener({ payload: { phase: "ready" } }));
+
+    expect(screen.getByText("Application prête")).toBeInTheDocument();
+    expect(hasPostUpdateRelaunchFlag()).toBe(false);
   });
 
   it("unsubscribes from backend status changes on unmount", async () => {

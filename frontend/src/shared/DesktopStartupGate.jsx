@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 import DesktopTitleBar from "./DesktopTitleBar";
+import { clearPostUpdateRelaunchFlag, hasPostUpdateRelaunchFlag } from "./updateRelaunchFlag";
 import "./DesktopStartupGate.css";
 
 const BACKEND_STATUS_EVENT = "backend://status";
@@ -23,7 +24,7 @@ function mergeBackendPhase(current, next) {
   return next;
 }
 
-function StartupScreen({ phase }) {
+function StartupScreen({ phase, fromUpdate }) {
   const [relaunching, setRelaunching] = useState(false);
   const [relaunchError, setRelaunchError] = useState("");
   const failed = phase === "failed";
@@ -51,7 +52,9 @@ function StartupScreen({ phase }) {
         <h1>{failed ? "Nemoris n’a pas pu démarrer" : "Démarrage de Nemoris…"}</h1>
         <p>
           {failed
-            ? "Le service interne ne répond pas. Vos données n’ont pas été modifiées."
+            ? fromUpdate
+              ? "La mise à jour est installée, vos données n’ont pas été modifiées : c’est seulement le redémarrage qui a besoin d’un second essai."
+              : "Le service interne ne répond pas. Vos données n’ont pas été modifiées."
             : "Préparation de votre espace de révision."}
         </p>
         {failed && (
@@ -73,6 +76,11 @@ function StartupScreen({ phase }) {
 function DesktopStartupGate({ children }) {
   const desktop = desktopBackendIsPresent();
   const [phase, setPhase] = useState(() => (desktop ? "starting" : "ready"));
+  const [fromUpdate] = useState(() => desktop && hasPostUpdateRelaunchFlag());
+
+  useEffect(() => {
+    if (phase === "ready") clearPostUpdateRelaunchFlag();
+  }, [phase]);
 
   useEffect(() => {
     if (!desktop) return undefined;
@@ -117,7 +125,7 @@ function DesktopStartupGate({ children }) {
   return (
     <>
       <DesktopTitleBar />
-      {phase === "ready" ? children : <StartupScreen phase={phase} />}
+      {phase === "ready" ? children : <StartupScreen phase={phase} fromUpdate={fromUpdate} />}
     </>
   );
 }
