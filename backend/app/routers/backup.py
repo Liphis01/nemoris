@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 
 from ..bootstrap import init_database
 from ..database import engine
-from ..services.backups import create_backup, restore_backup
+from ..services.backups import create_backup, reset_collection, restore_backup
 from ..services.startup import run_startup_rebalance_with_session
 
 
@@ -49,3 +49,15 @@ def import_database(file: UploadFile = File(...)):
     run_startup_rebalance_with_session()
 
     return {"status": "imported", "included": result["included"]}
+
+
+@router.post("/data/reset")
+def reset_data():
+    # Same file-swap dance as the import above: release the SQLite handle
+    # before the database file is deleted, then rebuild the empty schema.
+    engine.dispose()
+    result = reset_collection()
+    init_database()
+    run_startup_rebalance_with_session()
+
+    return {"status": "reset", "backup": result["backup"]}

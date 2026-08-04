@@ -273,3 +273,43 @@ def restore_backup(
                 restored.append(name)
 
     return {"included": restored}
+
+
+def reset_collection(
+    *,
+    database_file: Path = DATABASE_FILE,
+    static_dir: Path = STATIC_DIR,
+    backup_dir: Path = BACKUP_DIR
+):
+    """Wipe the collection back to a fresh-install state: no questions, no media.
+
+    A backup is always taken first, so a mistaken reset stays recoverable
+    through the usual import flow. Like restore_backup this is destructive and
+    callers running against the live engine must dispose its connection pool
+    first, then re-run the migrations to recreate the empty schema.
+    """
+
+    backup = None
+
+    if database_file.exists():
+        backup = create_backup(
+            database_file=database_file,
+            static_dir=static_dir,
+            backup_dir=backup_dir,
+            reason="reset",
+            label="before-reset"
+        )
+
+    database_file.unlink(missing_ok=True)
+
+    # The default journal mode leaves no sidecars behind, but a crash (or a
+    # later switch to WAL) can; drop them so the recreated database cannot be
+    # rehydrated from a stale write-ahead log.
+    for suffix in ("-wal", "-shm"):
+        database_file.with_name(database_file.name + suffix).unlink(
+            missing_ok=True
+        )
+
+    _clear_static_dir(static_dir)
+
+    return {"backup": backup.as_dict() if backup else None}

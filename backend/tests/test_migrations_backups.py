@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 import app.migrations as migrations_module
 from app.migrations import run_migrations
 from app.models import Base, Question, QuestionGroup
-from app.services.backups import create_backup, restore_backup
+from app.services.backups import create_backup, reset_collection, restore_backup
 
 
 def sqlite_url(path):
@@ -72,6 +72,102 @@ class BackupTests(unittest.TestCase):
             self.assertEqual(manifest["reason"], "test")
             self.assertIn("questions.db", manifest["included"])
             self.assertIn("static/image.txt", manifest["included"])
+
+
+class ResetCollectionTests(unittest.TestCase):
+    def _populate(self, temp_dir):
+        database_file = temp_dir / "questions.db"
+        static_dir = temp_dir / "static"
+
+        with sqlite3.connect(database_file) as connection:
+            connection.execute("CREATE TABLE sample (value TEXT)")
+            connection.execute("INSERT INTO sample (value) VALUES ('seeded')")
+
+        (static_dir / "nested").mkdir(parents=True)
+        (static_dir / "image.txt").write_text("media", encoding="utf-8")
+        (static_dir / "nested" / "clip.txt").write_text("more", encoding="utf-8")
+
+        return database_file, static_dir
+
+    def test_reset_removes_database_and_media(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file, static_dir = self._populate(temp_dir)
+
+            reset_collection(
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertFalse(database_file.exists())
+            self.assertTrue(static_dir.exists())
+            self.assertEqual(list(static_dir.rglob("*")), [])
+
+    def test_reset_backs_up_the_wiped_collection_first(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file, static_dir = self._populate(temp_dir)
+            backup_dir = temp_dir / "backups"
+
+            result = reset_collection(
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=backup_dir
+            )
+
+            backup_path = Path(result["backup"]["path"])
+            self.assertTrue(backup_path.exists())
+
+            with ZipFile(backup_path) as zip_file:
+                self.assertIn("questions.db", zip_file.namelist())
+                self.assertIn("static/image.txt", zip_file.namelist())
+
+            # The backup must be restorable, otherwise a mistaken reset is
+            # unrecoverable.
+            restore_backup(
+                backup_path,
+                database_file=database_file,
+                static_dir=static_dir
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute("SELECT value FROM sample").fetchall()
+
+            self.assertEqual(rows, [("seeded",)])
+            self.assertTrue((static_dir / "image.txt").exists())
+
+    def test_reset_drops_stale_wal_sidecars(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file, static_dir = self._populate(temp_dir)
+            wal = database_file.with_name("questions.db-wal")
+            shm = database_file.with_name("questions.db-shm")
+            wal.write_bytes(b"stale")
+            shm.write_bytes(b"stale")
+
+            reset_collection(
+                database_file=database_file,
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertFalse(wal.exists())
+            self.assertFalse(shm.exists())
+
+    def test_reset_without_an_existing_database_makes_no_backup(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            static_dir = temp_dir / "static"
+            static_dir.mkdir()
+
+            result = reset_collection(
+                database_file=temp_dir / "questions.db",
+                static_dir=static_dir,
+                backup_dir=temp_dir / "backups"
+            )
+
+            self.assertIsNone(result["backup"])
 
 
 class RestoreTests(unittest.TestCase):

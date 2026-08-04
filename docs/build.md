@@ -140,5 +140,11 @@ stale packaged sidecar is stopped before Vite/Tauri rebuilds or replaces files.
   their own.
 - `backend/static/` contains uploaded media (dev). Installed apps store media
   under the same app-data dir.
+- Paramètres → Données → "Réinitialiser ma collection" (`POST /data/reset`)
+  wipes questions, media and progress back to that fresh-install state without
+  users having to find the app-data dir themselves. It always writes a
+  `before-reset` backup first, and it marks the collection dirty so a
+  signed-in device pushes the emptied collection instead of pulling the old
+  one straight back.
 - `backend/backups/` contains exportable backup zips and is ignored by git.
 - Backend tests live in `backend/tests`. Install `pytest` separately if needed.

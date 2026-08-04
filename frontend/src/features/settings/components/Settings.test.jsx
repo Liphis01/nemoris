@@ -7,7 +7,11 @@ import {
   within
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { exportDatabase, importDatabase } from "../../../api/backup";
+import {
+  exportDatabase,
+  importDatabase,
+  resetCollection
+} from "../../../api/backup";
 import { getPackCatalogDiagnostics } from "../../../api/packs";
 import {
   getReviewSettings,
@@ -27,7 +31,8 @@ vi.mock("../../../api/review", () => ({
 
 vi.mock("../../../api/backup", () => ({
   exportDatabase: vi.fn(),
-  importDatabase: vi.fn()
+  importDatabase: vi.fn(),
+  resetCollection: vi.fn()
 }));
 
 vi.mock("../../../api/packs", () => ({
@@ -81,6 +86,7 @@ describe("Settings", () => {
     rebalanceReviewCalendar.mockResolvedValue({});
     exportDatabase.mockResolvedValue("quiz-app-backup-2026-06-18.zip");
     importDatabase.mockResolvedValue({ status: "imported" });
+    resetCollection.mockResolvedValue({ status: "reset", backup: null });
     getPackCatalogDiagnostics.mockResolvedValue({
       status: "ok",
       summary: "Catalogue prêt.",
@@ -347,5 +353,76 @@ describe("Settings", () => {
     });
 
     expect(importDatabase).not.toHaveBeenCalled();
+  });
+
+  it("resets the collection after confirmation and reloads", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const reload = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, reload }
+    });
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByRole("radio", { name: /Régulier/ });
+    fireEvent.click(screen.getByRole("button", { name: "Réinitialiser" }));
+
+    await waitFor(() => {
+      expect(resetCollection).toHaveBeenCalledTimes(1);
+    });
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reset when the confirmation is declined", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByRole("radio", { name: /Régulier/ });
+    fireEvent.click(screen.getByRole("button", { name: "Réinitialiser" }));
+
+    expect(resetCollection).not.toHaveBeenCalled();
+  });
+
+  it("warns that a reset also wipes the cloud copy when signed in", async () => {
+    getSyncStatus.mockResolvedValue({
+      signed_in: true,
+      account_email: "user@example.com",
+      server_url: "https://project.supabase.co",
+      last_server_version: 4,
+      auto_sync_enabled: true,
+      local_change_seq: 0,
+      last_synced_change_seq: 0,
+      collection_dirty: false,
+      last_auto_sync_at: null,
+      last_auto_sync_status: null,
+      last_auto_sync_error: null,
+      code_schema_version: "0016",
+      server_meta: null
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByText("user@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Réinitialiser" }));
+
+    expect(confirm.mock.calls[0][0]).toContain("cloud");
+  });
+
+  it("reports a failed reset without reloading", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    resetCollection.mockRejectedValue(new Error("Reset failed"));
+
+    render(<Settings setMode={vi.fn()} />);
+
+    await screen.findByRole("radio", { name: /Régulier/ });
+    fireEvent.click(screen.getByRole("button", { name: "Réinitialiser" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reset failed");
+    expect(
+      screen.getByRole("button", { name: "Réinitialiser" })
+    ).toBeEnabled();
   });
 });

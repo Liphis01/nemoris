@@ -141,6 +141,7 @@ COLLECTION_MUTATION_RULES = [
     ("POST", re.compile(r"^/answer_timeline/?$")),
     ("POST", re.compile(r"^/answer_sequence/?$")),
     ("POST", re.compile(r"^/backup/import/?$")),
+    ("POST", re.compile(r"^/data/reset/?$")),
     ("POST", re.compile(r"^/packs/import/?$")),
     ("POST", re.compile(r"^/blueprints/import/?$")),
     ("POST", re.compile(r"^/packs/update/?$")),

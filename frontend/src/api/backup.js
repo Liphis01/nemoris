@@ -42,6 +42,13 @@ export async function exportDatabase() {
 }
 
 
+export function resetCollection() {
+  // The backend takes a backup before wiping, so this stays recoverable
+  // through importDatabase.
+  return requestJson("/data/reset", { method: "POST" });
+}
+
+
 export function importDatabase(file) {
   const formData = new FormData();
   formData.append("file", file);

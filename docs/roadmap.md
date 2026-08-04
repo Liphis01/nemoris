@@ -7,7 +7,7 @@
 - il reste un dossier qui s'appelle blueprint
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
-
+- permettre de créer une collection à partir des ratés d'un groupe ou d'une collection dans training
 
 ## quick fixes
 

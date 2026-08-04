@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { exportDatabase, importDatabase } from "../../../api/backup";
+import {
+  exportDatabase,
+  importDatabase,
+  resetCollection
+} from "../../../api/backup";
 import { getPackCatalogDiagnostics } from "../../../api/packs";
 import {
   getReviewSettings,
@@ -87,6 +91,7 @@ function SettingsRail({
   sync,
   exporting,
   importing,
+  resetting,
   onExport
 }) {
   return (
@@ -134,7 +139,7 @@ function SettingsRail({
           <button
             type="button"
             onClick={onExport}
-            disabled={exporting || importing}
+            disabled={exporting || importing || resetting}
             className="settings-secondary"
           >
             {exporting ? "Export..." : "Exporter la base"}
@@ -281,6 +286,7 @@ export default function Settings({
   const fileInputRef = useRef(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [dataStatus, setDataStatus] = useState("");
   const [dataError, setDataError] = useState("");
 
@@ -444,6 +450,41 @@ export default function Settings({
     }
   }
 
+  async function handleReset() {
+    const syncWarning = sync.signedIn
+      ? " Votre compte est connecté : la prochaine synchronisation enverra " +
+        "cette collection vide et remplacera aussi la copie dans le cloud."
+      : "";
+
+    const confirmed = window.confirm(
+      "Réinitialiser supprimera TOUTES vos questions, vos médias et toute " +
+        "votre progression. Une sauvegarde est créée automatiquement avant " +
+        "l'effacement, mais l'application repartira de zéro." +
+        syncWarning +
+        " Continuer ?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setResetting(true);
+    setDataStatus("");
+    setDataError("");
+
+    try {
+      await resetCollection();
+      // Every view holds questions/progress that no longer exist; reload
+      // rather than trying to invalidate them one by one.
+      setDataStatus("Collection réinitialisée. Rechargement...");
+      window.location.reload();
+    } catch (resetError) {
+      console.error(resetError);
+      setDataError(resetError.message || "Réinitialisation impossible.");
+      setResetting(false);
+    }
+  }
+
   async function runCatalogDiagnostics() {
     setCatalogChecking(true);
     setCatalogDiagnosticError("");
@@ -496,6 +537,7 @@ export default function Settings({
             sync={sync}
             exporting={exporting}
             importing={importing}
+            resetting={resetting}
             onExport={handleExport}
           />
 
@@ -587,8 +629,8 @@ export default function Settings({
               icon="⇣"
               accent="green"
               title="Données"
-              description="Sauvegarde complète et restauration"
-              badge="2 actions"
+              description="Sauvegarde, restauration et remise à zéro"
+              badge="3 actions"
             >
               <div className="settings-row">
                 <div className="settings-row-copy">
@@ -601,7 +643,7 @@ export default function Settings({
                 <button
                   type="button"
                   onClick={handleExport}
-                  disabled={exporting || importing}
+                  disabled={exporting || importing || resetting}
                   className="settings-secondary"
                 >
                   {exporting ? "Export..." : "Exporter"}
@@ -619,7 +661,7 @@ export default function Settings({
                 <button
                   type="button"
                   onClick={openImportPicker}
-                  disabled={exporting || importing}
+                  disabled={exporting || importing || resetting}
                   className="settings-danger"
                 >
                   {importing ? "Import..." : "Importer"}
@@ -633,6 +675,25 @@ export default function Settings({
                   className="settings-file-input"
                   onChange={handleImportFile}
                 />
+              </div>
+
+              <div className="settings-row settings-row-danger">
+                <div className="settings-row-copy">
+                  <strong>Réinitialiser ma collection</strong>
+                  <span>
+                    Efface toutes les questions, médias et progressions pour
+                    repartir à zéro. Une sauvegarde est créée avant l'effacement.
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={exporting || importing || resetting}
+                  className="settings-danger"
+                >
+                  {resetting ? "Réinitialisation..." : "Réinitialiser"}
+                </button>
               </div>
 
               {dataStatus && (
