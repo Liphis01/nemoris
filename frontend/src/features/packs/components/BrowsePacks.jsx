@@ -12,7 +12,7 @@ import PackCard from "./PackCard";
 import PackReviewsSection from "./PackReviewsSection";
 import UnplacedTagRootsDialog from "./UnplacedTagRootsDialog";
 import PublicationsManager from "./PublicationsManager";
-import { formatSize, questionCountLabel } from "./packFormatting";
+import { formatSize } from "./packFormatting";
 import "./BrowsePacks.css";
 
 const STATUS_FILTERS = [
@@ -40,14 +40,6 @@ const SORT_OPTIONS = [
   { value: "questions", label: "Questions" }
 ];
 
-function downloadCountLabel(count) {
-  if (count === null || count === undefined) {
-    return null;
-  }
-
-  return `${count.toLocaleString("fr-FR")} téléchargement${count > 1 ? "s" : ""}`;
-}
-
 function statusLabel(status) {
   if (status === "local_copy") {
     return "Déjà présent";
@@ -69,13 +61,6 @@ function statusClassName(status) {
   if (status === "not_installed") return "pack-status-pill-install";
   if (status === "local_copy") return "pack-status-pill-local";
   return "";
-}
-
-function availabilityLabel(status) {
-  if (status === "update_available") return "Mise à jour disponible";
-  if (status === "up_to_date") return "À jour";
-  if (status === "local_copy") return "Présent localement";
-  return "Non installé";
 }
 
 function StatePanel({ children, title }) {
@@ -237,14 +222,12 @@ function PackDetailPanel({
   const {
     entry,
     status,
-    hasLocalContent,
     isMine,
     localGroupId,
     action
   } = item;
   const typeStyle = getPackTypeChipStyle(entry.type_group);
   const sizeLabel = formatSize(entry.size_bytes);
-  const downloadLabel = downloadCountLabel(entry.download_count);
   const canUnsubscribe = (
     status === "up_to_date" || status === "update_available"
   );
@@ -287,16 +270,8 @@ function PackDetailPanel({
           <strong>{entry.question_count ?? "—"}</strong>
         </div>
         <div className="pack-detail-stat">
-          <span>Statut</span>
-          <strong>{availabilityLabel(status)}</strong>
-        </div>
-        <div className="pack-detail-stat">
-          <span>Local</span>
-          <strong>{hasLocalContent ? "Déjà présent" : "Absent"}</strong>
-        </div>
-        <div className="pack-detail-stat">
-          <span>Propriétaire</span>
-          <strong>{isMine ? "Moi" : "Autre"}</strong>
+          <span>Téléchargements</span>
+          <strong>{entry.download_count?.toLocaleString("fr-FR") ?? "—"}</strong>
         </div>
         <div className="pack-detail-stat">
           <span>Taille</span>
@@ -306,11 +281,6 @@ function PackDetailPanel({
           <span>Licence</span>
           <strong>{entry.license || "—"}</strong>
         </div>
-      </div>
-
-      <div className="pack-detail-meta">
-        <span>{questionCountLabel(entry.question_count)}</span>
-        {downloadLabel && <span>{downloadLabel}</span>}
       </div>
 
       <div className="pack-action-row">
@@ -371,7 +341,7 @@ function PackDetailPanel({
         </div>
       )}
 
-      <PackReviewsSection entry={entry} setMode={setMode} />
+      <PackReviewsSection entry={entry} isOwner={isMine} setMode={setMode} />
     </aside>
   );
 }

@@ -798,7 +798,10 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
         if (fallbackGuid) return fallbackGuid;
         if (hasPrevious) return previous;
 
-        return firstActive?.pack_guid || firstArchived?.pack_guid || NEW_PACK_KEY;
+        // Land on "Nouveau pack" by default rather than an arbitrary
+        // existing publication -- that's the natural first stop when
+        // opening the tab.
+        return NEW_PACK_KEY;
       });
       setPublicationView((previous) => (
         previous === "archived" && !firstArchived && firstActive

@@ -172,18 +172,6 @@ export default function PackCard({
             Ouvrir
           </button>
         )}
-
-        {!canAct && !canOpenGroup && (
-          <span className={`pack-status-pill ${statusClassName(status)}`}>
-            {statusLabel(status)}
-          </span>
-        )}
-
-        {status === "update_available" && (
-          <span className="pack-detail-muted">
-            Changements disponibles
-          </span>
-        )}
       </div>
 
       {action.error && (

@@ -425,11 +425,15 @@ grant execute on function public.add_pack_comment(text, text) to authenticated;
 -- =========================================================
 -- This is the real function body as pulled from the live project via
 -- `select pg_get_functiondef(oid) from pg_proc where proname =
--- 'search_pack_catalog';`, with exactly two changes from the original:
+-- 'search_pack_catalog';`, with three changes from the original:
 --   1. avg_rating, rating_count, comment_count added to the per-row JSON
 --      (they flow through for free from section 2's new columns, since
 --      every CTE here selects b.*/filtered.* rather than naming columns).
 --   2. A 'note' branch added to the ORDER BY inside the `ordered` CTE.
+--   3. theme_rows now groups straight from public.pack_catalog (is_public
+--      only) instead of from `filtered` -- the theme sidebar is a snapshot
+--      of the catalog and no longer reacts to query/theme/type/status or to
+--      your own install state (2026-08-05).
 -- No change was needed to exclude archived/unpublished packs -- the WHERE
 -- clause already filters on is_public = true only (confirmed against the
 -- live body below), and unpublish_my_pack already clears that flag.
@@ -521,6 +525,11 @@ page as (
   from ordered
   where page_order <= (select page_limit from params)
 ),
+-- Theme facets are a snapshot of the whole public catalog, independent of
+-- query/theme/type/status -- otherwise the sidebar shrinks or reorders
+-- whenever you search, filter, or install something, even though nothing in
+-- the shared catalog changed. It should only move when the catalog itself
+-- does.
 theme_rows as (
   select
     unnest(themes) as theme,
@@ -528,7 +537,8 @@ theme_rows as (
     sum(download_count) as download_count,
     bool_or(featured) as featured,
     bool_or(pinned) as pinned
-  from filtered
+  from public.pack_catalog
+  where is_public = true
   group by theme
 )
 select jsonb_build_object(
