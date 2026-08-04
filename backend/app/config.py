@@ -7,15 +7,6 @@ IS_FROZEN = bool(getattr(sys, "frozen", False))
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_DIR = BACKEND_DIR.parent
 BUNDLED_DIR = Path(getattr(sys, "_MEIPASS", PROJECT_DIR))
-INSTALL_DIR = Path(sys.executable).resolve().parent if IS_FROZEN else BACKEND_DIR
-# First-run data shipped by the packaging scripts next to the executable.
-SEED_DIR = INSTALL_DIR / "seed"
-
-# Candidate directories that may hold first-run data, in priority order:
-# the old next-to-exe layout (questions.db beside the exe), the packaging
-# scripts' seed/ folder, and data bundled inside a onefile build (extracted
-# to _MEIPASS/seed by the Tauri sidecar build).
-SEED_SOURCE_DIRS = [INSTALL_DIR, SEED_DIR, BUNDLED_DIR / "seed"]
 
 
 def _frozen_app_data_dir():

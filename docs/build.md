@@ -107,7 +107,7 @@ On Linux:
 ```bash
 cd backend
 ./venv/bin/pyinstaller --name nemoris-backend --onedir --clean --noconfirm \
-  --add-data "questions.db:seed" --collect-data countryinfo run_sidecar.py
+  --collect-data countryinfo run_sidecar.py
 
 cd ../frontend
 npm run tauri dev      # or: npm run tauri build
@@ -118,7 +118,7 @@ On Windows PowerShell, use `;` as PyInstaller's data separator:
 ```powershell
 cd backend
 .\venv\Scripts\pyinstaller.exe --name nemoris-backend --onedir --clean --noconfirm `
-  --add-data "questions.db;seed" --collect-data countryinfo run_sidecar.py
+  --collect-data countryinfo run_sidecar.py
 
 cd ..\frontend
 npm run tauri dev      # or: npm run tauri build
@@ -132,10 +132,12 @@ stale packaged sidecar is stopped before Vite/Tauri rebuilds or replaces files.
 
 ## App Data And Tests
 
-- `backend/questions.db` is local dev data and is ignored by git. The desktop
-  release seeds a fresh copy from `backend/questions.csv` and bundles it in the
-  backend resource; on first launch it is copied into the user's app-data dir
+- `backend/questions.db` is local dev data and is ignored by git. No database is
+  bundled in the release: a fresh install starts on an empty collection, created
+  by the migrations on first launch in the user's app-data dir
   (`%APPDATA%\Nemoris` / `~/.local/share/nemoris`), never next to the binary.
+  Users get content by subscribing to packs from the catalogue or importing
+  their own.
 - `backend/static/` contains uploaded media (dev). Installed apps store media
   under the same app-data dir.
 - `backend/backups/` contains exportable backup zips and is ignored by git.

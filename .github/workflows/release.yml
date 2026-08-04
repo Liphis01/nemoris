@@ -36,15 +36,14 @@ jobs:
 
       # The FastAPI backend ships as a PyInstaller onedir resource. Avoiding
       # onefile prevents a large temporary extraction on every app launch.
-      # questions.db is seeded from the tracked CSV for first-run data.
+      # No questions.db is bundled: a fresh install starts empty and users
+      # pull content from the pack catalogue.
       - name: Build backend sidecar
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
-          python -c "from app.bootstrap import init_database; init_database()"
-          python import_csv.py
-          pyinstaller --name nemoris-backend --onedir --clean --noconfirm --add-data "questions.db;seed" --collect-data countryinfo run_sidecar.py
+          pyinstaller --name nemoris-backend --onedir --clean --noconfirm --collect-data countryinfo run_sidecar.py
 
       - name: Smoke-test backend sidecar
         shell: pwsh

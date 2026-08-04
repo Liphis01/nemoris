@@ -2,8 +2,8 @@
 
 Tauri owns the window; this process is purely the FastAPI/uvicorn server.
 The port is chosen by the Rust host and passed in QUIZ_APP_PORT. Data storage
-(APP_DATA_DIR) and first-run seeding are handled by app.config / app.bootstrap
-exactly as in the standalone build, since sys.frozen is set here too.
+(APP_DATA_DIR) is handled by app.config / app.bootstrap exactly as in the
+standalone build, since sys.frozen is set here too.
 """
 
 from pathlib import Path
