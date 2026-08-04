@@ -7,8 +7,6 @@
 - il reste un dossier qui s'appelle blueprint
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
-- permettre de créer une collection à partir des ratés d'un groupe ou d'une collection dans training
-at the end of a training session, propose to create a collection with the failed questions
 
 ## quick fixes
 
@@ -50,6 +48,7 @@ at the end of a training session, propose to create a collection with the failed
 - faire des packs publics/amis only/privés
 - challenge des amis sur des packs
 - quels sont les principes à respecter pour un rendu graphique idéal ? vérifie que c'est appliqué partout
+- permettre d'avoir un "type" map où il faut cliquer sur toutes les zones qui respectent un critère (ex: les pays où on parle français) (pas forcément binaire)
 
 ## refactors
 
