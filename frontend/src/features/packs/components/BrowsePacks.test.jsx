@@ -384,7 +384,6 @@ describe("BrowsePacks", () => {
       expect(publishPack).toHaveBeenCalledWith(
         { groupId: 10 },
         {
-          version: 1,
           name: "États et géographie",
           description: "",
           license: "",
@@ -399,7 +398,7 @@ describe("BrowsePacks", () => {
     expect(
       await screen.findByRole("heading", { name: "Atlas des capitales" })
     ).toBeInTheDocument();
-    expect(screen.getByText("Publié")).toBeInTheDocument();
+    expect(screen.getAllByText("Publié").length).toBeGreaterThan(0);
   });
 
   it("publishes a playlist as a multi-group pack", async () => {

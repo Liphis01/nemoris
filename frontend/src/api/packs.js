@@ -57,6 +57,25 @@ export function listPackPublications() {
 }
 
 
+export function getGroupPackPublication(groupId) {
+  return requestJson(`/packs/sources/groups/${groupId}/publication`);
+}
+
+
+export function previewGroupPackChanges(groupId) {
+  return requestJson(`/packs/sources/groups/${groupId}/release-preview`, {
+    method: "POST"
+  });
+}
+
+
+export function publishGroupPackChanges(groupId) {
+  return requestJson(`/packs/sources/groups/${groupId}/publish-changes`, {
+    method: "POST"
+  });
+}
+
+
 export function savePackDraft(groupId, payload) {
   return requestJson(`/packs/${groupId}/publish/draft`, {
     method: "POST",

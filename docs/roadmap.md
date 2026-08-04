@@ -18,7 +18,6 @@
 - mettre une petite loupe plutôt que le + pour la preview des images
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - pouvoir zoomer sur les images pour les questions isolées
-- ne pas nécessairement reset les records après un edit (et s'interroger sur comment gérer les records sur les packs importés (leaderboard possible ?))
 - ajouter le nombre de questions des groupes media (et d'autres ?)
 
 ## bugs

@@ -17,17 +17,17 @@ function downloadCountLabel(count) {
   return `${count.toLocaleString("fr-FR")} téléchargement${count > 1 ? "s" : ""}`;
 }
 
-function statusLabel(status, installedVersion) {
+function statusLabel(status) {
   if (status === "local_copy") {
     return "Déjà présent";
   }
 
   if (status === "update_available") {
-    return installedVersion ? `v${installedVersion} installée` : "Mise à jour";
+    return "Changements disponibles";
   }
 
   if (status === "up_to_date") {
-    return installedVersion ? `À jour v${installedVersion}` : "À jour";
+    return "Installé";
   }
 
   return "À installer";
@@ -64,7 +64,6 @@ export default function PackCard({
   const {
     entry,
     status,
-    installedVersion,
     isMine,
     localGroupId,
     action
@@ -116,7 +115,7 @@ export default function PackCard({
               </span>
             )}
             <span className={`pack-status-pill ${statusClassName(status)}`}>
-              {statusLabel(status, installedVersion)}
+              {statusLabel(status)}
             </span>
           </span>
         </div>
@@ -132,8 +131,8 @@ export default function PackCard({
             <span>questions</span>
           </span>
           <span className="pack-card-stat">
-            <strong>v{entry.version ?? "—"}</strong>
-            <span>version</span>
+            <strong>{sizeLabel || "—"}</strong>
+            <span>taille</span>
           </span>
         </div>
 
@@ -176,13 +175,13 @@ export default function PackCard({
 
         {!canAct && !canOpenGroup && (
           <span className={`pack-status-pill ${statusClassName(status)}`}>
-            {statusLabel(status, installedVersion)}
+            {statusLabel(status)}
           </span>
         )}
 
         {status === "update_available" && (
           <span className="pack-detail-muted">
-            v{entry.version} disponible
+            Changements disponibles
           </span>
         )}
       </div>

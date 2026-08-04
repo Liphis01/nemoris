@@ -19,11 +19,14 @@ from ..services.pack_catalog import (
     backfill_pack_installs,
     check_pack_catalog_health,
     delete_pack_publication,
+    get_group_pack_publication,
     get_my_pack_status,
     get_pack_publish_status,
     list_pack_comments,
     list_pack_publications,
+    preview_group_pack_changes,
     publish_pack_publication,
+    publish_group_pack_changes,
     preview_pack_release,
     rate_pack,
     record_pack_install,
@@ -130,6 +133,19 @@ def pack_publish_drafts(db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+@router.get("/packs/sources/groups/{group_id}/publication")
+def group_pack_publication(group_id: int, db: Session = Depends(get_db)):
+    try:
+        return get_group_pack_publication(db, group_id)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        status_code = 404 if str(error) == "Question group not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
 @router.get("/blueprints/catalog/search", include_in_schema=False)
 @router.get("/packs/catalog/search")
 def search_catalog_packs(
@@ -155,6 +171,38 @@ def search_catalog_packs(
         )
     except PackCatalogError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/sources/groups/{group_id}/release-preview")
+def preview_group_pack_publication_release(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        return preview_group_pack_changes(db, group_id)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        status_code = 404 if str(error) == "Question group not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/packs/sources/groups/{group_id}/publish-changes")
+def publish_group_pack_publication_changes(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        return publish_group_pack_changes(db, group_id)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        status_code = 404 if str(error) == "Question group not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
 @router.post("/blueprints/{group_id}/publish/draft", include_in_schema=False)

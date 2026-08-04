@@ -1247,23 +1247,40 @@ def _get_owned_publication(db, pack_guid, *, required=False):
     return _normalize_publication(rows[0], project_url)
 
 
-def _validate_public_release_version(db, pack_guid, version):
-    publication = _get_owned_publication(db, pack_guid)
+def _release_version_for_publication(publication, version=None):
     current_version = _int_or_none(
         publication.get("version") if publication else None
     )
+    requested_version = _int_or_none(version) if version is not None else None
+
+    if version is not None and requested_version is None:
+        raise PackCatalogError("Publication invalide.")
+
+    if requested_version is None:
+        if publication and publication.get("is_public"):
+            return (current_version or 0) + 1
+
+        return current_version or 1
+
+    if requested_version < 1:
+        raise PackCatalogError("Publication invalide.")
 
     if (
         publication
         and publication.get("is_public")
         and current_version is not None
-        and int(version) <= current_version
+        and requested_version <= current_version
     ):
         raise PackCatalogError(
-            "La nouvelle version doit être supérieure à la version publiée."
+            "Cette publication a déjà des changements plus récents."
         )
 
-    return publication
+    return requested_version
+
+
+def _resolve_release_version(db, pack_guid, version=None):
+    publication = _get_owned_publication(db, pack_guid)
+    return publication, _release_version_for_publication(publication, version)
 
 
 def _local_publication_source(db, pack_guid):
@@ -1304,7 +1321,7 @@ def _local_publication_source(db, pack_guid):
         }
 
     raise PackCatalogError(
-        "Source supprimée localement : impossible de préparer cette version."
+        "Source supprimée localement : impossible de préparer les changements."
     )
 
 
@@ -1533,21 +1550,16 @@ def preview_pack_release(
     db,
     pack_guid,
     *,
-    version,
+    version=None,
     name,
     description="",
     license="",
     tags=None,
     themes=None
 ):
-    safe_version = int(version)
     publication = _get_owned_publication(db, pack_guid, required=True)
+    safe_version = _release_version_for_publication(publication, version)
     current_version = _int_or_none(publication.get("version")) or 1
-
-    if publication.get("is_public") and safe_version <= current_version:
-        raise PackCatalogError(
-            "La nouvelle version doit être supérieure à la version publiée."
-        )
 
     source = _local_publication_source(db, publication["pack_guid"])
     source_summary = (
@@ -1626,11 +1638,121 @@ def preview_pack_release(
     }
 
 
+def _group_publication_source(db, group_id):
+    group = (
+        db.query(QuestionGroup)
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
+
+    if not group:
+        raise ValueError("Question group not found")
+
+    return group
+
+
+def _source_release_payload(publication, source):
+    return {
+        "name": source.name or publication.get("name") or "Pack sans titre",
+        "description": publication.get("description") or "",
+        "license": publication.get("license") or "",
+        "tags": publication.get("tags") or []
+    }
+
+
+def get_group_pack_publication(db, group_id):
+    group = _group_publication_source(db, group_id)
+    settings = get_pack_catalog_settings()
+    project_url = normalize_supabase_url(settings.get("url"))
+    key = str(settings.get("key") or "").strip()
+
+    if not project_url or not key:
+        return {
+            "status": "unavailable",
+            "configured": False,
+            "signed_in": False,
+            "source": {"kind": "group", "id": group.id, "name": group.name},
+            "publication": None,
+            "can_publish_changes": False
+        }
+
+    state, _ = _effective_publish_state(project_url, required=False)
+
+    if not state:
+        return {
+            "status": "signed_out",
+            "configured": True,
+            "signed_in": False,
+            "source": {"kind": "group", "id": group.id, "name": group.name},
+            "publication": None,
+            "can_publish_changes": False
+        }
+
+    publication = _get_owned_publication(db, group.guid)
+
+    return {
+        "status": (
+            publication.get("publication_status")
+            if publication else "not_published"
+        ),
+        "configured": True,
+        "signed_in": True,
+        "source": {"kind": "group", "id": group.id, "name": group.name},
+        "publication": publication,
+        "can_publish_changes": bool(
+            publication
+            and publication.get("is_public")
+            and publication.get("publication_status") != "archived"
+        )
+    }
+
+
+def _published_group_publication(db, group_id):
+    group = _group_publication_source(db, group_id)
+    publication = _get_owned_publication(db, group.guid, required=True)
+
+    if (
+        not publication.get("is_public")
+        or publication.get("publication_status") == "archived"
+    ):
+        raise PackCatalogError("Ce groupe n'a pas de pack publié actif.")
+
+    return group, publication
+
+
+def preview_group_pack_changes(db, group_id):
+    group, publication = _published_group_publication(db, group_id)
+    return preview_pack_release(
+        db,
+        publication["pack_guid"],
+        version=None,
+        **_source_release_payload(publication, group)
+    )
+
+
+def publish_group_pack_changes(db, group_id):
+    group, publication = _published_group_publication(db, group_id)
+    draft = save_pack_publish_draft(
+        db,
+        group.id,
+        version=None,
+        **_source_release_payload(publication, group)
+    )
+    published = publish_pack_publication(db, publication["pack_guid"])
+
+    return {
+        **published,
+        "previous_version": publication.get("version"),
+        "next_version": draft["publication"].get("version"),
+        "draft": draft["publication"]
+    }
+
+
 def save_pack_publish_draft(
     db,
     group_id,
     *,
-    version,
+    version=None,
     name,
     description="",
     license="",
@@ -1642,9 +1764,8 @@ def save_pack_publish_draft(
     if summary["question_count"] <= 0:
         raise ValueError("Cannot publish an empty group")
 
-    safe_version = int(version)
-    _validate_public_release_version(
-        db, summary["pack_guid"], safe_version
+    _publication, safe_version = _resolve_release_version(
+        db, summary["pack_guid"], version
     )
     zip_path = export_pack(
         db,
@@ -1672,7 +1793,7 @@ def save_playlist_publish_draft(
     db,
     collection_id,
     *,
-    version,
+    version=None,
     name,
     description="",
     license="",
@@ -1689,9 +1810,8 @@ def save_playlist_publish_draft(
     if summary["question_count"] <= 0:
         raise ValueError("Cannot publish an empty playlist")
 
-    safe_version = int(version)
-    _validate_public_release_version(
-        db, summary["pack_guid"], safe_version
+    _publication, safe_version = _resolve_release_version(
+        db, summary["pack_guid"], version
     )
     zip_path = export_playlist_pack(
         db,

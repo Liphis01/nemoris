@@ -297,7 +297,7 @@ describe("PublicationsManager", () => {
     expect(onOpenGroup).toHaveBeenCalledWith(42);
   });
 
-  it("publishes a new version from a prefilled release preview", async () => {
+  it("publishes changes from a prefilled release preview", async () => {
     listPackPublications.mockResolvedValue({
       publications: [
         {
@@ -324,33 +324,31 @@ describe("PublicationsManager", () => {
     render(<PublicationsManager setMode={vi.fn()} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Publier une nouvelle version" })
+      await screen.findByRole("button", { name: "Publier les changements" })
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Nouvelle version" })
+      await screen.findByRole("heading", { name: "Publier les changements" })
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Titre du pack")).toHaveValue("Territoires du monde");
-    expect(screen.getByLabelText("Version du pack")).toHaveValue(4);
     expect(screen.getByLabelText("Licence du pack")).toHaveValue("CC0");
     expect(screen.getByText(/Déduits automatiquement des thèmes de base/)).toBeInTheDocument();
     expect(screen.getByLabelText("Mots-clés de recherche du pack")).toHaveValue("géographie");
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Prévisualiser la version" })
+        screen.getByRole("button", { name: "Prévisualiser les changements" })
       ).toBeEnabled();
     });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Prévisualiser la version" })
+      screen.getByRole("button", { name: "Prévisualiser les changements" })
     );
 
     await waitFor(() => {
       expect(previewPackRelease).toHaveBeenCalledWith(
         "published-guid",
         expect.objectContaining({
-          version: 4,
           name: "Territoires du monde",
           description: "Ancienne description.",
           license: "CC0",
@@ -362,14 +360,13 @@ describe("PublicationsManager", () => {
     expect(screen.getByText("Questions ajoutées")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Publier la version v4" })
+      screen.getByRole("button", { name: "Publier les changements" })
     );
 
     await waitFor(() => {
       expect(publishPack).toHaveBeenCalledWith(
         { groupId: 42 },
         expect.objectContaining({
-          version: 4,
           name: "Territoires du monde"
         })
       );

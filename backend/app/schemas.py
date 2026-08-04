@@ -289,7 +289,7 @@ class MapRepairActionRequest(BaseModel):
 
 
 class PackExportRequest(BaseModel):
-    version: int = Field(ge=1)
+    version: Optional[int] = Field(default=None, ge=1)
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     license: str = Field(default="", max_length=200)

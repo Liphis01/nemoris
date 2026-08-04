@@ -48,17 +48,17 @@ function downloadCountLabel(count) {
   return `${count.toLocaleString("fr-FR")} téléchargement${count > 1 ? "s" : ""}`;
 }
 
-function statusLabel(status, installedVersion) {
+function statusLabel(status) {
   if (status === "local_copy") {
     return "Déjà présent";
   }
 
   if (status === "update_available") {
-    return installedVersion ? `v${installedVersion} installée` : "Mise à jour";
+    return "Changements disponibles";
   }
 
   if (status === "up_to_date") {
-    return installedVersion ? `À jour v${installedVersion}` : "À jour";
+    return "Installé";
   }
 
   return "À installer";
@@ -71,7 +71,7 @@ function statusClassName(status) {
   return "";
 }
 
-function versionCheckLabel(status) {
+function availabilityLabel(status) {
   if (status === "update_available") return "Mise à jour disponible";
   if (status === "up_to_date") return "À jour";
   if (status === "local_copy") return "Présent localement";
@@ -237,11 +237,9 @@ function PackDetailPanel({
   const {
     entry,
     status,
-    installedVersion,
     hasLocalContent,
     isMine,
     localGroupId,
-    localPackVersion,
     action
   } = item;
   const typeStyle = getPackTypeChipStyle(entry.type_group);
@@ -271,7 +269,7 @@ function PackDetailPanel({
             </span>
           )}
           <span className={`pack-status-pill ${statusClassName(status)}`}>
-            {statusLabel(status, installedVersion)}
+            {statusLabel(status)}
           </span>
         </span>
       </div>
@@ -289,12 +287,8 @@ function PackDetailPanel({
           <strong>{entry.question_count ?? "—"}</strong>
         </div>
         <div className="pack-detail-stat">
-          <span>Catalogue</span>
-          <strong>v{entry.version ?? "—"}</strong>
-        </div>
-        <div className="pack-detail-stat">
           <span>Statut</span>
-          <strong>{versionCheckLabel(status)}</strong>
+          <strong>{availabilityLabel(status)}</strong>
         </div>
         <div className="pack-detail-stat">
           <span>Local</span>
@@ -317,10 +311,6 @@ function PackDetailPanel({
       <div className="pack-detail-meta">
         <span>{questionCountLabel(entry.question_count)}</span>
         {downloadLabel && <span>{downloadLabel}</span>}
-        {installedVersion && <span>v{installedVersion} installée</span>}
-        {!installedVersion && localPackVersion && (
-          <span>v{localPackVersion} locale</span>
-        )}
       </div>
 
       <div className="pack-action-row">

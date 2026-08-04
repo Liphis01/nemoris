@@ -36,7 +36,9 @@ from app.schemas import (
 )
 from app.services.pack_catalog import (
     _annotate_publication_sources,
+    get_group_pack_publication,
     get_pack_publish_status,
+    publish_group_pack_changes,
     preview_pack_release,
     publish_pack_publication,
     save_pack_publish_draft
@@ -815,6 +817,67 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         self.assertEqual(payload["p_tags"], ["capitales"])
         self.assertEqual(payload["p_themes"], ["Géographie"])
 
+    def test_save_draft_auto_increments_public_pack_version(self):
+        db = make_db()
+        group_id = self.configure(db)
+        calls = []
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_zip:
+            temp_zip.write(b"zip-bytes")
+            temp_zip.flush()
+
+            def fake_urlopen(request, timeout):
+                calls.append((request, timeout))
+
+                if "/rest/v1/pack_catalog?select=" in request.full_url:
+                    return FakeResponse([{
+                        "pack_guid": "group-guid",
+                        "name": "Atlas des capitales",
+                        "version": 2,
+                        "question_count": 1,
+                        "storage_path": "user-123/group-guid/v2-atlas.zip",
+                        "is_public": True,
+                        "publication_status": "published"
+                    }])
+
+                if "/storage/v1/object/pack-zips/" in request.full_url:
+                    return FakeResponse({})
+
+                return FakeResponse({
+                    "pack_guid": "group-guid",
+                    "name": "Atlas des capitales",
+                    "version": 3,
+                    "question_count": 1,
+                    "storage_path": "user-123/group-guid/v3-atlas.zip",
+                    "is_public": False,
+                    "publication_status": "draft"
+                })
+
+            with mock.patch(
+                "app.services.pack_catalog.load_sync_state",
+                return_value=self.empty_sync_state()
+            ), mock.patch(
+                "app.services.pack_catalog.load_pack_publish_state",
+                return_value=self.publish_state()
+            ), mock.patch(
+                "app.services.pack_catalog.export_pack",
+                return_value=Path(temp_zip.name)
+            ) as export_mock, mock.patch(
+                "app.services.pack_catalog.urlopen",
+                fake_urlopen
+            ):
+                result = save_pack_publish_draft(
+                    db,
+                    group_id,
+                    name="Atlas des capitales"
+                )
+
+        self.assertEqual(result["publication"]["version"], 3)
+        self.assertEqual(export_mock.call_args.kwargs["version"], 3)
+        rpc_payload = json.loads(calls[2][0].data.decode("utf-8"))
+        self.assertEqual(rpc_payload["p_version"], 3)
+        self.assertIn("/v3-atlas-des-capitales.zip", calls[1][0].full_url)
+
     def test_preview_release_compares_published_zip_with_local_source(self):
         db = make_db()
         group_id = self.configure(db)
@@ -907,6 +970,108 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         self.assertIn("/rest/v1/pack_catalog?select=", calls[0][0].full_url)
         self.assertIn("/storage/v1/object/pack-zips/", calls[1][0].full_url)
 
+    def test_publish_group_changes_uses_linked_publication_without_manual_version(self):
+        db = make_db()
+        group_id = self.configure(db)
+        group = db.query(QuestionGroup).filter(QuestionGroup.id == group_id).first()
+        group.name = "Capitales corrigées"
+        db.commit()
+        calls = []
+        published_row = {
+            "pack_guid": "group-guid",
+            "name": "Atlas des capitales",
+            "description": "Cartes de capitales.",
+            "version": 2,
+            "question_count": 1,
+            "license": "CC0",
+            "tags": ["capitales"],
+            "themes": ["géographie"],
+            "storage_path": "user-123/group-guid/v2-atlas.zip",
+            "is_public": True,
+            "publication_status": "published"
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_zip:
+            temp_zip.write(b"zip-bytes")
+            temp_zip.flush()
+
+            def fake_urlopen(request, timeout):
+                calls.append((request, timeout))
+
+                if "/rest/v1/pack_catalog?select=" in request.full_url:
+                    return FakeResponse([published_row])
+
+                if "/storage/v1/object/pack-zips/" in request.full_url:
+                    return FakeResponse({})
+
+                if request.full_url.endswith("/rest/v1/rpc/upsert_my_pack_draft"):
+                    return FakeResponse({
+                        **published_row,
+                        "name": "Capitales corrigées",
+                        "version": 3,
+                        "storage_path": (
+                            "user-123/group-guid/v3-capitales-corrigées.zip"
+                        ),
+                        "is_public": False,
+                        "publication_status": "draft"
+                    })
+
+                if request.full_url.endswith("/rest/v1/rpc/publish_my_pack"):
+                    return FakeResponse({
+                        **published_row,
+                        "name": "Capitales corrigées",
+                        "version": 3,
+                        "storage_path": (
+                            "user-123/group-guid/v3-capitales-corrigées.zip"
+                        )
+                    })
+
+                raise AssertionError(f"unexpected request {request.full_url}")
+
+            with mock.patch(
+                "app.services.pack_catalog.load_sync_state",
+                return_value=self.empty_sync_state()
+            ), mock.patch(
+                "app.services.pack_catalog.load_pack_publish_state",
+                return_value=self.publish_state()
+            ), mock.patch(
+                "app.services.pack_catalog.export_pack",
+                return_value=Path(temp_zip.name)
+            ) as export_mock, mock.patch(
+                "app.services.pack_catalog.urlopen",
+                fake_urlopen
+            ):
+                result = publish_group_pack_changes(db, group_id)
+
+        self.assertEqual(result["status"], "published")
+        self.assertEqual(result["previous_version"], 2)
+        self.assertEqual(result["next_version"], 3)
+        self.assertEqual(result["publication"]["name"], "Capitales corrigées")
+        self.assertEqual(export_mock.call_args.kwargs["version"], 3)
+        draft_payload = json.loads(calls[3][0].data.decode("utf-8"))
+        self.assertEqual(draft_payload["p_name"], "Capitales corrigées")
+        self.assertEqual(draft_payload["p_description"], "Cartes de capitales.")
+        self.assertEqual(draft_payload["p_version"], 3)
+
+    def test_group_pack_publication_signed_out_is_non_blocking(self):
+        db = make_db()
+        group_id = self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            result = get_group_pack_publication(db, group_id)
+
+        self.assertEqual(result["status"], "signed_out")
+        self.assertFalse(result["can_publish_changes"])
+
     def test_save_draft_rejects_same_version_for_public_pack(self):
         db = make_db()
         group_id = self.configure(db)
@@ -935,7 +1100,7 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
             fake_urlopen
         ), self.assertRaisesRegex(
             ValueError,
-            "version doit être supérieure"
+            "déjà des changements plus récents"
         ):
             save_pack_publish_draft(
                 db,

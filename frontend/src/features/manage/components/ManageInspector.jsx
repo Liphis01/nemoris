@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
 import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
@@ -14,6 +15,11 @@ import useInspectorEditorMode, {
   DIRECT_GROUP_TYPES
 } from "../hooks/useInspectorEditorMode";
 import useInspectorPreviewState from "../hooks/useInspectorPreviewState";
+import {
+  getGroupPackPublication,
+  previewGroupPackChanges,
+  publishGroupPackChanges
+} from "../../../api/packs";
 
 // The grouped types whose editor opens on a group that does not exist yet.
 const PENDING_GROUP_EDITORS = {
@@ -21,6 +27,162 @@ const PENDING_GROUP_EDITORS = {
   media: MediaGroupEditor,
   sequence: SequenceGroupEditor
 };
+
+const publishButtonStyle = {
+  background: "#1f2a22",
+  border: "1px solid #2f5f3d",
+  borderRadius: "8px",
+  color: "#a7f3c1",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 800,
+  lineHeight: 1,
+  padding: "8px 11px",
+  whiteSpace: "nowrap"
+};
+
+const publishButtonDisabledStyle = {
+  ...publishButtonStyle,
+  cursor: "default",
+  opacity: 0.55
+};
+
+function diffCount(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function formatPublishSummary(preview) {
+  const added = diffCount(preview?.questions?.added);
+  const edited = diffCount(preview?.questions?.edited);
+  const removed = diffCount(preview?.questions?.removed);
+  const groupChanges =
+    diffCount(preview?.groups?.added) +
+    diffCount(preview?.groups?.edited) +
+    diffCount(preview?.groups?.removed);
+  const metadata = diffCount(preview?.metadata_changed);
+
+  return [
+    "Publier les changements de ce pack ?",
+    "",
+    `${added} question${added > 1 ? "s" : ""} ajoutée${added > 1 ? "s" : ""}`,
+    `${edited} question${edited > 1 ? "s" : ""} modifiée${edited > 1 ? "s" : ""}`,
+    `${removed} question${removed > 1 ? "s" : ""} retirée${removed > 1 ? "s" : ""}`,
+    `${groupChanges} groupe${groupChanges > 1 ? "s" : ""} modifié${groupChanges > 1 ? "s" : ""}`,
+    `${metadata} métadonnée${metadata > 1 ? "s" : ""} modifiée${metadata > 1 ? "s" : ""}`
+  ].join("\n");
+}
+
+function PackPublishHeaderAction({ group, requestManageTransition }) {
+  const [publicationState, setPublicationState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const groupId = group?.id || null;
+
+  useEffect(() => {
+    if (!groupId) {
+      setPublicationState(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setMessage("");
+    setError("");
+
+    getGroupPackPublication(groupId)
+      .then((result) => {
+        if (!cancelled) {
+          setPublicationState(result);
+        }
+      })
+      .catch((loadError) => {
+        console.error(loadError);
+        if (!cancelled) {
+          setPublicationState(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
+
+  if (!publicationState?.can_publish_changes) {
+    return null;
+  }
+
+  async function publishChanges() {
+    if (!groupId || busy) return;
+
+    const runAfterPendingSave = requestManageTransition || ((action) => action());
+
+    await runAfterPendingSave(async () => {
+      setBusy(true);
+      setMessage("");
+      setError("");
+
+      try {
+        const preview = await previewGroupPackChanges(groupId);
+
+        if (preview?.unchanged) {
+          setMessage("Aucun changement");
+          return;
+        }
+
+        if (!window.confirm(formatPublishSummary(preview))) {
+          return;
+        }
+
+        const result = await publishGroupPackChanges(groupId);
+        setPublicationState(previous => ({
+          ...(previous || {}),
+          status: result.publication?.publication_status || "published",
+          publication: result.publication,
+          can_publish_changes: true
+        }));
+        setMessage("Publié");
+      } catch (publishError) {
+        console.error(publishError);
+        setError(publishError.message || "Publication impossible");
+      } finally {
+        setBusy(false);
+      }
+    });
+  }
+
+  return (
+    <span
+      style={{
+        alignItems: "center",
+        display: "inline-flex",
+        gap: "7px",
+        minWidth: 0
+      }}
+    >
+      <button
+        type="button"
+        disabled={busy}
+        onClick={publishChanges}
+        style={busy ? publishButtonDisabledStyle : publishButtonStyle}
+      >
+        {busy ? "Publication..." : "Publier les changements"}
+      </button>
+      {(message || error) && (
+        <span
+          role={error ? "alert" : "status"}
+          style={{
+            color: error ? "#f2b8b8" : "#9ccfa9",
+            fontSize: "12px",
+            fontWeight: 700,
+            whiteSpace: "nowrap"
+          }}
+        >
+          {error || message}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export default function ManageInspector({
   allGroups,
@@ -110,6 +272,18 @@ export default function ManageInspector({
     setEditingZone,
     setSelectedItem
   });
+
+  function renderGroupHeaderAction(group, calendarAction = null) {
+    return (
+      <>
+        {calendarAction}
+        <PackPublishHeaderAction
+          group={group}
+          requestManageTransition={requestManageTransition}
+        />
+      </>
+    );
+  }
 
   // Shared by the "edit an existing group" and "create a group" paths: a save
   // reconciles the group and question caches the same way either time.
@@ -463,7 +637,8 @@ export default function ManageInspector({
           onClose={() => { }}
           registerPendingSaveHandler={registerPendingSaveHandler}
           selectedZone={editingZone}
-          headerAction={
+          headerAction={renderGroupHeaderAction(
+            group,
             selectedIsMapZone ? (
               <ReviewCalendarAction
                 compact
@@ -471,7 +646,7 @@ export default function ManageInspector({
                 onOpen={openSelectedInCalendar}
               />
             ) : null
-          }
+          )}
         />
       </div>
     );
@@ -566,7 +741,8 @@ export default function ManageInspector({
           }}
           registerPendingSaveHandler={registerPendingSaveHandler}
           updateQuestion={updateQuestion}
-          headerAction={
+          headerAction={renderGroupHeaderAction(
+            group,
             selectedIsImageItem ? (
               <ReviewCalendarAction
                 compact
@@ -574,7 +750,7 @@ export default function ManageInspector({
                 onOpen={openSelectedInCalendar}
               />
             ) : null
-          }
+          )}
         />
       </div>
     );
@@ -634,7 +810,8 @@ export default function ManageInspector({
           })}
           registerPendingSaveHandler={registerPendingSaveHandler}
           updateQuestion={updateQuestion}
-          headerAction={
+          headerAction={renderGroupHeaderAction(
+            group,
             selectedIsGroupItem ? (
               <ReviewCalendarAction
                 compact
@@ -642,7 +819,7 @@ export default function ManageInspector({
                 onOpen={openSelectedInCalendar}
               />
             ) : null
-          }
+          )}
         />
       </div>
     );

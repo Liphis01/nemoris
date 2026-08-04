@@ -48,15 +48,8 @@ function termsToDraft(values) {
 }
 
 
-function nextReleaseVersion(publication) {
-  const currentVersion = Number(publication?.version);
-  return String(Number.isFinite(currentVersion) ? Math.floor(currentVersion) + 1 : 1);
-}
-
-
 function releasePayloadKey(payload) {
   return JSON.stringify({
-    version: payload.version,
     name: payload.name,
     description: payload.description,
     license: payload.license,
@@ -90,7 +83,7 @@ function ReleaseDiffPreview({ preview }) {
   return (
     <div className="pack-release-preview" role="status">
       <div className="pack-release-preview-head">
-        <strong>v{preview.published_version} → v{preview.next_version}</strong>
+        <strong>Changements à publier</strong>
         <span>
           {preview.question_count?.published ?? "—"} → {preview.question_count?.next ?? "—"} questions
         </span>
@@ -123,7 +116,7 @@ function ReleaseDiffPreview({ preview }) {
 
       {preview.unchanged && (
         <div className="pack-release-warning">
-          Aucun changement détecté pour cette version.
+          Aucun changement détecté.
         </div>
       )}
     </div>
@@ -155,9 +148,6 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
   );
   const [sourceSearch, setSourceSearch] = useState("");
   const [title, setTitle] = useState(basePublication?.name || "");
-  const [version, setVersion] = useState(
-    releaseMode ? nextReleaseVersion(basePublication) : "1"
-  );
   const [license, setLicense] = useState(basePublication?.license || "");
   const [description, setDescription] = useState(basePublication?.description || "");
   const [tagsDraft, setTagsDraft] = useState(termsToDraft(basePublication?.tags));
@@ -223,24 +213,18 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
   const selectedSource = sourceKind === "playlist"
     ? selectedPlaylist
     : selectedGroup;
-  const versionNumber = Number(version);
   const publishPayload = {
-    version: Math.floor(versionNumber),
     name: title.trim(),
     description: description.trim(),
     license: license.trim(),
     tags: splitTerms(tagsDraft)
   };
-  const currentPublicationVersion = Number(basePublication?.version || 0);
   const previewKey = releasePayloadKey(publishPayload);
   const previewReady = releaseMode && preview?.payloadKey === previewKey;
   const canPublish = (
     selectedSource &&
     !publishingBusy &&
     title.trim() &&
-    Number.isFinite(versionNumber) &&
-    versionNumber >= 1 &&
-    (!releaseMode || versionNumber > currentPublicationVersion) &&
     (selectedSource.question_count || 0) > 0 &&
     // A generated playlist is derived from your review history, so it is not
     // yours to hand to someone else.
@@ -454,14 +438,14 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
   return (
     <section
       className="pack-export-panel app-scrollbar"
-      aria-label={releaseMode ? "Nouvelle version" : "Nouveau pack"}
+      aria-label={releaseMode ? "Publier les changements" : "Nouveau pack"}
     >
       <div className="pack-section-head">
         <div>
-          <h2>{releaseMode ? "Nouvelle version" : "Nouveau pack"}</h2>
+          <h2>{releaseMode ? "Publier les changements" : "Nouveau pack"}</h2>
           <p>
             {releaseMode
-              ? `Préparer v${publishPayload.version} pour le catalogue`
+              ? "Préparer les changements pour le catalogue"
               : (
                 sourceKind === "playlist"
                   ? "Mettre une playlist dans le catalogue"
@@ -517,31 +501,17 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
           />
         </label>
 
-        <div className="pack-form-grid">
-          <label className="pack-field">
-            <span className="pack-field-label">Version</span>
-            <input
-              aria-label="Version du pack"
-              type="number"
-              min="1"
-              value={version}
-              onChange={(event) => setVersion(event.target.value)}
-              disabled={publishingBusy}
-            />
-          </label>
-
-          <label className="pack-field">
-            <span className="pack-field-label">Licence</span>
-            <input
-              aria-label="Licence du pack"
-              type="text"
-              placeholder="CC0, CC-BY..."
-              value={license}
-              onChange={(event) => setLicense(event.target.value)}
-              disabled={publishingBusy}
-            />
-          </label>
-        </div>
+        <label className="pack-field">
+          <span className="pack-field-label">Licence</span>
+          <input
+            aria-label="Licence du pack"
+            type="text"
+            placeholder="CC0, CC-BY..."
+            value={license}
+            onChange={(event) => setLicense(event.target.value)}
+            disabled={publishingBusy}
+          />
+        </label>
 
         <label className="pack-field">
           <span className="pack-field-label">Description</span>
@@ -573,12 +543,6 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
           </label>
         </div>
 
-        {releaseMode && versionNumber <= currentPublicationVersion && (
-          <div className="pack-alert" role="alert">
-            Choisis une version supérieure à v{basePublication.version}.
-          </div>
-        )}
-
         {releaseMode && (
           <ReleaseDiffPreview preview={previewReady ? preview : null} />
         )}
@@ -592,7 +556,7 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
                 disabled={!canPublish}
                 onClick={handlePreview}
               >
-                {previewBusy ? "Prévisualisation..." : "Prévisualiser la version"}
+                {previewBusy ? "Prévisualisation..." : "Prévisualiser les changements"}
               </button>
               <button
                 type="button"
@@ -600,7 +564,7 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
                 disabled={!canPublish || !previewReady}
                 onClick={handlePublish}
               >
-                {draftBusy ? "Publication..." : `Publier la version v${publishPayload.version}`}
+                {draftBusy ? "Publication..." : "Publier les changements"}
               </button>
               <button
                 type="button"
@@ -663,7 +627,7 @@ function PackDetail({
       <div className="pack-section-head">
         <div>
           <h2>{publication.name}</h2>
-          <p>v{publication.version} · {questionCountLabel(publication.question_count)}</p>
+          <p>{questionCountLabel(publication.question_count)}</p>
         </div>
         <span className={`pack-status-pill ${statusClassName(publication)}`}>
           {statusLabel(publication)}
@@ -684,8 +648,8 @@ function PackDetail({
           <strong>{publication.comment_count || 0}</strong>
         </div>
         <div className="pack-detail-stat">
-          <span>Version</span>
-          <strong>v{publication.version}</strong>
+          <span>Publication</span>
+          <strong>{statusLabel(publication)}</strong>
         </div>
       </div>
 
@@ -697,7 +661,7 @@ function PackDetail({
       {publication.orphaned ? (
         <div className="pack-alert" role="note">
           ⚠ Source supprimée localement — ce pack reste public mais tu ne
-          peux plus en publier de nouvelle version.
+          peux plus publier de changements.
         </div>
       ) : publication.source?.name ? (
         publication.source.kind === "group" && onOpenGroup ? (
@@ -733,7 +697,7 @@ function PackDetail({
             disabled={action.busy}
             onClick={() => onStartRelease(publication)}
           >
-            Publier une nouvelle version
+            Publier les changements
           </button>
         )}
 
@@ -1085,7 +1049,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
                     </span>
                     <strong>{publication.name}</strong>
                     <small>
-                      v{publication.version} · {questionCountLabel(publication.question_count)}
+                      {questionCountLabel(publication.question_count)}
                       {ratingLabel ? ` · ${ratingLabel}` : ""}
                       {publication.orphaned ? " · ⚠ source supprimée" : ""}
                     </small>
