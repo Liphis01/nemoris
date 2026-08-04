@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
-import { fadeInStyle } from "../../../shared/styles";
+import { fadeInStyle, letterboxPatternBg } from "../../../shared/styles";
 import { useFlip } from "../../../shared/useFlip";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
@@ -1548,7 +1548,7 @@ export default function MediaReview({
           tabIndex={previewByThumbnail ? 0 : -1}
           style={{
             alignItems: "center",
-            background: "#101010",
+            background: letterboxPatternBg,
             border: "1px solid #262626",
             borderRadius: "9px",
             cursor: previewByThumbnail && mediaSrc
@@ -1579,9 +1579,11 @@ export default function MediaReview({
                 playsInline
                 onClick={(event) => event.stopPropagation()}
                 style={{
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  boxSizing: "border-box",
                   maxHeight: `${tileImageMaxHeight}px`,
-                  maxWidth: "100%",
-                  objectFit: "contain"
+                  objectFit: "contain",
+                  width: "100%"
                 }}
               />
             ) : (
@@ -1589,9 +1591,11 @@ export default function MediaReview({
                 src={mediaSrc}
                 alt={revealed ? answerLabel(row.item) : "image"}
                 style={{
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  boxSizing: "border-box",
                   maxHeight: `${tileImageMaxHeight}px`,
-                  maxWidth: "100%",
-                  objectFit: "contain"
+                  objectFit: "contain",
+                  width: "100%"
                 }}
               />
             )
@@ -1767,8 +1771,8 @@ export default function MediaReview({
           cursor: selectable ? "pointer" : "default",
           display: "grid",
           gap: "10px",
-          gridTemplateRows: "minmax(0, 1fr) minmax(22px, auto)",
-          height: "100%",
+          gridTemplateRows: prompt ? "auto auto" : "minmax(0, 1fr) minmax(22px, auto)",
+          height: prompt ? "auto" : "100%",
           minHeight: "0",
           minWidth: 0,
           overflow: "hidden",
@@ -1806,7 +1810,7 @@ export default function MediaReview({
           tabIndex={previewByThumbnail ? 0 : undefined}
           style={{
             alignItems: "center",
-            background: "#101010",
+            background: letterboxPatternBg,
             border: "1px solid #262626",
             borderRadius: "8px",
             cursor: previewByThumbnail
@@ -1840,10 +1844,11 @@ export default function MediaReview({
                 onClick={(event) => event.stopPropagation()}
                 {...imageMarkerProps}
                 style={{
+                  background: letterboxPatternBg,
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  boxSizing: "border-box",
                   display: "block",
-                  height: "100%",
                   maxHeight: "100%",
-                  maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
                   width: "100%"
@@ -1855,10 +1860,11 @@ export default function MediaReview({
                 alt={revealed ? answerLabel(row.item) : "image"}
                 {...imageMarkerProps}
                 style={{
+                  background: letterboxPatternBg,
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  boxSizing: "border-box",
                   display: "block",
-                  height: "100%",
                   maxHeight: "100%",
-                  maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
                   width: "100%"
@@ -2700,9 +2706,11 @@ export default function MediaReview({
           <div
             data-image-prompt-board
             style={{
-              display: "grid",
-              height: "100%",
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "center",
               margin: "0 auto",
+              maxHeight: "100%",
               maxWidth: "640px",
               minHeight: 0,
               width: "min(100%, 640px)"
@@ -3060,40 +3068,68 @@ export default function MediaReview({
                   }}
                 />
               ) : getMediaKind(previewRow.item.media) === "video" ? (
-                <video
-                  src={resolveMediaUrl(previewRow.item.media)}
-                  controls
-                  playsInline
+                <div
                   style={{
-                    background: "#0d0d0d",
+                    alignItems: "center",
+                    background: letterboxPatternBg,
                     borderRadius: "8px",
-                    display: "block",
+                    display: "flex",
                     height: isImageAnswerRevealed(previewRow, resultMode)
                       ? "min(62vh, 560px)"
                       : "min(68vh, 620px)",
-                    objectFit: "contain",
+                    justifyContent: "center",
                     width: "100%"
                   }}
-                />
+                >
+                  <video
+                    src={resolveMediaUrl(previewRow.item.media)}
+                    controls
+                    playsInline
+                    style={{
+                      background: letterboxPatternBg,
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      borderRadius: "8px",
+                      boxSizing: "border-box",
+                      display: "block",
+                      maxHeight: "100%",
+                      objectFit: "contain",
+                      width: "100%"
+                    }}
+                  />
+                </div>
               ) : (
-                <img
-                  src={resolveMediaUrl(previewRow.item.media)}
-                  alt={
-                    isImageAnswerRevealed(previewRow, resultMode)
-                      ? answerLabel(previewRow.item)
-                      : "image"
-                  }
+                <div
                   style={{
-                    background: "#0d0d0d",
+                    alignItems: "center",
+                    background: letterboxPatternBg,
                     borderRadius: "8px",
-                    display: "block",
+                    display: "flex",
                     height: isImageAnswerRevealed(previewRow, resultMode)
                       ? "min(62vh, 560px)"
                       : "min(68vh, 620px)",
-                    objectFit: "contain",
+                    justifyContent: "center",
                     width: "100%"
                   }}
-                />
+                >
+                  <img
+                    src={resolveMediaUrl(previewRow.item.media)}
+                    alt={
+                      isImageAnswerRevealed(previewRow, resultMode)
+                        ? answerLabel(previewRow.item)
+                        : "image"
+                    }
+                    style={{
+                      background: letterboxPatternBg,
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      borderRadius: "8px",
+                      boxSizing: "border-box",
+                      display: "block",
+                      maxHeight: "100%",
+                      objectFit: "contain",
+                      width: "100%"
+                    }}
+                  />
+                </div>
               )
             ) : (
               <div
@@ -3283,7 +3319,7 @@ const imageRecapSelectedPreviewStyle = {
 
 const imageRecapSelectedPreviewButtonStyle = {
   alignItems: "center",
-  background: "#151515",
+  background: letterboxPatternBg,
   border: "1px solid #303030",
   borderRadius: "12px",
   boxSizing: "border-box",
@@ -3311,10 +3347,11 @@ const imageRecapSelectedPreviewMissedStyle = {
 };
 
 const imageRecapSelectedPreviewImageStyle = {
+  background: letterboxPatternBg,
+  border: "1px solid rgba(255, 255, 255, 0.12)",
+  boxSizing: "border-box",
   display: "block",
-  height: "min(44vh, 340px)",
-  maxHeight: "100%",
-  maxWidth: "100%",
+  maxHeight: "min(44vh, 340px)",
   objectFit: "contain",
   width: "100%"
 };
@@ -3578,7 +3615,7 @@ const imageRecapStatusUnansweredStyle = {
 
 const imageRecapThumbnailStyle = {
   alignItems: "center",
-  background: "#101010",
+  background: letterboxPatternBg,
   border: "1px solid #2a2a2a",
   borderRadius: "7px",
   display: "flex",
@@ -3590,10 +3627,11 @@ const imageRecapThumbnailStyle = {
 };
 
 const imageRecapThumbnailImageStyle = {
+  background: letterboxPatternBg,
+  border: "1px solid rgba(255, 255, 255, 0.12)",
+  boxSizing: "border-box",
   display: "block",
-  height: "100%",
   maxHeight: "100%",
-  maxWidth: "100%",
   objectFit: "contain",
   width: "100%"
 };

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { letterboxPatternBg } from "./styles";
 
 const previewShortcutKeys = new Set(["Enter", "0", "1", "2", "3"]);
 
@@ -59,11 +60,14 @@ export function MediaZoomOverlay({ src, alt, onClose }) {
                 onKeyDown={(event) => event.stopPropagation()}
                 role="dialog"
                 style={{
+                    alignItems: "center",
                     background: "#111",
                     border: "1px solid #333",
                     borderRadius: "12px",
                     boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
                     boxSizing: "border-box",
+                    display: "flex",
+                    justifyContent: "center",
                     maxHeight: "86vh",
                     overflow: "hidden",
                     padding: "14px",
@@ -101,11 +105,12 @@ export function MediaZoomOverlay({ src, alt, onClose }) {
                     src={src}
                     alt={alt}
                     style={{
-                        background: "#0d0d0d",
+                        background: letterboxPatternBg,
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
                         borderRadius: "8px",
+                        boxSizing: "border-box",
                         display: "block",
-                        height: "68vh",
-                        maxHeight: "620px",
+                        maxHeight: "min(68vh, 620px)",
                         objectFit: "contain",
                         width: "100%"
                     }}
@@ -154,7 +159,9 @@ export function ZoomableImageThumb({
                     src={src}
                     alt={alt}
                     style={{
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
                         borderRadius: "8px",
+                        boxSizing: "border-box",
                         display: "block",
                         maxHeight: "132px",
                         maxWidth: "100%",
@@ -184,7 +191,9 @@ export function ZoomableImageThumb({
                 src={src}
                 alt={alt}
                 style={{
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
                     borderRadius: "8px",
+                    boxSizing: "border-box",
                     display: "block",
                     maxHeight: "180px",
                     maxWidth: "100%",

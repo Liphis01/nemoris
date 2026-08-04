@@ -647,7 +647,8 @@ function EventCard({
             maxHeight: "260px",
             objectFit: "contain",
             borderRadius: "10px",
-            border: "1px solid #2d2d2d",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            boxSizing: "border-box",
             background: "#101010",
             marginTop: "10px"
           }}

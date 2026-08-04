@@ -247,6 +247,7 @@ export function useManageTextPreview(items, options = {}) {
                 objectFit: "contain",
                 borderRadius: "8px",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
+                boxSizing: "border-box",
                 background: "#0f0f0f"
               }}
             />

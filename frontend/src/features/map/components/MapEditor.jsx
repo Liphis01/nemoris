@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import TagPicker from "../../../shared/TagPicker";
 import { useTagLabels } from "../../../shared/tagLabels";
 import { resolveMediaUrl } from "../../../shared/media";
+import { letterboxPatternBg } from "../../../shared/styles";
 import { apiUrl } from "../../../api/config";
 import {
   cancelMapImport,
@@ -881,8 +882,11 @@ export default function MapEditor({
               src={apiUrl(upgradeDraft.preview_url)}
               alt="Aperçu de la mise à niveau"
               style={{
-                background: "#111",
-                height: "100px",
+                alignSelf: "center",
+                background: letterboxPatternBg,
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                boxSizing: "border-box",
+                maxHeight: "100px",
                 objectFit: "contain",
                 width: "180px"
               }}

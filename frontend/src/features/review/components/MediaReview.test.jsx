@@ -807,8 +807,8 @@ describe("MediaReview answer label preview", () => {
       .not.toBeInTheDocument();
     expect(promptBoard).toBeInTheDocument();
     expect(promptBoard).toHaveStyle({
-      display: "grid",
-      height: "100%",
+      display: "flex",
+      maxHeight: "100%",
       maxWidth: "640px"
     });
     expect(promptTiles).toHaveLength(1);

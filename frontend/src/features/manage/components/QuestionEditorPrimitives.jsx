@@ -20,6 +20,7 @@ import {
   resolveMediaUrl
 } from "../../../shared/media";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
+import { letterboxPatternBg } from "../../../shared/styles";
 
 const DEFAULT_MEDIA_LABELS = {
   import: "Importer une image",
@@ -197,6 +198,8 @@ export function MediaPreview({ media }) {
           src={src}
           alt="preview"
           style={{
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            boxSizing: "border-box",
             maxHeight: "100%",
             maxWidth: "100%",
             objectFit: "contain"
@@ -525,6 +528,8 @@ function MediaPoolThumbnail({ media, size = 72 }) {
   const kind = getMediaKind(media);
 
   const shared = {
+    border: "1px solid rgba(255, 255, 255, 0.12)",
+    boxSizing: "border-box",
     maxHeight: "100%",
     maxWidth: "100%",
     objectFit: "contain"
@@ -1172,12 +1177,14 @@ export function MediaPoolField({
             <div
               onClick={(event) => event.stopPropagation()}
               style={{
+                alignItems: "center",
                 background: "#111",
                 border: "1px solid #333",
                 borderRadius: "12px",
                 boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
                 boxSizing: "border-box",
-                display: "grid",
+                display: "flex",
+                justifyContent: "center",
                 maxHeight: "86vh",
                 overflow: "hidden",
                 padding: "14px",
@@ -1228,10 +1235,12 @@ export function MediaPoolField({
                   src={resolveMediaUrl(previewMedia)}
                   controls
                   style={{
-                    background: "#0d0d0d",
+                    background: letterboxPatternBg,
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
                     borderRadius: "8px",
+                    boxSizing: "border-box",
                     display: "block",
-                    height: "min(62vh, 560px)",
+                    maxHeight: "min(62vh, 560px)",
                     objectFit: "contain",
                     width: "100%"
                   }}
@@ -1241,10 +1250,12 @@ export function MediaPoolField({
                   src={resolveMediaUrl(previewMedia)}
                   alt=""
                   style={{
-                    background: "#0d0d0d",
+                    background: letterboxPatternBg,
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
                     borderRadius: "8px",
+                    boxSizing: "border-box",
                     display: "block",
-                    height: "min(62vh, 560px)",
+                    maxHeight: "min(62vh, 560px)",
                     objectFit: "contain",
                     width: "100%"
                   }}

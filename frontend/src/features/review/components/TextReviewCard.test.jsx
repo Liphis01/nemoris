@@ -56,7 +56,7 @@ describe("TextReviewCard media preview", () => {
         const dialog = screen.getByRole("dialog", { name: "Image agrandie" });
         const previewImage = within(dialog).getByAltText("question");
 
-        expect(previewImage).toHaveStyle("height: 68vh; max-height: 620px; width: 100%;");
+        expect(previewImage).toHaveStyle("max-height: min(68vh, 620px); width: 100%;");
 
         fireEvent.keyDown(window, { key: "Escape" });
 

@@ -13,6 +13,7 @@ import {
   selectableInterpretations,
   simplifyInterpretationTitle
 } from "../mapImportPresentation";
+import { letterboxPatternBg } from "../../../shared/styles";
 
 const railButtonStyle = {
   background: "#242424",
@@ -190,11 +191,14 @@ export default function MapImportResultWorkspace({
         padding: "16px"
       }}>
         <div style={{
+          alignItems: "center",
           background: "#0f0f0f",
           border: "1px solid #262626",
           borderRadius: "12px",
           boxSizing: "border-box",
+          display: "flex",
           height: "100%",
+          justifyContent: "center",
           minHeight: 0,
           overflow: "hidden",
           padding: "10px",
@@ -214,7 +218,14 @@ export default function MapImportResultWorkspace({
             <img
               src={previewSrc}
               alt="Aperçu de la carte"
-              style={{ height: "100%", objectFit: "contain", width: "100%" }}
+              style={{
+                background: letterboxPatternBg,
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                boxSizing: "border-box",
+                maxHeight: "100%",
+                objectFit: "contain",
+                width: "100%"
+              }}
             />
           )}
         </div>
