@@ -7,6 +7,7 @@ import {
   recordCollectionTrainingAttempt,
   recordGroupTrainingAttempt
 } from "../../../api/training";
+import { createCollection } from "../../../api/collections";
 
 
 function isEditableTarget(target) {
@@ -187,6 +188,9 @@ export function useTrainingSession(active = true) {
   const [recordSaveStatus, setRecordSaveStatus] = useState("idle");
   const [recordSaveError, setRecordSaveError] = useState("");
   const [recordResult, setRecordResult] = useState(null);
+  const [collectionSaveStatus, setCollectionSaveStatus] = useState("idle");
+  const [collectionSaveError, setCollectionSaveError] = useState("");
+  const [createdCollectionName, setCreatedCollectionName] = useState("");
   const [isPaused, setIsPaused] = useState(false);
   const [pauseCount, setPauseCount] = useState(0);
   const recordSubmittedRef = useRef(false);
@@ -238,6 +242,9 @@ export function useTrainingSession(active = true) {
     setRecordSaveStatus("idle");
     setRecordSaveError("");
     setRecordResult(null);
+    setCollectionSaveStatus("idle");
+    setCollectionSaveError("");
+    setCreatedCollectionName("");
     recordSubmittedRef.current = false;
     setIsPaused(false);
     setPauseCount(0);
@@ -337,6 +344,44 @@ export function useTrainingSession(active = true) {
       "retry"
     );
   }, [failedQuestionIds, originalQuestions, resetRun]);
+
+  // Lets the user turn this run's misses into a standalone collection they
+  // can come back and train on later, independently of this run. Plain
+  // pinned-question collection, no rules -- same shape PlaylistBuilder saves
+  // when a playlist has no rule clauses.
+  const createCollectionFromFailed = useCallback(async (name) => {
+    const cleanedName = String(name || "").trim();
+
+    if (
+      !cleanedName ||
+      failedQuestionIds.size === 0 ||
+      collectionSaveStatus === "saving"
+    ) {
+      return;
+    }
+
+    setCollectionSaveStatus("saving");
+    setCollectionSaveError("");
+
+    try {
+      const collection = await createCollection({
+        name: cleanedName,
+        question_ids: Array.from(failedQuestionIds)
+      });
+
+      setCollectionSaveStatus("saved");
+      setCreatedCollectionName(collection?.name || cleanedName);
+      // Refreshes the scope selector so the new collection is immediately
+      // trainable without leaving and re-entering the Training tab.
+      loadScopes();
+    } catch (error) {
+      console.error(error);
+      setCollectionSaveStatus("error");
+      setCollectionSaveError(
+        error.message || "Impossible de créer la collection."
+      );
+    }
+  }, [collectionSaveStatus, failedQuestionIds, loadScopes]);
 
   const handleTextAnswer = useCallback((options = {}) => {
     if (!current) return;
@@ -651,8 +696,12 @@ export function useTrainingSession(active = true) {
     allQuestionIds,
     attemptFoundCount,
     canPause,
+    collectionSaveError,
+    collectionSaveStatus,
     completedElapsedMs,
     completedRunElapsedMs,
+    createCollectionFromFailed,
+    createdCollectionName,
     currentIndex,
     elapsedMs,
     failedCount,

@@ -71,6 +71,15 @@ const disabledButtonStyle = {
   opacity: 0.55
 };
 
+const inputStyle = {
+  background: "#141414",
+  border: "1px solid #333",
+  borderRadius: "8px",
+  color: "#eee",
+  fontSize: "14px",
+  padding: "10px 12px"
+};
+
 const completionMetricStyle = {
   background: "#141414",
   border: "1px solid #282828",
@@ -862,6 +871,8 @@ export default function TrainingSession({ setMode }) {
   const labelForTag = useTagLabels();
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [showCollectionNameField, setShowCollectionNameField] = useState(false);
+  const [collectionNameDraft, setCollectionNameDraft] = useState("");
   const currentQuestion = session.questions[session.currentIndex];
   const activeGroupMode = (
     session.activeScope?.groupMode ||
@@ -877,6 +888,23 @@ export default function TrainingSession({ setMode }) {
     session.attemptFoundCount,
     session.allQuestionIds.length
   );
+
+  function resetCollectionNameField() {
+    setShowCollectionNameField(false);
+    setCollectionNameDraft("");
+  }
+
+  // The date suffix keeps a repeat run of the same scope from immediately
+  // colliding with the unique collection name from last time.
+  function openCollectionNameField() {
+    const dateLabel = new Date().toLocaleDateString("fr-FR");
+
+    setCollectionNameDraft(
+      `Erreurs – ${session.labelForActiveScope} – ${dateLabel}`
+    );
+    setShowCollectionNameField(true);
+  }
+
   const hasActiveQuestion = Boolean(
     session.activeScope &&
     !session.trainingLoading &&
@@ -1311,7 +1339,10 @@ export default function TrainingSession({ setMode }) {
                 >
                   <button
                     type="button"
-                    onClick={session.restartFullScope}
+                    onClick={() => {
+                      resetCollectionNameField();
+                      session.restartFullScope();
+                    }}
                     style={primaryButtonStyle}
                   >
                     Recommencer
@@ -1319,7 +1350,10 @@ export default function TrainingSession({ setMode }) {
                   <button
                     type="button"
                     disabled={session.failedCount === 0}
-                    onClick={session.retryFailedItems}
+                    onClick={() => {
+                      resetCollectionNameField();
+                      session.retryFailedItems();
+                    }}
                     style={session.failedCount === 0
                       ? disabledButtonStyle
                       : buttonStyle}
@@ -1328,12 +1362,87 @@ export default function TrainingSession({ setMode }) {
                   </button>
                   <button
                     type="button"
-                    onClick={session.returnToScopeSelector}
+                    onClick={() => {
+                      resetCollectionNameField();
+                      session.returnToScopeSelector();
+                    }}
                     style={buttonStyle}
                   >
                     ← Retour
                   </button>
                 </div>
+
+                {session.failedCount > 0 && (
+                  <div style={{ marginTop: "18px" }}>
+                    {session.collectionSaveStatus === "saved" ? (
+                      <div style={{ color: "#9fd8ac", fontSize: "14px", fontWeight: "700" }}>
+                        Collection « {session.createdCollectionName} » créée.
+                      </div>
+                    ) : showCollectionNameField ? (
+                      <div
+                        style={{
+                          alignItems: "center",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          justifyContent: "center"
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          aria-label="Nom de la collection"
+                          value={collectionNameDraft}
+                          onChange={(event) => setCollectionNameDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              session.createCollectionFromFailed(collectionNameDraft);
+                            }
+                          }}
+                          placeholder="Nom de la collection"
+                          style={inputStyle}
+                        />
+                        <button
+                          type="button"
+                          disabled={
+                            !collectionNameDraft.trim() ||
+                            session.collectionSaveStatus === "saving"
+                          }
+                          onClick={() => session.createCollectionFromFailed(collectionNameDraft)}
+                          style={
+                            !collectionNameDraft.trim() ||
+                            session.collectionSaveStatus === "saving"
+                              ? disabledButtonStyle
+                              : primaryButtonStyle
+                          }
+                        >
+                          {session.collectionSaveStatus === "saving" ? "Création..." : "Créer"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetCollectionNameField}
+                          style={buttonStyle}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={openCollectionNameField}
+                        style={buttonStyle}
+                      >
+                        Créer une collection avec les erreurs
+                      </button>
+                    )}
+
+                    {session.collectionSaveStatus === "error" && (
+                      <div style={{ color: "#ff9c9c", fontSize: "13px", marginTop: "10px" }}>
+                        {session.collectionSaveError}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

@@ -7,6 +7,7 @@ import {
   recordCollectionTrainingAttempt,
   recordGroupTrainingAttempt
 } from "../../../api/training";
+import { createCollection } from "../../../api/collections";
 import TrainingSession from "./TrainingSession";
 
 vi.mock("../../../api/training", () => ({
@@ -15,6 +16,10 @@ vi.mock("../../../api/training", () => ({
   listTrainingScopes: vi.fn(),
   recordCollectionTrainingAttempt: vi.fn(),
   recordGroupTrainingAttempt: vi.fn()
+}));
+
+vi.mock("../../../api/collections", () => ({
+  createCollection: vi.fn()
 }));
 
 
@@ -134,6 +139,7 @@ describe("TrainingSession", () => {
     gradeTrainingTimeline.mockResolvedValue({ status: "ok", results: [] });
     recordGroupTrainingAttempt.mockResolvedValue({});
     recordCollectionTrainingAttempt.mockResolvedValue({});
+    createCollection.mockResolvedValue({ id: 42, name: "Erreurs" });
   });
 
   afterEach(() => {
@@ -503,6 +509,55 @@ describe("TrainingSession", () => {
         collectionId: 8
       });
     });
+  });
+
+  it("creates a collection from the failed questions on the completion screen", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        question_id: 1,
+        type_q: "text",
+        question: "Question",
+        answer: "Answer"
+      }
+    ]);
+    createCollection.mockResolvedValueOnce({ id: 42, name: "Erreurs sauvegardées" });
+
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer le tag Geo" }));
+
+    await screen.findByLabelText("Réponse");
+
+    // Submitting blank, then confirming, grades the question as missed.
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+
+    expect(await screen.findByText("Entraînement terminé")).toBeInTheDocument();
+
+    const openButton = screen.getByRole("button", {
+      name: "Créer une collection avec les erreurs"
+    });
+
+    fireEvent.click(openButton);
+
+    const dateLabel = new Date().toLocaleDateString("fr-FR");
+    const nameField = screen.getByLabelText("Nom de la collection");
+
+    expect(nameField).toHaveValue(`Erreurs – #Geo – ${dateLabel}`);
+
+    fireEvent.click(screen.getByRole("button", { name: "Créer" }));
+
+    await waitFor(() => {
+      expect(createCollection).toHaveBeenCalledWith({
+        name: `Erreurs – #Geo – ${dateLabel}`,
+        question_ids: [1]
+      });
+    });
+
+    expect(await screen.findByText(
+      "Collection « Erreurs sauvegardées » créée."
+    )).toBeInTheDocument();
   });
 
 });

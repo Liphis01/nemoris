@@ -11,6 +11,7 @@ import {
   recordCollectionTrainingAttempt,
   recordGroupTrainingAttempt
 } from "../../../api/training";
+import { createCollection } from "../../../api/collections";
 
 vi.mock("../../../api/training", () => ({
   getTrainingItems: vi.fn(),
@@ -18,6 +19,10 @@ vi.mock("../../../api/training", () => ({
   listTrainingScopes: vi.fn(),
   recordCollectionTrainingAttempt: vi.fn(),
   recordGroupTrainingAttempt: vi.fn()
+}));
+
+vi.mock("../../../api/collections", () => ({
+  createCollection: vi.fn()
 }));
 
 
@@ -81,6 +86,7 @@ describe("useTrainingSession", () => {
       is_new_best_percent: true,
       is_new_best_time: true
     });
+    createCollection.mockResolvedValue({ id: 42, name: "Erreurs" });
     performanceNowSpy = vi
       .spyOn(performance, "now")
       .mockReturnValue(1000);
@@ -249,6 +255,164 @@ describe("useTrainingSession", () => {
         ]
       }
     ]);
+  });
+
+  it("creates a collection from the failed ids and refreshes the scope list", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        question_id: 1,
+        type_q: "text",
+        question: "Question",
+        answer: "Answer"
+      },
+      {
+        group_id: 2,
+        type_q: "map",
+        name: "Europe",
+        media: "europe.svg",
+        items: [
+          { question_id: 2, code: "fr", label: "France" },
+          { question_id: 3, code: "de", label: "Germany" }
+        ]
+      }
+    ]);
+    createCollection.mockResolvedValueOnce({ id: 42, name: "Erreurs Europe" });
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.tags).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "tag",
+        name: "geo"
+      });
+    });
+
+    act(() => {
+      result.current.handleTextAnswer();
+    });
+    act(() => {
+      result.current.handleMapComplete([3]);
+    });
+
+    expect(result.current.failedCount).toBe(1);
+    expect(listTrainingScopes).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.createCollectionFromFailed("Erreurs Europe");
+    });
+
+    expect(createCollection).toHaveBeenCalledWith({
+      name: "Erreurs Europe",
+      question_ids: [3]
+    });
+    expect(result.current.collectionSaveStatus).toBe("saved");
+    expect(result.current.createdCollectionName).toBe("Erreurs Europe");
+    // loadScopes runs again on success so the new collection is immediately
+    // trainable without leaving the Training tab.
+    expect(listTrainingScopes).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces the server error when the collection name already exists", async () => {
+    createCollection.mockRejectedValueOnce(
+      new Error("Collection name already exists")
+    );
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.tags).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "tag",
+        name: "geo"
+      });
+    });
+
+    act(() => {
+      result.current.handleTextAnswer({ failedQuestionIds: [1] });
+    });
+
+    expect(result.current.failedCount).toBe(1);
+
+    await act(async () => {
+      await result.current.createCollectionFromFailed("Erreurs");
+    });
+
+    expect(result.current.collectionSaveStatus).toBe("error");
+    expect(result.current.collectionSaveError).toBe(
+      "Collection name already exists"
+    );
+    expect(result.current.createdCollectionName).toBe("");
+  });
+
+  it("does not call the API for a blank name or an empty failed set", async () => {
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.tags).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "tag",
+        name: "geo"
+      });
+    });
+
+    // No failures yet: a name alone isn't enough.
+    await act(async () => {
+      await result.current.createCollectionFromFailed("Erreurs");
+    });
+
+    expect(createCollection).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.handleTextAnswer({ failedQuestionIds: [1] });
+    });
+
+    // Failures exist now, but a blank/whitespace name still isn't enough.
+    await act(async () => {
+      await result.current.createCollectionFromFailed("   ");
+    });
+
+    expect(createCollection).not.toHaveBeenCalled();
+    expect(result.current.collectionSaveStatus).toBe("idle");
+  });
+
+  it("resets the collection save state when a new attempt starts", async () => {
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.tags).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "tag",
+        name: "geo"
+      });
+    });
+
+    act(() => {
+      result.current.handleTextAnswer({ failedQuestionIds: [1] });
+    });
+
+    await act(async () => {
+      await result.current.createCollectionFromFailed("Erreurs");
+    });
+
+    expect(result.current.collectionSaveStatus).toBe("saved");
+
+    act(() => {
+      result.current.restartFullScope();
+    });
+
+    expect(result.current.collectionSaveStatus).toBe("idle");
+    expect(result.current.createdCollectionName).toBe("");
   });
 
   it("restarts the full original scope and returns to the selector", async () => {
