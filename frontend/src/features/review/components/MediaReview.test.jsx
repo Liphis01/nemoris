@@ -809,7 +809,7 @@ describe("MediaReview answer label preview", () => {
     expect(promptBoard).toHaveStyle({
       display: "flex",
       maxHeight: "100%",
-      maxWidth: "640px"
+      maxWidth: "min(100%, 900px)"
     });
     expect(promptTiles).toHaveLength(1);
     expect(promptTiles[0]).toHaveAttribute("data-image-question-id", "1");

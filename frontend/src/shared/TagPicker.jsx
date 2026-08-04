@@ -10,6 +10,7 @@
 // grows as a side effect of ordinary tagging instead of being a separate chore.
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { labelForTag, primeTags, useTagHierarchy } from "./tagLabels";
 import { buildTagPickerModel } from "./tagPickerModel";
@@ -25,20 +26,47 @@ function newTagId() {
 }
 
 
+// Fixed-positioned and portaled to <body>: an absolutely positioned panel
+// still grows the scrollable area of whatever ancestor has overflow: auto
+// (the question editor's own scroll panel, in practice), so opening the
+// dropdown near the bottom of the form used to force a second, outer
+// scrollbar. Floating it outside the layout entirely keeps the page length
+// fixed regardless of where the input sits.
 const panelStyle = {
   background: "#161616",
   border: "1px solid #333",
   borderRadius: "8px",
   boxShadow: "0 14px 32px rgba(0, 0, 0, 0.35)",
   boxSizing: "border-box",
-  left: 0,
-  maxHeight: "260px",
   overflowY: "auto",
-  position: "absolute",
-  right: 0,
-  top: "calc(100% + 4px)",
+  position: "fixed",
   zIndex: 30
 };
+
+const PANEL_GAP = 4;
+const PANEL_MIN_HEIGHT = 160;
+const PANEL_MAX_HEIGHT = 260;
+
+// Opening below the input is the default, but that's exactly the wrong side
+// when the input itself is near the bottom of the viewport (e.g. the last
+// field in a tall form) — flip above whenever below is cramped and above has
+// more room, and size to whatever space actually exists either way.
+function computePanelPlacement(rect) {
+  const viewportHeight = window.innerHeight;
+  const spaceBelow = viewportHeight - rect.bottom - PANEL_GAP;
+  const spaceAbove = rect.top - PANEL_GAP;
+  const placeAbove = spaceBelow < PANEL_MIN_HEIGHT && spaceAbove > spaceBelow;
+  const available = placeAbove ? spaceAbove : spaceBelow;
+
+  return {
+    left: rect.left,
+    width: rect.width,
+    maxHeight: Math.max(Math.min(available, PANEL_MAX_HEIGHT), 120),
+    ...(placeAbove
+      ? { bottom: viewportHeight - rect.top + PANEL_GAP }
+      : { top: rect.bottom + PANEL_GAP })
+  };
+}
 
 const rowStyle = {
   alignItems: "center",
@@ -99,6 +127,8 @@ export default function TagPicker({
   const blurTimer = useRef(null);
   const listboxRef = useRef(null);
   const rowRefs = useRef(new Map());
+  const inputRef = useRef(null);
+  const [panelPlacement, setPanelPlacement] = useState(null);
 
   const query = String(value || "");
 
@@ -136,6 +166,27 @@ export default function TagPicker({
   }, [highlight, open, rows]);
 
   useEffect(() => () => window.clearTimeout(blurTimer.current), []);
+
+  // Track the input's viewport position while open so the portaled panel can
+  // follow it, including when an ancestor (not the window) is what scrolls.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPanelPlacement(null);
+      return;
+    }
+
+    function updateRect() {
+      if (inputRef.current) setPanelPlacement(computePanelPlacement(inputRef.current.getBoundingClientRect()));
+    }
+
+    updateRect();
+    window.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+    return () => {
+      window.removeEventListener("scroll", updateRect, true);
+      window.removeEventListener("resize", updateRect);
+    };
+  }, [open]);
 
   function setRowRef(rowId) {
     return (element) => {
@@ -335,6 +386,7 @@ export default function TagPicker({
 
       <div style={{ position: "relative" }}>
         <input
+          ref={inputRef}
           value={query}
           onChange={(event) => {
             setOpen(true);
@@ -364,8 +416,14 @@ export default function TagPicker({
           </div>
         )}
 
-        {open && (
-          <div ref={listboxRef} id={listboxId} role="listbox" className="app-scrollbar" style={panelStyle}>
+        {open && panelPlacement && createPortal(
+          <div
+            ref={listboxRef}
+            id={listboxId}
+            role="listbox"
+            className="app-scrollbar"
+            style={{ ...panelStyle, ...panelPlacement }}
+          >
             {rows.length === 0 && (
               <div style={{ color: "#777", fontSize: "13px", padding: "10px" }}>
                 {model.searching ? "Aucun tag." : "Aucune sous-catégorie."}
@@ -477,7 +535,8 @@ export default function TagPicker({
                 })}
               </div>
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

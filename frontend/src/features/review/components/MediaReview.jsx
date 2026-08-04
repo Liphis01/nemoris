@@ -22,6 +22,34 @@ import {
 } from "../relearningGrades";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 
+// A pure CSS max-width/max-height box can either upscale small media to fill
+// its box (forcing one axis, deriving the other from ratio) or hug content
+// correctly in every orientation (no forced axis) — never both at once: the
+// forced-axis approach doesn't shrink back on the other axis once its own
+// cap clips, re-opening a letterboxed gap around the shrunk content. So once
+// the source's real size is known, set the exact fit box directly instead.
+function fitPromptMedia(element) {
+  if (!element) return;
+
+  const naturalWidth = element.naturalWidth || element.videoWidth;
+  const naturalHeight = element.naturalHeight || element.videoHeight;
+  // Measure the board, not the immediate wrapper: the wrapper now shrinks to
+  // hug the media itself, so at load time its clientWidth is just whatever
+  // the media's current (unfitted) size happens to be, not the true budget.
+  const board = element.closest("[data-image-prompt-board]");
+
+  if (!naturalWidth || !naturalHeight || !board) return;
+
+  // Subtract the tile's own padding (10px each side) and the media's border
+  // (1px each side) so the fitted size never overflows the tile's edges.
+  const maxWidthPx = board.clientWidth - 24;
+  const maxHeightPx = Math.min(window.innerHeight * 0.48, 480);
+  const scale = Math.min(maxWidthPx / naturalWidth, maxHeightPx / naturalHeight);
+
+  element.style.width = `${naturalWidth * scale}px`;
+  element.style.height = `${naturalHeight * scale}px`;
+}
+
 const qualityOptions = [
   { value: 0, icon: "❌", title: "Faux" },
   { value: 1, icon: "😐", title: "Dur" },
@@ -1780,7 +1808,7 @@ export default function MediaReview({
           position: "relative",
           textAlign: "left",
           transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
-          width: "100%"
+          width: prompt ? "auto" : "100%"
         }}
       >
         {!prompt && keyIndex != null && keyIndex < 9 && !interactionFeedback && (
@@ -1824,7 +1852,7 @@ export default function MediaReview({
             minHeight: 0,
             overflow: "hidden",
             position: "relative",
-            width: "100%"
+            width: prompt ? "auto" : "100%"
           }}
         >
           {mediaSrc ? (
@@ -1842,32 +1870,36 @@ export default function MediaReview({
                 controls
                 playsInline
                 onClick={(event) => event.stopPropagation()}
+                onLoadedMetadata={prompt ? (event) => fitPromptMedia(event.currentTarget) : undefined}
                 {...imageMarkerProps}
                 style={{
                   background: letterboxPatternBg,
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   boxSizing: "border-box",
                   display: "block",
-                  maxHeight: "100%",
+                  maxHeight: prompt ? "min(48vh, 480px)" : "100%",
+                  maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
-                  width: "100%"
+                  width: prompt ? "auto" : "100%"
                 }}
               />
             ) : (
               <img
                 src={mediaSrc}
                 alt={revealed ? answerLabel(row.item) : "image"}
+                onLoad={prompt ? (event) => fitPromptMedia(event.currentTarget) : undefined}
                 {...imageMarkerProps}
                 style={{
                   background: letterboxPatternBg,
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   boxSizing: "border-box",
                   display: "block",
-                  maxHeight: "100%",
+                  maxHeight: prompt ? "min(48vh, 480px)" : "100%",
+                  maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
-                  width: "100%"
+                  width: prompt ? "auto" : "100%"
                 }}
               />
             )
@@ -2711,9 +2743,9 @@ export default function MediaReview({
               justifyContent: "center",
               margin: "0 auto",
               maxHeight: "100%",
-              maxWidth: "640px",
+              maxWidth: "min(100%, 900px)",
               minHeight: 0,
-              width: "min(100%, 640px)"
+              width: "100%"
             }}
           >
             {promptImageRow
