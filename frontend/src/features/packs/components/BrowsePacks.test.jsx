@@ -501,10 +501,13 @@ describe("BrowsePacks", () => {
       "aria-selected",
       "true"
     );
-    // The single publication is auto-selected, so its detail heading shows
-    // alongside its rail row -- assert on the heading specifically.
+    // The manager opens on "Nouveau pack" rather than auto-selecting a
+    // publication, so the proof it mounted with its data is the pack's row in
+    // the rail, not a detail heading.
+    const rail = await screen.findByRole("region", { name: "Mes packs" });
+
     expect(
-      await screen.findByRole("heading", { name: "Atlas des capitales" })
+      await within(rail).findByRole("button", { name: /Atlas des capitales/ })
     ).toBeInTheDocument();
   });
 

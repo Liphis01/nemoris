@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PublicationsManager from "./PublicationsManager";
@@ -81,6 +81,16 @@ const unpublished = {
   rating_count: 1,
   comment_count: 0
 };
+
+// The manager lands on "Nouveau pack" rather than auto-selecting a
+// publication, so anything asserting on a pack's detail panel has to open it
+// first. Scoped to the rail so it never matches the same name echoed in the
+// detail header, the source link or the group picker.
+async function openPackInRail(name) {
+  const rail = await screen.findByRole("region", { name: "Mes packs" });
+
+  await userEvent.click(await within(rail).findByRole("button", { name }));
+}
 
 describe("PublicationsManager", () => {
   beforeEach(() => {
@@ -290,6 +300,7 @@ describe("PublicationsManager", () => {
 
     render(<PublicationsManager setMode={vi.fn()} onOpenGroup={onOpenGroup} />);
 
+    await openPackInRail(/Territoires du monde/);
     await userEvent.click(
       await screen.findByRole("button", { name: /Drapeaux du monde/ })
     );
@@ -323,6 +334,7 @@ describe("PublicationsManager", () => {
 
     render(<PublicationsManager setMode={vi.fn()} />);
 
+    await openPackInRail(/Territoires du monde/);
     await userEvent.click(
       await screen.findByRole("button", { name: "Publier les changements" })
     );
@@ -386,6 +398,8 @@ describe("PublicationsManager", () => {
 
     render(<PublicationsManager setMode={vi.fn()} />);
 
+    await openPackInRail(/Territoires du monde/);
+
     // The catalog row survives a local delete, so the pack stays public with
     // no way to publish a new version of it.
     expect(await screen.findByRole("note")).toHaveTextContent(
@@ -404,8 +418,10 @@ describe("PublicationsManager", () => {
 
     render(<PublicationsManager setMode={vi.fn()} />);
 
-    // A single publication is selected by default, so its reviews are
-    // already visible -- no extra click to reveal them.
+    // Opening the pack is enough: its reviews render with the detail panel,
+    // there is no separate "Voir les retours" gate.
+    await openPackInRail(/Territoires du monde/);
+
     expect(await screen.findByText("Très utile !")).toBeInTheDocument();
   });
 });
