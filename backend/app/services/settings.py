@@ -218,7 +218,7 @@ def normalize_intake_settings(value, seed):
         "tuned_on": tuned_on,
         "up_streak": up_streak,
         "last_retention": data.get("last_retention"),
-        "last_completion_ratio": data.get("last_completion_ratio"),
+        "last_schedule_pressure": data.get("last_schedule_pressure"),
         "last_reviews_in_window": data.get("last_reviews_in_window")
     }
 

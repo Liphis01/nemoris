@@ -205,12 +205,35 @@ describe("Settings", () => {
       pace_tier: "regulier",
       pace_tier_resolved: "regulier",
       effective_daily_target: 14,
+      last_retention: 92.45,
+      pace_tiers: PACE_TIERS
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    const note = await screen.findByText(/Rythme actuel : 14 \/ jour/);
+
+    expect(note).toBeInTheDocument();
+    // The rate alone was the original failure: the user could see 14 but not
+    // why, nor what it was heading back toward.
+    expect(note).toHaveTextContent("92 % de réussite sur 30 jours");
+    expect(note).toHaveTextContent(
+      "Il remontera vers 20 tant que ton calendrier reste dégagé."
+    );
+  });
+
+  it("explains a rate that sits above the chosen tier", async () => {
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      effective_daily_target: 22,
+      last_retention: 95,
       pace_tiers: PACE_TIERS
     });
     render(<Settings setMode={vi.fn()} />);
 
     expect(
-      await screen.findByText(/Rythme actuel : 14 \/ jour/)
+      await screen.findByText(/Ton calendrier a de la marge/)
     ).toBeInTheDocument();
   });
 

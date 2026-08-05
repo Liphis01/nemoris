@@ -12,7 +12,11 @@ from app.routers.groups import suspend_group
 from app.routers.review import get_review, get_settings, update_settings
 from app.schemas import GroupSuspend, ReviewSettings
 from app.services.intake import (
+    MIN_PRESSURE_CARDS,
     NEW_QUESTION_WEIGHT,
+    PRESSURE_DOWN_MIN,
+    PRESSURE_UP_MAX,
+    PRESSURE_WINDOW_DAYS,
     due_question_count,
     UP_STREAK_REQUIRED,
     compute_intake_quota,
@@ -20,6 +24,7 @@ from app.services.intake import (
     count_introduced_today,
     count_reviews_done_today,
     daily_ceiling_for,
+    schedule_pressure,
     tune_intake_rate,
     wip_cap_for
 )
@@ -71,7 +76,8 @@ class IntakeTestCase(unittest.TestCase):
         reps=1,
         interval=0,
         last_review=None,
-        stability=1.0
+        stability=1.0,
+        ideal_next_review=None
     ):
         progress = Progress(
             question_id=question_id,
@@ -81,6 +87,9 @@ class IntakeTestCase(unittest.TestCase):
             lapses=0,
             interval=interval,
             next_review=next_review,
+            # Mirrors write_scheduling: a card the smoother never displaced
+            # stores its ideal date equal to its actual one.
+            ideal_next_review=ideal_next_review or next_review,
             last_review=last_review or date.today(),
             history=[]
         )
@@ -346,16 +355,41 @@ class IntakeWipTests(IntakeTestCase):
 
 
 class IntakeTuningTests(IntakeTestCase):
-    def seed_reviews(self, count, quality, days_back=10):
+    def seed_reviews(
+        self,
+        count,
+        quality,
+        days_back=10,
+        drift=0.0,
+        scheduled=None
+    ):
+        """Seed a review history and the scheduled calendar that goes with it.
+
+        A pressure-derived signal needs a calendar to read, so every seeded
+        question also gets a Progress row. ``drift`` is the share of them the
+        load smoother is pretended to have pushed past their ideal date;
+        ``scheduled`` caps how many get a Progress row at all, for exercising
+        the thin-population branch.
+        """
         today = date.today()
+        scheduled = count if scheduled is None else scheduled
+        displaced = int(round(scheduled * drift))
 
         for index in range(count):
             question_id = 500 + index
             self.add_question(question_id)
-            self.add_review_log(
+            reviewed_on = today - timedelta(days=index % days_back)
+            self.add_review_log(question_id, reviewed_on, quality=quality)
+
+            if index >= scheduled:
+                continue
+
+            ideal = today + timedelta(days=index % PRESSURE_WINDOW_DAYS)
+            self.add_progress(
                 question_id,
-                today - timedelta(days=index % days_back),
-                quality=quality
+                next_review=ideal + timedelta(days=3 if index < displaced else 0),
+                last_review=reviewed_on,
+                ideal_next_review=ideal
             )
 
     def test_low_retention_walks_the_rate_down_to_the_floor(self):
@@ -435,6 +469,235 @@ class IntakeTuningTests(IntakeTestCase):
         self.assertEqual(state["effective_daily_target"], 40)
         self.assertEqual(state["up_streak"], 0)
         self.assertIsNone(state["tuned_on"])
+
+    def test_a_saturated_calendar_walks_the_rate_down_despite_perfect_retention(self):
+        # The regression test for the whole bug class: answering everything
+        # correctly must no longer buy an increase on a jammed calendar.
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, drift=0.30)
+        self.db.commit()
+
+        tuned = tune_intake_rate(self.db, today=date.today())
+
+        self.assertEqual(tuned["last_retention"], 100.0)
+        self.assertEqual(tuned["last_schedule_pressure"], 0.30)
+        self.assertEqual(tuned["effective_daily_target"], 18)
+
+    def test_a_clear_calendar_and_strong_retention_earn_a_raise(self):
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, drift=0.0)
+        self.db.commit()
+
+        today = date.today()
+        rates = [
+            tune_intake_rate(self.db, today=today + timedelta(days=offset))[
+                "effective_daily_target"
+            ]
+            for offset in range(UP_STREAK_REQUIRED)
+        ]
+
+        self.assertEqual(rates, [20, 20, 22])
+
+    def test_a_calendar_with_no_scheduled_cards_holds_the_rate(self):
+        # An empty population means "no data", never "clear": a user with
+        # nothing scheduled must not be handed an increase.
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, scheduled=0)
+        self.db.commit()
+
+        today = date.today()
+        rates = [
+            tune_intake_rate(self.db, today=today + timedelta(days=offset))[
+                "effective_daily_target"
+            ]
+            for offset in range(UP_STREAK_REQUIRED + 1)
+        ]
+
+        self.assertEqual(set(rates), {20})
+
+    def test_a_population_below_the_measurement_floor_holds_the_rate(self):
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(
+            120,
+            quality=3,
+            days_back=1,
+            scheduled=MIN_PRESSURE_CARDS - 1
+        )
+        self.db.commit()
+
+        today = date.today()
+        rates = [
+            tune_intake_rate(self.db, today=today + timedelta(days=offset))[
+                "effective_daily_target"
+            ]
+            for offset in range(UP_STREAK_REQUIRED + 1)
+        ]
+
+        self.assertEqual(set(rates), {20})
+
+    def test_the_pressure_dead_zone_holds_the_rate(self):
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, drift=0.10)
+        self.db.commit()
+
+        today = date.today()
+        rates = [
+            tune_intake_rate(self.db, today=today + timedelta(days=offset))[
+                "effective_daily_target"
+            ]
+            for offset in range(UP_STREAK_REQUIRED + 1)
+        ]
+
+        self.assertEqual(set(rates), {20})
+
+    def test_a_backlog_pulled_forward_reads_as_pressure(self):
+        # The shape rebalance_review_calendar produces when a user falls behind:
+        # an overdue card is pulled to max(today, ideal), so it sits later than
+        # its ideal date. This is what replaces the old completion ratio.
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, scheduled=0)
+        today = date.today()
+
+        for index in range(120):
+            if index < 60:
+                self.add_progress(
+                    500 + index,
+                    next_review=today,
+                    ideal_next_review=today - timedelta(days=5)
+                )
+            else:
+                ideal = today + timedelta(days=index % PRESSURE_WINDOW_DAYS)
+                self.add_progress(
+                    500 + index,
+                    next_review=ideal,
+                    ideal_next_review=ideal
+                )
+
+        self.db.commit()
+        tuned = tune_intake_rate(self.db, today=today)
+
+        self.assertEqual(tuned["last_retention"], 100.0)
+        self.assertEqual(tuned["last_schedule_pressure"], 0.5)
+        self.assertEqual(tuned["effective_daily_target"], 18)
+
+    def test_cards_beyond_the_pressure_window_are_not_measured(self):
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, scheduled=0)
+        today = date.today()
+        far = today + timedelta(days=PRESSURE_WINDOW_DAYS + 5)
+
+        for index in range(120):
+            if index < 80:
+                self.add_progress(
+                    500 + index,
+                    next_review=far + timedelta(days=3),
+                    ideal_next_review=far
+                )
+            else:
+                ideal = today + timedelta(days=index % PRESSURE_WINDOW_DAYS)
+                self.add_progress(
+                    500 + index,
+                    next_review=ideal,
+                    ideal_next_review=ideal
+                )
+
+        self.db.commit()
+        pressure, measured = schedule_pressure(self.db, today)
+
+        self.assertEqual(measured, 40)
+        self.assertEqual(pressure, 0.0)
+
+    def test_suspended_and_unstarted_cards_do_not_create_pressure(self):
+        today = date.today()
+
+        for index in range(40):
+            self.add_question(700 + index)
+            ideal = today + timedelta(days=index % PRESSURE_WINDOW_DAYS)
+            self.add_progress(
+                700 + index,
+                next_review=ideal,
+                ideal_next_review=ideal
+            )
+
+        for index in range(60):
+            question_id = 800 + index
+            self.add_question(question_id, suspended=index % 2 == 0)
+            drifted = today + timedelta(days=index % PRESSURE_WINDOW_DAYS)
+
+            if index % 2 == 0:
+                self.add_progress(
+                    question_id,
+                    next_review=drifted + timedelta(days=4),
+                    ideal_next_review=drifted
+                )
+            else:
+                # Never answered: no reps and no last_review at all.
+                self.db.add(
+                    Progress(
+                        question_id=question_id,
+                        stability=0.0,
+                        difficulty=5.0,
+                        reps=0,
+                        lapses=0,
+                        interval=0,
+                        next_review=drifted + timedelta(days=4),
+                        ideal_next_review=drifted,
+                        last_review=None,
+                        history=[]
+                    )
+                )
+
+        self.db.commit()
+        pressure, measured = schedule_pressure(self.db, today)
+
+        self.assertEqual(measured, 40)
+        self.assertEqual(pressure, 0.0)
+
+
+class SchedulePressureTests(IntakeTestCase):
+    def build_calendar(self, count, displaced):
+        today = date.today()
+
+        for index in range(count):
+            self.add_question(900 + index)
+            ideal = today + timedelta(days=index % PRESSURE_WINDOW_DAYS)
+            self.add_progress(
+                900 + index,
+                next_review=ideal + timedelta(days=2 if index < displaced else 0),
+                ideal_next_review=ideal
+            )
+
+        self.db.commit()
+
+    def test_an_empty_calendar_is_not_measurable(self):
+        self.assertEqual(schedule_pressure(self.db, date.today()), (None, 0))
+
+    def test_a_population_below_the_floor_is_not_measurable(self):
+        self.build_calendar(MIN_PRESSURE_CARDS - 1, displaced=0)
+        pressure, measured = schedule_pressure(self.db, date.today())
+
+        self.assertIsNone(pressure)
+        self.assertEqual(measured, MIN_PRESSURE_CARDS - 1)
+
+    def test_the_ratio_is_displaced_over_measured(self):
+        self.build_calendar(40, displaced=10)
+        pressure, measured = schedule_pressure(self.db, date.today())
+
+        self.assertEqual(measured, 40)
+        self.assertEqual(pressure, 0.25)
+
+    def test_a_fully_clear_calendar_reads_zero_not_none(self):
+        self.build_calendar(MIN_PRESSURE_CARDS, displaced=0)
+        pressure, _ = schedule_pressure(self.db, date.today())
+
+        self.assertEqual(pressure, 0.0)
+        self.assertLessEqual(pressure, PRESSURE_UP_MAX)
+
+    def test_a_jammed_calendar_clears_the_down_threshold(self):
+        self.build_calendar(40, displaced=20)
+        pressure, _ = schedule_pressure(self.db, date.today())
+
+        self.assertGreaterEqual(pressure, PRESSURE_DOWN_MIN)
 
 
 class IntakeSettingsTests(IntakeTestCase):

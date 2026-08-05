@@ -277,6 +277,7 @@ export default function Settings({
   const [paceTier, setPaceTier] = useState(null);
   const [paceTiers, setPaceTiers] = useState(FALLBACK_PACE_TIERS);
   const [effectiveTarget, setEffectiveTarget] = useState(null);
+  const [lastRetention, setLastRetention] = useState(null);
   const [resolvedTier, setResolvedTier] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -358,6 +359,7 @@ export default function Settings({
     setTarget(settings.catchup_daily_target || 50);
     setPaceTier(settings.pace_tier ?? null);
     setEffectiveTarget(settings.effective_daily_target ?? null);
+    setLastRetention(settings.last_retention ?? null);
 
     if (Array.isArray(settings.pace_tiers) && settings.pace_tiers.length > 0) {
       setPaceTiers(settings.pace_tiers);
@@ -605,7 +607,14 @@ export default function Settings({
                   {effectiveTarget !== null && effectiveTarget !== target && (
                     <p className="settings-pace-note">
                       Rythme actuel : {effectiveTarget} / jour — ajusté
-                      automatiquement d'après tes résultats récents.
+                      automatiquement d'après tes résultats récents
+                      {lastRetention !== null
+                        ? ` (${Math.round(lastRetention)} % de réussite sur 30 jours)`
+                        : ""}
+                      .{" "}
+                      {effectiveTarget < target
+                        ? `Il remontera vers ${target} tant que ton calendrier reste dégagé.`
+                        : "Ton calendrier a de la marge, il dépasse le palier choisi."}
                     </p>
                   )}
                 </div>

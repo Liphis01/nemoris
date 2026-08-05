@@ -15,6 +15,7 @@ import app.migrations as migrations_module
 from app.migrations import run_migrations
 from app.models import Base, Question, QuestionGroup
 from app.services.backups import create_backup, reset_collection, restore_backup
+from app.services.settings import load_intake_settings
 
 
 def sqlite_url(path):
@@ -424,7 +425,7 @@ class MigrationTests(unittest.TestCase):
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
                     "0015", "0016", "0017", "0018",
-                    "0019", "0020", "0021", "0022", "0023", "0024"
+                    "0019", "0020", "0021", "0022", "0023", "0024", "0025"
                 ]
             )
             self.assertIsNotNone(result["backup"])
@@ -461,7 +462,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(type_q, "text")
             self.assertIn("catchup_daily_target", setting)
-            self.assertEqual(migration_count, 24)
+            self.assertEqual(migration_count, 25)
             self.assertEqual(ideal_interval, 0)
             self.assertEqual(ideal_next_review, "2026-01-01")
 
@@ -509,7 +510,7 @@ class MigrationTests(unittest.TestCase):
                     "0001", "0002", "0003", "0004", "0005", "0006", "0007",
                     "0008", "0009", "0010", "0011", "0012", "0013", "0014",
                     "0015", "0016", "0017", "0018",
-                    "0019", "0020", "0021", "0022", "0023", "0024"
+                    "0019", "0020", "0021", "0022", "0023", "0024", "0025"
                 ]
             )
             self.assertIsNone(result["backup"])
@@ -611,7 +612,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0005", "0006", "0007", "0008", "0009",
                     "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018",
-                    "0019", "0020", "0021", "0022", "0023", "0024"
+                    "0019", "0020", "0021", "0022", "0023", "0024", "0025"
                 ]
             )
 
@@ -687,7 +688,7 @@ class MigrationTests(unittest.TestCase):
                 [
                     "0006", "0007", "0008", "0009",
                     "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018",
-                    "0019", "0020", "0021", "0022", "0023", "0024"
+                    "0019", "0020", "0021", "0022", "0023", "0024", "0025"
                 ]
             )
 
@@ -697,6 +698,90 @@ class MigrationTests(unittest.TestCase):
                 ).fetchall()
 
             self.assertEqual(rows, [("review",)])
+
+    def test_intake_tuner_reset_migration_unsticks_the_stored_rate(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp_dir = Path(temp_name)
+            database_file = temp_dir / "questions.db"
+
+            with sqlite3.connect(database_file) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE schema_migrations (
+                        version TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        applied_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                for version in ("0001", "0002", "0003", "0004", "0005"):
+                    connection.execute(
+                        """
+                        INSERT INTO schema_migrations (version, name, applied_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (version, f"migration-{version}", "2026-01-01")
+                    )
+
+                connection.execute(
+                    """
+                    CREATE TABLE app_settings (
+                        key VARCHAR PRIMARY KEY,
+                        value JSON NOT NULL
+                    )
+                    """
+                )
+                connection.executemany(
+                    "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+                    [
+                        (
+                            "review",
+                            json.dumps({
+                                "catchup_daily_target": 80,
+                                "pace_tier": "intensif"
+                            })
+                        ),
+                        (
+                            "review_intake",
+                            json.dumps({
+                                "effective_daily_target": 64,
+                                "tuned_on": "2026-08-04",
+                                "up_streak": 0,
+                                "last_completion_ratio": 0.8578
+                            })
+                        )
+                    ]
+                )
+
+            engine = create_engine(sqlite_url(database_file))
+            run_migrations(
+                target_engine=engine,
+                database_file=database_file,
+                static_dir=temp_dir / "static",
+                backup_dir=temp_dir / "backups"
+            )
+
+            with sqlite3.connect(database_file) as connection:
+                rows = connection.execute(
+                    "SELECT key FROM app_settings WHERE key = 'review_intake'"
+                ).fetchall()
+
+            self.assertEqual(rows, [])
+
+            # The point of the migration: the tier the user chose is what they
+            # get back, instead of a rate earned under the deleted rule.
+            session = Session(bind=engine)
+
+            try:
+                state = load_intake_settings(session, 80)
+            finally:
+                session.close()
+
+            self.assertEqual(state["effective_daily_target"], 80)
+            self.assertEqual(state["up_streak"], 0)
+            self.assertIsNone(state["tuned_on"])
+            self.assertIsNone(state["last_schedule_pressure"])
 
     def test_content_guid_migration_backfills_and_indexes(self):
         with tempfile.TemporaryDirectory() as temp_name:
@@ -782,7 +867,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             guids = {}
@@ -969,7 +1054,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1127,7 +1212,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1220,7 +1305,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1274,7 +1359,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             with sqlite3.connect(database_file) as connection:
@@ -1370,7 +1455,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             self.assertIn("pack_subscriptions", table_names(database_file))
@@ -1517,7 +1602,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
             self.assertIn("pack_subscriptions", table_names(database_file))
             self.assertNotIn("blueprint_subscriptions", table_names(database_file))
@@ -1656,7 +1741,7 @@ class MigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [migration["version"] for migration in result["applied"]],
-                ["0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"]
+                ["0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"]
             )
 
             digest = hashlib.sha256(svg_bytes).hexdigest()

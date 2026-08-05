@@ -23,6 +23,7 @@ from app.routers.review import (
     revise_answer_question,
     update_settings
 )
+from app.services.intake import PRESSURE_DOWN_MIN, schedule_pressure
 from app.services.review import _new_question_ids
 from app.services.startup import run_startup_rebalance
 from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
@@ -2140,6 +2141,39 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(len(response), 3)
         self.assertEqual(overdue_count, 3)
+
+    def test_a_saturated_rebalance_is_visible_as_intake_pressure(self):
+        # The intake tuner reads saturation off the calendar the smoother
+        # produces, so the two subsystems have to agree. Without this the
+        # pressure metric is only ever exercised against hand-built drift, and
+        # a change to daily_load_score or choose_soft_rebalance_date that
+        # stopped displacing cards would silently remove the tuner's down
+        # signal instead of failing a test.
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        today = date.today()
+
+        for offset in range(120):
+            question_id = 2000 + offset
+            self.add_question(question_id)
+            self.add_progress(
+                question_id,
+                today,
+                reps=1,
+                ideal_next_review=today
+            )
+
+        self.db.commit()
+
+        cleared, _ = schedule_pressure(self.db, today)
+        self.assertEqual(cleared, 0.0)
+
+        run_startup_rebalance(self.db)
+        self.db.commit()
+
+        pressure, measured = schedule_pressure(self.db, today)
+
+        self.assertEqual(measured, 120)
+        self.assertGreaterEqual(pressure, PRESSURE_DOWN_MIN)
 
 
 if __name__ == "__main__":

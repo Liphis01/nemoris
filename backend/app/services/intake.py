@@ -61,10 +61,30 @@ TUNE_WINDOW_DAYS = 30
 MIN_TUNE_REVIEWS = 60
 RETENTION_LOW = 80.0
 RETENTION_HIGH = 90.0
-COMPLETION_LOW = 0.80
-COMPLETION_HIGH = 0.95
+
+# Schedule pressure: the share of scheduled cards the load smoother had to push
+# off their FSRS-ideal date. Measured over a shorter horizon than retention
+# because saturation propagates forward from today, so a 30-day window dilutes a
+# real front-of-calendar jam with a quiet tail.
+PRESSURE_WINDOW_DAYS = 14
+# Calibrated by replaying rebalance_review_calendar: the smoother only displaces
+# a card once a day exceeds the target by about sqrt(target) (~9 at target 80),
+# so healthy calendars with normal day-to-day jitter read <= 0.03 and genuinely
+# saturated ones read >= 0.18. These two sit inside that empty band, and the gap
+# between them is the hysteresis that mirrors the 80-90 retention dead zone.
+PRESSURE_UP_MAX = 0.05
+PRESSURE_DOWN_MIN = 0.15
+# Below this the ratio is quantisation noise, not a measurement. Chosen so that
+# at the smallest measurable population one displaced card still permits "up"
+# but two do not.
+MIN_PRESSURE_CARDS = 20
+
 UP_STREAK_REQUIRED = 3
 TUNE_FLOOR_RATIO = 0.50
+# Unreachable in practice, and deliberately so: the calendar smooths against the
+# tier seed and starts displacing cards at ~1.10x of it, so that is the real
+# stable maximum. The tier is meant to be the ceiling; do not raise this to
+# compensate.
 TUNE_CEILING_RATIO = 1.25
 TUNE_STEP_RATIO = 0.10
 
@@ -240,57 +260,85 @@ def rolling_retention(db, today, window_days=TUNE_WINDOW_DAYS):
     return (success or 0) * 100.0 / reviews, reviews
 
 
-def completion_ratio(db, today, daily_rate, window_days=TUNE_WINDOW_DAYS):
-    """Reviews actually completed vs. what the rate asked for, over the window.
+def schedule_pressure(db, today, window_days=PRESSURE_WINDOW_DAYS):
+    """How saturated the review calendar is, as the share of scheduled cards the
+    load smoother had to push past their FSRS-ideal date.
 
-    DISTINCT (question_id, reviewed_on) collapses retries so a struggling user
-    is not scored as high-volume for grinding the same card.
+    ``next_review > ideal_next_review`` is only ever produced by load smoothing:
+    ``smooth_scheduling`` returns the scheduling untouched when the ideal date
+    was free (scheduler.py), and ``rebalance_review_calendar`` re-derives every
+    date from the stored ideal on each run, so this measures *today's* calendar
+    rather than accumulated history. The rebalancer runs on every launch, so the
+    reading is always the smoother's own verdict on the current calendar.
+
+    Unlike the review-volume ratio it replaces, it is supply-independent: the
+    calendar is smoothed against ``catchup_daily_target`` -- the tier the user
+    picked -- and not against the tuned rate, so the tuner cannot move its own
+    reference and trap itself between two thresholds it can never clear.
+
+    Cards whose ideal date has already passed count too: the rebalancer pulls
+    them forward to ``max(today, ideal)``, which overloads today and displaces
+    other cards, so a user falling behind still shows up here. A raw overdue
+    count could not be used -- the rebalancer erases the backlog on every run.
+
+    The window is anchored on ``ideal_next_review`` rather than ``next_review``
+    so displacing a card can never push it out of its own denominator.
+
+    Returns ``(pressure, measured)``. ``pressure`` is None on a population too
+    thin to measure, which the caller must read as "no data", never as "clear".
     """
-    start = today - timedelta(days=window_days)
-    # Counted as a distinct subquery rather than COUNT(DISTINCT a, b), which is
-    # not portable across dialects.
-    pairs = (
-        db.query(ReviewLog.question_id, ReviewLog.reviewed_on)
-        .filter(
-            ReviewLog.reviewed_on >= start,
-            ReviewLog.reviewed_on <= today
+    horizon = today + timedelta(days=window_days)
+    displaced, measured = (
+        db.query(
+            func.sum(
+                case(
+                    (Progress.next_review > Progress.ideal_next_review, 1),
+                    else_=0
+                )
+            ),
+            func.count(Progress.question_id)
         )
-        .distinct()
-        .subquery()
+        .join(Question, Question.id == Progress.question_id)
+        .filter(
+            reviewable_question_filter(),
+            started_progress_filter(),
+            Progress.next_review.isnot(None),
+            Progress.ideal_next_review.isnot(None),
+            Progress.ideal_next_review <= horizon
+        )
+        .one()
     )
-    done = db.query(func.count()).select_from(pairs).scalar() or 0
 
-    first_review = (
-        db.query(func.min(ReviewLog.reviewed_on))
-        .filter(ReviewLog.reviewed_on.isnot(None))
-        .scalar()
-    )
+    if not measured or measured < MIN_PRESSURE_CARDS:
+        return None, measured or 0
 
-    if not first_review:
-        return None, done
-
-    # Clamp the denominator to the age of the collection, so a two-week-old
-    # install is not judged against a 30-day window it never had.
-    elapsed = max(1, min(window_days, (today - first_review).days + 1))
-
-    return done / float(elapsed * daily_rate), done
+    return (displaced or 0) / float(measured), measured
 
 
-def _tune_signal(retention, completion, reviews_in_window):
+def _tune_signal(retention, pressure, reviews_in_window):
     if reviews_in_window < MIN_TUNE_REVIEWS:
         return "hold"
 
-    if retention is None or completion is None:
-        return "hold"
-
-    if retention < RETENTION_LOW or completion < COMPLETION_LOW:
+    # The two arms are independent on the way down: either a user who is failing
+    # cards or a user whose calendar is jammed needs relief now, and neither has
+    # to wait for the other arm to have data.
+    if retention is not None and retention < RETENTION_LOW:
         return "down"
 
-    if retention >= RETENTION_HIGH and completion >= COMPLETION_HIGH:
+    if pressure is not None and pressure >= PRESSURE_DOWN_MIN:
+        return "down"
+
+    # Up is the opposite: it has to be earned, so it needs both measurements.
+    # This guard sits between the arms so a missing reading can never
+    # manufacture an increase.
+    if retention is None or pressure is None:
+        return "hold"
+
+    if retention >= RETENTION_HIGH and pressure <= PRESSURE_UP_MAX:
         return "up"
 
-    # The 80-90% / 0.80-0.95 dead zone is the primary hysteresis: a user
-    # hovering around 85% retention never moves.
+    # Two dead zones, 80-90% retention and 0.05-0.15 pressure: a user hovering
+    # around 85% retention on a calendar that is merely busy never moves.
     return "hold"
 
 
@@ -312,8 +360,10 @@ def tune_intake_rate(db, today=None):
 
     effective = _clamp(state["effective_daily_target"], floor, ceiling)
     retention, reviews_in_window = rolling_retention(db, today)
-    completion, _ = completion_ratio(db, today, effective)
-    signal = _tune_signal(retention, completion, reviews_in_window)
+    # Deliberately takes no rate argument: the signal is measured against the
+    # tier the calendar is smoothed with, not against the number being tuned.
+    pressure, _ = schedule_pressure(db, today)
+    signal = _tune_signal(retention, pressure, reviews_in_window)
     up_streak = state["up_streak"]
 
     if signal == "up":
@@ -338,7 +388,7 @@ def tune_intake_rate(db, today=None):
             "tuned_on": today.isoformat(),
             "up_streak": up_streak,
             "last_retention": retention,
-            "last_completion_ratio": completion,
+            "last_schedule_pressure": pressure,
             "last_reviews_in_window": reviews_in_window
         },
         seed

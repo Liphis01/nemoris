@@ -313,6 +313,26 @@ def _migration_remove_daily_grove_setting(connection):
     )
 
 
+def _migration_reset_intake_tuner(connection):
+    # The intake tuner's second signal changed from a review-volume ratio to
+    # schedule pressure. A rate earned under the old rule is not comparable to
+    # one earned under the new one, and save_review_settings only resets the
+    # tuner when the tier NUMBER changes, so re-picking the same tier would
+    # leave a stuck user stuck. Dropping the row is equivalent to
+    # reset_intake_settings: load_intake_settings normalizes a missing row back
+    # to the tier seed, and it also clears the obsolete last_completion_ratio
+    # key instead of leaving it on disk as dead JSON.
+    from .services.settings import INTAKE_SETTINGS_KEY
+
+    if not _table_exists(connection, "app_settings"):
+        return
+
+    connection.exec_driver_sql(
+        "DELETE FROM app_settings WHERE key = ?",
+        (INTAKE_SETTINGS_KEY,)
+    )
+
+
 def _migration_collection_data_column(connection):
     if not _table_exists(connection, "collections"):
         return
@@ -1539,6 +1559,12 @@ MIGRATIONS = [
         run=_migration_multilingual_tag_ids,
         requires_backup=True,
         needs_static_dir=True
+    ),
+    # No backup: this drops one derived, device-local, rebuildable row.
+    Migration(
+        version="0025",
+        name="reset_intake_tuner",
+        run=_migration_reset_intake_tuner
     )
 ]
 

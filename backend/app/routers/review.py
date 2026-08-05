@@ -108,7 +108,7 @@ def review_settings_payload(db, settings):
         "effective_daily_target": intake["effective_daily_target"],
         "tuned_on": intake["tuned_on"],
         "last_retention": intake["last_retention"],
-        "last_completion_ratio": intake["last_completion_ratio"]
+        "last_schedule_pressure": intake["last_schedule_pressure"]
     }
 
 
