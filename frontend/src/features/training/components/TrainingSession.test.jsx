@@ -372,7 +372,9 @@ describe("TrainingSession", () => {
     expect(status).toHaveTextContent("Training");
     expect(status).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("Question 1 / 1");
-    expect(status).toHaveTextContent("#Geo");
+    // Tags are metadata for browsing, not for answering a question already on
+    // screen, so the compact header leaves them out.
+    expect(status).not.toHaveTextContent("#Geo");
     expect(secondary.querySelector('[data-training-timer-panel="prominent"]'))
       .toBeInTheDocument();
     expect(secondary).toHaveTextContent("Temps");

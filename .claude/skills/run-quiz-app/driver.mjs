@@ -75,8 +75,9 @@ if (cmd === "screenshot") {
     await mockApi(page, { review: reviewFixture });
     await page.goto(BASE_URL);
     await page.waitForLoadState("networkidle");
-    // "DÉMARRER →" starts the review session
-    await page.getByRole("button", { name: "DÉMARRER" }).click();
+    // The review hero card's accessible name comes from its aria-label
+    // ("Révision du jour: ...") not its visible "DÉMARRER →" text.
+    await page.getByRole("button", { name: /Révision du jour/ }).click();
     await page.waitForSelector("text=Voir la réponse");
     await page.getByRole("button", { name: "Voir la réponse" }).click();
     await page.getByRole("button", { name: /Bon/ }).click();
@@ -96,7 +97,7 @@ if (cmd === "screenshot") {
     console.log("home: OK");
 
     // 2. Start review
-    await page.getByRole("button", { name: "DÉMARRER" }).click();
+    await page.getByRole("button", { name: /Révision du jour/ }).click();
     await page.waitForSelector("text=Voir la réponse");
     await ss(page, "/tmp/quiz-smoke-question.png");
     console.log("question: OK");

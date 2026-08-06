@@ -31,7 +31,7 @@
 
 ## to do when i have more time
 
-- aller voir l'historique d'une seule question
+- aller voir l'historique d'une seule question et facilement voir la réponse que j'ai donnée à chaque fois
 - heatmap des zones les plus durs pour les maps
 - trouver un meilleur agencement pour les aliases dans map preview
 - supprimer une question appelle le rebalancing ?

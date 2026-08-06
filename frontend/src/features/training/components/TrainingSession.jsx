@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import TrainingTimerPanel from "../../review/components/TrainingTimerPanel";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
-import { useTagLabels } from "../../../shared/tagLabels";
 import { useTrainingSession } from "../hooks/useTrainingSession";
 import {
   formatDuration,
@@ -868,7 +867,6 @@ function PauseOverlay({ session }) {
 
 export default function TrainingSession({ setMode }) {
   const session = useTrainingSession(true);
-  const labelForTag = useTagLabels();
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [showCollectionNameField, setShowCollectionNameField] = useState(false);
@@ -1000,13 +998,33 @@ export default function TrainingSession({ setMode }) {
             >
               <div
                 style={{
-                  color: "#f0c36a",
-                  fontSize: "11px",
-                  fontWeight: 900,
-                  textTransform: "uppercase"
+                  alignItems: "center",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px 10px",
+                  justifyContent: "center"
                 }}
               >
-                Training
+                <div
+                  style={{
+                    color: "#f0c36a",
+                    fontSize: "11px",
+                    fontWeight: 900,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  Training
+                </div>
+                <div
+                  style={{
+                    color: "#888",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    lineHeight: 1.2
+                  }}
+                >
+                  Question {session.currentIndex + 1} / {session.questions.length}
+                </div>
               </div>
               <strong
                 data-visual-session-title
@@ -1024,38 +1042,6 @@ export default function TrainingSession({ setMode }) {
               >
                 {session.labelForActiveScope}
               </strong>
-              <div
-                style={{
-                  alignItems: "center",
-                  color: "#888",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  gap: "6px 8px",
-                  justifyContent: "center",
-                  lineHeight: 1.2
-                }}
-              >
-                <span>
-                  Question {session.currentIndex + 1} / {session.questions.length}
-                </span>
-                {(currentQuestion.tags || []).map(tag => (
-                  <span
-                    key={tag}
-                    style={{
-                      background: "#2b2047",
-                      borderRadius: "999px",
-                      color: "#b69cff",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      padding: "3px 8px"
-                    }}
-                  >
-                    #{labelForTag(tag)}
-                  </span>
-                ))}
-              </div>
             </div>
 
             <div
@@ -1456,47 +1442,19 @@ export default function TrainingSession({ setMode }) {
                     alignItems: "center",
                     display: "flex",
                     flexWrap: "wrap",
-                    justifyContent: "space-between",
-                    gap: "16px",
+                    gap: "12px",
                     marginBottom: "18px"
                   }}
                 >
-                  <div style={{ alignItems: "center", display: "flex", gap: "12px" }}>
-                    <div style={{ color: "#888", fontSize: "14px", whiteSpace: "nowrap" }}>
-                      Question {session.currentIndex + 1} / {session.questions.length}
-                    </div>
-                    {session.recordEligible && (
-                      <PauseResumeButton
-                        session={session}
-                        style={{ fontSize: "12px", padding: "7px 10px" }}
-                      />
-                    )}
+                  <div style={{ color: "#888", fontSize: "14px", whiteSpace: "nowrap" }}>
+                    Question {session.currentIndex + 1} / {session.questions.length}
                   </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "6px",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end"
-                    }}
-                  >
-                    {(currentQuestion.tags || []).map(tag => (
-                      <div
-                        key={tag}
-                        style={{
-                          background: "#2b2047",
-                          borderRadius: "999px",
-                          color: "#b69cff",
-                          fontSize: "11px",
-                          fontWeight: "600",
-                          padding: "4px 10px"
-                        }}
-                      >
-                        #{labelForTag(tag)}
-                      </div>
-                    ))}
-                  </div>
+                  {session.recordEligible && (
+                    <PauseResumeButton
+                      session={session}
+                      style={{ fontSize: "12px", padding: "7px 10px" }}
+                    />
+                  )}
                 </div>
 
                 <div style={{ position: "relative" }}>

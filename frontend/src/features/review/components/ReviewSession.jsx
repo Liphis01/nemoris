@@ -1,6 +1,5 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
-import { useTagLabels } from "../../../shared/tagLabels";
 import { isRelearningQuestion } from "../relearningGrades";
 import "./ReviewSession.css";
 
@@ -146,7 +145,6 @@ export default function ReviewSession({
   submitSequenceAnswer,
   graduateGroupedAnswer
 }) {
-  const labelForTag = useTagLabels();
   const currentQuestion = questions[currentIndex];
   const hasActiveQuestion = Boolean(
     !reviewLoading &&
@@ -233,8 +231,7 @@ export default function ReviewSession({
               gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 520px) minmax(0, 1fr)",
               marginBottom: "10px",
               minHeight: "72px",
-              padding: "10px 14px",
-              position: "relative"
+              padding: "10px 14px"
             }}
           >
             <div
@@ -310,32 +307,50 @@ export default function ReviewSession({
                 display: "flex",
                 flexDirection: "column",
                 gap: "4px",
+                gridColumn: "2",
                 justifyContent: "center",
-                left: "50%",
-                maxWidth: "min(520px, calc(100% - 320px))",
                 minWidth: 0,
-                pointerEvents: "none",
-                position: "absolute",
                 textAlign: "center",
-                top: "50%",
-                transform: "translate(-50%, -50%)",
                 width: "100%"
               }}
             >
-              {relearning ? (
-                <RelearningBadge compact />
-              ) : (
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px 10px",
+                  justifyContent: "center"
+                }}
+              >
+                {relearning ? (
+                  <RelearningBadge compact />
+                ) : (
+                  <div
+                    style={{
+                      color: "#f0c36a",
+                      fontSize: "11px",
+                      fontWeight: 900,
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    Révision
+                  </div>
+                )}
                 <div
                   style={{
-                    color: "#f0c36a",
-                    fontSize: "11px",
-                    fontWeight: 900,
-                    textTransform: "uppercase"
+                    color: "#888",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    lineHeight: 1.2
                   }}
                 >
-                  Révision
+                  Question {questionNumber} / {baseQuestionTotal}
                 </div>
-              )}
+                {showRelearningCount && (
+                  <RelearningCountChip count={relearningRemaining} compact />
+                )}
+              </div>
               {currentQuestion.name && (
                 <strong
                   style={{
@@ -352,47 +367,6 @@ export default function ReviewSession({
                 >
                   {currentQuestion.name}
                 </strong>
-              )}
-              <div
-                style={{
-                  color: "#888",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  lineHeight: 1.2
-                }}
-              >
-                Question {questionNumber} / {baseQuestionTotal}
-              </div>
-              {showRelearningCount && (
-                <RelearningCountChip count={relearningRemaining} compact />
-              )}
-              {(currentQuestion.tags || []).length > 0 && (
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "6px 8px",
-                    justifyContent: "center",
-                    lineHeight: 1.2
-                  }}
-                >
-                  {(currentQuestion.tags || []).map(tag => (
-                    <span
-                      key={tag}
-                      style={{
-                        background: "#2b2047",
-                        borderRadius: "999px",
-                        color: "#b69cff",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        padding: "3px 8px"
-                      }}
-                    >
-                      #{labelForTag(tag)}
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
 
@@ -601,7 +575,6 @@ export default function ReviewSession({
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 alignItems: "center",
                 flexWrap: "wrap",
                 rowGap: "10px",
@@ -671,31 +644,6 @@ export default function ReviewSession({
                     ← Réponse précédente
                   </button>
                 )}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end"
-                }}
-              >
-                {(currentQuestion.tags || []).map(tag => (
-                  <div
-                    key={tag}
-                    style={{
-                      background: "#2b2047",
-                      color: "#b69cff",
-                      padding: "4px 10px",
-                      borderRadius: "999px",
-                      fontSize: "11px",
-                      fontWeight: "600"
-                    }}
-                  >
-                    #{labelForTag(tag)}
-                  </div>
-                ))}
               </div>
 
             </div>

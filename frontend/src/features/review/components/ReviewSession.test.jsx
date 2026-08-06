@@ -87,7 +87,9 @@ describe("ReviewSession", () => {
     expect(status).toHaveTextContent("Flags");
     expect(status).toHaveTextContent("Question 1 / 1");
     expect(shell).toHaveTextContent("Flags");
-    expect(status).toHaveTextContent("#Geo");
+    // Tags are metadata for browsing, not for answering a question already on
+    // screen, so the compact header leaves them out.
+    expect(status).not.toHaveTextContent("#Geo");
     expect(bar).not.toHaveTextContent("Image");
     expect(screen.queryByRole("heading", { name: "Révision" }))
       .not.toBeInTheDocument();

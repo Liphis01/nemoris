@@ -77,7 +77,7 @@ cd frontend && npm run test:run   # vitest, ~1 s
 
 ## Gotchas
 
-- **"Révision du jour" text is not a button.** The card title is not clickable — the "DÉMARRER →" button at the bottom of the card starts the session. The e2e tests also click "Révision du jour" text, but that works because `mockApi` sets `has_due: true` which makes the whole card a link. Use `page.getByRole("button", { name: "DÉMARRER" })` in custom scripts.
+- **The whole review card is one button, and its accessible name is not the visible "DÉMARRER →" text.** The card has `aria-label={`${reviewTitle}: ...`}` (e.g. "Révision du jour: ..."), which overrides the button's computed name — `getByRole("button", { name: "DÉMARRER" })` matches zero elements and times out. Use `page.getByRole("button", { name: /Révision du jour/ })` (or `getByText("Révision du jour")`, matched on visible text) in custom scripts. This is what `driver.mjs` does.
 
 - **`/review/summary` must return `has_due: true`.** Without it the home page shows "0 À JOUR" and the DÉMARRER button is disabled. The driver's `mockApi(page, { review: reviewFixture })` sets this automatically.
 
