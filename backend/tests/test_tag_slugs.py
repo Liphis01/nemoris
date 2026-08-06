@@ -96,7 +96,7 @@ class MultilingualTagIdMigrationTests(unittest.TestCase):
 
             result = self.run_migration(temp_dir, database_file, engine)
 
-            self.assertEqual([entry["version"] for entry in result["applied"]], ["0024", "0025"])
+            self.assertEqual([entry["version"] for entry in result["applied"]], ["0024", "0025", "0026"])
             self.assertIsNotNone(result["backup"])
             with Session(engine) as session:
                 rows = session.query(Question).order_by(Question.id).all()
@@ -265,7 +265,7 @@ class MultilingualTagIdMigrationTests(unittest.TestCase):
 
             self.assertEqual(
                 [entry["version"] for entry in result["applied"]],
-                ["0024", "0025"]
+                ["0024", "0025", "0026"]
             )
             with sqlite3.connect(database_file) as connection:
                 columns = {

@@ -226,26 +226,22 @@ describe("Settings", () => {
     expect(rebalanceReviewCalendar).not.toHaveBeenCalled();
   });
 
-  it("shows the auto-adjusted rate when it differs from the tier", async () => {
+  it("explains a reduced rate as fewer new questions, not fewer reviews", async () => {
     getReviewSettings.mockResolvedValue({
       catchup_daily_target: 20,
       pace_tier: "regulier",
       pace_tier_resolved: "regulier",
-      effective_daily_target: 14,
+      rate_ratio: 0.75,
       last_retention: 92.45,
       pace_tiers: PACE_TIERS
     });
     render(<Settings setMode={vi.fn()} />);
 
-    const note = await screen.findByText(/Rythme actuel : 14 \/ jour/);
+    const note = await screen.findByText(/Nouvelles questions réduites à 75 %/);
 
-    expect(note).toBeInTheDocument();
-    // The rate alone was the original failure: the user could see 14 but not
-    // why, nor what it was heading back toward.
     expect(note).toHaveTextContent("92 % de réussite sur 30 jours");
-    expect(note).toHaveTextContent(
-      "Il remontera vers 20 tant que ton calendrier reste dégagé."
-    );
+    // The whole point: the user must not infer their review load shrank.
+    expect(note).toHaveTextContent("Tes révisions programmées, elles, ne changent pas.");
   });
 
   it("explains a rate that sits above the chosen tier", async () => {
@@ -253,14 +249,64 @@ describe("Settings", () => {
       catchup_daily_target: 20,
       pace_tier: "regulier",
       pace_tier_resolved: "regulier",
-      effective_daily_target: 22,
-      last_retention: 95,
+      rate_ratio: 1.25,
       pace_tiers: PACE_TIERS
     });
     render(<Settings setMode={vi.fn()} />);
 
     expect(
       await screen.findByText(/Ton calendrier a de la marge/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows the tier seed in the rail, not the tuned number", async () => {
+    // The tuned ratio only scales new questions now, so showing it as the
+    // daily objective was a false statement.
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      rate_ratio: 0.75,
+      effective_daily_target: 15,
+      pace_tiers: PACE_TIERS
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    expect(await screen.findByText("20 questions / jour")).toBeInTheDocument();
+    expect(screen.queryByText("15 questions / jour")).not.toBeInTheDocument();
+  });
+
+  it("shows the remaining pool and its runway", async () => {
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      unstarted_count: 412,
+      intake_runway_days: 21,
+      pace_tiers: PACE_TIERS
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    expect(
+      await screen.findByText(/Réserve : 412 questions jamais vues/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/environ 3 semaines/)
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the pool is exhausted", async () => {
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      unstarted_count: 0,
+      pace_tiers: PACE_TIERS
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    expect(
+      await screen.findByText(/Réserve épuisée/)
     ).toBeInTheDocument();
   });
 

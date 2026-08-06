@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     Date,
     ForeignKey,
+    Index,
     Table,
     JSON,
     Text,
@@ -213,6 +214,15 @@ class ReviewLog(Base):
             "question_id",
             "seq",
             name="uq_review_log_question_seq"
+        ),
+        # The intake counters ask "was this question ever seen before day X"
+        # twice per review-screen load (today, then yesterday for the ramp
+        # limit). Without this the NOT IN subquery rescans the whole table
+        # prefix each time.
+        Index(
+            "ix_review_log_question_reviewed",
+            "question_id",
+            "reviewed_on"
         ),
     )
 

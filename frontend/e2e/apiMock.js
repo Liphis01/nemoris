@@ -164,6 +164,9 @@ export async function mockApi(page, options = {}) {
       pace_tier_resolved: "regulier",
       effective_daily_target: 20,
       last_retention: null,
+      rate_ratio: 1,
+      unstarted_count: 12,
+      intake_runway_days: null,
       pace_tiers: [
         { key: "leger", daily_target: 10, estimated_minutes: 3 },
         { key: "regulier", daily_target: 20, estimated_minutes: 5 },

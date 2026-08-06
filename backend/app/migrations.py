@@ -313,6 +313,23 @@ def _migration_remove_daily_grove_setting(connection):
     )
 
 
+def _migration_review_log_question_reviewed_index(connection):
+    if not _table_exists(connection, "review_log"):
+        return
+
+    columns = _column_names(connection, "review_log")
+
+    if "question_id" not in columns or "reviewed_on" not in columns:
+        return
+
+    connection.exec_driver_sql(
+        """
+        CREATE INDEX IF NOT EXISTS ix_review_log_question_reviewed
+        ON review_log (question_id, reviewed_on)
+        """
+    )
+
+
 def _migration_reset_intake_tuner(connection):
     # The intake tuner's second signal changed from a review-volume ratio to
     # schedule pressure. A rate earned under the old rule is not comparable to
@@ -1565,6 +1582,12 @@ MIGRATIONS = [
         version="0025",
         name="reset_intake_tuner",
         run=_migration_reset_intake_tuner
+    ),
+    # No backup: index only, no data touched.
+    Migration(
+        version="0026",
+        name="review_log_question_reviewed_index",
+        run=_migration_review_log_question_reviewed_index
     )
 ]
 

@@ -223,30 +223,6 @@ def _progress_row_has_started(row):
     )
 
 
-def _started_progress_rows(db):
-    return (
-        db.query(
-            Progress.question_id,
-            Progress.stability,
-            Progress.difficulty,
-            Progress.reps,
-            Progress.lapses,
-            Progress.interval,
-            Progress.ideal_interval,
-            Progress.last_review,
-            Progress.next_review,
-            Progress.ideal_next_review,
-            Progress.fsrs_card,
-            Progress.fsrs_version,
-            Progress.history,
-            Question.type_q,
-            Question.data.label("question_data")
-        )
-        .join(Question, Question.id == Progress.question_id)
-        .filter(reviewable_question_filter())
-        .all()
-    )
-
 
 def _new_question_ids(db, limit=None):
     # One global pool, ordered by id: new questions are introduced in creation
@@ -320,24 +296,6 @@ def _due_question_count(db, today):
 
     return sum(1 for row in rows if _progress_row_has_started(row))
 
-
-def _new_question_count(db, started_rows=None):
-    total_questions = (
-        db.query(func.count(Question.id))
-        .filter(reviewable_question_filter())
-        .scalar()
-        or 0
-    )
-    started_rows = started_rows if started_rows is not None else (
-        _started_progress_rows(db)
-    )
-    started_count = sum(
-        1
-        for row in started_rows
-        if _progress_row_has_started(row)
-    )
-
-    return max(0, total_questions - started_count)
 
 
 def get_review_summary(db, today=None):

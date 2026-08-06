@@ -19,7 +19,7 @@ boundary visible; ``review.py`` stays a pure-read module.
 from datetime import date, timedelta
 from math import ceil
 
-from sqlalchemy import case, distinct, func, or_
+from sqlalchemy import case, distinct, func, not_, or_
 
 from ..models import Progress, Question, ReviewLog
 from .map_eligibility import reviewable_question_filter
@@ -56,6 +56,30 @@ from .settings import (
 # nobody. Deliberately a cliff: a taper would re-couple new questions to review
 # load, which is exactly what this design removes.
 NEW_INTAKE_SATURATION_STOP = 1.5
+
+# A card introduced today does not cost one review slot. It also generates
+# follow-up reviews within days (first intervals are 1-3 days), and it takes
+# longer to work through than a card being recalled. So the day is filled in
+# review-equivalents: 80 means 80 reviews' worth of effort, not 80 items.
+NEW_QUESTION_WEIGHT = 1.75
+
+# The fill reacts to today's review load, but the cards it introduces come back
+# 1-3 days later -- a feedback loop with a lag and, without this, no brake.
+# Left alone it sawtooths: measured swings of 5..40 with day-to-day jumps of 35.
+#
+# Growth only. A lower bound would be actively harmful: the fill pins to the
+# tier floor once review_load passes seed - WEIGHT*new_min (71 at intensif)
+# while the saturation breaker does not fire until 1.5x the seed (120), so
+# across that whole window a lower band would FORCE unneeded new cards onto a
+# day already over its target -- the opposite of what damping is for. Capping
+# growth alone is enough, because the sawtooth's crash edge only exists as the
+# echo of an earlier spike. Same asymmetry the tuner already uses.
+INTAKE_RAMP_UP_RATIO = 0.25
+
+# Runway estimate for the unstarted pool. Deliberately coarse: the intake rate
+# self-regulates, so a trailing mean taken early overstates the drain rate.
+RUNWAY_WINDOW_DAYS = 14
+RUNWAY_MIN_PER_DAY = 1.0
 
 # Under FSRS with no learning steps a Good-rated card walks roughly
 # 1d -> 3d -> 8d -> 20d -> 50d, so it clears the WIP release bar (21 days /
@@ -147,29 +171,102 @@ def count_reviews_done_today(db, today):
     ) or 0
 
 
-def count_introduced_today(db, today):
-    # Progress rows are created lazily on first answer, so there is no
-    # "introduced_at" to read. MIN(review_log.reviewed_on) per question is the
-    # true introduction date, and the review_log migration backfills it from
-    # legacy Progress.history, so this also works on old databases.
-    #
-    # superseded_by is deliberately NOT filtered here: a re-grade appends a
-    # replacement row, but the original still proves the question was touched
-    # that day, which is all this counts.
+def count_introduced_on(db, day):
+    """Questions whose first ever review falls on `day`.
+
+    Progress rows are created lazily on first answer, so there is no
+    "introduced_at" to read. MIN(review_log.reviewed_on) per question is the
+    true introduction date, and the review_log migration backfills it from
+    legacy Progress.history, so this also works on old databases.
+
+    superseded_by is deliberately NOT filtered here: a re-grade appends a
+    replacement row, but the original still proves the question was touched
+    that day, which is all this counts.
+    """
     seen_before = (
         db.query(ReviewLog.question_id)
-        .filter(ReviewLog.reviewed_on < today)
+        .filter(ReviewLog.reviewed_on < day)
         .distinct()
     )
 
     return (
         db.query(func.count(distinct(ReviewLog.question_id)))
         .filter(
-            ReviewLog.reviewed_on == today,
+            ReviewLog.reviewed_on == day,
             ReviewLog.question_id.notin_(seen_before)
         )
         .scalar()
     ) or 0
+
+
+def count_introduced_today(db, today):
+    return count_introduced_on(db, today)
+
+
+def unstarted_question_count(db):
+    """Questions the intake pool can still draw on: reviewable, never started.
+
+    No `Progress.question_id IS NULL` clause is needed, and adding one would be
+    misleading: both arms of started_progress_filter are total functions, so a
+    missing progress row makes them FALSE rather than NULL and NOT(...) is
+    correctly TRUE. There is no three-valued-logic trap here.
+    """
+    return (
+        db.query(func.count(Question.id))
+        .outerjoin(Progress, Progress.question_id == Question.id)
+        .filter(
+            reviewable_question_filter(),
+            not_(started_progress_filter())
+        )
+        .scalar()
+    ) or 0
+
+
+def recent_intake_per_day(db, today, window_days=RUNWAY_WINDOW_DAYS):
+    """Mean introductions per day over the window ending yesterday.
+
+    One grouped pass rather than a query per day: MIN(reviewed_on) per question
+    is the introduction date, which is the same definition count_introduced_on
+    uses. Days with no activity are included on purpose -- they are real usage,
+    and excluding them would flatter the estimate.
+    """
+    first_seen = (
+        db.query(
+            ReviewLog.question_id,
+            func.min(ReviewLog.reviewed_on).label("first_day")
+        )
+        .group_by(ReviewLog.question_id)
+        .subquery()
+    )
+    introduced = (
+        db.query(func.count())
+        .select_from(first_seen)
+        .filter(
+            first_seen.c.first_day >= today - timedelta(days=window_days),
+            first_seen.c.first_day <= today - timedelta(days=1)
+        )
+        .scalar()
+    ) or 0
+
+    return introduced / float(window_days)
+
+
+def intake_runway_days(db, today, pool=None):
+    """Roughly how long the unstarted pool lasts at the recent intake rate.
+
+    Coarse by nature: the intake rate self-regulates downward as the in-flight
+    population grows, so a trailing mean overstates the drain rate, and any pack
+    import invalidates the figure outright. Callers must bucket it rather than
+    print a day count. None when intake is too slow to extrapolate from.
+    """
+    per_day = recent_intake_per_day(db, today)
+
+    if per_day < RUNWAY_MIN_PER_DAY:
+        return None
+
+    pool = unstarted_question_count(db) if pool is None else pool
+
+    return int(pool / per_day)
 
 
 def count_in_flight(db):
@@ -189,21 +286,32 @@ def wip_cap_for(daily_rate):
     return int(_clamp(round(daily_rate * WIP_LOAD_DAYS), WIP_CAP_MIN, WIP_CAP_MAX))
 
 
-def fill_to_target_budget(daily_rate, review_load, new_min, new_max):
+def fill_to_target_budget(
+    daily_target,
+    review_load,
+    new_min,
+    new_max,
+    weight=NEW_QUESTION_WEIGHT
+):
     """New questions needed to top the day up toward the tier's target.
 
     Scheduled reviews are counted first -- they are what the user already owes
-    -- and new questions take the remainder. Clamped so a quiet day cannot dump
-    the whole library, and so a busy day still brings some new material rather
-    than none.
+    -- and new questions take the remainder, priced at `weight` reviews each.
+    The clamp runs AFTER the division so the tier's floor and ceiling stay
+    expressed in cards, which is what the picker promises the user.
     """
-    return int(_clamp(daily_rate - review_load, new_min, new_max))
+    return int(_clamp(
+        (daily_target - review_load) / weight,
+        new_min,
+        new_max
+    ))
 
 
 def compute_intake_quota(
     db,
     today=None,
-    daily_rate=None,
+    daily_target=None,
+    rate_ratio=None,
     due_count=None,
     pace_tier=None
 ):
@@ -211,47 +319,85 @@ def compute_intake_quota(
 
     Every intermediate is returned, so the UI can explain a zero quota and the
     tests can assert on the reasoning rather than only the result.
+
+    `daily_target` is the tier seed -- the same number the calendar smoother
+    spreads reviews toward. The tuner's opinion arrives separately as
+    `rate_ratio` and scales only the new-question count, which is the only
+    thing it can actually control.
     """
     today = today or date.today()
     settings = None
+    intake = None
 
-    if daily_rate is None or pace_tier is None:
+    if daily_target is None or pace_tier is None:
         settings = get_review_settings(db)
 
-    if daily_rate is None:
-        daily_rate = load_intake_settings(
-            db,
-            settings["catchup_daily_target"]
-        )["effective_daily_target"]
+    if daily_target is None:
+        daily_target = settings["catchup_daily_target"]
 
     if pace_tier is None:
         pace_tier = settings["pace_tier"]
+
+    if rate_ratio is None:
+        intake = load_intake_settings(db, daily_target)
+        rate_ratio = intake["rate_ratio"]
 
     if due_count is None:
         due_count = due_question_count(db, today)
 
     reviews_done_today = count_reviews_done_today(db, today)
     introduced_today = count_introduced_today(db, today)
+    introduced_yesterday = count_introduced_on(db, today - timedelta(days=1))
 
     # What the day owes in reviews. Introductions are subtracted out so a new
     # card is not counted twice. Reviews already done still count, which is what
     # keeps the quota stable as the user works through the session instead of
     # handing out a fresh batch every time the screen is reopened.
+    #
+    # Deliberately NOT weighted: charging introductions at NEW_QUESTION_WEIGHT
+    # here would let the breaker trip mid-session on the very cards the session
+    # just handed out.
     review_load = max(0, reviews_done_today - introduced_today) + due_count
-    saturation = review_load / max(1, daily_rate)
+    saturation = review_load / max(1, daily_target)
     breaker = 0.0 if saturation >= NEW_INTAKE_SATURATION_STOP else 1.0
 
-    new_min, new_max = new_question_bounds(daily_rate, pace_tier)
-    new_budget = fill_to_target_budget(
-        daily_rate,
+    new_min, new_max = new_question_bounds(daily_target, pace_tier)
+    new_fill = fill_to_target_budget(
+        daily_target,
         review_load,
         new_min,
         new_max
     )
+
+    # The tuner scales the headroom ABOVE the floor, never the floor itself:
+    # scaling the whole budget would let it silently void the tier's guarantee.
+    new_budget_tuned = int(_clamp(
+        new_min + (new_fill - new_min) * rate_ratio + 0.5,
+        new_min,
+        new_max
+    ))
+
+    # Growth limit, applied to the day's total allowance and BEFORE the
+    # introduced_today subtraction: damping the remainder instead would make the
+    # ramp a no-op on reload and re-inflate a partly used budget.
+    #
+    # A yesterday of zero means "no data", not "zero" -- a brand-new install, a
+    # skipped day, or a day the breaker zeroed must not be pinned near nothing.
+    # Same convention schedule_pressure uses for a thin population.
+    if introduced_yesterday > 0:
+        ramp_ceiling = max(
+            new_min,
+            ceil(introduced_yesterday * (1 + INTAKE_RAMP_UP_RATIO))
+        )
+        new_budget = min(new_budget_tuned, ramp_ceiling)
+    else:
+        ramp_ceiling = None
+        new_budget = new_budget_tuned
+
     new_budget_remaining = max(0, new_budget - introduced_today)
 
     wip_count = count_in_flight(db)
-    wip_cap = wip_cap_for(daily_rate)
+    wip_cap = wip_cap_for(daily_target)
     soft_start = wip_cap * WIP_SOFT_START
 
     if wip_count >= wip_cap:
@@ -264,15 +410,20 @@ def compute_intake_quota(
     quota = max(0, int(new_budget_remaining * wip_factor * breaker))
 
     return {
-        "daily_rate": daily_rate,
+        "daily_target": daily_target,
+        "rate_ratio": rate_ratio,
         "pace_tier": pace_tier,
         "new_min": new_min,
         "new_max": new_max,
         "due_count": due_count,
         "reviews_done_today": reviews_done_today,
         "introduced_today": introduced_today,
+        "introduced_yesterday": introduced_yesterday,
         "review_load": review_load,
         "saturation": saturation,
+        "new_fill": new_fill,
+        "new_budget_tuned": new_budget_tuned,
+        "ramp_ceiling": ramp_ceiling,
         "new_budget": new_budget,
         "new_budget_remaining": new_budget_remaining,
         "wip_count": wip_count,
@@ -402,7 +553,7 @@ def tune_intake_rate(db, today=None):
     # Read the guard first: every call after the first of the day is one
     # indexed SELECT and no write at all.
     if state["tuned_on"] == today.isoformat():
-        return {"changed": False, **state}
+        return {"changed": False, "daily_target": seed, **state}
 
     ratio = state["rate_ratio"]
     retention, reviews_in_window = rolling_retention(db, today)
@@ -454,4 +605,4 @@ def tune_intake_rate(db, today=None):
         seed
     )
 
-    return {"changed": True, **tuned}
+    return {"changed": True, "daily_target": seed, **tuned}

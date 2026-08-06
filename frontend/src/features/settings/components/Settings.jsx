@@ -16,6 +16,15 @@ import SyncAccountSection from "./SyncAccountSection";
 import UpdateSection from "./UpdateSection";
 import { useSyncAccount } from "./useSyncAccount";
 
+// Bucketed on purpose: the runway carries roughly +/-25% model error and any
+// pack import invalidates it, so a precise day count would be false precision.
+function runwayLabel(days) {
+  if (days == null) return "";
+  if (days < 14) return ` — de quoi tenir environ ${days} jours à ce rythme`;
+  if (days < 60) return ` — de quoi tenir environ ${Math.round(days / 7)} semaines à ce rythme`;
+  return " — de quoi tenir plusieurs mois";
+}
+
 const PACE_TIER_LABELS = {
   leger: "Léger",
   regulier: "Régulier",
@@ -276,7 +285,9 @@ export default function Settings({
   const [target, setTarget] = useState(50);
   const [paceTier, setPaceTier] = useState(null);
   const [paceTiers, setPaceTiers] = useState(FALLBACK_PACE_TIERS);
-  const [effectiveTarget, setEffectiveTarget] = useState(null);
+  const [rateRatio, setRateRatio] = useState(null);
+  const [unstartedCount, setUnstartedCount] = useState(null);
+  const [runwayDays, setRunwayDays] = useState(null);
   const [lastRetention, setLastRetention] = useState(null);
   const [resolvedTier, setResolvedTier] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -358,7 +369,9 @@ export default function Settings({
   function applySettings(settings) {
     setTarget(settings.catchup_daily_target || 50);
     setPaceTier(settings.pace_tier ?? null);
-    setEffectiveTarget(settings.effective_daily_target ?? null);
+    setRateRatio(settings.rate_ratio ?? null);
+    setUnstartedCount(settings.unstarted_count ?? null);
+    setRunwayDays(settings.intake_runway_days ?? null);
     setLastRetention(settings.last_retention ?? null);
 
     if (Array.isArray(settings.pace_tiers) && settings.pace_tiers.length > 0) {
@@ -530,7 +543,7 @@ export default function Settings({
         <div className="settings-layout">
           <SettingsRail
             loading={loading}
-            target={effectiveTarget ?? target}
+            target={target}
             tierLabel={
               resolvedTier
                 ? PACE_TIER_LABELS[resolvedTier] || resolvedTier
@@ -552,7 +565,7 @@ export default function Settings({
               accent="amber"
               title="Review"
               description="Rythme quotidien"
-              badge={loading ? "..." : `${effectiveTarget ?? target} / jour`}
+              badge={loading ? "..." : `${target} / jour`}
             >
               {loading ? (
                 <div className="settings-loading">
@@ -616,17 +629,23 @@ export default function Settings({
                     </p>
                   )}
 
-                  {effectiveTarget !== null && effectiveTarget !== target && (
+                  {rateRatio !== null && rateRatio !== 1 && (
                     <p className="settings-pace-note">
-                      Rythme actuel : {effectiveTarget} / jour — ajusté
-                      automatiquement d'après tes résultats récents
+                      {rateRatio < 1
+                        ? `Nouvelles questions réduites à ${Math.round(rateRatio * 100)} % pour l'instant`
+                        : `Ton calendrier a de la marge : tu reçois ${Math.round(rateRatio * 100)} % des nouvelles questions prévues par ton palier`}
                       {lastRetention !== null
                         ? ` (${Math.round(lastRetention)} % de réussite sur 30 jours)`
                         : ""}
-                      .{" "}
-                      {effectiveTarget < target
-                        ? `Il remontera vers ${target} tant que ton calendrier reste dégagé.`
-                        : "Ton calendrier a de la marge, il dépasse le palier choisi."}
+                      . Tes révisions programmées, elles, ne changent pas.
+                    </p>
+                  )}
+
+                  {unstartedCount !== null && (
+                    <p className="settings-pace-note">
+                      {unstartedCount > 0
+                        ? `Réserve : ${unstartedCount} questions jamais vues${runwayLabel(runwayDays)}.`
+                        : "Réserve épuisée : tes sessions ne contiennent plus que des révisions. Importe un pack pour repartir sur du nouveau."}
                     </p>
                   )}
                 </div>

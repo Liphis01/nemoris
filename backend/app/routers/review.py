@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -43,7 +45,12 @@ from ..services.text_modes import (
     text_mode_difficulty,
     normalize_text_mode
 )
-from ..services.intake import compute_intake_quota, tune_intake_rate
+from ..services.intake import (
+    compute_intake_quota,
+    intake_runway_days,
+    tune_intake_rate,
+    unstarted_question_count
+)
 from ..services.review import (
     get_review_items,
     get_review_summary
@@ -99,6 +106,7 @@ def review_settings_payload(db, settings):
     # to highlight, the tiers on offer, and the rate the tuner has actually
     # settled on (which the UI shows next to the chosen tier).
     intake = load_intake_settings(db, settings["catchup_daily_target"])
+    pool = unstarted_question_count(db)
 
     return {
         **settings,
@@ -110,7 +118,13 @@ def review_settings_payload(db, settings):
         "effective_daily_target": intake["effective_daily_target"],
         "tuned_on": intake["tuned_on"],
         "last_retention": intake["last_retention"],
-        "last_schedule_pressure": intake["last_schedule_pressure"]
+        "last_schedule_pressure": intake["last_schedule_pressure"],
+        "rate_ratio": intake["rate_ratio"],
+        # Settings is a cold, user-initiated route, so it can afford the pool
+        # count and the grouped runway aggregate. Keep both OUT of
+        # compute_intake_quota, which runs on the menu tile.
+        "unstarted_count": pool,
+        "intake_runway_days": intake_runway_days(db, date.today(), pool=pool)
     }
 
 
@@ -177,7 +191,8 @@ def get_review(db: Session = Depends(get_db)):
 
     quota = compute_intake_quota(
         db,
-        daily_rate=tuned["effective_daily_target"]
+        daily_target=tuned["daily_target"],
+        rate_ratio=tuned["rate_ratio"]
     )
 
     # The service handles due filtering and runtime map grouping.
