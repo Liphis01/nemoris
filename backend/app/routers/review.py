@@ -49,6 +49,8 @@ from ..services.review import (
     get_review_summary
 )
 from ..services.settings import (
+    clear_pace_pressure_notice,
+    get_pace_pressure_notice,
     get_review_settings,
     get_startup_rebalance_notice,
     load_intake_settings,
@@ -147,6 +149,19 @@ def rebalance_review(db: Session = Depends(get_db)):
 @router.get("/review/startup_notice")
 def get_startup_notice(db: Session = Depends(get_db)):
     return get_startup_rebalance_notice(db)
+
+
+@router.get("/review/pace_notice")
+def get_pace_notice(db: Session = Depends(get_db)):
+    return get_pace_pressure_notice(db)
+
+
+@router.post("/review/pace_notice/dismiss")
+def dismiss_pace_notice(db: Session = Depends(get_db)):
+    clear_pace_pressure_notice(db)
+    db.commit()
+
+    return {"status": "ok"}
 
 
 @router.get("/review")

@@ -25,22 +25,37 @@ from ..models import Progress, Question, ReviewLog
 from .map_eligibility import reviewable_question_filter
 from .progress import in_flight_progress_filter, started_progress_filter
 from .settings import (
+    TUNE_CEILING_RATIO,
+    TUNE_FLOOR_RATIO,
+    clear_pace_pressure_notice,
     get_review_settings,
     load_intake_settings,
-    save_intake_settings
+    new_question_bounds,
+    save_intake_settings,
+    save_pace_pressure_notice,
+    suggested_lighter_tier
 )
 
 
-# A card introduced today does not cost one review slot: it also generates
-# follow-up reviews within days (first intervals are 1-3 days), which no other
-# guard can see yet because they are not scheduled at introduction time.
-NEW_QUESTION_WEIGHT = 1.75
-
-# Hard ceiling on introductions, as a share of the daily rate and in absolute
-# terms. This is the guard that stops a brand-new 200-question library with
-# nothing due from being dumped on the user on day one.
-NEW_SHARE_CEILING = 0.35
-ABSOLUTE_DAILY_CEILING = 20
+# The tier is a request for more work than the schedule alone produces, so new
+# questions FILL THE DAY UP toward it: what is already owed in reviews is
+# counted first, and new questions take the remainder.
+#
+# The per-tier floor is what stops this becoming the old "leftovers" rule, where
+# a busy day left nothing and the user could never get through their backlog. A
+# day already at or past its target still brings the floor's worth of new
+# material, so the total deliberately goes ABOVE the target -- the tier says how
+# much the user wants, not how little they will be allowed.
+#
+# It is self-regulating: cards introduced today come back due within days, which
+# raises tomorrow's review load, which shrinks tomorrow's fill. Intake tapers on
+# its own without any extra machinery.
+#
+# Emergency stop only. Returning to 300 due cards after a fortnight away is not
+# a heavy day, it is a backlog, and adding new material on top of it helps
+# nobody. Deliberately a cliff: a taper would re-couple new questions to review
+# load, which is exactly what this design removes.
+NEW_INTAKE_SATURATION_STOP = 1.5
 
 # Under FSRS with no learning steps a Good-rated card walks roughly
 # 1d -> 3d -> 8d -> 20d -> 50d, so it clears the WIP release bar (21 days /
@@ -79,14 +94,23 @@ PRESSURE_DOWN_MIN = 0.15
 # but two do not.
 MIN_PRESSURE_CARDS = 20
 
-UP_STREAK_REQUIRED = 3
-TUNE_FLOOR_RATIO = 0.50
-# Unreachable in practice, and deliberately so: the calendar smooths against the
-# tier seed and starts displacing cards at ~1.10x of it, so that is the real
-# stable maximum. The tier is meant to be the ceiling; do not raise this to
-# compensate.
-TUNE_CEILING_RATIO = 1.25
-TUNE_STEP_RATIO = 0.10
+# The rate moves toward its target by at most one step per day. This is a rate
+# limiter, not an accumulator: it converges to the same value regardless of the
+# path taken, which is what makes a tier round trip cost nothing, while still
+# damping a signal that is inherently steppy (schedule_pressure jumps ~0.00 to
+# ~0.18 at the smoother's knee, and a tier change rebalances the calendar and
+# zeroes pressure outright). Without the limiter the day after any tier change
+# would grant the ceiling.
+#
+# Asymmetric on purpose, preserving "down applies at once but up has to be
+# earned" in a form that carries no hidden state: floor to ceiling takes 10 days
+# upward, 4 days downward.
+TUNE_UP_STEP_RATIO = 0.05
+TUNE_DOWN_STEP_RATIO = 0.15
+# How long the rate has to sit pinned at the floor on a saturated calendar
+# before the user is told their tier is too heavy. One full PRESSURE_WINDOW_DAYS,
+# so the prompt can never fire on a signal shorter than the measurement itself.
+FLOOR_PROMPT_DAYS = 14
 
 
 def _clamp(value, lower, upper):
@@ -165,21 +189,43 @@ def wip_cap_for(daily_rate):
     return int(_clamp(round(daily_rate * WIP_LOAD_DAYS), WIP_CAP_MIN, WIP_CAP_MAX))
 
 
-def daily_ceiling_for(daily_rate):
-    return max(1, min(ceil(daily_rate * NEW_SHARE_CEILING), ABSOLUTE_DAILY_CEILING))
+def fill_to_target_budget(daily_rate, review_load, new_min, new_max):
+    """New questions needed to top the day up toward the tier's target.
+
+    Scheduled reviews are counted first -- they are what the user already owes
+    -- and new questions take the remainder. Clamped so a quiet day cannot dump
+    the whole library, and so a busy day still brings some new material rather
+    than none.
+    """
+    return int(_clamp(daily_rate - review_load, new_min, new_max))
 
 
-def compute_intake_quota(db, today=None, daily_rate=None, due_count=None):
+def compute_intake_quota(
+    db,
+    today=None,
+    daily_rate=None,
+    due_count=None,
+    pace_tier=None
+):
     """How many new questions to introduce today. Pure read: never writes.
 
     Every intermediate is returned, so the UI can explain a zero quota and the
     tests can assert on the reasoning rather than only the result.
     """
     today = today or date.today()
+    settings = None
+
+    if daily_rate is None or pace_tier is None:
+        settings = get_review_settings(db)
 
     if daily_rate is None:
-        seed = get_review_settings(db)["catchup_daily_target"]
-        daily_rate = load_intake_settings(db, seed)["effective_daily_target"]
+        daily_rate = load_intake_settings(
+            db,
+            settings["catchup_daily_target"]
+        )["effective_daily_target"]
+
+    if pace_tier is None:
+        pace_tier = settings["pace_tier"]
 
     if due_count is None:
         due_count = due_question_count(db, today)
@@ -187,21 +233,22 @@ def compute_intake_quota(db, today=None, daily_rate=None, due_count=None):
     reviews_done_today = count_reviews_done_today(db, today)
     introduced_today = count_introduced_today(db, today)
 
-    # Introductions are billed once, at NEW_QUESTION_WEIGHT, so they are
-    # subtracted out of the plain review count first. This is also what keeps
-    # the quota stable across repeated loads on the same day: after a finished
-    # session the load stays non-zero, so no second batch is handed out.
-    weighted_load = (
-        max(0, reviews_done_today - introduced_today) +
-        due_count +
-        NEW_QUESTION_WEIGHT * introduced_today
+    # What the day owes in reviews. Introductions are subtracted out so a new
+    # card is not counted twice. Reviews already done still count, which is what
+    # keeps the quota stable as the user works through the session instead of
+    # handing out a fresh batch every time the screen is reopened.
+    review_load = max(0, reviews_done_today - introduced_today) + due_count
+    saturation = review_load / max(1, daily_rate)
+    breaker = 0.0 if saturation >= NEW_INTAKE_SATURATION_STOP else 1.0
+
+    new_min, new_max = new_question_bounds(daily_rate, pace_tier)
+    new_budget = fill_to_target_budget(
+        daily_rate,
+        review_load,
+        new_min,
+        new_max
     )
-
-    slack = max(0.0, daily_rate - weighted_load)
-    slack_allowance = int(slack // NEW_QUESTION_WEIGHT)
-
-    ceiling = daily_ceiling_for(daily_rate)
-    ceiling_remaining = max(0, ceiling - introduced_today)
+    new_budget_remaining = max(0, new_budget - introduced_today)
 
     wip_count = count_in_flight(db)
     wip_cap = wip_cap_for(daily_rate)
@@ -214,17 +261,20 @@ def compute_intake_quota(db, today=None, daily_rate=None, due_count=None):
     else:
         wip_factor = (wip_cap - wip_count) / (wip_cap - soft_start)
 
-    quota = max(0, int(min(slack_allowance, ceiling_remaining) * wip_factor))
+    quota = max(0, int(new_budget_remaining * wip_factor * breaker))
 
     return {
         "daily_rate": daily_rate,
+        "pace_tier": pace_tier,
+        "new_min": new_min,
+        "new_max": new_max,
         "due_count": due_count,
         "reviews_done_today": reviews_done_today,
         "introduced_today": introduced_today,
-        "weighted_load": weighted_load,
-        "slack_allowance": slack_allowance,
-        "ceiling": ceiling,
-        "ceiling_remaining": ceiling_remaining,
+        "review_load": review_load,
+        "saturation": saturation,
+        "new_budget": new_budget,
+        "new_budget_remaining": new_budget_remaining,
         "wip_count": wip_count,
         "wip_cap": wip_cap,
         "wip_factor": wip_factor,
@@ -354,39 +404,49 @@ def tune_intake_rate(db, today=None):
     if state["tuned_on"] == today.isoformat():
         return {"changed": False, **state}
 
-    floor = max(1, round(seed * TUNE_FLOOR_RATIO))
-    ceiling = max(floor, round(seed * TUNE_CEILING_RATIO))
-    step = max(1, round(seed * TUNE_STEP_RATIO))
-
-    effective = _clamp(state["effective_daily_target"], floor, ceiling)
+    ratio = state["rate_ratio"]
     retention, reviews_in_window = rolling_retention(db, today)
     # Deliberately takes no rate argument: the signal is measured against the
     # tier the calendar is smoothed with, not against the number being tuned.
     pressure, _ = schedule_pressure(db, today)
     signal = _tune_signal(retention, pressure, reviews_in_window)
-    up_streak = state["up_streak"]
 
+    # One step toward the target, never a jump. The result depends only on the
+    # current ratio and today's measurements, so no history is accumulated and
+    # a tier round trip converges back to where it started.
     if signal == "up":
-        # Down applies at once but up has to earn it: a drowning user should
-        # not wait three days for relief, while a good week should not
-        # immediately raise the workload the user asked for.
-        up_streak += 1
-
-        if up_streak >= UP_STREAK_REQUIRED:
-            effective = min(ceiling, effective + step)
-            up_streak = 0
+        ratio = min(TUNE_CEILING_RATIO, ratio + TUNE_UP_STEP_RATIO)
     elif signal == "down":
-        effective = max(floor, effective - step)
-        up_streak = 0
-    else:
-        up_streak = 0
+        ratio = max(TUNE_FLOOR_RATIO, ratio - TUNE_DOWN_STEP_RATIO)
+
+    # Pinned at the floor on a calendar that is still jammed means the tier
+    # itself is too heavy -- the tuner has run out of room to help. Counted so
+    # the user can be told, rather than being walked silently down a tier.
+    at_floor = (
+        ratio <= TUNE_FLOOR_RATIO and
+        pressure is not None and
+        pressure >= PRESSURE_DOWN_MIN
+    )
+    floor_days = state["floor_days"] + 1 if at_floor else 0
+
+    if floor_days >= FLOOR_PROMPT_DAYS:
+        tier = get_review_settings(db).get("pace_tier")
+        save_pace_pressure_notice(db, {
+            "tier": tier,
+            "suggested_tier": suggested_lighter_tier(tier),
+            "pressure": pressure,
+            "daily_target": seed,
+            "floor_days": floor_days
+        })
+    elif floor_days == 0:
+        clear_pace_pressure_notice(db)
 
     tuned = save_intake_settings(
         db,
         {
-            "effective_daily_target": effective,
+            "rate_ratio": ratio,
             "tuned_on": today.isoformat(),
-            "up_streak": up_streak,
+            "floor_days": floor_days,
             "last_retention": retention,
             "last_schedule_pressure": pressure,
             "last_reviews_in_window": reviews_in_window

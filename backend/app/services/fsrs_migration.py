@@ -190,6 +190,7 @@ def migrate_progress_to_fsrs_v6(db):
             "skipped": 0
         }
 
+
     rows = (
         db.query(Progress, Question.type_q)
         .join(Question, Question.id == Progress.question_id)

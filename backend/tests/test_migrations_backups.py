@@ -779,7 +779,7 @@ class MigrationTests(unittest.TestCase):
                 session.close()
 
             self.assertEqual(state["effective_daily_target"], 80)
-            self.assertEqual(state["up_streak"], 0)
+            self.assertEqual(state["rate_ratio"], 1.0)
             self.assertIsNone(state["tuned_on"])
             self.assertIsNone(state["last_schedule_pressure"])
 

@@ -186,6 +186,33 @@ describe("Settings", () => {
     expect(rebalanceReviewCalendar).not.toHaveBeenCalled();
   });
 
+  it("shows how many new questions each tier allows", async () => {
+    getReviewSettings.mockResolvedValue({
+      catchup_daily_target: 20,
+      pace_tier: "regulier",
+      pace_tier_resolved: "regulier",
+      effective_daily_target: 20,
+      pace_tiers: PACE_TIERS.map((tier, index) => ({
+        ...tier,
+        new_min: index + 1,
+        new_max: 5 * (index + 1)
+      }))
+    });
+    render(<Settings setMode={vi.fn()} />);
+
+    expect(
+      await screen.findByText("jusqu'à 20 nouvelles / jour")
+    ).toBeInTheDocument();
+  });
+
+  it("explains that scheduled reviews come first", async () => {
+    render(<Settings setMode={vi.fn()} />);
+
+    expect(
+      await screen.findByText(/révisions programmées passent toujours en premier/)
+    ).toBeInTheDocument();
+  });
+
   it("shows save errors and restores the previous tier", async () => {
     updateReviewSettings.mockRejectedValue(new Error("Save failed"));
     render(<Settings setMode={vi.fn()} />);

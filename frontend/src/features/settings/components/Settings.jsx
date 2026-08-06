@@ -593,9 +593,21 @@ export default function Settings({
                         <span className="settings-pace-tier-time">
                           ~{tier.estimated_minutes} min
                         </span>
+                        {tier.new_max != null && (
+                          <span className="settings-pace-tier-projection">
+                            jusqu'à {tier.new_max} nouvelles / jour
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
+
+                  <p className="settings-pace-note">
+                    Tes révisions programmées passent toujours en premier. Le
+                    palier dit combien de questions en plus tu veux : les
+                    nouvelles complètent ta journée jusqu'à ce volume, sans
+                    jamais descendre sous le minimum du palier.
+                  </p>
 
                   {!paceTier && (
                     <p className="settings-pace-note">

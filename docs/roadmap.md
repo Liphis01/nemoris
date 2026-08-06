@@ -11,6 +11,7 @@
 - laisser les créateurs personnaliser la devanture de leur pack
 - système de proposition de patchs pour les packs
 - dans les settings, un truc pour me contacter
+- app mobile
 
 ## quick fixes
 

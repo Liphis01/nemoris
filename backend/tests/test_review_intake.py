@@ -13,17 +13,15 @@ from app.routers.review import get_review, get_settings, update_settings
 from app.schemas import GroupSuspend, ReviewSettings
 from app.services.intake import (
     MIN_PRESSURE_CARDS,
-    NEW_QUESTION_WEIGHT,
     PRESSURE_DOWN_MIN,
     PRESSURE_UP_MAX,
     PRESSURE_WINDOW_DAYS,
     due_question_count,
-    UP_STREAK_REQUIRED,
     compute_intake_quota,
     count_in_flight,
     count_introduced_today,
     count_reviews_done_today,
-    daily_ceiling_for,
+    fill_to_target_budget,
     schedule_pressure,
     tune_intake_rate,
     wip_cap_for
@@ -109,7 +107,10 @@ class IntakeTestCase(unittest.TestCase):
 
 
 class IntakeQuotaTests(IntakeTestCase):
-    def test_a_full_day_of_due_work_leaves_no_room(self):
+    def test_a_full_day_of_due_work_still_funds_new_questions(self):
+        # Previously a day merely at its target blocked intake entirely. New
+        # questions now have their own budget, and only a genuinely overloaded
+        # day (past the saturation breaker) stops them.
         today = date.today()
 
         for question_id in range(1, 25):
@@ -121,9 +122,12 @@ class IntakeQuotaTests(IntakeTestCase):
         quota = compute_intake_quota(self.db, today=today, daily_rate=20)
 
         self.assertEqual(quota["due_count"], 24)
-        self.assertEqual(quota["quota"], 0)
+        self.assertLess(quota["saturation"], 1.5)
+        self.assertEqual(quota["quota"], quota["new_budget"])
 
-    def test_slack_is_charged_at_the_new_question_weight(self):
+    def test_new_intake_does_not_compete_with_review_slack(self):
+        # The regression that motivates the whole decoupling: a day already
+        # carrying reviews must still fund its full new-question budget.
         today = date.today()
 
         for question_id in range(1, 11):
@@ -134,11 +138,10 @@ class IntakeQuotaTests(IntakeTestCase):
 
         quota = compute_intake_quota(self.db, today=today, daily_rate=20)
 
-        # 20 - 10 due = 10 slack, and each new card costs 1.75 slots.
-        self.assertEqual(quota["slack_allowance"], int(10 // NEW_QUESTION_WEIGHT))
-        self.assertEqual(quota["quota"], 5)
+        self.assertEqual(quota["due_count"], 10)
+        self.assertEqual(quota["quota"], quota["new_budget"])
 
-    def test_idle_day_is_bound_by_the_ceiling_not_the_slack(self):
+    def test_idle_day_is_bound_by_the_new_budget(self):
         for question_id in range(1, 200):
             self.add_question(question_id)
 
@@ -147,18 +150,121 @@ class IntakeQuotaTests(IntakeTestCase):
         quota = compute_intake_quota(self.db, daily_rate=20)
 
         self.assertEqual(quota["due_count"], 0)
-        self.assertEqual(quota["ceiling"], 7)
-        self.assertLess(quota["ceiling"], quota["slack_allowance"])
-        self.assertEqual(quota["quota"], 7)
+        self.assertEqual(quota["new_budget"], 10)
+        self.assertEqual(quota["quota"], 10)
 
-    def test_ceilings_scale_with_the_tier_and_stop_at_the_absolute_cap(self):
-        self.assertEqual(daily_ceiling_for(10), 4)
-        self.assertEqual(daily_ceiling_for(20), 7)
-        self.assertEqual(daily_ceiling_for(40), 14)
-        # ceil(80 * 0.35) = 28, clamped by the absolute backstop.
-        self.assertEqual(daily_ceiling_for(80), 20)
+    def test_new_intake_survives_a_full_day_of_reviews(self):
+        today = date.today()
 
-    def test_questions_already_introduced_today_consume_the_ceiling(self):
+        for question_id in range(1, 200):
+            self.add_question(question_id)
+
+        # 60 due against a rate of 20: three times the target, which under the
+        # old slack arithmetic left nothing at all for new questions.
+        for question_id in range(1, 61):
+            self.add_progress(question_id, next_review=today)
+
+        self.db.commit()
+
+        quota = compute_intake_quota(self.db, today=today, daily_rate=20)
+
+        self.assertEqual(quota["due_count"], 60)
+        self.assertEqual(quota["quota"], 0)  # breaker: 60/20 = 3.0 >= 1.5
+
+    def test_the_fill_shrinks_as_the_schedule_fills_the_day(self):
+        # Scheduled questions come first: the busier the day already is, the
+        # less room is left to top up -- down to the floor, never below it.
+        today = date.today()
+
+        for question_id in range(1, 200):
+            self.add_question(question_id)
+
+        self.db.commit()
+        quotas = []
+
+        for due in (0, 7, 14, 21):
+            for question_id in range(1, due + 1):
+                progress = (
+                    self.db.query(Progress)
+                    .filter(Progress.question_id == question_id)
+                    .first()
+                )
+
+                if not progress:
+                    self.add_progress(question_id, next_review=today)
+
+            self.db.commit()
+            quota = compute_intake_quota(
+                self.db,
+                today=today,
+                daily_rate=20,
+                pace_tier="regulier"
+            )
+            quotas.append(quota["quota"])
+
+        self.assertEqual(quotas, sorted(quotas, reverse=True))
+        self.assertEqual(quotas[0], 10)
+        # Past the target the tier's floor still holds.
+        self.assertEqual(quotas[-1], 2)
+
+    def test_new_intake_stops_at_the_saturation_breaker(self):
+        today = date.today()
+
+        for question_id in range(1, 200):
+            self.add_question(question_id)
+
+        for question_id in range(1, 30):
+            self.add_progress(question_id, next_review=today)
+
+        self.db.commit()
+
+        # 29 due against a rate of 20 is 1.45x: just under the stop.
+        just_under = compute_intake_quota(self.db, today=today, daily_rate=20)
+        self.assertLess(just_under["saturation"], 1.5)
+        self.assertEqual(just_under["quota"], just_under["new_budget"])
+
+        self.add_question(500)
+        self.add_progress(500, next_review=today)
+        self.db.commit()
+
+        over = compute_intake_quota(self.db, today=today, daily_rate=20)
+        self.assertGreaterEqual(over["saturation"], 1.5)
+        self.assertEqual(over["quota"], 0)
+
+    def test_the_budget_fills_the_day_up_toward_the_target(self):
+        # A quiet day is topped up to the tier's ceiling; a day already at its
+        # target still brings the floor's worth of new material.
+        self.assertEqual(fill_to_target_budget(80, 0, 5, 40), 40)
+        self.assertEqual(fill_to_target_budget(80, 50, 5, 40), 30)
+        self.assertEqual(fill_to_target_budget(80, 80, 5, 40), 5)
+        # Past the target the floor still holds: the total goes ABOVE the tier,
+        # because the tier says how much the user wants, not how little.
+        self.assertEqual(fill_to_target_budget(80, 120, 5, 40), 5)
+
+    def test_scheduled_questions_are_counted_first(self):
+        # Priority to the schedule: reviews consume the day, new questions take
+        # only what is left.
+        today = date.today()
+
+        for question_id in range(1, 200):
+            self.add_question(question_id)
+
+        for question_id in range(1, 61):
+            self.add_progress(question_id, next_review=today)
+
+        self.db.commit()
+
+        quota = compute_intake_quota(
+            self.db,
+            today=today,
+            daily_rate=80,
+            pace_tier="intensif"
+        )
+
+        self.assertEqual(quota["due_count"], 60)
+        self.assertEqual(quota["quota"], 20)
+
+    def test_questions_already_introduced_today_consume_the_budget(self):
         today = date.today()
 
         for question_id in range(1, 30):
@@ -173,8 +279,7 @@ class IntakeQuotaTests(IntakeTestCase):
         quota = compute_intake_quota(self.db, today=today, daily_rate=20)
 
         self.assertEqual(quota["introduced_today"], 7)
-        self.assertEqual(quota["ceiling_remaining"], 0)
-        self.assertEqual(quota["quota"], 0)
+        self.assertEqual(quota["new_budget_remaining"], 3)
 
     def test_finished_session_does_not_hand_out_a_second_batch(self):
         # The regression that matters most: reopening the review screen after
@@ -205,8 +310,38 @@ class IntakeQuotaTests(IntakeTestCase):
 
         self.assertEqual(quota["reviews_done_today"], 12)
         self.assertEqual(quota["introduced_today"], 7)
-        self.assertEqual(quota["weighted_load"], 5 + 0 + NEW_QUESTION_WEIGHT * 7)
-        self.assertEqual(quota["quota"], 0)
+        # Reviews already done still count toward the day, so reopening the
+        # screen does not restart the fill from scratch.
+        self.assertEqual(quota["review_load"], 5)
+        self.assertLess(quota["quota"], quota["new_budget"])
+
+    def test_a_partly_used_budget_is_handed_out_on_reload(self):
+        # Introductions already made are subtracted from the day's fill, so a
+        # reload hands out only what is still owed rather than a fresh batch.
+        today = date.today()
+
+        for question_id in range(1, 40):
+            self.add_question(question_id)
+
+        for question_id in range(1, 6):
+            self.add_progress(
+                question_id,
+                next_review=today + timedelta(days=4),
+                reps=3
+            )
+            self.add_review_log(question_id, today - timedelta(days=4), seq=1)
+            self.add_review_log(question_id, today, seq=2)
+
+        for question_id in range(10, 13):
+            self.add_progress(question_id, next_review=today + timedelta(days=1))
+            self.add_review_log(question_id, today)
+
+        self.db.commit()
+
+        quota = compute_intake_quota(self.db, today=today, daily_rate=20)
+
+        self.assertEqual(quota["introduced_today"], 3)
+        self.assertEqual(quota["quota"], quota["new_budget"] - 3)
 
     def test_same_day_retries_count_as_one_review(self):
         today = date.today()
@@ -269,7 +404,7 @@ class IntakeWipTests(IntakeTestCase):
 
         self.assertGreater(quota["wip_factor"], 0.0)
         self.assertLess(quota["wip_factor"], 1.0)
-        self.assertLess(quota["quota"], quota["ceiling"])
+        self.assertLess(quota["quota"], quota["new_budget"])
 
     def test_python_and_sql_in_flight_predicates_agree(self):
         cases = [
@@ -405,25 +540,38 @@ class IntakeTuningTests(IntakeTestCase):
             rates.append(tuned["effective_daily_target"])
 
         self.assertLess(rates[0], 20)
-        # Floor is half the tier seed and the walk stops there.
-        self.assertEqual(min(rates), 10)
-        self.assertEqual(rates[-1], 10)
+        # Floor is 0.75 of the tier seed and the walk stops there.
+        self.assertEqual(min(rates), 15)
+        self.assertEqual(rates[-1], 15)
 
-    def test_strong_retention_needs_a_streak_before_raising_the_rate(self):
+    def test_a_raise_is_rate_limited_not_streak_gated(self):
+        # No streak counter any more: the rate simply moves one small step per
+        # day toward its target, which is what makes it path-independent.
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
         self.seed_reviews(120, quality=3, days_back=1)
         self.db.commit()
 
         today = date.today()
-        rates = []
+        rates = [
+            tune_intake_rate(self.db, today=today + timedelta(days=offset))[
+                "effective_daily_target"
+            ]
+            for offset in range(3)
+        ]
 
-        for offset in range(UP_STREAK_REQUIRED):
-            tuned = tune_intake_rate(self.db, today=today + timedelta(days=offset))
-            rates.append(tuned["effective_daily_target"])
+        self.assertEqual(rates, [21, 22, 23])
 
-        self.assertEqual(rates[0], 20)
-        self.assertEqual(rates[1], 20)
-        self.assertEqual(rates[2], 22)
+    def test_the_rate_falls_faster_than_it_rises(self):
+        # "Down applies at once, up has to be earned", preserved without any
+        # stored streak: the down step is three times the up step.
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        self.seed_reviews(120, quality=0)
+        self.db.commit()
+
+        today = date.today()
+        first = tune_intake_rate(self.db, today=today)["effective_daily_target"]
+
+        self.assertEqual(20 - first, 3)
 
     def test_a_thin_window_holds_the_rate(self):
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
@@ -452,23 +600,41 @@ class IntakeTuningTests(IntakeTestCase):
             second["effective_daily_target"]
         )
 
-    def test_choosing_a_tier_resets_the_tuner(self):
+    def test_choosing_a_tier_rescales_the_tuner_without_losing_it(self):
+        # The tuner's judgement is stored as a ratio of the tier, so changing
+        # tier re-anchors it instead of discarding it.
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
         self.seed_reviews(120, quality=0)
         self.db.commit()
 
         tune_intake_rate(self.db, today=date.today())
-        self.assertLess(
-            load_intake_settings(self.db, 20)["effective_daily_target"],
-            20
-        )
+        ratio = load_intake_settings(self.db, 20)["rate_ratio"]
+
+        self.assertLess(ratio, 1.0)
 
         update_settings(ReviewSettings(pace_tier="soutenu"), db=self.db)
         state = load_intake_settings(self.db, 40)
 
-        self.assertEqual(state["effective_daily_target"], 40)
-        self.assertEqual(state["up_streak"], 0)
+        self.assertEqual(state["rate_ratio"], ratio)
+        self.assertEqual(state["effective_daily_target"], round(40 * ratio))
         self.assertIsNone(state["tuned_on"])
+
+    def test_a_tier_round_trip_preserves_the_tuned_rate(self):
+        # Leaving a tier and coming back must cost nothing: the whole point of
+        # storing a ratio rather than an absolute number.
+        update_settings(ReviewSettings(pace_tier="intensif"), db=self.db)
+        self.seed_reviews(120, quality=3, days_back=1, drift=0.0)
+        self.db.commit()
+
+        tune_intake_rate(self.db, today=date.today())
+        before = load_intake_settings(self.db, 80)["effective_daily_target"]
+
+        update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
+        update_settings(ReviewSettings(pace_tier="intensif"), db=self.db)
+
+        after = load_intake_settings(self.db, 80)["effective_daily_target"]
+
+        self.assertEqual(after, before)
 
     def test_a_saturated_calendar_walks_the_rate_down_despite_perfect_retention(self):
         # The regression test for the whole bug class: answering everything
@@ -481,7 +647,7 @@ class IntakeTuningTests(IntakeTestCase):
 
         self.assertEqual(tuned["last_retention"], 100.0)
         self.assertEqual(tuned["last_schedule_pressure"], 0.30)
-        self.assertEqual(tuned["effective_daily_target"], 18)
+        self.assertEqual(tuned["effective_daily_target"], 17)
 
     def test_a_clear_calendar_and_strong_retention_earn_a_raise(self):
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
@@ -493,10 +659,10 @@ class IntakeTuningTests(IntakeTestCase):
             tune_intake_rate(self.db, today=today + timedelta(days=offset))[
                 "effective_daily_target"
             ]
-            for offset in range(UP_STREAK_REQUIRED)
+            for offset in range(3)
         ]
 
-        self.assertEqual(rates, [20, 20, 22])
+        self.assertEqual(rates, [21, 22, 23])
 
     def test_a_calendar_with_no_scheduled_cards_holds_the_rate(self):
         # An empty population means "no data", never "clear": a user with
@@ -510,7 +676,7 @@ class IntakeTuningTests(IntakeTestCase):
             tune_intake_rate(self.db, today=today + timedelta(days=offset))[
                 "effective_daily_target"
             ]
-            for offset in range(UP_STREAK_REQUIRED + 1)
+            for offset in range(4)
         ]
 
         self.assertEqual(set(rates), {20})
@@ -530,7 +696,7 @@ class IntakeTuningTests(IntakeTestCase):
             tune_intake_rate(self.db, today=today + timedelta(days=offset))[
                 "effective_daily_target"
             ]
-            for offset in range(UP_STREAK_REQUIRED + 1)
+            for offset in range(4)
         ]
 
         self.assertEqual(set(rates), {20})
@@ -545,7 +711,7 @@ class IntakeTuningTests(IntakeTestCase):
             tune_intake_rate(self.db, today=today + timedelta(days=offset))[
                 "effective_daily_target"
             ]
-            for offset in range(UP_STREAK_REQUIRED + 1)
+            for offset in range(4)
         ]
 
         self.assertEqual(set(rates), {20})
@@ -578,7 +744,7 @@ class IntakeTuningTests(IntakeTestCase):
 
         self.assertEqual(tuned["last_retention"], 100.0)
         self.assertEqual(tuned["last_schedule_pressure"], 0.5)
-        self.assertEqual(tuned["effective_daily_target"], 18)
+        self.assertEqual(tuned["effective_daily_target"], 17)
 
     def test_cards_beyond_the_pressure_window_are_not_measured(self):
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
@@ -729,8 +895,8 @@ class IntakeSettingsTests(IntakeTestCase):
         self.assertIsNone(settings["pace_tier"])
         self.assertEqual(resolve_pace_tier(50, None), "soutenu")
         self.assertEqual(
-            compute_intake_quota(self.db, daily_rate=50)["ceiling"],
-            18
+            compute_intake_quota(self.db, daily_rate=50)["new_budget"],
+            25
         )
 
     def test_the_tuned_rate_never_syncs(self):
@@ -817,7 +983,7 @@ class SuspendedQuestionTests(IntakeTestCase):
 
         self.assertEqual(get_review(db=self.db), [])
         # The allowance still exists; there is simply nothing eligible to fill it.
-        self.assertEqual(quota["quota"], 7)
+        self.assertEqual(quota["quota"], 10)
         self.assertEqual(_new_question_ids(self.db), [])
 
 

@@ -1567,8 +1567,9 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(summary["new_count"], 1)
         self.assertEqual(summary["session_count"], 3)
 
-    def test_review_caps_new_questions_at_the_daily_ceiling(self):
-        # Régulier: 20/day -> ceiling ceil(20 * 0.35) = 7 introductions.
+    def test_review_caps_new_questions_at_the_tier_ceiling(self):
+        # Nothing scheduled, so the day fills up toward the target and stops at
+        # régulier's ceiling of 10 new questions.
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
 
         for question_id in range(1, 31):
@@ -1578,10 +1579,10 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         response = get_review(db=self.db)
 
-        self.assertEqual(len(response), 7)
+        self.assertEqual(len(response), 10)
         self.assertEqual(
             sorted(item["question_id"] for item in response),
-            list(range(1, 8))
+            list(range(1, 11))
         )
 
     def test_review_serves_a_small_pool_entirely(self):
