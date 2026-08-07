@@ -575,6 +575,9 @@ export function useMediaReview(
   const [lockedMissedQuestionIds, setLockedMissedQuestionIds] = useState([]);
   const [revealedQuestionIds, setRevealedQuestionIds] = useState([]);
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
+  // What the learner actually typed/picked per item, for M0 0.1 (storing the
+  // given answer). Keyed like qualityByQuestionId.
+  const [answerByQuestionId, setAnswerByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
   const [interactionFeedback, setInteractionFeedback] = useState(null);
   const [resultMode, setResultMode] = useState(false);
@@ -589,6 +592,7 @@ export function useMediaReview(
     setLockedMissedQuestionIds([]);
     setRevealedQuestionIds([]);
     setQualityByQuestionId({});
+    setAnswerByQuestionId({});
     setFeedbackTone(null);
     setInteractionFeedback(null);
     setResultMode(false);
@@ -835,8 +839,16 @@ export function useMediaReview(
     );
   }
 
-  function markFound(item) {
+  function recordAnswer(item, guess) {
+    if (!item || guess === undefined || guess === null) return;
+
+    setAnswerByQuestionId(prev => ({ ...prev, [item.question_id]: guess }));
+  }
+
+  function markFound(item, guess) {
     if (!item) return;
+
+    recordAnswer(item, guess);
 
     const nextFoundIds = rememberFound(item);
 
@@ -856,9 +868,10 @@ export function useMediaReview(
     }
   }
 
-  function markMissed(item) {
+  function markMissed(item, guess) {
     if (!item) return;
 
+    recordAnswer(item, guess);
     rememberRevealed(item);
     rememberResolved(item);
     setInput("");
@@ -878,10 +891,13 @@ export function useMediaReview(
         relearningGroup,
         qualities
       );
+      const answers = Object.fromEntries(
+        Object.entries(answerByQuestionId).filter(([questionId]) => questionId in graded)
+      );
 
       await Promise.all([
         Object.keys(graded).length > 0
-          ? submitAnswer(graded, mode, contextItems.length)
+          ? submitAnswer(graded, mode, contextItems.length, answers)
           : null,
         graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
       ].filter(Boolean));
@@ -896,6 +912,7 @@ export function useMediaReview(
       setLockedMissedQuestionIds([]);
       setRevealedQuestionIds([]);
       setQualityByQuestionId({});
+      setAnswerByQuestionId({});
       setFeedbackTone(null);
       setInteractionFeedback(null);
       setResultMode(false);
@@ -939,7 +956,7 @@ export function useMediaReview(
 
     if (mode === IMAGE_MODE_TYPE_PROMPT) {
       if (currentPromptItem && matchesImageAnswer(currentPromptItem, input)) {
-        markFound(currentPromptItem);
+        markFound(currentPromptItem, input);
       } else if (input.trim()) {
         setFeedbackTone("incorrect");
       }
@@ -952,7 +969,7 @@ export function useMediaReview(
     const match = answerLookup.get(normalizeImageAnswer(input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
-      markFound(match);
+      markFound(match, input);
     } else if (input.trim()) {
       setFeedbackTone("incorrect");
     }
@@ -978,10 +995,11 @@ export function useMediaReview(
       selectedQuestionId: questionId
     });
 
+    // The pick is an image, so the option's question id is the answer.
     if (isCorrect) {
-      markFound(currentPromptItem);
+      markFound(currentPromptItem, questionId);
     } else {
-      markMissed(currentPromptItem);
+      markMissed(currentPromptItem, questionId);
     }
   }
 
@@ -996,6 +1014,9 @@ export function useMediaReview(
     }
 
     const isCorrect = currentPromptItem.question_id === questionId;
+    const selectedOption = choiceOptions.find(
+      option => option.question_id === questionId
+    );
 
     setInteractionFeedback({
       id: Date.now(),
@@ -1005,10 +1026,12 @@ export function useMediaReview(
       selectedQuestionId: questionId
     });
 
+    const guess = imageAnswerLabel(selectedOption) ?? questionId;
+
     if (isCorrect) {
-      markFound(currentPromptItem);
+      markFound(currentPromptItem, guess);
     } else {
-      markMissed(currentPromptItem);
+      markMissed(currentPromptItem, guess);
     }
   }
 

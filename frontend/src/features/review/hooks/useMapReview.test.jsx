@@ -201,10 +201,12 @@ describe("useMapReview recap sorting", () => {
       await result.current.sendResult();
     });
 
+    // The typed string rides along as the given answer; the zone that was
+    // never answered contributes no entry.
     expect(submitAnswer).toHaveBeenCalledWith({
       1: 2,
       2: 0
-    }, "type_all", 2);
+    }, "type_all", 2, { 1: "Alpha" });
     expect(sendMapAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
@@ -554,7 +556,8 @@ describe("useMapReview recap sorting", () => {
       expect(submitAnswer).toHaveBeenCalledWith(
         { [target.question_id]: 1 },
         "multiple_choice",
-        contextItems.length
+        contextItems.length,
+        { [target.question_id]: target.label }
       );
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
@@ -601,10 +604,13 @@ describe("useMapReview recap sorting", () => {
       await result.current.sendResult();
     });
 
+    // The wrong pick is the confusion signal worth recording, so it is the
+    // label that was chosen — not the correct one — that gets sent.
     expect(submitAnswer).toHaveBeenCalledWith(
       { [target.question_id]: 0 },
       "multiple_choice",
-      contextItems.length
+      contextItems.length,
+      { [target.question_id]: wrong.label }
     );
     expect(onComplete).toHaveBeenCalledWith([target.question_id]);
   });
@@ -652,7 +658,7 @@ describe("useMapReview recap sorting", () => {
 
       expect(submitAnswer).toHaveBeenCalledWith({
         [target.question_id]: 2
-      }, "multiple_choice", 5);
+      }, "multiple_choice", 5, { [target.question_id]: target.label });
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
       randomSpy.mockRestore();

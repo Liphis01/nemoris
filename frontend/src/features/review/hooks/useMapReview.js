@@ -432,6 +432,9 @@ export function useMapReview(
   const [resolvedQuestionIds, setResolvedQuestionIds] = useState([]);
   const [showRecap, setShowRecap] = useState(false);
   const [qualityByQuestionId, setQualityByQuestionId] = useState({});
+  // What the learner actually typed/clicked/picked per zone, for M0 0.1
+  // (storing the given answer). Keyed like qualityByQuestionId.
+  const [answerByQuestionId, setAnswerByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
   const [remainingFocusCode, setRemainingFocusCode] = useState(null);
   const [focusVersion, setFocusVersion] = useState(0);
@@ -460,6 +463,7 @@ export function useMapReview(
     setResolvedQuestionIds([]);
     setShowRecap(false);
     setQualityByQuestionId({});
+    setAnswerByQuestionId({});
     setFocusedCode(null);
     setRemainingFocusCode(null);
     setFocusVersion(0);
@@ -679,10 +683,13 @@ export function useMapReview(
         relearningGroup,
         qualities
       );
+      const answers = Object.fromEntries(
+        Object.entries(answerByQuestionId).filter(([questionId]) => questionId in graded)
+      );
 
       await Promise.all([
         Object.keys(graded).length > 0
-          ? submitAnswer(graded, mode, contextItems.length)
+          ? submitAnswer(graded, mode, contextItems.length, answers)
           : null,
         graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
       ].filter(Boolean));
@@ -695,6 +702,7 @@ export function useMapReview(
       setFoundQuestionIds([]);
       setResolvedQuestionIds([]);
       setQualityByQuestionId({});
+      setAnswerByQuestionId({});
       setFocusedCode(null);
       setRemainingFocusCode(null);
       setFocusVersion(0);
@@ -788,10 +796,17 @@ export function useMapReview(
     setActivePromptQuestionId(target.question_id);
   }
 
-  function markFound(item) {
+  function recordAnswer(item, guess) {
+    if (!item || guess === undefined || guess === null) return;
+
+    setAnswerByQuestionId(prev => ({ ...prev, [item.question_id]: guess }));
+  }
+
+  function markFound(item, guess) {
     // Do not count a zone twice if the user types an alias after finding it.
     if (!item || foundQuestionIdSet.has(item.question_id)) return;
 
+    recordAnswer(item, guess);
     rememberFound(item);
     rememberResolved(item);
     setCorrectFlashId(Date.now());
@@ -800,9 +815,10 @@ export function useMapReview(
     advanceAfterResolved(item);
   }
 
-  function markMissed(item) {
+  function markMissed(item, guess) {
     if (!item) return;
 
+    recordAnswer(item, guess);
     rememberResolved(item);
     setIncorrectFlashId(Date.now());
     setCorrectFlashId(0);
@@ -813,7 +829,7 @@ export function useMapReview(
   function handleSubmit() {
     if (mode === MAP_MODE_TYPE_PROMPT) {
       if (currentPromptItem && itemMatchesInput(currentPromptItem, input)) {
-        markFound(currentPromptItem);
+        markFound(currentPromptItem, input);
       } else if (input.trim()) {
         setIncorrectFlashId(Date.now());
         setCorrectFlashId(0);
@@ -828,7 +844,7 @@ export function useMapReview(
     const match = zoneByAnswer.get(normalize(input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
-      markFound(match);
+      markFound(match, input);
     } else if (input.trim()) {
       setIncorrectFlashId(Date.now());
       setCorrectFlashId(0);
@@ -843,7 +859,7 @@ export function useMapReview(
     }
 
     if (currentPromptItem.code === code) {
-      markFound(currentPromptItem);
+      markFound(currentPromptItem, code);
       return;
     }
 
@@ -860,7 +876,7 @@ export function useMapReview(
       id: Date.now(),
       flashCodes: [code]
     });
-    markMissed(currentPromptItem);
+    markMissed(currentPromptItem, code);
   }
 
   function handleChoiceSelect(questionId) {
@@ -873,6 +889,9 @@ export function useMapReview(
     }
 
     const isCorrect = currentPromptItem.question_id === questionId;
+    const selectedOption = choiceOptions.find(
+      option => option.question_id === questionId
+    );
 
     setChoiceFeedback({
       id: Date.now(),
@@ -884,9 +903,9 @@ export function useMapReview(
     });
 
     if (isCorrect) {
-      markFound(currentPromptItem);
+      markFound(currentPromptItem, selectedOption?.label ?? questionId);
     } else {
-      markMissed(currentPromptItem);
+      markMissed(currentPromptItem, selectedOption?.label ?? questionId);
     }
   }
 

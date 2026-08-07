@@ -119,6 +119,9 @@ export default function TextGroupReview({
   const [failedIds, setFailedIds] = useState(() => new Set());
   const [wrongFlash, setWrongFlash] = useState(null);
   const [hoveredPairId, setHoveredPairId] = useState(null);
+  // What the learner actually typed/picked per item, for M0 0.1 (storing the
+  // given answer).
+  const [answersByQuestionId, setAnswersByQuestionId] = useState({});
   // recap
   const [qualities, setQualities] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -191,11 +194,14 @@ export default function TextGroupReview({
       group,
       finalQualities
     );
+    const answers = Object.fromEntries(
+      Object.entries(answersByQuestionId).filter(([questionId]) => questionId in graded)
+    );
 
     try {
       await Promise.all([
         Object.keys(graded).length > 0
-          ? submitAnswer?.(graded, mode, contextItems.length)
+          ? submitAnswer?.(graded, mode, contextItems.length, answers)
           : null,
         graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
       ].filter(Boolean));
@@ -214,7 +220,13 @@ export default function TextGroupReview({
   const checkTypedAnswer = useCallback((item) => {
     if (foundIds.has(item.question_id)) return;
 
-    if (itemAccepts(item, inputs[item.question_id])) {
+    const typed = inputs[item.question_id];
+
+    if (typed) {
+      setAnswersByQuestionId(prev => ({ ...prev, [item.question_id]: typed }));
+    }
+
+    if (itemAccepts(item, typed)) {
       setFoundIds(prev => new Set(prev).add(item.question_id));
     }
   }, [foundIds, inputs]);
@@ -248,6 +260,14 @@ export default function TextGroupReview({
     if (!promptItem) return;
 
     const correct = normalize(promptItem.answer) === normalize(answerItem.answer);
+
+    // Keep the first pick: match lets the learner retry until correct, and it
+    // is the initial (possibly wrong) choice that carries the confusion signal.
+    setAnswersByQuestionId(prev => (
+      promptItem.question_id in prev
+        ? prev
+        : { ...prev, [promptItem.question_id]: answerItem.answer }
+    ));
 
     if (correct) {
       setMatchedIds(prev => new Set(prev).add(promptItem.question_id));

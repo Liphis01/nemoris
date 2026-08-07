@@ -15,6 +15,11 @@ WEIGHT_TEMPERATURE = 1.15
 # (click_prompt and the multiple-choice modes). Below this, such modes are
 # degenerate (picking blindly among 1-3 options), so they are never offered.
 CHOICE_MODE_MIN_CONTEXT = 5
+# How many of a question's most recent history entries to inspect when
+# scoring mode variety, and how hard a mode's average recent share pulls its
+# score down.
+RECENT_MODE_LOOKBACK = 6
+RECENT_MODE_WEIGHT = 0.55
 
 
 def _progress_started(progress):
@@ -58,6 +63,54 @@ def question_mode_affinity_counts(questions):
         counts[question_mode_affinity(question)] += 1
 
     return counts
+
+
+def recent_mode_counts(questions, history_key, valid_modes, limit=RECENT_MODE_LOOKBACK):
+    counts = {}
+
+    for question in questions or []:
+        progress = getattr(question, "progress", None)
+        history = list(progress.history or []) if progress else []
+        seen = 0
+
+        for entry in reversed(history):
+            if not isinstance(entry, dict):
+                continue
+
+            mode = entry.get(history_key)
+
+            if mode in valid_modes:
+                counts[mode] = counts.get(mode, 0) + 1
+                seen += 1
+
+            if seen >= limit:
+                break
+
+    return counts
+
+
+def apply_recent_mode_penalty(
+    scores,
+    questions,
+    history_key,
+    valid_modes,
+    weight=RECENT_MODE_WEIGHT,
+    limit=RECENT_MODE_LOOKBACK
+):
+    questions = list(questions or [])
+
+    if not questions:
+        return scores
+
+    counts = recent_mode_counts(questions, history_key, valid_modes, limit=limit)
+
+    # Each question contributes at most `limit` sightings, so dividing by the
+    # due-set size keeps the penalty an average-per-question share regardless
+    # of how many questions are being scored together.
+    for mode, count in counts.items():
+        scores[mode] = scores.get(mode, 0) - (weight * count / len(questions))
+
+    return scores
 
 
 def weighted_mode_choice(modes, scores, tie_order, rng=None):

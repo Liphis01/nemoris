@@ -2,6 +2,9 @@
 
 
 ## vérifier
+- il faut split en deux dans la review les groupes (pas 30 + 1 questions mais 16 + 15)
+- dans les relearning il y a un problème de regroupement des mêmes groupes
+- dans les relearning, mettre la même image qui a posé problème
 
 ## Urgent
 - il reste un dossier qui s'appelle blueprint
@@ -23,6 +26,7 @@
 - scroll automatique à enlever quand on quitte la preview d'une image de 
 - pouvoir zoomer sur les images pour les questions isolées
 - ajouter le nombre de questions des groupes media (et d'autres ?)
+- enlever tous les tooltips natifs qui polluent l'interface
 
 ## bugs
 
@@ -80,6 +84,9 @@
 - si c'est la même map, permettre de combiner des trainings de deux trucs différents (pays + capitales du monde par exemple)
 - un mode 1v1 (ou plus) sur un pack en particulier ou sur un pack aléatoire ou sur un pack aléatoire en commun ? sur un tirage aléatoire du pack (pour pas faire tout le pack) ex: chacun son tour remplir une map, le dernier gagne
 - enlever le truc des versions de packs et juste permettre d'éditer un pack
+- laisser un champ d'input optionnel pour tous les types (même texte) mais laisser quand même le choix de qualité au user
+- regarder les essais et le temps mis pour suggérer une qualité
+- un truc pour relier les questions entre elles (ex: france -> pays du monde, capitale, drapeau, ...)
 
 
 ## Conseils/idées issus de la littérature scientifique

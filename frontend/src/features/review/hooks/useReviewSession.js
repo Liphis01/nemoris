@@ -107,22 +107,25 @@ export function useReviewSession(active) {
   const submitMapAnswer = useCallback((
     items,
     mode = undefined,
-    contextCount = undefined
-  ) => sendMapAnswer(items, mode, contextCount, reviewDateRef.current),
+    contextCount = undefined,
+    answers = undefined
+  ) => sendMapAnswer(items, mode, contextCount, answers, reviewDateRef.current),
   []);
 
   const submitMediaAnswer = useCallback((
     items,
     mode = undefined,
-    contextCount = undefined
-  ) => sendMediaAnswer(items, mode, contextCount, reviewDateRef.current),
+    contextCount = undefined,
+    answers = undefined
+  ) => sendMediaAnswer(items, mode, contextCount, answers, reviewDateRef.current),
   []);
 
   const submitTextAnswer = useCallback((
     items,
     mode = undefined,
-    contextCount = undefined
-  ) => sendTextAnswer(items, mode, contextCount, reviewDateRef.current),
+    contextCount = undefined,
+    answers = undefined
+  ) => sendTextAnswer(items, mode, contextCount, answers, reviewDateRef.current),
   []);
 
   const submitTimelineAnswer = useCallback((items) =>

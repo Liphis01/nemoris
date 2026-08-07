@@ -1,3 +1,4 @@
+import random
 import unittest
 from datetime import date, timedelta
 
@@ -6,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Progress, Question, QuestionGroup
+from app.models import Progress, Question, QuestionGroup, ReviewLog
 from app.routers.review import answer_sequence
 from app.schemas import (
     QuestionCreate,
@@ -322,6 +323,59 @@ class SequenceModeTests(SequenceTestCase):
 
         self.assertEqual(mode, SEQUENCE_MODE_MULTIPLE_CHOICE)
 
+    def test_recency_penalty_stays_proportionate_on_a_large_due_set(self):
+        # Every one of 30 support-affinity items shares a history spread
+        # evenly across three modes. Unnormalized, the accumulated counts
+        # (30 questions x 2 entries x three modes) would drive every
+        # penalized mode's score far below next_in_sequence's untouched 2.0,
+        # locking selection onto it regardless of the support bucket's
+        # actual preference for multiple_choice/reorder. Normalized, the
+        # affinity table's preference survives.
+        group = self.add_group()
+        history = (
+            [{"sequence_mode": SEQUENCE_MODE_MULTIPLE_CHOICE}] * 2
+            + [{"sequence_mode": SEQUENCE_MODE_REORDER}] * 2
+            + [{"sequence_mode": SEQUENCE_MODE_TYPE_POSITION}] * 2
+        )
+        due = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                reps=1,
+                difficulty=8.0,
+                history=list(history)
+            )
+            for index in range(1, 31)
+        ]
+
+        mode = choose_sequence_review_mode(
+            due,
+            due,
+            multiple_choice_context_count=len(due),
+            rng=FixedRandom(0)
+        )
+
+        self.assertEqual(mode, SEQUENCE_MODE_MULTIPLE_CHOICE)
+
+    def test_next_in_sequence_is_withheld_when_due_positions_are_adjacent(self):
+        group = self.add_group()
+        due = [
+            self.add_item(group, f"Item {index}", index, reps=1)
+            for index in range(1, CHOICE_MODE_MIN_CONTEXT + 1)
+        ]
+
+        for value in [0.0, 0.4, 0.9]:
+            mode = choose_sequence_review_mode(
+                due,
+                due,
+                multiple_choice_context_count=len(due),
+                has_adjacent_due_positions=True,
+                rng=FixedRandom(value)
+            )
+
+            self.assertNotEqual(mode, SEQUENCE_MODE_NEXT_IN_SEQUENCE)
+
 
 class SequenceReviewSerializationTests(SequenceTestCase):
     def test_anchors_are_started_peers_only_and_hide_new_items(self):
@@ -423,7 +477,65 @@ class SequenceReviewSerializationTests(SequenceTestCase):
         self.assertEqual(by_label["Alpha"]["position"], 1)
         self.assertIsNone(by_label["Alpha"]["previous_label"])
         self.assertEqual(by_label["Gamma"]["position"], 3)
-        self.assertEqual(by_label["Gamma"]["previous_label"], "Beta")
+        # Beta (position 2) is itself due and unrevealed in this same set, so
+        # its label must be withheld rather than leaked onto Gamma's row.
+        self.assertIsNone(by_label["Gamma"]["previous_label"])
+
+    def test_previous_label_is_shown_for_a_started_non_due_predecessor(self):
+        group = self.add_group()
+        self.add_item(
+            group,
+            "Alpha",
+            1,
+            reps=4,
+            next_review=date.today() + timedelta(days=30)
+        )
+        due = [
+            self.add_item(
+                group,
+                "Beta",
+                2,
+                reps=2,
+                next_review=date.today()
+            )
+        ]
+        self.db.commit()
+
+        items = serialize_review_items(due, scheduled_review=True)
+        sequence_group = next(
+            item for item in items if item["type_q"] == "sequence"
+        )
+        by_label = {
+            item["label"]: item
+            for item in sequence_group["items"]
+        }
+
+        self.assertEqual(by_label["Beta"]["previous_label"], "Alpha")
+
+    def test_previous_label_is_withheld_for_an_unstarted_predecessor(self):
+        group = self.add_group()
+        self.add_item(group, "Alpha", 1)
+        due = [
+            self.add_item(
+                group,
+                "Beta",
+                2,
+                reps=2,
+                next_review=date.today()
+            )
+        ]
+        self.db.commit()
+
+        items = serialize_review_items(due, scheduled_review=True)
+        sequence_group = next(
+            item for item in items if item["type_q"] == "sequence"
+        )
+        by_label = {
+            item["label"]: item
+            for item in sequence_group["items"]
+        }
+
+        self.assertIsNone(by_label["Beta"]["previous_label"])
 
 
 class AnswerSequenceEndpointTests(SequenceTestCase):
@@ -474,6 +586,47 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
         self.assertEqual(entry["effective_quality"], 2)
         self.assertTrue(entry["mode_adjusted"])
         self.assertAlmostEqual(entry["mode_difficulty"], 0.55, places=6)
+
+    def test_records_the_submitted_position_as_the_given_answer(self):
+        group = self.add_group()
+        items = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                question_id=index,
+                reps=2,
+                next_review=date.today()
+            )
+            for index in range(1, 4)
+        ]
+        self.db.commit()
+
+        answer_sequence(
+            SequenceAnswerRequest(
+                items={
+                    1: SequenceAnswerItem(position=1),
+                    2: SequenceAnswerItem(position=3)
+                },
+                mode=SEQUENCE_MODE_TYPE_POSITION,
+                context_count=3
+            ),
+            db=self.db
+        )
+
+        self.assertEqual(items[0].progress.history[-1]["answer"], 1)
+        # A miss must record what was actually placed, not the expected rank.
+        self.assertEqual(items[1].progress.history[-1]["answer"], 3)
+
+        # The revlog mirrors the entry verbatim, so the answer rides along.
+        row = (
+            self.db.query(ReviewLog)
+            .filter(ReviewLog.question_id == 2)
+            .order_by(ReviewLog.seq.desc())
+            .first()
+        )
+
+        self.assertEqual(row.data["answer"], 3)
 
     def test_reorder_difficulty_tracks_the_submitted_pool(self):
         group = self.add_group()

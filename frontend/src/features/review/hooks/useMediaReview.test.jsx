@@ -207,7 +207,8 @@ describe("useMediaReview", () => {
         [missedIds[1]]: 0
       },
       IMAGE_MODE_TYPE_PROMPT,
-      3
+      3,
+      { [found.question_id]: found.answer }
     );
     expect(onComplete).toHaveBeenCalledWith([missedIds[1]]);
   });
@@ -254,7 +255,8 @@ describe("useMediaReview", () => {
         [missed.question_id]: 0
       },
       IMAGE_MODE_TYPE_PROMPT,
-      2
+      2,
+      { [found.question_id]: found.answer }
     );
     expect(sendMediaAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
@@ -524,7 +526,8 @@ describe("useMediaReview", () => {
           [prompt.question_id]: 2
         },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-        5
+        5,
+        { [prompt.question_id]: prompt.label }
       );
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
@@ -587,7 +590,8 @@ describe("useMediaReview", () => {
       expect(submitAnswer).toHaveBeenCalledWith(
         { [prompt.question_id]: 1 },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-        contextItems.length
+        contextItems.length,
+        { [prompt.question_id]: prompt.label }
       );
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
@@ -634,10 +638,13 @@ describe("useMediaReview", () => {
       await result.current.sendResult();
     });
 
+    // The wrong pick is the confusion signal worth recording, so it is the
+    // label that was chosen — not the correct one — that gets sent.
     expect(submitAnswer).toHaveBeenCalledWith(
       { [prompt.question_id]: 0 },
       IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-      contextItems.length
+      contextItems.length,
+      { [prompt.question_id]: wrong.label }
     );
     expect(onComplete).toHaveBeenCalledWith([prompt.question_id]);
   });

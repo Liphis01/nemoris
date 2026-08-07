@@ -374,6 +374,10 @@ class MapAnswerRequest(BaseModel):
     mode: Optional[MapMode] = None
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
+    # What the learner actually typed/clicked, keyed like `items`. Optional
+    # and additive: older clients that omit it keep working, and modes with
+    # nothing to capture (self-graded cards) simply never send a key here.
+    answers: Optional[Dict[int, Any]] = None
 
 
 class MediaAnswerRequest(BaseModel):
@@ -381,6 +385,7 @@ class MediaAnswerRequest(BaseModel):
     mode: Optional[ImageMode] = None
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
+    answers: Optional[Dict[int, Any]] = None
 
 
 class TextAnswerRequest(BaseModel):
@@ -388,6 +393,7 @@ class TextAnswerRequest(BaseModel):
     mode: Optional[TextMode] = None
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
+    answers: Optional[Dict[int, Any]] = None
 
 
 TimelinePrecision = Literal[

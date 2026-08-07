@@ -109,10 +109,19 @@ function resolveGroupedAnswerArgs(contextCount, reviewDate) {
 }
 
 
+// `answers` carries what the learner actually typed/clicked/picked, keyed like
+// `items`. Optional on every path: the server stores it when present and
+// behaves exactly as before when it is omitted.
+function answersPayload(answers) {
+  return answers && Object.keys(answers).length > 0 ? { answers } : {};
+}
+
+
 export function sendMapAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
+  answers = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
@@ -127,6 +136,7 @@ export function sendMapAnswer(
       items,
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
+      ...answersPayload(answers),
       ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
     })
   });
@@ -137,6 +147,7 @@ export function sendMediaAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
+  answers = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
@@ -151,6 +162,7 @@ export function sendMediaAnswer(
       items,
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
+      ...answersPayload(answers),
       ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
     })
   });
@@ -161,6 +173,7 @@ export function sendTextAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
+  answers = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
@@ -175,6 +188,7 @@ export function sendTextAnswer(
       items,
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
+      ...answersPayload(answers),
       ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
     })
   });

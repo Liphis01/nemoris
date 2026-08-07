@@ -3,6 +3,7 @@ from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
+    apply_recent_mode_penalty,
     question_mode_affinity_counts,
     weighted_mode_choice
 )
@@ -124,33 +125,11 @@ def calibrate_sequence_quality(raw_quality, mode=None, context_count=0):
     return max(0, min(3, quality))
 
 
-def _recent_mode_counts(questions, limit=6):
-    counts = {}
-
-    for question in questions or []:
-        history = list(question.progress.history or []) if question.progress else []
-        seen = 0
-
-        for entry in reversed(history):
-            if not isinstance(entry, dict):
-                continue
-
-            mode = entry.get("sequence_mode")
-
-            if mode in SEQUENCE_MODES:
-                counts[mode] = counts.get(mode, 0) + 1
-                seen += 1
-
-            if seen >= limit:
-                break
-
-    return counts
-
-
 def choose_sequence_review_mode(
     due_questions,
     context_questions,
     multiple_choice_context_count=None,
+    has_adjacent_due_positions=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -195,10 +174,7 @@ def choose_sequence_review_mode(
 
     scores = dict(base_scores)
 
-    recent_counts = _recent_mode_counts(due_questions)
-
-    for mode, count in recent_counts.items():
-        scores[mode] = scores.get(mode, 0) - (0.55 * count)
+    apply_recent_mode_penalty(scores, due_questions, "sequence_mode", SEQUENCE_MODES)
 
     tie_order = {
         SEQUENCE_MODE_MULTIPLE_CHOICE: 0,
@@ -222,6 +198,17 @@ def choose_sequence_review_mode(
             mode
             for mode in eligible_modes
             if mode != SEQUENCE_MODE_REORDER
+        ]
+
+    # next_in_sequence prompts with the predecessor's label. If the due set
+    # contains adjacent positions, that predecessor may itself be due (and
+    # unrevealed) or on screen in the same session -- either way, showing its
+    # label leaks an answer. type_position stays eligible as the fallback.
+    if has_adjacent_due_positions:
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode != SEQUENCE_MODE_NEXT_IN_SEQUENCE
         ]
 
     return weighted_mode_choice(eligible_modes, scores, tie_order, rng=rng)

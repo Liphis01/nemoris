@@ -2,6 +2,7 @@ from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
+    apply_recent_mode_penalty,
     question_mode_affinity_counts,
     weighted_mode_choice
 )
@@ -81,29 +82,6 @@ def calibrate_image_quality(raw_quality, mode=None, context_count=0):
     return max(0, min(3, quality))
 
 
-def _recent_mode_counts(questions, limit=6):
-    counts = {}
-
-    for question in questions or []:
-        history = list(question.progress.history or []) if question.progress else []
-        seen = 0
-
-        for entry in reversed(history):
-            if not isinstance(entry, dict):
-                continue
-
-            mode = entry.get("image_mode")
-
-            if mode in IMAGE_MODES:
-                counts[mode] = counts.get(mode, 0) + 1
-                seen += 1
-
-            if seen >= limit:
-                break
-
-    return counts
-
-
 def choose_image_review_mode(
     due_questions,
     context_questions,
@@ -158,10 +136,7 @@ def choose_image_review_mode(
     elif context_count >= 12:
         scores[IMAGE_MODE_MULTIPLE_CHOICE_IMAGE] += 0.2
 
-    recent_counts = _recent_mode_counts(due_questions)
-
-    for mode, count in recent_counts.items():
-        scores[mode] = scores.get(mode, 0) - (0.55 * count)
+    apply_recent_mode_penalty(scores, due_questions, "image_mode", IMAGE_MODES)
 
     for mode in discouraged_modes or []:
         if mode in IMAGE_MODES:

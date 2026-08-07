@@ -186,11 +186,13 @@ describe("useReviewSession", () => {
       { 10: 0 },
       "type_all",
       undefined,
+      undefined,
       "2026-01-01"
     );
     expect(sendMediaAnswer).toHaveBeenCalledWith(
       { 11: 2 },
       "multiple_choice_image",
+      undefined,
       undefined,
       "2026-01-01"
     );

@@ -296,7 +296,8 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
         map_mode=data.mode or DEFAULT_MAP_MODE,
         require_type="map",
         today=data.review_date,
-        context_count=data.context_count
+        context_count=data.context_count,
+        answers=data.answers
     )
     return {"status": "ok"}
 
@@ -309,7 +310,8 @@ def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
         image_mode=data.mode or DEFAULT_IMAGE_MODE,
         require_type="media",
         today=data.review_date,
-        context_count=data.context_count
+        context_count=data.context_count,
+        answers=data.answers
     )
     return {"status": "ok"}
 
@@ -322,7 +324,8 @@ def answer_text(data: TextAnswerRequest, db: Session = Depends(get_db)):
         text_mode=data.mode or DEFAULT_TEXT_MODE,
         require_type="text",
         today=data.review_date,
-        context_count=data.context_count
+        context_count=data.context_count,
+        answers=data.answers
     )
     return {"status": "ok"}
 
@@ -345,8 +348,10 @@ def apply_answer_batch(
     text_mode=None,
     require_type=None,
     today=None,
-    context_count=None
+    context_count=None,
+    answers=None
 ):
+    answers = answers or {}
     question_ids = list(items.keys())
     questions = (
         db.query(Question)
@@ -482,18 +487,19 @@ def apply_answer_batch(
                 context_count=active_context_count,
                 tuning=scheduler_tuning
             )
-            progress_quality_pairs.append((
-                progress,
-                raw_quality,
-                {
-                    "map_mode": normalized_map_mode,
-                    "map_context_count": active_context_count,
-                    "raw_quality": raw_quality,
-                    "effective_quality": raw_quality,
-                    "mode_adjusted": difficulty != 1.0,
-                    "mode_difficulty": difficulty
-                }
-            ))
+            metadata = {
+                "map_mode": normalized_map_mode,
+                "map_context_count": active_context_count,
+                "raw_quality": raw_quality,
+                "effective_quality": raw_quality,
+                "mode_adjusted": difficulty != 1.0,
+                "mode_difficulty": difficulty
+            }
+
+            if question_id in answers:
+                metadata["answer"] = answers[question_id]
+
+            progress_quality_pairs.append((progress, raw_quality, metadata))
         elif normalized_image_mode:
             raw_quality = calibrate_image_quality(quality)
 
@@ -527,6 +533,9 @@ def apply_answer_batch(
             if normalized_image_mode in IMAGE_MULTIPLE_CHOICE_MODES:
                 metadata["image_choice_count"] = min(4, active_context_count)
 
+            if question_id in answers:
+                metadata["answer"] = answers[question_id]
+
             progress_quality_pairs.append((
                 progress,
                 raw_quality,
@@ -553,18 +562,19 @@ def apply_answer_batch(
                 context_count=active_context_count,
                 tuning=scheduler_tuning
             )
-            progress_quality_pairs.append((
-                progress,
-                raw_quality,
-                {
-                    "text_mode": normalized_text_mode,
-                    "text_context_count": active_context_count,
-                    "raw_quality": raw_quality,
-                    "effective_quality": raw_quality,
-                    "mode_adjusted": difficulty != 1.0,
-                    "mode_difficulty": difficulty
-                }
-            ))
+            metadata = {
+                "text_mode": normalized_text_mode,
+                "text_context_count": active_context_count,
+                "raw_quality": raw_quality,
+                "effective_quality": raw_quality,
+                "mode_adjusted": difficulty != 1.0,
+                "mode_difficulty": difficulty
+            }
+
+            if question_id in answers:
+                metadata["answer"] = answers[question_id]
+
+            progress_quality_pairs.append((progress, raw_quality, metadata))
         else:
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -647,7 +657,16 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
             db.add(progress)
             progress_map[question_id] = progress
 
-        progress_quality_pairs.append((progress, final_quality))
+        progress_quality_pairs.append((
+            progress,
+            final_quality,
+            {
+                "answer": {
+                    "start": payload["start"],
+                    "end": payload.get("end")
+                }
+            }
+        ))
 
         results.append({
             "question_id": question_id,
@@ -776,7 +795,8 @@ def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
                 "raw_quality": raw_quality,
                 "effective_quality": raw_quality,
                 "mode_adjusted": difficulty != 1.0,
-                "mode_difficulty": difficulty
+                "mode_difficulty": difficulty,
+                "answer": guess.position
             }
         ))
 

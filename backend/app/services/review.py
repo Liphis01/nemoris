@@ -634,12 +634,6 @@ def _serialize_review_items(
             for item in all_group_questions
         }
 
-        def previous_label_for(item):
-            rank = positions[item.id]
-            previous = by_position.get(rank - 1)
-
-            return previous.answer if previous else None
-
         # Anchors are the peers the player is allowed to see already in place.
         # They must exclude EVERY due item of the group, not just the ones in
         # this chunk: _visual_review_contexts would hand back the other chunk's
@@ -647,6 +641,34 @@ def _serialize_review_items(
         # answers. Unstarted peers are withheld too -- their slots render locked
         # and blank so a new item is never revealed before its first review.
         due_ids = {item.id for item in due_questions}
+
+        def previous_label_for(item):
+            rank = positions[item.id]
+            previous = by_position.get(rank - 1)
+
+            if previous is None:
+                return None
+
+            # Same withholding rule as the anchors above: an unstarted or
+            # still-due predecessor would leak its answer onto this row.
+            if not progress_has_started(previous.progress):
+                return None
+
+            if previous.id in due_ids:
+                return None
+
+            return previous.answer
+
+        # next_in_sequence prints the predecessor's label directly above its
+        # input; if the due set has adjacent positions, that predecessor may
+        # be due (and unrevealed) in the same session, so the mode itself is
+        # withheld below rather than degrading individual rows -- see
+        # choose_sequence_review_mode's has_adjacent_due_positions.
+        due_positions = {positions[item.id] for item in due_questions}
+        has_adjacent_due_positions = any(
+            (rank + 1) in due_positions for rank in due_positions
+        )
+
         anchors = [
             serialize_sequence_anchor(item, positions[item.id])
             for item in all_group_questions
@@ -666,7 +688,8 @@ def _serialize_review_items(
             mode = choose_sequence_review_mode(
                 chunk_questions,
                 active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions)
+                multiple_choice_context_count=len(choice_context_questions),
+                has_adjacent_due_positions=has_adjacent_due_positions
             )
 
             if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
