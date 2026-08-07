@@ -9,7 +9,7 @@
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
 - système social (amis, packs privés, ...)
 - laisser les créateurs personnaliser la devanture de leur pack
-- système de proposition de patchs pour les packs
+- système de proposition de patchs collectif pour les packs
 - dans les settings, un truc pour me contacter
 - app mobile
 

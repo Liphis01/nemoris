@@ -437,6 +437,36 @@ function ImageAnswerLabel({ color, label, revealed }) {
   );
 }
 
+function ImageRecapAnswerText({ label }) {
+  const textRef = useRef(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = textRef.current;
+    const update = () => setTruncated(hasTextOverflow(element));
+
+    update();
+
+    const resizeObserver = element && "ResizeObserver" in window
+      ? new window.ResizeObserver(update)
+      : null;
+
+    resizeObserver?.observe(element);
+    window.addEventListener("resize", update);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [label]);
+
+  return (
+    <span ref={textRef} style={imageRecapAnswerTextStyle} title={truncated ? label : undefined}>
+      {label}
+    </span>
+  );
+}
+
 function answerLabel(item) {
   return item.label || item.answer || "Image";
 }
@@ -2461,7 +2491,6 @@ export default function MediaReview({
                               ? "3px solid #737373"
                               : "3px solid #f59e0b"
                         }}
-                        title={answerLabel(row.item)}
                       >
                         <div style={imageRecapAnswerCellStyle}>
                           <span
@@ -2500,9 +2529,7 @@ export default function MediaReview({
                             )}
                           </span>
 
-                          <span style={imageRecapAnswerTextStyle}>
-                            {answerLabel(row.item)}
-                          </span>
+                          <ImageRecapAnswerText label={answerLabel(row.item)} />
                         </div>
 
                         <div style={imageRecapMetricCellStyle}>
