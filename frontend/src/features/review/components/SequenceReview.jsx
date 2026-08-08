@@ -1,25 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   normalizeSequenceMode,
+  SEQUENCE_MODE_GAP_FILL,
   SEQUENCE_MODE_MULTIPLE_CHOICE,
-  SEQUENCE_MODE_NEXT_IN_SEQUENCE,
+  SEQUENCE_MODE_RECITE,
   SEQUENCE_MODE_REORDER,
   SEQUENCE_MODE_TYPE_POSITION
 } from "../sequenceModes";
+import SequenceRail from "./SequenceRail";
+import { isAnswerable, qualityColors } from "../sequenceRail";
 
 const CHOICE_COUNT = 4;
-
-const qualityColors = {
-  0: "#ff8c94",
-  1: "#f3d36a",
-  2: "#7ee2a8"
-};
 
 const qualityLabels = {
   0: "Raté",
   1: "Presque",
-  2: "Exact !"
+  2: "Exact !",
+  3: "Exact !"
 };
+
+const qualityRatingOptions = [
+  { value: 1, label: "Dur" },
+  { value: 2, label: "Bon" },
+  { value: 3, label: "Facile" }
+];
 
 const inputStyle = {
   background: "#101010",
@@ -43,16 +47,6 @@ const buttonStyle = {
   padding: "10px 16px"
 };
 
-const slotBaseStyle = {
-  alignItems: "center",
-  borderRadius: "8px",
-  boxSizing: "border-box",
-  display: "flex",
-  gap: "10px",
-  minHeight: "42px",
-  padding: "8px 11px"
-};
-
 function normalize(value) {
   return String(value || "")
     .trim()
@@ -61,18 +55,18 @@ function normalize(value) {
     .replace(/[̀-ͯ]/g, "");
 }
 
-function resolvePosition(candidates, guess) {
+function matchCandidate(candidates, guess) {
   const normalizedGuess = normalize(guess);
 
   if (!normalizedGuess) return null;
 
-  const match = candidates.find(candidate =>
-    [candidate.answer, ...(candidate.aliases || [])].some(
-      label => normalize(label) === normalizedGuess
-    )
+  return (
+    candidates.find(candidate =>
+      [candidate.answer, ...(candidate.aliases || [])].some(
+        label => normalize(label) === normalizedGuess
+      )
+    ) || null
   );
-
-  return match ? match.position : null;
 }
 
 function shuffled(list) {
@@ -99,10 +93,7 @@ function buildChoices(item, contextItems) {
   );
   const near = byDistance.slice(0, Math.max(0, (CHOICE_COUNT - 1) * 2));
 
-  return shuffled([
-    item,
-    ...shuffled(near).slice(0, CHOICE_COUNT - 1)
-  ]);
+  return shuffled([item, ...shuffled(near).slice(0, CHOICE_COUNT - 1)]);
 }
 
 export default function SequenceReview({
@@ -113,6 +104,7 @@ export default function SequenceReview({
   onAnsweringComplete,
   onComplete,
   submitAnswer,
+  showQualityControls = true,
   fillAvailableHeight = false
 }) {
   const mode = normalizeSequenceMode(requestedMode);
@@ -124,25 +116,31 @@ export default function SequenceReview({
     () => (contextItems && contextItems.length ? contextItems : items),
     [contextItems, items]
   );
-  const length = group?.length || items.length;
-  const anchors = useMemo(() => group?.anchors || [], [group]);
+  const rail = useMemo(() => group?.rail || [], [group]);
+  const railBlanks = useMemo(
+    () => rail.filter(slot => slot.kind === "blank"),
+    [rail]
+  );
 
   const [phase, setPhase] = useState("answer");
   const [inputs, setInputs] = useState({});
   const [placements, setPlacements] = useState({});
   const [heldId, setHeldId] = useState(null);
   const [choiceIndex, setChoiceIndex] = useState(0);
+  const [reciteIndex, setReciteIndex] = useState(0);
+  const [reciteRun, setReciteRun] = useState([]);
   const [results, setResults] = useState(null);
+  const [qualities, setQualities] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const revealed = phase === "review";
-  const isTyped =
-    mode === SEQUENCE_MODE_TYPE_POSITION ||
-    mode === SEQUENCE_MODE_NEXT_IN_SEQUENCE;
+  const isTypePosition = mode === SEQUENCE_MODE_TYPE_POSITION;
+  const isGapFill = mode === SEQUENCE_MODE_GAP_FILL;
   const isChoice = mode === SEQUENCE_MODE_MULTIPLE_CHOICE;
   const isReorder = mode === SEQUENCE_MODE_REORDER;
+  const isRecite = mode === SEQUENCE_MODE_RECITE;
 
-  const inputRefs = useRef({});
   const failedRef = useRef([]);
 
   const choicesByItem = useMemo(() => {
@@ -155,47 +153,6 @@ export default function SequenceReview({
     }, {});
   }, [isChoice, items, pool]);
 
-  // The reorder rail draws every slot in the list, not just the due ones, so
-  // the player places items in their absolute position rather than a relative
-  // order. Anchors are already-known peers; the remaining locked slots belong to
-  // items that have never been reviewed, so they stay blank -- revealing them
-  // would teach the answer before the card's first review.
-  const slots = useMemo(() => {
-    if (!isReorder) return [];
-
-    const anchorByPosition = new Map(
-      anchors.map(anchor => [anchor.position, anchor])
-    );
-    const duePositions = new Set(items.map(item => item.position));
-
-    return Array.from({ length }, (unused, index) => {
-      const position = index + 1;
-      const anchor = anchorByPosition.get(position);
-
-      if (anchor) {
-        return { position, kind: "anchor", label: anchor.label };
-      }
-
-      if (duePositions.has(position)) {
-        return { position, kind: "free" };
-      }
-
-      return { position, kind: "hidden" };
-    });
-  }, [anchors, isReorder, items, length]);
-
-  const tray = useMemo(() => (isReorder ? shuffled(items) : []), [isReorder, items]);
-
-  const placedByPosition = useMemo(() => {
-    const map = new Map();
-
-    Object.entries(placements).forEach(([questionId, position]) => {
-      map.set(position, Number(questionId));
-    });
-
-    return map;
-  }, [placements]);
-
   const itemsById = useMemo(
     () =>
       items.reduce((acc, item) => {
@@ -206,19 +163,58 @@ export default function SequenceReview({
     [items]
   );
 
+  const labelByQuestionId = useMemo(() => {
+    const map = {};
+
+    [...pool, ...items].forEach(entry => {
+      map[entry.question_id] = entry.label || entry.answer;
+    });
+    rail.forEach(slot => {
+      if (slot.label) map[slot.question_id] = slot.label;
+    });
+
+    return map;
+  }, [items, pool, rail]);
+
+  // reorder places due items into free slots; the tray holds exactly those
+  // items, which is why decoys are never drawn for this mode -- a slot with no
+  // tile to fill it would be a decoy at a glance.
+  const tray = useMemo(() => (isReorder ? shuffled(items) : []), [isReorder, items]);
+  const placedByPosition = useMemo(() => {
+    const map = new Map();
+
+    Object.entries(placements).forEach(([questionId, position]) => {
+      map.set(position, Number(questionId));
+    });
+
+    return map;
+  }, [placements]);
+
+  // Recitation starts just before the first thing it is asking for.
+  const runStart = useMemo(
+    () => (railBlanks.length ? railBlanks[0].position - 1 : 0),
+    [railBlanks]
+  );
+  const reciteTargets = useMemo(
+    () => rail.filter(slot => slot.position > runStart),
+    [rail, runStart]
+  );
+
   const activeChoiceItem = isChoice ? items[choiceIndex] : null;
 
   const answeredCount = isChoice
     ? Object.keys(inputs).length
     : isReorder
       ? Object.keys(placements).length
-      : items.filter(item => (inputs[item.question_id] || "").trim()).length;
+      : isRecite
+        ? reciteRun.length
+        : Object.values(inputs).filter(value => String(value || "").trim()).length;
 
   const canSubmit = isChoice
     ? Object.keys(inputs).length >= items.length
     : isReorder
       ? Object.keys(placements).length >= items.length
-      : answeredCount > 0;
+      : true;
 
   const place = useCallback((questionId, position) => {
     if (!questionId) return;
@@ -250,81 +246,164 @@ export default function SequenceReview({
     });
   }, []);
 
-  const buildPositions = useCallback((currentInputs) => {
-    const positions = {};
-
-    items.forEach(item => {
-      if (isReorder) {
-        positions[item.question_id] = {
-          position: placements[item.question_id] ?? null
-        };
-
-        return;
-      }
-
-      if (isChoice) {
-        positions[item.question_id] = {
-          position: currentInputs[item.question_id] ?? null
-        };
-
-        return;
-      }
-
-      positions[item.question_id] = {
-        position: resolvePosition(pool, currentInputs[item.question_id])
+  const buildPayload = useCallback(
+    (currentInputs, currentRun, commit) => {
+      const base = {
+        rail: rail.map(slot => ({ position: slot.position, kind: slot.kind })),
+        commit
       };
-    });
 
-    return positions;
-  }, [isChoice, isReorder, items, placements, pool]);
+      if (isRecite) {
+        return {
+          ...base,
+          run: currentRun,
+          runStart,
+          groupId: group?.group_id
+        };
+      }
 
-  // Takes the answers explicitly so the QCM can submit on its last pick without
-  // waiting for the state update to land.
-  const submit = useCallback(async (currentInputs = inputs) => {
-    if (submitting || revealed) return;
+      const payloadItems = {};
+
+      if (isReorder) {
+        items.forEach(item => {
+          payloadItems[item.question_id] = {
+            position: placements[item.question_id] ?? null,
+            ...(qualities[item.question_id]
+              ? { quality: qualities[item.question_id] }
+              : {})
+          };
+        });
+      } else if (isChoice) {
+        items.forEach(item => {
+          payloadItems[item.question_id] = {
+            position: currentInputs[item.question_id] ?? null,
+            ...(qualities[item.question_id]
+              ? { quality: qualities[item.question_id] }
+              : {})
+          };
+        });
+      } else if (isGapFill) {
+        // Only real blanks are posted. Decoys are answered so the blanks
+        // cannot be found by subtraction, but grading them would schedule
+        // cards the session never intended to review.
+        railBlanks.forEach(slot => {
+          const match = matchCandidate(pool, currentInputs[slot.position]);
+
+          payloadItems[slot.question_id] = {
+            position: match ? match.position : null,
+            ...(qualities[slot.question_id]
+              ? { quality: qualities[slot.question_id] }
+              : {})
+          };
+        });
+      } else {
+        items.forEach(item => {
+          const match = matchCandidate(pool, currentInputs[item.question_id]);
+
+          payloadItems[item.question_id] = {
+            position: match ? match.position : null,
+            ...(qualities[item.question_id]
+              ? { quality: qualities[item.question_id] }
+              : {})
+          };
+        });
+      }
+
+      return { ...base, items: payloadItems };
+    },
+    [
+      group,
+      isChoice,
+      isGapFill,
+      isRecite,
+      isReorder,
+      items,
+      placements,
+      pool,
+      qualities,
+      rail,
+      railBlanks,
+      runStart
+    ]
+  );
+
+  // Grade first, schedule second. The server is the only grader -- reproducing
+  // relative-order grading over a windowed rail in JS would be a second
+  // implementation free to drift from the Python one.
+  const grade = useCallback(
+    async (currentInputs = inputs, currentRun = reciteRun) => {
+      if (submitting || revealed) return;
+
+      setSubmitting(true);
+      setError(null);
+
+      try {
+        const response = await submitAnswer?.(
+          buildPayload(currentInputs, currentRun, false),
+          mode,
+          rail.length
+        );
+        const graded = (response?.results || []).reduce((acc, result) => {
+          acc[result.question_id] = result;
+
+          return acc;
+        }, {});
+
+        failedRef.current = Object.values(graded)
+          .filter(result => result.quality === 0)
+          .map(result => result.question_id);
+
+        setResults(graded);
+        setPhase("review");
+        onAnsweringComplete?.(failedRef.current);
+      } catch (caught) {
+        console.error(caught);
+        setError("La correction n'a pas pu être envoyée.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      buildPayload,
+      inputs,
+      mode,
+      onAnsweringComplete,
+      rail.length,
+      reciteRun,
+      revealed,
+      submitAnswer,
+      submitting
+    ]
+  );
+
+  const finish = useCallback(async () => {
+    if (submitting) return;
 
     setSubmitting(true);
+    setError(null);
 
     try {
-      const response = await submitAnswer?.(
-        buildPositions(currentInputs),
-        mode,
-        pool.length
-      );
-      const graded = (response?.results || []).reduce((acc, result) => {
-        acc[result.question_id] = result;
-
-        return acc;
-      }, {});
-
-      failedRef.current = Object.values(graded)
-        .filter(result => result.quality === 0)
-        .map(result => result.question_id);
-
-      setResults(graded);
-      setPhase("review");
-      onAnsweringComplete?.(failedRef.current);
-    } catch (error) {
-      console.error(error);
-      onComplete?.([]);
+      await submitAnswer?.(buildPayload(inputs, reciteRun, true), mode, rail.length);
+      onComplete?.(failedRef.current);
+    } catch (caught) {
+      // Stay on the recap rather than reporting a clean sweep: the previous
+      // behaviour swallowed the error and marked the whole chunk complete with
+      // zero failures, silently losing the session's answers.
+      console.error(caught);
+      setError("L'enregistrement a échoué. Réessaie.");
     } finally {
       setSubmitting(false);
     }
   }, [
-    buildPositions,
+    buildPayload,
     inputs,
     mode,
-    onAnsweringComplete,
     onComplete,
-    pool.length,
-    revealed,
+    rail.length,
+    reciteRun,
     submitAnswer,
     submitting
   ]);
-
-  function finish() {
-    onComplete?.(failedRef.current);
-  }
 
   const pickChoice = useCallback(
     (item, choice) => {
@@ -333,17 +412,31 @@ export default function SequenceReview({
       setInputs(nextInputs);
       setChoiceIndex(prev => prev + 1);
 
-      // Last card answered: grade the set straight away rather than bouncing
-      // through an effect.
       if (choiceIndex + 1 >= items.length) {
-        submit(nextInputs);
+        grade(nextInputs);
       }
     },
-    [choiceIndex, inputs, items.length, submit]
+    [choiceIndex, grade, inputs, items.length]
   );
 
-  // The session's global grading shortcuts are suppressed for this type, so the
-  // digit keys are free for the QCM options.
+  const submitRecitedItem = useCallback(
+    value => {
+      const match = matchCandidate(pool, value);
+      const nextRun = [...reciteRun, match ? match.question_id : -1];
+
+      setReciteRun(nextRun);
+      setReciteIndex(prev => prev + 1);
+      setInputs(prev => ({ ...prev, recite: "" }));
+
+      // A wrong item IS the stall -- the run ends there by definition, so
+      // there is nothing to gain by asking for more.
+      if (!match || reciteIndex + 1 >= reciteTargets.length) {
+        grade(inputs, nextRun);
+      }
+    },
+    [grade, inputs, pool, reciteIndex, reciteRun, reciteTargets.length]
+  );
+
   useEffect(() => {
     if (!isChoice || revealed || !activeChoiceItem) return undefined;
 
@@ -369,13 +462,17 @@ export default function SequenceReview({
     ...(fillAvailableHeight ? { flex: 1, minHeight: 0 } : {})
   };
 
-  function renderFeedback(item) {
-    const result = results?.[item.question_id];
+  function resultFor(questionId) {
+    return results?.[questionId] || null;
+  }
+
+  function renderFeedback(questionId) {
+    const result = resultFor(questionId);
 
     if (!result) return null;
 
     const gap =
-      result.quality === 2 || result.distance === null
+      result.quality >= 2 || result.distance === null || result.distance === undefined
         ? ""
         : ` · ${result.distance} rang${result.distance > 1 ? "s" : ""} d'écart`;
 
@@ -388,18 +485,287 @@ export default function SequenceReview({
       >
         {qualityLabels[result.quality]} · n° {result.expected_position}
         {gap}
+        {result.stall ? " · bloqué ici" : ""}
       </span>
     );
   }
+
+  // Only a hit is adjustable, and only when something is actually scheduled --
+  // the same rule timeline uses. A miss stays Again.
+  function renderQualityBar(questionId) {
+    const result = resultFor(questionId);
+
+    if (!showQualityControls || !result || result.quality === 0) return null;
+
+    const selected = qualities[questionId] ?? result.quality;
+
+    return (
+      <span data-sequence-quality-bar="" style={{ display: "flex", gap: "4px" }}>
+        {qualityRatingOptions.map(option => (
+          <button
+            key={option.value}
+            data-sequence-quality={option.value}
+            data-active={selected === option.value ? "" : undefined}
+            onClick={() =>
+              setQualities(prev => ({ ...prev, [questionId]: option.value }))
+            }
+            style={{
+              ...buttonStyle,
+              background: selected === option.value ? "#2f3a2f" : "#1b1b1b",
+              borderColor: selected === option.value ? "#4a7a52" : "#2d2d2d",
+              fontSize: "12px",
+              fontWeight: 500,
+              padding: "4px 9px"
+            }}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </span>
+    );
+  }
+
+  function renderRailSlot(slot) {
+    const answerable = isAnswerable(slot);
+    const isDecoy = slot.kind === "decoy";
+
+    if (isReorder) {
+      const placedId = placedByPosition.get(slot.position);
+      const placedItem = placedId ? itemsById[placedId] : null;
+
+      return (
+        <>
+          {slot.kind === "anchor" && (
+            <span style={{ color: "#777" }}>{slot.label}</span>
+          )}
+          {slot.kind === "hidden" && <span style={{ color: "#444" }}>•</span>}
+          {answerable && (
+            <span style={{ color: "#eee" }}>
+              {placedItem ? placedItem.label : ""}
+            </span>
+          )}
+          {revealed && placedItem && (
+            <span style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+              {renderFeedback(placedItem.question_id)}
+              {renderQualityBar(placedItem.question_id)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    if (!answerable) {
+      return slot.kind === "anchor" ? (
+        <span style={{ color: "#777" }}>{slot.label}</span>
+      ) : (
+        <span style={{ color: "#444" }}>•</span>
+      );
+    }
+
+    if (revealed) {
+      return (
+        <>
+          <span style={{ color: isDecoy ? "#777" : "#eee" }}>
+            {labelByQuestionId[slot.question_id]}
+          </span>
+          {isDecoy ? (
+            <span
+              data-sequence-decoy=""
+              style={{ color: "#666", fontSize: "12px", marginLeft: "auto" }}
+            >
+              hors barème
+            </span>
+          ) : (
+            <span style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+              {renderFeedback(slot.question_id)}
+              {renderQualityBar(slot.question_id)}
+            </span>
+          )}
+        </>
+      );
+    }
+
+    return (
+      <input
+        aria-label={`Élément au rang ${slot.position}`}
+        onChange={event =>
+          setInputs(prev => ({ ...prev, [slot.position]: event.target.value }))
+        }
+        onKeyDown={event => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            grade();
+          }
+        }}
+        style={inputStyle}
+        value={inputs[slot.position] || ""}
+      />
+    );
+  }
+
+  const showRail = isGapFill || isReorder || (isRecite && rail.length > 0);
 
   return (
     <div style={containerStyle} data-sequence-review={mode}>
       <div style={{ color: "#888", fontSize: "13px" }}>
         {!fillAvailableHeight && group?.name && `${group.name} · `}
-        {answeredCount}/{items.length}
+        {answeredCount}/{isRecite ? reciteTargets.length : items.length}
       </div>
 
-      {isTyped && (
+      {error && (
+        <div data-sequence-error="" style={{ color: "#ff8c94", fontSize: "13px" }}>
+          {error}
+        </div>
+      )}
+
+      {isRecite && !revealed && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ color: "#eee", fontSize: "16px", fontWeight: 700 }}>
+            {reciteIndex < reciteTargets.length
+              ? `Continue la liste — élément n° ${
+                  reciteTargets[reciteIndex]?.position
+                }`
+              : "Liste terminée"}
+          </div>
+
+          {reciteIndex < reciteTargets.length && (
+            <input
+              aria-label="Élément suivant"
+              autoFocus
+              onChange={event =>
+                setInputs(prev => ({ ...prev, recite: event.target.value }))
+              }
+              onKeyDown={event => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  submitRecitedItem(inputs.recite);
+                }
+              }}
+              style={inputStyle}
+              value={inputs.recite || ""}
+            />
+          )}
+
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              data-sequence-stall=""
+              onClick={() => grade(inputs, reciteRun)}
+              style={{ ...buttonStyle, fontWeight: 500 }}
+              type="button"
+            >
+              Je bloque
+            </button>
+          </div>
+
+          {reciteRun.length > 0 && (
+            <div style={{ color: "#888", fontSize: "13px" }}>
+              {reciteRun
+                .map(questionId => labelByQuestionId[questionId] || "?")
+                .join(" · ")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showRail && (
+        <div
+          style={
+            isReorder
+              ? {
+                  display: "grid",
+                  gap: "16px",
+                  gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
+                  minHeight: 0
+                }
+              : { display: "flex", flexDirection: "column", minHeight: 0 }
+          }
+        >
+          <SequenceRail
+            slots={rail}
+            revealed={revealed}
+            renderSlot={renderRailSlot}
+            onSlotClick={
+              isReorder
+                ? slot => {
+                    if (!isAnswerable(slot) || revealed) return;
+
+                    const placedId = placedByPosition.get(slot.position);
+
+                    if (heldId) {
+                      place(heldId, slot.position);
+                    } else if (placedId) {
+                      unplace(placedId);
+                    }
+                  }
+                : undefined
+            }
+            onSlotDrop={
+              isReorder ? (slot, questionId) => place(questionId, slot.position) : undefined
+            }
+            slotBorder={slot => {
+              if (!isAnswerable(slot)) return "1px solid #1e1e1e";
+
+              const placedId = placedByPosition.get(slot.position);
+              const result = isReorder
+                ? placedId && resultFor(placedId)
+                : resultFor(slot.question_id);
+
+              return `1px ${
+                isReorder && !placedId ? "dashed" : "solid"
+              } ${result ? qualityColors[result.quality] : "#3a3a3a"}`;
+            }}
+          />
+
+          {isReorder && (
+            <div
+              className="app-scrollbar"
+              data-sequence-tray=""
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+                overflowY: "auto"
+              }}
+            >
+              {tray
+                .filter(item => placements[item.question_id] === undefined)
+                .map(item => (
+                  <button
+                    key={item.question_id}
+                    data-sequence-tray-item={item.question_id}
+                    disabled={revealed}
+                    draggable={!revealed}
+                    onClick={() =>
+                      setHeldId(prev =>
+                        prev === item.question_id ? null : item.question_id
+                      )
+                    }
+                    onDragStart={event => {
+                      event.dataTransfer.setData(
+                        "text/plain",
+                        String(item.question_id)
+                      );
+                    }}
+                    style={{
+                      ...buttonStyle,
+                      background:
+                        heldId === item.question_id ? "#2f3a2f" : buttonStyle.background,
+                      borderColor: heldId === item.question_id ? "#4a7a52" : "#333",
+                      fontWeight: 500,
+                      textAlign: "left"
+                    }}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isTypePosition && (
         <div
           className="app-scrollbar"
           style={{
@@ -421,22 +787,11 @@ export default function SequenceReview({
               }}
             >
               <span style={{ color: "#aaa", fontSize: "14px" }}>
-                {mode === SEQUENCE_MODE_NEXT_IN_SEQUENCE
-                  ? item.previous_label
-                    ? `après « ${item.previous_label} »`
-                    : "premier élément"
-                  : `n° ${item.position}`}
+                n° {item.position}
               </span>
 
               <input
-                ref={node => {
-                  inputRefs.current[item.question_id] = node;
-                }}
-                aria-label={
-                  mode === SEQUENCE_MODE_NEXT_IN_SEQUENCE
-                    ? `Élément après ${item.previous_label || "le début"}`
-                    : `Élément au rang ${item.position}`
-                }
+                aria-label={`Élément au rang ${item.position}`}
                 disabled={revealed}
                 onChange={event =>
                   setInputs(prev => ({
@@ -447,14 +802,21 @@ export default function SequenceReview({
                 onKeyDown={event => {
                   if (event.key === "Enter") {
                     event.preventDefault();
-                    submit();
+                    grade();
                   }
                 }}
                 style={inputStyle}
                 value={inputs[item.question_id] || ""}
               />
 
-              {revealed ? renderFeedback(item) : <span />}
+              {revealed ? (
+                <span style={{ display: "flex", gap: "8px" }}>
+                  {renderFeedback(item.question_id)}
+                  {renderQualityBar(item.question_id)}
+                </span>
+              ) : (
+                <span />
+              )}
             </div>
           ))}
         </div>
@@ -493,7 +855,7 @@ export default function SequenceReview({
         </div>
       )}
 
-      {isChoice && revealed && (
+      {(isChoice || isRecite) && revealed && (
         <div
           className="app-scrollbar"
           style={{
@@ -503,10 +865,10 @@ export default function SequenceReview({
             overflowY: "auto"
           }}
         >
-          {items.map(item => (
+          {Object.values(results || {}).map(result => (
             <div
-              key={item.question_id}
-              data-sequence-row={item.position}
+              key={result.question_id}
+              data-sequence-row={result.expected_position}
               style={{
                 alignItems: "center",
                 display: "flex",
@@ -514,181 +876,32 @@ export default function SequenceReview({
                 justifyContent: "space-between"
               }}
             >
-              <span style={{ color: "#eee" }}>{item.label}</span>
-              {renderFeedback(item)}
+              <span style={{ color: "#eee" }}>{result.label}</span>
+              <span style={{ display: "flex", gap: "8px" }}>
+                {renderFeedback(result.question_id)}
+                {renderQualityBar(result.question_id)}
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      {isReorder && (
-        <div
-          style={{
-            display: "grid",
-            gap: "16px",
-            gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-            minHeight: 0
-          }}
-        >
-          <div
-            className="app-scrollbar"
-            data-sequence-rail=""
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "6px",
-              overflowY: "auto"
-            }}
-          >
-            {slots.map(slot => {
-              const placedId = placedByPosition.get(slot.position);
-              const placedItem = placedId ? itemsById[placedId] : null;
-              const result = placedItem ? results?.[placedItem.question_id] : null;
-
-              return (
-                <div
-                  key={slot.position}
-                  data-sequence-slot={slot.kind}
-                  data-sequence-slot-position={slot.position}
-                  onClick={() => {
-                    if (slot.kind !== "free" || revealed) return;
-
-                    if (heldId) {
-                      place(heldId, slot.position);
-                    } else if (placedItem) {
-                      unplace(placedItem.question_id);
-                    }
-                  }}
-                  onDragOver={event => {
-                    if (slot.kind === "free" && !revealed) event.preventDefault();
-                  }}
-                  onDrop={event => {
-                    if (slot.kind !== "free" || revealed) return;
-
-                    event.preventDefault();
-                    place(
-                      Number(event.dataTransfer.getData("text/plain")),
-                      slot.position
-                    );
-                  }}
-                  style={{
-                    ...slotBaseStyle,
-                    background: slot.kind === "free" ? "#151515" : "#101010",
-                    border:
-                      slot.kind === "free"
-                        ? `1px ${placedItem ? "solid" : "dashed"} ${
-                            result ? qualityColors[result.quality] : "#3a3a3a"
-                          }`
-                        : "1px solid #1e1e1e",
-                    cursor: slot.kind === "free" && !revealed ? "pointer" : "default",
-                    opacity: slot.kind === "hidden" ? 0.45 : 1
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "#666",
-                      fontSize: "12px",
-                      minWidth: "28px"
-                    }}
-                  >
-                    {slot.position}
-                  </span>
-
-                  {slot.kind === "anchor" && (
-                    <span style={{ color: "#777" }}>{slot.label}</span>
-                  )}
-
-                  {slot.kind === "hidden" && (
-                    <span style={{ color: "#444" }}>•</span>
-                  )}
-
-                  {slot.kind === "free" && (
-                    <span style={{ color: "#eee" }}>
-                      {placedItem ? placedItem.label : ""}
-                    </span>
-                  )}
-
-                  {revealed && result && (
-                    <span
-                      data-sequence-feedback={
-                        result.quality === 0
-                          ? "wrong"
-                          : result.quality === 1
-                            ? "close"
-                            : "correct"
-                      }
-                      style={{
-                        color: qualityColors[result.quality],
-                        fontSize: "12px",
-                        marginLeft: "auto"
-                      }}
-                    >
-                      {result.quality === 2
-                        ? qualityLabels[2]
-                        : `${qualityLabels[result.quality]} · n° ${result.expected_position}`}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div
-            className="app-scrollbar"
-            data-sequence-tray=""
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "6px",
-              overflowY: "auto"
-            }}
-          >
-            {tray
-              .filter(item => placements[item.question_id] === undefined)
-              .map(item => (
-                <button
-                  key={item.question_id}
-                  data-sequence-tray-item={item.question_id}
-                  disabled={revealed}
-                  draggable={!revealed}
-                  onClick={() =>
-                    setHeldId(prev =>
-                      prev === item.question_id ? null : item.question_id
-                    )
-                  }
-                  onDragStart={event => {
-                    event.dataTransfer.setData(
-                      "text/plain",
-                      String(item.question_id)
-                    );
-                  }}
-                  style={{
-                    ...buttonStyle,
-                    background:
-                      heldId === item.question_id ? "#2f3a2f" : buttonStyle.background,
-                    borderColor: heldId === item.question_id ? "#4a7a52" : "#333",
-                    fontWeight: 500,
-                    textAlign: "left"
-                  }}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
-
       <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
         {revealed ? (
-          <button onClick={finish} style={buttonStyle} type="button">
+          <button
+            disabled={submitting}
+            onClick={finish}
+            style={{ ...buttonStyle, opacity: submitting ? 0.5 : 1 }}
+            type="button"
+          >
             Continuer ↵
           </button>
         ) : (
-          !isChoice && (
+          !isChoice &&
+          !isRecite && (
             <button
               disabled={!canSubmit || submitting}
-              onClick={() => submit()}
+              onClick={() => grade()}
               style={{
                 ...buttonStyle,
                 opacity: canSubmit && !submitting ? 1 : 0.5

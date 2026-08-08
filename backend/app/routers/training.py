@@ -65,7 +65,7 @@ def grade_sequence_training(
     data: SequenceAnswerRequest,
     db: Session = Depends(get_db)
 ):
-    return grade_training_sequence(db, data.items)
+    return grade_training_sequence(db, data.items, mode=data.mode)
 
 
 @router.post("/training/groups/{group_id}/attempt_record")

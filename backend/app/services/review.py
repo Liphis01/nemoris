@@ -12,7 +12,6 @@ from ..serializers import (
     serialize_media_review_group,
     serialize_media_review_item,
     serialize_review_question_item,
-    serialize_sequence_anchor,
     serialize_sequence_review_group,
     serialize_sequence_review_item,
     serialize_text_review_group,
@@ -41,6 +40,7 @@ from .text_modes import (
     text_mode_difficulty
 )
 from .sequence import dense_positions
+from .sequence_rail import build_rail, rail_window_for, sequence_decoy_count
 from .sequence_modes import (
     SEQUENCE_MODE_MULTIPLE_CHOICE,
     SEQUENCE_MODE_REORDER,
@@ -629,51 +629,12 @@ def _serialize_review_items(
             key=lambda item: item.id
         )
         positions = dense_positions(all_group_questions)
-        by_position = {
-            positions[item.id]: item
-            for item in all_group_questions
-        }
 
-        # Anchors are the peers the player is allowed to see already in place.
-        # They must exclude EVERY due item of the group, not just the ones in
-        # this chunk: _visual_review_contexts would hand back the other chunk's
-        # still-due items, which on a reorder rail is literally showing the
-        # answers. Unstarted peers are withheld too -- their slots render locked
-        # and blank so a new item is never revealed before its first review.
+        # Every visibility decision now lives in build_rail. It must exclude
+        # EVERY due item of the group, not just this chunk's: the other chunk's
+        # still-due items are answers the learner still owes.
         due_ids = {item.id for item in due_questions}
-
-        def previous_label_for(item):
-            rank = positions[item.id]
-            previous = by_position.get(rank - 1)
-
-            if previous is None:
-                return None
-
-            # Same withholding rule as the anchors above: an unstarted or
-            # still-due predecessor would leak its answer onto this row.
-            if not progress_has_started(previous.progress):
-                return None
-
-            if previous.id in due_ids:
-                return None
-
-            return previous.answer
-
-        # next_in_sequence prints the predecessor's label directly above its
-        # input; if the due set has adjacent positions, that predecessor may
-        # be due (and unrevealed) in the same session, so the mode itself is
-        # withheld below rather than degrading individual rows -- see
-        # choose_sequence_review_mode's has_adjacent_due_positions.
-        due_positions = {positions[item.id] for item in due_questions}
-        has_adjacent_due_positions = any(
-            (rank + 1) in due_positions for rank in due_positions
-        )
-
-        anchors = [
-            serialize_sequence_anchor(item, positions[item.id])
-            for item in all_group_questions
-            if progress_has_started(item.progress) and item.id not in due_ids
-        ]
+        window = rail_window_for(len(all_group_questions))
 
         question_chunks = _group_review_chunks(due_questions, scheduled_review)
 
@@ -688,31 +649,41 @@ def _serialize_review_items(
             mode = choose_sequence_review_mode(
                 chunk_questions,
                 active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions),
-                has_adjacent_due_positions=has_adjacent_due_positions
+                multiple_choice_context_count=len(choice_context_questions)
             )
 
             if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
                 # Distractors are drawn from the peers on screen.
                 context_questions = choice_context_questions
             elif mode == SEQUENCE_MODE_REORDER:
-                # reorder is graded on the pool of free slots, which is exactly
-                # the chunk -- that pool is what click_prompt_base_difficulty
-                # expects as its context count.
                 context_questions = chunk_questions
             else:
                 context_questions = active_context_questions
 
+            # Built per chunk, not per group: which slots are blank depends on
+            # what this chunk is asking. The decoy/anchor pool still keys off
+            # the group-wide due_ids so a later chunk's answers stay off screen.
+            rail = build_rail(
+                all_group_questions,
+                positions,
+                due_ids,
+                chunk_due_ids={item.id for item in chunk_questions},
+                decoy_count=sequence_decoy_count(mode, chunk_questions),
+                window=window
+            )
+            # Priced from the rail for the modes the rail defines, so the
+            # difficulty describes what was actually on screen rather than a
+            # count the client asserted.
             mode_difficulty = sequence_mode_difficulty(
                 mode,
                 context_count=len(context_questions),
+                rail=rail,
                 tuning=scheduler_tuning
             )
             context_items = [
                 serialize_sequence_review_item(
                     item,
                     position=positions[item.id],
-                    previous_label=previous_label_for(item),
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
                 )
@@ -726,14 +697,13 @@ def _serialize_review_items(
                 group_data["tags"],
                 mode=mode,
                 context_items=context_items,
-                anchors=anchors,
+                rail=rail,
                 length=len(all_group_questions)
             )
             sequence_group["items"] = [
                 serialize_sequence_review_item(
                     item,
                     position=positions[item.id],
-                    previous_label=previous_label_for(item),
                     mode_difficulty=mode_difficulty,
                     scheduler_tuning=scheduler_tuning
                 )

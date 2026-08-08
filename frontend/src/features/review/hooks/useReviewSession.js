@@ -133,10 +133,10 @@ export function useReviewSession(active) {
   []);
 
   const submitSequenceAnswer = useCallback((
-    items,
+    payload,
     mode = undefined,
     contextCount = undefined
-  ) => sendSequenceAnswer(items, mode, contextCount, reviewDateRef.current),
+  ) => sendSequenceAnswer(payload, mode, contextCount, reviewDateRef.current),
   []);
 
   // "Acquis" for grouped items: graduate them from the frozen first-fail state

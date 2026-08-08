@@ -10,15 +10,17 @@ from .mode_selection import (
 
 
 SEQUENCE_MODE_TYPE_POSITION = "type_position"
-SEQUENCE_MODE_NEXT_IN_SEQUENCE = "next_in_sequence"
+SEQUENCE_MODE_GAP_FILL = "gap_fill"
 SEQUENCE_MODE_MULTIPLE_CHOICE = "multiple_choice"
 SEQUENCE_MODE_REORDER = "reorder"
+SEQUENCE_MODE_RECITE = "recite"
 
 SEQUENCE_MODES = (
     SEQUENCE_MODE_TYPE_POSITION,
-    SEQUENCE_MODE_NEXT_IN_SEQUENCE,
+    SEQUENCE_MODE_GAP_FILL,
     SEQUENCE_MODE_MULTIPLE_CHOICE,
-    SEQUENCE_MODE_REORDER
+    SEQUENCE_MODE_REORDER,
+    SEQUENCE_MODE_RECITE
 )
 DEFAULT_SEQUENCE_MODE = SEQUENCE_MODE_TYPE_POSITION
 
@@ -27,12 +29,29 @@ DEFAULT_SEQUENCE_MODE = SEQUENCE_MODE_TYPE_POSITION
 # everywhere else, so it anchors the scale at the reference difficulty.
 SEQUENCE_TYPE_POSITION_DIFFICULTY = 1.0
 
-# next_in_sequence is still free recall (nothing on screen to pick from), so it
-# stays near the top of the scale -- well above text `match` (0.6, recognition
-# among every answer). But the predecessor is the strongest cue an ordered list
-# has, and chaining is how ordered lists are actually stored, so it is the mode
-# you pass most easily.
-SEQUENCE_NEXT_DIFFICULTY = 0.8
+# gap_fill replaces next_in_sequence, which prompted with a bare predecessor
+# label. The rail shows the same predecessor IN CONTEXT, which is a better cue
+# and structurally cannot leak (a blank's own label is never drawn).
+#
+# But context in a list is not context on a map. A map's surrounding zones are
+# the CUE and the answer appears nowhere on screen; a list's surrounding items
+# ARE the answer, so a nearly-complete rail is answerable by subtraction with no
+# knowledge of the order at all -- and gets easier the more of the list is
+# known, which is backwards. So the difficulty is not a constant: it scales with
+# how much of the rail was blank, which is exactly what decoys and windowing
+# manipulate. Priced from the posted rail, never from a client-supplied count.
+SEQUENCE_GAP_FILL_MIN_DIFFICULTY = 0.5
+SEQUENCE_GAP_FILL_MAX_DIFFICULTY = 1.0
+
+# recite is the only mode above the reference: produce the chain from a start
+# point with nothing on screen to lean on. Deliberately 1.2 and not the 1.4 a
+# first pass suggested -- see
+# test_above_reference_difficulty_rewards_and_forgives_in_lockstep: a hard mode
+# both stretches the interval on success AND softens the lapse, so at 1.4 a
+# failed recite would leave a card nearly twice as strong as a failed
+# type_position. The reward also saturates at 1.5, so the top of the scale buys
+# less than it looks like it does.
+SEQUENCE_RECITE_DIFFICULTY = 1.2
 
 # Same shape as the map/image 4-option QCM (a 25% floor), so reuse their number
 # and keep the FSRS penalty/reward curve comparable across types.
@@ -86,13 +105,71 @@ def sequence_reorder_difficulty(context_count=0, tuning=None):
     return max(floor, min(ceiling, base))
 
 
-def sequence_mode_difficulty(mode=None, context_count=0, tuning=None):
+def sequence_gap_fill_difficulty(blank_count=0, label_count=0, tuning=None):
+    floor = _tuned_number(
+        tuning,
+        "sequence_gap_fill_min_difficulty",
+        SEQUENCE_GAP_FILL_MIN_DIFFICULTY
+    )
+    ceiling = _tuned_number(
+        tuning,
+        "sequence_gap_fill_max_difficulty",
+        SEQUENCE_GAP_FILL_MAX_DIFFICULTY
+    )
+    visible = blank_count + label_count
+
+    if visible <= 0:
+        return ceiling
+
+    # The share of the rail the learner had to produce rather than read. One
+    # blank among 23 labels is nearly free; four blanks among three labels is a
+    # real retrieval.
+    return floor + ((ceiling - floor) * (blank_count / visible))
+
+
+def sequence_rail_counts(rail):
+    """Blank-vs-label split of a rail, the input both rail-priced modes need."""
+    blanks = 0
+    labels = 0
+
+    for slot in rail or []:
+        kind = slot.get("kind") if isinstance(slot, dict) else getattr(slot, "kind", None)
+
+        if kind in ("blank", "decoy"):
+            # A decoy is indistinguishable from a real blank while answering,
+            # so it costs the learner exactly as much and counts as one.
+            blanks += 1
+        elif kind == "anchor":
+            labels += 1
+
+    return blanks, labels
+
+
+def sequence_mode_difficulty(mode=None, context_count=0, rail=None, tuning=None):
     mode = normalize_sequence_mode(mode)
+    blank_count, label_count = sequence_rail_counts(rail)
 
     if mode == SEQUENCE_MODE_REORDER:
+        # Graded on the pool of free slots. With a rail that pool is stated
+        # rather than declared, so windowing (which genuinely shrinks the
+        # choice space) lowers the difficulty instead of being asserted to.
         return sequence_reorder_difficulty(
-            context_count=context_count,
+            context_count=blank_count if rail else context_count,
             tuning=tuning
+        )
+
+    if mode == SEQUENCE_MODE_GAP_FILL:
+        return sequence_gap_fill_difficulty(
+            blank_count=blank_count,
+            label_count=label_count,
+            tuning=tuning
+        )
+
+    if mode == SEQUENCE_MODE_RECITE:
+        return _tuned_number(
+            tuning,
+            "sequence_recite_difficulty",
+            SEQUENCE_RECITE_DIFFICULTY
         )
 
     if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
@@ -102,13 +179,6 @@ def sequence_mode_difficulty(mode=None, context_count=0, tuning=None):
             SEQUENCE_MULTIPLE_CHOICE_DIFFICULTY
         )
 
-    if mode == SEQUENCE_MODE_NEXT_IN_SEQUENCE:
-        return _tuned_number(
-            tuning,
-            "sequence_next_difficulty",
-            SEQUENCE_NEXT_DIFFICULTY
-        )
-
     return _tuned_number(
         tuning,
         "sequence_type_position_difficulty",
@@ -116,20 +186,10 @@ def sequence_mode_difficulty(mode=None, context_count=0, tuning=None):
     )
 
 
-def calibrate_sequence_quality(raw_quality, mode=None, context_count=0):
-    try:
-        quality = int(raw_quality)
-    except (TypeError, ValueError):
-        quality = 0
-
-    return max(0, min(3, quality))
-
-
 def choose_sequence_review_mode(
     due_questions,
     context_questions,
     multiple_choice_context_count=None,
-    has_adjacent_due_positions=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -152,22 +212,29 @@ def choose_sequence_review_mode(
         # Struggling set -> favour recognition and placement over blind recall.
         base_scores = {
             SEQUENCE_MODE_MULTIPLE_CHOICE: 4.0,
+            SEQUENCE_MODE_GAP_FILL: 3.6,
             SEQUENCE_MODE_REORDER: 3.3,
-            SEQUENCE_MODE_NEXT_IN_SEQUENCE: 2.0,
+            SEQUENCE_MODE_RECITE: 0.6,
             SEQUENCE_MODE_TYPE_POSITION: 0.9
         }
     elif strong_count / len(due_questions) >= 0.55:
-        # Confident set -> favour recall from a bare index.
+        # Confident set -> favour producing the chain over reading it. This is
+        # the configuration a mature list spends most of its life in, and the
+        # one that used to collapse onto the two worst modes: reorder needs 5
+        # due items so it was excluded, leaving type_position and the old
+        # next_in_sequence near-certain. recite works at 1 due item or 20.
         base_scores = {
-            SEQUENCE_MODE_TYPE_POSITION: 3.5,
-            SEQUENCE_MODE_NEXT_IN_SEQUENCE: 3.0,
+            SEQUENCE_MODE_RECITE: 3.8,
+            SEQUENCE_MODE_TYPE_POSITION: 3.0,
+            SEQUENCE_MODE_GAP_FILL: 2.2,
             SEQUENCE_MODE_REORDER: 1.8,
             SEQUENCE_MODE_MULTIPLE_CHOICE: 0.9
         }
     else:
         base_scores = {
+            SEQUENCE_MODE_GAP_FILL: 3.4,
             SEQUENCE_MODE_REORDER: 3.2,
-            SEQUENCE_MODE_NEXT_IN_SEQUENCE: 3.0,
+            SEQUENCE_MODE_RECITE: 2.6,
             SEQUENCE_MODE_MULTIPLE_CHOICE: 2.0,
             SEQUENCE_MODE_TYPE_POSITION: 1.5
         }
@@ -179,8 +246,9 @@ def choose_sequence_review_mode(
     tie_order = {
         SEQUENCE_MODE_MULTIPLE_CHOICE: 0,
         SEQUENCE_MODE_REORDER: 1,
-        SEQUENCE_MODE_NEXT_IN_SEQUENCE: 2,
-        SEQUENCE_MODE_TYPE_POSITION: 3
+        SEQUENCE_MODE_GAP_FILL: 2,
+        SEQUENCE_MODE_RECITE: 3,
+        SEQUENCE_MODE_TYPE_POSITION: 4
     }
     eligible_modes = list(SEQUENCE_MODES)
 
@@ -200,15 +268,11 @@ def choose_sequence_review_mode(
             if mode != SEQUENCE_MODE_REORDER
         ]
 
-    # next_in_sequence prompts with the predecessor's label. If the due set
-    # contains adjacent positions, that predecessor may itself be due (and
-    # unrevealed) or on screen in the same session -- either way, showing its
-    # label leaks an answer. type_position stays eligible as the fallback.
-    if has_adjacent_due_positions:
-        eligible_modes = [
-            mode
-            for mode in eligible_modes
-            if mode != SEQUENCE_MODE_NEXT_IN_SEQUENCE
-        ]
+    # No adjacency guard any more. next_in_sequence needed one because it
+    # PRINTED the predecessor's label as a prompt, so two adjacent due items
+    # meant one of them was captioned with the other's answer. The rail never
+    # draws a blank's label, so adjacent blanks give the learner less context,
+    # not leaked context -- harder, which is correct. See
+    # test_a_blank_never_carries_its_own_label.
 
     return weighted_mode_choice(eligible_modes, scores, tie_order, rng=rng)

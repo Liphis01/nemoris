@@ -1,0 +1,7 @@
+# Read after .gitignore, last-match-wins, so `!` here re-includes a
+# git-ignored file in the graph scan.
+#
+# The knowledge-types roadmap is deliberately untracked (see .gitignore) but
+# should stay queryable — every other planning doc in docs/ is in the graph,
+# and graphify-out/ is itself git-ignored, so nothing leaks by indexing it.
+!docs/knowledge-types-roadmap.md

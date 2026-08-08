@@ -25,8 +25,13 @@ from .text_modes import (
     DEFAULT_TEXT_MODE,
     normalize_text_mode
 )
-from .sequence import dense_positions, grade_sequence_position
+from .sequence import (
+    dense_positions,
+    grade_sequence_ordering,
+    grade_sequence_position
+)
 from .sequence_modes import (
+    SEQUENCE_MODE_REORDER,
     DEFAULT_SEQUENCE_MODE,
     normalize_sequence_mode
 )
@@ -1120,7 +1125,7 @@ def get_training_items(
     raise HTTPException(status_code=400, detail="Invalid training scope")
 
 
-def grade_training_sequence(db, items):
+def grade_training_sequence(db, items, mode=None):
     # Sequences are server-graded, so training needs its own grader: reusing the
     # review endpoint would write real FSRS history from a practice run. This
     # returns the same result shape and never touches Progress.
@@ -1178,11 +1183,42 @@ def grade_training_sequence(db, items):
         positions.update(dense_positions(group_questions))
 
     results = []
+    # Training must grade the way review grades, or the same placement reads
+    # "Exact !" here and "Raté" in a real session. reorder produces an ordering,
+    # so it gets the ordering grader; the single-probe modes stay on distance.
+    ordering_grades = {}
+
+    if normalize_sequence_mode(mode) == SEQUENCE_MODE_REORDER:
+        placed_by_position = {
+            guess.position: question_id
+            for question_id, guess in items.items()
+            if guess.position is not None
+        }
+        true_order = [
+            question_id
+            for question_id, _ in sorted(
+                positions.items(),
+                key=lambda entry: entry[1]
+            )
+            if question_id in items
+        ]
+        produced_order = [
+            placed_by_position[position]
+            for position in sorted(placed_by_position)
+        ]
+        ordering_grades = grade_sequence_ordering(
+            true_order,
+            produced_order,
+            list(items.keys())
+        )
 
     for question_id, guess in items.items():
         question = question_map[question_id]
         expected_position = positions.get(question_id)
-        grading = grade_sequence_position(expected_position, guess.position)
+        grading = ordering_grades.get(question_id) or grade_sequence_position(
+            expected_position,
+            guess.position
+        )
 
         results.append({
             "question_id": question_id,

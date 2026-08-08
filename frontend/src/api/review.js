@@ -211,22 +211,30 @@ export function sendTimelineAnswer(items, reviewDate = undefined) {
 
 
 export function sendSequenceAnswer(
-  items,
+  payload,
   mode = undefined,
   contextCount = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+  const { items, rail, run, runStart, groupId, commit = true } = payload || {};
 
-  // items is an object of question_id -> { position }. Sequences are graded on
-  // the server, so this reads the response instead of discarding it.
+  // Sequences are graded on the server, so this reads the response instead of
+  // discarding it. `rail` states what was on screen -- the server cannot
+  // reconstruct it, and ordering grading is impossible without it. `commit:
+  // false` grades without scheduling so the learner can refine a hit first.
   return requestJson("/answer_sequence", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      items,
+      ...(items ? { items } : {}),
+      ...(rail ? { rail } : {}),
+      ...(run ? { run } : {}),
+      ...(runStart !== undefined ? { run_start: runStart } : {}),
+      ...(groupId !== undefined ? { group_id: groupId } : {}),
+      commit,
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
       ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})

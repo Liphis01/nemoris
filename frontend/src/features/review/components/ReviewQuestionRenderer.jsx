@@ -133,6 +133,7 @@ export default function ReviewQuestionRenderer({
                 onComplete={handleSequenceComplete}
                 submitAnswer={submitSequenceAnswer}
                 graduateAnswer={graduateGroupedAnswer}
+                showQualityControls={!trainingMode}
                 fillAvailableHeight={compactVisualLayout}
             />
         );

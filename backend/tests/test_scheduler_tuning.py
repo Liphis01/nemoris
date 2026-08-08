@@ -341,6 +341,52 @@ def test_easy_mode_scales_whole_interval_on_correct_answer():
     assert hard >= base
 
 
+def test_above_reference_difficulty_rewards_and_forgives_in_lockstep():
+    # Characterization for modes priced ABOVE type_all = 1.0. Nothing shipped
+    # there until sequence recitation: the highest production value is 1.05 and
+    # the highest previously under test is 1.15. These numbers are what a mode
+    # author is signing up for, so they are pinned rather than described.
+    def fresh():
+        return Progress(
+            question_id=1,
+            stability=20.0,
+            difficulty=5.0,
+            reps=5,
+            lapses=0,
+            interval=10,
+            last_review=date.today() - timedelta(days=10),
+            next_review=date.today(),
+            history=[]
+        )
+
+    intervals = {
+        difficulty: update_progress(
+            fresh(), 2, mode_difficulty=difficulty, enable_fuzzing=False
+        )["interval"]
+        for difficulty in [1.0, 1.2, 1.4]
+    }
+    lapsed = {
+        difficulty: update_progress(
+            fresh(), 0, mode_difficulty=difficulty, enable_fuzzing=False
+        )["stability"]
+        for difficulty in [1.0, 1.2, 1.4]
+    }
+
+    assert intervals == {1.0: 43, 1.2: 50, 1.4: 57}
+
+    # The catch a mode author is most likely to miss: a hard mode does not only
+    # earn a longer interval on success, it also SOFTENS the lapse. At 1.4 a
+    # failed card keeps nearly twice the stability of a failed reference-mode
+    # card, so the mode is rewarded twice and punished less.
+    assert round(lapsed[1.2] / lapsed[1.0], 2) == 1.48
+    assert round(lapsed[1.4] / lapsed[1.0], 2) == 1.96
+
+    # The reward saturates: MAX_SUCCESS_REWARD_FACTOR silently caps at 1.5, so
+    # pricing a mode above that buys nothing on success while still discounting
+    # every failure.
+    assert success_reward_factor(1.6) == success_reward_factor(1.5)
+
+
 def test_click_prompt_difficulty_models_shrinking_pool():
     # Re-anchored curve tracks the AVERAGE (shrinking) pool, so it is lower than
     # the old 0.95 - 0.55/sqrt(N) at every pool size, and both formula sites

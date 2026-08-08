@@ -41,10 +41,16 @@ TextMode = Literal[
 
 SequenceMode = Literal[
     "type_position",
-    "next_in_sequence",
+    "gap_fill",
     "multiple_choice",
-    "reorder"
+    "reorder",
+    "recite"
 ]
+
+# What one rail slot was showing. `blank` is a due item's slot; `decoy` is a
+# known slot deliberately blanked so the blanks cannot be found by subtraction,
+# and is answered but never graded.
+SequenceSlotKind = Literal["anchor", "blank", "decoy", "hidden"]
 
 TrainingGroupMode = Literal[
     "type_all",
@@ -55,8 +61,9 @@ TrainingGroupMode = Literal[
     "multiple_choice_image",
     "match",
     "type_position",
-    "next_in_sequence",
-    "reorder"
+    "gap_fill",
+    "reorder",
+    "recite"
 ]
 
 
@@ -430,13 +437,51 @@ class SequenceAnswerItem(BaseModel):
     # rather than a bare int so a future server-resolved `text` field can be
     # added without breaking the endpoint.
     position: Optional[int] = Field(default=None, ge=1)
+    # The learner's felt-difficulty on a correct answer, same contract as
+    # timeline: None keeps the auto grade, and reconcile_sequence_quality never
+    # lets it upgrade a miss.
+    quality: Optional[AnswerQuality] = None
+
+
+class SequenceRailSlot(BaseModel):
+    # One row of what was actually on screen. The answer endpoint rebuilds ranks
+    # from a fresh dense_positions but CANNOT reconstruct the rail: decoys are
+    # chosen at random, and an item introduced by an earlier chunk of the same
+    # session has already flipped to "started". So the client posts back what it
+    # was shown, exactly as it already posts context_count, and the server
+    # validates it against the real positions rather than trusting it.
+    position: int = Field(ge=1)
+    kind: SequenceSlotKind
 
 
 class SequenceAnswerRequest(BaseModel):
-    items: Dict[int, SequenceAnswerItem]
+    items: Dict[int, SequenceAnswerItem] = Field(default_factory=dict)
     mode: Optional[SequenceMode] = None
     context_count: Optional[int] = Field(default=None, ge=0)
+    rail: Optional[List[SequenceRailSlot]] = None
+    # Recitation posts the ordered question ids it produced instead of a
+    # position per item, because the whole point is the run: what was produced
+    # before the stall, and nothing after it.
+    run: Optional[List[int]] = None
+    run_start: Optional[int] = Field(default=None, ge=0)
+    # Recitation needs the list even when the learner produced nothing, because
+    # stalling on the very first item is itself the answer. `run` alone cannot
+    # identify the group in that case.
+    group_id: Optional[int] = None
+    # False grades and returns without scheduling, so the learner can refine a
+    # hit before it is written. The commit posts the same answers back with
+    # their chosen qualities.
+    commit: bool = True
     review_date: Optional[date] = None
+
+    @model_validator(mode="after")
+    def _run_excludes_items(self):
+        # A payload carrying both would be graded twice, once per path, and the
+        # second write would silently overwrite the first. Reject it loudly.
+        if self.run is not None and self.items:
+            raise ValueError("A sequence answer carries either `run` or `items`, not both")
+
+        return self
 
 
 class TrainingAttemptRecordRequest(BaseModel):

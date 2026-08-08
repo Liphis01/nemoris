@@ -334,15 +334,17 @@ def serialize_sequence_review_group(
     tags=None,
     mode=None,
     context_items=None,
-    anchors=None,
+    rail=None,
     length=0
 ):
     # Runtime aggregation object for one ordered list. `length` is the full list
-    # size, so the reorder rail can draw every slot even when only a few items
-    # are due. `anchors` are the already-known peers the player may see in
-    # place; they are deliberately NOT context_items, whose count is what the
-    # client posts back as context_count and must match the pool the mode
-    # difficulty was computed on.
+    # size, so the rail can report "n° X / N" even when it only draws a window.
+    # `rail` is the slot list the client renders and posts back -- it is the one
+    # statement of what was on screen, and grading an ordering is impossible
+    # without it, since the answer endpoint cannot reconstruct which slots were
+    # anchors once a chunk has already written progress. `context_items` count
+    # is what the client posts back as context_count and must match the pool the
+    # mode difficulty was computed on.
     return {
         "group_id": group.id,
 
@@ -358,7 +360,7 @@ def serialize_sequence_review_group(
 
         "length": length,
 
-        "anchors": anchors or [],
+        "rail": rail or [],
 
         "context_items": context_items or [],
 
@@ -366,20 +368,9 @@ def serialize_sequence_review_group(
     }
 
 
-def serialize_sequence_anchor(question, position):
-    return {
-        "question_id": question.id,
-
-        "label": question.answer,
-
-        "position": position
-    }
-
-
 def serialize_sequence_review_item(
     question,
     position=None,
-    previous_label=None,
     mode_difficulty=None,
     scheduler_tuning=None
 ):
@@ -393,10 +384,6 @@ def serialize_sequence_review_item(
         "label": question.answer,
 
         "position": position,
-
-        # next_in_sequence prompts with the predecessor; None means this item
-        # opens the list.
-        "previous_label": previous_label,
 
         "tags": question.tags or [],
 

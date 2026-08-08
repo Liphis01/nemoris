@@ -23,6 +23,7 @@ from ..services.progress import (
     apply_scheduling_batch,
     create_initial_progress,
     graduate_relearning,
+    progress_has_started,
     rebalance_progress_calendar,
     replace_latest_scheduling
 )
@@ -67,11 +68,17 @@ from ..services.settings import (
     save_review_settings
 )
 from ..services.sequence import (
+    dense_positions,
+    grade_sequence_ordering,
     grade_sequence_position,
-    sequence_positions_for_questions
+    grade_sequence_recitation,
+    reconcile_sequence_quality,
+    sequence_group_questions
 )
 from ..services.sequence_modes import (
     DEFAULT_SEQUENCE_MODE,
+    SEQUENCE_MODE_RECITE,
+    SEQUENCE_MODE_REORDER,
     normalize_sequence_mode,
     sequence_mode_difficulty
 )
@@ -704,25 +711,32 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
 @router.post("/answer_sequence")
 def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
     # Sequences are the one type that is both auto-graded (like timeline: the
-    # client posts a position, the server decides the quality) and moded (like
+    # client posts a placement, the server decides the quality) and moded (like
     # text: the mode's difficulty must reach FSRS). apply_answer_batch cannot be
     # reused because its contract is a SUBMITTED quality, so this grades like
     # timeline and then appends the 3-tuples that carry the mode metadata.
-    question_ids = list(data.items.keys())
+    #
+    # Two phases. commit=False grades and returns without scheduling, so the
+    # learner can see the result and refine a hit before anything is written;
+    # the commit posts the same answers back with their chosen qualities. The
+    # alternative -- grading in the browser like timeline does -- would mean a
+    # second implementation of the ordering grader in JS, drifting from this one.
+    mode = normalize_sequence_mode(data.mode or DEFAULT_SEQUENCE_MODE)
+    is_recitation = data.run is not None
+    seed_ids = list(
+        dict.fromkeys(data.run if is_recitation else data.items.keys())
+    )
 
     questions = (
-        db.query(Question)
-        .filter(Question.id.in_(question_ids))
-        .all()
+        db.query(Question).filter(Question.id.in_(seed_ids)).all()
+        if seed_ids
+        else []
     )
-    question_map = {
-        question.id: question
-        for question in questions
-    }
+    question_map = {question.id: question for question in questions}
 
     missing_ids = [
         question_id
-        for question_id in question_ids
+        for question_id in seed_ids
         if question_id not in question_map
     ]
 
@@ -739,44 +753,121 @@ def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
                 detail=f"Question {question_id} is not a sequence question"
             )
 
-    mode = normalize_sequence_mode(data.mode or DEFAULT_SEQUENCE_MODE)
     scheduler_tuning = load_scheduler_tuning_settings(db)
     submitted_context_count = normalize_context_count(data.context_count)
 
     # Ranks are only meaningful against the whole list, and they are recomputed
     # here through the same helper the serializer used, so what was shown and
     # what is graded cannot drift.
-    positions, group_sizes = sequence_positions_for_questions(db, questions)
-
-    existing_progresses = (
-        db.query(Progress)
-        .filter(Progress.question_id.in_(question_ids))
-        .all()
+    group_ids = [data.group_id] if data.group_id else []
+    siblings_by_group = sequence_group_questions(
+        db,
+        questions,
+        group_ids=group_ids
     )
+    positions = {}
+    group_sizes = {}
+    siblings = {}
+
+    for group_id, group_questions in siblings_by_group.items():
+        positions.update(dense_positions(group_questions))
+        group_sizes[group_id] = len(group_questions)
+
+        for question in group_questions:
+            siblings[question.id] = question
+
+    by_position = {rank: question_id for question_id, rank in positions.items()}
+    started_ids = {
+        question_id
+        for question_id, question in siblings.items()
+        if progress_has_started(question.progress)
+    }
+
+    # The rail is the client's statement of what was on screen. It cannot be
+    # rebuilt here -- decoys are picked at random, and an item introduced by an
+    # earlier chunk of this same session has already flipped to "started" -- so
+    # it is posted back and validated against the real ranks rather than
+    # trusted or recomputed.
+    rail = [
+        {"position": slot.position, "kind": slot.kind}
+        for slot in (data.rail or [])
+        if slot.position in by_position
+    ]
+    rail.sort(key=lambda slot: slot["position"])
+
+    difficulty = sequence_mode_difficulty(
+        mode,
+        context_count=(
+            submitted_context_count
+            if submitted_context_count is not None
+            else max(group_sizes.values(), default=0)
+        ),
+        rail=rail or None,
+        tuning=scheduler_tuning
+    )
+
+    if is_recitation:
+        auto_grades, stall_id = _grade_recitation(
+            data,
+            by_position,
+            started_ids,
+            group_sizes
+        )
+        graded_ids = list(auto_grades.keys())
+    else:
+        auto_grades = _grade_placements(data, mode, positions, rail, by_position)
+        stall_id = None
+        graded_ids = list(data.items.keys())
+
+    # Recitation grades the stall item, which the client never submitted -- it
+    # cannot know which one it is without being handed the answer.
+    for question_id in graded_ids:
+        if question_id not in question_map and question_id in siblings:
+            question_map[question_id] = siblings[question_id]
+
     progress_map = {
         progress.question_id: progress
-        for progress in existing_progresses
+        for progress in (
+            db.query(Progress)
+            .filter(Progress.question_id.in_(graded_ids))
+            .all()
+            if graded_ids
+            else []
+        )
     }
     results = []
     progress_quality_pairs = []
 
-    for question_id, guess in data.items.items():
-        question = question_map[question_id]
-        expected_position = positions.get(question_id)
-        grading = grade_sequence_position(expected_position, guess.position)
-        raw_quality = grading["quality"]
-        progress = progress_map.get(question_id)
+    for question_id in graded_ids:
+        question = question_map.get(question_id)
 
-        active_context_count = (
-            submitted_context_count
-            if submitted_context_count is not None
-            else group_sizes.get(question.group_id, 0)
+        if question is None:
+            continue
+
+        grading = auto_grades[question_id]
+        auto_quality = grading["quality"]
+        requested = (
+            data.items[question_id].quality
+            if question_id in data.items
+            else None
         )
-        difficulty = sequence_mode_difficulty(
-            mode,
-            context_count=active_context_count,
-            tuning=scheduler_tuning
-        )
+        final_quality = reconcile_sequence_quality(auto_quality, requested)
+
+        results.append({
+            "question_id": question_id,
+            "quality": final_quality,
+            "auto_quality": auto_quality,
+            "expected_position": positions.get(question_id),
+            "guessed_position": grading.get("guessed_position"),
+            "distance": grading["distance"],
+            "label": question.answer,
+            "stall": question_id == stall_id
+        })
+
+        if not data.commit:
+            continue
+
+        progress = progress_map.get(question_id)
 
         if not progress:
             progress = create_initial_progress(
@@ -788,26 +879,18 @@ def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
 
         progress_quality_pairs.append((
             progress,
-            raw_quality,
+            final_quality,
             {
                 "sequence_mode": mode,
-                "sequence_context_count": active_context_count,
-                "raw_quality": raw_quality,
-                "effective_quality": raw_quality,
+                "sequence_context_count": len(rail) or submitted_context_count,
+                "sequence_rail": rail,
+                "raw_quality": auto_quality,
+                "effective_quality": final_quality,
                 "mode_adjusted": difficulty != 1.0,
                 "mode_difficulty": difficulty,
-                "answer": guess.position
+                "answer": grading.get("guessed_position")
             }
         ))
-
-        results.append({
-            "question_id": question_id,
-            "quality": raw_quality,
-            "expected_position": expected_position,
-            "guessed_position": guess.position,
-            "distance": grading["distance"],
-            "label": question.answer
-        })
 
     if progress_quality_pairs:
         apply_scheduling_batch(
@@ -822,11 +905,88 @@ def answer_sequence(data: SequenceAnswerRequest, db: Session = Depends(get_db)):
             progress_map.get(result["question_id"])
         )
 
-    db.commit()
-    sync_generated_hard_collection(db)
+    if data.commit:
+        db.commit()
+        sync_generated_hard_collection(db)
+    else:
+        db.rollback()
 
     return {
         "status": "ok",
         "mode": mode,
+        "committed": data.commit,
         "results": results
     }
+
+
+def _grade_placements(data, mode, positions, rail, by_position):
+    """
+    One placement per item. `reorder` is graded on relative order against the
+    rail; the single-probe modes keep distance grading, because there is no
+    ordering to compare -- each row is an independent question.
+    """
+    guessed = {
+        question_id: guess.position
+        for question_id, guess in data.items.items()
+    }
+
+    if mode == SEQUENCE_MODE_REORDER and rail:
+        placed_by_position = {
+            position: question_id
+            for question_id, position in guessed.items()
+            if position is not None
+        }
+        blanks = {
+            slot["position"]
+            for slot in rail
+            if slot["kind"] == "blank"
+        }
+        true_order = [by_position[slot["position"]] for slot in rail]
+        produced_order = [
+            placed_by_position.get(slot["position"])
+            if slot["position"] in blanks
+            else by_position[slot["position"]]
+            for slot in rail
+        ]
+        grades = grade_sequence_ordering(
+            true_order,
+            [item for item in produced_order if item is not None],
+            list(data.items.keys())
+        )
+
+        for question_id, grade in grades.items():
+            grade["guessed_position"] = guessed.get(question_id)
+
+        return grades
+
+    grades = {}
+
+    for question_id, position in guessed.items():
+        grade = grade_sequence_position(positions.get(question_id), position)
+        grade["guessed_position"] = position
+        grades[question_id] = grade
+
+    return grades
+
+
+def _grade_recitation(data, by_position, started_ids, group_sizes):
+    start_rank = data.run_start or 0
+    length = max(group_sizes.values(), default=0)
+    expected_order = [
+        by_position[rank]
+        for rank in range(start_rank + 1, length + 1)
+        if rank in by_position
+    ]
+    graded, stall_id = grade_sequence_recitation(
+        expected_order,
+        data.run,
+        started_ids
+    )
+
+    return (
+        {
+            question_id: {"quality": quality, "distance": None}
+            for question_id, quality in graded.items()
+        },
+        stall_id
+    )
