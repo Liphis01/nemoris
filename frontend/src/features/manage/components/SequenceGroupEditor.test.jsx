@@ -83,7 +83,7 @@ describe("SequenceGroupEditor — group not yet persisted", () => {
     expect(patchSequenceGroupItems).toHaveBeenCalledWith(
       7,
       expect.objectContaining({
-        group: { name: "Alphabet grec", tags: [] }
+        group: expect.objectContaining({ name: "Alphabet grec", tags: [] })
       })
     );
   });
@@ -114,7 +114,7 @@ describe("SequenceGroupEditor — group not yet persisted", () => {
     expect(patchSequenceGroupItems).toHaveBeenCalledWith(
       9,
       expect.objectContaining({
-        group: { name: "Nouvelle liste", tags: [] }
+        group: expect.objectContaining({ name: "Nouvelle liste", tags: [] })
       })
     );
   });
@@ -149,5 +149,121 @@ describe("SequenceGroupEditor — group not yet persisted", () => {
       "Alpha",
       "Bêta"
     ]);
+  });
+});
+
+describe("SequenceGroupEditor — derived order", () => {
+  function renderDerived(items = []) {
+    getSequenceGroupItems.mockResolvedValue(items);
+
+    render(
+      <SequenceGroupEditor
+        group={{
+          id: 9,
+          type_group: "sequence",
+          name: "Rois de France",
+          media: null,
+          tags: [],
+          data: { order: { mode: "derived", kind: "date" } }
+        }}
+        availableTags={[]}
+        ensurePersistedGroup={vi.fn()}
+        onSave={vi.fn()}
+        selectedItem={null}
+      />
+    );
+  }
+
+  const withYear = (id, answer, year) => ({
+    id,
+    answer,
+    label: answer,
+    aliases: [],
+    tags: [],
+    data: {
+      order_value: { year, month: null, day: null, precision: "year" }
+    }
+  });
+
+  it("previews the derived order instead of the stored array order", async () => {
+    renderDerived([
+      withYear(1, "Louis XVI", 1774),
+      withYear(2, "Henri IV", 1589),
+      withYear(3, "Louis XIV", 1643)
+    ]);
+
+    await screen.findByDisplayValue("Henri IV");
+
+    const answers = [...document.querySelectorAll("[data-sequence-item-row] input")]
+      .filter(node => node.getAttribute("aria-label")?.startsWith("Élément "))
+      .map(node => node.value);
+
+    expect(answers).toEqual(["Henri IV", "Louis XIV", "Louis XVI"]);
+  });
+
+  it("hides manual reordering, which the next save would discard", async () => {
+    renderDerived([withYear(1, "Henri IV", 1589), withYear(2, "Louis XIV", 1643)]);
+
+    await screen.findByDisplayValue("Henri IV");
+
+    expect(screen.queryByRole("button", { name: /Monter l'élément/ })).toBeNull();
+    expect(
+      document.querySelector("[data-sequence-item-row]").draggable
+    ).toBe(false);
+  });
+
+  it("marks an item with no value, since it will sort last", async () => {
+    renderDerived([
+      withYear(1, "Henri IV", 1589),
+      { id: 2, answer: "Inconnu", label: "Inconnu", aliases: [], tags: [], data: {} }
+    ]);
+
+    await screen.findByDisplayValue("Inconnu");
+
+    const inputs = [...document.querySelectorAll("[data-sequence-order-value]")];
+
+    expect(inputs.map(node => node.value)).toEqual(["1589", ""]);
+  });
+
+  it("enables saving when only the order setting changed", async () => {
+    // buildSignature must cover the order setting, or the Save button never
+    // enables and switching modes is silently lost.
+    renderDerived([withYear(1, "Henri IV", 1589)]);
+
+    await screen.findByDisplayValue("Henri IV");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Ordre/ }));
+    fireEvent.change(screen.getByLabelText("Ordre de la liste"), {
+      target: { value: "manual" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    await waitFor(() => expect(patchSequenceGroupItems).toHaveBeenCalled());
+
+    const [, payload] = patchSequenceGroupItems.mock.calls.at(-1);
+
+    expect(payload.group.order.mode).toBe("manual");
+  });
+
+  it("posts the typed attribute value with the item", async () => {
+    renderDerived([withYear(1, "Henri IV", 1589)]);
+
+    await screen.findByDisplayValue("Henri IV");
+
+    fireEvent.change(screen.getByLabelText("Valeur d'ordre de l'élément 1"), {
+      target: { value: "1590" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    await waitFor(() => expect(patchSequenceGroupItems).toHaveBeenCalled());
+
+    const [, payload] = patchSequenceGroupItems.mock.calls.at(-1);
+
+    expect(payload.items[0].data.order_value).toEqual({
+      year: 1590,
+      month: null,
+      day: null,
+      precision: "year"
+    });
   });
 });

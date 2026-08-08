@@ -621,11 +621,25 @@ class SequenceGroupItemBulkItem(BaseModel):
     )
 
 
+class SequenceOrderSettings(BaseModel):
+    # A group whose order IS a sort by some attribute -- reigns by date, singles
+    # by chart position -- derives its ranks instead of having them authored.
+    # Omitting `order` entirely leaves the group manual, which is what every
+    # existing group is, so no backfill is needed.
+    mode: Literal["manual", "derived"] = "manual"
+
+    kind: Literal["date", "number"] = "date"
+
+    label: Optional[str] = None
+
+
 class SequenceGroupItemsGroupUpdate(BaseModel):
 
     name: Optional[str] = None
 
     tags: Optional[List[str]] = None
+
+    order: Optional[SequenceOrderSettings] = None
 
 
 class SequenceGroupItemsBulkUpdate(BaseModel):

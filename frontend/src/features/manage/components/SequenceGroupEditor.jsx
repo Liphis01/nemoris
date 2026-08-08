@@ -4,6 +4,12 @@ import {
   patchSequenceGroupItems
 } from "../../../api/sequenceGroups";
 import { invalidateTags } from "../../../shared/tagLabels";
+import {
+  normalizeOrder,
+  orderValueText,
+  parseOrderValue,
+  sortableOrderValue
+} from "../sequenceOrder";
 import FavoriteToggleButton from "./FavoriteToggleButton";
 import SuspendToggleButton from "./SuspendToggleButton";
 import {
@@ -64,7 +70,10 @@ function buildSignature(group, tags, items, deletedItemIds) {
   return JSON.stringify({
     group: {
       name: group?.name || "",
-      tags: tags || []
+      tags: tags || [],
+      // Without this the Save button never enables for a pure order-setting
+      // change and the edit is silently lost.
+      order: normalizeOrder(group?.data?.order)
     },
     // The array order IS the content here, so the signature must be
     // order-sensitive: a pure reorder is an unsaved change like any other.
@@ -72,7 +81,8 @@ function buildSignature(group, tags, items, deletedItemIds) {
       id: item.id || item.tempId,
       answer: item.answer || "",
       aliases: item.aliases || [],
-      favorite: Boolean(item.data?.favorite)
+      favorite: Boolean(item.data?.favorite),
+      orderValue: item.data?.order_value ?? null
     })),
     deletedItemIds: [...deletedItemIds].sort((a, b) => a - b)
   });
@@ -121,15 +131,20 @@ const SequenceItemRow = memo(function SequenceItemRow({
   onToggleFavorite,
   onToggleSuspended,
   onUpdateItem,
+  order,
   selected
 }) {
+  // A derived list is ranked by its attribute, so manual reordering is not just
+  // pointless here -- leaving it live would imply an edit the next save discards.
+  const isDerived = order?.mode === "derived";
+
   return (
     <div
       data-sequence-item-row={index + 1}
-      draggable
-      onDragOver={onDragOver}
-      onDragStart={event => onDragStart(event, item)}
-      onDrop={event => onDrop(event, index)}
+      draggable={!isDerived}
+      onDragOver={isDerived ? undefined : onDragOver}
+      onDragStart={isDerived ? undefined : event => onDragStart(event, item)}
+      onDrop={isDerived ? undefined : event => onDrop(event, index)}
       style={{
         alignItems: "center",
         background: selected ? "#232b23" : "#181818",
@@ -137,16 +152,23 @@ const SequenceItemRow = memo(function SequenceItemRow({
         borderRadius: "10px",
         display: "grid",
         gap: "10px",
-        gridTemplateColumns: "auto auto 1fr auto",
+        gridTemplateColumns: isDerived
+          ? "auto auto 1fr auto auto"
+          : "auto auto 1fr auto",
         padding: "8px 10px"
       }}
     >
       <span
         aria-hidden="true"
-        style={{ color: "#555", cursor: "grab", fontSize: "13px" }}
-        title="Glisser pour réordonner"
+        style={{
+          color: "#555",
+          cursor: isDerived ? "default" : "grab",
+          fontSize: "13px",
+          opacity: isDerived ? 0.3 : 1
+        }}
+        title={isDerived ? "Ordre calculé" : "Glisser pour réordonner"}
       >
-        ⠿
+        {isDerived ? "∑" : "⠿"}
       </span>
 
       <span
@@ -171,25 +193,54 @@ const SequenceItemRow = memo(function SequenceItemRow({
         value={item.answer}
       />
 
+      {isDerived && (
+        <input
+          aria-label={`Valeur d'ordre de l'élément ${index + 1}`}
+          data-sequence-order-value={index + 1}
+          onChange={event =>
+            onUpdateItem(item.tempId, {
+              data: {
+                ...(item.data || {}),
+                order_value: parseOrderValue(event.target.value, order.kind)
+              }
+            })
+          }
+          placeholder={order.kind === "number" ? "n°" : "année"}
+          style={{
+            ...inputStyle,
+            borderColor: sortableOrderValue(item, order.kind) === null
+              ? "#6b4a2a"
+              : inputStyle.border,
+            textAlign: "right",
+            width: "88px"
+          }}
+          value={orderValueText(item.data?.order_value, order.kind)}
+        />
+      )}
+
       <div style={{ alignItems: "center", display: "flex", gap: "5px" }}>
-        <button
-          aria-label={`Monter l'élément ${index + 1}`}
-          disabled={isFirst}
-          onClick={() => onMove(index, index - 1)}
-          style={{ ...moveButtonStyle, opacity: isFirst ? 0.35 : 1 }}
-          type="button"
-        >
-          ↑
-        </button>
-        <button
-          aria-label={`Descendre l'élément ${index + 1}`}
-          disabled={isLast}
-          onClick={() => onMove(index, index + 1)}
-          style={{ ...moveButtonStyle, opacity: isLast ? 0.35 : 1 }}
-          type="button"
-        >
-          ↓
-        </button>
+        {!isDerived && (
+          <>
+            <button
+              aria-label={`Monter l'élément ${index + 1}`}
+              disabled={isFirst}
+              onClick={() => onMove(index, index - 1)}
+              style={{ ...moveButtonStyle, opacity: isFirst ? 0.35 : 1 }}
+              type="button"
+            >
+              ↑
+            </button>
+            <button
+              aria-label={`Descendre l'élément ${index + 1}`}
+              disabled={isLast}
+              onClick={() => onMove(index, index + 1)}
+              style={{ ...moveButtonStyle, opacity: isLast ? 0.35 : 1 }}
+              type="button"
+            >
+              ↓
+            </button>
+          </>
+        )}
 
         <FavoriteToggleButton
           favorite={Boolean(item.data?.favorite)}
@@ -234,6 +285,7 @@ export default function SequenceGroupEditor({
   const [initialSignature, setInitialSignature] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
   const itemsScrollRef = useRef(null);
   const currentGroupRef = useRef(group);
   const saveItemsRef = useRef(null);
@@ -246,6 +298,47 @@ export default function SequenceGroupEditor({
     buildSignature(editableGroup, sharedTags, items, deletedItemIds)
   ), [deletedItemIds, editableGroup, items, sharedTags]);
   const hasUnsavedChanges = currentSignature !== initialSignature;
+
+  const order = useMemo(
+    () => normalizeOrder(editableGroup?.data?.order),
+    [editableGroup]
+  );
+  const isDerived = order.mode === "derived";
+
+  const updateOrder = useCallback(patch => {
+    setEditableGroup(prev => {
+      const previousOrder = normalizeOrder(prev?.data?.order);
+
+      return {
+        ...(prev || {}),
+        data: {
+          ...((prev || {}).data || {}),
+          order: { ...previousOrder, ...patch }
+        }
+      };
+    });
+  }, []);
+
+  // A derived list is sorted by its attribute, so showing it in array order
+  // would be a lie between typing a value and saving.
+  const displayItems = useMemo(() => {
+    if (!isDerived) return items;
+
+    return [...items]
+      .map((item, index) => ({ item, index }))
+      .sort((left, right) => {
+        const leftValue = sortableOrderValue(left.item, order.kind);
+        const rightValue = sortableOrderValue(right.item, order.kind);
+
+        if (leftValue === null && rightValue === null) return left.index - right.index;
+        if (leftValue === null) return 1;
+        if (rightValue === null) return -1;
+        if (leftValue !== rightValue) return leftValue - rightValue;
+
+        return left.index - right.index;
+      })
+      .map(entry => entry.item);
+  }, [isDerived, items, order.kind]);
 
   useEffect(() => {
     currentGroupRef.current = group;
@@ -510,7 +603,8 @@ export default function SequenceGroupEditor({
       const saveResult = await patchSequenceGroupItems(targetGroupId, {
         group: {
           name: nameForSave,
-          tags: sharedTags || []
+          tags: sharedTags || [],
+          order
         },
         items: items.map(serializeItem),
         deleted_item_ids: deletedItemIds
@@ -672,10 +766,64 @@ export default function SequenceGroupEditor({
             Coller une liste
           </button>
 
+          <button
+            data-sequence-order-toggle=""
+            type="button"
+            onClick={() => setOrderOpen(prev => !prev)}
+            style={{ ...buttonStyle, ...compactHeaderButtonStyle }}
+          >
+            Ordre{isDerived ? " · calculé" : ""}
+          </button>
+
           {saveStatus && (
             <span style={{ color: "#888", fontSize: "13px" }}>{saveStatus}</span>
           )}
         </div>
+
+        {orderOpen && (
+          <div data-sequence-order-panel="" style={{ display: "grid", gap: "7px" }}>
+            <label
+              htmlFor="sequence-order-mode"
+              style={{ color: "#bbb", fontSize: "12px" }}
+            >
+              Ordre de la liste
+            </label>
+            <select
+              id="sequence-order-mode"
+              onChange={event => updateOrder({ mode: event.target.value })}
+              style={compactHeaderInputStyle}
+              value={order.mode}
+            >
+              <option value="manual">Manuel — l'ordre des lignes</option>
+              <option value="derived">Calculé — trier par une valeur</option>
+            </select>
+
+            {isDerived && (
+              <>
+                <label
+                  htmlFor="sequence-order-kind"
+                  style={{ color: "#bbb", fontSize: "12px" }}
+                >
+                  Trier par
+                </label>
+                <select
+                  id="sequence-order-kind"
+                  onChange={event => updateOrder({ kind: event.target.value })}
+                  style={compactHeaderInputStyle}
+                  value={order.kind}
+                >
+                  <option value="date">Année</option>
+                  <option value="number">Nombre</option>
+                </select>
+
+                <span style={{ color: "#888", fontSize: "12px" }}>
+                  Le rang est recalculé à l'enregistrement. Les éléments sans
+                  valeur passent à la fin.
+                </span>
+              </>
+            )}
+          </div>
+        )}
 
         {bulkOpen && (
           <div style={{ display: "grid", gap: "7px" }}>
@@ -734,13 +882,14 @@ export default function SequenceGroupEditor({
           </div>
         )}
 
-        {!loading && items.map((item, index) => (
+        {!loading && displayItems.map((item, index) => (
           <SequenceItemRow
             key={item.tempId}
             index={index}
             isFirst={index === 0}
-            isLast={index === items.length - 1}
+            isLast={index === displayItems.length - 1}
             item={item}
+            order={order}
             onDragOver={handleDragOver}
             onDragStart={handleDragStart}
             onDrop={handleDrop}

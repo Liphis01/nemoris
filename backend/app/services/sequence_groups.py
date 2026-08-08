@@ -7,6 +7,12 @@ from .map_zones import merge_tags
 from .tag_hierarchy import ensure_tag_ids
 from .questions import delete_question_dependents
 from .sequence import dense_positions
+from .sequence_order import (
+    SEQUENCE_ORDER_VALUE_KEY,
+    derive_sequence_positions,
+    merge_sequence_order,
+    sequence_order_settings
+)
 
 
 def derive_sequence_group_tags(questions):
@@ -121,6 +127,16 @@ def save_sequence_group_items(db, group_id: int, payload):
             shared_tags_provided = True
             shared_tags = ensure_tag_ids(db, group_updates.get("tags"))
 
+        if "order" in group_updates:
+            # Merged, not assigned: group.data also holds training_record and
+            # training_records, and a whole-dict replace would drop them.
+            group.data = merge_sequence_order(
+                group.data,
+                group_updates.get("order")
+            )
+
+    order = sequence_order_settings(group)
+
     existing_items = (
         db.query(Question)
         .filter(
@@ -167,8 +183,39 @@ def save_sequence_group_items(db, group_id: int, payload):
                 if item.id not in deleted_item_ids:
                     item.tags = shared_tags
 
+        derived_positions = None
+
+        if order:
+            # The attribute may live on the stored row rather than the payload:
+            # the editor only resends `data` for rows it touched, and
+            # build_sequence_item_data preserves unsent keys.
+            def order_value_for(index, item_payload):
+                sent = (item_payload.data or {}).get(SEQUENCE_ORDER_VALUE_KEY)
+
+                if sent is not None:
+                    return sent
+
+                stored = existing_by_id.get(item_payload.id) if item_payload.id else None
+
+                return (stored.data or {}).get(SEQUENCE_ORDER_VALUE_KEY) if stored else None
+
+            derived_positions = derive_sequence_positions(
+                [
+                    (index, order_value_for(index, item_payload))
+                    for index, item_payload in enumerate(payload.items)
+                ],
+                order["kind"]
+            )
+
         for index, item_payload in enumerate(payload.items):
-            position = index + 1
+            # Array order is the rank for a manual group; a derived group sorts
+            # on its declared attribute instead. Either way an integer rank is
+            # written, so every downstream reader is unchanged.
+            position = (
+                derived_positions[index]
+                if derived_positions is not None
+                else index + 1
+            )
             aliases = [
                 alias
                 for alias in item_payload.aliases
@@ -264,6 +311,9 @@ def save_sequence_group_items(db, group_id: int, payload):
             "name": group.name,
             "media": group.media,
             "tags": response_tags,
+            # The editor needs its order setting echoed back, or it cannot tell
+            # a save succeeded and would re-enable manual reordering.
+            "data": group.data or {},
             "question_count": question_count
         },
         "items": [
