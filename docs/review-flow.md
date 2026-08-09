@@ -24,6 +24,14 @@ additive `presentation_kind` discriminator:
 Runtime grouped objects are response shapes only. They are never stored as
 questions and never own progress.
 
+Review objects that perform typed or selected-answer matching carry an
+additive `answer_policy` object. Existing content defaults to relaxed matching:
+ignore case and diacritics, collapse hyphen/whitespace differences, and use no
+fuzzy typo tolerance. Authors can set `QuestionGroup.data.answer_policy` (or,
+for future single-card overrides, `Question.data.answer_policy`) to the `exact`
+preset. Effective policy resolution is question override, then group override,
+then type default.
+
 ## Runtime Shapes
 
 Text items use `question_id`, prompt, answer, media, tags, and progress.
@@ -43,6 +51,7 @@ Map groups use:
       "code": "fr",
       "label": "France",
       "aliases": ["republique francaise"],
+      "answer_policy": { "preset": "relaxed" },
       "progress": {}
     }
   ]
@@ -93,14 +102,28 @@ POST /answer_map
 {
   "items": { "12": 2, "13": 0 },
   "mode": "multiple_choice",
-  "answers": { "12": "France", "13": "Belgique" },
+  "answers": { "12": 12, "13": 13 },
   "candidates": { "12": [12, 13, 14, 15], "13": [12, 13, 14, 15] }
 }
 ```
 
 Grouped media and grouped text answers use the same additive `answers` and
-`candidates` shape. Sequences post their server-validated `rail` or recitation
-fields; the answer path records that context in history.
+`candidates` shape. Typed modes send raw strings; click, choice, and match
+modes send selected question ids when available. Sequences post their
+server-validated `rail` or recitation fields; typed sequence items may send
+`text` without a resolved position, and the backend resolves it against
+candidate labels and aliases.
+
+Media's reverse QCM is `multiple_choice_media`: the displayed label is the
+prompt and the learner selects one of four media options, including audio
+players. `multiple_choice_image` is accepted only as a legacy request value and
+is normalized before scheduling metadata is written.
+
+An opted-in text group may receive `type_reverse`. It displays each stored
+answer as the cue and grades the typed original `question`; its answer event
+therefore records `direction: "answer_to_prompt"` and that original question as
+the expected value. The group must have complete pairs and unique normalized
+answer cues.
 
 Timeline review posts one guess per atomic timeline question:
 
@@ -123,6 +146,11 @@ Every scheduling-moving grouped/timeline/sequence answer writes legacy flat
 history keys plus a nested `answer_event` snapshot with raw response, resolved
 id when available, expected value, type, `presentation_kind`, mode, direction,
 candidate ids, answer policy, grader/presentation version, and useful context.
+When raw or resolved answer data is present, grouped map/media/text and
+sequence grading is backend-authoritative: a backend miss schedules quality
+`0`, while a backend hit keeps the learner's valid quality choice or defaults
+to `2`. Older clients that omit answer data still use the legacy client-graded
+quality path and are marked as such in `answer_event.context`.
 
 ## Frontend Session Behavior
 
@@ -173,7 +201,7 @@ Settings and rebalancing endpoints:
 - Keep runtime grouping explicit in backend services/serializers.
 - Add new types only through the type contract registry in
   `backend/app/services/type_contracts.py`, with exhaustive tests for required
-  consumers.
+  consumers, default answer policy, and matching authority.
 - Use joined or bulk queries to avoid N+1 work.
 - Keep progress atomic even when multiple items are answered from one screen.
 - Keep timeline grading and date normalization on the backend authoritative.

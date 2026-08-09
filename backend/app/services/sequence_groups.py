@@ -14,6 +14,7 @@ from .sequence_order import (
     sequence_order_settings
 )
 from .sequence_modes import merge_sequence_review_goal
+from .answer_policy import merge_answer_policy
 
 
 def derive_sequence_group_tags(questions):
@@ -140,6 +141,13 @@ def save_sequence_group_items(db, group_id: int, payload):
             group.data = merge_sequence_review_goal(
                 group.data,
                 group_updates.get("review_goal")
+            )
+
+        if "answer_policy" in group_updates:
+            group.data = merge_answer_policy(
+                group.data,
+                group_updates.get("answer_policy"),
+                type_q="sequence"
             )
 
     order = sequence_order_settings(group)
@@ -321,6 +329,7 @@ def save_sequence_group_items(db, group_id: int, payload):
             # The editor needs its order setting echoed back, or it cannot tell
             # a save succeeded and would re-enable manual reordering.
             "data": group.data or {},
+            "answer_policy": (group.data or {}).get("answer_policy"),
             "question_count": question_count
         },
         "items": [

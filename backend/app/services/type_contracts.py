@@ -5,6 +5,7 @@ from .image_modes import IMAGE_MODES
 from .map_modes import MAP_MODES
 from .sequence_modes import SEQUENCE_MODES
 from .text_modes import TEXT_MODES
+from .answer_policy import ANSWER_POLICY_PRESET_RELAXED
 
 
 QuestionGrouping = Literal["required", "optional", "forbidden"]
@@ -35,6 +36,8 @@ class QuestionTypeContract:
     modes: tuple[str, ...]
     history_key: str | None
     answer_grader: str
+    default_answer_policy: str
+    matching_authority: str
     training_support: str
     retry_shape: str
     manage_editor: str
@@ -50,6 +53,8 @@ class GroupTypeContract:
     runtime_presentation: str
     modes: tuple[str, ...]
     history_key: str | None
+    default_answer_policy: str
+    matching_authority: str
     training_support: str
     retry_shape: str
     manage_editor: str
@@ -66,6 +71,8 @@ QUESTION_TYPE_CONTRACTS = {
         modes=TEXT_MODES,
         history_key="text_mode",
         answer_grader="routers.review.apply_answer_batch",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend when raw answers are present; self-graded single cards",
         training_support="single cards and text groups",
         retry_shape="single_card or text_group",
         manage_editor="TextQuestionEditor/TextGroupEditor",
@@ -81,6 +88,8 @@ QUESTION_TYPE_CONTRACTS = {
         modes=MAP_MODES,
         history_key="map_mode",
         answer_grader="routers.review.apply_answer_batch",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend when raw/resolved answers are present",
         training_support="map group",
         retry_shape="map_group",
         manage_editor="CreateMapGroupEditor/Map zone editor",
@@ -96,6 +105,8 @@ QUESTION_TYPE_CONTRACTS = {
         modes=("event_to_date",),
         history_key=None,
         answer_grader="timeline.grade_timeline_answer",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend date grader",
         training_support="timeline items",
         retry_shape="timeline_group",
         manage_editor="TimelineQuestionEditor",
@@ -111,6 +122,8 @@ QUESTION_TYPE_CONTRACTS = {
         modes=IMAGE_MODES,
         history_key="image_mode",
         answer_grader="routers.review.apply_answer_batch",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend when raw/resolved answers are present",
         training_support="single cards and media groups",
         retry_shape="single_card or media_group",
         manage_editor="MediaGroupEditor/media fields",
@@ -126,6 +139,8 @@ QUESTION_TYPE_CONTRACTS = {
         modes=SEQUENCE_MODES,
         history_key="sequence_mode",
         answer_grader="sequence_answers.grade_sequence_answer",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend",
         training_support="sequence group",
         retry_shape="sequence_group",
         manage_editor="SequenceGroupEditor",
@@ -143,6 +158,8 @@ GROUP_TYPE_CONTRACTS = {
         runtime_presentation=PRESENTATION_MAP_GROUP,
         modes=MAP_MODES,
         history_key="map_mode",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend when raw/resolved answers are present",
         training_support="supported",
         retry_shape="map_group",
         manage_editor="CreateMapGroupEditor",
@@ -155,6 +172,8 @@ GROUP_TYPE_CONTRACTS = {
         runtime_presentation=PRESENTATION_MEDIA_GROUP,
         modes=IMAGE_MODES,
         history_key="image_mode",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend when raw/resolved answers are present",
         training_support="supported",
         retry_shape="media_group",
         manage_editor="MediaGroupEditor",
@@ -167,6 +186,8 @@ GROUP_TYPE_CONTRACTS = {
         runtime_presentation=PRESENTATION_TEXT_GROUP,
         modes=TEXT_MODES,
         history_key="text_mode",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend when raw/resolved answers are present",
         training_support="supported",
         retry_shape="text_group",
         manage_editor="TextGroupEditor",
@@ -179,6 +200,8 @@ GROUP_TYPE_CONTRACTS = {
         runtime_presentation=PRESENTATION_SEQUENCE_GROUP,
         modes=SEQUENCE_MODES,
         history_key="sequence_mode",
+        default_answer_policy=ANSWER_POLICY_PRESET_RELAXED,
+        matching_authority="backend",
         training_support="supported",
         retry_shape="sequence_group",
         manage_editor="SequenceGroupEditor",

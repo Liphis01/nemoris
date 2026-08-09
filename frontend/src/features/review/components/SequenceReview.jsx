@@ -9,6 +9,7 @@ import {
 } from "../sequenceModes";
 import SequenceRail from "./SequenceRail";
 import { isAnswerable, qualityColors } from "../sequenceRail";
+import { matchesAnswerValue } from "../answerPolicy";
 
 const CHOICE_COUNT = 4;
 
@@ -47,25 +48,9 @@ const buttonStyle = {
   padding: "10px 16px"
 };
 
-function normalize(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
-
 function matchCandidate(candidates, guess) {
-  const normalizedGuess = normalize(guess);
-
-  if (!normalizedGuess) return null;
-
   return (
-    candidates.find(candidate =>
-      [candidate.answer, ...(candidate.aliases || [])].some(
-        label => normalize(label) === normalizedGuess
-      )
-    ) || null
+    candidates.find(candidate => matchesAnswerValue(candidate, guess)) || null
   );
 }
 

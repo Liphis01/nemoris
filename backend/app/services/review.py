@@ -39,6 +39,7 @@ from .text_modes import (
     choose_text_review_mode,
     text_mode_difficulty
 )
+from .text_groups import text_group_reverse_mode_enabled
 from .sequence import dense_positions
 from .sequence_rail import (
     build_rail,
@@ -585,7 +586,11 @@ def _serialize_review_items(
             mode = choose_text_review_mode(
                 chunk_questions,
                 active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions)
+                multiple_choice_context_count=len(choice_context_questions),
+                reverse_mode_enabled=text_group_reverse_mode_enabled(
+                    group,
+                    all_group_questions
+                )
             )
             context_questions = (
                 choice_context_questions

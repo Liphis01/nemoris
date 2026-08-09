@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 from ..models import Question, QuestionGroup
 from ..serializers import serialize_manage_question, serialize_progress
 from .tag_hierarchy import ensure_tag_ids
+from .answer_policy import merge_answer_policy
 
 
 def merge_tags(*tag_lists):
@@ -103,6 +104,13 @@ def save_map_group_zones(db, group_id: int, payload):
         if "tags" in group_updates:
             shared_tags_provided = True
             shared_tags = ensure_tag_ids(db, group_updates.get("tags"))
+
+        if "answer_policy" in group_updates:
+            group.data = merge_answer_policy(
+                group.data,
+                group_updates.get("answer_policy"),
+                type_q="map"
+            )
 
     existing_zones = (
         db.query(Question)
@@ -243,6 +251,7 @@ def save_map_group_zones(db, group_id: int, payload):
             "name": group.name,
             "media": group.media,
             "data": group.data or {},
+            "answer_policy": (group.data or {}).get("answer_policy"),
             "tags": response_tags,
             "question_count": question_count
         },

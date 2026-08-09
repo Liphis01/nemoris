@@ -280,7 +280,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
             0.55
         )
         self.assertEqual(
-            image_mode_difficulty("multiple_choice_image", 20),
+            image_mode_difficulty("multiple_choice_media", 20),
             0.55
         )
 
@@ -313,7 +313,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
         self.assertNotIn(
             choose_image_review_mode([hard], context[:4], rng=FixedRandom(0)),
-            {"multiple_choice_label", "multiple_choice_image"}
+            {"multiple_choice_label", "multiple_choice_media"}
         )
         self.assertEqual(
             choose_image_review_mode(
@@ -351,7 +351,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
         self.assertGreater(
             support_modes["multiple_choice_label"] +
-            support_modes["multiple_choice_image"] +
+            support_modes["multiple_choice_media"] +
             support_modes["click_prompt"],
             260
         )

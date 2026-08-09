@@ -11,13 +11,17 @@ from .mode_selection import (
 IMAGE_MODE_TYPE_ALL = "type_all"
 IMAGE_MODE_TYPE_PROMPT = "type_prompt"
 IMAGE_MODE_MULTIPLE_CHOICE_LABEL = "multiple_choice_label"
-IMAGE_MODE_MULTIPLE_CHOICE_IMAGE = "multiple_choice_image"
+IMAGE_MODE_MULTIPLE_CHOICE_MEDIA = "multiple_choice_media"
+LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE = "multiple_choice_image"
+# Keep imports from pre-M2.1 callers working while every newly emitted mode uses
+# the media-neutral identifier.
+IMAGE_MODE_MULTIPLE_CHOICE_IMAGE = IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 
 IMAGE_MODES = (
     IMAGE_MODE_TYPE_ALL,
     IMAGE_MODE_TYPE_PROMPT,
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-    IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 )
 DEFAULT_IMAGE_MODE = IMAGE_MODE_TYPE_PROMPT
 IMAGE_TYPE_ALL_DIFFICULTY = 1.0
@@ -26,21 +30,31 @@ IMAGE_MULTIPLE_CHOICE_DIFFICULTY = 0.55
 
 IMAGE_MULTIPLE_CHOICE_MODES = {
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
-    IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+    IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 }
 
-# Audio is heard one clip at a time rather than scanned in a grid, so only the
-# prompt->name modes make sense for an audio-only media group.
+# Audio is heard one clip at a time, but the reversed QCM remains valid: four
+# numbered players make its target explicit without a visual grid.
 IMAGE_AUDIO_MODES = (
     IMAGE_MODE_TYPE_PROMPT,
-    IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+    IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+    IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 )
 
 
-def normalize_image_mode(mode):
+def canonical_image_mode(mode):
     value = str(mode or "").strip()
 
-    return value if value in IMAGE_MODES else DEFAULT_IMAGE_MODE
+    if value == LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE:
+        return IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
+
+    return value if value in IMAGE_MODES else None
+
+
+def normalize_image_mode(mode):
+    value = canonical_image_mode(mode)
+
+    return value if value is not None else DEFAULT_IMAGE_MODE
 
 
 def _tuned_number(tuning, key, default):
@@ -109,7 +123,7 @@ def choose_image_review_mode(
     if support_count / len(due_questions) >= 0.55:
         base_scores = {
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 4.0,
-            IMAGE_MODE_MULTIPLE_CHOICE_IMAGE: 3.8,
+            IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 3.8,
             IMAGE_MODE_TYPE_PROMPT: 2.1,
             IMAGE_MODE_TYPE_ALL: 0.8
         }
@@ -118,13 +132,13 @@ def choose_image_review_mode(
             IMAGE_MODE_TYPE_PROMPT: 3.6,
             IMAGE_MODE_TYPE_ALL: 3.1,
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 1.1,
-            IMAGE_MODE_MULTIPLE_CHOICE_IMAGE: 1.0
+            IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 1.0
         }
     else:
         base_scores = {
             IMAGE_MODE_TYPE_PROMPT: 3.0,
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 2.2,
-            IMAGE_MODE_MULTIPLE_CHOICE_IMAGE: 2.1,
+            IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 2.1,
             IMAGE_MODE_TYPE_ALL: 1.4
         }
 
@@ -132,11 +146,17 @@ def choose_image_review_mode(
 
     if context_count <= 4:
         scores[IMAGE_MODE_MULTIPLE_CHOICE_LABEL] -= 0.4
-        scores[IMAGE_MODE_MULTIPLE_CHOICE_IMAGE] -= 0.4
+        scores[IMAGE_MODE_MULTIPLE_CHOICE_MEDIA] -= 0.4
     elif context_count >= 12:
-        scores[IMAGE_MODE_MULTIPLE_CHOICE_IMAGE] += 0.2
+        scores[IMAGE_MODE_MULTIPLE_CHOICE_MEDIA] += 0.2
 
-    apply_recent_mode_penalty(scores, due_questions, "image_mode", IMAGE_MODES)
+    apply_recent_mode_penalty(
+        scores,
+        due_questions,
+        "image_mode",
+        IMAGE_MODES,
+        mode_normalizer=canonical_image_mode
+    )
 
     for mode in discouraged_modes or []:
         if mode in IMAGE_MODES:
@@ -144,7 +164,7 @@ def choose_image_review_mode(
 
     tie_order = {
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 0,
-        IMAGE_MODE_MULTIPLE_CHOICE_IMAGE: 1,
+        IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 1,
         IMAGE_MODE_TYPE_PROMPT: 2,
         IMAGE_MODE_TYPE_ALL: 3
     }

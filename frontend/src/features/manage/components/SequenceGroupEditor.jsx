@@ -28,6 +28,8 @@ import {
   QuestionEditorField,
   TagEditor
 } from "./QuestionEditorPrimitives";
+import AnswerPolicyControl from "./AnswerPolicyControl";
+import { answerPolicyFromGroup } from "./answerPolicyControlUtils";
 
 let tempItemCounter = 0;
 
@@ -76,7 +78,8 @@ function buildSignature(group, tags, items, deletedItemIds) {
       // Without this the Save button never enables for a pure order-setting
       // change and the edit is silently lost.
       order: normalizeOrder(group?.data?.order),
-      reviewGoal: normalizeReviewGoal(group?.data?.review_goal)
+      reviewGoal: normalizeReviewGoal(group?.data?.review_goal),
+      answerPolicy: answerPolicyFromGroup(group)
     },
     // The array order IS the content here, so the signature must be
     // order-sensitive: a pure reorder is an unsaved change like any other.
@@ -330,6 +333,17 @@ export default function SequenceGroupEditor({
       data: {
         ...((prev || {}).data || {}),
         review_goal: normalizeReviewGoal(value)
+      }
+    }));
+  }, []);
+
+  const updateAnswerPolicy = useCallback((policy) => {
+    setEditableGroup(prev => ({
+      ...(prev || {}),
+      answer_policy: policy,
+      data: {
+        ...((prev || {}).data || {}),
+        answer_policy: policy
       }
     }));
   }, []);
@@ -620,7 +634,8 @@ export default function SequenceGroupEditor({
           name: nameForSave,
           tags: sharedTags || [],
           order,
-          review_goal: reviewGoal
+          review_goal: reviewGoal,
+          answer_policy: answerPolicyFromGroup(editableGroup)
         },
         items: items.map(serializeItem),
         deleted_item_ids: deletedItemIds
@@ -763,6 +778,11 @@ export default function SequenceGroupEditor({
           chipStyle={sequenceGroupHeaderTagChipStyle}
           inputOverrideStyle={compactHeaderInputStyle}
           labelOverrideStyle={{ fontSize: "12px" }}
+        />
+
+        <AnswerPolicyControl
+          policy={answerPolicyFromGroup(editableGroup)}
+          onChange={updateAnswerPolicy}
         />
 
         <div style={{ alignItems: "center", display: "flex", gap: "8px" }}>

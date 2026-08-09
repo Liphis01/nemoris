@@ -65,7 +65,13 @@ def question_mode_affinity_counts(questions):
     return counts
 
 
-def recent_mode_counts(questions, history_key, valid_modes, limit=RECENT_MODE_LOOKBACK):
+def recent_mode_counts(
+    questions,
+    history_key,
+    valid_modes,
+    limit=RECENT_MODE_LOOKBACK,
+    mode_normalizer=None
+):
     counts = {}
 
     for question in questions or []:
@@ -78,6 +84,9 @@ def recent_mode_counts(questions, history_key, valid_modes, limit=RECENT_MODE_LO
                 continue
 
             mode = entry.get(history_key)
+
+            if mode_normalizer:
+                mode = mode_normalizer(mode)
 
             if mode in valid_modes:
                 counts[mode] = counts.get(mode, 0) + 1
@@ -95,14 +104,21 @@ def apply_recent_mode_penalty(
     history_key,
     valid_modes,
     weight=RECENT_MODE_WEIGHT,
-    limit=RECENT_MODE_LOOKBACK
+    limit=RECENT_MODE_LOOKBACK,
+    mode_normalizer=None
 ):
     questions = list(questions or [])
 
     if not questions:
         return scores
 
-    counts = recent_mode_counts(questions, history_key, valid_modes, limit=limit)
+    counts = recent_mode_counts(
+        questions,
+        history_key,
+        valid_modes,
+        limit=limit,
+        mode_normalizer=mode_normalizer
+    )
 
     # Each question contributes at most `limit` sightings, so dividing by the
     # due-set size keeps the penalty an average-per-question share regardless

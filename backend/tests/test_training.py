@@ -242,13 +242,13 @@ class TrainingTests(unittest.TestCase):
             self.db,
             scope_type="group",
             group_id=group.id,
-            image_mode="multiple_choice_image"
+            image_mode="multiple_choice_media"
         )
 
         self.assertEqual(len(response), 1)
         self.assertEqual(response[0]["type_q"], "media")
         self.assertEqual(response[0]["group_id"], group.id)
-        self.assertEqual(response[0]["mode"], "multiple_choice_image")
+        self.assertEqual(response[0]["mode"], "multiple_choice_media")
         self.assertEqual(len(response[0]["items"]), 2)
         self.assertEqual(len(response[0]["context_items"]), 2)
         self.assertEqual(
@@ -604,7 +604,7 @@ class TrainingTests(unittest.TestCase):
                 9000,
                 2,
                 2,
-                mode="multiple_choice_image"
+                mode="multiple_choice_media"
             )
         )
         type_prompt = record_training_attempt(
@@ -620,7 +620,7 @@ class TrainingTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            choices["training_records"]["multiple_choice_image"]["best_time_ms"],
+            choices["training_records"]["multiple_choice_media"]["best_time_ms"],
             9000
         )
         self.assertEqual(
@@ -628,7 +628,7 @@ class TrainingTests(unittest.TestCase):
             50
         )
         self.assertEqual(
-            group.data["training_records"]["multiple_choice_image"]["best_time_ms"],
+            group.data["training_records"]["multiple_choice_media"]["best_time_ms"],
             9000
         )
         self.assertEqual(

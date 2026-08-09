@@ -13,6 +13,7 @@ import {
   IMAGE_MODE_TYPE_ALL,
   IMAGE_MODE_TYPE_PROMPT
 } from "../imageModes";
+import { ANSWER_POLICY_EXACT } from "../answerPolicy";
 
 vi.mock("../../../api/review", () => ({
   sendMediaAnswer: vi.fn()
@@ -61,6 +62,13 @@ describe("image review helpers", () => {
       imageItem(1, "Côte d'Ivoire", ["Ivory-Coast"]),
       "ivory coast"
     )).toBe(true);
+  });
+
+  it("honors exact image answer policy", () => {
+    expect(matchesImageAnswer({
+      ...imageItem(1, "État"),
+      answer_policy: ANSWER_POLICY_EXACT
+    }, "etat")).toBe(false);
   });
 
   it("always defaults successful answers to quality 2", () => {
@@ -536,7 +544,7 @@ describe("useMediaReview", () => {
         },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         5,
-        { [prompt.question_id]: prompt.label },
+        { [prompt.question_id]: prompt.question_id },
         expect.any(Object)
       );
       expect(onComplete).toHaveBeenCalledWith([]);
@@ -601,7 +609,7 @@ describe("useMediaReview", () => {
         { [prompt.question_id]: 1 },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         contextItems.length,
-        { [prompt.question_id]: prompt.label },
+        { [prompt.question_id]: prompt.question_id },
         expect.any(Object)
       );
       expect(onComplete).toHaveBeenCalledWith([]);
@@ -649,13 +657,13 @@ describe("useMediaReview", () => {
       await result.current.sendResult();
     });
 
-    // The wrong pick is the confusion signal worth recording, so it is the
-    // label that was chosen — not the correct one — that gets sent.
+    // The wrong pick is the confusion signal worth recording, so the selected
+    // item id is sent rather than the correct one.
     expect(submitAnswer).toHaveBeenCalledWith(
       { [prompt.question_id]: 0 },
       IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
       contextItems.length,
-      { [prompt.question_id]: wrong.label },
+      { [prompt.question_id]: wrong.question_id },
       expect.any(Object)
     );
     expect(onComplete).toHaveBeenCalledWith([prompt.question_id]);

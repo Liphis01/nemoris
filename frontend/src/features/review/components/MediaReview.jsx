@@ -1083,7 +1083,7 @@ export default function MediaReview({
   const tileMinHeight = fillAvailableHeight ? "212px" : "250px";
   const feedbackCopy = feedbackTone === "incorrect"
     ? answersByClick
-      ? "Mauvaise image."
+      ? "Mauvais média."
       : showLabelChoices
         ? "Mauvais choix."
         : "Réponse incorrecte."
@@ -1092,7 +1092,7 @@ export default function MediaReview({
       : normalizedMode === IMAGE_MODE_TYPE_ALL
         ? "Tape les réponses."
         : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-          ? "Choisis la bonne image."
+          ? "Choisis le bon média."
           : normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
             ? "Choisis le bon nom."
             : "Tape le nom de l'image.";
@@ -2881,8 +2881,8 @@ export default function MediaReview({
                 }}
               >
                 {normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
-                  ? "Image demandée"
-                  : "Image surlignée"}
+                  ? "Média demandé"
+                  : "Média surligné"}
               </div>
             )}
             <div

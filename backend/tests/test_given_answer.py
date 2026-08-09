@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Progress, Question, ReviewLog
+from app.models import Progress, Question, QuestionGroup, ReviewLog
 from app.routers.review import answer_map, answer_text, answer_timeline
 from app.schemas import (
     MapAnswerRequest,
@@ -28,14 +28,15 @@ class GivenAnswerTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def add_question(self, question_id, type_q, data=None):
+    def add_question(self, question_id, type_q, data=None, answer=None, group=None):
         question = Question(
             id=question_id,
             type_q=type_q,
             question=f"Question {question_id}",
-            answer=f"Answer {question_id}",
+            answer=answer or f"Answer {question_id}",
             tags=[],
-            data=data or {}
+            data=data or {},
+            group=group
         )
         self.db.add(question)
         self.db.add(Progress(
@@ -120,6 +121,69 @@ class GivenAnswerTests(unittest.TestCase):
         )
 
         self.assertEqual(self.latest_entry(1)["answer"], "stalagmite")
+
+    def test_backend_downgrades_raw_text_miss(self):
+        self.add_question(1, "text", answer="stalagmite")
+        self.db.commit()
+
+        answer_text(
+            TextAnswerRequest(items={1: 3}, answers={1: "stalactite"}),
+            db=self.db
+        )
+
+        entry = self.latest_entry(1)
+        self.assertEqual(entry["quality"], 0)
+        self.assertEqual(entry["raw_quality"], 3)
+        self.assertEqual(entry["effective_quality"], 0)
+        self.assertFalse(entry["answer_event"]["context"]["backend_matched"])
+        self.assertEqual(
+            entry["answer_event"]["context"]["grading_authority"],
+            "backend"
+        )
+
+    def test_legacy_text_answer_keeps_client_quality(self):
+        self.add_question(1, "text", answer="stalagmite")
+        self.db.commit()
+
+        answer_text(TextAnswerRequest(items={1: 3}), db=self.db)
+
+        entry = self.latest_entry(1)
+        self.assertEqual(entry["quality"], 3)
+        self.assertEqual(
+            entry["answer_event"]["context"]["grading_authority"],
+            "legacy_client"
+        )
+
+    def test_group_exact_policy_is_recorded_and_applied(self):
+        group = QuestionGroup(
+            type_group="text",
+            name="Orthographe",
+            data={
+                "answer_policy": {
+                    "preset": "exact",
+                    "case": "strict",
+                    "diacritics": "strict",
+                    "spacing": "strict",
+                    "punctuation": "strict",
+                    "fuzzy": "none"
+                }
+            }
+        )
+        self.db.add(group)
+        self.add_question(1, "text", answer="État", group=group)
+        self.db.commit()
+
+        answer_text(
+            TextAnswerRequest(items={1: 2}, answers={1: "etat"}),
+            db=self.db
+        )
+
+        entry = self.latest_entry(1)
+        self.assertEqual(entry["quality"], 0)
+        self.assertEqual(
+            entry["answer_event"]["answer_policy"]["preset"],
+            "exact"
+        )
 
     def test_timeline_stores_the_placed_date(self):
         self.add_question(

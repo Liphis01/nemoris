@@ -22,6 +22,9 @@ editors, and quick grouped-content inspection.
 - `QuestionGroup` stores presentation metadata only: `type_group`, `name`, `media`, `data`.
 - No group-level progress. Do not create database question types like `map_group` or `timeline_group`.
 - Prefer `Question.data` or `QuestionGroup.data` for type-specific metadata before adding SQL columns.
+- Answer policy overrides live in `QuestionGroup.data.answer_policy` or
+  `Question.data.answer_policy`; default matching remains relaxed unless an
+  explicit exact policy is set.
 - Current persisted question types and group types must be declared in
   `backend/app/services/type_contracts.py`. Add or change a type only by
   updating that registry and its exhaustive tests.
@@ -31,6 +34,11 @@ editors, and quick grouped-content inspection.
 - `text`: normal prompt/answer review.
 - `map`: one SVG zone per `Question`; map group metadata is `QuestionGroup(type_group="map")`. Zone `code` and `aliases` live in `question.data`.
 - `timeline`: one date item per `Question`; it must not belong to a group. `data.timeline` has `kind` (`point` or `interval`), `start`, optional `end`, and precision `year`/`month`/`day`. Year 0 is invalid; BC years are negative.
+- `media`: one media card per `Question`; grouped media review uses
+  `QuestionGroup(type_group="media")` while progress stays per question.
+- `sequence`: one ordered item per `Question` in
+  `QuestionGroup(type_group="sequence")`; ranks live in `Question.data.position`
+  or are derived from group order metadata at save time.
 
 Runtime grouped objects may exist for review UI payloads, but they are never
 persisted as questions.
@@ -47,6 +55,10 @@ persisted as questions.
   keys and also write nested `answer_event` metadata with raw response,
   expected value, candidate ids, mode, direction, policy, and presentation
   context.
+- When grouped map/media/text or sequence submits include raw strings or
+  selected ids, backend matching is authoritative for scheduling. Legacy
+  client-quality submits remain accepted and are marked as legacy in
+  `answer_event.context`.
 - Text failures, failed map zones, failed timeline items, grouped media/text
   misses, and sequence misses are requeued within the frontend session.
 - Scheduling lives in `scheduler.py` and `services/progress.py`: keep FSRS-inspired intervals, history, load smoothing, type mixing, and `catchup_daily_target` rebalancing behavior intact.
@@ -62,7 +74,8 @@ persisted as questions.
 
 ## Map And Timeline UX
 
-- Map answer matching ignores case, accents, and hyphen/space differences.
+- Relaxed answer matching ignores case, accents, and hyphen/space differences;
+  exact policy is available for orthography-sensitive groups.
 - Map review sends one quality per zone; recap appears after all zones are found and keeps per-zone progress independent.
 - Keep map input focus stable around buttons, and prevent global review shortcuts from leaking into map/timeline/input fields.
 - Timeline date math must stay consistent between `backend/app/services/timeline.py` and `frontend/src/features/timeline/timelineUtils.js`.

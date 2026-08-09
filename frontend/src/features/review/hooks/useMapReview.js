@@ -8,19 +8,9 @@ import {
   MAP_MODE_TYPE_PROMPT,
   normalizeMapMode
 } from "../mapModes";
+import { matchesAnswerValue } from "../answerPolicy";
 
 export const MAP_RECAP_UNANSWERED = "unanswered";
-
-
-function normalize(str = "") {
-  // Match user input without case, accent, or hyphen/space sensitivity.
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .trim()
-    .replace(/[-\s]+/g, " ");
-}
 
 
 function getHistoryStats(item) {
@@ -226,19 +216,8 @@ function compareActiveRecapSort(a, b, recapSort, qualityByQuestionId) {
 }
 
 
-function answerValues(item) {
-  const aliases = item.aliases || item.data?.aliases || [];
-
-  return [item.label, ...aliases].filter(Boolean);
-}
-
-
 function itemMatchesInput(item, input) {
-  const normalizedInput = normalize(input);
-
-  if (!normalizedInput) return false;
-
-  return answerValues(item).some(value => normalize(value) === normalizedInput);
+  return matchesAnswerValue(item, input);
 }
 
 
@@ -533,23 +512,6 @@ export function useMapReview(
     },
     [isPromptMode, reviewKey, reviewZones]
   );
-
-  const zoneByAnswer = useMemo(() => {
-    // Build a normalized lookup from every label and alias to its zone item.
-    const lookup = new Map();
-
-    reviewZones.forEach(item => {
-      answerValues(item).forEach(value => {
-        const normalized = normalize(value);
-
-        if (normalized && !lookup.has(normalized)) {
-          lookup.set(normalized, item);
-        }
-      });
-    });
-
-    return lookup;
-  }, [reviewZones]);
 
   const foundQuestionIdSet = useMemo(
     () => new Set(foundQuestionIds),
@@ -853,7 +815,7 @@ export function useMapReview(
 
     if (mode !== MAP_MODE_TYPE_ALL) return;
 
-    const match = zoneByAnswer.get(normalize(input));
+    const match = reviewZones.find(item => itemMatchesInput(item, input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match, input);
@@ -871,7 +833,7 @@ export function useMapReview(
     }
 
     if (currentPromptItem.code === code) {
-      markFound(currentPromptItem, code);
+      markFound(currentPromptItem, currentPromptItem.question_id);
       return;
     }
 
@@ -888,7 +850,7 @@ export function useMapReview(
       id: Date.now(),
       flashCodes: [code]
     });
-    markMissed(currentPromptItem, code);
+    markMissed(currentPromptItem, clickedItem.question_id);
   }
 
   function handleChoiceSelect(questionId) {
@@ -901,9 +863,6 @@ export function useMapReview(
     }
 
     const isCorrect = currentPromptItem.question_id === questionId;
-    const selectedOption = choiceOptions.find(
-      option => option.question_id === questionId
-    );
     setCandidateIdsByQuestionId(prev => ({
       ...prev,
       [currentPromptItem.question_id]: choiceOptions
@@ -921,9 +880,9 @@ export function useMapReview(
     });
 
     if (isCorrect) {
-      markFound(currentPromptItem, selectedOption?.label ?? questionId);
+      markFound(currentPromptItem, questionId);
     } else {
-      markMissed(currentPromptItem, selectedOption?.label ?? questionId);
+      markMissed(currentPromptItem, questionId);
     }
   }
 

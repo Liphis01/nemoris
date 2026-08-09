@@ -28,6 +28,7 @@ from .services.type_contracts import (
     PRESENTATION_SINGLE_CARD,
     PRESENTATION_TEXT_GROUP
 )
+from .services.answer_policy import effective_answer_policy
 
 
 def serialize_progress(progress, today=None):
@@ -102,6 +103,9 @@ def serialize_manage_question(question):
         "tags": question.tags or [],
         "data": question.data or {},
         "group_id": question.group_id,
+
+        "answer_policy": effective_answer_policy(question=question),
+
         "suspended": bool(question.suspended),
         "progress": serialize_progress(question.progress),
         "group":
@@ -154,6 +158,8 @@ def serialize_review_question_item(question):
 
         "answer_media": question.answer_media,
 
+        "answer_policy": effective_answer_policy(question=question),
+
         "tags": question.tags or [],
 
         "progress": serialize_progress(
@@ -185,6 +191,8 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
 
         "map": (group.data or {}).get("map"),
 
+        "answer_policy": effective_answer_policy(group=group, type_q="map"),
+
         "tags": tags or [],
 
         "mode": normalize_map_mode(mode or DEFAULT_MAP_MODE),
@@ -211,6 +219,8 @@ def serialize_map_review_zone(
         "label": question.answer,
 
         "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "answer_policy": effective_answer_policy(question=question),
 
         "progress": serialize_progress(
             question.progress
@@ -243,6 +253,8 @@ def serialize_media_review_group(group, tags=None, mode=None, context_items=None
 
         "tags": tags or [],
 
+        "answer_policy": effective_answer_policy(group=group, type_q="media"),
+
         "mode": normalize_image_mode(mode or DEFAULT_IMAGE_MODE),
 
         "context_items": context_items or [],
@@ -272,6 +284,8 @@ def serialize_media_review_item(
         "tags": question.tags or [],
 
         "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "answer_policy": effective_answer_policy(question=question),
 
         "progress": serialize_progress(
             question.progress
@@ -304,6 +318,8 @@ def serialize_text_review_group(group, tags=None, mode=None, context_items=None)
 
         "tags": tags or [],
 
+        "answer_policy": effective_answer_policy(group=group, type_q="text"),
+
         "mode": normalize_text_mode(mode or DEFAULT_TEXT_MODE),
 
         "context_items": context_items or [],
@@ -329,6 +345,8 @@ def serialize_text_review_item(
         "tags": question.tags or [],
 
         "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "answer_policy": effective_answer_policy(question=question),
 
         "progress": serialize_progress(
             question.progress
@@ -379,6 +397,8 @@ def serialize_sequence_review_group(
 
         "review_goal": sequence_review_goal(group),
 
+        "answer_policy": effective_answer_policy(group=group, type_q="sequence"),
+
         "length": length,
 
         "rail": rail or [],
@@ -411,6 +431,8 @@ def serialize_sequence_review_item(
         "tags": question.tags or [],
 
         "aliases": question.data.get("aliases", []) if question.data else [],
+
+        "answer_policy": effective_answer_policy(question=question),
 
         "progress": serialize_progress(
             question.progress

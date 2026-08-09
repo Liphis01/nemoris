@@ -557,7 +557,7 @@ describe("useMapReview recap sorting", () => {
         { [target.question_id]: 1 },
         "multiple_choice",
         contextItems.length,
-        { [target.question_id]: target.label },
+        { [target.question_id]: target.question_id },
         expect.any(Object)
       );
       expect(onComplete).toHaveBeenCalledWith([]);
@@ -605,13 +605,13 @@ describe("useMapReview recap sorting", () => {
       await result.current.sendResult();
     });
 
-    // The wrong pick is the confusion signal worth recording, so it is the
-    // label that was chosen — not the correct one — that gets sent.
+    // The wrong pick is the confusion signal worth recording, so the selected
+    // zone id is sent rather than the correct one.
     expect(submitAnswer).toHaveBeenCalledWith(
       { [target.question_id]: 0 },
       "multiple_choice",
       contextItems.length,
-      { [target.question_id]: wrong.label },
+      { [target.question_id]: wrong.question_id },
       expect.any(Object)
     );
     expect(onComplete).toHaveBeenCalledWith([target.question_id]);
@@ -660,7 +660,7 @@ describe("useMapReview recap sorting", () => {
 
       expect(submitAnswer).toHaveBeenCalledWith({
         [target.question_id]: 2
-      }, "multiple_choice", 5, { [target.question_id]: target.label }, expect.any(Object));
+      }, "multiple_choice", 5, { [target.question_id]: target.question_id }, expect.any(Object));
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
       randomSpy.mockRestore();

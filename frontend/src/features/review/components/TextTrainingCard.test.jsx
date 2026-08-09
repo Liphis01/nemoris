@@ -5,6 +5,7 @@ import {
   matchesTextTrainingAnswer,
   normalizeTextTrainingAnswer
 } from "../textTrainingUtils";
+import { ANSWER_POLICY_EXACT } from "../answerPolicy";
 
 
 const question = {
@@ -42,6 +43,15 @@ describe("TextTrainingCard", () => {
     expect(normalizeTextTrainingAnswer(" Côte-d Ivoire ")).toBe("cote d ivoire");
     expect(matchesTextTrainingAnswer(question, "ville-lumiere")).toBe(true);
     expect(matchesTextTrainingAnswer(question, "Lyon")).toBe(false);
+  });
+
+  it("honors exact answer policy", () => {
+    expect(matchesTextTrainingAnswer({
+      ...question,
+      answer: "État",
+      aliases: [],
+      answer_policy: ANSWER_POLICY_EXACT
+    }, "etat")).toBe(false);
   });
 
   it("advances immediately on a correct answer", () => {

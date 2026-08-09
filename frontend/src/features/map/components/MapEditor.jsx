@@ -17,6 +17,8 @@ import {
   pendingSaveDotStyle,
   pendingSaveButtonStyle
 } from "../../manage/components/QuestionEditorStyles";
+import AnswerPolicyControl from "../../manage/components/AnswerPolicyControl";
+import { answerPolicyFromGroup } from "../../manage/components/answerPolicyControlUtils";
 import MapMediaInput from "./MapMediaInput";
 import SvgMap from "./SvgMap";
 import {
@@ -212,6 +214,14 @@ export default function MapEditor({
       "tags",
       (editableGroup.tags || []).filter(item => item !== tag)
     );
+  }
+
+  function updateAnswerPolicy(policy) {
+    updateGroupField("answer_policy", policy);
+    updateGroupField("data", {
+      ...(editableGroup.data || {}),
+      answer_policy: policy
+    });
   }
 
   function handleHorizontalChipWheel(event) {
@@ -789,6 +799,11 @@ export default function MapEditor({
                 />
               </div>
             </div>
+
+            <AnswerPolicyControl
+              policy={answerPolicyFromGroup(editableGroup)}
+              onChange={updateAnswerPolicy}
+            />
 
           <div
             style={{

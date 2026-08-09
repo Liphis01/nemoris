@@ -18,6 +18,7 @@ import {
   defaultImageMode,
   IMAGE_MODES,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_MULTIPLE_CHOICE_MEDIA,
   IMAGE_MODE_TYPE_PROMPT,
   imageModeDetails,
   imageModeLabels
@@ -25,6 +26,7 @@ import {
 import {
   defaultTextMode,
   TEXT_MODES,
+  TEXT_MODE_TYPE_REVERSE,
   textModeDetails,
   textModeLabels
 } from "../../review/textModes";
@@ -114,6 +116,8 @@ function normalizeText(value) {
 function groupIsAudioOnly(group) {
   // Audio can't be scanned in parallel, so audio-only groups drop the grid modes.
   // Kind is inferred per item from the file extension.
+  if (typeof group?.audio_only === "boolean") return group.audio_only;
+
   const items = group?.questions || group?.items || [];
   const kinds = items
     .map((item) => getMediaKind(item?.media))
@@ -138,7 +142,8 @@ function modeConfigForGroup(group) {
     const modes = audioOnly
       ? IMAGE_MODES.filter((mode) => (
         mode === IMAGE_MODE_TYPE_PROMPT ||
-        mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL
+        mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
+        mode === IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
       ))
       : IMAGE_MODES;
 
@@ -155,7 +160,9 @@ function modeConfigForGroup(group) {
       defaultMode: defaultTextMode,
       details: textModeDetails,
       labels: textModeLabels,
-      modes: TEXT_MODES
+      modes: group?.reverse_mode_enabled
+        ? TEXT_MODES
+        : TEXT_MODES.filter(mode => mode !== TEXT_MODE_TYPE_REVERSE)
     };
   }
 
@@ -218,7 +225,7 @@ function modeGlyph(mode) {
   if (mode === "type_prompt") return "T";
   if (mode === "multiple_choice") return "4";
   if (mode === "multiple_choice_label") return "A4";
-  if (mode === "multiple_choice_image") return "I4";
+  if (mode === "multiple_choice_media") return "M4";
 
   return "?";
 }

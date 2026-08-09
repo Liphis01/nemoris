@@ -815,6 +815,47 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
         self.assertEqual(row.data["answer"], "réponse brute")
 
+    def test_resolves_typed_sequence_answer_on_the_backend(self):
+        group = self.add_group()
+        items = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                question_id=index,
+                reps=2,
+                next_review=date.today()
+            )
+            for index in range(1, 4)
+        ]
+        items[0].data = {"position": 1, "aliases": ["Premier"]}
+        self.db.commit()
+
+        response = answer_sequence(
+            SequenceAnswerRequest(
+                group_id=group.id,
+                items={
+                    1: SequenceAnswerItem(position=None, text="premier")
+                },
+                mode=SEQUENCE_MODE_TYPE_POSITION,
+                context_count=3,
+                candidates={1: [1, 2, 3]}
+            ),
+            db=self.db
+        )
+
+        result = response["results"][0]
+        entry = items[0].progress.history[-1]
+
+        self.assertEqual(result["quality"], 2)
+        self.assertEqual(result["guessed_position"], 1)
+        self.assertEqual(entry["sequence_resolved_position"], 1)
+        self.assertEqual(entry["answer_event"]["resolved_response_id"], 1)
+        self.assertEqual(
+            entry["answer_event"]["answer_policy"]["preset"],
+            "relaxed"
+        )
+
     def test_reorder_difficulty_tracks_the_submitted_pool(self):
         group = self.add_group()
         self.add_item(

@@ -2,7 +2,10 @@ import unittest
 from typing import get_args
 
 from app import schemas
-from app.services.image_modes import IMAGE_MODES
+from app.services.image_modes import (
+    IMAGE_MODES,
+    LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE
+)
 from app.services.map_modes import MAP_MODES
 from app.services.sequence_modes import SEQUENCE_MODES
 from app.services.text_modes import TEXT_MODES
@@ -33,6 +36,8 @@ class TypeContractTests(unittest.TestCase):
             "runtime_presentations",
             "modes",
             "answer_grader",
+            "default_answer_policy",
+            "matching_authority",
             "training_support",
             "retry_shape",
             "manage_editor",
@@ -54,6 +59,8 @@ class TypeContractTests(unittest.TestCase):
             "question_type",
             "runtime_presentation",
             "modes",
+            "default_answer_policy",
+            "matching_authority",
             "training_support",
             "retry_shape",
             "manage_editor",
@@ -81,7 +88,10 @@ class TypeContractTests(unittest.TestCase):
 
     def test_schema_mode_literals_match_mode_modules(self):
         self.assertEqual(set(get_args(schemas.MapMode)), set(MAP_MODES))
-        self.assertEqual(set(get_args(schemas.ImageMode)), set(IMAGE_MODES))
+        self.assertEqual(
+            set(get_args(schemas.ImageMode)),
+            set(IMAGE_MODES) | {LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE}
+        )
         self.assertEqual(set(get_args(schemas.TextMode)), set(TEXT_MODES))
         self.assertEqual(set(get_args(schemas.SequenceMode)), set(SEQUENCE_MODES))
 

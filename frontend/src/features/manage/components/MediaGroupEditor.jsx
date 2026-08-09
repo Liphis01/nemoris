@@ -21,6 +21,8 @@ import {
   QuestionEditorField,
   TagEditor
 } from "./QuestionEditorPrimitives";
+import AnswerPolicyControl from "./AnswerPolicyControl";
+import { answerPolicyFromGroup } from "./answerPolicyControlUtils";
 
 let tempItemCounter = 0;
 const MEDIA_GROUP_ROW_HEIGHT = 214;
@@ -168,7 +170,8 @@ function buildSignature(group, tags, items, deletedItemIds) {
     group: {
       name: group?.name || "",
       media: group?.media || "",
-      tags: tags || []
+      tags: tags || [],
+      answerPolicy: answerPolicyFromGroup(group)
     },
     items: items.map(item => ({
       id: item.id || item.tempId,
@@ -636,6 +639,17 @@ export default function MediaGroupEditor({
     }));
   }, []);
 
+  const updateAnswerPolicy = useCallback((policy) => {
+    setEditableGroup(prev => ({
+      ...(prev || {}),
+      answer_policy: policy,
+      data: {
+        ...((prev || {}).data || {}),
+        answer_policy: policy
+      }
+    }));
+  }, []);
+
   const handleItemsScroll = useCallback((event) => {
     setItemsScrollTop(event.currentTarget.scrollTop);
   }, []);
@@ -980,7 +994,8 @@ export default function MediaGroupEditor({
         group: {
           name: nameForSave,
           media: editableGroup.media || "",
-          tags: sharedTags || []
+          tags: sharedTags || [],
+          answer_policy: answerPolicyFromGroup(editableGroup)
         },
         items: items.map(serializeItem),
         deleted_item_ids: deletedItemIds
@@ -1138,6 +1153,11 @@ export default function MediaGroupEditor({
           chipStyle={imageGroupHeaderTagChipStyle}
           inputOverrideStyle={compactHeaderInputStyle}
           labelOverrideStyle={{ fontSize: "12px" }}
+        />
+
+        <AnswerPolicyControl
+          policy={answerPolicyFromGroup(editableGroup)}
+          onChange={updateAnswerPolicy}
         />
 
         <div

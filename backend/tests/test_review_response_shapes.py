@@ -58,6 +58,7 @@ TEXT_REVIEW_KEYS = {
     "media",
     "media_pool",
     "answer_media",
+    "answer_policy",
     "tags",
     "progress",
     "projected_intervals",
@@ -70,6 +71,7 @@ MAP_GROUP_KEYS = {
     "name",
     "media",
     "map",
+    "answer_policy",
     "tags",
     "mode",
     "context_items",
@@ -80,6 +82,7 @@ MAP_ZONE_KEYS = {
     "code",
     "label",
     "aliases",
+    "answer_policy",
     "progress",
     "projected_intervals",
     "relearning_interval"
@@ -91,6 +94,7 @@ IMAGE_GROUP_KEYS = {
     "name",
     "media",
     "tags",
+    "answer_policy",
     "mode",
     "context_items",
     "items"
@@ -104,6 +108,7 @@ IMAGE_ITEM_KEYS = {
     "media_pool",
     "tags",
     "aliases",
+    "answer_policy",
     "progress",
     "projected_intervals",
     "relearning_interval"
@@ -518,7 +523,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
                 "click_prompt",
                 "type_prompt",
                 "multiple_choice_label",
-                "multiple_choice_image"
+                "multiple_choice_media"
             }
         )
         self.assertEqual(len(image_group["context_items"]), 2)
@@ -830,8 +835,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertFalse({121, 122, 123} & progress_ids)
 
     def test_audio_only_media_group_uses_serial_review_modes(self):
-        # Audio can't be scanned in a grid, so an audio-only media group must
-        # only ever use the prompt->name modes, never the spatial/QCM-media ones.
+        # Audio can't be scanned in a grid, but its reversed QCM is still valid:
+        # each numbered choice contains one independently playable clip.
         today = date.today()
         audio_group = QuestionGroup(
             id=60,
@@ -852,7 +857,11 @@ class ReviewResponseShapeTests(unittest.TestCase):
             )
         self.db.commit()
 
-        serial_modes = {"type_prompt", "multiple_choice_label"}
+        serial_modes = {
+            "type_prompt",
+            "multiple_choice_label",
+            "multiple_choice_media"
+        }
 
         # Mode selection is randomised, so sample repeatedly.
         for _ in range(40):
@@ -959,7 +968,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id for item in image_items}
         )
 
-        image_mc_modes = {"multiple_choice_label", "multiple_choice_image"}
+        image_mc_modes = {"multiple_choice_label", "multiple_choice_media"}
         all_started_ids = {item.id for item in image_items}
 
         for group in image_groups:
@@ -982,7 +991,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
                 "click_prompt",
                 "type_prompt",
                 "multiple_choice_label",
-                "multiple_choice_image"
+                "multiple_choice_media"
             }
             for group in image_groups
         ))
@@ -1112,7 +1121,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(set(returned_ids), {item.id for item in image_items})
         self.assertEqual(len(returned_ids), len(set(returned_ids)))
 
-        image_mc_modes = {"multiple_choice_label", "multiple_choice_image"}
+        image_mc_modes = {"multiple_choice_label", "multiple_choice_media"}
         all_started_ids = {item.id for item in image_items}
 
         for group in image_groups:
@@ -1239,7 +1248,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             MediaAnswerRequest(items={
                 item_a.id: 3,
                 item_b.id: 0
-            }, mode="multiple_choice_image", context_count=5),
+            }, mode="multiple_choice_media", context_count=5),
             db=self.db
         )
 
@@ -1258,7 +1267,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             item_b.id: 0
         })
         item_a_history = item_a.progress.history[-1]
-        self.assertEqual(item_a_history["image_mode"], "multiple_choice_image")
+        self.assertEqual(item_a_history["image_mode"], "multiple_choice_media")
         self.assertEqual(item_a_history["raw_quality"], 3)
         self.assertEqual(item_a_history["effective_quality"], 3)
         self.assertEqual(item_a_history["image_context_count"], 5)
@@ -1266,7 +1275,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertTrue(item_a_history["mode_adjusted"])
         self.assertEqual(
             item_a_history["mode_difficulty"],
-            image_mode_difficulty("multiple_choice_image", 5)
+            image_mode_difficulty("multiple_choice_media", 5)
         )
         self.assertIn("mode_reward_factor", item_a_history)
 
@@ -1278,7 +1287,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             MediaAnswerRequest(items={
                 item_a.id: 2,
                 item_b.id: 0
-            }, mode="multiple_choice_image"),
+            }, mode="multiple_choice_media"),
             db=self.db
         )
 
@@ -1300,7 +1309,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertNotIn(
             image_groups[0]["mode"],
-            {"multiple_choice_image", "multiple_choice_label"}
+            {"multiple_choice_media", "multiple_choice_label"}
         )
         self.assertEqual(item_b.progress.next_review, date.today())
 
@@ -1333,7 +1342,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
                     item.id: 2
                     for item in submitted_items
                 },
-                mode="multiple_choice_image"
+                mode="multiple_choice_media"
             ),
             db=self.db
         )
@@ -1341,11 +1350,11 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(response, {"status": "ok"})
 
         history = submitted_items[0].progress.history[-1]
-        self.assertEqual(history["image_mode"], "multiple_choice_image")
+        self.assertEqual(history["image_mode"], "multiple_choice_media")
         self.assertEqual(history["image_context_count"], 5)
         self.assertAlmostEqual(
             history["mode_difficulty"],
-            image_mode_difficulty("multiple_choice_image", 5)
+            image_mode_difficulty("multiple_choice_media", 5)
         )
 
     def test_answer_timeline_endpoint_returns_per_item_result_shapes(self):

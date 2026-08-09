@@ -29,6 +29,11 @@ from .sequence_modes import (
 )
 from .settings import load_scheduler_tuning_settings
 from .answer_events import sequence_answer_event
+from .answer_policy import (
+    candidate_ids_for,
+    effective_answer_policy,
+    matches_answer_value
+)
 
 
 def _bad_request(message):
@@ -252,9 +257,43 @@ def _grade_recitation(data, siblings, positions):
     return rows, stall_id, scheduled_ids
 
 
-def _grade_placements(data, mode, positions, rail, by_position):
+def _resolve_sequence_position(question_id, guess, siblings, positions, group, data):
+    if guess.position is not None:
+        return guess.position
+
+    if not str(guess.text or "").strip():
+        return None
+
+    candidate_ids = candidate_ids_for(question_id, data.candidates) or list(siblings)
+
+    for candidate_id in candidate_ids:
+        candidate = siblings.get(candidate_id)
+        if candidate is None:
+            continue
+        if matches_answer_value(
+            candidate,
+            guess.text,
+            policy=effective_answer_policy(
+                question=candidate,
+                group=group,
+                type_q="sequence"
+            )
+        ):
+            return positions.get(candidate_id)
+
+    return None
+
+
+def _grade_placements(data, mode, positions, rail, by_position, siblings, group):
     guessed = {
-        question_id: guess.position
+        question_id: _resolve_sequence_position(
+            question_id,
+            guess,
+            siblings,
+            positions,
+            group,
+            data
+        )
         for question_id, guess in data.items.items()
     }
     valid_positions = set(positions.values())
@@ -410,7 +449,15 @@ def grade_sequence_answer(db, data, schedule=False):
             _bad_request("Recite mode requires a run")
         if data.qualities:
             _bad_request("Placement quality overrides belong inside each item")
-        grades = _grade_placements(data, mode, positions, rail, by_position)
+        grades = _grade_placements(
+            data,
+            mode,
+            positions,
+            rail,
+            by_position,
+            siblings,
+            group
+        )
         scheduled_ids = set(data.items)
         stall_id = None
         results = []
@@ -512,13 +559,14 @@ def grade_sequence_answer(db, data, schedule=False):
             }
         else:
             guess = data.items[question_id]
+            resolved_position = result.get("guessed_position")
             answer_metadata = {
                 "answer": (
                     guess.text
                     if guess.text is not None
-                    else guess.position
+                    else resolved_position
                 ),
-                "sequence_resolved_position": guess.position
+                "sequence_resolved_position": resolved_position
             }
             event_candidate_ids = (
                 (data.candidates or {}).get(question_id) or [
@@ -554,6 +602,11 @@ def grade_sequence_answer(db, data, schedule=False):
                     },
                     mode=mode,
                     candidate_ids=event_candidate_ids,
+                    answer_policy=effective_answer_policy(
+                        question=question,
+                        group=group,
+                        type_q="sequence"
+                    ),
                     context=event_context
                 ),
                 "raw_quality": result["auto_quality"],

@@ -120,6 +120,13 @@ Use it to distinguish screen shapes such as `single_card`, `map_group`,
 `media_group`, `text_group`, `timeline_group`, and `sequence_group`; keep
 `type_q` as the stored atomic family.
 
+Answer matching policy is JSON metadata, not schema. Store group-level
+overrides in `QuestionGroup.data.answer_policy` and future per-card overrides in
+`Question.data.answer_policy`. The default preset is `relaxed` and preserves
+existing behavior for map/media/text/sequence matching; `exact` is available in
+Manage for orthography-sensitive groups. Effective policy resolution is
+question override, group override, then type default.
+
 ## Manage UI
 
 Manage is both a spreadsheet and a knowledge browser. Keep the current
@@ -186,6 +193,12 @@ per legacy `Progress.history` entry; dual-written since migration 0011).
   `data["answer_event"]` with the raw response, resolved id when available,
   expected value snapshot, presentation kind, mode, candidate ids, policy, and
   context. There is no schema migration for this.
+- **Answer grading is backend-authoritative when answer data is present.**
+  Grouped map/media/text submits continue accepting legacy quality maps, but
+  raw typed strings or selected ids are re-checked by the backend before
+  scheduling. Sequence typed answers are resolved by the backend against
+  candidate labels/aliases. Legacy client-graded rows remain accepted and are
+  marked in `answer_event.context`.
 
 ## Implementation Rules
 
@@ -193,7 +206,7 @@ per legacy `Progress.history` entry; dual-written since migration 0011).
 - Add new persisted types or group types through
   `backend/app/services/type_contracts.py`; the registry is the checklist for
   validators, review, Training, retry behavior, Manage, calendar/filter labels,
-  packs/sync, and mobile support.
+  packs/sync, mobile support, default answer policy, and matching authority.
 - Keep changes scoped and behavior-preserving.
 - Use `joinedload`, outer joins, or bulk queries for richer backend payloads.
 - Keep timeline date math consistent between backend

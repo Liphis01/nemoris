@@ -25,6 +25,11 @@ function arraysMatch(left = [], right = []) {
 }
 
 
+function dataMatches(left = {}, right = {}) {
+  return JSON.stringify(left || {}) === JSON.stringify(right || {});
+}
+
+
 function mergeTagsFromZones(zones = []) {
   const tagIds = new Set();
 
@@ -46,6 +51,7 @@ function buildEditableGroup(group, zones = []) {
     media: group.media || "",
     tags: Array.isArray(group.tags) ? group.tags : mergeTagsFromZones(zones),
     data: group.data || {},
+    answer_policy: group.answer_policy || group.data?.answer_policy || null,
     map: group.map || group.data?.map || null
   };
 }
@@ -231,7 +237,8 @@ export function useMapZones(group) {
     return (
       (editableGroup.name || "") !== (initialGroup.name || "") ||
       (editableGroup.media || "") !== (initialGroup.media || "") ||
-      !arraysMatch(editableGroup.tags || [], initialGroup.tags || [])
+      !arraysMatch(editableGroup.tags || [], initialGroup.tags || []) ||
+      !dataMatches(editableGroup.data, initialGroup.data)
     );
   }
 
@@ -256,7 +263,8 @@ export function useMapZones(group) {
       group: {
         name: editableGroup.name,
         media: editableGroup.media,
-        tags: editableGroup.tags || []
+        tags: editableGroup.tags || [],
+        answer_policy: editableGroup.data?.answer_policy || null
       },
       zones: changedZones.map(zone => ({
         id: String(zone.id || "").startsWith("tmp-") ? null : zone.id,
@@ -286,7 +294,20 @@ export function useMapZones(group) {
       name: saveResult.group?.name ?? editableGroup.name ?? "",
       type_group: saveResult.group?.type_group ?? editableGroup.type_group ?? "map",
       media: saveResult.group?.media ?? editableGroup.media ?? "",
-      tags: saveResult.group?.tags ?? editableGroup.tags ?? []
+      tags: saveResult.group?.tags ?? editableGroup.tags ?? [],
+      data: saveResult.group?.data ?? editableGroup.data ?? {},
+      answer_policy: (
+        saveResult.group?.answer_policy ??
+        saveResult.group?.data?.answer_policy ??
+        editableGroup.data?.answer_policy ??
+        null
+      ),
+      map: (
+        saveResult.group?.map ??
+        saveResult.group?.data?.map ??
+        editableGroup.map ??
+        null
+      )
     };
 
     setEditableGroup(nextGroup);

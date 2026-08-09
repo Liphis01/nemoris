@@ -23,8 +23,11 @@ from .map_modes import (
 )
 from .text_modes import (
     DEFAULT_TEXT_MODE,
+    TEXT_MODE_TYPE_REVERSE,
     normalize_text_mode
 )
+from .text_groups import text_group_reverse_mode_enabled
+from .media import media_kind_from_name
 from .sequence import (
     dense_positions
 )
@@ -445,12 +448,11 @@ def serialize_training_records(data, content_fingerprint=None, group_type="map")
                 mode
             )
 
-            if normalized_mode != mode:
-                continue
-
             serialized = _serialize_record(record, content_fingerprint)
 
-            if serialized:
+            if serialized and (
+                normalized_mode not in records or normalized_mode == mode
+            ):
                 records[normalized_mode] = serialized
 
     legacy_record = serialize_training_record(data, content_fingerprint)
@@ -478,15 +480,14 @@ def serialize_previous_training_records(
                 mode
             )
 
-            if normalized_mode != mode:
-                continue
-
             serialized = _serialize_previous_record(
                 record,
                 content_fingerprint
             )
 
-            if serialized:
+            if serialized and (
+                normalized_mode not in records or normalized_mode == mode
+            ):
                 records[normalized_mode] = serialized
 
     current_records = serialize_training_records(
@@ -526,6 +527,7 @@ def list_training_scopes(db):
         .all()
     )
     group_ids = [group.id for group, _ in groups]
+    groups_by_id = {group.id: group for group, _ in groups}
     fingerprints_by_group_id = training_fingerprints_for_groups(
         db,
         [group for group, _ in groups]
@@ -566,6 +568,47 @@ def list_training_scopes(db):
             tags or []
         )
 
+    media_kinds_by_group_id = {}
+    text_questions_by_group_id = {}
+
+    if group_ids:
+        media_rows = (
+            db.query(Question.group_id, Question.media)
+            .filter(
+                Question.group_id.in_(group_ids),
+                Question.type_q == "media"
+            )
+            .all()
+        )
+        text_rows = (
+            db.query(Question)
+            .filter(
+                Question.group_id.in_(group_ids),
+                Question.type_q == "text"
+            )
+            .all()
+        )
+
+        for group_id, media in media_rows:
+            if media:
+                media_kinds_by_group_id.setdefault(group_id, set()).add(
+                    media_kind_from_name(media)
+                )
+
+        for question in text_rows:
+            text_questions_by_group_id.setdefault(question.group_id, []).append(question)
+
+    audio_only_group_ids = {
+        group_id
+        for group_id, kinds in media_kinds_by_group_id.items()
+        if kinds == {"audio"}
+    }
+    reverse_text_group_ids = {
+        group_id
+        for group_id, questions in text_questions_by_group_id.items()
+        if text_group_reverse_mode_enabled(groups_by_id[group_id], questions)
+    }
+
     hierarchy = load_tag_hierarchy(db)
     pmap = parent_map(hierarchy)
     tag_names_by_key = {}
@@ -601,6 +644,8 @@ def list_training_scopes(db):
                 "name": group.name,
                 "media": group.media,
                 "map": (group.data or {}).get("map"),
+                "audio_only": group.id in audio_only_group_ids,
+                "reverse_mode_enabled": group.id in reverse_text_group_ids,
                 "tags": tags_by_group_id.get(group.id, []),
                 "question_count": question_count,
                 "training_record": serialize_training_record(
@@ -1016,6 +1061,20 @@ def get_training_items(
         normalized_map_mode = normalize_map_mode(map_mode)
         normalized_image_mode = normalize_image_mode(image_mode)
         normalized_text_mode = normalize_text_mode(text_mode)
+
+        if (
+            normalized_text_mode == TEXT_MODE_TYPE_REVERSE and
+            not text_group_reverse_mode_enabled(
+                group,
+                db.query(Question)
+                .filter(
+                    Question.group_id == group_id,
+                    Question.type_q == "text"
+                )
+                .all()
+            )
+        ):
+            normalized_text_mode = DEFAULT_TEXT_MODE
 
         for item in items:
             if item.get("group_id") == group_id:

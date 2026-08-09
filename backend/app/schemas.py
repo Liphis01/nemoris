@@ -31,12 +31,14 @@ ImageMode = Literal[
     "type_all",
     "type_prompt",
     "multiple_choice_label",
+    "multiple_choice_media",
     "multiple_choice_image"
 ]
 
 TextMode = Literal[
     "type_all",
-    "match"
+    "match",
+    "type_reverse"
 ]
 
 SequenceMode = Literal[
@@ -58,8 +60,10 @@ TrainingGroupMode = Literal[
     "type_prompt",
     "multiple_choice",
     "multiple_choice_label",
+    "multiple_choice_media",
     "multiple_choice_image",
     "match",
+    "type_reverse",
     "type_position",
     "gap_fill",
     "reorder",
@@ -546,6 +550,8 @@ class MapZonesGroupUpdate(BaseModel):
 
     tags: Optional[List[str]] = None
 
+    answer_policy: Optional[dict[str, Any]] = None
+
 
 class MapZonesBulkUpdate(BaseModel):
 
@@ -586,6 +592,8 @@ class MediaGroupItemsGroupUpdate(BaseModel):
 
     tags: Optional[List[str]] = None
 
+    answer_policy: Optional[dict[str, Any]] = None
+
 
 class MediaGroupItemsBulkUpdate(BaseModel):
 
@@ -622,6 +630,10 @@ class TextGroupItemsGroupUpdate(BaseModel):
     name: Optional[str] = None
 
     tags: Optional[List[str]] = None
+
+    answer_policy: Optional[dict[str, Any]] = None
+
+    reverse_mode_enabled: Optional[bool] = None
 
 
 class TextGroupItemsBulkUpdate(BaseModel):
@@ -669,6 +681,8 @@ class SequenceGroupItemsGroupUpdate(BaseModel):
     name: Optional[str] = None
 
     tags: Optional[List[str]] = None
+
+    answer_policy: Optional[dict[str, Any]] = None
 
     order: Optional[SequenceOrderSettings] = None
 

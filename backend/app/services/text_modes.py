@@ -10,10 +10,12 @@ from .mode_selection import (
 
 TEXT_MODE_TYPE_ALL = "type_all"
 TEXT_MODE_MATCH = "match"
+TEXT_MODE_TYPE_REVERSE = "type_reverse"
 
 TEXT_MODES = (
     TEXT_MODE_TYPE_ALL,
-    TEXT_MODE_MATCH
+    TEXT_MODE_MATCH,
+    TEXT_MODE_TYPE_REVERSE
 )
 DEFAULT_TEXT_MODE = TEXT_MODE_TYPE_ALL
 
@@ -22,6 +24,9 @@ DEFAULT_TEXT_MODE = TEXT_MODE_TYPE_ALL
 # (0.55) because every answer is on screen.
 TEXT_TYPE_ALL_DIFFICULTY = 1.0
 TEXT_MATCH_DIFFICULTY = 0.6
+# The reverse prompt is still free recall. Keep it anchored to the shared
+# baseline until actual answer events justify separate calibration.
+TEXT_TYPE_REVERSE_DIFFICULTY = 1.0
 
 
 def normalize_text_mode(mode):
@@ -46,6 +51,9 @@ def text_mode_difficulty(mode=None, context_count=0, tuning=None):
     if mode == TEXT_MODE_MATCH:
         return _tuned_number(tuning, "text_match_difficulty", TEXT_MATCH_DIFFICULTY)
 
+    if mode == TEXT_MODE_TYPE_REVERSE:
+        return TEXT_TYPE_REVERSE_DIFFICULTY
+
     return _tuned_number(tuning, "text_type_all_difficulty", TEXT_TYPE_ALL_DIFFICULTY)
 
 
@@ -62,6 +70,7 @@ def choose_text_review_mode(
     due_questions,
     context_questions,
     multiple_choice_context_count=None,
+    reverse_mode_enabled=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -84,17 +93,20 @@ def choose_text_review_mode(
         # Struggling set -> favour the easier recognition mode.
         base_scores = {
             TEXT_MODE_MATCH: 3.4,
+            TEXT_MODE_TYPE_REVERSE: 1.5,
             TEXT_MODE_TYPE_ALL: 1.4
         }
     elif strong_count / len(due_questions) >= 0.55:
         # Confident set -> favour recall.
         base_scores = {
             TEXT_MODE_TYPE_ALL: 3.4,
+            TEXT_MODE_TYPE_REVERSE: 2.9,
             TEXT_MODE_MATCH: 1.2
         }
     else:
         base_scores = {
             TEXT_MODE_TYPE_ALL: 2.6,
+            TEXT_MODE_TYPE_REVERSE: 2.3,
             TEXT_MODE_MATCH: 2.2
         }
 
@@ -104,7 +116,8 @@ def choose_text_review_mode(
 
     tie_order = {
         TEXT_MODE_MATCH: 0,
-        TEXT_MODE_TYPE_ALL: 1
+        TEXT_MODE_TYPE_REVERSE: 1,
+        TEXT_MODE_TYPE_ALL: 2
     }
     eligible_modes = list(TEXT_MODES)
 
@@ -113,6 +126,11 @@ def choose_text_review_mode(
     if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
         eligible_modes = [
             mode for mode in eligible_modes if mode != TEXT_MODE_MATCH
+        ]
+
+    if not reverse_mode_enabled:
+        eligible_modes = [
+            mode for mode in eligible_modes if mode != TEXT_MODE_TYPE_REVERSE
         ]
 
     return weighted_mode_choice(eligible_modes, scores, tie_order, rng=rng)

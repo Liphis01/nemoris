@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import RichText from "../../../shared/RichText";
-import { normalizeTextMode, TEXT_MODE_MATCH } from "../textModes";
+import {
+  normalizeTextMode,
+  TEXT_MODE_MATCH,
+  TEXT_MODE_TYPE_REVERSE
+} from "../textModes";
 import {
   GOT_IT_QUALITY,
   isRelearningGroupItem,
   partitionRelearningQualities,
   relearningQualityOptions
 } from "../relearningGrades";
+import { matchesAnswerValue, normalizeAnswerText } from "../answerPolicy";
 
 const qualityOptions = [
   { value: 0, icon: "❌", title: "Faux" },
@@ -64,22 +69,15 @@ const buttonStyle = {
   padding: "10px 16px"
 };
 
-function normalize(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
+function itemAccepts(item, guess, reverse = false) {
+  if (reverse) {
+    const policy = item?.answer_policy;
+    const expected = normalizeAnswerText(item?.question, policy);
 
-function itemAccepts(item, guess) {
-  const normalizedGuess = normalize(guess);
+    return Boolean(expected) && normalizeAnswerText(guess, policy) === expected;
+  }
 
-  if (!normalizedGuess) return false;
-
-  return [item.answer, ...(item.aliases || [])].some(
-    candidate => normalize(candidate) === normalizedGuess
-  );
+  return matchesAnswerValue(item, guess);
 }
 
 function shuffled(list) {
@@ -107,6 +105,7 @@ export default function TextGroupReview({
 }) {
   const mode = normalizeTextMode(requestedMode);
   const isMatch = mode === TEXT_MODE_MATCH;
+  const isReverse = mode === TEXT_MODE_TYPE_REVERSE;
   const items = useMemo(() => reviewItems || [], [reviewItems]);
 
   const [phase, setPhase] = useState("answer");
@@ -233,10 +232,10 @@ export default function TextGroupReview({
       setAnswersByQuestionId(prev => ({ ...prev, [item.question_id]: typed }));
     }
 
-    if (itemAccepts(item, typed)) {
+    if (itemAccepts(item, typed, isReverse)) {
       setFoundIds(prev => new Set(prev).add(item.question_id));
     }
-  }, [foundIds, inputs]);
+  }, [foundIds, inputs, isReverse]);
 
   const handleInputKeyDown = useCallback((event, item, index) => {
     if (event.key !== "Enter") return;
@@ -266,14 +265,14 @@ export default function TextGroupReview({
     const promptItem = items.find(item => item.question_id === selectedPromptId);
     if (!promptItem) return;
 
-    const correct = normalize(promptItem.answer) === normalize(answerItem.answer);
+    const correct = matchesAnswerValue(promptItem, answerItem.answer);
 
     // Keep the first pick: match lets the learner retry until correct, and it
     // is the initial (possibly wrong) choice that carries the confusion signal.
     setAnswersByQuestionId(prev => (
       promptItem.question_id in prev
         ? prev
-        : { ...prev, [promptItem.question_id]: answerItem.answer }
+        : { ...prev, [promptItem.question_id]: answerItem.question_id }
     ));
 
     if (correct) {
@@ -395,7 +394,11 @@ export default function TextGroupReview({
     width: "100%"
   };
 
-  const headerLabel = isMatch ? "TEXTE · Associer" : "TEXTE · Tout taper";
+  const headerLabel = isMatch
+    ? "TEXTE · Associer"
+    : isReverse
+      ? "TEXTE · Inverser"
+      : "TEXTE · Tout taper";
 
   if (phase === "recap") {
     return (
@@ -717,11 +720,11 @@ export default function TextGroupReview({
                   whiteSpace: "nowrap"
                 }}
               >
-                <RichText>{item.question}</RichText>
+                <RichText>{isReverse ? item.answer : item.question}</RichText>
               </div>
               {found ? (
                 <div style={{ color: "#7ee2a8", fontWeight: 700 }}>
-                  <RichText>{item.answer}</RichText>
+                  <RichText>{isReverse ? item.question : item.answer}</RichText>
                 </div>
               ) : (
                 <input
@@ -730,7 +733,7 @@ export default function TextGroupReview({
                   onChange={(event) => handleInputChange(item.question_id, event.target.value)}
                   onKeyDown={(event) => handleInputKeyDown(event, item, index)}
                   onBlur={() => checkTypedAnswer(item)}
-                  placeholder="Réponse…"
+                  placeholder={isReverse ? "Indice d’origine…" : "Réponse…"}
                   style={inputStyle}
                 />
               )}

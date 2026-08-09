@@ -15,6 +15,7 @@ from .media import (
 )
 from .media_pool import pool_media_and_data, read_media_pool
 from .questions import delete_question_dependents
+from .answer_policy import merge_answer_policy
 
 
 def desired_media_pool(item_payload):
@@ -170,6 +171,13 @@ def save_media_group_items(db, group_id: int, payload):
             shared_tags_provided = True
             shared_tags = ensure_tag_ids(db, group_updates.get("tags"))
 
+        if "answer_policy" in group_updates:
+            group.data = merge_answer_policy(
+                group.data,
+                group_updates.get("answer_policy"),
+                type_q="media"
+            )
+
     existing_items = (
         db.query(Question)
         .filter(
@@ -324,6 +332,8 @@ def save_media_group_items(db, group_id: int, payload):
             "type_group": group.type_group,
             "name": group.name,
             "media": group.media,
+            "data": group.data or {},
+            "answer_policy": (group.data or {}).get("answer_policy"),
             "tags": response_tags,
             "question_count": question_count
         },

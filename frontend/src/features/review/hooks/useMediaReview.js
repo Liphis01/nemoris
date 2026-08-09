@@ -9,32 +9,21 @@ import {
   IMAGE_MODE_TYPE_PROMPT,
   normalizeImageMode
 } from "../imageModes";
+import {
+  matchesAnswerValue,
+  normalizeAnswerText
+} from "../answerPolicy";
 
 export const IMAGE_RECAP_UNANSWERED = "unanswered";
 
 
 export function normalizeImageAnswer(value = "") {
-  return String(value)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .trim()
-    .replace(/[-\s]+/g, " ");
+  return normalizeAnswerText(value);
 }
 
 
 export function matchesImageAnswer(item, value) {
-  const normalized = normalizeImageAnswer(value);
-
-  if (!normalized) return false;
-
-  const answers = [
-    item?.label,
-    item?.answer,
-    ...(item?.aliases || item?.data?.aliases || [])
-  ];
-
-  return answers.some(answer => normalizeImageAnswer(answer) === normalized);
+  return matchesAnswerValue(item, value);
 }
 
 
@@ -157,27 +146,6 @@ function uniqueItemsByQuestionId(...itemGroups) {
     (items || []).forEach(item => {
       if (item?.question_id !== undefined && item?.question_id !== null) {
         lookup.set(item.question_id, item);
-      }
-    });
-  });
-
-  return lookup;
-}
-
-
-function buildAnswerLookup(items) {
-  const lookup = new Map();
-
-  (items || []).forEach(item => {
-    [
-      item?.label,
-      item?.answer,
-      ...(item?.aliases || item?.data?.aliases || [])
-    ].forEach(value => {
-      const normalized = normalizeImageAnswer(value);
-
-      if (normalized && !lookup.has(normalized)) {
-        lookup.set(normalized, item);
       }
     });
   });
@@ -655,10 +623,6 @@ export function useMediaReview(
     currentPromptItem,
     mode
   ]);
-  const answerLookup = useMemo(
-    () => buildAnswerLookup(sessionItems),
-    [sessionItems]
-  );
   const choiceOptions = useMemo(
     () => buildChoiceOptions(
       currentPromptItem,
@@ -978,7 +942,7 @@ export function useMediaReview(
 
     if (mode !== IMAGE_MODE_TYPE_ALL) return;
 
-    const match = answerLookup.get(normalizeImageAnswer(input));
+    const match = sessionItems.find(item => matchesImageAnswer(item, input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match, input);
@@ -1032,10 +996,6 @@ export function useMediaReview(
     }
 
     const isCorrect = currentPromptItem.question_id === questionId;
-    const selectedOption = choiceOptions.find(
-      option => option.question_id === questionId
-    );
-
     setInteractionFeedback({
       id: Date.now(),
       correctQuestionId: currentPromptItem.question_id,
@@ -1050,12 +1010,10 @@ export function useMediaReview(
         .filter(id => id != null)
     }));
 
-    const guess = imageAnswerLabel(selectedOption) ?? questionId;
-
     if (isCorrect) {
-      markFound(currentPromptItem, guess);
+      markFound(currentPromptItem, questionId);
     } else {
-      markMissed(currentPromptItem, guess);
+      markMissed(currentPromptItem, questionId);
     }
   }
 

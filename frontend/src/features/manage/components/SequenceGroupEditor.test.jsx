@@ -88,6 +88,34 @@ describe("SequenceGroupEditor — group not yet persisted", () => {
     );
   });
 
+  it("persists the answer policy preset", async () => {
+    const ensurePersistedGroup = vi.fn().mockResolvedValue({
+      id: 11,
+      name: "Nouvelle liste"
+    });
+
+    renderPending(ensurePersistedGroup);
+
+    fireEvent.change(screen.getByLabelText("Politique de réponse"), {
+      target: { value: "exact" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    await waitFor(() =>
+      expect(patchSequenceGroupItems).toHaveBeenCalledWith(
+        11,
+        expect.objectContaining({
+          group: expect.objectContaining({
+            answer_policy: expect.objectContaining({
+              preset: "exact",
+              diacritics: "strict"
+            })
+          })
+        })
+      )
+    );
+  });
+
   it("keeps the fallback name when the list is saved unnamed", async () => {
     // The group is created under a default name; the PATCH that follows must
     // adopt it rather than blanking the name back out.

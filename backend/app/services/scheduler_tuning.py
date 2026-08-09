@@ -156,7 +156,12 @@ def normalize_history_mode(entry):
 
     mode = entry.get("map_mode") or entry.get("image_mode") or event_mode
 
-    if mode in {"multiple_choice", "multiple_choice_label", "multiple_choice_image"}:
+    if mode in {
+        "multiple_choice",
+        "multiple_choice_label",
+        "multiple_choice_media",
+        "multiple_choice_image"
+    }:
         return "multiple_choice"
 
     if mode in {"type_all", "type_prompt", "click_prompt"}:

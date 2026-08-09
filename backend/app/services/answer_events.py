@@ -1,3 +1,4 @@
+from .answer_policy import ANSWER_POLICY_RELAXED
 from .type_contracts import (
     PRESENTATION_MAP_GROUP,
     PRESENTATION_MEDIA_GROUP,
@@ -7,14 +8,7 @@ from .type_contracts import (
 )
 
 
-ANSWER_POLICY_CURRENT_RELAXED = {
-    "preset": "current_relaxed",
-    "case": "ignore",
-    "diacritics": "ignore",
-    "spacing": "relaxed",
-    "punctuation": "relaxed",
-    "fuzzy": "none"
-}
+ANSWER_POLICY_CURRENT_RELAXED = ANSWER_POLICY_RELAXED
 GRADER_VERSION = "m2.0"
 PRESENTATION_VERSION = "m2.0"
 
@@ -87,6 +81,8 @@ def direction_for_grouped_answer(type_q, mode):
 
     if type_q == "media":
         return {
+            "multiple_choice_media": "label_to_media",
+            # Histories created before M2.1 are retained verbatim.
             "multiple_choice_image": "label_to_media",
             "multiple_choice_label": "media_to_label",
             "type_prompt": "media_to_label",
@@ -96,6 +92,7 @@ def direction_for_grouped_answer(type_q, mode):
     if type_q == "text":
         return {
             "match": "prompt_to_answer_match",
+            "type_reverse": "answer_to_prompt",
             "type_all": "prompt_to_answer"
         }.get(mode, "prompt_to_answer")
 
@@ -118,6 +115,7 @@ def sequence_answer_event(
     expected_value=None,
     mode=None,
     candidate_ids=None,
+    answer_policy=None,
     context=None
 ):
     return answer_event(
@@ -130,6 +128,7 @@ def sequence_answer_event(
         mode=mode,
         direction="sequence_retrieval",
         candidate_ids=candidate_ids,
+        answer_policy=answer_policy,
         context=context
     )
 

@@ -5,8 +5,10 @@ import { useMediaReview } from "../hooks/useMediaReview";
 import {
   IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+  IMAGE_MODE_MULTIPLE_CHOICE_MEDIA,
   IMAGE_MODE_TYPE_ALL,
-  IMAGE_MODE_TYPE_PROMPT
+  IMAGE_MODE_TYPE_PROMPT,
+  normalizeImageMode
 } from "../imageModes";
 
 vi.mock("../hooks/useMediaReview", () => ({
@@ -911,6 +913,35 @@ describe("MediaReview answer label preview", () => {
 
     fireEvent.keyDown(window, { key: "2" });
 
+    expect(handleImageSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("keeps audio players playable before a QCM media choice is selected", () => {
+    const handleImageSelect = vi.fn();
+    const rows = [1, 2, 3, 4].map(questionId => imageGridRow(questionId, {
+      item: {
+        ...imageItem(questionId, `Son ${questionId}`),
+        media: `/static/sound-${questionId}.mp3`
+      }
+    }));
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_MEDIA,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        handleImageSelect
+      }
+    }));
+
+    expect(normalizeImageMode("multiple_choice_image"))
+      .toBe(IMAGE_MODE_MULTIPLE_CHOICE_MEDIA);
+    expect(container.querySelectorAll("audio")).toHaveLength(4);
+
+    fireEvent.click(container.querySelector("audio"));
+    expect(handleImageSelect).not.toHaveBeenCalled();
+
+    fireEvent.click(tileFor(container, 2));
     expect(handleImageSelect).toHaveBeenCalledWith(2);
   });
 
