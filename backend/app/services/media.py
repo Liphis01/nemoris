@@ -114,11 +114,11 @@ def is_safe_svg(data: bytes):
 
     lowered = text.lower()
 
-    if (
-        "<!doctype" in lowered or
-        "<!entity" in lowered or
-        "javascript:" in lowered
-    ):
+    # A DOCTYPE is common in otherwise static SVG 1.1 map files. ElementTree
+    # does not fetch an external DTD here, so the declaration itself is safe;
+    # keep rejecting entity declarations, which are the part that can expand
+    # content or reference external resources.
+    if "<!entity" in lowered or "javascript:" in lowered:
         return False
 
     try:

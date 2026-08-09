@@ -25,6 +25,12 @@ SVG_BYTES = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">'
     b'<rect width="1" height="1" fill="#fff"/></svg>'
 )
+SVG_DOCTYPE_BYTES = (
+    b'<?xml version="1.0" encoding="utf-8"?>\n'
+    b'<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" '
+    b'"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n'
+    b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>'
+)
 GLOBAL_ADDRINFO = [
     (None, None, None, None, ("93.184.216.34", 0))
 ]
@@ -97,7 +103,8 @@ class MediaTests(unittest.TestCase):
             ("photo.png", "image/png", PNG_BYTES, ".png"),
             ("photo.gif", "image/gif", GIF_BYTES, ".gif"),
             ("photo.webp", "image/webp", WEBP_BYTES, ".webp"),
-            ("photo.svg", "image/svg+xml", SVG_BYTES, ".svg")
+            ("photo.svg", "image/svg+xml", SVG_BYTES, ".svg"),
+            ("map.svg", "image/svg+xml", SVG_DOCTYPE_BYTES, ".svg")
         ]
 
         urls = []
@@ -180,7 +187,10 @@ class MediaTests(unittest.TestCase):
         unsafe_payloads = [
             b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
             b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>',
-            b'<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg"></svg>'
+            (
+                b'<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+                b'<svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>'
+            )
         ]
 
         for payload in unsafe_payloads:

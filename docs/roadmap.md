@@ -58,6 +58,7 @@
 - challenge des amis sur des packs
 - quels sont les principes à respecter pour un rendu graphique idéal ? vérifie que c'est appliqué partout
 - permettre d'avoir un "type" map où il faut cliquer sur toutes les zones qui respectent un critère (ex: les pays où on parle français) (pas forcément binaire)
+- faire des qcm pas que de 4 réponses (peut aider à adapter la difficulté)
 
 ## refactors
 
