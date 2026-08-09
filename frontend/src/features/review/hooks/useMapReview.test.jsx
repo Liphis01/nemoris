@@ -725,7 +725,9 @@ describe("useMapReview recap sorting", () => {
       const firstPrompt = result.current.currentPromptItem;
 
       expect(firstPrompt.question_id).toBe(6);
-      expect(optionIds(result.current.choiceOptions)).toEqual([2, 5, 6, 7]);
+      // Zeta/Theta are deliberately close labels, so the M2.3 ranker promotes
+      // Theta over a merely difficult distractor.
+      expect(optionIds(result.current.choiceOptions)).toEqual([2, 6, 7, 8]);
 
       act(() => {
         result.current.handleChoiceSelect(firstPrompt.question_id);
@@ -737,7 +739,7 @@ describe("useMapReview recap sorting", () => {
       const nextIds = optionIds(result.current.choiceOptions);
 
       expect(result.current.currentPromptItem.question_id).toBe(1);
-      expect(nextIds).toEqual([1, 3, 4, 8]);
+      expect(nextIds).toEqual([1, 3, 4, 5]);
       expect(new Set(nextIds).size).toBe(nextIds.length);
       // Previously answered target is excluded from distractors.
       expect(nextIds).not.toContain(firstPrompt.question_id);

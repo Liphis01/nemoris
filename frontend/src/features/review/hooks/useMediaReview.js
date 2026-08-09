@@ -13,6 +13,7 @@ import {
   matchesAnswerValue,
   normalizeAnswerText
 } from "../answerPolicy";
+import { buildChoiceOptions } from "../distractorSelection";
 
 export const IMAGE_RECAP_UNANSWERED = "unanswered";
 
@@ -154,85 +155,6 @@ function uniqueItemsByQuestionId(...itemGroups) {
 }
 
 
-function compareDistractorDifficulty(a, b) {
-  const aScore = getDifficultyScore(a, getHistoryStats(a));
-  const bScore = getDifficultyScore(b, getHistoryStats(b));
-
-  if (bScore !== aScore) {
-    return bScore - aScore;
-  }
-
-  const labelSort = imageAnswerLabel(a).localeCompare(imageAnswerLabel(b));
-
-  if (labelSort !== 0) {
-    return labelSort;
-  }
-
-  return (a.question_id || 0) - (b.question_id || 0);
-}
-
-
-const DISTRACTOR_DIFFICULTY_SCALE = 2.0;
-const DISTRACTOR_COOLDOWN_DECAY = 1.6;
-
-
-function distractorWeight(item, maxDifficultyScore, usageCounts) {
-  const difficultyScore = getDifficultyScore(item, getHistoryStats(item));
-  const useCount = usageCounts.get(item.question_id) || 0;
-  const difficultyWeight = Math.exp(
-    (difficultyScore - maxDifficultyScore) / DISTRACTOR_DIFFICULTY_SCALE
-  );
-  const cooldownWeight = Math.exp(-DISTRACTOR_COOLDOWN_DECAY * useCount);
-
-  return difficultyWeight * cooldownWeight;
-}
-
-
-function weightedSampleDistractors(items, count, usageCounts = new Map()) {
-  const candidates = [...(items || [])].sort(compareDistractorDifficulty);
-  const selected = [];
-
-  while (selected.length < count && candidates.length > 0) {
-    const maxDifficultyScore = Math.max(
-      ...candidates.map(item => getDifficultyScore(item, getHistoryStats(item)))
-    );
-    const weightedCandidates = candidates
-      .map((item, index) => ({
-        index,
-        item,
-        weight: distractorWeight(item, maxDifficultyScore, usageCounts)
-      }))
-      .sort((a, b) => {
-        if (b.weight !== a.weight) {
-          return b.weight - a.weight;
-        }
-
-        return compareDistractorDifficulty(a.item, b.item);
-      });
-    const totalWeight = weightedCandidates.reduce(
-      (total, candidate) => total + candidate.weight,
-      0
-    );
-    let threshold = Math.random() * totalWeight;
-    let selectedIndex = candidates.length - 1;
-
-    for (const candidate of weightedCandidates) {
-      threshold -= candidate.weight;
-
-      if (threshold <= 0) {
-        selectedIndex = candidate.index;
-        break;
-      }
-    }
-
-    selected.push(candidates[selectedIndex]);
-    candidates.splice(selectedIndex, 1);
-  }
-
-  return selected;
-}
-
-
 function choiceOptionsRecordKey(target, choiceOptions) {
   if (!target || !choiceOptions?.length) return null;
 
@@ -263,32 +185,6 @@ function recordDistractorUsage(usageState, target, choiceOptions) {
       (usageState.counts.get(item.question_id) || 0) + 1
     );
   });
-}
-
-
-function buildChoiceOptions(target, contextItems, usageCounts, excludeQuestionIds) {
-  if (!target) return [];
-
-  const candidates = (contextItems || []).filter(item =>
-    item.question_id !== target.question_id && (item.label || item.answer)
-  );
-  const preferred = excludeQuestionIds
-    ? candidates.filter(item => !excludeQuestionIds.has(item.question_id))
-    : candidates;
-
-  let distractors = weightedSampleDistractors(preferred, 3, usageCounts);
-
-  // "If possible": only fall back to already-answered questions to reach 3.
-  if (distractors.length < 3) {
-    const chosen = new Set(distractors.map(item => item.question_id));
-    const fallback = candidates.filter(item => !chosen.has(item.question_id));
-
-    distractors = distractors.concat(
-      weightedSampleDistractors(fallback, 3 - distractors.length, usageCounts)
-    );
-  }
-
-  return shuffled([target, ...distractors]);
 }
 
 

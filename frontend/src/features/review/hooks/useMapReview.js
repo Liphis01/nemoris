@@ -9,6 +9,7 @@ import {
   normalizeMapMode
 } from "../mapModes";
 import { matchesAnswerValue } from "../answerPolicy";
+import { buildChoiceOptions as buildConfusableChoiceOptions } from "../distractorSelection";
 
 export const MAP_RECAP_UNANSWERED = "unanswered";
 
@@ -85,10 +86,6 @@ const initialRecapSort = {
   key: null,
   direction: "asc"
 };
-const DISTRACTOR_DIFFICULTY_SCALE = 2.0;
-const DISTRACTOR_COOLDOWN_DECAY = 1.6;
-
-
 function getSelectedQuality(item, isFound, qualityByQuestionId) {
   return qualityByQuestionId[item.question_id] ?? (isFound ? 2 : 0);
 }
@@ -233,81 +230,6 @@ function shuffle(items) {
 }
 
 
-function compareDistractorDifficulty(a, b) {
-  const aScore = getDifficultyScore(a, getHistoryStats(a));
-  const bScore = getDifficultyScore(b, getHistoryStats(b));
-
-  if (bScore !== aScore) {
-    return bScore - aScore;
-  }
-
-  const labelSort = String(a.label || "").localeCompare(String(b.label || ""));
-
-  if (labelSort !== 0) {
-    return labelSort;
-  }
-
-  return (a.question_id || 0) - (b.question_id || 0);
-}
-
-
-function distractorWeight(item, maxDifficultyScore, usageCounts) {
-  const difficultyScore = getDifficultyScore(item, getHistoryStats(item));
-  const useCount = usageCounts.get(item.question_id) || 0;
-  const difficultyWeight = Math.exp(
-    (difficultyScore - maxDifficultyScore) / DISTRACTOR_DIFFICULTY_SCALE
-  );
-  const cooldownWeight = Math.exp(-DISTRACTOR_COOLDOWN_DECAY * useCount);
-
-  return difficultyWeight * cooldownWeight;
-}
-
-
-function weightedSampleDistractors(items, count, usageCounts = new Map()) {
-  const candidates = [...(items || [])].sort(compareDistractorDifficulty);
-  const selected = [];
-
-  while (selected.length < count && candidates.length > 0) {
-    const maxDifficultyScore = Math.max(
-      ...candidates.map(item => getDifficultyScore(item, getHistoryStats(item)))
-    );
-    const weightedCandidates = candidates
-      .map((item, index) => ({
-        index,
-        item,
-        weight: distractorWeight(item, maxDifficultyScore, usageCounts)
-      }))
-      .sort((a, b) => {
-        if (b.weight !== a.weight) {
-          return b.weight - a.weight;
-        }
-
-        return compareDistractorDifficulty(a.item, b.item);
-      });
-    const totalWeight = weightedCandidates.reduce(
-      (total, candidate) => total + candidate.weight,
-      0
-    );
-    let threshold = Math.random() * totalWeight;
-    let selectedIndex = candidates.length - 1;
-
-    for (const candidate of weightedCandidates) {
-      threshold -= candidate.weight;
-
-      if (threshold <= 0) {
-        selectedIndex = candidate.index;
-        break;
-      }
-    }
-
-    selected.push(candidates[selectedIndex]);
-    candidates.splice(selectedIndex, 1);
-  }
-
-  return selected;
-}
-
-
 function resetDistractorUsageForReviewKey(ref, reviewKey) {
   if (ref.current.reviewKey !== reviewKey) {
     ref.current = {
@@ -359,32 +281,6 @@ function itemKey(items) {
 }
 
 
-function buildChoiceOptions(target, contextItems, usageCounts, excludeQuestionIds) {
-  if (!target) return [];
-
-  const candidates = (contextItems || []).filter(item =>
-    item.question_id !== target.question_id && item.label
-  );
-  const preferred = excludeQuestionIds
-    ? candidates.filter(item => !excludeQuestionIds.has(item.question_id))
-    : candidates;
-
-  let distractors = weightedSampleDistractors(preferred, 3, usageCounts);
-
-  // "If possible": only fall back to already-answered questions to reach 3.
-  if (distractors.length < 3) {
-    const chosen = new Set(distractors.map(item => item.question_id));
-    const fallback = candidates.filter(item => !chosen.has(item.question_id));
-
-    distractors = distractors.concat(
-      weightedSampleDistractors(fallback, 3 - distractors.length, usageCounts)
-    );
-  }
-
-  return shuffle([target, ...distractors]);
-}
-
-
 export function useMapReview(
   reviewZones,
   onComplete,
@@ -403,6 +299,7 @@ export function useMapReview(
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
+  const mapGeometry = options.mapGeometry;
   const relearningGroup = options.group;
   const graduateAnswer = options.graduateAnswer;
   const isPromptMode = mode !== MAP_MODE_TYPE_ALL;
@@ -546,11 +443,12 @@ export function useMapReview(
   );
 
   const choiceOptions = useMemo(
-    () => buildChoiceOptions(
+    () => buildConfusableChoiceOptions(
       currentPromptItem,
       contextItems,
       distractorUsage.counts,
-      resolvedQuestionIdSet
+      resolvedQuestionIdSet,
+      { geometry: mapGeometry }
     ),
     // Cooldown counts and the answered-question exclusion set live in mutable
     // per-review state; they should affect the next prompt sample, not resample
@@ -558,7 +456,7 @@ export function useMapReview(
     // when currentPromptItem advances, at which point resolvedQuestionIdSet
     // reflects the just-answered question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [contextItems, currentPromptItem]
+    [contextItems, currentPromptItem, mapGeometry]
   );
 
   useEffect(() => {

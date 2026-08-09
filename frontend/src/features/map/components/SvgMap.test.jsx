@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import SvgMap from "./SvgMap";
+import { mapZoneGeometry } from "./mapGeometry";
 
 const svgMarkup = `
   <svg viewBox="0 0 100 100">
@@ -222,6 +223,24 @@ describe("SvgMap zone hover colors", () => {
 
     fireEvent.click(dueZone);
     expect(onSelect).toHaveBeenCalledWith("due");
+  });
+});
+
+describe("mapZoneGeometry", () => {
+  it("unions multipart zone boxes and ignores invalid geometry", () => {
+    const geometry = mapZoneGeometry([
+      { code: "islands", el: { getBBox: () => ({ x: 2, y: 4, width: 3, height: 2 }) } },
+      { code: "islands", el: { getBBox: () => ({ x: 8, y: 1, width: 4, height: 5 }) } },
+      { code: "broken", el: { getBBox: () => { throw new Error("no bbox"); } } }
+    ], { viewBox: { baseVal: { width: 30, height: 40 } } });
+
+    expect(geometry.diagonal).toBe(50);
+    expect(geometry.zones).toEqual({
+      islands: {
+        bbox: { x: 2, y: 1, width: 10, height: 5 },
+        centroid: { x: 7, y: 3.5 }
+      }
+    });
   });
 });
 

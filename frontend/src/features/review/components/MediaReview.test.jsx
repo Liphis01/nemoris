@@ -696,9 +696,9 @@ describe("MediaReview answer label preview", () => {
       .not.toBeInTheDocument();
     expect(choiceBoard).toBeInTheDocument();
     expect(scrollPane).toContainElement(choiceBoard);
-    expect(controlBand).toHaveTextContent("Image demandée");
+    expect(controlBand).toHaveTextContent("Média demandé");
     expect(controlBand).toHaveTextContent("Image 1");
-    expect(scrollPane).not.toHaveTextContent("Image demandée");
+    expect(scrollPane).not.toHaveTextContent("Média demandé");
     expect(choiceBoard).toHaveStyle({
       display: "grid",
       height: "100%",

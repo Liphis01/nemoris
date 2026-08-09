@@ -10,6 +10,7 @@ import {
 import SequenceRail from "./SequenceRail";
 import { isAnswerable, qualityColors } from "../sequenceRail";
 import { matchesAnswerValue } from "../answerPolicy";
+import { buildChoiceOptions } from "../distractorSelection";
 
 const CHOICE_COUNT = 4;
 
@@ -78,7 +79,13 @@ function buildChoices(item, contextItems) {
   );
   const near = byDistance.slice(0, Math.max(0, (CHOICE_COUNT - 1) * 2));
 
-  return shuffled([item, ...shuffled(near).slice(0, CHOICE_COUNT - 1)]);
+  return buildChoiceOptions(
+    item,
+    [item, ...near],
+    new Map(),
+    null,
+    { sequence: true }
+  );
 }
 
 export default function SequenceReview({

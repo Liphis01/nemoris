@@ -21,7 +21,8 @@ import {
   IMAGE_MODE_MULTIPLE_CHOICE_MEDIA,
   IMAGE_MODE_TYPE_PROMPT,
   imageModeDetails,
-  imageModeLabels
+  imageModeLabels,
+  normalizeImageMode
 } from "../../review/imageModes";
 import {
   defaultTextMode,
@@ -189,6 +190,15 @@ function recordForMode(group, mode) {
   // non-default mode the hook overwrites it with that mode's score, which would
   // otherwise leak into the default mode until the next refresh.
   if (records && typeof records === "object") {
+    if (group?.type_group === "media") {
+      const canonicalMode = normalizeImageMode(mode);
+      const legacyRecord = Object.entries(records).find(([storedMode]) => (
+        normalizeImageMode(storedMode) === canonicalMode
+      ))?.[1];
+
+      return records[canonicalMode] || legacyRecord || null;
+    }
+
     return records[mode] || null;
   }
 

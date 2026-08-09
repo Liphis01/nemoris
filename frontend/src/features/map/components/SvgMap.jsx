@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { mapZoneGeometry } from "./mapGeometry";
 
 const emptyZoneLabels = {};
 
@@ -93,7 +94,8 @@ export default function SvgMap({
     clickableCodes = null,
     zoneLabels = emptyZoneLabels,
     onSelect,
-    onCodesLoaded
+    onCodesLoaded,
+    onGeometryLoaded
 }) {
     // SvgMap injects raw SVG markup, then manages interaction by attaching
     // listeners/styles to elements that declare data-code.
@@ -235,6 +237,7 @@ export default function SvgMap({
         if (!isV2 && !isBackendOwnedLegacy) {
             setLoadError("Cette carte externe doit être mise à niveau avant utilisation.");
             onCodesLoaded?.([]);
+            onGeometryLoaded?.({ diagonal: 0, zones: {} });
             return undefined;
         }
 
@@ -338,6 +341,7 @@ export default function SvgMap({
                 if (onCodesLoaded) {
                     onCodesLoaded(mapCodes);
                 }
+                onGeometryLoaded?.(mapZoneGeometry(zoneElements, svgEl));
             })
             .catch((error) => {
                 if (cancelled) return;
@@ -345,13 +349,14 @@ export default function SvgMap({
                 containerRef.current?.replaceChildren();
                 setLoadError(error.message || "Impossible de charger la carte.");
                 onCodesLoaded?.([]);
+                onGeometryLoaded?.({ diagonal: 0, zones: {} });
             });
 
         return () => {
             cancelled = true;
             zoneElementsRef.current = [];
         };
-    }, [svgPath, mapManifest, onCodesLoaded]);
+    }, [svgPath, mapManifest, onCodesLoaded, onGeometryLoaded]);
 
     useEffect(() => {
         // Apply semantic colors to the imported SVG without modifying the SVG

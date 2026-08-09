@@ -260,6 +260,10 @@ export default function MapReview({
   fillAvailableHeight = false
 }) {
   const normalizedMode = normalizeMapMode(modeProp || group.mode);
+  const [mapGeometry, setMapGeometry] = useState(null);
+  const handleMapGeometryLoaded = useCallback(geometry => {
+    setMapGeometry(geometry?.diagonal > 0 ? geometry : null);
+  }, []);
   const {
     activeMissedCodes,
     choiceFeedback,
@@ -311,7 +315,8 @@ export default function MapReview({
     inlineChoiceRating: showQualityControls,
     onAnsweringComplete,
     group,
-    graduateAnswer
+    graduateAnswer,
+    mapGeometry
   });
   const showChoiceRating = (
     mode === MAP_MODE_MULTIPLE_CHOICE &&
@@ -975,6 +980,7 @@ export default function MapReview({
               selected={selectedCode || undefined}
               zoneLabels={foundZoneLabels}
               onSelect={handleActiveMapSelect}
+              onGeometryLoaded={handleMapGeometryLoaded}
             />
             {showAutoZoomToggle && (
               <button
