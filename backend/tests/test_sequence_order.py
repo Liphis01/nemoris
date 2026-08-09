@@ -256,6 +256,38 @@ class SequenceOrderSaveTests(unittest.TestCase):
 
         self.assertEqual(saved["group"]["data"]["order"]["mode"], "derived")
 
+    def test_review_goal_override_can_be_saved_and_returned_to_auto(self):
+        self.group.data = {"training_record": {"best_time_ms": 1234}}
+        self.db.commit()
+
+        save_sequence_group_items(
+            self.db,
+            self.group.id,
+            SequenceGroupItemsBulkUpdate(
+                group=SequenceGroupItemsGroupUpdate(
+                    review_goal="random_access"
+                ),
+                items=[],
+                deleted_item_ids=[]
+            )
+        )
+        self.assertEqual(self.group.data["review_goal"], "random_access")
+        self.assertEqual(
+            self.group.data["training_record"],
+            {"best_time_ms": 1234}
+        )
+
+        save_sequence_group_items(
+            self.db,
+            self.group.id,
+            SequenceGroupItemsBulkUpdate(
+                group=SequenceGroupItemsGroupUpdate(review_goal="auto"),
+                items=[],
+                deleted_item_ids=[]
+            )
+        )
+        self.assertNotIn("review_goal", self.group.data)
+
 
 if __name__ == "__main__":
     unittest.main()

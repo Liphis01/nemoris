@@ -49,10 +49,27 @@ function renderSequence({
   onComplete = vi.fn(),
   showQualityControls = true
 } = {}) {
+  const firstBlankIndex = rail.findIndex(entry => entry.kind === "blank");
+  const recitation = mode === "recite" && firstBlankIndex >= 0
+    ? {
+        cue: firstBlankIndex > 0 ? rail[firstBlankIndex - 1] : null,
+        run_start: rail[firstBlankIndex].position - 1,
+        targets: rail.slice(firstBlankIndex).map(entry => ({
+          question_id: entry.question_id,
+          position: entry.position
+        }))
+      }
+    : null;
+  const presentedReviewItems = recitation
+    ? reviewItems.filter(entry => (
+        recitation.targets.some(target => target.question_id === entry.question_id)
+      ))
+    : reviewItems;
+
   render(
     <SequenceReview
-      group={{ group_id: 7, name: "Alphabet grec", length: 3, rail }}
-      reviewItems={reviewItems}
+      group={{ group_id: 7, name: "Alphabet grec", length: 3, rail, recitation }}
+      reviewItems={presentedReviewItems}
       contextItems={contextItems}
       mode={mode}
       onAnsweringComplete={onAnsweringComplete}
@@ -83,9 +100,9 @@ describe("SequenceReview", () => {
 
     expect(mode).toBe("type_position");
     expect(payload.items).toEqual({
-      1: { position: 1 },
-      2: { position: 3 },
-      3: { position: null }
+      1: { position: 1, text: "Alpha" },
+      2: { position: 3, text: "Gamma" },
+      3: { position: null, text: "" }
     });
   });
 
@@ -98,7 +115,10 @@ describe("SequenceReview", () => {
     fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
 
     await waitFor(() => expect(submitAnswer).toHaveBeenCalled());
-    expect(submitAnswer.mock.calls[0][0].items[2]).toEqual({ position: 2 });
+    expect(submitAnswer.mock.calls[0][0].items[2]).toEqual({
+      position: 2,
+      text: "  beta "
+    });
   });
 
   it("grades without scheduling, then commits on Continuer", async () => {
@@ -122,7 +142,10 @@ describe("SequenceReview", () => {
     fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalled());
-    expect(submitAnswer.mock.calls[1][0].commit).toBe(true);
+    const preview = submitAnswer.mock.calls[0][0];
+    const commit = submitAnswer.mock.calls[1][0];
+
+    expect(commit).toEqual({ ...preview, commit: true });
   });
 
   it("lets a hit be bumped to Facile and posts the chosen quality", async () => {
@@ -248,8 +271,8 @@ describe("SequenceReview", () => {
 
       await waitFor(() => expect(submitAnswer).toHaveBeenCalled());
       expect(submitAnswer.mock.calls[0][0].rail).toEqual([
-        { position: 1, kind: "blank" },
-        { position: 2, kind: "anchor" }
+        { question_id: 1, position: 1, kind: "blank" },
+        { question_id: 9, position: 2, kind: "anchor" }
       ]);
     });
   });
@@ -328,8 +351,14 @@ describe("SequenceReview", () => {
 
       const payload = submitAnswer.mock.calls[0][0];
 
-      expect(payload.run).toEqual([2, 3]);
+      expect(payload.run).toEqual([
+        { text: "Bêta", question_id: 2 },
+        { text: "Gamma", question_id: 3 }
+      ]);
       expect(payload.runStart).toBe(1);
+      expect(payload.targetIds).toEqual([2, 3]);
+      expect(payload.scheduledIds).toEqual([2, 3]);
+      expect(payload.stopReason).toBe("completed");
       expect(payload.groupId).toBe(7);
     });
 
@@ -347,7 +376,10 @@ describe("SequenceReview", () => {
       });
 
       await waitFor(() => expect(submitAnswer).toHaveBeenCalled());
-      expect(submitAnswer.mock.calls[0][0].run).toEqual([-1]);
+      expect(submitAnswer.mock.calls[0][0].run).toEqual([
+        { text: "pas dans la liste", question_id: null }
+      ]);
+      expect(submitAnswer.mock.calls[0][0].stopReason).toBe("wrong_answer");
     });
 
     it("lets the learner declare the stall", async () => {
@@ -360,6 +392,50 @@ describe("SequenceReview", () => {
 
       await waitFor(() => expect(submitAnswer).toHaveBeenCalled());
       expect(submitAnswer.mock.calls[0][0].run).toEqual([]);
+      expect(submitAnswer.mock.calls[0][0].stopReason).toBe("declared_stall");
+    });
+
+    it("shows only the starting cue, never future target labels", () => {
+      renderSequence({ mode: "recite", rail: reciteRail });
+
+      expect(screen.getByText("Après Delta")).toBeInTheDocument();
+      expect(screen.queryByText("Bêta")).not.toBeInTheDocument();
+      expect(screen.queryByText("Gamma")).not.toBeInTheDocument();
+    });
+
+    it("requeues scheduled unattempted targets and hides context quality controls", async () => {
+      const submitAnswer = vi.fn().mockResolvedValue(gradedResponse([
+        {
+          question_id: 2,
+          quality: 2,
+          expected_position: 2,
+          label: "Bêta",
+          scheduled: false,
+          status: "graded"
+        },
+        {
+          question_id: 3,
+          quality: null,
+          expected_position: 3,
+          label: "Gamma",
+          scheduled: true,
+          status: "unattempted"
+        }
+      ]));
+      const onAnsweringComplete = vi.fn();
+
+      renderSequence({
+        mode: "recite",
+        rail: reciteRail,
+        submitAnswer,
+        onAnsweringComplete
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Je bloque" }));
+
+      await screen.findByText("Non présenté · à revoir");
+      expect(onAnsweringComplete).toHaveBeenCalledWith([3]);
+      expect(document.querySelector("[data-sequence-quality-bar]")).toBeNull();
     });
   });
 });

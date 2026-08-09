@@ -9,15 +9,19 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import Progress, Question, QuestionGroup, ReviewLog
 from app.routers.review import answer_sequence
+from app.routers.training import grade_sequence_training
 from app.schemas import (
     QuestionCreate,
     SequenceAnswerItem,
     SequenceAnswerRequest,
+    SequenceRailSlot,
+    SequenceRunItem,
     SequenceGroupItemBulkItem,
     SequenceGroupItemsBulkUpdate,
     TrainingAttemptRecordRequest
 )
 from app.services.mode_difficulty import click_prompt_base_difficulty
+from app.services.sequence_modes import sequence_reorder_difficulty
 from app.services.mode_selection import CHOICE_MODE_MIN_CONTEXT
 from app.services.questions import create_question
 from app.services.review import serialize_review_items
@@ -30,17 +34,21 @@ from app.services.sequence_groups import (
     list_sequence_group_items,
     save_sequence_group_items
 )
+from app.services.sequence_answers import grade_sequence_answer
 from app.services.sequence_modes import (
+    SEQUENCE_GOAL_RANDOM_ACCESS,
+    SEQUENCE_GOAL_RECITATION,
     SEQUENCE_MODE_MULTIPLE_CHOICE,
     SEQUENCE_MODE_GAP_FILL,
     SEQUENCE_MODE_RECITE,
     SEQUENCE_MODE_REORDER,
     SEQUENCE_MODE_TYPE_POSITION,
     choose_sequence_review_mode,
-    sequence_mode_difficulty
+    sequence_mode_difficulty,
+    sequence_review_goal
 )
 from app.services.training import (
-    grade_training_sequence,
+    get_training_items,
     group_training_fingerprint,
     record_training_attempt,
     serialize_previous_training_record
@@ -437,7 +445,118 @@ class SequenceModeTests(SequenceTestCase):
         self.assertNotIn(SEQUENCE_MODE_REORDER, modes)
 
 
+class SequenceReviewGoalTests(SequenceTestCase):
+    def test_manual_and_derived_order_infer_different_goals(self):
+        manual = self.add_group("Alphabet")
+        derived = self.add_group("Chronologie")
+        derived.data = {"order": {"mode": "derived", "kind": "date"}}
+
+        self.assertEqual(sequence_review_goal(manual), SEQUENCE_GOAL_RECITATION)
+        self.assertEqual(
+            sequence_review_goal(derived),
+            SEQUENCE_GOAL_RANDOM_ACCESS
+        )
+
+    def test_an_explicit_goal_overrides_order_inference(self):
+        group = self.add_group()
+        group.data = {
+            "order": {"mode": "derived", "kind": "number"},
+            "review_goal": SEQUENCE_GOAL_RECITATION
+        }
+
+        self.assertEqual(sequence_review_goal(group), SEQUENCE_GOAL_RECITATION)
+
+    def test_scheduled_selection_respects_the_resolved_goal(self):
+        group = self.add_group()
+        due = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                reps=3,
+                next_review=date.today()
+            )
+            for index in range(1, 7)
+        ]
+
+        recitation_modes = {
+            choose_sequence_review_mode(
+                due,
+                due,
+                review_goal=SEQUENCE_GOAL_RECITATION,
+                rng=FixedRandom(value)
+            )
+            for value in (0.0, 0.25, 0.5, 0.75, 0.99)
+        }
+        random_access_modes = {
+            choose_sequence_review_mode(
+                due,
+                due,
+                review_goal=SEQUENCE_GOAL_RANDOM_ACCESS,
+                rng=FixedRandom(value)
+            )
+            for value in (0.0, 0.25, 0.5, 0.75, 0.99)
+        }
+
+        self.assertLessEqual(
+            recitation_modes,
+            {
+                SEQUENCE_MODE_RECITE,
+                SEQUENCE_MODE_GAP_FILL,
+                SEQUENCE_MODE_REORDER
+            }
+        )
+        self.assertLessEqual(
+            random_access_modes,
+            {
+                SEQUENCE_MODE_TYPE_POSITION,
+                SEQUENCE_MODE_MULTIPLE_CHOICE
+            }
+        )
+
+
 class SequenceReviewSerializationTests(SequenceTestCase):
+    def test_recite_serializes_server_bounded_presentations_without_a_rail(self):
+        group = self.add_group()
+        questions = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                question_id=index,
+                reps=3,
+                next_review=(
+                    date.today()
+                    if index in {11, 31}
+                    else date.today() + timedelta(days=30)
+                )
+            )
+            for index in range(1, 41)
+        ]
+        self.db.commit()
+
+        groups = serialize_review_items(
+            [questions[10], questions[30]],
+            scheduled_review=True,
+            forced_sequence_mode=SEQUENCE_MODE_RECITE
+        )
+
+        self.assertEqual(len(groups), 2)
+        self.assertTrue(all(group_payload["rail"] == [] for group_payload in groups))
+        self.assertEqual(
+            [group_payload["recitation"]["run_start"] for group_payload in groups],
+            [10, 30]
+        )
+        self.assertEqual(
+            [group_payload["recitation"]["scheduled_ids"] for group_payload in groups],
+            [[11], [31]]
+        )
+        self.assertTrue(all(
+            "label" not in target
+            for group_payload in groups
+            for target in group_payload["recitation"]["targets"]
+        ))
+
     def test_the_rail_never_labels_an_item_before_its_first_review(self):
         # THE load-bearing invariant of the whole type. Asserted against the
         # rail rather than a specific slot layout, because decoys deliberately
@@ -469,7 +588,11 @@ class SequenceReviewSerializationTests(SequenceTestCase):
 
         self.db.commit()
 
-        items = serialize_review_items(due, scheduled_review=True)
+        items = serialize_review_items(
+            due,
+            scheduled_review=True,
+            forced_sequence_mode=SEQUENCE_MODE_GAP_FILL
+        )
         sequence_group = next(
             item for item in items if item["type_q"] == "sequence"
         )
@@ -503,7 +626,11 @@ class SequenceReviewSerializationTests(SequenceTestCase):
         self.add_item(group, "New 3", 3)
         self.db.commit()
 
-        items = serialize_review_items(due, scheduled_review=True)
+        items = serialize_review_items(
+            due,
+            scheduled_review=True,
+            forced_sequence_mode=SEQUENCE_MODE_GAP_FILL
+        )
         sequence_group = next(
             item for item in items if item["type_q"] == "sequence"
         )
@@ -598,6 +725,7 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
         response = answer_sequence(
             SequenceAnswerRequest(
+                group_id=group.id,
                 items={
                     1: SequenceAnswerItem(position=1),
                     2: SequenceAnswerItem(position=3),
@@ -646,9 +774,10 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
         answer_sequence(
             SequenceAnswerRequest(
+                group_id=group.id,
                 items={
-                    1: SequenceAnswerItem(position=1),
-                    2: SequenceAnswerItem(position=3)
+                    1: SequenceAnswerItem(position=1, text="Item 1"),
+                    2: SequenceAnswerItem(position=3, text="réponse brute")
                 },
                 mode=SEQUENCE_MODE_TYPE_POSITION,
                 context_count=3
@@ -656,9 +785,16 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
             db=self.db
         )
 
-        self.assertEqual(items[0].progress.history[-1]["answer"], 1)
+        self.assertEqual(items[0].progress.history[-1]["answer"], "Item 1")
         # A miss must record what was actually placed, not the expected rank.
-        self.assertEqual(items[1].progress.history[-1]["answer"], 3)
+        self.assertEqual(
+            items[1].progress.history[-1]["answer"],
+            "réponse brute"
+        )
+        self.assertEqual(
+            items[1].progress.history[-1]["sequence_resolved_position"],
+            3
+        )
 
         # The revlog mirrors the entry verbatim, so the answer rides along.
         row = (
@@ -668,7 +804,7 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
             .first()
         )
 
-        self.assertEqual(row.data["answer"], 3)
+        self.assertEqual(row.data["answer"], "réponse brute")
 
     def test_reorder_difficulty_tracks_the_submitted_pool(self):
         group = self.add_group()
@@ -684,7 +820,13 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
         answer_sequence(
             SequenceAnswerRequest(
+                group_id=group.id,
                 items={1: SequenceAnswerItem(position=1)},
+                rail=[SequenceRailSlot(
+                    question_id=1,
+                    position=1,
+                    kind="blank"
+                )],
                 mode=SEQUENCE_MODE_REORDER,
                 context_count=10
             ),
@@ -701,7 +843,7 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
         self.assertAlmostEqual(
             entry["mode_difficulty"],
-            click_prompt_base_difficulty(10),
+            sequence_reorder_difficulty(1),
             places=6
         )
 
@@ -712,7 +854,8 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
         response = answer_sequence(
             SequenceAnswerRequest(
-                items={1: SequenceAnswerItem(position=5)},
+                group_id=group.id,
+                items={1: SequenceAnswerItem(position=None, text="5")},
                 mode=SEQUENCE_MODE_TYPE_POSITION
             ),
             db=self.db
@@ -730,13 +873,15 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
         self.assertEqual(progress.next_review, date.today())
 
     def test_rejects_a_non_sequence_question(self):
+        group = self.add_group()
         item = Question(
             id=1,
             type_q="text",
             question="Nope",
             answer="Nope",
             tags=[],
-            data={}
+            data={},
+            group_id=group.id
         )
         self.db.add(item)
         self.db.commit()
@@ -744,6 +889,7 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
         with self.assertRaises(HTTPException) as caught:
             answer_sequence(
                 SequenceAnswerRequest(
+                    group_id=group.id,
                     items={1: SequenceAnswerItem(position=1)}
                 ),
                 db=self.db
@@ -753,6 +899,96 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
 
 
 class SequenceTrainingTests(SequenceTestCase):
+    def test_all_modes_share_the_scheduled_preview_grader_without_writes(self):
+        group = self.add_group()
+        questions = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                question_id=index,
+                reps=2,
+                next_review=date.today()
+            )
+            for index in range(1, 7)
+        ]
+        self.db.commit()
+        before = {
+            question.id: list(question.progress.history)
+            for question in questions
+        }
+
+        for mode in (
+            SEQUENCE_MODE_TYPE_POSITION,
+            SEQUENCE_MODE_GAP_FILL,
+            SEQUENCE_MODE_MULTIPLE_CHOICE,
+            SEQUENCE_MODE_REORDER,
+            SEQUENCE_MODE_RECITE
+        ):
+            with self.subTest(mode=mode):
+                presentations = get_training_items(
+                    self.db,
+                    scope_type="group",
+                    group_id=group.id,
+                    sequence_mode=mode
+                )
+                self.assertTrue(presentations)
+                self.assertTrue(all(
+                    presentation["mode"] == mode
+                    for presentation in presentations
+                ))
+                presentation = presentations[0]
+
+                if mode == SEQUENCE_MODE_RECITE:
+                    target_ids = [
+                        target["question_id"]
+                        for target in presentation["recitation"]["targets"]
+                    ]
+                    request = SequenceAnswerRequest(
+                        group_id=group.id,
+                        mode=mode,
+                        run=[
+                            SequenceRunItem(
+                                text=f"Item {question_id}",
+                                question_id=question_id
+                            )
+                            for question_id in target_ids
+                        ],
+                        run_start=presentation["recitation"]["run_start"],
+                        target_ids=target_ids,
+                        scheduled_ids=presentation["recitation"]["scheduled_ids"],
+                        stop_reason="completed",
+                        commit=False
+                    )
+                else:
+                    request = SequenceAnswerRequest(
+                        group_id=group.id,
+                        mode=mode,
+                        items={
+                            item["question_id"]: SequenceAnswerItem(
+                                position=item["position"],
+                                text=item["label"]
+                            )
+                            for item in presentation["items"]
+                        },
+                        rail=[SequenceRailSlot(**slot) for slot in presentation["rail"]],
+                        commit=False
+                    )
+
+                scheduled_preview = answer_sequence(request, db=self.db)
+                training_grade = grade_sequence_training(request, db=self.db)
+
+                self.assertEqual(training_grade, scheduled_preview)
+
+        self.assertEqual(
+            {
+                question.id: list(question.progress.history)
+                for question in questions
+            },
+            before
+        )
+        self.assertEqual(self.db.query(ReviewLog).count(), 0)
+
     def test_reordering_the_list_retires_the_training_record(self):
         # Every other type keys its record on the SET of items, but for a
         # sequence the order IS the challenge -- a permutation of the same ids
@@ -819,12 +1055,17 @@ class SequenceTrainingTests(SequenceTestCase):
         before_next_review = before.progress.next_review
         before_reps = before.progress.reps
 
-        response = grade_training_sequence(
+        response = grade_sequence_answer(
             self.db,
-            {
+            SequenceAnswerRequest(
+                group_id=group.id,
+                items={
                 1: SequenceAnswerItem(position=1),
-                2: SequenceAnswerItem(position=9)
-            }
+                2: SequenceAnswerItem(position=None, text="inconnu")
+                },
+                commit=False
+            ),
+            schedule=False
         )
         by_id = {
             result["question_id"]: result

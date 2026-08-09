@@ -6,8 +6,10 @@ import {
 import { invalidateTags } from "../../../shared/tagLabels";
 import {
   normalizeOrder,
+  normalizeReviewGoal,
   orderValueText,
   parseOrderValue,
+  resolvedReviewGoal,
   sortableOrderValue
 } from "../sequenceOrder";
 import FavoriteToggleButton from "./FavoriteToggleButton";
@@ -73,7 +75,8 @@ function buildSignature(group, tags, items, deletedItemIds) {
       tags: tags || [],
       // Without this the Save button never enables for a pure order-setting
       // change and the edit is silently lost.
-      order: normalizeOrder(group?.data?.order)
+      order: normalizeOrder(group?.data?.order),
+      reviewGoal: normalizeReviewGoal(group?.data?.review_goal)
     },
     // The array order IS the content here, so the signature must be
     // order-sensitive: a pure reorder is an unsaved change like any other.
@@ -304,6 +307,8 @@ export default function SequenceGroupEditor({
     [editableGroup]
   );
   const isDerived = order.mode === "derived";
+  const reviewGoal = normalizeReviewGoal(editableGroup?.data?.review_goal);
+  const effectiveReviewGoal = resolvedReviewGoal(reviewGoal, order);
 
   const updateOrder = useCallback(patch => {
     setEditableGroup(prev => {
@@ -317,6 +322,16 @@ export default function SequenceGroupEditor({
         }
       };
     });
+  }, []);
+
+  const updateReviewGoal = useCallback(value => {
+    setEditableGroup(prev => ({
+      ...(prev || {}),
+      data: {
+        ...((prev || {}).data || {}),
+        review_goal: normalizeReviewGoal(value)
+      }
+    }));
   }, []);
 
   // A derived list is sorted by its attribute, so showing it in array order
@@ -604,7 +619,8 @@ export default function SequenceGroupEditor({
         group: {
           name: nameForSave,
           tags: sharedTags || [],
-          order
+          order,
+          review_goal: reviewGoal
         },
         items: items.map(serializeItem),
         deleted_item_ids: deletedItemIds
@@ -822,6 +838,28 @@ export default function SequenceGroupEditor({
                 </span>
               </>
             )}
+
+            <label
+              htmlFor="sequence-review-goal"
+              style={{ color: "#bbb", fontSize: "12px" }}
+            >
+              Objectif de révision
+            </label>
+            <select
+              id="sequence-review-goal"
+              onChange={event => updateReviewGoal(event.target.value)}
+              style={compactHeaderInputStyle}
+              value={reviewGoal}
+            >
+              <option value="auto">Automatique</option>
+              <option value="recitation">Réciter dans l'ordre</option>
+              <option value="random_access">Retrouver par position</option>
+            </select>
+            <span style={{ color: "#888", fontSize: "12px" }}>
+              Automatique utilise {effectiveReviewGoal === "recitation"
+                ? "la récitation pour un ordre manuel"
+                : "l'accès par position pour un ordre calculé"}.
+            </span>
           </div>
         )}
 

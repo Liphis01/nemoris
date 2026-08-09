@@ -18,6 +18,10 @@ from ..scheduler import (
     update_progress
 )
 from .mode_difficulty import click_prompt_base_difficulty
+from .sequence_modes import (
+    SEQUENCE_GOAL_RECITATION,
+    sequence_reorder_difficulty
+)
 from .settings import (
     SCHEDULER_TUNING_SETTINGS_KEY,
     load_scheduler_tuning_settings,
@@ -27,11 +31,17 @@ from .settings import (
 
 
 DEFAULT_TUNING_REPORT_DIR = BACKEND_DIR / "tuning_reports"
-TUNABLE_MODES = {"type_prompt", "multiple_choice", "click_prompt"}
+TUNABLE_MODES = {
+    "type_prompt",
+    "multiple_choice",
+    "click_prompt",
+    "sequence_reorder"
+}
 PARAMETER_STEPS = {
     "type_prompt_difficulty": 0.03,
     "multiple_choice_difficulty": 0.03,
     "click_prompt_bias": 0.025,
+    "sequence_reorder_bias": 0.025,
     "easy_reward_floor": 0.025,
     "failure_penalty_power": 0.05
 }
@@ -42,6 +52,7 @@ class TuningParams:
     type_prompt_difficulty: float = 1.05
     multiple_choice_difficulty: float = 0.55
     click_prompt_bias: float = 0.0
+    sequence_reorder_bias: float = 0.0
     easy_reward_floor: float = 0.50
     failure_penalty_power: float = 1.0
 
@@ -79,6 +90,9 @@ class HistoryEvent:
     mode: str
     quality: int
     context_count: int
+    goal: str | None = None
+    recorded_difficulty: float | None = None
+    recorded_sequence_reorder_bias: float = 0.0
 
 
 @dataclass
@@ -96,6 +110,17 @@ def clamp(value, lower, upper):
 
 
 def normalize_history_mode(entry):
+    sequence_mode = entry.get("sequence_mode")
+
+    if sequence_mode in {
+        "type_position",
+        "gap_fill",
+        "multiple_choice",
+        "reorder",
+        "recite"
+    }:
+        return f"sequence_{sequence_mode}"
+
     mode = entry.get("map_mode") or entry.get("image_mode")
 
     if mode in {"multiple_choice", "multiple_choice_label", "multiple_choice_image"}:
@@ -108,7 +133,12 @@ def normalize_history_mode(entry):
 
 
 def history_context_count(entry):
-    for key in ("map_context_count", "image_context_count", "context_count"):
+    for key in (
+        "sequence_context_count",
+        "map_context_count",
+        "image_context_count",
+        "context_count"
+    ):
         if entry.get(key) is None:
             continue
 
@@ -118,6 +148,20 @@ def history_context_count(entry):
             return 0
 
     return 0
+
+
+def history_mode_difficulty(entry):
+    try:
+        return float(entry.get("mode_difficulty"))
+    except (TypeError, ValueError):
+        return None
+
+
+def history_sequence_reorder_bias(entry):
+    try:
+        return float(entry.get("sequence_reorder_bias", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def history_quality(entry):
@@ -151,7 +195,10 @@ def sorted_history_events(progress):
             reviewed_on=reviewed_on,
             mode=mode,
             quality=quality,
-            context_count=history_context_count(entry)
+            context_count=history_context_count(entry),
+            goal=entry.get("sequence_goal"),
+            recorded_difficulty=history_mode_difficulty(entry),
+            recorded_sequence_reorder_bias=history_sequence_reorder_bias(entry)
         ))
 
     return sorted(events, key=lambda item: (item.reviewed_on, item.index))
@@ -170,6 +217,28 @@ def mode_difficulty_for_event(event, params):
     if event.mode == "click_prompt":
         difficulty = click_prompt_base_difficulty(event.context_count)
         return clamp(difficulty + params.click_prompt_bias, 0.35, 0.98)
+
+    if event.mode == "sequence_reorder":
+        if event.recorded_difficulty is not None:
+            base = (
+                event.recorded_difficulty -
+                event.recorded_sequence_reorder_bias
+            )
+            return clamp(base + params.sequence_reorder_bias, 0.4, 0.95)
+
+        return sequence_reorder_difficulty(
+            event.context_count,
+            tuning=params.to_settings()
+        )
+
+    if event.mode.startswith("sequence_") and event.recorded_difficulty is not None:
+        return event.recorded_difficulty
+
+    if event.mode == "sequence_multiple_choice":
+        return params.multiple_choice_difficulty
+
+    if event.mode == "sequence_type_position":
+        return 1.0
 
     return 1.0
 
@@ -240,10 +309,26 @@ def replay_progress_for_samples(progress, params):
     previous_event = None
 
     for sequence, event in enumerate(events):
-        if (
+        validates_shared_mode = (
             event.mode == "type_all" and
             previous_event and
-            previous_event.mode in TUNABLE_MODES and
+            previous_event.mode in {
+                "type_prompt",
+                "multiple_choice",
+                "click_prompt"
+            }
+        )
+        validates_sequence_reorder = (
+            event.mode == "sequence_recite" and
+            event.goal == SEQUENCE_GOAL_RECITATION and
+            previous_event and
+            previous_event.mode == "sequence_reorder" and
+            previous_event.goal == SEQUENCE_GOAL_RECITATION
+        )
+
+        if (
+            previous_event and
+            (validates_shared_mode or validates_sequence_reorder) and
             (event.reviewed_on - previous_event.reviewed_on).days >= 1
         ):
             retrievability = replay_retrievability(replay, event.reviewed_on)
@@ -400,7 +485,13 @@ def validation_improvement(base_score, candidate_score):
     return (base_score - candidate_score) / base_score
 
 
-def changed_param_sample_gate(changed_param, validation_counts, min_mode_pairs):
+def changed_param_sample_gate(
+    changed_param,
+    sample_counts,
+    validation_counts,
+    min_total_pairs,
+    min_mode_pairs
+):
     if changed_param == "type_prompt_difficulty":
         return validation_counts.get("type_prompt", 0) >= min_mode_pairs
 
@@ -409,6 +500,12 @@ def changed_param_sample_gate(changed_param, validation_counts, min_mode_pairs):
 
     if changed_param == "click_prompt_bias":
         return validation_counts.get("click_prompt", 0) >= min_mode_pairs
+
+    if changed_param == "sequence_reorder_bias":
+        return (
+            sample_counts.get("sequence_reorder", 0) >= max(100, min_total_pairs) and
+            validation_counts.get("sequence_reorder", 0) >= max(25, min_mode_pairs)
+        )
 
     if changed_param in {"easy_reward_floor", "failure_penalty_power"}:
         return sum(
@@ -455,7 +552,9 @@ def choose_candidate(progress_rows, current, min_total_pairs, min_mode_pairs):
         reason = "candidate_not_better"
     elif not changed_param_sample_gate(
         best_record["changed_param"],
+        current_record["sample_counts"],
         current_record["validation_sample_counts"],
+        min_total_pairs,
         min_mode_pairs
     ):
         reason = "insufficient_mode_pairs"
@@ -659,6 +758,7 @@ def write_reports(out_dir, summary, calibration_rows, score_rows):
             "type_prompt_difficulty",
             "multiple_choice_difficulty",
             "click_prompt_bias",
+            "sequence_reorder_bias",
             "easy_reward_floor",
             "failure_penalty_power"
         ]

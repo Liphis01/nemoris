@@ -24,9 +24,11 @@ from app.services.scheduler_tuning import (
     HistoryEvent,
     TuningParams,
     brier_score,
+    changed_param_sample_gate,
     choose_candidate,
     mode_difficulty_for_event,
     replay_progress_for_samples,
+    split_samples,
     sorted_history_events,
     tune_scheduler
 )
@@ -60,6 +62,37 @@ def mode_history(source_mode, source_quality, validation_quality, start, gap=40)
             "raw_quality": validation_quality,
             "map_mode": "type_all",
             "map_context_count": 4
+        }
+    ]
+
+
+def sequence_history(
+    source_quality,
+    validation_quality,
+    start,
+    gap=40,
+    source_goal="recitation",
+    validation_goal="recitation"
+):
+    return [
+        {
+            "reviewed_on": start.isoformat(),
+            "quality": source_quality,
+            "raw_quality": source_quality,
+            "sequence_mode": "reorder",
+            "sequence_goal": source_goal,
+            "sequence_context_count": 5,
+            "sequence_reorder_bias": 0.0,
+            "mode_difficulty": 0.5509
+        },
+        {
+            "reviewed_on": (start + timedelta(days=gap)).isoformat(),
+            "quality": validation_quality,
+            "raw_quality": validation_quality,
+            "sequence_mode": "recite",
+            "sequence_goal": validation_goal,
+            "sequence_context_count": 5,
+            "mode_difficulty": 1.2
         }
     ]
 
@@ -145,6 +178,111 @@ def test_history_extraction_skips_incomplete_and_same_day_retries():
 
     assert len(sorted_history_events(progress)) == 2
     assert replay_progress_for_samples(progress, TuningParams()) == []
+
+
+def test_sequence_reorder_pairs_only_with_later_recitation_validation():
+    eligible = progress_with_history(
+        1,
+        sequence_history(2, 2, date(2026, 1, 1), gap=1)
+    )
+    same_day = progress_with_history(
+        2,
+        sequence_history(2, 2, date(2026, 1, 1), gap=0)
+    )
+    wrong_goal = progress_with_history(
+        3,
+        sequence_history(
+            2,
+            2,
+            date(2026, 1, 1),
+            source_goal="random_access"
+        )
+    )
+
+    samples = replay_progress_for_samples(eligible, TuningParams())
+
+    assert len(samples) == 1
+    assert samples[0].source_mode == "sequence_reorder"
+    assert replay_progress_for_samples(same_day, TuningParams()) == []
+    assert replay_progress_for_samples(wrong_goal, TuningParams()) == []
+
+
+def test_sequence_replay_uses_recorded_presentation_difficulty():
+    params = TuningParams(sequence_reorder_bias=0.025)
+    recorded = {
+        "sequence_type_position": 1.0,
+        "sequence_gap_fill": 0.72,
+        "sequence_multiple_choice": 0.55,
+        "sequence_recite": 1.2
+    }
+
+    for mode, difficulty in recorded.items():
+        event = HistoryEvent(
+            question_id=1,
+            index=0,
+            reviewed_on=date.today(),
+            mode=mode,
+            quality=2,
+            context_count=6,
+            recorded_difficulty=difficulty
+        )
+        assert mode_difficulty_for_event(event, params) == difficulty
+
+    reorder = HistoryEvent(
+        question_id=1,
+        index=0,
+        reviewed_on=date.today(),
+        mode="sequence_reorder",
+        quality=2,
+        context_count=6,
+        recorded_difficulty=0.65,
+        recorded_sequence_reorder_bias=0.0
+    )
+    assert mode_difficulty_for_event(reorder, params) == 0.675
+
+
+def test_sequence_bias_requires_100_pairs_and_25_holdout_pairs():
+    assert not changed_param_sample_gate(
+        "sequence_reorder_bias",
+        {"sequence_reorder": 99},
+        {"sequence_reorder": 25},
+        min_total_pairs=10,
+        min_mode_pairs=5
+    )
+    assert not changed_param_sample_gate(
+        "sequence_reorder_bias",
+        {"sequence_reorder": 100},
+        {"sequence_reorder": 24},
+        min_total_pairs=10,
+        min_mode_pairs=5
+    )
+    assert changed_param_sample_gate(
+        "sequence_reorder_bias",
+        {"sequence_reorder": 100},
+        {"sequence_reorder": 25},
+        min_total_pairs=10,
+        min_mode_pairs=5
+    )
+
+
+def test_calibration_holdout_is_chronological():
+    samples = [
+        CalibrationSample(
+            question_id=index,
+            sequence=0,
+            source_mode="sequence_reorder",
+            validation_date=date(2026, 1, 1) + timedelta(days=index),
+            predicted_retrievability=0.5,
+            observed_success=index % 2
+        )
+        for index in range(100)
+    ]
+
+    training, holdout = split_samples(samples)
+
+    assert len(training) == 70
+    assert len(holdout) == 30
+    assert training[-1].validation_date < holdout[0].validation_date
 
 
 def test_brier_score_prefers_perfect_predictions():
@@ -416,6 +554,8 @@ def test_click_prompt_difficulty_models_shrinking_pool():
 def test_mode_difficulty_defaults_match_retune():
     tuning = DEFAULT_SCHEDULER_TUNING_SETTINGS
 
+    assert tuning["sequence_reorder_bias"] == 0.0
+    assert TuningParams.from_settings({}).sequence_reorder_bias == 0.0
     assert map_mode_difficulty("multiple_choice", 20, tuning=tuning) == 0.55
     assert image_mode_difficulty("multiple_choice_label", 20, tuning=tuning) == 0.55
     assert map_mode_difficulty("type_prompt", 20, tuning=tuning) == 1.05
@@ -618,6 +758,8 @@ def test_cli_dry_run_writes_reports_only(tmp_path):
     summary = json.loads((tmp_path / "summary.json").read_text())
     assert summary["accepted"]
     assert not summary["applied"]
+    assert summary["current_params"]["sequence_reorder_bias"] == 0.0
+    assert "sequence_reorder" in summary["sample_counts"]
     assert (
         db.query(AppSetting)
         .filter(AppSetting.key == SCHEDULER_TUNING_SETTINGS_KEY)

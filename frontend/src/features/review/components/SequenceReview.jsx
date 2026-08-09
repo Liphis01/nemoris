@@ -142,6 +142,7 @@ export default function SequenceReview({
   const isRecite = mode === SEQUENCE_MODE_RECITE;
 
   const failedRef = useRef([]);
+  const attemptRef = useRef(null);
 
   const choicesByItem = useMemo(() => {
     if (!isChoice) return {};
@@ -190,14 +191,19 @@ export default function SequenceReview({
     return map;
   }, [placements]);
 
-  // Recitation starts just before the first thing it is asking for.
-  const runStart = useMemo(
-    () => (railBlanks.length ? railBlanks[0].position - 1 : 0),
-    [railBlanks]
-  );
+  const recitation = group?.recitation || null;
+  const runStart = recitation?.run_start ?? 0;
   const reciteTargets = useMemo(
-    () => rail.filter(slot => slot.position > runStart),
-    [rail, runStart]
+    () => recitation?.targets || [],
+    [recitation]
+  );
+  const targetIds = useMemo(
+    () => reciteTargets.map(target => target.question_id),
+    [reciteTargets]
+  );
+  const scheduledIds = useMemo(
+    () => recitation?.scheduled_ids || items.map(item => item.question_id),
+    [items, recitation]
   );
 
   const activeChoiceItem = isChoice ? items[choiceIndex] : null;
@@ -247,9 +253,14 @@ export default function SequenceReview({
   }, []);
 
   const buildPayload = useCallback(
-    (currentInputs, currentRun, commit) => {
+    (currentInputs, currentRun, commit, stopReason = undefined) => {
       const base = {
-        rail: rail.map(slot => ({ position: slot.position, kind: slot.kind })),
+        rail: rail.map(slot => ({
+          question_id: slot.question_id,
+          position: slot.position,
+          kind: slot.kind
+        })),
+        groupId: group?.group_id,
         commit
       };
 
@@ -258,7 +269,9 @@ export default function SequenceReview({
           ...base,
           run: currentRun,
           runStart,
-          groupId: group?.group_id
+          targetIds,
+          scheduledIds,
+          stopReason
         };
       }
 
@@ -277,6 +290,9 @@ export default function SequenceReview({
         items.forEach(item => {
           payloadItems[item.question_id] = {
             position: currentInputs[item.question_id] ?? null,
+            text: pool.find(candidate => (
+              candidate.position === currentInputs[item.question_id]
+            ))?.answer || "",
             ...(qualities[item.question_id]
               ? { quality: qualities[item.question_id] }
               : {})
@@ -291,6 +307,7 @@ export default function SequenceReview({
 
           payloadItems[slot.question_id] = {
             position: match ? match.position : null,
+            text: currentInputs[slot.position] || "",
             ...(qualities[slot.question_id]
               ? { quality: qualities[slot.question_id] }
               : {})
@@ -302,6 +319,7 @@ export default function SequenceReview({
 
           payloadItems[item.question_id] = {
             position: match ? match.position : null,
+            text: currentInputs[item.question_id] || "",
             ...(qualities[item.question_id]
               ? { quality: qualities[item.question_id] }
               : {})
@@ -323,23 +341,60 @@ export default function SequenceReview({
       qualities,
       rail,
       railBlanks,
-      runStart
+      runStart,
+      scheduledIds,
+      targetIds
     ]
   );
+
+  const commitPayload = useCallback(() => {
+    const attempt = attemptRef.current;
+
+    if (!attempt) return null;
+
+    if (isRecite) {
+      return { ...attempt, commit: true, qualities };
+    }
+
+    return {
+      ...attempt,
+      commit: true,
+      items: Object.fromEntries(
+        Object.entries(attempt.items || {}).map(([questionId, answer]) => [
+          questionId,
+          {
+            ...answer,
+            ...(qualities[questionId] ? { quality: qualities[questionId] } : {})
+          }
+        ])
+      )
+    };
+  }, [isRecite, qualities]);
 
   // Grade first, schedule second. The server is the only grader -- reproducing
   // relative-order grading over a windowed rail in JS would be a second
   // implementation free to drift from the Python one.
   const grade = useCallback(
-    async (currentInputs = inputs, currentRun = reciteRun) => {
+    async (
+      currentInputs = inputs,
+      currentRun = reciteRun,
+      stopReason = undefined
+    ) => {
       if (submitting || revealed) return;
 
       setSubmitting(true);
       setError(null);
 
       try {
+        const attempt = buildPayload(
+          currentInputs,
+          currentRun,
+          false,
+          stopReason
+        );
+        attemptRef.current = attempt;
         const response = await submitAnswer?.(
-          buildPayload(currentInputs, currentRun, false),
+          attempt,
           mode,
           rail.length
         );
@@ -350,7 +405,11 @@ export default function SequenceReview({
         }, {});
 
         failedRef.current = Object.values(graded)
-          .filter(result => result.quality === 0)
+          .filter(result => (
+            result.scheduled !== false && (
+              result.quality === 0 || result.status === "unattempted"
+            )
+          ))
           .map(result => result.question_id);
 
         setResults(graded);
@@ -383,7 +442,11 @@ export default function SequenceReview({
     setError(null);
 
     try {
-      await submitAnswer?.(buildPayload(inputs, reciteRun, true), mode, rail.length);
+      const payload = commitPayload();
+
+      if (!payload) throw new Error("Missing graded sequence attempt");
+
+      await submitAnswer?.(payload, mode, rail.length);
       onComplete?.(failedRef.current);
     } catch (caught) {
       // Stay on the recap rather than reporting a clean sweep: the previous
@@ -395,12 +458,10 @@ export default function SequenceReview({
       setSubmitting(false);
     }
   }, [
-    buildPayload,
-    inputs,
+    commitPayload,
     mode,
     onComplete,
     rail.length,
-    reciteRun,
     submitAnswer,
     submitting
   ]);
@@ -422,7 +483,13 @@ export default function SequenceReview({
   const submitRecitedItem = useCallback(
     value => {
       const match = matchCandidate(pool, value);
-      const nextRun = [...reciteRun, match ? match.question_id : -1];
+      const expectedId = reciteTargets[reciteIndex]?.question_id;
+      const nextRun = [
+        ...reciteRun,
+        { text: value, question_id: match?.question_id ?? null }
+      ];
+      const wrong = !match || match.question_id !== expectedId;
+      const completed = reciteIndex + 1 >= reciteTargets.length;
 
       setReciteRun(nextRun);
       setReciteIndex(prev => prev + 1);
@@ -430,11 +497,11 @@ export default function SequenceReview({
 
       // A wrong item IS the stall -- the run ends there by definition, so
       // there is nothing to gain by asking for more.
-      if (!match || reciteIndex + 1 >= reciteTargets.length) {
-        grade(inputs, nextRun);
+      if (wrong || completed) {
+        grade(inputs, nextRun, wrong ? "wrong_answer" : "completed");
       }
     },
-    [grade, inputs, pool, reciteIndex, reciteRun, reciteTargets.length]
+    [grade, inputs, pool, reciteIndex, reciteRun, reciteTargets]
   );
 
   useEffect(() => {
@@ -471,6 +538,14 @@ export default function SequenceReview({
 
     if (!result) return null;
 
+    if (result.status === "unattempted") {
+      return (
+        <span data-sequence-feedback="unattempted" style={{ color: "#888", fontSize: "13px" }}>
+          Non présenté · à revoir
+        </span>
+      );
+    }
+
     const gap =
       result.quality >= 2 || result.distance === null || result.distance === undefined
         ? ""
@@ -495,7 +570,13 @@ export default function SequenceReview({
   function renderQualityBar(questionId) {
     const result = resultFor(questionId);
 
-    if (!showQualityControls || !result || result.quality === 0) return null;
+    if (
+      !showQualityControls ||
+      !result ||
+      result.scheduled === false ||
+      result.quality === null ||
+      result.quality === 0
+    ) return null;
 
     const selected = qualities[questionId] ?? result.quality;
 
@@ -604,7 +685,7 @@ export default function SequenceReview({
     );
   }
 
-  const showRail = isGapFill || isReorder || (isRecite && rail.length > 0);
+  const showRail = isGapFill || isReorder;
 
   return (
     <div style={containerStyle} data-sequence-review={mode}>
@@ -621,6 +702,11 @@ export default function SequenceReview({
 
       {isRecite && !revealed && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {recitation?.cue?.label && (
+            <div data-sequence-recite-cue="" style={{ color: "#888", fontSize: "14px" }}>
+              Après {recitation.cue.label}
+            </div>
+          )}
           <div style={{ color: "#eee", fontSize: "16px", fontWeight: 700 }}>
             {reciteIndex < reciteTargets.length
               ? `Continue la liste — élément n° ${
@@ -650,7 +736,7 @@ export default function SequenceReview({
           <div style={{ display: "flex", gap: "8px" }}>
             <button
               data-sequence-stall=""
-              onClick={() => grade(inputs, reciteRun)}
+              onClick={() => grade(inputs, reciteRun, "declared_stall")}
               style={{ ...buttonStyle, fontWeight: 500 }}
               type="button"
             >
@@ -661,7 +747,7 @@ export default function SequenceReview({
           {reciteRun.length > 0 && (
             <div style={{ color: "#888", fontSize: "13px" }}>
               {reciteRun
-                .map(questionId => labelByQuestionId[questionId] || "?")
+                .map(item => labelByQuestionId[item.question_id] || item.text || "?")
                 .join(" · ")}
             </div>
           )}

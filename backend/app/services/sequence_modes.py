@@ -15,6 +15,13 @@ SEQUENCE_MODE_MULTIPLE_CHOICE = "multiple_choice"
 SEQUENCE_MODE_REORDER = "reorder"
 SEQUENCE_MODE_RECITE = "recite"
 
+SEQUENCE_GOAL_RECITATION = "recitation"
+SEQUENCE_GOAL_RANDOM_ACCESS = "random_access"
+SEQUENCE_REVIEW_GOALS = (
+    SEQUENCE_GOAL_RECITATION,
+    SEQUENCE_GOAL_RANDOM_ACCESS
+)
+
 SEQUENCE_MODES = (
     SEQUENCE_MODE_TYPE_POSITION,
     SEQUENCE_MODE_GAP_FILL,
@@ -79,6 +86,46 @@ def normalize_sequence_mode(mode):
     return value if value in SEQUENCE_MODES else DEFAULT_SEQUENCE_MODE
 
 
+def normalize_sequence_review_goal(value):
+    value = str(value or "").strip()
+
+    return value if value in SEQUENCE_REVIEW_GOALS else None
+
+
+def sequence_review_goal(group):
+    """Resolve the skill the author intends this ordered group to train.
+
+    Existing groups need no migration: hand-authored order means recitation,
+    while an order derived from a date/number is a random-access catalogue.
+    An explicit override wins without coupling it to later order edits.
+    """
+    data = getattr(group, "data", None) or {}
+    explicit = normalize_sequence_review_goal(data.get("review_goal"))
+
+    if explicit:
+        return explicit
+
+    order = data.get("order") if isinstance(data.get("order"), dict) else {}
+
+    return (
+        SEQUENCE_GOAL_RANDOM_ACCESS
+        if order.get("mode") == "derived"
+        else SEQUENCE_GOAL_RECITATION
+    )
+
+
+def merge_sequence_review_goal(group_data, value):
+    merged = dict(group_data or {})
+    normalized = normalize_sequence_review_goal(value)
+
+    if normalized:
+        merged["review_goal"] = normalized
+    else:
+        merged.pop("review_goal", None)
+
+    return merged
+
+
 def _tuned_number(tuning, key, default):
     if not isinstance(tuning, dict):
         return default
@@ -91,6 +138,7 @@ def _tuned_number(tuning, key, default):
 
 def sequence_reorder_difficulty(context_count=0, tuning=None):
     base = click_prompt_base_difficulty(context_count)
+    bias = _tuned_number(tuning, "sequence_reorder_bias", 0.0)
     floor = _tuned_number(
         tuning,
         "sequence_reorder_min_difficulty",
@@ -102,7 +150,7 @@ def sequence_reorder_difficulty(context_count=0, tuning=None):
         SEQUENCE_REORDER_MAX_DIFFICULTY
     )
 
-    return max(floor, min(ceiling, base))
+    return max(floor, min(ceiling, base + bias))
 
 
 def sequence_gap_fill_difficulty(blank_count=0, label_count=0, tuning=None):
@@ -190,6 +238,7 @@ def choose_sequence_review_mode(
     due_questions,
     context_questions,
     multiple_choice_context_count=None,
+    review_goal=None,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -251,6 +300,18 @@ def choose_sequence_review_mode(
         SEQUENCE_MODE_TYPE_POSITION: 4
     }
     eligible_modes = list(SEQUENCE_MODES)
+
+    if review_goal == SEQUENCE_GOAL_RECITATION:
+        eligible_modes = [
+            SEQUENCE_MODE_GAP_FILL,
+            SEQUENCE_MODE_REORDER,
+            SEQUENCE_MODE_RECITE
+        ]
+    elif review_goal == SEQUENCE_GOAL_RANDOM_ACCESS:
+        eligible_modes = [
+            SEQUENCE_MODE_TYPE_POSITION,
+            SEQUENCE_MODE_MULTIPLE_CHOICE
+        ]
 
     # multiple_choice draws its distractors from the peers on screen; reorder is
     # graded on the pool of free slots. Both collapse below the shared minimum.

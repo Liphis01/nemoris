@@ -12,6 +12,20 @@ export function normalizeOrder(order) {
   };
 }
 
+export function normalizeReviewGoal(value) {
+  return ["recitation", "random_access"].includes(value) ? value : "auto";
+}
+
+export function resolvedReviewGoal(value, order) {
+  const normalized = normalizeReviewGoal(value);
+
+  if (normalized !== "auto") return normalized;
+
+  return normalizeOrder(order).mode === "derived"
+    ? "random_access"
+    : "recitation";
+}
+
 export function orderValueText(value, kind) {
   if (value === null || value === undefined) return "";
   if (kind === "number") return String(value);

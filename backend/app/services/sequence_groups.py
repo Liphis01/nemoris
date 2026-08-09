@@ -13,6 +13,7 @@ from .sequence_order import (
     merge_sequence_order,
     sequence_order_settings
 )
+from .sequence_modes import merge_sequence_review_goal
 
 
 def derive_sequence_group_tags(questions):
@@ -133,6 +134,12 @@ def save_sequence_group_items(db, group_id: int, payload):
             group.data = merge_sequence_order(
                 group.data,
                 group_updates.get("order")
+            )
+
+        if "review_goal" in group_updates:
+            group.data = merge_sequence_review_goal(
+                group.data,
+                group_updates.get("review_goal")
             )
 
     order = sequence_order_settings(group)

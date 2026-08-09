@@ -22,6 +22,7 @@ from app.services.sequence_rail import (
     SLOT_DECOY,
     SLOT_HIDDEN,
     build_rail,
+    build_recitation_presentations,
     rail_graded_ids,
     rail_true_order,
     rail_window_for
@@ -225,6 +226,70 @@ class RailWindowTests(RailTestCase):
         self.assertEqual(
             rail_true_order(rail),
             [item.id for item in items[7:14]]
+        )
+
+
+class RecitationPresentationTests(RailTestCase):
+    def test_a_short_run_has_one_safe_cue_and_hides_every_target_label(self):
+        items = [self.add(label, index + 1) for index, label in enumerate("ABCDE")]
+        rail = self.rail({items[2].id})
+
+        presentations = build_recitation_presentations(rail)
+
+        self.assertEqual(len(presentations), 1)
+        self.assertEqual(
+            presentations[0]["cue"],
+            {
+                "question_id": items[1].id,
+                "position": 2,
+                "label": "B"
+            }
+        )
+        self.assertEqual(
+            [target["question_id"] for target in presentations[0]["targets"]],
+            [item.id for item in items[2:]]
+        )
+        self.assertEqual(presentations[0]["scheduled_ids"], [items[2].id])
+        self.assertTrue(all(
+            "label" not in target
+            for target in presentations[0]["targets"]
+        ))
+
+    def test_an_unstarted_item_ends_the_current_run(self):
+        items = [
+            self.add("A", 1),
+            self.add("B", 2),
+            self.add("C", 3),
+            self.add("D", 4, started=False),
+            self.add("E", 5),
+            self.add("F", 6)
+        ]
+        rail = self.rail({items[1].id, items[5].id})
+
+        presentations = build_recitation_presentations(rail)
+
+        self.assertEqual(
+            [
+                [target["question_id"] for target in presentation["targets"]]
+                for presentation in presentations
+            ],
+            [[items[1].id, items[2].id], [items[5].id]]
+        )
+
+    def test_distant_windowed_due_regions_become_separate_presentations(self):
+        items = [self.add(f"item-{index}", index + 1) for index in range(40)]
+        rail = self.rail({items[10].id, items[30].id}, window=3)
+
+        presentations = build_recitation_presentations(rail)
+
+        self.assertEqual(len(presentations), 2)
+        self.assertEqual(
+            [presentation["run_start"] for presentation in presentations],
+            [10, 30]
+        )
+        self.assertEqual(
+            [presentation["scheduled_ids"] for presentation in presentations],
+            [[items[10].id], [items[30].id]]
         )
 
 

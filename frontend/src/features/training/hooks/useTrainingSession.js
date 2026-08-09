@@ -469,7 +469,11 @@ export function useTrainingSession(active = true) {
   // Sequences are graded on the server, so training needs the dedicated grader:
   // routing this to /answer_sequence would schedule real reviews from practice.
   const submitSequenceTrainingAnswer = useCallback(
-    (items) => gradeTrainingSequence(items),
+    (payload, mode, contextCount) => gradeTrainingSequence(
+      payload,
+      mode,
+      contextCount
+    ),
     []
   );
 

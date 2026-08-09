@@ -437,6 +437,9 @@ class SequenceAnswerItem(BaseModel):
     # rather than a bare int so a future server-resolved `text` field can be
     # added without breaking the endpoint.
     position: Optional[int] = Field(default=None, ge=1)
+    # Preserve the literal input even when the current client-side matcher
+    # cannot resolve it. M2 answer policies can later re-evaluate this value.
+    text: Optional[str] = None
     # The learner's felt-difficulty on a correct answer, same contract as
     # timeline: None keeps the auto grade, and reconcile_sequence_quality never
     # lets it upgrade a miss.
@@ -450,11 +453,18 @@ class SequenceRailSlot(BaseModel):
     # session has already flipped to "started". So the client posts back what it
     # was shown, exactly as it already posts context_count, and the server
     # validates it against the real positions rather than trusting it.
+    question_id: int
     position: int = Field(ge=1)
     kind: SequenceSlotKind
 
 
+class SequenceRunItem(BaseModel):
+    text: str
+    question_id: Optional[int] = None
+
+
 class SequenceAnswerRequest(BaseModel):
+    group_id: int = Field(gt=0)
     items: Dict[int, SequenceAnswerItem] = Field(default_factory=dict)
     mode: Optional[SequenceMode] = None
     context_count: Optional[int] = Field(default=None, ge=0)
@@ -462,12 +472,16 @@ class SequenceAnswerRequest(BaseModel):
     # Recitation posts the ordered question ids it produced instead of a
     # position per item, because the whole point is the run: what was produced
     # before the stall, and nothing after it.
-    run: Optional[List[int]] = None
+    run: Optional[List[SequenceRunItem]] = None
     run_start: Optional[int] = Field(default=None, ge=0)
-    # Recitation needs the list even when the learner produced nothing, because
-    # stalling on the very first item is itself the answer. `run` alone cannot
-    # identify the group in that case.
-    group_id: Optional[int] = None
+    target_ids: List[int] = Field(default_factory=list)
+    scheduled_ids: List[int] = Field(default_factory=list)
+    stop_reason: Optional[Literal[
+        "completed",
+        "wrong_answer",
+        "declared_stall"
+    ]] = None
+    qualities: Dict[int, AnswerQuality] = Field(default_factory=dict)
     # False grades and returns without scheduling, so the learner can refine a
     # hit before it is written. The commit posts the same answers back with
     # their chosen qualities.
@@ -480,6 +494,16 @@ class SequenceAnswerRequest(BaseModel):
         # second write would silently overwrite the first. Reject it loudly.
         if self.run is not None and self.items:
             raise ValueError("A sequence answer carries either `run` or `items`, not both")
+
+        if self.run is not None:
+            if not self.target_ids:
+                raise ValueError("A recitation answer requires `target_ids`")
+            if self.run_start is None:
+                raise ValueError("A recitation answer requires `run_start`")
+            if self.stop_reason is None:
+                raise ValueError("A recitation answer requires `stop_reason`")
+        elif self.target_ids or self.scheduled_ids or self.stop_reason:
+            raise ValueError("Recitation presentation fields require `run`")
 
         return self
 
@@ -640,6 +664,13 @@ class SequenceGroupItemsGroupUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
     order: Optional[SequenceOrderSettings] = None
+
+    # None/"auto" removes the override and restores order-source inference.
+    review_goal: Optional[Literal[
+        "auto",
+        "recitation",
+        "random_access"
+    ]] = None
 
 
 class SequenceGroupItemsBulkUpdate(BaseModel):

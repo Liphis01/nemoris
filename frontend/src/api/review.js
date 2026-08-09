@@ -217,7 +217,18 @@ export function sendSequenceAnswer(
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
-  const { items, rail, run, runStart, groupId, commit = true } = payload || {};
+  const {
+    items,
+    rail,
+    run,
+    runStart,
+    targetIds,
+    scheduledIds,
+    stopReason,
+    qualities,
+    groupId,
+    commit = true
+  } = payload || {};
 
   // Sequences are graded on the server, so this reads the response instead of
   // discarding it. `rail` states what was on screen -- the server cannot
@@ -233,6 +244,10 @@ export function sendSequenceAnswer(
       ...(rail ? { rail } : {}),
       ...(run ? { run } : {}),
       ...(runStart !== undefined ? { run_start: runStart } : {}),
+      ...(targetIds ? { target_ids: targetIds } : {}),
+      ...(scheduledIds ? { scheduled_ids: scheduledIds } : {}),
+      ...(stopReason ? { stop_reason: stopReason } : {}),
+      ...(qualities && Object.keys(qualities).length ? { qualities } : {}),
       ...(groupId !== undefined ? { group_id: groupId } : {}),
       commit,
       ...(mode ? { mode } : {}),

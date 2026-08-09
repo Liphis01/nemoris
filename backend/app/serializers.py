@@ -14,7 +14,8 @@ from .services.map_modes import (
 )
 from .services.sequence_modes import (
     DEFAULT_SEQUENCE_MODE,
-    normalize_sequence_mode
+    normalize_sequence_mode,
+    sequence_review_goal
 )
 from .services.text_modes import (
     DEFAULT_TEXT_MODE,
@@ -335,7 +336,8 @@ def serialize_sequence_review_group(
     mode=None,
     context_items=None,
     rail=None,
-    length=0
+    length=0,
+    recitation=None
 ):
     # Runtime aggregation object for one ordered list. `length` is the full list
     # size, so the rail can report "n° X / N" even when it only draws a window.
@@ -358,11 +360,15 @@ def serialize_sequence_review_group(
 
         "mode": normalize_sequence_mode(mode or DEFAULT_SEQUENCE_MODE),
 
+        "review_goal": sequence_review_goal(group),
+
         "length": length,
 
         "rail": rail or [],
 
         "context_items": context_items or [],
+
+        "recitation": recitation,
 
         "items": []
     }

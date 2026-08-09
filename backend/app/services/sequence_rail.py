@@ -166,13 +166,11 @@ def sequence_decoy_count(mode, due_questions):
     )
     from .sequence_modes import (
         SEQUENCE_MODE_GAP_FILL,
-        SEQUENCE_MODE_RECITE,
         SEQUENCE_MODE_TYPE_POSITION
     )
 
     if mode not in (
         SEQUENCE_MODE_GAP_FILL,
-        SEQUENCE_MODE_RECITE,
         SEQUENCE_MODE_TYPE_POSITION
     ):
         return 0
@@ -188,6 +186,85 @@ def sequence_decoy_count(mode, due_questions):
         return 0
 
     return 2
+
+
+def build_recitation_presentations(rail):
+    """Turn a possibly disjoint rail into safe contiguous recitation runs.
+
+    A run starts at the first real blank in a contiguous, already-known region.
+    Hidden/unstarted slots and window gaps are hard boundaries. Only the item
+    immediately before the first target may be exposed as a cue; later anchors
+    become hidden targets instead of leaking their labels.
+    """
+    ordered = sorted(rail or [], key=lambda slot: slot["position"])
+    regions = []
+    current = []
+    previous_position = None
+
+    for slot in ordered:
+        boundary = (
+            slot.get("kind") == SLOT_HIDDEN or
+            (
+                previous_position is not None and
+                slot["position"] != previous_position + 1
+            )
+        )
+
+        if boundary and current:
+            regions.append(current)
+            current = []
+
+        if slot.get("kind") != SLOT_HIDDEN:
+            current.append(slot)
+
+        previous_position = slot["position"]
+
+    if current:
+        regions.append(current)
+
+    presentations = []
+
+    for region in regions:
+        first_blank_index = next(
+            (
+                index
+                for index, slot in enumerate(region)
+                if slot.get("kind") == SLOT_BLANK
+            ),
+            None
+        )
+
+        if first_blank_index is None:
+            continue
+
+        cue_slot = region[first_blank_index - 1] if first_blank_index > 0 else None
+        target_slots = region[first_blank_index:]
+        presentations.append({
+            "cue": (
+                {
+                    "question_id": cue_slot["question_id"],
+                    "position": cue_slot["position"],
+                    "label": cue_slot.get("label")
+                }
+                if cue_slot and cue_slot.get("kind") == SLOT_ANCHOR
+                else None
+            ),
+            "run_start": target_slots[0]["position"] - 1,
+            "targets": [
+                {
+                    "question_id": slot["question_id"],
+                    "position": slot["position"]
+                }
+                for slot in target_slots
+            ],
+            "scheduled_ids": [
+                slot["question_id"]
+                for slot in target_slots
+                if slot.get("kind") == SLOT_BLANK
+            ]
+        })
+
+    return presentations
 
 
 def rail_window_for(length):

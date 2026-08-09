@@ -245,6 +245,26 @@ describe("SequenceGroupEditor — derived order", () => {
     expect(payload.group.order.mode).toBe("manual");
   });
 
+  it("shows the inferred goal and persists an explicit override", async () => {
+    renderDerived([withYear(1, "Henri IV", 1589)]);
+
+    await screen.findByDisplayValue("Henri IV");
+    fireEvent.click(screen.getByRole("button", { name: /^Ordre/ }));
+
+    expect(screen.getByText(/l'accès par position pour un ordre calculé/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Objectif de révision"), {
+      target: { value: "recitation" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    await waitFor(() => expect(patchSequenceGroupItems).toHaveBeenCalled());
+
+    const [, payload] = patchSequenceGroupItems.mock.calls.at(-1);
+
+    expect(payload.group.review_goal).toBe("recitation");
+  });
+
   it("posts the typed attribute value with the item", async () => {
     renderDerived([withYear(1, "Henri IV", 1589)]);
 

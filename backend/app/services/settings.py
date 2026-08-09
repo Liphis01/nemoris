@@ -107,6 +107,8 @@ MIN_MULTIPLE_CHOICE_DIFFICULTY = 0.30
 MAX_MULTIPLE_CHOICE_DIFFICULTY = 0.80
 MIN_CLICK_PROMPT_BIAS = -0.25
 MAX_CLICK_PROMPT_BIAS = 0.15
+MIN_SEQUENCE_REORDER_BIAS = -0.25
+MAX_SEQUENCE_REORDER_BIAS = 0.15
 
 DEFAULT_REVIEW_SETTINGS = {
     "catchup_daily_target": DEFAULT_CATCHUP_DAILY_TARGET,
@@ -116,6 +118,7 @@ DEFAULT_SCHEDULER_TUNING_SETTINGS = {
     "type_prompt_difficulty": MAP_TYPE_PROMPT_DIFFICULTY,
     "multiple_choice_difficulty": MAP_MULTIPLE_CHOICE_DIFFICULTY,
     "click_prompt_bias": 0.0,
+    "sequence_reorder_bias": 0.0,
     "easy_reward_floor": DEFAULT_EASY_REWARD_FLOOR,
     "failure_penalty_power": DEFAULT_FAILURE_PENALTY_POWER
 }
@@ -364,6 +367,13 @@ def normalize_scheduler_tuning_settings(value):
             DEFAULT_SCHEDULER_TUNING_SETTINGS["click_prompt_bias"],
             MIN_CLICK_PROMPT_BIAS,
             MAX_CLICK_PROMPT_BIAS
+        ),
+        "sequence_reorder_bias": _float_setting(
+            data,
+            "sequence_reorder_bias",
+            DEFAULT_SCHEDULER_TUNING_SETTINGS["sequence_reorder_bias"],
+            MIN_SEQUENCE_REORDER_BIAS,
+            MAX_SEQUENCE_REORDER_BIAS
         ),
         "easy_reward_floor": _float_setting(
             data,

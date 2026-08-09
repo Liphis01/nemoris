@@ -11,12 +11,12 @@ from ..schemas import (
 )
 from ..services.training import (
     get_training_items,
-    grade_training_sequence,
     grade_training_timeline,
     list_training_scopes,
     record_collection_training_attempt,
     record_training_attempt
 )
+from ..services.sequence_answers import grade_sequence_answer
 
 
 router = APIRouter()
@@ -65,7 +65,7 @@ def grade_sequence_training(
     data: SequenceAnswerRequest,
     db: Session = Depends(get_db)
 ):
-    return grade_training_sequence(db, data.items, mode=data.mode)
+    return grade_sequence_answer(db, data, schedule=False)
 
 
 @router.post("/training/groups/{group_id}/attempt_record")

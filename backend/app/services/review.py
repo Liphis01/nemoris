@@ -40,11 +40,19 @@ from .text_modes import (
     text_mode_difficulty
 )
 from .sequence import dense_positions
-from .sequence_rail import build_rail, rail_window_for, sequence_decoy_count
+from .sequence_rail import (
+    build_rail,
+    build_recitation_presentations,
+    rail_window_for,
+    sequence_decoy_count
+)
 from .sequence_modes import (
     SEQUENCE_MODE_MULTIPLE_CHOICE,
+    SEQUENCE_MODE_RECITE,
     SEQUENCE_MODE_REORDER,
     choose_sequence_review_mode,
+    normalize_sequence_mode,
+    sequence_review_goal,
     sequence_mode_difficulty
 )
 from .mode_selection import (
@@ -325,7 +333,8 @@ def _serialize_review_items(
     questions,
     scheduler_tuning=None,
     scheduled_review=False,
-    timeline_anchors=None
+    timeline_anchors=None,
+    forced_sequence_mode=None
 ):
     review_items = []
     map_grouped_items = {}
@@ -629,6 +638,7 @@ def _serialize_review_items(
             key=lambda item: item.id
         )
         positions = dense_positions(all_group_questions)
+        review_goal = sequence_review_goal(group)
 
         # Every visibility decision now lives in build_rail. It must exclude
         # EVERY due item of the group, not just this chunk's: the other chunk's
@@ -646,10 +656,15 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
-            mode = choose_sequence_review_mode(
-                chunk_questions,
-                active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions)
+            mode = (
+                normalize_sequence_mode(forced_sequence_mode)
+                if forced_sequence_mode is not None
+                else choose_sequence_review_mode(
+                    chunk_questions,
+                    active_context_questions,
+                    multiple_choice_context_count=len(choice_context_questions),
+                    review_goal=review_goal
+                )
             )
 
             if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
@@ -671,6 +686,64 @@ def _serialize_review_items(
                 decoy_count=sequence_decoy_count(mode, chunk_questions),
                 window=window
             )
+
+            if mode == SEQUENCE_MODE_RECITE:
+                questions_by_id = {
+                    question.id: question
+                    for question in all_group_questions
+                }
+
+                for recitation in build_recitation_presentations(rail):
+                    target_ids = [
+                        target["question_id"]
+                        for target in recitation["targets"]
+                    ]
+                    scheduled_ids = set(recitation["scheduled_ids"])
+                    segment_questions = [
+                        question
+                        for question in chunk_questions
+                        if question.id in scheduled_ids
+                    ]
+
+                    if not segment_questions:
+                        continue
+
+                    mode_difficulty = sequence_mode_difficulty(
+                        mode,
+                        context_count=len(target_ids),
+                        tuning=scheduler_tuning
+                    )
+                    context_items = [
+                        serialize_sequence_review_item(
+                            questions_by_id[question_id],
+                            position=positions[question_id],
+                            mode_difficulty=mode_difficulty,
+                            scheduler_tuning=scheduler_tuning
+                        )
+                        for question_id in target_ids
+                    ]
+                    sequence_group = serialize_sequence_review_group(
+                        group,
+                        group_data["tags"],
+                        mode=mode,
+                        context_items=context_items,
+                        rail=[],
+                        length=len(all_group_questions),
+                        recitation=recitation
+                    )
+                    sequence_group["items"] = [
+                        serialize_sequence_review_item(
+                            item,
+                            position=positions[item.id],
+                            mode_difficulty=mode_difficulty,
+                            scheduler_tuning=scheduler_tuning
+                        )
+                        for item in segment_questions
+                    ]
+                    sequence_review_groups.append(sequence_group)
+
+                continue
+
             # Priced from the rail for the modes the rail defines, so the
             # difficulty describes what was actually on screen rather than a
             # count the client asserted.
@@ -724,13 +797,15 @@ def serialize_review_items(
     questions,
     scheduler_tuning=None,
     scheduled_review=False,
-    timeline_anchors=None
+    timeline_anchors=None,
+    forced_sequence_mode=None
 ):
     return _serialize_review_items(
         questions,
         scheduler_tuning=scheduler_tuning,
         scheduled_review=scheduled_review,
-        timeline_anchors=timeline_anchors
+        timeline_anchors=timeline_anchors,
+        forced_sequence_mode=forced_sequence_mode
     )
 
 

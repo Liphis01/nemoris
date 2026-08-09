@@ -26,12 +26,9 @@ from .text_modes import (
     normalize_text_mode
 )
 from .sequence import (
-    dense_positions,
-    grade_sequence_ordering,
-    grade_sequence_position
+    dense_positions
 )
 from .sequence_modes import (
-    SEQUENCE_MODE_REORDER,
     DEFAULT_SEQUENCE_MODE,
     normalize_sequence_mode
 )
@@ -1007,15 +1004,18 @@ def get_training_items(
             .filter(Question.group_id == group_id)
             .all()
         )
+        normalized_sequence_mode = normalize_sequence_mode(sequence_mode)
         items = _attach_text_training_aliases(
-            serialize_review_items(questions),
+            serialize_review_items(
+                questions,
+                forced_sequence_mode=normalized_sequence_mode
+            ),
             questions
         )
         content_fingerprint = group_training_fingerprint(db, group_id)
         normalized_map_mode = normalize_map_mode(map_mode)
         normalized_image_mode = normalize_image_mode(image_mode)
         normalized_text_mode = normalize_text_mode(text_mode)
-        normalized_sequence_mode = normalize_sequence_mode(sequence_mode)
 
         for item in items:
             if item.get("group_id") == group_id:
@@ -1064,7 +1064,10 @@ def get_training_items(
             for question in questions
         }
         items = _attach_text_training_aliases(
-            serialize_review_items(questions),
+            serialize_review_items(
+                questions,
+                forced_sequence_mode=DEFAULT_SEQUENCE_MODE
+            ),
             questions
         )
         content_fingerprint = collection_training_fingerprint(
@@ -1118,122 +1121,14 @@ def get_training_items(
             if question_in_tag_subtree(question, tag_keys)
         ]
         return _attach_text_training_aliases(
-            serialize_review_items(questions),
+            serialize_review_items(
+                questions,
+                forced_sequence_mode=DEFAULT_SEQUENCE_MODE
+            ),
             questions
         )
 
     raise HTTPException(status_code=400, detail="Invalid training scope")
-
-
-def grade_training_sequence(db, items, mode=None):
-    # Sequences are server-graded, so training needs its own grader: reusing the
-    # review endpoint would write real FSRS history from a practice run. This
-    # returns the same result shape and never touches Progress.
-    question_ids = list(items.keys())
-    questions = (
-        db.query(Question)
-        .options(joinedload(Question.progress))
-        .filter(Question.id.in_(question_ids))
-        .all()
-    )
-    question_map = {
-        question.id: question
-        for question in questions
-    }
-    missing_ids = [
-        question_id
-        for question_id in question_ids
-        if question_id not in question_map
-    ]
-
-    if missing_ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Questions not found: {missing_ids}"
-        )
-
-    for question_id, question in question_map.items():
-        if question.type_q != "sequence":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Question {question_id} is not a sequence question"
-            )
-
-    group_ids = {
-        question.group_id
-        for question in questions
-        if question.group_id
-    }
-    siblings = (
-        db.query(Question)
-        .filter(
-            Question.group_id.in_(group_ids),
-            Question.type_q == "sequence"
-        )
-        .all()
-    ) if group_ids else []
-    by_group = {}
-
-    for question in siblings:
-        by_group.setdefault(question.group_id, []).append(question)
-
-    positions = {}
-
-    for group_questions in by_group.values():
-        positions.update(dense_positions(group_questions))
-
-    results = []
-    # Training must grade the way review grades, or the same placement reads
-    # "Exact !" here and "Raté" in a real session. reorder produces an ordering,
-    # so it gets the ordering grader; the single-probe modes stay on distance.
-    ordering_grades = {}
-
-    if normalize_sequence_mode(mode) == SEQUENCE_MODE_REORDER:
-        placed_by_position = {
-            guess.position: question_id
-            for question_id, guess in items.items()
-            if guess.position is not None
-        }
-        true_order = [
-            question_id
-            for question_id, _ in sorted(
-                positions.items(),
-                key=lambda entry: entry[1]
-            )
-            if question_id in items
-        ]
-        produced_order = [
-            placed_by_position[position]
-            for position in sorted(placed_by_position)
-        ]
-        ordering_grades = grade_sequence_ordering(
-            true_order,
-            produced_order,
-            list(items.keys())
-        )
-
-    for question_id, guess in items.items():
-        question = question_map[question_id]
-        expected_position = positions.get(question_id)
-        grading = ordering_grades.get(question_id) or grade_sequence_position(
-            expected_position,
-            guess.position
-        )
-
-        results.append({
-            "question_id": question_id,
-            "quality": grading["quality"],
-            "expected_position": expected_position,
-            "guessed_position": guess.position,
-            "distance": grading["distance"],
-            "label": question.answer,
-            "progress": serialize_progress(question.progress)
-        })
-
-    return {
-        "status": "ok",
-        "results": results
-    }
 
 
 def grade_training_timeline(db, items):

@@ -58,7 +58,7 @@ export function gradeTrainingTimeline(items) {
 }
 
 
-export function gradeTrainingSequence(items) {
+export function gradeTrainingSequence(payload, mode, contextCount) {
   // Sequences are server-graded, so training must NOT go through /answer_sequence
   // or a practice run would write real FSRS history. This grades without
   // scheduling.
@@ -67,7 +67,20 @@ export function gradeTrainingSequence(items) {
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      ...(payload?.items ? { items: payload.items } : {}),
+      ...(payload?.rail ? { rail: payload.rail } : {}),
+      ...(payload?.run ? { run: payload.run } : {}),
+      ...(payload?.runStart !== undefined ? { run_start: payload.runStart } : {}),
+      ...(payload?.targetIds ? { target_ids: payload.targetIds } : {}),
+      ...(payload?.scheduledIds ? { scheduled_ids: payload.scheduledIds } : {}),
+      ...(payload?.stopReason ? { stop_reason: payload.stopReason } : {}),
+      ...(payload?.qualities ? { qualities: payload.qualities } : {}),
+      group_id: payload?.groupId,
+      commit: payload?.commit ?? false,
+      ...(mode ? { mode } : {}),
+      ...(Number.isFinite(contextCount) ? { context_count: contextCount } : {})
+    })
   });
 }
 
