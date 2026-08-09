@@ -95,6 +95,31 @@ describe("ReviewSession", () => {
       .not.toBeInTheDocument();
   });
 
+  it("uses presentation_kind to detect grouped visual review", () => {
+    const { container } = renderReviewSession({
+      questions: [
+        {
+          presentation_kind: "media_group",
+          type_q: "text",
+          name: "Audio",
+          mode: "type_prompt",
+          items: [
+            {
+              question_id: 1,
+              answer: "France",
+              label: "France",
+              media: "/static/france.mp3"
+            }
+          ]
+        }
+      ],
+      currentIndex: 0
+    });
+
+    expect(container.querySelector("[data-visual-session-shell]"))
+      .toBeInTheDocument();
+  });
+
   it("keeps the existing layout for active text review", () => {
     const { container } = renderReviewSession({
       questions: [

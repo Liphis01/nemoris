@@ -28,6 +28,36 @@ function isEditableTarget(target) {
 const TEXT_ANSWER_FEEDBACK_MS = 240;
 
 
+function isSingleCard(question) {
+  if (question?.presentation_kind) {
+    return question.presentation_kind === "single_card";
+  }
+
+  return !Array.isArray(question?.items);
+}
+
+
+function isSelfManagedPresentation(question) {
+  if ([
+    "map_group",
+    "media_group",
+    "timeline_group",
+    "text_group",
+    "sequence_group"
+  ].includes(question?.presentation_kind)) {
+    return true;
+  }
+
+  return (
+    question?.type_q === "map" ||
+    question?.type_q === "timeline" ||
+    (question?.type_q === "media" && question?.items) ||
+    (question?.type_q === "text" && question?.items) ||
+    (question?.type_q === "sequence" && question?.items)
+  );
+}
+
+
 function localReviewDateString(now = new Date()) {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -57,14 +87,14 @@ export function useReviewSession(active) {
   const current = questions[currentIndex];
   const lastQuestionIndex = currentIndex - 1;
   const lastQuestion = questions[lastQuestionIndex];
-  const currentIsTextLike = current?.type_q === "text" || (
-    current?.type_q === "media" &&
-    !current?.items
-  );
-  const lastQuestionIsTextLike = lastQuestion?.type_q === "text" || (
-    lastQuestion?.type_q === "media" &&
-    !lastQuestion?.items
-  );
+  const currentIsTextLike = (
+    current?.type_q === "text" ||
+    current?.type_q === "media"
+  ) && isSingleCard(current);
+  const lastQuestionIsTextLike = (
+    lastQuestion?.type_q === "text" ||
+    lastQuestion?.type_q === "media"
+  ) && isSingleCard(lastQuestion);
   const currentTextAnswer = currentIsTextLike
     ? answeredTextByIndex[currentIndex]
     : null;
@@ -108,28 +138,52 @@ export function useReviewSession(active) {
     items,
     mode = undefined,
     contextCount = undefined,
-    answers = undefined
-  ) => sendMapAnswer(items, mode, contextCount, answers, reviewDateRef.current),
+    answers = undefined,
+    candidates = undefined
+  ) => sendMapAnswer(
+    items,
+    mode,
+    contextCount,
+    answers,
+    candidates,
+    reviewDateRef.current
+  ),
   []);
 
   const submitMediaAnswer = useCallback((
     items,
     mode = undefined,
     contextCount = undefined,
-    answers = undefined
-  ) => sendMediaAnswer(items, mode, contextCount, answers, reviewDateRef.current),
+    answers = undefined,
+    candidates = undefined
+  ) => sendMediaAnswer(
+    items,
+    mode,
+    contextCount,
+    answers,
+    candidates,
+    reviewDateRef.current
+  ),
   []);
 
   const submitTextAnswer = useCallback((
     items,
     mode = undefined,
     contextCount = undefined,
-    answers = undefined
-  ) => sendTextAnswer(items, mode, contextCount, answers, reviewDateRef.current),
+    answers = undefined,
+    candidates = undefined
+  ) => sendTextAnswer(
+    items,
+    mode,
+    contextCount,
+    answers,
+    candidates,
+    reviewDateRef.current
+  ),
   []);
 
-  const submitTimelineAnswer = useCallback((items) =>
-    sendTimelineAnswer(items, reviewDateRef.current),
+  const submitTimelineAnswer = useCallback((items, presentationContext = undefined) =>
+    sendTimelineAnswer(items, presentationContext, reviewDateRef.current),
   []);
 
   const submitSequenceAnswer = useCallback((
@@ -387,13 +441,7 @@ export function useReviewSession(active) {
     function handleKeyDown(event) {
       // Self-managed types own their keyboard: sequence needs the digits for
       // its QCM options and the letters for its typed modes.
-      if (
-        current?.type_q === "map" ||
-        current?.type_q === "timeline" ||
-        (current?.type_q === "media" && current?.items) ||
-        (current?.type_q === "text" && current?.items) ||
-        (current?.type_q === "sequence" && current?.items)
-      ) {
+      if (isSelfManagedPresentation(current)) {
         return;
       }
 

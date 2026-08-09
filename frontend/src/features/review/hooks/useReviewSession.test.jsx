@@ -187,6 +187,7 @@ describe("useReviewSession", () => {
       "type_all",
       undefined,
       undefined,
+      undefined,
       "2026-01-01"
     );
     expect(sendMediaAnswer).toHaveBeenCalledWith(
@@ -194,10 +195,12 @@ describe("useReviewSession", () => {
       "multiple_choice_image",
       undefined,
       undefined,
+      undefined,
       "2026-01-01"
     );
     expect(sendTimelineAnswer).toHaveBeenCalledWith(
       { 12: { start: { year: 2000 } } },
+      undefined,
       "2026-01-01"
     );
   });

@@ -197,11 +197,18 @@ export default function TextGroupReview({
     const answers = Object.fromEntries(
       Object.entries(answersByQuestionId).filter(([questionId]) => questionId in graded)
     );
+    const candidateSource = isMatch ? answerOrder : contextItems;
+    const candidateIds = candidateSource
+      .map(item => item.question_id)
+      .filter(id => id != null);
+    const candidates = Object.fromEntries(
+      Object.keys(graded).map(questionId => [questionId, candidateIds])
+    );
 
     try {
       await Promise.all([
         Object.keys(graded).length > 0
-          ? submitAnswer?.(graded, mode, contextItems.length, answers)
+          ? submitAnswer?.(graded, mode, contextItems.length, answers, candidates)
           : null,
         graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
       ].filter(Boolean));

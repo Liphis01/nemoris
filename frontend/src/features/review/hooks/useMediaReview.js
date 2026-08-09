@@ -578,6 +578,7 @@ export function useMediaReview(
   // What the learner actually typed/picked per item, for M0 0.1 (storing the
   // given answer). Keyed like qualityByQuestionId.
   const [answerByQuestionId, setAnswerByQuestionId] = useState({});
+  const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
   const [interactionFeedback, setInteractionFeedback] = useState(null);
   const [resultMode, setResultMode] = useState(false);
@@ -593,6 +594,7 @@ export function useMediaReview(
     setRevealedQuestionIds([]);
     setQualityByQuestionId({});
     setAnswerByQuestionId({});
+    setCandidateIdsByQuestionId({});
     setFeedbackTone(null);
     setInteractionFeedback(null);
     setResultMode(false);
@@ -894,10 +896,19 @@ export function useMediaReview(
       const answers = Object.fromEntries(
         Object.entries(answerByQuestionId).filter(([questionId]) => questionId in graded)
       );
+      const fallbackCandidateIds = contextItems
+        .map(item => item.question_id)
+        .filter(id => id != null);
+      const candidates = Object.fromEntries(
+        Object.keys(graded).map(questionId => [
+          questionId,
+          candidateIdsByQuestionId[questionId] || fallbackCandidateIds
+        ])
+      );
 
       await Promise.all([
         Object.keys(graded).length > 0
-          ? submitAnswer(graded, mode, contextItems.length, answers)
+          ? submitAnswer(graded, mode, contextItems.length, answers, candidates)
           : null,
         graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
       ].filter(Boolean));
@@ -913,6 +924,7 @@ export function useMediaReview(
       setRevealedQuestionIds([]);
       setQualityByQuestionId({});
       setAnswerByQuestionId({});
+      setCandidateIdsByQuestionId({});
       setFeedbackTone(null);
       setInteractionFeedback(null);
       setResultMode(false);
@@ -994,6 +1006,12 @@ export function useMediaReview(
       options: choiceOptions,
       selectedQuestionId: questionId
     });
+    setCandidateIdsByQuestionId(prev => ({
+      ...prev,
+      [currentPromptItem.question_id]: choiceOptions
+        .map(option => option.question_id)
+        .filter(id => id != null)
+    }));
 
     // The pick is an image, so the option's question id is the answer.
     if (isCorrect) {
@@ -1025,6 +1043,12 @@ export function useMediaReview(
       options: choiceOptions,
       selectedQuestionId: questionId
     });
+    setCandidateIdsByQuestionId(prev => ({
+      ...prev,
+      [currentPromptItem.question_id]: choiceOptions
+        .map(option => option.question_id)
+        .filter(id => id != null)
+    }));
 
     const guess = imageAnswerLabel(selectedOption) ?? questionId;
 

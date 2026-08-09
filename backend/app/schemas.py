@@ -385,6 +385,9 @@ class MapAnswerRequest(BaseModel):
     # and additive: older clients that omit it keep working, and modes with
     # nothing to capture (self-graded cards) simply never send a key here.
     answers: Optional[Dict[int, Any]] = None
+    # Candidate question ids shown to the learner, keyed like `items`.
+    # Optional and additive; old clients only miss exposure analytics.
+    candidates: Optional[Dict[int, List[int]]] = None
 
 
 class MediaAnswerRequest(BaseModel):
@@ -393,6 +396,7 @@ class MediaAnswerRequest(BaseModel):
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
     answers: Optional[Dict[int, Any]] = None
+    candidates: Optional[Dict[int, List[int]]] = None
 
 
 class TextAnswerRequest(BaseModel):
@@ -401,6 +405,7 @@ class TextAnswerRequest(BaseModel):
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
     answers: Optional[Dict[int, Any]] = None
+    candidates: Optional[Dict[int, List[int]]] = None
 
 
 TimelinePrecision = Literal[
@@ -428,6 +433,7 @@ class TimelineAnswerItem(BaseModel):
 
 class TimelineAnswerRequest(BaseModel):
     items: Dict[int, TimelineAnswerItem]
+    presentation_context: Optional[dict[str, Any]] = None
     review_date: Optional[date] = None
 
 
@@ -469,6 +475,7 @@ class SequenceAnswerRequest(BaseModel):
     mode: Optional[SequenceMode] = None
     context_count: Optional[int] = Field(default=None, ge=0)
     rail: Optional[List[SequenceRailSlot]] = None
+    candidates: Optional[Dict[int, List[int]]] = None
     # Recitation posts the ordered question ids it produced instead of a
     # position per item, because the whole point is the run: what was produced
     # before the stall, and nothing after it.

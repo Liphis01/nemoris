@@ -4,6 +4,16 @@ import { isRelearningQuestion } from "../relearningGrades";
 import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
+  if ([
+    "map_group",
+    "media_group",
+    "timeline_group",
+    "text_group",
+    "sequence_group"
+  ].includes(question?.presentation_kind)) {
+    return true;
+  }
+
   return (
     ["media", "map", "timeline"].includes(question?.type_q) ||
     (question?.type_q === "text" && Array.isArray(question?.items)) ||

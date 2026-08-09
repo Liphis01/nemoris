@@ -110,6 +110,17 @@ def clamp(value, lower, upper):
 
 
 def normalize_history_mode(entry):
+    answer_event = entry.get("answer_event")
+    event_mode = (
+        answer_event.get("mode")
+        if isinstance(answer_event, dict)
+        else None
+    )
+    event_type = (
+        answer_event.get("type_q")
+        if isinstance(answer_event, dict)
+        else None
+    )
     sequence_mode = entry.get("sequence_mode")
 
     if sequence_mode in {
@@ -121,7 +132,29 @@ def normalize_history_mode(entry):
     }:
         return f"sequence_{sequence_mode}"
 
-    mode = entry.get("map_mode") or entry.get("image_mode")
+    if event_type == "sequence" and event_mode in {
+        "type_position",
+        "gap_fill",
+        "multiple_choice",
+        "reorder",
+        "recite"
+    }:
+        return f"sequence_{event_mode}"
+
+    text_mode = entry.get("text_mode")
+
+    if event_type == "text" and not text_mode:
+        text_mode = event_mode
+
+    if text_mode == "match":
+        return "text_match"
+    if text_mode == "type_all":
+        return "type_all"
+
+    if event_type == "timeline":
+        return f"timeline_{event_mode or 'event_to_date'}"
+
+    mode = entry.get("map_mode") or entry.get("image_mode") or event_mode
 
     if mode in {"multiple_choice", "multiple_choice_label", "multiple_choice_image"}:
         return "multiple_choice"
@@ -239,6 +272,12 @@ def mode_difficulty_for_event(event, params):
 
     if event.mode == "sequence_type_position":
         return 1.0
+
+    if (
+        event.mode.startswith("text_") or
+        event.mode.startswith("timeline_")
+    ) and event.recorded_difficulty is not None:
+        return event.recorded_difficulty
 
     return 1.0
 
@@ -636,6 +675,9 @@ def build_summary(result, apply_enabled, applied):
     elif applied:
         reason = "applied"
 
+    current_params = current["params"].to_settings()
+    candidate_params = candidate["params"].to_settings()
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "setting_key": SCHEDULER_TUNING_SETTINGS_KEY,
@@ -648,8 +690,22 @@ def build_summary(result, apply_enabled, applied):
         "validation_pairs": len(current["validation_samples"]),
         "sample_counts": current["sample_counts"],
         "validation_sample_counts": current["validation_sample_counts"],
-        "current_params": current["params"].to_settings(),
-        "candidate_params": candidate["params"].to_settings(),
+        "current_params": current_params,
+        "candidate_params": candidate_params,
+        "difficulty_effect_contract": {
+            "current": {
+                "success_reward_floor": current_params["easy_reward_floor"],
+                "failure_penalty_power": current_params["failure_penalty_power"]
+            },
+            "candidate": {
+                "success_reward_floor": candidate_params["easy_reward_floor"],
+                "failure_penalty_power": candidate_params["failure_penalty_power"]
+            },
+            "note": (
+                "Mode difficulty changes both success reward and lapse "
+                "forgiveness; tune them as one scheduling contract."
+            )
+        },
         "expected_direction": expected_direction(
             current["params"],
             candidate["params"]

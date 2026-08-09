@@ -68,12 +68,21 @@ class GivenAnswerTests(unittest.TestCase):
         answer_map(
             MapAnswerRequest(
                 items={1: 2, 2: 0},
-                answers={1: "France", 2: "Belgique"}
+                answers={1: "France", 2: "Belgique"},
+                candidates={1: [1, 2], 2: [1, 2]}
             ),
             db=self.db
         )
 
-        self.assertEqual(self.latest_entry(1)["answer"], "France")
+        first_entry = self.latest_entry(1)
+        self.assertEqual(first_entry["answer"], "France")
+        self.assertEqual(first_entry["answer_event"]["raw_response"], "France")
+        self.assertEqual(first_entry["answer_event"]["candidate_ids"], [1, 2])
+        self.assertEqual(first_entry["answer_event"]["type_q"], "map")
+        self.assertEqual(
+            first_entry["answer_event"]["presentation_kind"],
+            "map_group"
+        )
         # A miss is the interesting case: it records the confusion, not the
         # right answer.
         self.assertEqual(self.latest_entry(2)["answer"], "Belgique")
@@ -85,6 +94,8 @@ class GivenAnswerTests(unittest.TestCase):
         answer_map(MapAnswerRequest(items={1: 2}), db=self.db)
 
         self.assertNotIn("answer", self.latest_entry(1))
+        self.assertIn("answer_event", self.latest_entry(1))
+        self.assertIsNone(self.latest_entry(1)["answer_event"]["raw_response"])
 
     def test_partial_answers_only_annotate_the_items_supplied(self):
         self.add_question(1, "map")
@@ -129,7 +140,8 @@ class GivenAnswerTests(unittest.TestCase):
                     1: TimelineAnswerItem(
                         start=TimelineDateValue(year=1792, precision="year")
                     )
-                }
+                },
+                presentation_context={"range": {"start_value": 1, "end_value": 2}}
             ),
             db=self.db
         )
@@ -138,6 +150,19 @@ class GivenAnswerTests(unittest.TestCase):
 
         self.assertEqual(entry["answer"]["start"]["year"], 1792)
         self.assertIsNone(entry["answer"]["end"])
+        self.assertEqual(entry["answer_event"]["type_q"], "timeline")
+        self.assertEqual(
+            entry["answer_event"]["presentation_kind"],
+            "timeline_group"
+        )
+        self.assertEqual(
+            entry["answer_event"]["expected_value"]["start"]["year"],
+            1789
+        )
+        self.assertEqual(
+            entry["answer_event"]["context"]["range"],
+            {"start_value": 1, "end_value": 2}
+        )
 
     def test_the_answer_is_mirrored_into_the_revlog(self):
         self.add_question(1, "map")
@@ -156,6 +181,7 @@ class GivenAnswerTests(unittest.TestCase):
         )
 
         self.assertEqual(row.data["answer"], "France")
+        self.assertEqual(row.data["answer_event"]["raw_response"], "France")
 
 
 if __name__ == "__main__":

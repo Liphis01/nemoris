@@ -104,7 +104,7 @@ describe("TimelineReview", () => {
     // 14/07/1789 is exactly the answer -> auto Good (2), sent on continue.
     await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
       1: { start: { day: 14, month: 7, precision: "day", year: 1789 }, quality: 2 }
-    }));
+    }, expect.objectContaining({ item_ids: [1] })));
   });
 
   it("reveals the correction from a client-side grade and records the miss on continue", async () => {
@@ -144,7 +144,7 @@ describe("TimelineReview", () => {
 
     await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
       9: { start: { day: null, month: null, precision: "year", year: 1800 }, quality: 0 }
-    }));
+    }, expect.objectContaining({ item_ids: [9] })));
     await waitFor(() => expect(onComplete).toHaveBeenCalledWith([9]));
   });
 
@@ -163,7 +163,7 @@ describe("TimelineReview", () => {
 
     await waitFor(() => expect(submitAnswer).toHaveBeenCalledWith({
       9: { start: { day: null, month: null, precision: "year", year: 1850 }, quality: 3 }
-    }));
+    }, expect.objectContaining({ item_ids: [9] })));
   });
 
   it("collapses a relearning hit to Encore/Acquis and graduates instead of re-grading", async () => {

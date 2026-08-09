@@ -271,11 +271,21 @@ export default function SequenceReview({
           runStart,
           targetIds,
           scheduledIds,
-          stopReason
+          stopReason,
+          candidates: Object.fromEntries(
+            targetIds.map(questionId => [questionId, targetIds])
+          )
         };
       }
 
       const payloadItems = {};
+      const railCandidateIds = rail
+        .map(slot => slot.question_id)
+        .filter(id => id != null);
+      const poolCandidateIds = pool
+        .map(item => item.question_id)
+        .filter(id => id != null);
+      const candidates = {};
 
       if (isReorder) {
         items.forEach(item => {
@@ -285,6 +295,7 @@ export default function SequenceReview({
               ? { quality: qualities[item.question_id] }
               : {})
           };
+          candidates[item.question_id] = railCandidateIds;
         });
       } else if (isChoice) {
         items.forEach(item => {
@@ -297,6 +308,9 @@ export default function SequenceReview({
               ? { quality: qualities[item.question_id] }
               : {})
           };
+          candidates[item.question_id] = (choicesByItem[item.question_id] || [])
+            .map(option => option.question_id)
+            .filter(id => id != null);
         });
       } else if (isGapFill) {
         // Only real blanks are posted. Decoys are answered so the blanks
@@ -312,6 +326,7 @@ export default function SequenceReview({
               ? { quality: qualities[slot.question_id] }
               : {})
           };
+          candidates[slot.question_id] = railCandidateIds;
         });
       } else {
         items.forEach(item => {
@@ -324,12 +339,14 @@ export default function SequenceReview({
               ? { quality: qualities[item.question_id] }
               : {})
           };
+          candidates[item.question_id] = poolCandidateIds;
         });
       }
 
-      return { ...base, items: payloadItems };
+      return { ...base, items: payloadItems, candidates };
     },
     [
+      choicesByItem,
       group,
       isChoice,
       isGapFill,

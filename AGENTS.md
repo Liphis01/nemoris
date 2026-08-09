@@ -22,6 +22,9 @@ editors, and quick grouped-content inspection.
 - `QuestionGroup` stores presentation metadata only: `type_group`, `name`, `media`, `data`.
 - No group-level progress. Do not create database question types like `map_group` or `timeline_group`.
 - Prefer `Question.data` or `QuestionGroup.data` for type-specific metadata before adding SQL columns.
+- Current persisted question types and group types must be declared in
+  `backend/app/services/type_contracts.py`. Add or change a type only by
+  updating that registry and its exhaustive tests.
 
 ## Question Types
 
@@ -36,7 +39,16 @@ persisted as questions.
 
 - `/review` selects due/new atomic questions and builds frontend-ready runtime groups. Review filtering is no longer a main `/review` concern.
 - Backend owns grouping and serializers; frontend should render returned shapes instead of rebuilding grouping rules.
-- Text failures, failed map zones, and failed timeline items are requeued within the frontend session.
+- Review response objects include additive `presentation_kind` values
+  (`single_card`, `map_group`, `media_group`, `text_group`, `timeline_group`,
+  `sequence_group`). Prefer that discriminator for screen shape while keeping
+  `type_q` as the atomic question family.
+- Scheduling-moving grouped/timeline/sequence answers keep legacy flat history
+  keys and also write nested `answer_event` metadata with raw response,
+  expected value, candidate ids, mode, direction, policy, and presentation
+  context.
+- Text failures, failed map zones, failed timeline items, grouped media/text
+  misses, and sequence misses are requeued within the frontend session.
 - Scheduling lives in `scheduler.py` and `services/progress.py`: keep FSRS-inspired intervals, history, load smoothing, type mixing, and `catchup_daily_target` rebalancing behavior intact.
 
 ## Manage UX

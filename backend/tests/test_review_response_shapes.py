@@ -51,6 +51,7 @@ PROGRESS_KEYS = {
 }
 TEXT_REVIEW_KEYS = {
     "type_q",
+    "presentation_kind",
     "question_id",
     "question",
     "answer",
@@ -65,6 +66,7 @@ TEXT_REVIEW_KEYS = {
 MAP_GROUP_KEYS = {
     "group_id",
     "type_q",
+    "presentation_kind",
     "name",
     "media",
     "map",
@@ -85,6 +87,7 @@ MAP_ZONE_KEYS = {
 IMAGE_GROUP_KEYS = {
     "group_id",
     "type_q",
+    "presentation_kind",
     "name",
     "media",
     "tags",
@@ -107,6 +110,7 @@ IMAGE_ITEM_KEYS = {
 }
 TIMELINE_GROUP_KEYS = {
     "type_q",
+    "presentation_kind",
     "name",
     "items",
     "range",

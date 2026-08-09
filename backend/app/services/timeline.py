@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from ..models import Progress, Question
 from ..scheduler import preview_intervals, relearning_graduate_interval
 from ..serializers import serialize_progress
+from .type_contracts import PRESENTATION_TIMELINE_GROUP
 
 
 VALID_PRECISIONS = {"year", "month", "day"}
@@ -295,6 +296,7 @@ def serialize_timeline_review_item(question):
 def serialize_timeline_review_group(items, anchors=None):
     return {
         "type_q": "timeline",
+        "presentation_kind": PRESENTATION_TIMELINE_GROUP,
         "name": "Timeline",
         "items": items,
         "range": build_timeline_range(items),

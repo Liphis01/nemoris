@@ -780,12 +780,21 @@ class AnswerSequenceEndpointTests(SequenceTestCase):
                     2: SequenceAnswerItem(position=3, text="réponse brute")
                 },
                 mode=SEQUENCE_MODE_TYPE_POSITION,
-                context_count=3
+                context_count=3,
+                candidates={1: [1, 2, 3], 2: [1, 2, 3]}
             ),
             db=self.db
         )
 
         self.assertEqual(items[0].progress.history[-1]["answer"], "Item 1")
+        self.assertEqual(
+            items[0].progress.history[-1]["answer_event"]["candidate_ids"],
+            [1, 2, 3]
+        )
+        self.assertEqual(
+            items[0].progress.history[-1]["answer_event"]["presentation_kind"],
+            "sequence_group"
+        )
         # A miss must record what was actually placed, not the expected rank.
         self.assertEqual(
             items[1].progress.history[-1]["answer"],

@@ -21,6 +21,13 @@ from .services.text_modes import (
     DEFAULT_TEXT_MODE,
     normalize_text_mode
 )
+from .services.type_contracts import (
+    PRESENTATION_MAP_GROUP,
+    PRESENTATION_MEDIA_GROUP,
+    PRESENTATION_SEQUENCE_GROUP,
+    PRESENTATION_SINGLE_CARD,
+    PRESENTATION_TEXT_GROUP
+)
 
 
 def serialize_progress(progress, today=None):
@@ -133,6 +140,8 @@ def serialize_review_question_item(question):
     return {
         "type_q": question.type_q,
 
+        "presentation_kind": PRESENTATION_SINGLE_CARD,
+
         "question_id": question.id,
 
         "question": question.question,
@@ -167,6 +176,8 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
         "group_id": group.id,
         
         "type_q": "map",
+
+        "presentation_kind": PRESENTATION_MAP_GROUP,
 
         "name": group.name,
 
@@ -223,6 +234,8 @@ def serialize_media_review_group(group, tags=None, mode=None, context_items=None
         "group_id": group.id,
 
         "type_q": "media",
+
+        "presentation_kind": PRESENTATION_MEDIA_GROUP,
 
         "name": group.name,
 
@@ -282,6 +295,8 @@ def serialize_text_review_group(group, tags=None, mode=None, context_items=None)
         "group_id": group.id,
 
         "type_q": "text",
+
+        "presentation_kind": PRESENTATION_TEXT_GROUP,
 
         "name": group.name,
 
@@ -351,6 +366,8 @@ def serialize_sequence_review_group(
         "group_id": group.id,
 
         "type_q": "sequence",
+
+        "presentation_kind": PRESENTATION_SEQUENCE_GROUP,
 
         "name": group.name,
 

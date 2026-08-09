@@ -26,7 +26,7 @@ Core fields:
 | --- | --- |
 | `question` | Prompt/title shown in Manage and review |
 | `answer` | Expected answer or display label |
-| `type_q` | `text`, `map`, or `timeline` |
+| `type_q` | `text`, `map`, `timeline`, `media`, or `sequence` |
 | `media` | Image, SVG, audio, or video path |
 | `tags` | Lightweight filters |
 | `group_id` | Optional presentation group membership |
@@ -74,7 +74,9 @@ the two cases above.
 
 ## Question Types
 
-`text` is a normal prompt/answer card.
+`text` is a normal prompt/answer card. Text questions may also belong to a
+`QuestionGroup(type_group="text")` for runtime association review. The group
+owns presentation metadata only; each question still owns its own progress.
 
 `map` is one SVG zone per question. The group is a `QuestionGroup` with
 `type_group="map"` and shared media. Zone metadata lives on each question:
@@ -101,6 +103,22 @@ group. Their date metadata lives in `data.timeline`:
 
 Supported precisions are `year`, `month`, and `day`. Year 0 is invalid; BC
 years are negative.
+
+`media` is an atomic card with media as cue or target. Related media cards may
+belong to `QuestionGroup(type_group="media")` so review can present grouped
+media modes while scheduling remains per question.
+
+`sequence` is one ordered item per question in
+`QuestionGroup(type_group="sequence")`. Positions are stored in
+`Question.data.position`, or derived at save time from
+`QuestionGroup.data.order` and per-item `data.order_value`. Review can present
+rails, multiple choice, reorder, or recitation, but every scheduled result still
+updates the item question's own `Progress`.
+
+Runtime review responses include `presentation_kind` in addition to `type_q`.
+Use it to distinguish screen shapes such as `single_card`, `map_group`,
+`media_group`, `text_group`, `timeline_group`, and `sequence_group`; keep
+`type_q` as the stored atomic family.
 
 ## Manage UI
 
@@ -163,10 +181,19 @@ per legacy `Progress.history` entry; dual-written since migration 0011).
   `review_log` is what blueprints/sync consume; the JSON column is what
   request-time mode logic consumes. Do not "finish" this by ripping out
   `history` on the assumption it was left half-done — it was not.
+- **Answer events are additive metadata.** Grouped, timeline, and sequence
+  answer paths keep their legacy flat history keys and also write
+  `data["answer_event"]` with the raw response, resolved id when available,
+  expected value snapshot, presentation kind, mode, candidate ids, policy, and
+  context. There is no schema migration for this.
 
 ## Implementation Rules
 
 - Prefer existing hooks, serializers, services, and feature folders.
+- Add new persisted types or group types through
+  `backend/app/services/type_contracts.py`; the registry is the checklist for
+  validators, review, Training, retry behavior, Manage, calendar/filter labels,
+  packs/sync, and mobile support.
 - Keep changes scoped and behavior-preserving.
 - Use `joinedload`, outer joins, or bulk queries for richer backend payloads.
 - Keep timeline date math consistent between backend

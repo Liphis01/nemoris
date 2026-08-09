@@ -67,6 +67,12 @@ from ..services.settings import (
     save_review_settings
 )
 from ..services.sequence_answers import grade_sequence_answer
+from ..services.answer_events import (
+    answer_event,
+    direction_for_grouped_answer,
+    presentation_for_grouped_answer,
+    timeline_answer_event
+)
 from ..services.timeline import (
     grade_timeline_answer,
     reconcile_timeline_quality,
@@ -289,7 +295,8 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
         require_type="map",
         today=data.review_date,
         context_count=data.context_count,
-        answers=data.answers
+        answers=data.answers,
+        candidates=data.candidates
     )
     return {"status": "ok"}
 
@@ -303,7 +310,8 @@ def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
         require_type="media",
         today=data.review_date,
         context_count=data.context_count,
-        answers=data.answers
+        answers=data.answers,
+        candidates=data.candidates
     )
     return {"status": "ok"}
 
@@ -317,7 +325,8 @@ def answer_text(data: TextAnswerRequest, db: Session = Depends(get_db)):
         require_type="text",
         today=data.review_date,
         context_count=data.context_count,
-        answers=data.answers
+        answers=data.answers,
+        candidates=data.candidates
     )
     return {"status": "ok"}
 
@@ -341,9 +350,11 @@ def apply_answer_batch(
     require_type=None,
     today=None,
     context_count=None,
-    answers=None
+    answers=None,
+    candidates=None
 ):
     answers = answers or {}
+    candidates = candidates or {}
     question_ids = list(items.keys())
     questions = (
         db.query(Question)
@@ -491,6 +502,19 @@ def apply_answer_batch(
             if question_id in answers:
                 metadata["answer"] = answers[question_id]
 
+            metadata["answer_event"] = answer_event(
+                question=question,
+                raw_response=answers.get(question_id),
+                resolved_response_id=answers.get(question_id),
+                expected_value=question.answer if question else None,
+                type_q="map",
+                presentation_kind=presentation_for_grouped_answer("map"),
+                mode=normalized_map_mode,
+                direction=direction_for_grouped_answer("map", normalized_map_mode),
+                candidate_ids=candidates.get(question_id),
+                context={"context_count": active_context_count}
+            )
+
             progress_quality_pairs.append((progress, raw_quality, metadata))
         elif normalized_image_mode:
             raw_quality = calibrate_image_quality(quality)
@@ -527,6 +551,22 @@ def apply_answer_batch(
 
             if question_id in answers:
                 metadata["answer"] = answers[question_id]
+
+            metadata["answer_event"] = answer_event(
+                question=question,
+                raw_response=answers.get(question_id),
+                resolved_response_id=answers.get(question_id),
+                expected_value=question.answer if question else None,
+                type_q="media",
+                presentation_kind=presentation_for_grouped_answer("media"),
+                mode=normalized_image_mode,
+                direction=direction_for_grouped_answer(
+                    "media",
+                    normalized_image_mode
+                ),
+                candidate_ids=candidates.get(question_id),
+                context={"context_count": active_context_count}
+            )
 
             progress_quality_pairs.append((
                 progress,
@@ -565,6 +605,19 @@ def apply_answer_batch(
 
             if question_id in answers:
                 metadata["answer"] = answers[question_id]
+
+            metadata["answer_event"] = answer_event(
+                question=question,
+                raw_response=answers.get(question_id),
+                resolved_response_id=answers.get(question_id),
+                expected_value=question.answer if question else None,
+                type_q="text",
+                presentation_kind=presentation_for_grouped_answer("text"),
+                mode=normalized_text_mode,
+                direction=direction_for_grouped_answer("text", normalized_text_mode),
+                candidate_ids=candidates.get(question_id),
+                context={"context_count": active_context_count}
+            )
 
             progress_quality_pairs.append((progress, raw_quality, metadata))
         else:
@@ -656,7 +709,16 @@ def answer_timeline(data: TimelineAnswerRequest, db: Session = Depends(get_db)):
                 "answer": {
                     "start": payload["start"],
                     "end": payload.get("end")
-                }
+                },
+                "answer_event": timeline_answer_event(
+                    question=question,
+                    raw_response={
+                        "start": payload["start"],
+                        "end": payload.get("end")
+                    },
+                    expected_value=timeline,
+                    context=data.presentation_context or {}
+                )
             }
         ))
 

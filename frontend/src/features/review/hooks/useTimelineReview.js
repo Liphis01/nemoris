@@ -110,6 +110,15 @@ export default function useTimelineReview({
     () => group?.range || buildRangeFromItems(sortedItems),
     [group?.range, sortedItems]
   );
+  const presentationContext = useMemo(() => ({
+    range,
+    anchor_ids: (group?.anchors || [])
+      .map(anchor => anchor.question_id ?? anchor.id)
+      .filter(id => id != null),
+    item_ids: sortedItems
+      .map(item => item.question_id)
+      .filter(id => id != null)
+  }), [group?.anchors, range, sortedItems]);
 
   const activeItem = itemById.get(activeId) || null;
   // A relearning retry (in-session or from persisted progress) never re-grades
@@ -278,7 +287,7 @@ export default function useTimelineReview({
         } else {
           await submitAnswer({
             [questionId]: { ...pendingGuess, quality: selectedQuality }
-          });
+          }, presentationContext);
         }
       } catch (requestError) {
         setError(requestError.message || "Impossible d'enregistrer cette réponse.");
@@ -312,6 +321,7 @@ export default function useTimelineReview({
     onComplete,
     orderedIds,
     pendingGuess,
+    presentationContext,
     revealed,
     selectedQuality,
     submitAnswer

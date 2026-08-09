@@ -435,6 +435,7 @@ export function useMapReview(
   // What the learner actually typed/clicked/picked per zone, for M0 0.1
   // (storing the given answer). Keyed like qualityByQuestionId.
   const [answerByQuestionId, setAnswerByQuestionId] = useState({});
+  const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
   const [remainingFocusCode, setRemainingFocusCode] = useState(null);
   const [focusVersion, setFocusVersion] = useState(0);
@@ -464,6 +465,7 @@ export function useMapReview(
     setShowRecap(false);
     setQualityByQuestionId({});
     setAnswerByQuestionId({});
+    setCandidateIdsByQuestionId({});
     setFocusedCode(null);
     setRemainingFocusCode(null);
     setFocusVersion(0);
@@ -686,10 +688,19 @@ export function useMapReview(
       const answers = Object.fromEntries(
         Object.entries(answerByQuestionId).filter(([questionId]) => questionId in graded)
       );
+      const fallbackCandidateIds = contextItems
+        .map(item => item.question_id)
+        .filter(id => id != null);
+      const candidates = Object.fromEntries(
+        Object.keys(graded).map(questionId => [
+          questionId,
+          candidateIdsByQuestionId[questionId] || fallbackCandidateIds
+        ])
+      );
 
       await Promise.all([
         Object.keys(graded).length > 0
-          ? submitAnswer(graded, mode, contextItems.length, answers)
+          ? submitAnswer(graded, mode, contextItems.length, answers, candidates)
           : null,
         graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
       ].filter(Boolean));
@@ -703,6 +714,7 @@ export function useMapReview(
       setResolvedQuestionIds([]);
       setQualityByQuestionId({});
       setAnswerByQuestionId({});
+      setCandidateIdsByQuestionId({});
       setFocusedCode(null);
       setRemainingFocusCode(null);
       setFocusVersion(0);
@@ -892,6 +904,12 @@ export function useMapReview(
     const selectedOption = choiceOptions.find(
       option => option.question_id === questionId
     );
+    setCandidateIdsByQuestionId(prev => ({
+      ...prev,
+      [currentPromptItem.question_id]: choiceOptions
+        .map(option => option.question_id)
+        .filter(id => id != null)
+    }));
 
     setChoiceFeedback({
       id: Date.now(),

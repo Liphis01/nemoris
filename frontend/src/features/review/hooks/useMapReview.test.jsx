@@ -206,7 +206,7 @@ describe("useMapReview recap sorting", () => {
     expect(submitAnswer).toHaveBeenCalledWith({
       1: 2,
       2: 0
-    }, "type_all", 2, { 1: "Alpha" });
+    }, "type_all", 2, { 1: "Alpha" }, { 1: [1, 2], 2: [1, 2] });
     expect(sendMapAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
@@ -557,7 +557,8 @@ describe("useMapReview recap sorting", () => {
         { [target.question_id]: 1 },
         "multiple_choice",
         contextItems.length,
-        { [target.question_id]: target.label }
+        { [target.question_id]: target.label },
+        expect.any(Object)
       );
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
@@ -610,7 +611,8 @@ describe("useMapReview recap sorting", () => {
       { [target.question_id]: 0 },
       "multiple_choice",
       contextItems.length,
-      { [target.question_id]: wrong.label }
+      { [target.question_id]: wrong.label },
+      expect.any(Object)
     );
     expect(onComplete).toHaveBeenCalledWith([target.question_id]);
   });
@@ -658,7 +660,7 @@ describe("useMapReview recap sorting", () => {
 
       expect(submitAnswer).toHaveBeenCalledWith({
         [target.question_id]: 2
-      }, "multiple_choice", 5, { [target.question_id]: target.label });
+      }, "multiple_choice", 5, { [target.question_id]: target.label }, expect.any(Object));
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
       randomSpy.mockRestore();

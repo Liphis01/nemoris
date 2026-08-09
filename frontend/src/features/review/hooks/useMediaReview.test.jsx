@@ -208,7 +208,12 @@ describe("useMediaReview", () => {
       },
       IMAGE_MODE_TYPE_PROMPT,
       3,
-      { [found.question_id]: found.answer }
+      { [found.question_id]: found.answer },
+      {
+        [found.question_id]: [1, 2, 3],
+        [missedIds[0]]: [1, 2, 3],
+        [missedIds[1]]: [1, 2, 3]
+      }
     );
     expect(onComplete).toHaveBeenCalledWith([missedIds[1]]);
   });
@@ -256,7 +261,11 @@ describe("useMediaReview", () => {
       },
       IMAGE_MODE_TYPE_PROMPT,
       2,
-      { [found.question_id]: found.answer }
+      { [found.question_id]: found.answer },
+      {
+        [found.question_id]: [1, 2],
+        [missed.question_id]: [1, 2]
+      }
     );
     expect(sendMediaAnswer).not.toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
@@ -527,7 +536,8 @@ describe("useMediaReview", () => {
         },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         5,
-        { [prompt.question_id]: prompt.label }
+        { [prompt.question_id]: prompt.label },
+        expect.any(Object)
       );
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
@@ -591,7 +601,8 @@ describe("useMediaReview", () => {
         { [prompt.question_id]: 1 },
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
         contextItems.length,
-        { [prompt.question_id]: prompt.label }
+        { [prompt.question_id]: prompt.label },
+        expect.any(Object)
       );
       expect(onComplete).toHaveBeenCalledWith([]);
     } finally {
@@ -644,7 +655,8 @@ describe("useMediaReview", () => {
       { [prompt.question_id]: 0 },
       IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
       contextItems.length,
-      { [prompt.question_id]: wrong.label }
+      { [prompt.question_id]: wrong.label },
+      expect.any(Object)
     );
     expect(onComplete).toHaveBeenCalledWith([prompt.question_id]);
   });

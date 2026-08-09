@@ -117,14 +117,30 @@ function answersPayload(answers) {
 }
 
 
+function candidatesPayload(candidates) {
+  return candidates && Object.keys(candidates).length > 0 ? { candidates } : {};
+}
+
+
 export function sendMapAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
   answers = undefined,
+  candidates = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+  const resolvedCandidates = (
+    typeof candidates === "string" && reviewDate === undefined
+      ? undefined
+      : candidates
+  );
+  const resolvedReviewDate = (
+    typeof candidates === "string" && reviewDate === undefined
+      ? candidates
+      : resolved.reviewDate
+  );
 
   // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestOk("/answer_map", {
@@ -137,7 +153,8 @@ export function sendMapAnswer(
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
       ...answersPayload(answers),
-      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
+      ...candidatesPayload(resolvedCandidates),
+      ...(resolvedReviewDate ? { review_date: resolvedReviewDate } : {})
     })
   });
 }
@@ -148,9 +165,20 @@ export function sendMediaAnswer(
   mode = undefined,
   contextCount = undefined,
   answers = undefined,
+  candidates = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+  const resolvedCandidates = (
+    typeof candidates === "string" && reviewDate === undefined
+      ? undefined
+      : candidates
+  );
+  const resolvedReviewDate = (
+    typeof candidates === "string" && reviewDate === undefined
+      ? candidates
+      : resolved.reviewDate
+  );
 
   // items is an object of question_id -> quality, one entry per atomic image.
   return requestOk("/answer_media", {
@@ -163,7 +191,8 @@ export function sendMediaAnswer(
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
       ...answersPayload(answers),
-      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
+      ...candidatesPayload(resolvedCandidates),
+      ...(resolvedReviewDate ? { review_date: resolvedReviewDate } : {})
     })
   });
 }
@@ -174,9 +203,20 @@ export function sendTextAnswer(
   mode = undefined,
   contextCount = undefined,
   answers = undefined,
+  candidates = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
+  const resolvedCandidates = (
+    typeof candidates === "string" && reviewDate === undefined
+      ? undefined
+      : candidates
+  );
+  const resolvedReviewDate = (
+    typeof candidates === "string" && reviewDate === undefined
+      ? candidates
+      : resolved.reviewDate
+  );
 
   // items is an object of question_id -> quality, one entry per text pair.
   return requestOk("/answer_text", {
@@ -189,13 +229,29 @@ export function sendTextAnswer(
       ...(mode ? { mode } : {}),
       ...answerContextPayload(resolved.contextCount),
       ...answersPayload(answers),
-      ...(resolved.reviewDate ? { review_date: resolved.reviewDate } : {})
+      ...candidatesPayload(resolvedCandidates),
+      ...(resolvedReviewDate ? { review_date: resolvedReviewDate } : {})
     })
   });
 }
 
 
-export function sendTimelineAnswer(items, reviewDate = undefined) {
+export function sendTimelineAnswer(
+  items,
+  presentationContext = undefined,
+  reviewDate = undefined
+) {
+  const resolvedContext = (
+    typeof presentationContext === "string" && reviewDate === undefined
+      ? undefined
+      : presentationContext
+  );
+  const resolvedReviewDate = (
+    typeof presentationContext === "string" && reviewDate === undefined
+      ? presentationContext
+      : reviewDate
+  );
+
   // items is an object of question_id -> normalized timeline guesses.
   return requestJson("/answer_timeline", {
     method: "POST",
@@ -204,7 +260,8 @@ export function sendTimelineAnswer(items, reviewDate = undefined) {
     },
     body: JSON.stringify({
       items,
-      ...(reviewDate ? { review_date: reviewDate } : {})
+      ...(resolvedContext ? { presentation_context: resolvedContext } : {}),
+      ...(resolvedReviewDate ? { review_date: resolvedReviewDate } : {})
     })
   });
 }
@@ -226,6 +283,7 @@ export function sendSequenceAnswer(
     scheduledIds,
     stopReason,
     qualities,
+    candidates,
     groupId,
     commit = true
   } = payload || {};
@@ -248,6 +306,7 @@ export function sendSequenceAnswer(
       ...(scheduledIds ? { scheduled_ids: scheduledIds } : {}),
       ...(stopReason ? { stop_reason: stopReason } : {}),
       ...(qualities && Object.keys(qualities).length ? { qualities } : {}),
+      ...candidatesPayload(candidates),
       ...(groupId !== undefined ? { group_id: groupId } : {}),
       commit,
       ...(mode ? { mode } : {}),

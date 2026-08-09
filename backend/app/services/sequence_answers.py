@@ -28,6 +28,7 @@ from .sequence_modes import (
     sequence_review_goal
 )
 from .settings import load_scheduler_tuning_settings
+from .answer_events import sequence_answer_event
 
 
 def _bad_request(message):
@@ -345,6 +346,9 @@ def grade_sequence_answer(db, data, schedule=False):
 
     _validate_ids(submitted_ids, siblings, "Sequence answers")
     _validate_ids(data.qualities, siblings, "Sequence quality overrides")
+    for question_id, candidate_ids in (data.candidates or {}).items():
+        _validate_ids([question_id], siblings, "Sequence candidate targets")
+        _validate_ids(candidate_ids, siblings, "Sequence candidates")
 
     scheduler_tuning = load_scheduler_tuning_settings(db)
     context_count = _normalize_context_count(data.context_count)
@@ -494,6 +498,18 @@ def grade_sequence_answer(db, data, schedule=False):
                     run_item.question_id if run_item is not None else None
                 )
             }
+            event_candidate_ids = (
+                (data.candidates or {}).get(question_id) or data.target_ids
+            )
+            event_context = {
+                "context_count": context_count,
+                "goal": goal,
+                "target_ids": data.target_ids,
+                "scheduled_ids": data.scheduled_ids,
+                "run_start": data.run_start,
+                "stop_reason": data.stop_reason,
+                "stall_id": stall_id
+            }
         else:
             guess = data.items[question_id]
             answer_metadata = {
@@ -504,6 +520,18 @@ def grade_sequence_answer(db, data, schedule=False):
                 ),
                 "sequence_resolved_position": guess.position
             }
+            event_candidate_ids = (
+                (data.candidates or {}).get(question_id) or [
+                    slot["question_id"]
+                    for slot in rail
+                    if slot.get("question_id") is not None
+                ]
+            )
+            event_context = {
+                "context_count": len(rail) or context_count,
+                "goal": goal,
+                "rail": rail
+            }
 
         progress_quality_pairs.append((
             progress,
@@ -511,6 +539,23 @@ def grade_sequence_answer(db, data, schedule=False):
             {
                 **metadata_base,
                 **answer_metadata,
+                "answer_event": sequence_answer_event(
+                    question=question,
+                    raw_response=answer_metadata["answer"],
+                    resolved_response_id=(
+                        answer_metadata.get("sequence_resolved_answer_id") or
+                        by_position.get(
+                            answer_metadata.get("sequence_resolved_position")
+                        )
+                    ),
+                    expected_value={
+                        "answer": question.answer,
+                        "position": positions[question_id]
+                    },
+                    mode=mode,
+                    candidate_ids=event_candidate_ids,
+                    context=event_context
+                ),
                 "raw_quality": result["auto_quality"],
                 "effective_quality": result["quality"]
             }

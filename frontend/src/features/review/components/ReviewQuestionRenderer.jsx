@@ -25,6 +25,38 @@ function reviewItemRenderKey(q, currentIndex) {
     ].join(":");
 }
 
+function presentationKind(q) {
+    return q?.presentation_kind || "";
+}
+
+function isMapGroup(q) {
+    return presentationKind(q) === "map_group" || (
+        q?.type_q === "map" && Boolean(q?.media)
+    );
+}
+
+function isMediaGroup(q) {
+    return presentationKind(q) === "media_group" || (
+        q?.type_q === "media" && Array.isArray(q?.items)
+    );
+}
+
+function isTimelineGroup(q) {
+    return presentationKind(q) === "timeline_group" || q?.type_q === "timeline";
+}
+
+function isSequenceGroup(q) {
+    return presentationKind(q) === "sequence_group" || (
+        q?.type_q === "sequence" && Array.isArray(q?.items)
+    );
+}
+
+function isTextGroup(q) {
+    return presentationKind(q) === "text_group" || (
+        q?.type_q === "text" && Array.isArray(q?.items)
+    );
+}
+
 export default function ReviewQuestionRenderer({
     q,
     currentIndex,
@@ -59,7 +91,7 @@ export default function ReviewQuestionRenderer({
     const renderKey = reviewItemRenderKey(q, currentIndex);
 
     // Grouped map review built from atomic map questions.
-    if (q.type_q === "map" && q.media) {
+    if (isMapGroup(q)) {
         return (
             <MapReview
                 key={renderKey}
@@ -80,7 +112,7 @@ export default function ReviewQuestionRenderer({
         );
     }
 
-    if (q.type_q === "media" && q.items) {
+    if (isMediaGroup(q)) {
         const imageMode = normalizeImageMode(q.mode);
         const separatesResolvedItems = imageMode === IMAGE_MODE_TYPE_PROMPT;
 
@@ -105,7 +137,7 @@ export default function ReviewQuestionRenderer({
         );
     }
 
-    if (q.type_q === "timeline") {
+    if (isTimelineGroup(q)) {
         return (
             <TimelineReview
                 key={renderKey}
@@ -121,7 +153,7 @@ export default function ReviewQuestionRenderer({
         );
     }
 
-    if (q.type_q === "sequence" && q.items) {
+    if (isSequenceGroup(q)) {
         return (
             <SequenceReview
                 key={renderKey}
@@ -139,7 +171,7 @@ export default function ReviewQuestionRenderer({
         );
     }
 
-    if (q.type_q === "text" && q.items) {
+    if (isTextGroup(q)) {
         return (
             <TextGroupReview
                 key={renderKey}

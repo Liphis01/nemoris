@@ -111,4 +111,19 @@ describe("ReviewQuestionRenderer image review props", () => {
       separateResolvedItems: false
     });
   });
+
+  it("prefers presentation_kind when choosing the renderer", () => {
+    renderRenderer({
+      q: {
+        ...imageQuestion(IMAGE_MODE_TYPE_PROMPT),
+        presentation_kind: "media_group",
+        type_q: "text"
+      }
+    });
+
+    expect(MediaReview).toHaveBeenCalled();
+    expect(lastMediaReviewProps()).toMatchObject({
+      mode: IMAGE_MODE_TYPE_PROMPT
+    });
+  });
 });
