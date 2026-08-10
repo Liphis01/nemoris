@@ -27,6 +27,9 @@ from .text_modes import (
     normalize_text_mode
 )
 from .text_groups import text_group_reverse_mode_enabled
+from .cloze_modes import DEFAULT_CLOZE_MODE, normalize_cloze_mode
+from .cloze import cloze_is_buried
+from .set_modes import SET_MODE_COLLECT_MEMBERS, normalize_set_mode
 from .media import media_kind_from_name
 from .sequence import (
     dense_positions
@@ -62,7 +65,7 @@ TRAINING_RECORD_FIELDS = {
     "question_count",
     "content_fingerprint"
 }
-MODE_GROUP_TYPES = {"map", "media", "text", "sequence"}
+MODE_GROUP_TYPES = {"map", "media", "text", "cloze", "grid", "set", "sequence"}
 
 
 def normalize_scope_tag(value):
@@ -232,7 +235,7 @@ def training_fingerprints_for_groups(db, groups):
             db.query(Question)
             .filter(
                 Question.group_id.in_(group_ids),
-                Question.type_q.in_(["map", "media", "text", "sequence"]),
+                Question.type_q.in_(["map", "media", "text", "cloze", "grid", "set", "sequence"]),
                 reviewable_question_filter(),
             )
             .order_by(Question.id)
@@ -370,6 +373,12 @@ def default_training_mode_for_group_type(group_type):
     if group_type == "text":
         return DEFAULT_TEXT_MODE
 
+    if group_type == "cloze":
+        return DEFAULT_CLOZE_MODE
+
+    if group_type == "set":
+        return SET_MODE_COLLECT_MEMBERS
+
     if group_type == "sequence":
         return DEFAULT_SEQUENCE_MODE
 
@@ -385,6 +394,12 @@ def normalize_training_mode_for_group_type(group_type, mode):
 
     if group_type == "text":
         return normalize_text_mode(mode)
+
+    if group_type == "cloze":
+        return normalize_cloze_mode(mode)
+
+    if group_type == "set":
+        return normalize_set_mode(mode)
 
     if group_type == "sequence":
         return normalize_sequence_mode(mode)
@@ -555,7 +570,7 @@ def list_training_scopes(db):
         db.query(Question.group_id, Question.tags)
         .filter(
             Question.group_id.in_(group_ids),
-            Question.type_q.in_(["map", "media"])
+            Question.type_q.in_(["map", "media", "cloze", "grid", "set"])
         )
         .all()
         if group_ids else []
@@ -1044,11 +1059,13 @@ def get_training_items(
         if not group:
             raise HTTPException(status_code=404, detail="Group not found")
 
-        questions = (
+        questions = [
+            question for question in (
             _training_question_query(db)
             .filter(Question.group_id == group_id)
             .all()
-        )
+            ) if not cloze_is_buried(question)
+        ]
         normalized_sequence_mode = normalize_sequence_mode(sequence_mode)
         items = _attach_text_training_aliases(
             serialize_review_items(
@@ -1085,6 +1102,10 @@ def get_training_items(
                     item["mode"] = normalized_image_mode
                 elif item.get("type_q") == "text":
                     item["mode"] = normalized_text_mode
+                elif item.get("type_q") == "cloze":
+                    item["mode"] = DEFAULT_CLOZE_MODE
+                elif item.get("type_q") == "set":
+                    item["mode"] = SET_MODE_COLLECT_MEMBERS
                 elif item.get("type_q") == "sequence":
                     item["mode"] = normalized_sequence_mode
 
@@ -1109,7 +1130,8 @@ def get_training_items(
                 detail="Collection not found"
             )
 
-        questions = (
+        questions = [
+            question for question in (
             _training_question_query(db)
             .join(
                 question_collection,
@@ -1117,7 +1139,8 @@ def get_training_items(
             )
             .filter(question_collection.c.collection_id == collection_id)
             .all()
-        )
+            ) if not cloze_is_buried(question)
+        ]
         selected_question_ids = {
             question.id
             for question in questions
@@ -1147,6 +1170,10 @@ def get_training_items(
                 item["mode"] = normalized_image_mode
             elif item.get("type_q") == "text":
                 item["mode"] = normalized_text_mode
+            elif item.get("type_q") == "cloze":
+                item["mode"] = DEFAULT_CLOZE_MODE
+            elif item.get("type_q") == "set":
+                item["mode"] = SET_MODE_COLLECT_MEMBERS
             elif item.get("type_q") == "sequence":
                 item["mode"] = normalized_sequence_mode
 
@@ -1177,7 +1204,7 @@ def get_training_items(
                 db,
                 _question_ids_for_training_tag(db, tag_keys)
             )
-            if question_in_tag_subtree(question, tag_keys)
+            if question_in_tag_subtree(question, tag_keys) and not cloze_is_buried(question)
         ]
         return _attach_text_training_aliases(
             serialize_review_items(

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTrainingItems,
+  gradeTrainingCloze,
+  gradeTrainingGrid,
+  gradeTrainingSet,
+  gradeTrainingEnumeration,
+  gradeTrainingNumeric,
   gradeTrainingSequence,
   gradeTrainingTimeline,
   listTrainingScopes,
@@ -461,6 +466,17 @@ export function useTrainingSession(active = true) {
   const submitMapTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitMediaTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
   const submitTextTrainingAnswer = useCallback(async () => ({ status: "ok" }), []);
+  const submitClozeTrainingAnswer = useCallback(
+    (payload) => gradeTrainingCloze(payload),
+    []
+  );
+  const submitNumericTrainingAnswer = useCallback(
+    (payload) => gradeTrainingNumeric(payload),
+    []
+  );
+  const submitGridTrainingAnswer = useCallback((payload) => gradeTrainingGrid(payload), []);
+  const submitSetTrainingAnswer = useCallback((payload) => gradeTrainingSet(payload), []);
+  const submitEnumerationTrainingAnswer = useCallback((payload) => gradeTrainingEnumeration(payload), []);
   const submitTimelineTrainingAnswer = useCallback(
     (items) => gradeTrainingTimeline(items),
     []
@@ -741,6 +757,11 @@ export function useTrainingSession(active = true) {
     startScope,
     submitMediaTrainingAnswer,
     submitTextTrainingAnswer,
+    submitClozeTrainingAnswer,
+    submitNumericTrainingAnswer,
+    submitGridTrainingAnswer,
+    submitSetTrainingAnswer,
+    submitEnumerationTrainingAnswer,
     submitMapTrainingAnswer,
     submitTimelineTrainingAnswer,
     submitSequenceTrainingAnswer,

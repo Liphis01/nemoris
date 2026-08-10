@@ -1,10 +1,16 @@
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
+from ..models import Question
 from ..schemas import (
+    ClozeAnswerRequest,
+    GridAnswerRequest,
+    SetAnswerRequest,
+    EnumerationAnswerRequest,
+    NumericAnswerRequest,
     SequenceAnswerRequest,
     TimelineAnswerRequest,
     TrainingAttemptRecordRequest
@@ -17,6 +23,11 @@ from ..services.training import (
     record_training_attempt
 )
 from ..services.sequence_answers import grade_sequence_answer
+from ..services.cloze import grade_cloze_answer
+from ..services.numeric import grade_numeric_answer
+from ..services.grid import grade_grid_answers
+from ..services.set_groups import grade_set_answers
+from ..services.enumeration import grade_enumeration_answers
 
 
 router = APIRouter()
@@ -66,6 +77,50 @@ def grade_sequence_training(
     db: Session = Depends(get_db)
 ):
     return grade_sequence_answer(db, data, schedule=False)
+
+
+@router.post("/training/grade_cloze")
+def grade_cloze_training(
+    data: ClozeAnswerRequest,
+    db: Session = Depends(get_db)
+):
+    return grade_cloze_answer(db, data, schedule=False)
+
+
+@router.post("/training/grade_numeric")
+def grade_numeric_training(
+    data: NumericAnswerRequest,
+    db: Session = Depends(get_db)
+):
+    return grade_numeric_answer(db, data)
+
+
+@router.post("/training/grade_grid")
+def grade_grid_training(
+    data: GridAnswerRequest,
+    db: Session = Depends(get_db)
+):
+    graded = grade_grid_answers(db, data)
+    return {"group_id": data.group_id, "items": [{key: value for key, value in result.items() if key != "question"} for result in graded["items"]]}
+
+
+@router.post("/training/grade_set")
+def grade_set_training(data: SetAnswerRequest, db: Session = Depends(get_db)):
+    graded = grade_set_answers(db, data)
+    return {
+        "group_id": data.group_id,
+        "items": [{key: value for key, value in result.items() if key != "question"} for result in graded["items"]],
+        "recognized": graded["recognized"], "unmatched": graded["unmatched"],
+    }
+
+
+@router.post("/training/grade_enumeration")
+def grade_enumeration_training(data: EnumerationAnswerRequest, db: Session = Depends(get_db)):
+    question = db.query(Question).filter(Question.id == data.question_id, Question.type_q == "enumeration").first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Enumeration card not found")
+    result = grade_enumeration_answers(question, data.answers)
+    return {key: value for key, value in result.items() if key not in {"enumeration", "answer_policy"}}
 
 
 @router.post("/training/groups/{group_id}/attempt_record")

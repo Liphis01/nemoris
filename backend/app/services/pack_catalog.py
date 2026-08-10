@@ -1140,18 +1140,19 @@ def _collection_publish_summary(db, collection_id):
     if not collection:
         raise ValueError("Playlist not found")
 
-    # An ungrouped question carries no presentation context, so it cannot
-    # travel in a pack -- same rule the exporter applies.
     questions = [
         question
         for question in (collection.questions or [])
-        if question.group is not None
+        if question.group is not None or question.type_q in {"numeric", "enumeration"}
     ]
-    source_types = {question.group.type_group for question in questions}
+    source_types = {
+        question.group.type_group if question.group is not None else question.type_q
+        for question in questions
+    }
     tags = merge_tags(*[
         question.tags or []
         for question in questions
-        if question.type_q in {"map", "media", "text"}
+        if question.type_q in {"map", "media", "text", "numeric", "enumeration", "cloze", "grid", "set", "sequence"}
     ])
 
     return {
@@ -1165,7 +1166,7 @@ def _collection_publish_summary(db, collection_id):
         "tags": tags,
         "themes": _catalog_themes_for_tags(db, tags),
         "source_kind": "playlist",
-        "group_count": len({question.group.id for question in questions})
+        "group_count": len({question.group.id for question in questions if question.group})
     }
 
 

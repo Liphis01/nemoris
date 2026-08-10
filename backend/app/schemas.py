@@ -7,6 +7,11 @@ from .services.svg_maps.contracts import MapImportOntology, validate_map_package
 
 QuestionType = Literal[
     "text",
+    "numeric",
+    "cloze",
+    "grid",
+    "set",
+    "enumeration",
     "map",
     "timeline",
     "media",
@@ -17,6 +22,9 @@ GroupType = Literal[
     "map",
     "media",
     "text",
+    "cloze",
+    "grid",
+    "set",
     "sequence"
 ]
 
@@ -40,6 +48,12 @@ TextMode = Literal[
     "match",
     "type_reverse"
 ]
+
+ClozeMode = Literal["fill_blank"]
+NumericMode = Literal["numeric_input"]
+GridMode = Literal["fill_cell", "fill_row"]
+SetMode = Literal["collect_members"]
+EnumerationMode = Literal["collect_quota"]
 
 SequenceMode = Literal[
     "type_position",
@@ -67,7 +81,13 @@ TrainingGroupMode = Literal[
     "type_position",
     "gap_fill",
     "reorder",
-    "recite"
+    "recite",
+    "fill_blank",
+    "numeric_input",
+    "fill_cell",
+    "fill_row",
+    "collect_members",
+    "collect_quota"
 ]
 
 
@@ -410,6 +430,90 @@ class TextAnswerRequest(BaseModel):
     review_date: Optional[date] = None
     answers: Optional[Dict[int, Any]] = None
     candidates: Optional[Dict[int, List[int]]] = None
+
+
+class ClozeAnswerRequest(BaseModel):
+    group_id: int = Field(gt=0)
+    question_id: int = Field(gt=0)
+    answer: str = ""
+    # Preview validates server-side without scheduling. A commit uses 1..3 for
+    # a hit and forces 0 for a miss.
+    quality: Optional[AnswerQuality] = None
+    commit: bool = False
+    review_date: Optional[date] = None
+
+
+class NumericAnswerRequest(BaseModel):
+    question_id: int = Field(gt=0)
+    answer: str = ""
+    quality: Optional[AnswerQuality] = None
+    commit: bool = False
+    review_date: Optional[date] = None
+
+
+class ClozeGroupUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    tags: List[str] = Field(default_factory=list)
+    answer_policy: Optional[dict[str, Any]] = None
+    source: str = Field(min_length=1)
+
+
+class GridAxisItem(BaseModel):
+    key: str
+    label: str = Field(min_length=1, max_length=200)
+
+
+class GridCellItem(BaseModel):
+    key: str
+    row_key: str
+    column_key: str
+    value: str = Field(min_length=1)
+
+
+class GridGroupUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    tags: List[str] = Field(default_factory=list)
+    answer_policy: Optional[dict[str, Any]] = None
+    grid: dict[str, Any]
+
+
+class GridAnswerItem(BaseModel):
+    answer: str = ""
+
+
+class GridAnswerRequest(BaseModel):
+    group_id: int = Field(gt=0)
+    items: Dict[int, GridAnswerItem] = Field(min_length=1)
+    mode: GridMode = "fill_cell"
+    quality: Optional[AnswerQuality] = None
+    commit: bool = False
+    review_date: Optional[date] = None
+
+
+class SetGroupUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    tags: List[str] = Field(default_factory=list)
+    answer_policy: Optional[dict[str, Any]] = None
+    members: List[dict[str, Any]] = Field(min_length=1)
+
+
+class SetAnswerRequest(BaseModel):
+    group_id: int = Field(gt=0)
+    question_ids: List[int] = Field(min_length=1)
+    answers: List[str] = Field(default_factory=list)
+    mode: SetMode = "collect_members"
+    quality: Optional[AnswerQuality] = None
+    commit: bool = False
+    review_date: Optional[date] = None
+
+
+class EnumerationAnswerRequest(BaseModel):
+    question_id: int = Field(gt=0)
+    answers: List[str] = Field(default_factory=list)
+    mode: EnumerationMode = "collect_quota"
+    quality: Optional[AnswerQuality] = None
+    commit: bool = False
+    review_date: Optional[date] = None
 
 
 TimelinePrecision = Literal[

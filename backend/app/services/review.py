@@ -15,7 +15,8 @@ from ..serializers import (
     serialize_sequence_review_group,
     serialize_sequence_review_item,
     serialize_text_review_group,
-    serialize_text_review_item
+    serialize_text_review_item,
+    serialize_cloze_review_group
 )
 from .timeline import (
     build_mastered_timeline_anchors,
@@ -40,6 +41,12 @@ from .text_modes import (
     text_mode_difficulty
 )
 from .text_groups import text_group_reverse_mode_enabled
+from .cloze import cloze_is_buried
+from .cloze_modes import DEFAULT_CLOZE_MODE, cloze_mode_difficulty
+from .grid_modes import GRID_MODE_FILL_CELL, GRID_MODE_FILL_ROW
+from .grid import grid_presentation
+from .set_groups import set_presentation
+from .set_modes import SET_MODE_COLLECT_MEMBERS
 from .sequence import dense_positions
 from .sequence_rail import (
     build_rail,
@@ -220,7 +227,7 @@ def _due_questions(db, today):
             )
         )
         .all()
-        if progress_has_started(question.progress)
+        if progress_has_started(question.progress) and not cloze_is_buried(question, today)
     ]
 
 
@@ -240,6 +247,8 @@ def _new_question_ids(db, limit=None):
     rows = (
         db.query(
             Question.id,
+            Question.type_q,
+            Question.data,
             Progress.reps,
             Progress.last_review,
             Progress.history
@@ -251,7 +260,7 @@ def _new_question_ids(db, limit=None):
     )
 
     for row in rows:
-        if _progress_row_has_started(row):
+        if _progress_row_has_started(row) or cloze_is_buried(row, date.today()):
             continue
 
         ids.append(row.id)
@@ -288,6 +297,8 @@ def _due_question_count(db, today):
     rows = (
         db.query(
             Progress.question_id,
+            Question.type_q,
+            Question.data,
             Progress.reps,
             Progress.last_review,
             Progress.history
@@ -303,7 +314,10 @@ def _due_question_count(db, today):
         .all()
     )
 
-    return sum(1 for row in rows if _progress_row_has_started(row))
+    return sum(
+        1 for row in rows
+        if _progress_row_has_started(row) and not cloze_is_buried(row, today)
+    )
 
 
 
@@ -341,6 +355,9 @@ def _serialize_review_items(
     map_grouped_items = {}
     media_grouped_items = {}
     text_grouped_items = {}
+    cloze_grouped_items = {}
+    grid_grouped_items = {}
+    set_grouped_items = {}
     sequence_grouped_items = {}
     timeline_items = []
 
@@ -397,6 +414,21 @@ def _serialize_review_items(
                 }
 
             sequence_grouped_items[group_id]["questions"].append(question)
+            continue
+
+        if question.group and question.group.type_group == "cloze":
+            # One shown deletion reveals the authored context. Other due
+            # siblings are deliberately omitted and will be buried on answer.
+            group_id = question.group.id
+            cloze_grouped_items.setdefault(group_id, question)
+            continue
+
+        if question.group and question.group.type_group == "grid":
+            grid_grouped_items.setdefault(question.group.id, {"group": question.group, "questions": []})["questions"].append(question)
+            continue
+
+        if question.group and question.group.type_group == "set":
+            set_grouped_items.setdefault(question.group.id, {"group": question.group, "questions": []})["questions"].append(question)
             continue
 
         if question.type_q == "timeline":
@@ -789,11 +821,45 @@ def _serialize_review_items(
             ]
             sequence_review_groups.append(sequence_group)
 
+    cloze_review_groups = [
+        serialize_cloze_review_group(
+            question.group,
+            question,
+            mode=DEFAULT_CLOZE_MODE,
+            mode_difficulty=cloze_mode_difficulty(DEFAULT_CLOZE_MODE),
+            scheduler_tuning=scheduler_tuning,
+        )
+        for _group_id, question in sorted(cloze_grouped_items.items())
+    ]
+
+    grid_review_groups = []
+    for group_data in grid_grouped_items.values():
+        by_row = {}
+        for question in group_data["questions"]:
+            row_key = ((question.data or {}).get("grid") or {}).get("row_key")
+            by_row.setdefault(row_key, []).append(question)
+        consumed_ids = set()
+        for row_questions in by_row.values():
+            if len(row_questions) >= 2:
+                grid_review_groups.append(grid_presentation(group_data["group"], row_questions, GRID_MODE_FILL_ROW))
+                consumed_ids.update(item.id for item in row_questions)
+        for question in group_data["questions"]:
+            if question.id not in consumed_ids:
+                grid_review_groups.append(grid_presentation(group_data["group"], [question], GRID_MODE_FILL_CELL))
+
+    set_review_groups = [
+        set_presentation(group_data["group"], group_data["questions"], SET_MODE_COLLECT_MEMBERS)
+        for group_data in set_grouped_items.values()
+    ]
+
     return (
         review_items
         + map_review_groups
         + media_review_groups
         + text_review_groups
+        + cloze_review_groups
+        + grid_review_groups
+        + set_review_groups
         + sequence_review_groups
     )
 

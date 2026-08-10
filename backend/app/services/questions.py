@@ -19,6 +19,11 @@ from .sequence import validate_question_sequence
 from .tag_hierarchy import ensure_tag_ids
 from .tombstones import record_question_tombstones, record_tombstone
 from .timeline import validate_question_timeline
+from .numeric import (
+    format_numeric_value,
+    validate_question_numeric,
+)
+from .enumeration import validate_question_enumeration
 
 
 GROUP_COMPATIBILITY = {
@@ -27,6 +32,9 @@ GROUP_COMPATIBILITY = {
     "map": ["map"],
     "media": ["media"],
     "text": ["text"],
+    "cloze": ["cloze"],
+    "grid": ["grid"],
+    "set": ["set"],
     "sequence": ["sequence"]
 }
 
@@ -73,15 +81,22 @@ def create_question(db, payload):
     validate_question_timeline(payload.type_q, payload.group_id, payload.data)
     validate_question_sequence(payload.type_q, payload.group_id, payload.data)
     validate_group_compatibility(db, payload.type_q, payload.group_id)
+    data = validate_question_numeric(payload.type_q, payload.group_id, payload.data)
+    data = validate_question_enumeration(payload.type_q, payload.group_id, data)
+    answer = (
+        format_numeric_value(data["numeric"])
+        if payload.type_q == "numeric"
+        else (f"{data['enumeration']['required_count']} éléments distincts" if payload.type_q == "enumeration" else payload.answer)
+    )
 
     question = Question(
         type_q=payload.type_q,
         question=payload.question,
-        answer=payload.answer,
+        answer=answer,
         media=payload.media,
         answer_media=payload.answer_media,
         tags=ensure_tag_ids(db, payload.tags),
-        data=payload.data or {},
+        data=data,
         group_id=payload.group_id
     )
 
@@ -158,6 +173,52 @@ def update_question(db, question_id: int, payload):
     validate_question_timeline(future_type, future_group_id, future_data)
     validate_question_sequence(future_type, future_group_id, future_data)
     validate_group_compatibility(db, future_type, future_group_id)
+    future_data = validate_question_numeric(
+        future_type,
+        future_group_id,
+        future_data,
+    )
+    future_data = validate_question_enumeration(future_type, future_group_id, future_data)
+    if future_type == "numeric":
+        updates["data"] = future_data
+        updates["answer"] = format_numeric_value(future_data["numeric"])
+    if future_type == "enumeration":
+        updates["data"] = future_data
+        updates["answer"] = f"{future_data['enumeration']['required_count']} éléments distincts"
+    if "tags" in updates:
+        updates["tags"] = ensure_tag_ids(db, updates["tags"])
+
+    numeric_value_changed = (
+        question.type_q == "numeric" and
+        future_type == "numeric" and
+        ((question.data or {}).get("numeric") or {}).get("value") !=
+        future_data["numeric"]["value"]
+    )
+    enumeration_content_changed = (
+        question.type_q == "enumeration" and future_type == "enumeration" and
+        ((question.data or {}).get("enumeration") or {}) != future_data["enumeration"]
+    )
+    if numeric_value_changed or enumeration_content_changed:
+        # A new expected magnitude is a new fact. Retire the old GUID rather
+        # than making historical success look like success on the replacement.
+        replacement = Question(
+            type_q=future_type,
+            question=updates.get("question", question.question),
+            answer=updates.get("answer", question.answer),
+            media=updates.get("media", question.media),
+            answer_media=updates.get("answer_media", question.answer_media),
+            tags=updates.get("tags", question.tags or []),
+            data=future_data,
+            group_id=future_group_id,
+            suspended=updates.get("suspended", question.suspended),
+        )
+        replacement.collections = list(question.collections or [])
+        delete_question_dependents(db, [question.id])
+        db.delete(question)
+        db.add(replacement)
+        db.commit()
+        db.refresh(replacement)
+        return replacement
 
     for field in [
         "type_q",
@@ -172,9 +233,6 @@ def update_question(db, question_id: int, payload):
     ]:
         if field in updates:
             value = updates[field]
-
-            if field == "tags":
-                value = ensure_tag_ids(db, value)
 
             setattr(question, field, value)
 
@@ -230,8 +288,11 @@ def delete_question_dependents(db, question_ids):
             question_collection.c.question_id.in_(question_ids)
         )
     )
+    # Keep already-loaded ``question.progress`` instances in sync as well.
+    # Replacements deliberately retain no schedule, and a bulk delete with
+    # ``False`` otherwise leaves a stale Progress object to be flushed later.
     db.query(Progress).filter(Progress.question_id.in_(question_ids)).delete(
-        synchronize_session=False
+        synchronize_session="fetch"
     )
 
 

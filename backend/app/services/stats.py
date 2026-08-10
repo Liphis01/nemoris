@@ -7,7 +7,7 @@ from ..scheduler import parse_history_date
 from .progress import progress_is_new
 
 
-KNOWN_TYPES = ("text", "map", "timeline", "media", "sequence")
+KNOWN_TYPES = ("text", "numeric", "cloze", "grid", "set", "enumeration", "map", "timeline", "media", "sequence")
 LOAD_WINDOW_DAYS = 30
 RETENTION_WINDOW_DAYS = 90
 HARD_QUESTION_LIMIT = 12

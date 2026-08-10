@@ -50,7 +50,7 @@ def get_groups(db: Session = Depends(get_db)):
         db.query(Question.group_id, Question.tags)
         .filter(
             Question.group_id.in_(group_ids),
-            Question.type_q.in_(["map", "media", "text"])
+            Question.type_q.in_(["map", "media", "text", "cloze", "grid", "set", "sequence"])
         )
         .all()
         if group_ids else []
@@ -98,7 +98,7 @@ def get_group(group_id: int, db: Session = Depends(get_db)):
         "tags": merge_tags(*[
             question.tags or []
             for question in group.questions
-            if question.type_q in {"map", "media", "text"}
+            if question.type_q in {"map", "media", "text", "cloze", "grid", "set", "sequence"}
         ]),
         "data": group.data or {},
         "questions": [

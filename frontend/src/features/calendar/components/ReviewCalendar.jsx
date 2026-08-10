@@ -151,6 +151,7 @@ function dueLabel(question) {
   if (question.group?.name) return question.group.name;
   if (question.type_q === "map") return "Map zone";
   if (question.type_q === "media") return question.answer || "Média";
+  if (question.type_q === "numeric") return question.answer || "Valeur numérique";
   if (question.type_q === "timeline") return question.answer || "Timeline";
   if (question.type_q === "sequence") return question.answer || "Séquence";
   return question.answer || "Question";

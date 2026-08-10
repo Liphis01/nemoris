@@ -236,6 +236,68 @@ export function sendTextAnswer(
 }
 
 
+export function sendClozeAnswer(payload, reviewDate = undefined) {
+  return requestJson("/answer_cloze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      group_id: payload.groupId,
+      question_id: payload.questionId,
+      answer: payload.answer || "",
+      commit: Boolean(payload.commit),
+      ...(payload.quality !== undefined ? { quality: payload.quality } : {}),
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+
+export function sendNumericAnswer(payload, reviewDate = undefined) {
+  return requestJson("/answer_numeric", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question_id: payload.questionId,
+      answer: payload.answer || "",
+      commit: Boolean(payload.commit),
+      ...(payload.quality !== undefined ? { quality: payload.quality } : {}),
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+
+export function sendGridAnswer(payload, reviewDate = undefined) {
+  return requestJson("/answer_grid", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      group_id: payload.groupId,
+      items: payload.items,
+      mode: payload.mode,
+      commit: Boolean(payload.commit),
+      ...(payload.quality !== undefined ? { quality: payload.quality } : {}),
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+
+export function sendSetAnswer(payload, reviewDate = undefined) {
+  return requestJson("/answer_set", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      group_id: payload.groupId,
+      question_ids: payload.questionIds,
+      answers: payload.answers,
+      mode: payload.mode,
+      commit: Boolean(payload.commit),
+      ...(payload.quality !== undefined ? { quality: payload.quality } : {}),
+      ...(reviewDate ? { review_date: reviewDate } : {})
+    })
+  });
+}
+export function sendEnumerationAnswer(payload, reviewDate = undefined) { return requestJson("/answer_enumeration", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({question_id:payload.questionId,answers:payload.answers,commit:Boolean(payload.commit),...(payload.quality!==undefined?{quality:payload.quality}:{}),...(reviewDate?{review_date:reviewDate}:{})}) }); }
+
+
 export function sendTimelineAnswer(
   items,
   presentationContext = undefined,

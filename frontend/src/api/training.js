@@ -84,6 +84,54 @@ export function gradeTrainingSequence(payload, mode, contextCount) {
   });
 }
 
+export function gradeTrainingCloze(payload) {
+  return requestJson("/training/grade_cloze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      group_id: payload.groupId,
+      question_id: payload.questionId,
+      answer: payload.answer || "",
+      commit: false
+    })
+  });
+}
+
+export function gradeTrainingNumeric(payload) {
+  return requestJson("/training/grade_numeric", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question_id: payload.questionId,
+      answer: payload.answer || "",
+      commit: false
+    })
+  });
+}
+
+export function gradeTrainingGrid(payload) {
+  return requestJson("/training/grade_grid", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ group_id: payload.groupId, items: payload.items, mode: payload.mode, commit: false })
+  });
+}
+
+export function gradeTrainingSet(payload) {
+  return requestJson("/training/grade_set", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      group_id: payload.groupId,
+      question_ids: payload.questionIds,
+      answers: payload.answers,
+      mode: payload.mode,
+      commit: false
+    })
+  });
+}
+export function gradeTrainingEnumeration(payload) { return requestJson("/training/grade_enumeration", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question_id:payload.questionId,answers:payload.answers,commit:false})}); }
+
 
 export function recordGroupTrainingAttempt(groupId, payload) {
   return requestJson(`/training/groups/${groupId}/attempt_record`, {

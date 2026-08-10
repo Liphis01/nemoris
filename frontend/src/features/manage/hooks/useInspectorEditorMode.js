@@ -28,10 +28,13 @@ function emptyGroupDraft(type_group = "") {
 // form (nothing to upload first). The group itself is NOT persisted here -- see
 // PENDING_GROUP_EDITORS in ManageInspector: it is created at the first save that
 // has something worth saving, so a mis-click leaves no empty group behind.
-export const DIRECT_GROUP_TYPES = ["text", "media", "sequence"];
+export const DIRECT_GROUP_TYPES = ["text", "media", "cloze", "grid", "set", "sequence"];
 
 export const DEFAULT_GROUP_NAMES = {
   text: "Nouveau groupe texte",
+  cloze: "Nouvelle note à trous",
+  grid: "Nouvelle grille",
+  set: "Nouvel ensemble",
   media: "Nouveau groupe média",
   sequence: "Nouvelle liste"
 };

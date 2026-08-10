@@ -195,6 +195,7 @@ def _export_pack_bundle(
     description="",
     license="",
     source_kind="group",
+    standalone_questions=None,
     static_dir: Path | None = None,
     pack_dir: Path | None = None
 ):
@@ -213,6 +214,27 @@ def _export_pack_bundle(
     question_entries = []
     ensure_stored_tag_ids(db)
 
+    standalone_questions = standalone_questions or []
+
+    def question_entry(question, group_guid=None):
+        return {
+            "guid": question.guid,
+            "group_guid": group_guid,
+            "type_q": question.type_q,
+            "question": question.question,
+            "answer": question.answer,
+            "media": _resolve_media_ref(
+                db, question.media, static_dir, media_assets
+            ),
+            "answer_media": _resolve_media_ref(
+                db, question.answer_media, static_dir, media_assets
+            ),
+            "tags": question.tags or [],
+            "data": _resolve_data_media(
+                db, question.data or {}, static_dir, media_assets
+            )
+        }
+
     for group, questions in sources:
         for question in questions:
             canonical_tags = ensure_tag_ids(db, question.tags or [])
@@ -230,28 +252,22 @@ def _export_pack_bundle(
             "data": group.data or {}
         })
         question_entries.extend(
-            {
-                "guid": question.guid,
-                "group_guid": group.guid,
-                "type_q": question.type_q,
-                "question": question.question,
-                "answer": question.answer,
-                "media": _resolve_media_ref(
-                    db, question.media, static_dir, media_assets
-                ),
-                "answer_media": _resolve_media_ref(
-                    db, question.answer_media, static_dir, media_assets
-                ),
-                "tags": question.tags or [],
-                "data": _resolve_data_media(
-                    db, question.data or {}, static_dir, media_assets
-                )
-            }
+            question_entry(question, group.guid)
             # Ordered by id for stable diffs across re-exports.
             for question in sorted(questions, key=lambda item: item.id)
         )
 
-    source_types = {group.type_group for group, _ in sources}
+    for question in sorted(standalone_questions, key=lambda item: item.id):
+        canonical_tags = ensure_tag_ids(db, question.tags or [])
+        if canonical_tags != (question.tags or []):
+            question.tags = canonical_tags
+        question_entries.append(question_entry(question))
+
+    db.flush()
+    source_types = (
+        {group.type_group for group, _ in sources}
+        | {question.type_q for question in standalone_questions}
+    )
     content = {"groups": group_entries, "questions": question_entries}
     manifest = {
         "format": PACK_FORMAT,
@@ -365,18 +381,19 @@ def export_playlist_pack(
         raise ValueError("Playlist not found")
 
     buckets = {}
+    standalone_questions = []
 
     for question in collection.questions:
-        # group_id is nullable; an ungrouped question has no presentation
-        # context to ship, so it cannot be part of a pack.
         if question.group is None:
+            if question.type_q in {"numeric", "enumeration"}:
+                standalone_questions.append(question)
             continue
 
         buckets.setdefault(question.group.id, (question.group, []))[1].append(
             question
         )
 
-    if not buckets:
+    if not buckets and not standalone_questions:
         raise ValueError("Cannot publish an empty playlist")
 
     sources = [buckets[key] for key in sorted(buckets)]
@@ -390,6 +407,7 @@ def export_playlist_pack(
         description=description,
         license=license,
         source_kind="playlist",
+        standalone_questions=standalone_questions,
         static_dir=static_dir,
         pack_dir=pack_dir
     )
@@ -453,7 +471,7 @@ def _read_manifest_and_content(zip_file):
     else:
         group_entries = [content.get("group")]
 
-    if not isinstance(group_entries, list) or not group_entries:
+    if not isinstance(group_entries, list):
         raise ValueError("Invalid pack: content.json is malformed")
 
     if not all(isinstance(entry, dict) for entry in group_entries):
@@ -479,11 +497,26 @@ def _read_manifest_and_content(zip_file):
 
     if any(
         entry.get("group_guid") not in known_group_guids
+        and not (
+            entry.get("group_guid") is None
+            and entry.get("type_q") in {"numeric", "enumeration"}
+        )
         for entry in question_entries
     ):
         raise ValueError(
             "Invalid pack: a question references a group not in this pack"
         )
+
+    from .cloze import validate_cloze_pack_entries
+    from .grid import validate_grid_pack_entries
+    from .set_groups import validate_set_pack_entries
+    from .numeric import validate_numeric_pack_entries
+    from .enumeration import validate_enumeration_pack_entries
+    validate_cloze_pack_entries(group_entries, question_entries)
+    validate_grid_pack_entries(group_entries, question_entries)
+    validate_set_pack_entries(group_entries, question_entries)
+    validate_numeric_pack_entries(question_entries)
+    validate_enumeration_pack_entries(question_entries)
 
     return manifest, pack_guid, version, group_entries, question_entries
 
@@ -717,7 +750,10 @@ def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
                 answer_media=materialize(entry.get("answer_media")),
                 tags=entry.get("tags") or [],
                 data=_materialize_data_media(entry.get("data") or {}, materialize),
-                group_id=group_targets[entry.get("group_guid")].id,
+                group_id=(
+                    group_targets[entry["group_guid"]].id
+                    if entry.get("group_guid") is not None else None
+                ),
                 pack_guid=pack_guid,
                 pack_version=version,
                 content_hash=content_hash(entry, QUESTION_HASH_FIELDS)
@@ -747,7 +783,7 @@ def import_pack(db, zip_path, *, static_dir: Path | None = None, source=None):
         )
         db.commit()
 
-        group_id = group_results[0]["id"]
+        group_id = group_results[0]["id"] if group_results else None
 
     return {
         "status": "imported",
@@ -1006,7 +1042,7 @@ def update_pack(
                     answer_media=materialize(entry.get("answer_media")),
                     tags=entry.get("tags") or [],
                     data=_materialize_data_media(entry.get("data") or {}, materialize),
-                    group_id=target_group.id,
+                    group_id=target_group.id if target_group else None,
                     pack_guid=pack_guid,
                     pack_version=version,
                     content_hash=content_hash(entry, QUESTION_HASH_FIELDS)
@@ -1025,10 +1061,11 @@ def update_pack(
             # group_id is deliberately absent from QUESTION_HASH_FIELDS, so a
             # question moved between this pack's groups produces no hash
             # change and would otherwise be left in its old group forever.
-            moved = local.group_id != target_group.id
+            target_group_id = target_group.id if target_group else None
+            moved = local.group_id != target_group_id
 
             if moved:
-                local.group_id = target_group.id
+                local.group_id = target_group_id
 
             # Unforked and upstream didn't actually change this item -- leave
             # it untouched so "updated" only ever reports real changes.

@@ -9,6 +9,7 @@ function isVisualQuestion(question) {
     "media_group",
     "timeline_group",
     "text_group",
+    "cloze_group",
     "sequence_group"
   ].includes(question?.presentation_kind)) {
     return true;
@@ -142,6 +143,9 @@ export default function ReviewSession({
   handleImageComplete,
   handleTimelineComplete,
   handleSequenceComplete,
+  handleClozeComplete,
+  handleNumericComplete,
+  handleGridComplete,
   canReturnToLastQuestion,
   returnToLastQuestion,
   sessionComplete,
@@ -153,6 +157,11 @@ export default function ReviewSession({
   submitTextAnswer,
   submitTimelineAnswer,
   submitSequenceAnswer,
+  submitClozeAnswer,
+  submitNumericAnswer,
+  submitGridAnswer,
+  submitSetAnswer,
+  submitEnumerationAnswer,
   graduateGroupedAnswer
 }) {
   const currentQuestion = questions[currentIndex];
@@ -427,11 +436,19 @@ export default function ReviewSession({
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
               handleSequenceComplete={handleSequenceComplete}
+              handleClozeComplete={handleClozeComplete}
+              handleNumericComplete={handleNumericComplete}
+              handleGridComplete={handleGridComplete}
               submitMapAnswer={submitMapAnswer}
               submitMediaAnswer={submitMediaAnswer}
               submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               submitSequenceAnswer={submitSequenceAnswer}
+              submitClozeAnswer={submitClozeAnswer}
+              submitNumericAnswer={submitNumericAnswer}
+              submitGridAnswer={submitGridAnswer}
+              submitSetAnswer={submitSetAnswer}
+              submitEnumerationAnswer={submitEnumerationAnswer}
               graduateGroupedAnswer={graduateGroupedAnswer}
               allowPartialSubmit={false}
               compactVisualLayout
@@ -670,11 +687,19 @@ export default function ReviewSession({
               handleImageComplete={handleImageComplete}
               handleTimelineComplete={handleTimelineComplete}
               handleSequenceComplete={handleSequenceComplete}
+              handleClozeComplete={handleClozeComplete}
+              handleNumericComplete={handleNumericComplete}
+              handleGridComplete={handleGridComplete}
               submitMapAnswer={submitMapAnswer}
               submitMediaAnswer={submitMediaAnswer}
               submitTextAnswer={submitTextAnswer}
               submitTimelineAnswer={submitTimelineAnswer}
               submitSequenceAnswer={submitSequenceAnswer}
+              submitClozeAnswer={submitClozeAnswer}
+              submitNumericAnswer={submitNumericAnswer}
+              submitGridAnswer={submitGridAnswer}
+              submitSetAnswer={submitSetAnswer}
+              submitEnumerationAnswer={submitEnumerationAnswer}
               graduateGroupedAnswer={graduateGroupedAnswer}
               allowPartialSubmit={false}
             />

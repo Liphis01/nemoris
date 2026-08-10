@@ -1374,6 +1374,46 @@ class PackFormatV1CompatTests(PackFixtureMixin, unittest.TestCase):
 
 
 class PlaylistPackTests(PackFixtureMixin, unittest.TestCase):
+    def test_numeric_only_playlist_round_trips_without_a_group(self):
+        db = make_db()
+        numeric = Question(
+            type_q="numeric",
+            question="Distance Terre-Lune ?",
+            answer="384 400 km",
+            tags=[],
+            data={"numeric": {
+                "value": "384400",
+                "unit": "km",
+                "display_precision": 0,
+                "relative_tolerance": "0.1",
+                "zero_absolute_tolerance": None,
+            }},
+        )
+        playlist = Collection(name="Mesures", data={}, questions=[numeric])
+        db.add(playlist)
+        db.commit()
+
+        zip_path = export_playlist_pack(
+            db,
+            playlist.id,
+            version=1,
+            name="Mesures",
+            static_dir=self.make_static_dir(),
+            pack_dir=self.make_static_dir(),
+        )
+        with ZipFile(zip_path) as zip_file:
+            content = json.loads(zip_file.read("content.json"))
+        self.assertEqual(content["groups"], [])
+        self.assertIsNone(content["questions"][0]["group_guid"])
+
+        target = make_db()
+        result = import_pack(target, zip_path, static_dir=self.make_static_dir())
+        imported = target.query(Question).one()
+        self.assertEqual(result["group_id"], None)
+        self.assertEqual(imported.type_q, "numeric")
+        self.assertIsNone(imported.group_id)
+        self.assertEqual(imported.data["numeric"]["value"], "384400")
+
     def build_playlist_source(self):
         """A playlist spanning a map group and a text group.
 

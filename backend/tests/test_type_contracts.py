@@ -9,6 +9,11 @@ from app.services.image_modes import (
 from app.services.map_modes import MAP_MODES
 from app.services.sequence_modes import SEQUENCE_MODES
 from app.services.text_modes import TEXT_MODES
+from app.services.cloze_modes import CLOZE_MODES
+from app.services.numeric_modes import NUMERIC_MODES
+from app.services.grid_modes import GRID_MODES
+from app.services.set_modes import SET_MODES
+from app.services.enumeration_modes import ENUMERATION_MODES
 from app.services.type_contracts import (
     GROUP_TYPE_CONTRACTS,
     PRESENTATION_KINDS,
@@ -80,10 +85,18 @@ class TypeContractTests(unittest.TestCase):
         self.assertEqual(QUESTION_TYPE_CONTRACTS["map"].modes, MAP_MODES)
         self.assertEqual(QUESTION_TYPE_CONTRACTS["media"].modes, IMAGE_MODES)
         self.assertEqual(QUESTION_TYPE_CONTRACTS["text"].modes, TEXT_MODES)
+        self.assertEqual(QUESTION_TYPE_CONTRACTS["numeric"].modes, NUMERIC_MODES)
+        self.assertEqual(QUESTION_TYPE_CONTRACTS["cloze"].modes, CLOZE_MODES)
+        self.assertEqual(QUESTION_TYPE_CONTRACTS["grid"].modes, GRID_MODES)
+        self.assertEqual(QUESTION_TYPE_CONTRACTS["set"].modes, SET_MODES)
+        self.assertEqual(QUESTION_TYPE_CONTRACTS["enumeration"].modes, ENUMERATION_MODES)
         self.assertEqual(QUESTION_TYPE_CONTRACTS["sequence"].modes, SEQUENCE_MODES)
         self.assertEqual(GROUP_TYPE_CONTRACTS["map"].modes, MAP_MODES)
         self.assertEqual(GROUP_TYPE_CONTRACTS["media"].modes, IMAGE_MODES)
         self.assertEqual(GROUP_TYPE_CONTRACTS["text"].modes, TEXT_MODES)
+        self.assertEqual(GROUP_TYPE_CONTRACTS["cloze"].modes, CLOZE_MODES)
+        self.assertEqual(GROUP_TYPE_CONTRACTS["grid"].modes, GRID_MODES)
+        self.assertEqual(GROUP_TYPE_CONTRACTS["set"].modes, SET_MODES)
         self.assertEqual(GROUP_TYPE_CONTRACTS["sequence"].modes, SEQUENCE_MODES)
 
     def test_schema_mode_literals_match_mode_modules(self):
@@ -93,6 +106,11 @@ class TypeContractTests(unittest.TestCase):
             set(IMAGE_MODES) | {LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE}
         )
         self.assertEqual(set(get_args(schemas.TextMode)), set(TEXT_MODES))
+        self.assertEqual(set(get_args(schemas.NumericMode)), set(NUMERIC_MODES))
+        self.assertEqual(set(get_args(schemas.ClozeMode)), set(CLOZE_MODES))
+        self.assertEqual(set(get_args(schemas.GridMode)), set(GRID_MODES))
+        self.assertEqual(set(get_args(schemas.SetMode)), set(SET_MODES))
+        self.assertEqual(set(get_args(schemas.EnumerationMode)), set(ENUMERATION_MODES))
         self.assertEqual(set(get_args(schemas.SequenceMode)), set(SEQUENCE_MODES))
 
 

@@ -5,6 +5,11 @@ import {
   sendMediaAnswer,
   sendMapAnswer,
   sendTextAnswer,
+  sendClozeAnswer,
+  sendGridAnswer,
+  sendSetAnswer,
+  sendEnumerationAnswer,
+  sendNumericAnswer,
   sendTimelineAnswer,
   sendSequenceAnswer,
   reviseAnswer,
@@ -43,6 +48,10 @@ function isSelfManagedPresentation(question) {
     "media_group",
     "timeline_group",
     "text_group",
+    "cloze_group",
+    "grid_cell",
+    "grid_row",
+    "set_group",
     "sequence_group"
   ].includes(question?.presentation_kind)) {
     return true;
@@ -50,6 +59,7 @@ function isSelfManagedPresentation(question) {
 
   return (
     question?.type_q === "map" ||
+    question?.type_q === "numeric" ||
     question?.type_q === "timeline" ||
     (question?.type_q === "media" && question?.items) ||
     (question?.type_q === "text" && question?.items) ||
@@ -193,6 +203,12 @@ export function useReviewSession(active) {
   ) => sendSequenceAnswer(payload, mode, contextCount, reviewDateRef.current),
   []);
 
+  const submitClozeAnswer = useCallback((payload) => sendClozeAnswer(payload, reviewDateRef.current), []);
+  const submitGridAnswer = useCallback((payload) => sendGridAnswer(payload, reviewDateRef.current), []);
+  const submitSetAnswer = useCallback((payload) => sendSetAnswer(payload, reviewDateRef.current), []);
+  const submitEnumerationAnswer = useCallback((payload) => sendEnumerationAnswer(payload, reviewDateRef.current), []);
+  const submitNumericAnswer = useCallback((payload) => sendNumericAnswer(payload, reviewDateRef.current), []);
+
   // "Acquis" for grouped items: graduate them from the frozen first-fail state
   // on the pinned session date, carrying no grade.
   const graduateGroupedAnswer = useCallback((questionIds) =>
@@ -309,6 +325,39 @@ export function useReviewSession(active) {
   const handleImageComplete = handleGroupComplete;
   const handleTimelineComplete = handleGroupComplete;
   const handleSequenceComplete = handleGroupComplete;
+  const handleClozeComplete = handleGroupComplete;
+  function handleGridComplete(failedQuestionIds = [], retryPresentation = {}) {
+    const answerIndex = currentIndex;
+    if (current && failedQuestionIds.length > 0) {
+      const failedItems = (current.items || []).filter(item =>
+        failedQuestionIds.includes(item.question_id)
+      );
+      if (failedItems.length > 0) {
+        setQuestions(previous => [
+          ...previous,
+          {
+            ...current,
+            ...retryPresentation,
+            items: failedItems,
+            _reviewRetryOfIndex: answerIndex
+          }
+        ]);
+      }
+    }
+    setCurrentIndex(previous => previous + 1);
+    setReturnToLastQuestionArmed(true);
+  }
+  const handleNumericComplete = useCallback((failedQuestionIds = []) => {
+    const answerIndex = currentIndex;
+    if (current && failedQuestionIds.includes(current.question_id)) {
+      setQuestions(previous => [
+        ...previous,
+        { ...current, _reviewRetryOfIndex: answerIndex }
+      ]);
+    }
+    setCurrentIndex(previous => previous + 1);
+    setReturnToLastQuestionArmed(true);
+  }, [current, currentIndex]);
 
   // Closes the run out. Shared by the "nothing was due today" bootstrap path
   // and the "just answered the last question" path below, so both land on the
@@ -498,6 +547,9 @@ export function useReviewSession(active) {
     handleMapComplete,
     handleTimelineComplete,
     handleSequenceComplete,
+    handleClozeComplete,
+    handleGridComplete,
+    handleNumericComplete,
     handleTextAnswer,
     canReturnToLastQuestion,
     currentTextQuality: currentTextAnswer?.quality ?? null,
@@ -508,6 +560,11 @@ export function useReviewSession(active) {
     submitTextAnswer,
     submitTimelineAnswer,
     submitSequenceAnswer,
+    submitClozeAnswer,
+    submitGridAnswer,
+    submitSetAnswer,
+    submitEnumerationAnswer,
+    submitNumericAnswer,
     graduateGroupedAnswer,
     questions,
     reviewError,

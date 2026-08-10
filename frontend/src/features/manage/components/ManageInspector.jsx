@@ -4,6 +4,9 @@ import CreateMapGroupEditor from "./CreateMapGroupEditor";
 import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
 import MediaGroupEditor from "./MediaGroupEditor";
 import TextGroupEditor from "./TextGroupEditor";
+import ClozeGroupEditor from "./ClozeGroupEditor";
+import GridGroupEditor from "./GridGroupEditor";
+import SetGroupEditor from "./SetGroupEditor";
 import SequenceGroupEditor from "./SequenceGroupEditor";
 import PlaylistBuilder from "./PlaylistBuilder";
 import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
@@ -24,6 +27,9 @@ import {
 // The grouped types whose editor opens on a group that does not exist yet.
 const PENDING_GROUP_EDITORS = {
   text: TextGroupEditor,
+  cloze: ClozeGroupEditor,
+  grid: GridGroupEditor,
+  set: SetGroupEditor,
   media: MediaGroupEditor,
   sequence: SequenceGroupEditor
 };
@@ -533,6 +539,14 @@ export default function ManageInspector({
     selectedItem.group?.id
   );
   const isSequenceGroup = selectedItem.type_group === "sequence";
+  const selectedIsClozeItem = selectedItem.type_q === "cloze" && (
+    selectedItem.group_id || selectedItem.group?.id
+  );
+  const isClozeGroup = selectedItem.type_group === "cloze";
+  const selectedIsGridItem = selectedItem.type_q === "grid" && (selectedItem.group_id || selectedItem.group?.id);
+  const isGridGroup = selectedItem.type_group === "grid";
+  const selectedIsSetItem = selectedItem.type_q === "set" && (selectedItem.group_id || selectedItem.group?.id);
+  const isSetGroup = selectedItem.type_group === "set";
 
   if (selectedIsMapZone || isMapGroup) {
     // Selecting either a map group or one of its zones opens the full map editor
@@ -759,6 +773,12 @@ export default function ManageInspector({
   if (
     selectedIsTextItem ||
     isTextGroup ||
+    selectedIsClozeItem ||
+    isClozeGroup ||
+    selectedIsGridItem ||
+    isGridGroup ||
+    selectedIsSetItem ||
+    isSetGroup ||
     selectedIsSequenceItem ||
     isSequenceGroup
   ) {
@@ -766,10 +786,13 @@ export default function ManageInspector({
     // editor differs, so the group lookup and the save/cache reconciliation
     // below are shared.
     const isSequence = selectedIsSequenceItem || isSequenceGroup;
-    const GroupEditor = isSequence ? SequenceGroupEditor : TextGroupEditor;
+    const isCloze = selectedIsClozeItem || isClozeGroup;
+    const isGrid = selectedIsGridItem || isGridGroup;
+    const isSet = selectedIsSetItem || isSetGroup;
+    const GroupEditor = isSequence ? SequenceGroupEditor : isCloze ? ClozeGroupEditor : isGrid ? GridGroupEditor : isSet ? SetGroupEditor : TextGroupEditor;
     const selectedIsGroupItem = isSequence
       ? selectedIsSequenceItem
-      : selectedIsTextItem;
+      : isCloze ? selectedIsClozeItem : isGrid ? selectedIsGridItem : isSet ? selectedIsSetItem : selectedIsTextItem;
     const groupId = selectedIsGroupItem
       ? selectedItem.group?.id ?? selectedItem.group_id
       : selectedItem.id;

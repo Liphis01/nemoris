@@ -111,6 +111,35 @@ def _migration_initial_schema(connection):
     Base.metadata.create_all(bind=connection)
 
 
+def _migration_cloze_capability(connection):
+    # Cloze stores its source/card relationship in existing JSON/GUID fields.
+    # Recording this capability still prevents an older app from accepting a
+    # pack it cannot render or validate.
+    return None
+
+
+def _migration_numeric_capability(connection):
+    # Numeric metadata lives in Question.data; this is a pack compatibility
+    # gate rather than a database-shape migration.
+    return None
+
+
+def _migration_grid_capability(connection):
+    # Grid source and generated-card keys use existing JSON/GUID fields.
+    return None
+
+
+def _migration_set_capability(connection):
+    # Membership sources and their generated cards use existing JSON/GUID fields.
+    return None
+
+
+def _migration_enumeration_capability(connection):
+    # Quota enumeration sources also live in Question.data. The migration is a
+    # compatibility marker for packs, not a database-shape change.
+    return None
+
+
 def _migration_progress_fsrs_columns(connection):
     if not _table_exists(connection, "progress"):
         return
@@ -1588,6 +1617,31 @@ MIGRATIONS = [
         version="0026",
         name="review_log_question_reviewed_index",
         run=_migration_review_log_question_reviewed_index
+    ),
+    Migration(
+        version="0027",
+        name="cloze_capability",
+        run=_migration_cloze_capability
+    ),
+    Migration(
+        version="0028",
+        name="numeric_capability",
+        run=_migration_numeric_capability
+    ),
+    Migration(
+        version="0029",
+        name="grid_capability",
+        run=_migration_grid_capability
+    ),
+    Migration(
+        version="0030",
+        name="set_capability",
+        run=_migration_set_capability
+    ),
+    Migration(
+        version="0031",
+        name="enumeration_capability",
+        run=_migration_enumeration_capability
     )
 ]
 

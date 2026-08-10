@@ -9,6 +9,9 @@ from .routers import (
     backup,
     packs,
     collections,
+    cloze_groups,
+    grid_groups,
+    set_groups,
     groups,
     map_imports,
     maps,
@@ -83,6 +86,9 @@ def create_app():
     app.include_router(maps.router)
     app.include_router(map_imports.router)
     app.include_router(media_groups.router)
+    app.include_router(cloze_groups.router)
+    app.include_router(grid_groups.router)
+    app.include_router(set_groups.router)
     app.include_router(text_groups.router)
     app.include_router(sequence_groups.router)
     app.include_router(uploads.router)

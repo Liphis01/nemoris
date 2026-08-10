@@ -56,13 +56,23 @@ describe("mobileReviewEngine", () => {
     const future = question({ id: 2, type_q: "media" });
     const map = question({ id: 3, type_q: "map" });
     const newText = question({ id: 4, type_q: "text" });
+    const cloze = question({ id: 5, type_q: "cloze" });
+    const numeric = question({ id: 6, type_q: "numeric" });
+    const grid = question({ id: 7, type_q: "grid" });
+    const set = question({ id: 8, type_q: "set" });
+    const enumeration = question({ id: 9, type_q: "enumeration" });
 
     const result = selectDueMobileReviewItems({
-      questions: [future, map, newText, due],
+      questions: [future, map, newText, due, cloze, numeric, grid, set, enumeration],
       progresses: [
         startedProgress({ question_id: 1, next_review: today }),
         startedProgress({ question_id: 2, next_review: "2026-08-01" }),
-        startedProgress({ question_id: 3, next_review: today })
+        startedProgress({ question_id: 3, next_review: today }),
+        startedProgress({ question_id: 5, next_review: today }),
+        startedProgress({ question_id: 6, next_review: today }),
+        startedProgress({ question_id: 7, next_review: today }),
+        startedProgress({ question_id: 8, next_review: today }),
+        startedProgress({ question_id: 9, next_review: today })
       ],
       today
     });

@@ -5,6 +5,8 @@ import {
   normalizeTimeline
 } from "../../timeline/timelineUtils";
 import TextQuestionEditor from "./TextQuestionEditor";
+import NumericQuestionEditor from "./NumericQuestionEditor";
+import EnumerationQuestionEditor from "./EnumerationQuestionEditor";
 
 function prepareTextDraft(draft) {
   return {
@@ -20,6 +22,37 @@ function prepareMediaDraft(draft) {
     type_q: "media",
     media: draft?.media || "",
     data: draft?.data || {}
+  };
+}
+
+function prepareNumericDraft(draft) {
+  return {
+    ...draft,
+    answer: "",
+    type_q: "numeric",
+    group_id: null,
+    data: {
+      ...(draft?.data || {}),
+      numeric: {
+        value: "",
+        unit: "",
+        display_precision: 0,
+        relative_tolerance: "0.10",
+        zero_absolute_tolerance: ""
+      }
+    }
+  };
+}
+function prepareEnumerationDraft(draft) {
+  return {
+    ...draft,
+    type_q: "enumeration",
+    group_id: null,
+    answer: "",
+    data: {
+      ...(draft?.data || {}),
+      enumeration: { members: [], required_count: 1 }
+    }
   };
 }
 
@@ -42,6 +75,14 @@ const questionEditorAdapters = {
   text: {
     Editor: TextQuestionEditor,
     prepareDraft: prepareTextDraft
+  },
+  numeric: {
+    Editor: NumericQuestionEditor,
+    prepareDraft: prepareNumericDraft
+  },
+  enumeration: {
+    Editor: EnumerationQuestionEditor,
+    prepareDraft: prepareEnumerationDraft
   },
   timeline: {
     Editor: TimelineQuestionEditor,

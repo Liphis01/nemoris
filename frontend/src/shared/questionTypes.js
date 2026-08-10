@@ -4,6 +4,27 @@ export const questionTypeChipStyles = {
     background: "#163b63",
     color: "#5eb6ff"
   },
+  numeric: {
+    label: "NUM",
+    background: "#423018",
+    color: "#f2b56b"
+  },
+  cloze: {
+    label: "CLOZE",
+    background: "#402044",
+    color: "#f0a6ff"
+  },
+  grid: {
+    label: "GRILLE",
+    background: "#163b38",
+    color: "#5eead4"
+  },
+  set: {
+    label: "ENSEMBLE",
+    background: "#24334c",
+    color: "#9ac5ff"
+  },
+  enumeration: { label: "QUOTA", background: "#4b2d4c", color: "#f3a8ef" },
   timeline: {
     label: "TIMELINE",
     background: "#2b2047",

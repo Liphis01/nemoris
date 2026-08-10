@@ -21,12 +21,19 @@ from .services.text_modes import (
     DEFAULT_TEXT_MODE,
     normalize_text_mode
 )
+from .services.cloze_modes import (
+    DEFAULT_CLOZE_MODE,
+    normalize_cloze_mode,
+)
+from .services.numeric_modes import DEFAULT_NUMERIC_MODE
+from .services.enumeration_modes import ENUMERATION_MODE_COLLECT_QUOTA
 from .services.type_contracts import (
     PRESENTATION_MAP_GROUP,
     PRESENTATION_MEDIA_GROUP,
     PRESENTATION_SEQUENCE_GROUP,
     PRESENTATION_SINGLE_CARD,
-    PRESENTATION_TEXT_GROUP
+    PRESENTATION_TEXT_GROUP,
+    PRESENTATION_CLOZE_GROUP
 )
 from .services.answer_policy import effective_answer_policy
 
@@ -97,6 +104,11 @@ def serialize_manage_question(question):
         "type_q": question.type_q,
         "question": question.question,
         "answer": question.answer,
+
+        "numeric": (
+            (question.data or {}).get("numeric")
+            if question.type_q == "numeric" else None
+        ),
         "media": question.media,
         "media_pool": read_media_pool(question.media, question.data),
         "answer_media": question.answer_media,
@@ -122,6 +134,9 @@ def serialize_manage_question(question):
                         "map",
                         "media",
                         "text",
+                        "cloze",
+                        "grid",
+                        "set",
                         "sequence"
                     }
                     else []
@@ -141,7 +156,7 @@ def serialize_manage_question(question):
 def serialize_review_question_item(question):
     # Text review sessions only need the prompt, answer, media, tags, and
     # progress state for one atomic item.
-    return {
+    payload = {
         "type_q": question.type_q,
 
         "presentation_kind": PRESENTATION_SINGLE_CARD,
@@ -173,6 +188,15 @@ def serialize_review_question_item(question):
 
         "relearning_interval": relearning_graduate_interval(question.progress)
     }
+
+    if question.type_q == "numeric":
+        payload["numeric"] = (question.data or {}).get("numeric")
+        payload["mode"] = DEFAULT_NUMERIC_MODE
+    if question.type_q == "enumeration":
+        payload["enumeration"] = (question.data or {}).get("enumeration")
+        payload["mode"] = ENUMERATION_MODE_COLLECT_QUOTA
+
+    return payload
 
 
 def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
@@ -360,6 +384,35 @@ def serialize_text_review_item(
         ),
 
         "relearning_interval": relearning_graduate_interval(question.progress)
+    }
+
+
+def serialize_cloze_review_group(group, question, mode=None, mode_difficulty=None, scheduler_tuning=None):
+    from .services.cloze import render_cloze_source
+    source = ((group.data or {}).get("cloze") or {}).get("source", "")
+    key = ((question.data or {}).get("cloze") or {}).get("key")
+    return {
+        "group_id": group.id,
+        "type_q": "cloze",
+        "presentation_kind": PRESENTATION_CLOZE_GROUP,
+        "name": group.name,
+        "source": source,
+        "masked_source": render_cloze_source(source, key) if key else source,
+        "cloze_key": key,
+        "answer_policy": effective_answer_policy(question=question, group=group, type_q="cloze"),
+        "mode": normalize_cloze_mode(mode or DEFAULT_CLOZE_MODE),
+        "items": [{
+            "question_id": question.id,
+            "answer": question.answer,
+            "progress": serialize_progress(question.progress),
+            "projected_intervals": preview_intervals(
+                question.progress,
+                favorite=bool((question.data or {}).get("favorite")),
+                mode_difficulty=mode_difficulty,
+                scheduler_tuning=scheduler_tuning
+            ),
+            "relearning_interval": relearning_graduate_interval(question.progress)
+        }]
     }
 
 

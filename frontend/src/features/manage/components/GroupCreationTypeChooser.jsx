@@ -18,6 +18,21 @@ const groupCreationTypes = [
     detail: "Associations texte↔texte (ex : pays → capitale)"
   },
   {
+    value: "cloze",
+    label: "Texte à trous",
+    detail: "Une note dont chaque trou est révisé séparément"
+  },
+  {
+    value: "grid",
+    label: "Grille",
+    detail: "Tableau lignes × colonnes (ex : conjugaison)"
+  },
+  {
+    value: "set",
+    label: "Ensemble",
+    detail: "Membres à rappeler sans ordre (ex : gaz nobles)"
+  },
+  {
     value: "sequence",
     label: "Liste ordonnée",
     detail: "Liste dont l'ordre compte (ex : alphabet grec)"

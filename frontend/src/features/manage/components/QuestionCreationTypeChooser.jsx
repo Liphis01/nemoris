@@ -13,6 +13,16 @@ const questionCreationTypes = [
     value: "timeline",
     label: "Événement timeline",
     detail: "Date ponctuelle ou intervalle"
+  },
+  {
+    value: "numeric",
+    label: "Valeur numérique",
+    detail: "Nombre, unité et tolérance"
+  },
+  {
+    value: "enumeration",
+    label: "Énumération",
+    detail: "Produire un quota de réponses distinctes"
   }
 ];
 

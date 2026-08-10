@@ -1127,12 +1127,20 @@ export default function TrainingSession({ setMode }) {
               handleImageComplete={session.handleImageComplete}
               handleTimelineComplete={session.handleTimelineComplete}
               handleSequenceComplete={session.handleSequenceComplete}
+              handleClozeComplete={session.handleSequenceComplete}
+              handleNumericComplete={session.handleSequenceComplete}
+              handleGridComplete={session.handleSequenceComplete}
               onAnsweringComplete={session.markAnsweringComplete}
               submitMapAnswer={session.submitMapTrainingAnswer}
               submitMediaAnswer={session.submitMediaTrainingAnswer}
               submitTextAnswer={session.submitTextTrainingAnswer}
               submitTimelineAnswer={session.submitTimelineTrainingAnswer}
               submitSequenceAnswer={session.submitSequenceTrainingAnswer}
+              submitClozeAnswer={session.submitClozeTrainingAnswer}
+              submitNumericAnswer={session.submitNumericTrainingAnswer}
+              submitGridAnswer={session.submitGridTrainingAnswer}
+              submitSetAnswer={session.submitSetTrainingAnswer}
+              submitEnumerationAnswer={session.submitEnumerationTrainingAnswer}
               trainingMode
               trainingElapsedMs={null}
               trainingBestTimeMs={null}
@@ -1487,12 +1495,20 @@ export default function TrainingSession({ setMode }) {
                     handleImageComplete={session.handleImageComplete}
                     handleTimelineComplete={session.handleTimelineComplete}
                     handleSequenceComplete={session.handleSequenceComplete}
+                    handleClozeComplete={session.handleSequenceComplete}
+                    handleNumericComplete={session.handleSequenceComplete}
+                    handleGridComplete={session.handleSequenceComplete}
                     onAnsweringComplete={session.markAnsweringComplete}
                     submitMapAnswer={session.submitMapTrainingAnswer}
                     submitMediaAnswer={session.submitMediaTrainingAnswer}
                     submitTextAnswer={session.submitTextTrainingAnswer}
                     submitTimelineAnswer={session.submitTimelineTrainingAnswer}
                     submitSequenceAnswer={session.submitSequenceTrainingAnswer}
+                    submitClozeAnswer={session.submitClozeTrainingAnswer}
+                    submitNumericAnswer={session.submitNumericTrainingAnswer}
+                    submitGridAnswer={session.submitGridTrainingAnswer}
+                    submitSetAnswer={session.submitSetTrainingAnswer}
+                    submitEnumerationAnswer={session.submitEnumerationTrainingAnswer}
                     trainingMode
                     trainingElapsedMs={session.recordEligible ? session.completedRunElapsedMs : null}
                     trainingBestTimeMs={session.recordEligible ? displayedRecord?.best_time_ms : null}
