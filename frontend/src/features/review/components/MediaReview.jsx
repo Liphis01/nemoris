@@ -1047,8 +1047,8 @@ export default function MediaReview({
     (showLabelChoices || showImageChoiceBoard)
   );
   // Training has no quality buttons to fill the freed slots, so instead of leaving
-  // the answer pinned to the first slot with dead space beside it, center the
-  // surviving answer(s) in the row.
+  // dead space beside the lone surviving tile, center the surviving answer(s) in
+  // the row.
   const centerReveal = Boolean(interactionFeedback) && !showQualityControls;
   const correctChoiceId = interactionFeedback?.correctQuestionId;
   // Once answered, only the answers worth looking at stay on the board: the correct
@@ -2722,9 +2722,11 @@ export default function MediaReview({
         }}
       >
         {showImageChoiceBoard ? (
-          // Same four slots throughout: the decoy media drop out, the correct one
-          // slides into the first slot, and the freed slots become the quality
-          // buttons (or "Continuer" after a wrong pick).
+          // Same four slots throughout: the decoy media drop out, the freed
+          // slots become the quality buttons (or "Continuer" after a wrong
+          // pick), and on a correct pick the answer slides to the last slot
+          // so the quality buttons' keycaps (1/2/3) always match their
+          // physical position (slots 1-3).
           <div
             ref={choiceGridRef}
             data-image-choice-board
@@ -2752,7 +2754,10 @@ export default function MediaReview({
               <div
                 key={row.item.question_id}
                 data-flip-key={`${choiceScope}:${row.item.question_id}`}
-                style={choiceSlotStyle}
+                style={{
+                  ...choiceSlotStyle,
+                  ...(interactionFeedback?.isCorrect ? { order: 1 } : null)
+                }}
               >
                 {renderImageChoiceTile(row, {
                   keyIndex: interactionFeedback ? null : index
@@ -2935,9 +2940,11 @@ export default function MediaReview({
         )}
 
         {showLabelChoices && (
-          // Same four slots throughout: the decoy names drop out, the correct one
-          // slides into the first slot, and the freed slots become the quality
-          // buttons (or "Continuer" after a wrong pick).
+          // Same four slots throughout: the decoy names drop out, the freed
+          // slots become the quality buttons (or "Continuer" after a wrong
+          // pick), and on a correct pick the answer slides to the last slot
+          // so the quality buttons' keycaps (1/2/3) always match their
+          // physical position (slots 1-3).
           <div
             ref={choiceGridRef}
             data-image-choice-grid
@@ -2955,7 +2962,10 @@ export default function MediaReview({
               <div
                 key={option.question_id}
                 data-flip-key={`${choiceScope}:${option.question_id}`}
-                style={choiceSlotStyle}
+                style={{
+                  ...choiceSlotStyle,
+                  ...(interactionFeedback?.isCorrect ? { order: 1 } : null)
+                }}
               >
                 <button
                   type="button"

@@ -152,14 +152,18 @@ def save_grid_group(db, group_id, payload):
     }
     previous_cells = {item["key"]: item for item in (previous or {}).get("cells", [])}
 
-    # Replacing the fact at a stable source key must retire the old memory. The
-    # server mints the replacement key, so a visual editor never needs hidden
-    # identity rules of its own.
+    # A cell keeps its identity when its text is corrected: the fact being drilled
+    # is the coordinate (this row × this column), not the exact wording, so fixing
+    # a typo must not cost the card its scheduling history.
+    #
+    # Moving a cell to another coordinate is a different matter -- the answer now
+    # belongs to a question the learner has never been asked -- so that still
+    # retires the old memory, with the server minting the replacement key.
     normalized_cells = []
     replaced_keys = set()
     for cell in incoming["cells"]:
         old = previous_cells.get(cell["key"])
-        if old and (old["value"] != cell["value"] or old["row_key"] != cell["row_key"] or old["column_key"] != cell["column_key"]):
+        if old and (old["row_key"] != cell["row_key"] or old["column_key"] != cell["column_key"]):
             replaced_keys.add(cell["key"])
             cell = {**cell, "key": str(uuid.uuid4())}
         normalized_cells.append(cell)

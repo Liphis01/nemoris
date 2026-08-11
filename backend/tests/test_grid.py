@@ -82,13 +82,27 @@ class GridTests(unittest.TestCase):
         self.assertEqual(card["progress"]["reps"], 2)
         self.assertEqual(card["guid"], first["guid"])
 
-    def test_replacing_a_cell_value_tombstones_its_old_card(self):
+    def test_correcting_a_cell_value_preserves_card_and_progress(self):
         grid = source()
-        old = self.save(grid)["cards"][0]
+        first = self.save(grid)["cards"][0]
+        self.db.add(Progress(question_id=first["id"], reps=3, history=[]))
+        self.db.commit()
         grid["cells"][0]["value"] = "parlais"
         saved = self.save(grid)
+        card = next(item for item in saved["cards"] if item["id"] == first["id"])
+        self.assertEqual(saved["deletedQuestionIds"], [])
+        self.assertEqual(card["answer"], "parlais")
+        self.assertEqual(card["guid"], first["guid"])
+        self.assertEqual(card["progress"]["reps"], 3)
+        self.assertEqual(self.db.query(Tombstone).filter(Tombstone.guid == first["guid"]).count(), 0)
+
+    def test_moving_a_cell_to_another_coordinate_tombstones_its_old_card(self):
+        grid = source()
+        old = self.save(grid)["cards"][0]
+        grid["cells"][0]["row_key"] = grid["rows"][1]["key"]
+        grid["cells"][1]["row_key"] = grid["rows"][0]["key"]
+        saved = self.save(grid)
         self.assertIn(old["id"], saved["deletedQuestionIds"])
-        self.assertNotIn(grid["cells"][0]["key"], {((card["data"].get("grid") or {}).get("key")) for card in saved["cards"]})
         self.assertEqual(self.db.query(Tombstone).filter(Tombstone.guid == old["guid"]).count(), 1)
 
     def test_validation_refuses_duplicate_coordinates(self):
