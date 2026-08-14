@@ -79,6 +79,83 @@ const summary = {
       }
     ]
   },
+  practice: {
+    item_limit: 120,
+    selectors: {
+      recent_misses: {
+        id: "recent_misses",
+        label: "Travailler les erreurs récentes",
+        question_ids: [2],
+        count: 1,
+        enabled: true
+      },
+      commonly_confused_pairs: {
+        id: "commonly_confused_pairs",
+        label: "Travailler les confusions",
+        question_ids: [2, 3],
+        count: 2,
+        enabled: true
+      },
+      new_only: {
+        id: "new_only",
+        label: "Nouveaux uniquement",
+        question_ids: [1],
+        count: 1,
+        enabled: true
+      },
+      almost_mastered: {
+        id: "almost_mastered",
+        label: "Presque maîtrisés",
+        question_ids: [3],
+        count: 1,
+        enabled: true
+      },
+      before_tomorrow: {
+        id: "before_tomorrow",
+        label: "À revoir avant demain",
+        question_ids: [2],
+        count: 1,
+        enabled: true
+      }
+    },
+    entry_points: [
+      {
+        id: "recent_misses",
+        label: "Travailler les erreurs récentes",
+        question_ids: [2],
+        count: 1,
+        enabled: true
+      },
+      {
+        id: "commonly_confused_pairs",
+        label: "Travailler les confusions",
+        question_ids: [2, 3],
+        count: 2,
+        enabled: true
+      },
+      {
+        id: "new_only",
+        label: "Nouveaux uniquement",
+        question_ids: [1],
+        count: 1,
+        enabled: true
+      },
+      {
+        id: "almost_mastered",
+        label: "Presque maîtrisés",
+        question_ids: [3],
+        count: 1,
+        enabled: true
+      },
+      {
+        id: "before_tomorrow",
+        label: "À revoir avant demain",
+        question_ids: [2],
+        count: 1,
+        enabled: true
+      }
+    ]
+  },
   upcoming_load: {
     total: 2,
     by_day: [
@@ -235,6 +312,48 @@ describe("StudyScreen", () => {
     });
 
     expect(getStudySummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts targeted unscheduled practice from M4 weak selectors", async () => {
+    const onStartTraining = vi.fn();
+    const setMode = vi.fn();
+
+    render(
+      <StudyScreen
+        scope={{ type: "group", id: 10 }}
+        setMode={setMode}
+        onStartTraining={onStartTraining}
+      />
+    );
+
+    await screen.findByRole("heading", {
+      name: "Départements français"
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Faibles" }));
+    fireEvent.click(screen.getByRole("button", {
+      name: /Travailler les erreurs récentes/
+    }));
+
+    expect(onStartTraining).toHaveBeenCalledWith(expect.objectContaining({
+      type: "questions",
+      name: "Travailler les erreurs récentes",
+      questionIds: [2]
+    }));
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /Travailler les confusions/
+    }));
+
+    expect(onStartTraining).toHaveBeenCalledWith(expect.objectContaining({
+      type: "questions",
+      name: "Travailler les confusions",
+      questionIds: [2, 3],
+      mapMode: "multiple_choice",
+      imageMode: "multiple_choice_media",
+      textMode: "match",
+      sequenceMode: "multiple_choice"
+    }));
   });
 
   it("renders read-only Learn hints and reveals answers deliberately", async () => {

@@ -88,6 +88,31 @@ function normalizeStudyScope(scope) {
     };
   }
 
+  if (type === "questions") {
+    const questionIds = (
+      scope.questionIds ||
+      scope.question_ids ||
+      scope.ids ||
+      []
+    )
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+
+    if (questionIds.length === 0) return null;
+
+    return {
+      type: "questions",
+      id: scope.id || questionIds.join(","),
+      questionIds,
+      name: scope.name || scope.label || "Pratique ciblée",
+      label: scope.label || scope.name || "Pratique ciblée",
+      mapMode: scope.mapMode || scope.map_mode || null,
+      imageMode: scope.imageMode || scope.image_mode || null,
+      textMode: scope.textMode || scope.text_mode || null,
+      sequenceMode: scope.sequenceMode || scope.sequence_mode || null
+    };
+  }
+
   return null;
 }
 
@@ -96,6 +121,20 @@ function scopeToTrainingTarget(scope) {
   const normalized = normalizeStudyScope(scope);
 
   if (!normalized || normalized.type === "pack") return null;
+
+  if (normalized.type === "questions") {
+    return {
+      type: "questions",
+      id: normalized.id,
+      questionIds: normalized.questionIds,
+      name: normalized.name,
+      label: normalized.label,
+      mapMode: normalized.mapMode,
+      imageMode: normalized.imageMode,
+      textMode: normalized.textMode,
+      sequenceMode: normalized.sequenceMode
+    };
+  }
 
   if (normalized.type === "group") {
     return {

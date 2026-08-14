@@ -211,6 +211,71 @@ class TrainingTests(unittest.TestCase):
             [3, 2, 1]
         )
 
+    def test_question_training_scope_uses_explicit_ids_without_progress_mutation(self):
+        today = date.today()
+        group = QuestionGroup(
+            id=13,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(
+            1,
+            type_q="map",
+            answer="France",
+            data={"code": "fr"},
+            group=group,
+            reps=2,
+            next_review=today + timedelta(days=3)
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            answer="Germany",
+            data={"code": "de"},
+            group=group
+        )
+        self.add_question(
+            3,
+            type_q="map",
+            answer="Italy",
+            data={"code": "it"},
+            group=group
+        )
+        self.db.commit()
+        progress_count = self.db.query(Progress).count()
+        before_progress = self.db.query(Progress).filter(
+            Progress.question_id == 1
+        ).first()
+        before_next_review = before_progress.next_review
+
+        response = get_training_items(
+            self.db,
+            scope_type="questions",
+            question_ids=[3, 1, 1],
+            map_mode="multiple_choice"
+        )
+
+        after_progress = self.db.query(Progress).filter(
+            Progress.question_id == 1
+        ).first()
+        self.assertEqual(self.db.query(Progress).count(), progress_count)
+        self.assertEqual(after_progress.next_review, before_next_review)
+        self.assertEqual(len(response), 1)
+        self.assertEqual(response[0]["type_q"], "map")
+        self.assertEqual(response[0]["mode"], "multiple_choice")
+        self.assertNotIn("training_fingerprint", response[0])
+        self.assertEqual(
+            {item["question_id"] for item in response[0]["items"]},
+            {1, 3}
+        )
+        self.assertEqual(
+            {item["question_id"] for item in response[0]["context_items"]},
+            {1, 3}
+        )
+
     def test_image_group_training_accepts_mode_and_context_items(self):
         group = QuestionGroup(
             id=11,
@@ -1171,3 +1236,8 @@ class TrainingTests(unittest.TestCase):
             get_training_items(self.db, scope_type="tag", tag=" ")
 
         self.assertEqual(missing_tag.exception.status_code, 400)
+
+        with self.assertRaises(HTTPException) as missing_questions:
+            get_training_items(self.db, scope_type="questions")
+
+        self.assertEqual(missing_questions.exception.status_code, 400)

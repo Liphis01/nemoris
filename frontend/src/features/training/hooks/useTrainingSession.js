@@ -139,6 +139,10 @@ function labelForScope(scope) {
     return scope.name || `Collection #${scope.id}`;
   }
 
+  if (scope.type === "questions") {
+    return scope.name || scope.label || "Pratique ciblée";
+  }
+
   return `#${scope.label || scope.name || ""}`;
 }
 
@@ -159,6 +163,17 @@ function scopeRequestOptions(scope) {
     return {
       scopeType: "collection",
       collectionId: scope.id
+    };
+  }
+
+  if (scope?.type === "questions") {
+    return {
+      scopeType: "questions",
+      questionIds: scope.questionIds || scope.question_ids || [],
+      ...(scope.mapMode ? { mapMode: scope.mapMode } : {}),
+      ...(scope.imageMode ? { imageMode: scope.imageMode } : {}),
+      ...(scope.textMode ? { textMode: scope.textMode } : {}),
+      ...(scope.sequenceMode ? { sequenceMode: scope.sequenceMode } : {})
     };
   }
 

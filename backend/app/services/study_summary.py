@@ -51,6 +51,10 @@ MASTERED_MIN_REPS = 3
 WEAK_ITEM_LIMIT = 20
 CONFUSION_LIMIT = 20
 LEARN_ITEM_LIMIT = 500
+PRACTICE_ITEM_LIMIT = 120
+DUE_SOON_DAYS = 7
+LOW_SUCCESS_MIN_ATTEMPTS = 2
+LOW_SUCCESS_MAX_RATE = 0.65
 
 BUCKET_THRESHOLDS = {
     "recent_miss_days": RECENT_MISS_WINDOW_DAYS,
@@ -58,7 +62,10 @@ BUCKET_THRESHOLDS = {
     "stable_min_stability_days": STABLE_MIN_STABILITY_DAYS,
     "stable_min_reps": STABLE_MIN_REPS,
     "mastered_min_stability_days": MASTERED_MIN_STABILITY_DAYS,
-    "mastered_min_reps": MASTERED_MIN_REPS
+    "mastered_min_reps": MASTERED_MIN_REPS,
+    "due_soon_days": DUE_SOON_DAYS,
+    "low_success_min_attempts": LOW_SUCCESS_MIN_ATTEMPTS,
+    "low_success_max_rate": LOW_SUCCESS_MAX_RATE
 }
 
 
@@ -507,11 +514,62 @@ def _weak_sort_key(item):
     )
 
 
+def _practice_sort_key(question, today):
+    signals = _question_signals(question, today)
+    return _weak_sort_key({
+        **_question_identity(question),
+        "signals": signals
+    })
+
+
 def _coerce_question_id(value):
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _coerce_question_ids(values):
+    ids = []
+
+    for value in values or []:
+        coerced = _coerce_question_id(value)
+
+        if coerced is not None:
+            ids.append(coerced)
+
+    return ids
+
+
+def _event_selected_question_id(event, candidate_ids):
+    selected_id = _coerce_question_id(event.get("resolved_response_id"))
+
+    if selected_id is not None:
+        return selected_id
+
+    context = event.get("context")
+
+    if isinstance(context, dict):
+        for key in (
+            "selected_candidate_id",
+            "selected_question_id",
+            "response_question_id"
+        ):
+            selected_id = _coerce_question_id(context.get(key))
+
+            if selected_id is not None:
+                return selected_id
+
+    selected_id = _coerce_question_id(event.get("raw_response"))
+
+    if selected_id is not None and selected_id in set(candidate_ids):
+        return selected_id
+
+    return None
+
+
+def _safe_policy(policy):
+    return dict(policy) if isinstance(policy, dict) else None
 
 
 def _confusions_for_questions(db, questions, today):
@@ -540,13 +598,12 @@ def _confusions_for_questions(db, questions, today):
             if not isinstance(event, dict):
                 continue
 
+            candidate_ids = _coerce_question_ids(event.get("candidate_ids"))
             expected_id = (
                 _coerce_question_id(event.get("expected_card_id")) or
                 question.id
             )
-            selected_id = _coerce_question_id(
-                event.get("resolved_response_id")
-            )
+            selected_id = _event_selected_question_id(event, candidate_ids)
 
             if selected_id is None or selected_id == expected_id:
                 continue
@@ -560,11 +617,20 @@ def _confusions_for_questions(db, questions, today):
                 "last_reviewed_on": None,
                 "raw_response": None,
                 "type_q": event.get("type_q") or question.type_q,
+                "presentation_kind": event.get("presentation_kind"),
                 "mode": event.get("mode"),
-                "direction": event.get("direction")
+                "direction": event.get("direction"),
+                "candidate_ids": set(),
+                "answer_policy": _safe_policy(event.get("answer_policy"))
             })
             pair["count"] += 1
             pair["raw_response"] = event.get("raw_response")
+            pair["candidate_ids"].update(candidate_ids)
+
+            if pair["answer_policy"] is None:
+                pair["answer_policy"] = _safe_policy(
+                    event.get("answer_policy")
+                )
 
             if (
                 pair["last_reviewed_on"] is None or
@@ -590,7 +656,10 @@ def _confusions_for_questions(db, questions, today):
         expected = questions_by_id.get(pair["expected_id"])
         selected = questions_by_id.get(pair["selected_id"])
         items.append({
-            **pair,
+            **{
+                **pair,
+                "candidate_ids": sorted(pair["candidate_ids"])
+            },
             "expected": (
                 _question_identity(expected)
                 if expected else {"id": pair["expected_id"]}
@@ -620,6 +689,202 @@ def _confusions_for_questions(db, questions, today):
         "pair_count": len(items),
         "event_count": sum(item["count"] for item in items),
         "items": items[:CONFUSION_LIMIT]
+    }
+
+
+def _progress_success_stats(progress):
+    attempts = []
+
+    if progress:
+        for entry in progress.history or []:
+            quality = _history_quality(entry)
+
+            if quality is not None:
+                attempts.append(quality)
+
+    if not attempts and progress and (progress.reps or 0) > 0:
+        reps = int(progress.reps or 0)
+        lapses = int(progress.lapses or 0)
+        successes = max(0, reps - lapses)
+        attempts = [2] * successes + [0] * min(lapses, reps)
+
+    total = len(attempts)
+    successes = sum(1 for quality in attempts if quality > 0)
+
+    return {
+        "attempts": total,
+        "successes": successes,
+        "success_rate": (successes / total) if total else None
+    }
+
+
+def _date_on_or_before(value, limit_day):
+    parsed = parse_history_date(value)
+
+    return parsed is not None and parsed <= limit_day
+
+
+def _unique_limited_ids(question_ids, limit=PRACTICE_ITEM_LIMIT):
+    ids = []
+    seen = set()
+
+    for value in question_ids or []:
+        question_id = _coerce_question_id(value)
+
+        if question_id is None or question_id in seen:
+            continue
+
+        seen.add(question_id)
+        ids.append(question_id)
+
+    return ids[:limit], len(ids) > limit
+
+
+def _practice_entry(entry_id, label, description, question_ids):
+    ids, truncated = _unique_limited_ids(question_ids)
+
+    return {
+        "id": entry_id,
+        "label": label,
+        "description": description,
+        "question_ids": ids,
+        "count": len(ids),
+        "enabled": len(ids) > 0,
+        "truncated": truncated
+    }
+
+
+def _practice_for_questions(questions, recent_miss_items, confusions, today):
+    sorted_questions = sorted(
+        questions,
+        key=lambda question: _practice_sort_key(question, today)
+    )
+    new_ids = []
+    high_lapse_ids = []
+    low_success_ids = []
+    due_soon_fragile_ids = []
+    almost_mastered_ids = []
+    before_tomorrow_ids = []
+
+    for question in sorted_questions:
+        if bool(question.suspended) or not question_is_reviewable(question):
+            continue
+
+        bucket = classify_mastery_bucket(question, today)
+        signals = _question_signals(question, today)
+        progress = question.progress
+        next_review = signals["next_review"]
+
+        if bucket == "unseen":
+            new_ids.append(question.id)
+
+        if signals["lapses"] >= 2:
+            high_lapse_ids.append(question.id)
+
+        stats = _progress_success_stats(progress)
+
+        if (
+            stats["attempts"] >= LOW_SUCCESS_MIN_ATTEMPTS and
+            stats["success_rate"] is not None and
+            stats["success_rate"] <= LOW_SUCCESS_MAX_RATE
+        ):
+            low_success_ids.append(question.id)
+
+        if (
+            bucket == "fragile" and
+            (
+                signals["due"] or
+                _date_on_or_before(
+                    next_review,
+                    today + timedelta(days=DUE_SOON_DAYS)
+                )
+            )
+        ):
+            due_soon_fragile_ids.append(question.id)
+
+        if (
+            bucket == "stable" and
+            (
+                signals["reps"] >= MASTERED_MIN_REPS - 1 or
+                signals["stability"] >= STABLE_MIN_STABILITY_DAYS
+            )
+        ):
+            almost_mastered_ids.append(question.id)
+
+        if signals["due"] or _date_on_or_before(
+            next_review,
+            today + timedelta(days=1)
+        ):
+            before_tomorrow_ids.append(question.id)
+
+    recent_miss_ids = [item["id"] for item in recent_miss_items]
+    confusion_ids = []
+
+    for item in confusions.get("items", []):
+        confusion_ids.extend([item.get("expected_id"), item.get("selected_id")])
+
+    selectors = {
+        "recent_misses": _practice_entry(
+            "recent_misses",
+            "Travailler les erreurs récentes",
+            "Items ratés dans la fenêtre récente.",
+            recent_miss_ids
+        ),
+        "high_lapses": _practice_entry(
+            "high_lapses",
+            "Lapses élevés",
+            "Items avec plusieurs oublis cumulés.",
+            high_lapse_ids
+        ),
+        "low_success": _practice_entry(
+            "low_success",
+            "Réussite basse",
+            "Items avec un taux de réussite faible dans ce scope.",
+            low_success_ids
+        ),
+        "due_soon_fragile": _practice_entry(
+            "due_soon_fragile",
+            "Fragiles bientôt dus",
+            "Items fragiles à stabiliser avant la prochaine charge.",
+            due_soon_fragile_ids
+        ),
+        "commonly_confused_pairs": _practice_entry(
+            "commonly_confused_pairs",
+            "Travailler les confusions",
+            "Items attendus et items choisis dans les confusions récentes.",
+            confusion_ids
+        ),
+        "new_only": _practice_entry(
+            "new_only",
+            "Nouveaux uniquement",
+            "Items encore jamais travaillés en review.",
+            new_ids
+        ),
+        "almost_mastered": _practice_entry(
+            "almost_mastered",
+            "Presque maîtrisés",
+            "Items stables qui ne sont pas encore maîtrisés.",
+            almost_mastered_ids
+        ),
+        "before_tomorrow": _practice_entry(
+            "before_tomorrow",
+            "À revoir avant demain",
+            "Items dus maintenant ou demain dans ce scope.",
+            before_tomorrow_ids
+        )
+    }
+    entry_ids = [
+        "recent_misses",
+        "commonly_confused_pairs",
+        "new_only",
+        "almost_mastered",
+        "before_tomorrow"
+    ]
+
+    return {
+        "item_limit": PRACTICE_ITEM_LIMIT,
+        "selectors": selectors,
+        "entry_points": [selectors[entry_id] for entry_id in entry_ids]
     }
 
 
@@ -903,6 +1168,12 @@ def build_study_scope_summary(
     )
     load_by_day = _load_by_day(questions, today)
     confusions = _confusions_for_questions(db, questions, today)
+    practice = _practice_for_questions(
+        questions,
+        recent_miss_items,
+        confusions,
+        today
+    )
 
     return {
         "generated_on": today.isoformat(),
@@ -927,6 +1198,7 @@ def build_study_scope_summary(
             "total": counts["lapse_total"]
         },
         "confusions": confusions,
+        "practice": practice,
         "upcoming_load": {
             "window_days": LOAD_WINDOW_DAYS,
             "total": sum(item["total"] for item in load_by_day),

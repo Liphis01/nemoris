@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
@@ -40,10 +40,11 @@ def get_scopes(db: Session = Depends(get_db)):
 
 @router.get("/training")
 def get_training(
-    scope_type: Literal["group", "tag", "collection"],
+    scope_type: Literal["group", "tag", "collection", "questions"],
     group_id: Optional[int] = None,
     collection_id: Optional[int] = None,
     tag: Optional[str] = None,
+    question_ids: Optional[list[int]] = Query(default=None, alias="question_id"),
     map_mode: Optional[str] = None,
     image_mode: Optional[str] = None,
     text_mode: Optional[str] = None,
@@ -56,6 +57,7 @@ def get_training(
         group_id=group_id,
         collection_id=collection_id,
         tag=tag,
+        question_ids=question_ids,
         map_mode=map_mode,
         image_mode=image_mode,
         text_mode=text_mode,

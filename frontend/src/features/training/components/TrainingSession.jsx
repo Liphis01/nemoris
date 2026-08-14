@@ -127,6 +127,7 @@ function initialScopeKey(scope, mode, nonce) {
     scope.type || "",
     scope.id || "",
     scope.key || "",
+    (scope.questionIds || scope.question_ids || []).join(","),
     scope.name || "",
     mode || ""
   ].join(":");
@@ -186,6 +187,27 @@ function normalizeInitialTrainingScope(initialScope, scopes) {
       label,
       name: label,
       type: "tag"
+    };
+  }
+
+  if (initialScope.type === "questions") {
+    const questionIds = (
+      initialScope.questionIds ||
+      initialScope.question_ids ||
+      []
+    )
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+
+    if (questionIds.length === 0) return null;
+
+    return {
+      ...initialScope,
+      id: initialScope.id || questionIds.join(","),
+      questionIds,
+      name: initialScope.name || initialScope.label || "Pratique ciblée",
+      label: initialScope.label || initialScope.name || "Pratique ciblée",
+      type: "questions"
     };
   }
 

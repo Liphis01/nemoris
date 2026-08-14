@@ -342,6 +342,40 @@ describe("TrainingSession", () => {
     });
   });
 
+  it("starts an initial targeted question practice scope", async () => {
+    const onInitialScopeHandled = vi.fn();
+
+    render(
+      <TrainingSession
+        setMode={vi.fn()}
+        initialScope={{
+          type: "questions",
+          id: "practice:recent",
+          name: "Travailler les erreurs récentes",
+          questionIds: [2, 3],
+          mapMode: "multiple_choice",
+          imageMode: "multiple_choice_media",
+          textMode: "match",
+          sequenceMode: "multiple_choice"
+        }}
+        initialScopeNonce={2}
+        onInitialScopeHandled={onInitialScopeHandled}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "questions",
+        questionIds: [2, 3],
+        mapMode: "multiple_choice",
+        imageMode: "multiple_choice_media",
+        textMode: "match",
+        sequenceMode: "multiple_choice"
+      });
+      expect(onInitialScopeHandled).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("keeps the selected group when returning from a training mode", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 

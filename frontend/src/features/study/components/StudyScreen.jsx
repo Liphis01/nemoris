@@ -54,6 +54,12 @@ const AUDIO_MEDIA_MODES = new Set([
   "multiple_choice_media"
 ]);
 const LEARN_SUPPORTED_FAMILIES = new Set(["map", "media"]);
+const CONFUSION_PRACTICE_MODES = {
+  mapMode: "multiple_choice",
+  imageMode: "multiple_choice_media",
+  textMode: "match",
+  sequenceMode: "multiple_choice"
+};
 
 
 function stableScopeKey(scope) {
@@ -164,6 +170,59 @@ function scopeToTrainingScope(scope) {
   }
 
   return null;
+}
+
+
+function compactScopeId(scope) {
+  return (
+    scope?.groupId ||
+    scope?.group_id ||
+    scope?.collectionId ||
+    scope?.collection_id ||
+    scope?.packGuid ||
+    scope?.pack_guid ||
+    scope?.key ||
+    scope?.id ||
+    "scope"
+  );
+}
+
+
+function practiceScopeForIds(label, questionIds, summary, extra = {}) {
+  const ids = (questionIds || [])
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value));
+
+  if (ids.length === 0) return null;
+
+  return {
+    type: "questions",
+    id: [
+      "practice",
+      summary?.scope?.type || "scope",
+      compactScopeId(summary?.scope),
+      label,
+      ids.join("-")
+    ].join(":"),
+    label,
+    name: label,
+    questionIds: ids,
+    ...extra
+  };
+}
+
+
+function practiceScopeFromEntry(entry, summary) {
+  const extra = entry?.id === "commonly_confused_pairs"
+    ? CONFUSION_PRACTICE_MODES
+    : {};
+
+  return practiceScopeForIds(
+    entry?.label || "Pratique ciblée",
+    entry?.question_ids || entry?.questionIds || [],
+    summary,
+    extra
+  );
 }
 
 
@@ -301,7 +360,7 @@ function recommendationFor(summary) {
     return {
       title: "Clarifier les confusions",
       detail: `${numberLabel(summary.confusions.event_count)} confusion${summary.confusions.event_count > 1 ? "s" : ""} récente${summary.confusions.event_count > 1 ? "s" : ""}`,
-      targetTab: "history"
+      targetTab: "weak"
     };
   }
 
@@ -1106,61 +1165,109 @@ function WeakItemRow({ item, onStartTraining }) {
 }
 
 
+function PracticeEntryPanel({ onStartTraining, summary }) {
+  const entries = summary.practice?.entry_points || [];
+
+  if (entries.length === 0) return null;
+
+  return (
+    <section className="study-panel study-practice-panel">
+      <div className="study-panel-head">
+        <h2>Pratique ciblée</h2>
+        <span>{numberLabel(entries.filter(entry => entry.enabled).length)}</span>
+      </div>
+
+      <div className="study-practice-grid">
+        {entries.map(entry => {
+          const practiceScope = practiceScopeFromEntry(entry, summary);
+
+          return (
+            <button
+              type="button"
+              className="study-practice-button"
+              disabled={!entry.enabled || !practiceScope || !onStartTraining}
+              key={entry.id}
+              onClick={() => onStartTraining?.(practiceScope)}
+            >
+              <strong>{entry.label}</strong>
+              <span>{questionCountLabel(entry.count)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+
 function WeakItemsTab({ onStartTraining, summary }) {
   const weakItems = summary.weak_items || [];
   const recentItems = summary.recent_misses?.items || [];
 
   return (
-    <div className="study-two-column">
-      <section className="study-panel">
-        <div className="study-panel-head">
-          <h2>Items faibles</h2>
-          <span>{numberLabel(weakItems.length)}</span>
-        </div>
+    <div className="study-weak-layout">
+      <PracticeEntryPanel
+        onStartTraining={onStartTraining}
+        summary={summary}
+      />
 
-        {weakItems.length > 0 ? (
-          <div className="study-item-list">
-            {weakItems.map(item => (
-              <WeakItemRow
-                item={item}
-                key={item.id}
-                onStartTraining={onStartTraining}
-              />
-            ))}
+      <div className="study-two-column">
+        <section className="study-panel">
+          <div className="study-panel-head">
+            <h2>Items faibles</h2>
+            <span>{numberLabel(weakItems.length)}</span>
           </div>
-        ) : (
-          <div className="study-muted">Aucun item faible détecté.</div>
-        )}
-      </section>
 
-      <section className="study-panel">
-        <div className="study-panel-head">
-          <h2>Erreurs récentes</h2>
-          <span>{numberLabel(summary.recent_misses?.event_count || 0)}</span>
-        </div>
+          {weakItems.length > 0 ? (
+            <div className="study-item-list">
+              {weakItems.map(item => (
+                <WeakItemRow
+                  item={item}
+                  key={item.id}
+                  onStartTraining={onStartTraining}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="study-muted">Aucun item faible détecté.</div>
+          )}
+        </section>
 
-        {recentItems.length > 0 ? (
-          <div className="study-item-list">
-            {recentItems.map(item => (
-              <WeakItemRow
-                item={item}
-                key={item.id}
-                onStartTraining={onStartTraining}
-              />
-            ))}
+        <section className="study-panel">
+          <div className="study-panel-head">
+            <h2>Erreurs récentes</h2>
+            <span>{numberLabel(summary.recent_misses?.event_count || 0)}</span>
           </div>
-        ) : (
-          <div className="study-muted">Aucune erreur récente.</div>
-        )}
-      </section>
+
+          {recentItems.length > 0 ? (
+            <div className="study-item-list">
+              {recentItems.map(item => (
+                <WeakItemRow
+                  item={item}
+                  key={item.id}
+                  onStartTraining={onStartTraining}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="study-muted">Aucune erreur récente.</div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
 
 
-function ConfusionRow({ item }) {
+function ConfusionRow({ item, onStartTraining, summary }) {
   const expected = item.expected?.answer || item.expected?.question || `#${item.expected_id}`;
   const selected = item.selected?.answer || item.selected?.question || `#${item.selected_id}`;
+  const practiceScope = practiceScopeForIds(
+    `Confusion · ${expected} / ${selected}`,
+    [item.expected_id, item.selected_id],
+    summary,
+    CONFUSION_PRACTICE_MODES
+  );
 
   return (
     <div className="study-confusion-row">
@@ -1176,12 +1283,18 @@ function ConfusionRow({ item }) {
         <span>Fois</span>
         <strong>{numberLabel(item.count)}</strong>
       </div>
+      <ActionButton
+        disabled={!practiceScope || !onStartTraining}
+        onClick={() => onStartTraining?.(practiceScope)}
+      >
+        Entraîner paire
+      </ActionButton>
     </div>
   );
 }
 
 
-function HistoryTab({ summary }) {
+function HistoryTab({ onStartTraining, summary }) {
   const confusions = summary.confusions?.items || [];
   const record = summary.training?.training_record;
   const previousRecord = summary.training?.previous_training_record;
@@ -1200,6 +1313,8 @@ function HistoryTab({ summary }) {
               <ConfusionRow
                 item={item}
                 key={`${item.expected_id}-${item.selected_id}`}
+                onStartTraining={onStartTraining}
+                summary={summary}
               />
             ))}
           </div>
@@ -1260,7 +1375,12 @@ function StudyContent({
   }
 
   if (activeTab === "history") {
-    return <HistoryTab summary={summary} />;
+    return (
+      <HistoryTab
+        onStartTraining={onStartTraining}
+        summary={summary}
+      />
+    );
   }
 
   return (

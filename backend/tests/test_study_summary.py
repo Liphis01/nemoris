@@ -200,8 +200,11 @@ class StudySummaryTests(unittest.TestCase):
             "raw_response": "Alpes",
             "expected_value": "Allier",
             "type_q": "map",
+            "presentation_kind": "map_group",
             "mode": "multiple_choice",
-            "direction": "label_to_zone"
+            "direction": "label_to_zone",
+            "candidate_ids": [fragile.id, stable.id],
+            "answer_policy": {"preset": "relaxed"}
         }
         self.add_progress(
             due_learning,
@@ -280,7 +283,52 @@ class StudySummaryTests(unittest.TestCase):
             summary["confusions"]["items"][0]["selected"]["id"],
             stable.id
         )
+        self.assertEqual(
+            summary["confusions"]["items"][0]["candidate_ids"],
+            [fragile.id, stable.id]
+        )
+        self.assertEqual(
+            summary["confusions"]["items"][0]["presentation_kind"],
+            "map_group"
+        )
+        self.assertEqual(
+            summary["confusions"]["items"][0]["answer_policy"],
+            {"preset": "relaxed"}
+        )
         self.assertEqual(summary["weak_items"][0]["id"], fragile.id)
+        self.assertEqual(
+            summary["practice"]["selectors"]["recent_misses"]["question_ids"],
+            [fragile.id]
+        )
+        self.assertEqual(
+            summary["practice"]["selectors"]["commonly_confused_pairs"]["question_ids"],
+            [fragile.id, stable.id]
+        )
+        self.assertEqual(
+            summary["practice"]["selectors"]["new_only"]["question_ids"],
+            [unseen.id]
+        )
+        self.assertEqual(
+            summary["practice"]["selectors"]["almost_mastered"]["question_ids"],
+            [stable.id]
+        )
+        self.assertEqual(
+            summary["practice"]["selectors"]["before_tomorrow"]["question_ids"],
+            [due_learning.id]
+        )
+        self.assertEqual(
+            [
+                entry["label"]
+                for entry in summary["practice"]["entry_points"]
+            ],
+            [
+                "Travailler les erreurs récentes",
+                "Travailler les confusions",
+                "Nouveaux uniquement",
+                "Presque maîtrisés",
+                "À revoir avant demain"
+            ]
+        )
         self.assertEqual(summary["learn"]["supported"], True)
         self.assertEqual(summary["learn"]["family"], "map")
         self.assertEqual(summary["learn"]["group"]["media"], "france.svg")

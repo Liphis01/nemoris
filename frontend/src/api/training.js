@@ -25,6 +25,12 @@ export function getTrainingItems(options = {}) {
     params.set("tag", options.tag);
   }
 
+  (options.questionIds || options.question_ids || []).forEach((questionId) => {
+    if (questionId !== undefined && questionId !== null) {
+      params.append("question_id", String(questionId));
+    }
+  });
+
   if (options.mapMode) {
     params.set("map_mode", options.mapMode);
   }

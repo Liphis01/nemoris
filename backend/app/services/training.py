@@ -110,7 +110,7 @@ def _training_question_query(db):
 
 
 def _training_questions_by_ids(db, question_ids):
-    question_ids = list(question_ids or [])
+    question_ids = list(dict.fromkeys(question_ids or []))
 
     if not question_ids:
         return []
@@ -1037,6 +1037,7 @@ def get_training_items(
     group_id=None,
     collection_id=None,
     tag=None,
+    question_ids=None,
     map_mode=None,
     image_mode=None,
     text_mode=None,
@@ -1182,6 +1183,71 @@ def get_training_items(
                     context_item
                     for context_item in item["context_items"]
                     if context_item.get("question_id") in selected_question_ids
+                ]
+                item["context_items"] = context_items or item.get("items", [])
+
+        return _shuffled_training_items(items)
+
+    if scope_type == "questions":
+        question_ids = list(dict.fromkeys(question_ids or []))
+
+        if not question_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="question_id is required for question training"
+            )
+
+        questions = [
+            question
+            for question in _training_questions_by_ids(db, question_ids)
+            if not cloze_is_buried(question)
+        ]
+        selected_question_ids = {
+            question.id
+            for question in questions
+        }
+        items = _attach_text_training_aliases(
+            serialize_review_items(
+                questions,
+                forced_sequence_mode=normalize_sequence_mode(
+                    sequence_mode or DEFAULT_SEQUENCE_MODE
+                )
+            ),
+            questions
+        )
+        normalized_map_mode = normalize_map_mode(map_mode)
+        normalized_image_mode = normalize_image_mode(image_mode)
+        normalized_text_mode = normalize_text_mode(text_mode)
+        normalized_sequence_mode = normalize_sequence_mode(
+            sequence_mode or DEFAULT_SEQUENCE_MODE
+        )
+
+        for item in items:
+            if item.get("type_q") == "map":
+                item["mode"] = normalized_map_mode
+            elif item.get("type_q") == "media":
+                item["mode"] = normalized_image_mode
+            elif item.get("type_q") == "text":
+                item["mode"] = normalized_text_mode
+            elif item.get("type_q") == "cloze":
+                item["mode"] = DEFAULT_CLOZE_MODE
+            elif item.get("type_q") == "set":
+                item["mode"] = SET_MODE_COLLECT_MEMBERS
+            elif item.get("type_q") == "sequence":
+                item["mode"] = normalized_sequence_mode
+
+            if isinstance(item.get("context_items"), list):
+                context_items = [
+                    context_item
+                    for context_item in item["context_items"]
+                    if (
+                        context_item.get("question_id") in selected_question_ids or
+                        context_item.get("question_id") in (
+                            item_id.get("question_id")
+                            for item_id in item.get("items", [])
+                            if isinstance(item_id, dict)
+                        )
+                    )
                 ]
                 item["context_items"] = context_items or item.get("items", [])
 
