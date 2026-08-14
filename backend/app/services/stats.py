@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 
 from ..models import Question
 from ..scheduler import parse_history_date
+from .guidance import build_profile_guidance
 from .progress import progress_is_new
 
 
@@ -367,5 +368,6 @@ def build_stats(db, today=None):
                 for summary in ranked_reviewed
                 if summary["type_q"] == "sequence"
             ][:WEAK_SPOT_LIMIT]
-        }
+        },
+        "guidance": build_profile_guidance(db, today)
     }

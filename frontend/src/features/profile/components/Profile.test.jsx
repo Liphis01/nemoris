@@ -150,4 +150,77 @@ describe("Profile", () => {
     expect(screen.getByText("612")).toBeInTheDocument();
     expect(screen.getByText("87%")).toBeInTheDocument();
   });
+
+  it("shows an empty guidance state when there is no signal yet", async () => {
+    getProfile.mockResolvedValue({
+      signed_in: false,
+      account_email: null,
+      profile: null
+    });
+    getStats.mockResolvedValue({
+      ...STATS,
+      guidance: {
+        weakest_groups: [],
+        improving_groups: [],
+        close_to_mastery_groups: [],
+        fragile_upcoming_load_groups: [],
+        new_material_runway: { unseen_total: 0, days_remaining: null },
+        retention_by_tag: []
+      }
+    });
+
+    render(<Profile setMode={vi.fn()} />);
+
+    expect(
+      await screen.findByText(
+        "Pas encore assez d'historique pour une recommandation. Continue à réviser."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Rien de fragile en ce moment.")).toBeInTheDocument();
+    expect(screen.getByText("Aucune charge fragile à venir.")).toBeInTheDocument();
+  });
+
+  it("recommends the most urgent group and opens its Study scope on click", async () => {
+    getProfile.mockResolvedValue({
+      signed_in: false,
+      account_email: null,
+      profile: null
+    });
+    getStats.mockResolvedValue({
+      ...STATS,
+      guidance: {
+        weakest_groups: [
+          { id: 7, name: "Départements français", total: 10, fragile_count: 4, fragile_ratio: 0.4, recent_miss_items: 3 }
+        ],
+        improving_groups: [],
+        close_to_mastery_groups: [],
+        fragile_upcoming_load_groups: [
+          { id: 7, name: "Départements français", fragile_count: 4, upcoming_load: 6 }
+        ],
+        new_material_runway: { unseen_total: 12, days_remaining: 5 },
+        retention_by_tag: [
+          { tag: "core:geography", label: "Géographie", reviews: 40, retention: 82 }
+        ]
+      }
+    });
+    const onOpenStudy = vi.fn();
+
+    render(<Profile setMode={vi.fn()} onOpenStudy={onOpenStudy} />);
+
+    expect(
+      await screen.findByText(/Départements français.*arrivent bientôt/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("Géographie")).toBeInTheDocument();
+    expect(screen.getByText("82%")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Étudier ce groupe →" })
+    );
+
+    expect(onOpenStudy).toHaveBeenCalledWith({
+      type: "group",
+      id: 7,
+      name: "Départements français"
+    });
+  });
 });

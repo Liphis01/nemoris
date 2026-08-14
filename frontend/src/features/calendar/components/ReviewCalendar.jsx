@@ -1612,6 +1612,11 @@ export default function ReviewCalendar({
 
                       {hasEvents && (
                         <span
+                          title={
+                            scheduledCount > 0
+                              ? `${scheduledCount} échéance${scheduledCount > 1 ? "s" : ""} ce jour${historyCount > 0 ? ` · ${historyCount} revue${historyCount > 1 ? "s" : ""} déjà faite${historyCount > 1 ? "s" : ""}` : ""}`
+                              : `${historyCount} revue${historyCount > 1 ? "s" : ""}${hasFailedHistory ? " (dont au moins un échec)" : ""}`
+                          }
                           style={{
                             minWidth: "22px",
                             height: "22px",
@@ -1753,40 +1758,60 @@ export default function ReviewCalendar({
               style={{
                 borderTop: "1px solid #262626",
                 display: "flex",
+                flexDirection: "column",
                 flexShrink: 0,
-                flexWrap: "wrap",
-                gap: "10px 14px",
+                gap: "6px",
                 padding: "7px 10px"
               }}
             >
-              {calendarLegendTypes.map((type) => {
-                const typeStyle = getQuestionTypeChipStyle(type);
+              <div
+                style={{
+                  color: "#666",
+                  fontSize: "10.5px",
+                  lineHeight: 1.4
+                }}
+              >
+                Le badge indique le nombre d'échéances (violet) ou de revues déjà
+                faites (gris) du jour. Chaque barre est un type de question, sa
+                longueur reflète sa part dans le total du jour.
+              </div>
 
-                return (
-                  <div
-                    key={type}
-                    style={{
-                      alignItems: "center",
-                      color: "#8f8f8f",
-                      display: "inline-flex",
-                      fontSize: "11px",
-                      fontWeight: "700",
-                      gap: "6px",
-                      lineHeight: 1
-                    }}
-                  >
-                    <span
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "10px 14px"
+                }}
+              >
+                {calendarLegendTypes.map((type) => {
+                  const typeStyle = getQuestionTypeChipStyle(type);
+
+                  return (
+                    <div
+                      key={type}
                       style={{
-                        background: typeStyle.color,
-                        borderRadius: "999px",
-                        height: "6px",
-                        width: "22px"
+                        alignItems: "center",
+                        color: "#8f8f8f",
+                        display: "inline-flex",
+                        fontSize: "11px",
+                        fontWeight: "700",
+                        gap: "6px",
+                        lineHeight: 1
                       }}
-                    />
-                    <span>{calendarTypeLabel(type)}</span>
-                  </div>
-                );
-              })}
+                    >
+                      <span
+                        style={{
+                          background: typeStyle.color,
+                          borderRadius: "999px",
+                          height: "6px",
+                          width: "22px"
+                        }}
+                      />
+                      <span>{calendarTypeLabel(type)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

@@ -343,6 +343,187 @@
   text-transform: uppercase;
 }
 
+/* ---- guidance panel: profile-as-explanation cards -------------------- */
+
+.profile-guidance-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-guidance-recommendation {
+  background: radial-gradient(70% 160% at 0% 0%, rgba(255, 204, 122, 0.1) 0%, transparent 65%), #1b1b1b;
+  border: 1px solid rgba(255, 204, 122, 0.28);
+  border-radius: 8px;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+
+.profile-guidance-recommendation-label {
+  color: #ffcc7a;
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.profile-guidance-recommendation p {
+  color: #eeeeee;
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.profile-guidance-cta {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: #ffcc7a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 10px;
+  padding: 0;
+}
+
+.profile-guidance-cta:hover {
+  text-decoration: underline;
+}
+
+.profile-guidance-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 14px;
+}
+
+.profile-guidance-grid-secondary {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-bottom: 0;
+}
+
+.profile-guidance-card {
+  background: #1b1b1b;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 13px 14px;
+}
+
+.profile-guidance-card h3 {
+  color: #dedede;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin: 0 0 9px;
+}
+
+.profile-guidance-empty {
+  color: #7f7f7f;
+  font-size: 12.5px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.profile-guidance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.profile-guidance-row-button {
+  align-items: center;
+  appearance: none;
+  background: #171717;
+  border: 1px solid #2f2f2f;
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 10px;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  width: 100%;
+}
+
+.profile-guidance-row-button:hover {
+  background-color: #1f1f1f;
+  border-color: #444444;
+}
+
+.profile-guidance-row-name {
+  color: #eeeeee;
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-guidance-row-meta {
+  color: #999999;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.profile-guidance-runway {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profile-guidance-runway-tile {
+  background: #171717;
+  border: 1px solid #2f2f2f;
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+
+.profile-guidance-runway-tile strong {
+  color: #ffffff;
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.profile-guidance-runway-tile span {
+  color: #999999;
+  display: block;
+  font-size: 10.5px;
+  margin-top: 4px;
+}
+
+.profile-guidance-tag-row {
+  align-items: center;
+  color: #cfcfcf;
+  display: flex;
+  font-size: 12.5px;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.profile-guidance-tag-row span:last-child {
+  color: #eeeeee;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
 /* ---- edit card ------------------------------------------------------ */
 
 .profile-field {
