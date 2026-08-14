@@ -22,6 +22,33 @@ function reviewedQuestion(history) {
 }
 
 
+function reviewedGroupQuestion(id, history) {
+  return {
+    id,
+    type_q: "map",
+    question: `Zone ${id}`,
+    answer: id === 1 ? "Allier" : "Alpes",
+    group_id: 10,
+    group: {
+      id: 10,
+      type_group: "map",
+      name: "Départements français",
+      tags: []
+    },
+    tags: [],
+    data: { code: `0${id}` },
+    progress: {
+      reps: history.length,
+      lapses: history.filter((entry) => Number(entry.quality) === 0).length,
+      interval: 3,
+      last_review: "2026-01-01",
+      next_review: "2026-01-04",
+      history
+    }
+  };
+}
+
+
 describe("ReviewCalendar", () => {
   beforeEach(() => {
     HTMLElement.prototype.scrollTo = vi.fn();
@@ -54,4 +81,34 @@ describe("ReviewCalendar", () => {
 
     expect(screen.getByText("50% (2)")).toBeInTheDocument();
   });
+
+  it("opens Study from a grouped calendar card", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12));
+    const onOpenStudy = vi.fn();
+
+    render(
+      <ReviewCalendar
+        setMode={vi.fn()}
+        questions={[
+          reviewedGroupQuestion(1, [
+            { reviewed_on: "2026-01-01", quality: 2 }
+          ]),
+          reviewedGroupQuestion(2, [
+            { reviewed_on: "2026-01-01", quality: 1 }
+          ])
+        ]}
+        onOpenStudy={onOpenStudy}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+
+    expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
+      id: 10,
+      name: "Départements français",
+      type: "group",
+      type_group: "map"
+    }));
+  }, 10000);
 });

@@ -353,6 +353,36 @@ describe("BrowsePacks", () => {
     expect(onOpenGroup).toHaveBeenCalledWith(10);
   });
 
+  it("opens Study from an installed pack detail", () => {
+    const onOpenStudy = vi.fn();
+
+    defaultHook({
+      items: [
+        item(textEntry, "up_to_date", 1, {}, {
+          localGroupId: 12
+        })
+      ],
+      total: 1,
+      hasMore: false
+    });
+
+    render(
+      <BrowsePacks
+        setMode={vi.fn()}
+        onOpenGroup={vi.fn()}
+        onOpenStudy={onOpenStudy}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+
+    expect(onOpenStudy).toHaveBeenCalledWith({
+      type: "pack",
+      packGuid: "biology-text",
+      name: "Biologie cellulaire"
+    });
+  });
+
   it("publishes a group in a single click, with no draft step", async () => {
     defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);

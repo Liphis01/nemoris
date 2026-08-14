@@ -288,6 +288,60 @@ describe("TrainingSession", () => {
     });
   });
 
+  it("opens Study for the selected training scope", async () => {
+    const onOpenStudy = vi.fn();
+
+    render(<TrainingSession setMode={vi.fn()} onOpenStudy={onOpenStudy} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+
+    expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
+      id: 5,
+      name: "Europe",
+      type: "group",
+      type_group: "map"
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Tags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+
+    expect(onOpenStudy).toHaveBeenLastCalledWith({
+      type: "tag",
+      id: "tag-geo",
+      label: "Geo",
+      name: "Geo"
+    });
+  });
+
+  it("starts an initial scope passed from Study", async () => {
+    const onInitialScopeHandled = vi.fn();
+
+    render(
+      <TrainingSession
+        setMode={vi.fn()}
+        initialScope={{
+          type: "group",
+          id: 5,
+          name: "Europe",
+          type_group: "map"
+        }}
+        initialMode="multiple_choice"
+        initialScopeNonce={1}
+        onInitialScopeHandled={onInitialScopeHandled}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "group",
+        groupId: 5,
+        mapMode: "multiple_choice"
+      });
+      expect(onInitialScopeHandled).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("keeps the selected group when returning from a training mode", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 

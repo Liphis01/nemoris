@@ -6,6 +6,7 @@ import ReviewCalendar from "./features/calendar/components/ReviewCalendar";
 import Profile from "./features/profile/components/Profile";
 import Settings from "./features/settings/components/Settings";
 import TrainingSession from "./features/training/components/TrainingSession";
+import StudyScreen from "./features/study/components/StudyScreen";
 import BrowsePacks from "./features/packs/components/BrowsePacks";
 import DesktopStartupGate from "./shared/DesktopStartupGate";
 import UpdateBanner from "./features/update/UpdateBanner";
@@ -24,6 +25,107 @@ const BACK_MOUSE_BUTTON = 3;
 const FORWARD_MOUSE_BUTTON = 4;
 
 
+function firstDefined(...values) {
+  return values.find(value => value !== undefined && value !== null);
+}
+
+
+function normalizeStudyScope(scope) {
+  if (!scope) return null;
+
+  const type = scope.scopeType || scope.type;
+
+  if (type === "group") {
+    const id = firstDefined(scope.groupId, scope.group_id, scope.id);
+    if (id === undefined) return null;
+
+    return {
+      type: "group",
+      id,
+      groupId: id,
+      name: scope.name || null,
+      type_group: scope.type_group || null,
+      audio_only: scope.audio_only,
+      reverse_mode_enabled: scope.reverse_mode_enabled
+    };
+  }
+
+  if (type === "collection") {
+    const id = firstDefined(scope.collectionId, scope.collection_id, scope.id);
+    if (id === undefined) return null;
+
+    return {
+      type: "collection",
+      id,
+      collectionId: id,
+      name: scope.name || null
+    };
+  }
+
+  if (type === "tag") {
+    const id = firstDefined(scope.tag, scope.key, scope.id, scope.label);
+    if (!id) return null;
+
+    return {
+      type: "tag",
+      id,
+      key: id,
+      tag: id,
+      label: scope.label || scope.name || id,
+      name: scope.name || scope.label || id
+    };
+  }
+
+  if (type === "pack") {
+    const packGuid = firstDefined(scope.packGuid, scope.pack_guid, scope.id);
+    if (!packGuid) return null;
+
+    return {
+      type: "pack",
+      id: packGuid,
+      packGuid,
+      name: scope.name || null
+    };
+  }
+
+  return null;
+}
+
+
+function scopeToTrainingTarget(scope) {
+  const normalized = normalizeStudyScope(scope);
+
+  if (!normalized || normalized.type === "pack") return null;
+
+  if (normalized.type === "group") {
+    return {
+      type: "group",
+      id: normalized.id,
+      name: normalized.name,
+      type_group: normalized.type_group,
+      audio_only: normalized.audio_only,
+      reverse_mode_enabled: normalized.reverse_mode_enabled
+    };
+  }
+
+  if (normalized.type === "collection") {
+    return {
+      type: "collection",
+      id: normalized.id,
+      name: normalized.name
+    };
+  }
+
+  return {
+    type: "tag",
+    id: normalized.id,
+    key: normalized.key,
+    label: normalized.label,
+    name: normalized.name
+  };
+}
+
+
 function AppContent() {
   // Top-level mode switching is intentionally simple: each feature owns its
   // internal state through hooks, while App only coordinates cross-feature jumps.
@@ -39,6 +141,8 @@ function AppContent() {
   const [reviewSummaryError, setReviewSummaryError] = useState("");
   const [settingsScrollTarget, setSettingsScrollTarget] = useState(null);
   const [packOpenTarget, setPackOpenTarget] = useState(null);
+  const [studyScope, setStudyScope] = useState(null);
+  const [trainingOpenTarget, setTrainingOpenTarget] = useState(null);
   const manageLibrary = useManageLibrary(mode);
   const reviewSession = useReviewSession(mode === "quiz");
   const autoSync = useAutoSync();
@@ -283,6 +387,32 @@ function AppContent() {
     setPackOpenTarget(null);
   }, []);
 
+  const openStudyScope = useCallback((scope) => {
+    const nextScope = normalizeStudyScope(scope);
+
+    if (!nextScope) return;
+
+    setStudyScope(nextScope);
+    navigateMode("study");
+  }, [navigateMode]);
+
+  const openTrainingScope = useCallback((scope, modeName = null) => {
+    const nextScope = scopeToTrainingTarget(scope);
+
+    if (!nextScope) return;
+
+    setTrainingOpenTarget({
+      mode: modeName || null,
+      nonce: Date.now(),
+      scope: nextScope
+    });
+    navigateMode("training");
+  }, [navigateMode]);
+
+  const clearTrainingOpenTarget = useCallback(() => {
+    setTrainingOpenTarget(null);
+  }, []);
+
   return (
     <div style={appStyle}>
       <div style={bannerOverlayStyle}>
@@ -311,7 +441,22 @@ function AppContent() {
         )}
 
         {mode === "training" && (
-          <TrainingSession setMode={navigateMode} />
+          <TrainingSession
+            setMode={navigateMode}
+            initialMode={trainingOpenTarget?.mode || null}
+            initialScope={trainingOpenTarget?.scope || null}
+            initialScopeNonce={trainingOpenTarget?.nonce || 0}
+            onInitialScopeHandled={clearTrainingOpenTarget}
+            onOpenStudy={openStudyScope}
+          />
+        )}
+
+        {mode === "study" && (
+          <StudyScreen
+            setMode={navigateMode}
+            scope={studyScope}
+            onStartTraining={openTrainingScope}
+          />
         )}
 
         {mode === "manage" && (
@@ -323,6 +468,7 @@ function AppContent() {
             openGroupId={manageOpenGroupId}
             clearOpenGroupId={() => setManageOpenGroupId(null)}
             onOpenInCalendar={openQuestionInCalendar}
+            onOpenStudy={openStudyScope}
           />
         )}
 
@@ -332,6 +478,7 @@ function AppContent() {
             questions={manageLibrary.allQuestions}
             onOpenQuestion={openQuestionInManage}
             onOpenGroupInManage={openGroupIdInManage}
+            onOpenStudy={openStudyScope}
             openQuestionId={calendarOpenQuestionId}
             clearOpenQuestionId={() => setCalendarOpenQuestionId(null)}
           />
@@ -341,6 +488,7 @@ function AppContent() {
           <Profile
             setMode={navigateMode}
             onOpenSettingsSection={openSettingsSection}
+            onOpenStudy={openStudyScope}
           />
         )}
 
@@ -356,6 +504,7 @@ function AppContent() {
           <BrowsePacks
             setMode={navigateMode}
             onOpenGroup={openGroupIdInManage}
+            onOpenStudy={openStudyScope}
             initialPackGuid={packOpenTarget?.guid || null}
             initialSearch={packOpenTarget?.search || ""}
             onInitialPackHandled={clearPackOpenTarget}

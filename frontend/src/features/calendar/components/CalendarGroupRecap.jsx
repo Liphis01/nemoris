@@ -119,6 +119,7 @@ export default function CalendarGroupRecap({
   onClose,
   onFocusQuestion,
   onOpenQuestion,
+  onOpenStudy,
   row,
   showHeader = true,
   todayKey
@@ -241,6 +242,22 @@ export default function CalendarGroupRecap({
               ×
             </button>
           )}
+        </div>
+      )}
+
+      {onOpenStudy && row.groupId && (
+        <div style={recapActionRowStyle}>
+          <button
+            type="button"
+            onClick={() => onOpenStudy({
+              ...group,
+              id: group.id ?? row.groupId,
+              type: "group"
+            })}
+            style={studyButtonStyle}
+          >
+            Study
+          </button>
         </div>
       )}
 
@@ -408,6 +425,12 @@ const recapHeaderStyle = {
   gap: "10px",
   justifyContent: "space-between",
   marginBottom: "12px"
+};
+
+const recapActionRowStyle = {
+  display: "flex",
+  justifyContent: "flex-end",
+  marginBottom: "10px"
 };
 
 const eyebrowStyle = {
@@ -645,4 +668,11 @@ const manageButtonStyle = {
   fontSize: "12px",
   fontWeight: "700",
   padding: "6px 9px"
+};
+
+const studyButtonStyle = {
+  ...manageButtonStyle,
+  background: "#14283d",
+  border: "1px solid #355c7b",
+  color: "#d8ecff"
 };

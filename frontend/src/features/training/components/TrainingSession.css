@@ -405,6 +405,42 @@
   font-size: 20px;
 }
 
+.training-tag-tile-frame {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.training-tag-study-button,
+.training-study-button {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  background: #1d1d1d;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #d8ecff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.1;
+  min-height: 34px;
+  padding: 8px 11px;
+}
+
+.training-tag-study-button:hover,
+.training-study-button:hover {
+  background: #14283d;
+  border-color: #355c7b;
+  color: #edf7ff;
+}
+
+.training-study-button-full {
+  margin-bottom: 14px;
+  width: 100%;
+}
+
 .training-detail-panel {
   background: #121212;
   border: 1px solid #303030;

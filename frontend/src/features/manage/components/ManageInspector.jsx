@@ -52,6 +52,19 @@ const publishButtonDisabledStyle = {
   opacity: 0.55
 };
 
+const studyButtonStyle = {
+  background: "#14283d",
+  border: "1px solid #355c7b",
+  borderRadius: "8px",
+  color: "#d8ecff",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 800,
+  lineHeight: 1,
+  padding: "8px 11px",
+  whiteSpace: "nowrap"
+};
+
 function diffCount(value) {
   return Array.isArray(value) ? value.length : 0;
 }
@@ -189,6 +202,29 @@ function PackPublishHeaderAction({ group, requestManageTransition }) {
   );
 }
 
+function StudyHeaderAction({ group, onOpenStudy, requestManageTransition }) {
+  if (!group?.id || !onOpenStudy) return null;
+
+  async function openStudy() {
+    const runAfterPendingSave = requestManageTransition || ((action) => action());
+
+    await runAfterPendingSave(() => onOpenStudy({
+      ...group,
+      type: "group"
+    }));
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={openStudy}
+      style={studyButtonStyle}
+    >
+      Study
+    </button>
+  );
+}
+
 export default function ManageInspector({
   allGroups,
   setAllGroups,
@@ -222,6 +258,7 @@ export default function ManageInspector({
   setHighlightedQuestionIds,
   importQuestionMediaUrl,
   onOpenInCalendar,
+  onOpenStudy,
   registerPendingSaveHandler,
   requestManageTransition,
   requestQuestionScroll,
@@ -280,6 +317,11 @@ export default function ManageInspector({
   function renderGroupHeaderAction(group, calendarAction = null) {
     return (
       <>
+        <StudyHeaderAction
+          group={group}
+          onOpenStudy={onOpenStudy}
+          requestManageTransition={requestManageTransition}
+        />
         {calendarAction}
         <PackPublishHeaderAction
           group={group}

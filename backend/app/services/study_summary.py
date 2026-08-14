@@ -12,6 +12,7 @@ from ..models import (
 from ..scheduler import parse_history_date
 from .collections import resolve_collection_questions
 from .map_eligibility import question_is_reviewable
+from .media import media_kind_from_name
 from .progress import progress_has_started, progress_is_new
 from .tag_hierarchy import (
     descendants,
@@ -21,6 +22,7 @@ from .tag_hierarchy import (
     parent_map,
     resolve_tag_id
 )
+from .text_groups import text_group_reverse_mode_enabled
 from .training import (
     MODE_GROUP_TYPES,
     collection_training_fingerprint,
@@ -194,6 +196,13 @@ def _group_scope(db, group_id):
         .filter(Question.group_id == group.id)
         .all()
     )
+    audio_only = group.type_group == "media" and _media_group_audio_only(
+        questions
+    )
+    reverse_mode_enabled = (
+        group.type_group == "text" and
+        text_group_reverse_mode_enabled(group, questions)
+    )
 
     return {
         "scope": {
@@ -203,7 +212,10 @@ def _group_scope(db, group_id):
             "name": group.name,
             "type_group": group.type_group,
             "media": group.media,
-            "pack_guid": group.pack_guid
+            "pack_guid": group.pack_guid,
+            "question_count": len(questions),
+            "audio_only": audio_only,
+            "reverse_mode_enabled": reverse_mode_enabled
         },
         "source": group,
         "questions": questions
@@ -684,29 +696,53 @@ def _available_modes(scope_type, source, questions):
     return _available_modes_for_questions(questions)
 
 
+def _media_group_audio_only(questions):
+    kinds = {
+        media_kind_from_name(question.media)
+        for question in questions
+        if question.type_q == "media" and question.media
+    }
+
+    return bool(kinds) and kinds == {"audio"}
+
+
 def _group_training_entries(db, questions):
     groups = []
     seen = set()
+    questions_by_group_id = {}
 
     for question in questions:
         group = question.group
 
         if not group or group.id in seen or group.type_group not in MODE_GROUP_TYPES:
+            if group and group.type_group in MODE_GROUP_TYPES:
+                questions_by_group_id.setdefault(group.id, []).append(question)
             continue
 
         seen.add(group.id)
         groups.append(group)
+        questions_by_group_id.setdefault(group.id, []).append(question)
 
     fingerprints = training_fingerprints_for_groups(db, groups)
     result = []
 
     for group in sorted(groups, key=lambda item: item.id):
         fingerprint = fingerprints.get(group.id)
+        group_questions = questions_by_group_id.get(group.id, [])
         result.append({
             "id": group.id,
             "guid": group.guid,
             "name": group.name,
             "type_group": group.type_group,
+            "question_count": len(group_questions),
+            "audio_only": (
+                group.type_group == "media" and
+                _media_group_audio_only(group_questions)
+            ),
+            "reverse_mode_enabled": (
+                group.type_group == "text" and
+                text_group_reverse_mode_enabled(group, group_questions)
+            ),
             "training_record": serialize_training_record(
                 group.data,
                 fingerprint

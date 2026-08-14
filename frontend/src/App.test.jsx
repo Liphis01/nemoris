@@ -44,6 +44,7 @@ vi.mock("./features/menu/Menu", () => ({
       <h1>Menu</h1>
       <button type="button" onClick={() => setMode("manage")}>Gestionnaire</button>
       <button type="button" onClick={() => setMode("calendar")}>Calendrier</button>
+      <button type="button" onClick={() => setMode("training")}>Entrainement</button>
     </main>
   )
 }));
@@ -70,7 +71,39 @@ vi.mock("./features/review/components/ReviewSession", () => ({
 }));
 
 vi.mock("./features/training/components/TrainingSession", () => ({
-  default: () => <main><h1>Entrainement</h1></main>
+  default: ({ initialMode, initialScope, onOpenStudy }) => (
+    <main>
+      <h1>Entrainement</h1>
+      <div data-testid="training-target">
+        {initialScope ? `${initialScope.type}:${initialScope.id}:${initialMode || ""}` : "none"}
+      </div>
+      <button
+        type="button"
+        onClick={() => onOpenStudy({
+          type: "group",
+          id: 5,
+          name: "Europe",
+          type_group: "map"
+        })}
+      >
+        Study Europe
+      </button>
+    </main>
+  )
+}));
+
+vi.mock("./features/study/components/StudyScreen", () => ({
+  default: ({ onStartTraining, scope }) => (
+    <main>
+      <h1>Study {scope?.name}</h1>
+      <button
+        type="button"
+        onClick={() => onStartTraining(scope, "multiple_choice")}
+      >
+        Start scoped training
+      </button>
+    </main>
+  )
 }));
 
 vi.mock("./features/profile/components/Profile", () => ({
@@ -117,5 +150,21 @@ describe("App mouse navigation", () => {
 
     fireEvent.mouseDown(window, { button: 4 });
     expect(screen.getByRole("heading", { name: "Calendrier" })).toBeInTheDocument();
+  });
+
+  it("opens Study from a feature and can launch scoped training", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Entrainement" }));
+    fireEvent.click(screen.getByRole("button", { name: "Study Europe" }));
+
+    expect(screen.getByRole("heading", { name: "Study Europe" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start scoped training" }));
+
+    expect(screen.getByRole("heading", { name: "Entrainement" })).toBeInTheDocument();
+    expect(screen.getByTestId("training-target")).toHaveTextContent(
+      "group:5:multiple_choice"
+    );
   });
 });

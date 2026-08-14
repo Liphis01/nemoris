@@ -207,6 +207,7 @@ function PackDetailPanel({
   item,
   onInstall,
   onOpenGroup,
+  onOpenStudy,
   onUnsubscribe,
   onUpdate,
   setMode
@@ -232,6 +233,7 @@ function PackDetailPanel({
     status === "up_to_date" || status === "update_available"
   );
   const canOpenGroup = Boolean(localGroupId && onOpenGroup);
+  const canOpenStudy = Boolean(canUnsubscribe && entry.pack_guid && onOpenStudy);
 
   return (
     <aside className="pack-detail-panel app-scrollbar" aria-label="Détail du pack">
@@ -317,6 +319,21 @@ function PackDetailPanel({
           </button>
         )}
 
+        {canOpenStudy && (
+          <button
+            type="button"
+            className="pack-secondary-button pack-study-button"
+            disabled={action.busy}
+            onClick={() => onOpenStudy({
+              type: "pack",
+              packGuid: entry.pack_guid,
+              name: entry.name
+            })}
+          >
+            Study
+          </button>
+        )}
+
         {canUnsubscribe && (
           <button
             type="button"
@@ -351,6 +368,7 @@ function ImporterScreen({
   initialSearch,
   onInitialPackHandled,
   onOpenGroup,
+  onOpenStudy,
   setMode
 }) {
   const [activeTheme, setActiveTheme] = useState(POPULAR_THEME);
@@ -502,6 +520,7 @@ function ImporterScreen({
         item={selectedItem}
         onInstall={install}
         onOpenGroup={onOpenGroup}
+        onOpenStudy={onOpenStudy}
         onUnsubscribe={unsubscribe}
         onUpdate={update}
         setMode={setMode}
@@ -513,6 +532,7 @@ function ImporterScreen({
 export default function BrowsePacks({
   setMode,
   onOpenGroup,
+  onOpenStudy,
   initialPackGuid = null,
   initialSearch = "",
   onInitialPackHandled = null
@@ -578,6 +598,7 @@ export default function BrowsePacks({
             initialSearch={initialSearch}
             onInitialPackHandled={onInitialPackHandled}
             onOpenGroup={onOpenGroup}
+            onOpenStudy={onOpenStudy}
             setMode={setMode}
           />
         )}

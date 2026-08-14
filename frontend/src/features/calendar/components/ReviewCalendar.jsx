@@ -795,6 +795,7 @@ function GroupEventCard({
   isSelected,
   onOpenGroup,
   onOpenGroupInManage,
+  onOpenStudy,
   row,
   todayKey
 }) {
@@ -945,16 +946,34 @@ function GroupEventCard({
 
       <div style={cardFooterStyle}>
         <span style={cardHintStyle}>Groupe #{row.groupId}</span>
-        <button
-          type="button"
-          onClick={(clickEvent) => {
-            clickEvent.stopPropagation();
-            onOpenGroupInManage?.(row.groupId);
-          }}
-          style={cardActionButtonStyle}
-        >
-          Éditer ↗
-        </button>
+        <span style={cardButtonClusterStyle}>
+          {onOpenStudy && (
+            <button
+              type="button"
+              onClick={(clickEvent) => {
+                clickEvent.stopPropagation();
+                onOpenStudy({
+                  ...group,
+                  id: group.id ?? row.groupId,
+                  type: "group"
+                });
+              }}
+              style={cardStudyButtonStyle}
+            >
+              Study
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(clickEvent) => {
+              clickEvent.stopPropagation();
+              onOpenGroupInManage?.(row.groupId);
+            }}
+            style={cardActionButtonStyle}
+          >
+            Éditer ↗
+          </button>
+        </span>
       </div>
     </div>
   );
@@ -965,6 +984,7 @@ export default function ReviewCalendar({
   questions,
   onOpenQuestion,
   onOpenGroupInManage,
+  onOpenStudy,
   openQuestionId,
   clearOpenQuestionId
 }) {
@@ -1220,6 +1240,7 @@ export default function ReviewCalendar({
         isSelected={isSelected}
         onOpenGroup={openGroupRow}
         onOpenGroupInManage={onOpenGroupInManage}
+        onOpenStudy={onOpenStudy}
         row={row}
         todayKey={todayKey}
       />
@@ -1994,6 +2015,7 @@ export default function ReviewCalendar({
                   focusedQuestionId={selectedCalendarQuestionId}
                   onFocusQuestion={setSelectedCalendarQuestionId}
                   onOpenQuestion={onOpenQuestion}
+                  onOpenStudy={onOpenStudy}
                   row={activeGroupRow}
                   showHeader={false}
                   todayKey={todayKey}
@@ -2084,6 +2106,13 @@ const cardHintStyle = {
   fontSize: "11px"
 };
 
+const cardButtonClusterStyle = {
+  display: "inline-flex",
+  flexWrap: "wrap",
+  gap: "6px",
+  justifyContent: "flex-end"
+};
+
 const cardMetaGridStyle = {
   display: "grid",
   gap: "8px",
@@ -2129,6 +2158,13 @@ const cardActionButtonStyle = {
   fontSize: "12px",
   fontWeight: "800",
   padding: "6px 10px"
+};
+
+const cardStudyButtonStyle = {
+  ...cardActionButtonStyle,
+  background: "#14283d",
+  border: "1px solid #355c7b",
+  color: "#d8ecff"
 };
 
 const tagOverflowStyle = {

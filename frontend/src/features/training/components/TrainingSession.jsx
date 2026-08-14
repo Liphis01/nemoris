@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReviewQuestionRenderer from "../../review/components/ReviewQuestionRenderer";
 import TrainingTimerPanel from "../../review/components/TrainingTimerPanel";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
@@ -111,6 +111,85 @@ const recordBadgeStyle = {
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+
+function sameId(left, right) {
+  return String(left ?? "") === String(right ?? "");
+}
+
+
+function initialScopeKey(scope, mode, nonce) {
+  if (!scope) return "";
+
+  return [
+    nonce || 0,
+    scope.type || "",
+    scope.id || "",
+    scope.key || "",
+    scope.name || "",
+    mode || ""
+  ].join(":");
+}
+
+
+function normalizeInitialTrainingScope(initialScope, scopes) {
+  if (!initialScope) return null;
+
+  if (initialScope.type === "group") {
+    const id = initialScope.id || initialScope.groupId || initialScope.group_id;
+    const group = (scopes.groups || []).find(candidate =>
+      sameId(candidate.id, id)
+    );
+
+    return {
+      ...(group || {}),
+      ...initialScope,
+      id,
+      type: "group",
+      type_group: group?.type_group || initialScope.type_group
+    };
+  }
+
+  if (initialScope.type === "collection") {
+    const id = (
+      initialScope.id ||
+      initialScope.collectionId ||
+      initialScope.collection_id
+    );
+    const collection = (scopes.collections || []).find(candidate =>
+      sameId(candidate.id, id)
+    );
+
+    return {
+      ...(collection || {}),
+      ...initialScope,
+      id,
+      type: "collection"
+    };
+  }
+
+  if (initialScope.type === "tag") {
+    const id = initialScope.id || initialScope.key || initialScope.tag;
+    const tag = (scopes.tags || []).find(candidate =>
+      sameId(candidate.id, id) ||
+      sameId(candidate.key, id) ||
+      sameId(candidate.label, id)
+    );
+    const label = tag?.label || tag?.name || initialScope.label || initialScope.name || id;
+
+    return {
+      ...(tag || {}),
+      ...initialScope,
+      id,
+      key: tag?.key || initialScope.key || id,
+      label,
+      name: label,
+      type: "tag"
+    };
+  }
+
+  return null;
 }
 
 
@@ -362,30 +441,44 @@ function GroupTile({ group, onSelect, selected }) {
 }
 
 
-function TagTile({ tag, startScope }) {
+function TagTile({ onOpenStudy, startScope, tag }) {
   const label = tag.label || tag.name;
-  return (
-    <button
-      type="button"
-      aria-label={`Démarrer le tag ${label}`}
-      className="training-scope-tile training-tag-tile"
-      onClick={() => startScope({
-        type: "tag",
-        id: tag.id || tag.key,
-        label,
-        name: label
-      })}
-    >
-      <span className="training-scope-tile-main">
-        <strong>#{label}</strong>
-        <span>{questionCountLabel(tag.count)}</span>
-      </span>
+  const scope = {
+    type: "tag",
+    id: tag.id || tag.key,
+    label,
+    name: label
+  };
 
-      <span className="training-scope-score">
-        <strong>→</strong>
-        <span>démarrer</span>
-      </span>
-    </button>
+  return (
+    <div className="training-tag-tile-frame">
+      <button
+        type="button"
+        aria-label={`Démarrer le tag ${label}`}
+        className="training-scope-tile training-tag-tile"
+        onClick={() => startScope(scope)}
+      >
+        <span className="training-scope-tile-main">
+          <strong>#{label}</strong>
+          <span>{questionCountLabel(tag.count)}</span>
+        </span>
+
+        <span className="training-scope-score">
+          <strong>→</strong>
+          <span>démarrer</span>
+        </span>
+      </button>
+
+      {onOpenStudy && (
+        <button
+          type="button"
+          className="training-tag-study-button"
+          onClick={() => onOpenStudy(scope)}
+        >
+          Study
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -420,6 +513,7 @@ function CollectionTile({ collection, onSelect, selected }) {
 // next to groups. Training just chooses one to practise.
 function CollectionDetailPanel({
   collection,
+  onOpenStudy,
   startScope
 }) {
   if (!collection) {
@@ -471,6 +565,18 @@ function CollectionDetailPanel({
           <span>{questionCountLabel(collection.question_count)}</span>
         </button>
 
+        {onOpenStudy && (
+          <button
+            type="button"
+            className="training-study-button"
+            onClick={() => onOpenStudy({
+              ...collection,
+              type: "collection"
+            })}
+          >
+            Study
+          </button>
+        )}
       </div>
     </aside>
   );
@@ -519,7 +625,7 @@ function ModeAction({ config, group, mode, startScope }) {
 }
 
 
-function GroupDetailPanel({ group, startScope }) {
+function GroupDetailPanel({ group, onOpenStudy, startScope }) {
   if (!group) {
     return (
       <aside className="training-detail-panel training-detail-empty" aria-label="Détails du groupe">
@@ -551,6 +657,19 @@ function GroupDetailPanel({ group, startScope }) {
       >
         <RecordMetric label="Score total" value={formatTotalPercent(totalPercent)} />
       </div>
+
+      {onOpenStudy && (
+        <button
+          type="button"
+          className="training-study-button training-study-button-full"
+          onClick={() => onOpenStudy({
+            ...group,
+            type: "group"
+          })}
+        >
+          Study
+        </button>
+      )}
 
       {config ? (
         <>
@@ -593,6 +712,7 @@ function ScopeSelector({
   scopesLoading,
   startScope,
   loadScopes,
+  onOpenStudy,
   selectedCollectionId,
   selectedGroupId,
   setMode,
@@ -768,6 +888,7 @@ function ScopeSelector({
                   <div className="training-detail-column app-scrollbar">
                     <GroupDetailPanel
                       group={selectedGroup}
+                      onOpenStudy={onOpenStudy}
                       startScope={startScope}
                     />
                   </div>
@@ -790,6 +911,7 @@ function ScopeSelector({
                   <div className="training-detail-column app-scrollbar">
                     <CollectionDetailPanel
                       collection={selectedCollection}
+                      onOpenStudy={onOpenStudy}
                       startScope={startScope}
                     />
                   </div>
@@ -800,6 +922,7 @@ function ScopeSelector({
                     {tags.map(tag => (
                       <TagTile
                         key={tag.id || tag.key || tag.name}
+                        onOpenStudy={onOpenStudy}
                         startScope={startScope}
                         tag={tag}
                       />
@@ -882,8 +1005,17 @@ function PauseOverlay({ session }) {
   );
 }
 
-export default function TrainingSession({ setMode }) {
+export default function TrainingSession({
+  initialMode = null,
+  initialScope = null,
+  initialScopeNonce = 0,
+  onInitialScopeHandled = null,
+  onOpenStudy = null,
+  setMode
+}) {
   const session = useTrainingSession(true);
+  const startTrainingScope = session.startScope;
+  const initialScopeHandledRef = useRef("");
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [showCollectionNameField, setShowCollectionNameField] = useState(false);
@@ -903,6 +1035,40 @@ export default function TrainingSession({ setMode }) {
     session.attemptFoundCount,
     session.allQuestionIds.length
   );
+
+  useEffect(() => {
+    if (!initialScope || session.scopesLoading) return;
+
+    const key = initialScopeKey(initialScope, initialMode, initialScopeNonce);
+
+    if (initialScopeHandledRef.current === key) return;
+
+    const nextScope = normalizeInitialTrainingScope(initialScope, session.scopes);
+
+    initialScopeHandledRef.current = key;
+
+    if (!nextScope?.id) {
+      onInitialScopeHandled?.();
+      return;
+    }
+
+    if (nextScope.type === "group") {
+      setSelectedGroupId(nextScope.id);
+    } else if (nextScope.type === "collection") {
+      setSelectedCollectionId(nextScope.id);
+    }
+
+    startTrainingScope(nextScope, initialMode);
+    onInitialScopeHandled?.();
+  }, [
+    initialMode,
+    initialScope,
+    initialScopeNonce,
+    onInitialScopeHandled,
+    session.scopes,
+    session.scopesLoading,
+    startTrainingScope
+  ]);
 
   function resetCollectionNameField() {
     setShowCollectionNameField(false);
@@ -1186,6 +1352,7 @@ export default function TrainingSession({ setMode }) {
             scopesLoading={session.scopesLoading}
             startScope={session.startScope}
             loadScopes={session.loadScopes}
+            onOpenStudy={onOpenStudy}
             selectedCollectionId={selectedCollectionId}
             selectedGroupId={selectedGroupId}
             setMode={setMode}

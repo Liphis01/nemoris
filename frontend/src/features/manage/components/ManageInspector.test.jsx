@@ -130,4 +130,21 @@ describe("ManageInspector pack publishing", () => {
     });
     expect(screen.getByText("Publié")).toBeInTheDocument();
   });
+
+  it("opens Study from the group editor header after pending saves", async () => {
+    const onOpenStudy = vi.fn();
+    const requestManageTransition = vi.fn(async (action) => action());
+
+    renderInspector({ onOpenStudy, requestManageTransition });
+
+    await userEvent.click(screen.getByRole("button", { name: "Study" }));
+
+    expect(requestManageTransition).toHaveBeenCalledTimes(1);
+    expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
+      id: group.id,
+      name: group.name,
+      type: "group",
+      type_group: "text"
+    }));
+  });
 });
