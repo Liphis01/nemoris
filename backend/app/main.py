@@ -22,6 +22,7 @@ from .routers import (
     review,
     sequence_groups,
     stats,
+    study,
     sync,
     tags,
     text_groups,
@@ -81,6 +82,7 @@ def create_app():
     app.include_router(collections.router)
     app.include_router(review.router)
     app.include_router(stats.router)
+    app.include_router(study.router)
     app.include_router(tags.router)
     app.include_router(training.router)
     app.include_router(maps.router)
