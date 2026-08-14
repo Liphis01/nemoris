@@ -742,6 +742,167 @@
   width: min(100%, 220px);
 }
 
+.pack-detail-chip-group {
+  display: grid;
+  gap: 6px;
+}
+
+.pack-detail-chip-label {
+  color: #858585;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pack-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pack-chip {
+  background: #1d1d1d;
+  border: 1px solid #303030;
+  border-radius: 999px;
+  color: #d4d4d4;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+}
+
+.pack-progress-panel,
+.pack-preview-panel {
+  border-top: 1px solid #282828;
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.pack-progress-panel h3,
+.pack-preview-panel h3 {
+  color: #f2f2f2;
+  font-size: 15px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.pack-progress-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.pack-progress-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 84px 1fr 34px;
+}
+
+.pack-progress-row span {
+  color: #a5a5a5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pack-progress-row strong {
+  color: #eeeeee;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.pack-progress-bar {
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.pack-progress-bar span {
+  background: #5eead4;
+  display: block;
+  height: 100%;
+}
+
+.pack-recommendation {
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+}
+
+.pack-recommendation span:first-child {
+  color: #858585;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pack-recommendation strong {
+  color: #f1f1f1;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.pack-recommendation span:last-child {
+  color: #a5a5a5;
+  font-size: 12px;
+}
+
+.pack-preview-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pack-preview-item {
+  align-items: center;
+  background: #1d1d1d;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 9px 11px;
+}
+
+.pack-preview-question {
+  color: #eeeeee;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pack-preview-answer-toggle {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 999px;
+  color: #5eead4;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+}
+
+.pack-preview-answer-toggle:hover {
+  border-color: #5eead4;
+}
+
+.pack-preview-more {
+  color: #858585;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .pack-export-panel form {
   display: grid;
   gap: 8px;

@@ -203,6 +203,13 @@ export function backfillPackInstalls() {
 }
 
 
+export function fetchPackPreview(packGuid, downloadUrl) {
+  const query = new URLSearchParams({ download_url: downloadUrl || "" });
+
+  return requestJson(`/packs/catalog/${packGuid}/preview?${query.toString()}`);
+}
+
+
 export function getMyPackStatus(packGuid) {
   return requestJson(`/packs/catalog/${packGuid}/my-status`);
 }

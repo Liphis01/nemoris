@@ -25,10 +25,13 @@ from .packs import (
     export_pack,
     export_playlist_pack
 )
-from .settings import get_pack_catalog_settings
+from .settings import INTAKE_SECONDS_PER_QUESTION, get_pack_catalog_settings
 from .tag_hierarchy import (
     CORE_ROOT_IDS,
+    CORE_ROOTS,
+    DEFAULT_LOCALE,
     ancestors,
+    comparison_key,
     ensure_stored_tag_ids,
     label_for_tag,
     load_tag_hierarchy,
@@ -56,6 +59,10 @@ MAX_LIMIT = 60
 HEALTH_SAMPLE_LIMIT = 3
 PUBLISH_TIMEOUT = 12
 PUBLISH_TRANSFER_TIMEOUT = 60
+PREVIEW_SAMPLE_LIMIT = 6
+PREVIEW_FETCH_TIMEOUT = 15
+PREVIEW_MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
+PREVIEW_TEXT_LIMIT = 160
 
 
 class PackCatalogError(ValueError):
@@ -408,6 +415,36 @@ def _public_storage_url(project_url, storage_path):
     )
 
 
+def _dedupe_theme_values(values):
+    seen = set()
+    deduped = []
+
+    for raw in values or []:
+        label = _canonical_theme_label(raw)
+        key = comparison_key(label)
+
+        if not key or key in seen:
+            continue
+
+        seen.add(key)
+        deduped.append(label)
+
+    return deduped
+
+
+def _estimated_minutes(question_count):
+    count = _int_or_none(question_count)
+
+    if not count or count <= 0:
+        return None
+
+    # Same flat per-question estimate used to label intake pace tiers
+    # (settings.pace_tier_options) -- a rough figure for a curriculum
+    # overview, not a measurement, so it deliberately does not vary by
+    # question type.
+    return max(1, round(count * INTAKE_SECONDS_PER_QUESTION / 60))
+
+
 def _normalize_pack(row, project_url):
     if not isinstance(row, dict):
         return None
@@ -422,7 +459,7 @@ def _normalize_pack(row, project_url):
         "size_bytes": row.get("size_bytes"),
         "license": str(row.get("license") or ""),
         "tags": row.get("tags") if isinstance(row.get("tags"), list) else [],
-        "themes": row.get("themes") if isinstance(row.get("themes"), list) else [],
+        "themes": _dedupe_theme_values(row.get("themes")),
         "download_count": row.get("download_count"),
         "featured": bool(row.get("featured")),
         "is_mine": bool(row.get("is_mine")),
@@ -430,7 +467,8 @@ def _normalize_pack(row, project_url):
         "updated_at": row.get("updated_at"),
         "avg_rating": _float_or_none(row.get("avg_rating")),
         "rating_count": _int_or_none(row.get("rating_count")) or 0,
-        "comment_count": _int_or_none(row.get("comment_count")) or 0
+        "comment_count": _int_or_none(row.get("comment_count")) or 0,
+        "estimated_minutes": _estimated_minutes(row.get("question_count"))
     }
     entry["download_url"] = (
         str(row.get("download_url") or "").strip()
@@ -447,12 +485,35 @@ def _theme_label(value):
     return str(value or "").replace("-", " ").strip().capitalize()
 
 
+# Root theme labels as seeded (CORE_ROOTS -> {tag_id: {"fr": label}}), keyed by
+# accent/case-folded comparison so any stored variant ("Geographie",
+# "géographie", "GÉOGRAPHIE") resolves to the one true canonical form. This is
+# the seed label, not a user's possibly-edited live tag_hierarchy label -- two
+# accounts publishing under the same theme must land on the same string
+# regardless of how either one's local hierarchy renamed that root.
+_CANONICAL_THEME_LABELS_BY_KEY = {
+    comparison_key(labels.get(DEFAULT_LOCALE) or ""): labels.get(DEFAULT_LOCALE)
+    for labels in CORE_ROOTS.values()
+    if labels.get(DEFAULT_LOCALE)
+}
+
+
+def _canonical_theme_label(value):
+    """Fold a raw theme string onto its canonical seed label when known.
+
+    Falls back to the ad hoc capitalize() for themes with no core-root match
+    (free-form catalog themes are not required to be seed roots).
+    """
+    key = comparison_key(value)
+    return _CANONICAL_THEME_LABELS_BY_KEY.get(key) or _theme_label(value)
+
+
 def _normalize_theme(raw):
     if isinstance(raw, str):
         value = raw.strip()
         return {
             "value": value,
-            "label": _theme_label(value),
+            "label": _canonical_theme_label(value),
             "result_count": None,
             "download_count": 0,
             "featured": False,
@@ -479,7 +540,7 @@ def _normalize_theme(raw):
 
     return {
         "value": value,
-        "label": str(raw.get("label") or _theme_label(value)),
+        "label": _canonical_theme_label(raw.get("label") or value),
         "result_count": _int_or_none(result_count),
         "download_count": _int_or_none(download_count) or 0,
         "featured": bool(raw.get("featured")),
@@ -496,9 +557,45 @@ def _theme_score(theme):
     )
 
 
+def _merge_theme_rows(themes):
+    """Collapse accent/case variants of the same theme into one facet tile.
+
+    Two accounts can each publish under a differently-accented spelling of the
+    same root ("Geographie" vs "Géographie") since the live tag_hierarchy
+    label a publish reads from is per-user-editable. The counts still need
+    summing so the merged tile's number matches what filtering by it returns.
+    """
+    merged = {}
+    order = []
+
+    for raw in themes:
+        theme = _normalize_theme(raw)
+
+        if not theme:
+            continue
+
+        key = comparison_key(theme["label"]) or comparison_key(theme["value"])
+        existing = merged.get(key)
+
+        if existing is None:
+            merged[key] = dict(theme)
+            order.append(key)
+            continue
+
+        existing["result_count"] = (
+            (existing["result_count"] or 0) + (theme["result_count"] or 0)
+        )
+        existing["download_count"] = (
+            (existing["download_count"] or 0) + (theme["download_count"] or 0)
+        )
+        existing["featured"] = existing["featured"] or theme["featured"]
+        existing["pinned"] = existing["pinned"] or theme["pinned"]
+
+    return [merged[key] for key in order]
+
+
 def _ordered_themes(themes, total, global_total=None):
-    normalized = []
-    seen = set()
+    normalized = _merge_theme_rows(themes)
     popular_count = _int_or_none(global_total)
 
     if popular_count is None:
@@ -506,15 +603,6 @@ def _ordered_themes(themes, total, global_total=None):
 
     if popular_count is None:
         popular_count = 0
-
-    for raw in themes:
-        theme = _normalize_theme(raw)
-
-        if not theme or theme["value"] in seen:
-            continue
-
-        seen.add(theme["value"])
-        normalized.append(theme)
 
     normalized.sort(
         key=lambda theme: (
@@ -656,6 +744,95 @@ def search_pack_catalog(
             result["next_cursor"] = None
 
     return result
+
+
+def _preview_text(value, limit=PREVIEW_TEXT_LIMIT):
+    text = str(value or "").strip()
+
+    if len(text) <= limit:
+        return text
+
+    return text[:limit].rstrip() + "…"
+
+
+def _validate_catalog_storage_url(download_url):
+    """Only ever fetch back the same public bucket a search result pointed
+    at -- never an arbitrary caller-supplied URL (this endpoint is
+    account-free, same as install, so it has no auth check to lean on
+    instead)."""
+    settings = get_pack_catalog_settings()
+    project_url = normalize_supabase_url(settings.get("url"))
+
+    if not project_url:
+        raise PackCatalogError("Catalogue Supabase non configuré.")
+
+    prefix = f"{project_url}/storage/v1/object/public/{CATALOG_BUCKET}/"
+    clean = str(download_url or "").strip()
+
+    if not clean.startswith(prefix):
+        raise PackCatalogError("URL de pack invalide.")
+
+    return clean
+
+
+def fetch_pack_preview(pack_guid, download_url, *, limit=PREVIEW_SAMPLE_LIMIT):
+    """A read-only look inside a not-yet-installed pack's zip.
+
+    Reuses the same manifest/content parser as import/update, but only ever
+    reads the zip in memory -- nothing here touches the local database, so a
+    learner can preview a pack without installing it.
+    """
+    url = _validate_catalog_storage_url(download_url)
+    request = Request(url, headers={"User-Agent": "nemoris-pack-preview/1"})
+
+    try:
+        with urlopen(request, timeout=PREVIEW_FETCH_TIMEOUT) as response:
+            raw = response.read(PREVIEW_MAX_DOWNLOAD_BYTES + 1)
+    except (HTTPError, URLError, TimeoutError) as error:
+        raise PackCatalogError("Aperçu indisponible pour le moment.") from error
+
+    if len(raw) > PREVIEW_MAX_DOWNLOAD_BYTES:
+        raise PackCatalogError("Pack trop volumineux pour un aperçu.")
+
+    try:
+        with ZipFile(io.BytesIO(raw)) as zip_file:
+            _manifest, resolved_guid, version, _group_entries, question_entries = (
+                _read_manifest_and_content(zip_file)
+            )
+    except (BadZipFile, ValueError) as error:
+        raise PackCatalogError("Pack illisible pour l'aperçu.") from error
+
+    type_counts = {}
+
+    for entry in question_entries:
+        type_q = str(entry.get("type_q") or "inconnu")
+        type_counts[type_q] = type_counts.get(type_q, 0) + 1
+
+    item_types = [
+        {"type_q": type_q, "count": count}
+        for type_q, count in sorted(
+            type_counts.items(),
+            key=lambda item: (-item[1], item[0])
+        )
+    ]
+    samples = [
+        {
+            "type_q": entry.get("type_q"),
+            "question": _preview_text(entry.get("question")),
+            "answer": _preview_text(entry.get("answer"))
+        }
+        for entry in question_entries[:limit]
+    ]
+
+    return {
+        "pack_guid": resolved_guid or pack_guid,
+        "version": version,
+        "question_count": len(question_entries),
+        "item_types": item_types,
+        "samples": samples,
+        "sample_count": len(samples),
+        "truncated": len(question_entries) > len(samples)
+    }
 
 
 def check_pack_catalog_health(db):
@@ -1098,7 +1275,15 @@ def _catalog_themes_for_tags(db, tag_values):
         tag_id = resolve_tag_id(hierarchy, value)
         if tag_id:
             root_ids |= ancestors(tag_id, parents) & set(CORE_ROOT_IDS)
-    return [label_for_tag(hierarchy, tag_id) for tag_id in sorted(root_ids)]
+    # Canonicalized against the seed label, not the live hierarchy label: a
+    # user can rename a core root's display label locally (custom label
+    # override), and two authors publishing under the same root must still
+    # land on one shared theme string in the catalog, or the sidebar splits
+    # into duplicate tiles again (see _merge_theme_rows).
+    return sorted({
+        _canonical_theme_label(label_for_tag(hierarchy, tag_id))
+        for tag_id in root_ids
+    })
 
 
 def _group_publish_summary(db, group_id):

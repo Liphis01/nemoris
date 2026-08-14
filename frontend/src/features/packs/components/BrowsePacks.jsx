@@ -2,8 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import {
   getPackTypeChipStyle,
+  getQuestionTypeChipStyle,
   packTypeChipStyles
 } from "../../../shared/questionTypes";
+import { getStudySummary } from "../../../api/study";
+import { fetchPackPreview } from "../../../api/packs";
+import {
+  numberLabel,
+  questionCountLabel,
+  recommendationFor
+} from "../../study/studyRecommendation";
 import {
   POPULAR_THEME,
   useBrowsePacks
@@ -14,6 +22,14 @@ import UnplacedTagRootsDialog from "./UnplacedTagRootsDialog";
 import PublicationsManager from "./PublicationsManager";
 import { formatSize } from "./packFormatting";
 import "./BrowsePacks.css";
+
+const PROGRESS_BUCKETS = [
+  { key: "mastered", label: "Maîtrisé" },
+  { key: "stable", label: "Stable" },
+  { key: "fragile", label: "Fragile" },
+  { key: "learning", label: "Apprentissage" },
+  { key: "unseen", label: "Nouveau" }
+];
 
 const STATUS_FILTERS = [
   { value: "all", label: "Tous statuts" },
@@ -203,6 +219,224 @@ function CatalogueState({ error, loading, reload }) {
   return null;
 }
 
+function estimatedTimeLabel(minutes) {
+  const value = Number(minutes || 0);
+
+  if (!value) return null;
+
+  if (value < 60) return `~${value} min`;
+
+  const hours = Math.floor(value / 60);
+  const rest = value % 60;
+
+  return rest ? `~${hours} h ${String(rest).padStart(2, "0")}` : `~${hours} h`;
+}
+
+
+function PackChipGroup({ label, values }) {
+  if (!values || values.length === 0) return null;
+
+  return (
+    <div className="pack-detail-chip-group">
+      <span className="pack-detail-chip-label">{label}</span>
+      <div className="pack-chip-row">
+        {values.map((value) => (
+          <span className="pack-chip" key={value}>{value}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function PackPreviewPanel({ entry }) {
+  const [state, setState] = useState({ status: "idle", data: null, error: "" });
+  const [revealed, setRevealed] = useState(() => new Set());
+
+  function loadPreview() {
+    setState({ status: "loading", data: null, error: "" });
+    setRevealed(new Set());
+
+    fetchPackPreview(entry.pack_guid, entry.download_url)
+      .then((data) => setState({ status: "ready", data, error: "" }))
+      .catch((error) => {
+        setState({
+          status: "error",
+          data: null,
+          error: error.message || "Aperçu impossible."
+        });
+      });
+  }
+
+  function toggleReveal(index) {
+    setRevealed((current) => {
+      const next = new Set(current);
+
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+
+      return next;
+    });
+  }
+
+  if (state.status === "idle") {
+    return (
+      <div className="pack-preview-panel">
+        <button
+          type="button"
+          className="pack-secondary-button"
+          disabled={!entry.download_url}
+          onClick={loadPreview}
+        >
+          Voir un aperçu
+        </button>
+      </div>
+    );
+  }
+
+  const itemTypes = state.data?.item_types || [];
+
+  return (
+    <div className="pack-preview-panel">
+      <div className="pack-section-head">
+        <div>
+          <h3>Aperçu</h3>
+          {itemTypes.length > 0 && (
+            <p>
+              {itemTypes
+                .map((typeEntry) => `${getQuestionTypeChipStyle(typeEntry.type_q).label} × ${typeEntry.count}`)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {state.status === "loading" && (
+        <div className="pack-status" role="status">Chargement de l'aperçu...</div>
+      )}
+
+      {state.status === "error" && (
+        <div className="pack-alert" role="alert">{state.error}</div>
+      )}
+
+      {state.status === "ready" && (
+        <ul className="pack-preview-list">
+          {state.data.samples.map((sample, index) => (
+            <li className="pack-preview-item" key={index}>
+              <span className="pack-preview-question">{sample.question}</span>
+              <button
+                type="button"
+                className="pack-preview-answer-toggle"
+                onClick={() => toggleReveal(index)}
+              >
+                {revealed.has(index) ? sample.answer : "Révéler la réponse"}
+              </button>
+            </li>
+          ))}
+          {state.data.truncated && (
+            <li className="pack-preview-more">
+              + {numberLabel(state.data.question_count - state.data.sample_count)} autres questions
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+
+function PackProgressPanel({ entry }) {
+  const [state, setState] = useState({
+    status: "loading",
+    summary: null,
+    error: ""
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setState({ status: "loading", summary: null, error: "" });
+
+    getStudySummary({ type: "pack", packGuid: entry.pack_guid })
+      .then((summary) => {
+        if (!cancelled) setState({ status: "ready", summary, error: "" });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            summary: null,
+            error: error.message || "Progression indisponible."
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.pack_guid]);
+
+  if (state.status === "loading") {
+    return (
+      <div className="pack-progress-panel">
+        <div className="pack-status" role="status">Chargement de la progression...</div>
+      </div>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <div className="pack-progress-panel">
+        <div className="pack-alert" role="alert">{state.error}</div>
+      </div>
+    );
+  }
+
+  const summary = state.summary;
+  const counts = summary.counts || {};
+  const buckets = summary.buckets || {};
+  const total = Math.max(1, counts.active_questions || 0);
+  const recommendation = recommendationFor(summary);
+
+  return (
+    <div className="pack-progress-panel">
+      <div className="pack-section-head">
+        <div>
+          <h3>Progression installée</h3>
+          <p>{questionCountLabel(counts.total_atomic_questions)}</p>
+        </div>
+      </div>
+
+      <div className="pack-progress-bars">
+        {PROGRESS_BUCKETS.map((bucket) => {
+          const value = buckets[bucket.key] || 0;
+          const percent = Math.round((value / total) * 100);
+
+          return (
+            <div className="pack-progress-row" key={bucket.key}>
+              <span>{bucket.label}</span>
+              <div className="pack-progress-bar" aria-hidden="true">
+                <span style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }} />
+              </div>
+              <strong>{numberLabel(value)}</strong>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="pack-recommendation">
+        <span>Prochaine action</span>
+        <strong>{recommendation.title}</strong>
+        <span>{recommendation.detail}</span>
+      </div>
+    </div>
+  );
+}
+
+
 function PackDetailPanel({
   item,
   onInstall,
@@ -283,7 +517,14 @@ function PackDetailPanel({
           <span>Licence</span>
           <strong>{entry.license || "—"}</strong>
         </div>
+        <div className="pack-detail-stat">
+          <span>Temps estimé</span>
+          <strong>{estimatedTimeLabel(entry.estimated_minutes) || "—"}</strong>
+        </div>
       </div>
+
+      <PackChipGroup label="Thèmes" values={entry.themes} />
+      <PackChipGroup label="Tags" values={entry.tags} />
 
       <div className="pack-action-row">
         {status === "not_installed" && (
@@ -357,6 +598,12 @@ function PackDetailPanel({
           {action.error}
         </div>
       )}
+
+      {canOpenStudy && (
+        <PackProgressPanel entry={entry} key={`progress-${entry.pack_guid}`} />
+      )}
+
+      <PackPreviewPanel entry={entry} key={`preview-${entry.pack_guid}`} />
 
       <PackReviewsSection entry={entry} isOwner={isMine} setMode={setMode} />
     </aside>

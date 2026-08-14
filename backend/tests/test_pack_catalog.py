@@ -24,6 +24,7 @@ from app.routers.packs import (
     diagnose_pack_catalog,
     pack_comments,
     pack_my_status,
+    preview_catalog_pack,
     rate_pack_route,
     record_pack_install_route,
     search_catalog_packs,
@@ -35,7 +36,9 @@ from app.schemas import (
     PackRatingRequest
 )
 from app.services.pack_catalog import (
+    PackCatalogError,
     _annotate_publication_sources,
+    fetch_pack_preview,
     get_group_pack_publication,
     get_pack_publish_status,
     publish_group_pack_changes,
@@ -83,11 +86,14 @@ class FakeResponse:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def read(self):
-        if isinstance(self.payload, bytes):
-            return self.payload
+    def read(self, size=None):
+        raw = (
+            self.payload
+            if isinstance(self.payload, bytes)
+            else json.dumps(self.payload).encode("utf-8")
+        )
 
-        return json.dumps(self.payload).encode("utf-8")
+        return raw if size is None else raw[:size]
 
 
 class PackCatalogSearchTests(unittest.TestCase):
@@ -246,6 +252,82 @@ class PackCatalogSearchTests(unittest.TestCase):
             [theme["value"] for theme in result["facets"]["themes"][1:]],
             ["géographie", "histoire", "maths"]
         )
+
+    def test_search_merges_accent_and_case_theme_variants(self):
+        # Two authors' local tag_hierarchy can each carry a differently
+        # accented/cased label for the same core root, so the catalog can
+        # legitimately hold both "Geographie" and "géographie" across
+        # different packs. The sidebar must show one merged tile, not two,
+        # with the counts summed so its number matches the packs that
+        # filtering by it returns.
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse({
+                "packs": [],
+                "facets": {
+                    "global_total": 7,
+                    "themes": [
+                        {
+                            "value": "Geographie",
+                            "result_count": 3,
+                            "download_count": 50
+                        },
+                        {
+                            "value": "géographie",
+                            "result_count": 4,
+                            "download_count": 900,
+                            "featured": True
+                        }
+                    ]
+                },
+                "total": 7,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = search_catalog_packs(q="atlas", db=db)
+
+        themes = result["facets"]["themes"][1:]
+        self.assertEqual(len(themes), 1)
+        self.assertEqual(themes[0]["label"], "Géographie")
+        self.assertEqual(themes[0]["result_count"], 7)
+        self.assertEqual(themes[0]["download_count"], 950)
+        self.assertTrue(themes[0]["featured"])
+
+    def test_search_dedupes_and_canonicalizes_pack_theme_list(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse({
+                "packs": [{
+                    "pack_guid": "world-map",
+                    "name": "Pays du monde",
+                    "type_group": "map",
+                    "question_count": 120,
+                    "themes": ["geographie", "Géographie", "Histoire"]
+                }],
+                "facets": {"themes": []},
+                "total": 1,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = search_catalog_packs(q="monde", db=db)
+
+        entry = result["packs"][0]
+        self.assertEqual(entry["themes"], ["Géographie", "Histoire"])
+        # Flat heuristic shared with the intake pace-tier estimate
+        # (settings.INTAKE_SECONDS_PER_QUESTION): 120 * 15s / 60 = 30.
+        self.assertEqual(entry["estimated_minutes"], 30)
 
     def test_popular_theme_switches_to_popular_sort(self):
         db = make_db()
@@ -1728,6 +1810,127 @@ class PackCatalogRatingTests(PackCatalogAuthTestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 401)
+
+
+class PackPreviewTests(unittest.TestCase):
+    """fetch_pack_preview reads a not-yet-installed pack's zip in memory."""
+
+    def setUp(self):
+        self.db = make_db()
+        use_catalog(
+            self,
+            url="https://project.supabase.co/rest/v1",
+            key="sb_publishable_test"
+        )
+        self.static_dir = Path(tempfile.mkdtemp())
+        self.pack_dir = Path(tempfile.mkdtemp())
+
+    def build_zip_bytes(self, question_count=3):
+        group = QuestionGroup(type_group="text", name="Capitales")
+        self.db.add(group)
+        self.db.flush()
+        questions = [
+            Question(
+                type_q="text",
+                question=f"Q{index}",
+                answer=f"A{index}",
+                tags=[],
+                group_id=group.id
+            )
+            for index in range(question_count)
+        ]
+        self.db.add_all(questions)
+        self.db.commit()
+
+        zip_path = export_pack(
+            self.db,
+            group.id,
+            version=1,
+            name="Capitales",
+            description="desc",
+            static_dir=self.static_dir,
+            pack_dir=self.pack_dir
+        )
+
+        return group.guid, zip_path.read_bytes()
+
+    def download_url(self):
+        return (
+            "https://project.supabase.co/storage/v1/object/public/"
+            "pack-zips/capitales.zip"
+        )
+
+    def test_returns_item_types_and_samples_without_touching_the_db(self):
+        pack_guid, zip_bytes = self.build_zip_bytes()
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse(zip_bytes)
+
+        with mock.patch("app.services.pack_catalog.urlopen", fake_urlopen):
+            preview = fetch_pack_preview(pack_guid, self.download_url())
+
+        self.assertEqual(preview["pack_guid"], pack_guid)
+        self.assertEqual(preview["question_count"], 3)
+        self.assertEqual(
+            preview["item_types"],
+            [{"type_q": "text", "count": 3}]
+        )
+        self.assertEqual(preview["sample_count"], 3)
+        self.assertFalse(preview["truncated"])
+        self.assertEqual(
+            [item["question"] for item in preview["samples"]],
+            ["Q0", "Q1", "Q2"]
+        )
+        # Nothing was imported: no group/question exists beyond the one this
+        # test itself created to build the fixture zip.
+        self.assertEqual(
+            self.db.query(QuestionGroup).count(), 1
+        )
+
+    def test_truncates_samples_past_the_preview_limit(self):
+        pack_guid, zip_bytes = self.build_zip_bytes(question_count=9)
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse(zip_bytes)
+
+        with mock.patch("app.services.pack_catalog.urlopen", fake_urlopen):
+            preview = fetch_pack_preview(pack_guid, self.download_url(), limit=4)
+
+        self.assertEqual(preview["question_count"], 9)
+        self.assertEqual(preview["sample_count"], 4)
+        self.assertTrue(preview["truncated"])
+
+    def test_rejects_a_url_outside_the_catalog_bucket(self):
+        with self.assertRaises(PackCatalogError):
+            fetch_pack_preview("guid", "https://evil.example.com/pack.zip")
+
+    def test_rejects_an_oversized_download(self):
+        _pack_guid, zip_bytes = self.build_zip_bytes()
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse(zip_bytes)
+
+        with mock.patch("app.services.pack_catalog.urlopen", fake_urlopen), \
+                mock.patch(
+                    "app.services.pack_catalog.PREVIEW_MAX_DOWNLOAD_BYTES",
+                    len(zip_bytes) - 1
+                ):
+            with self.assertRaises(PackCatalogError):
+                fetch_pack_preview("guid", self.download_url())
+
+    def test_rejects_a_corrupt_zip(self):
+        def fake_urlopen(request, timeout):
+            return FakeResponse(b"not a zip")
+
+        with mock.patch("app.services.pack_catalog.urlopen", fake_urlopen):
+            with self.assertRaises(PackCatalogError):
+                fetch_pack_preview("guid", self.download_url())
+
+    def test_router_wraps_preview_error_as_bad_request(self):
+        with self.assertRaises(HTTPException) as context:
+            preview_catalog_pack("guid", "https://evil.example.com/pack.zip")
+
+        self.assertEqual(context.exception.status_code, 400)
 
 
 class PublicationSourceTests(unittest.TestCase):

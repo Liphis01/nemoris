@@ -19,6 +19,7 @@ from ..services.pack_catalog import (
     backfill_pack_installs,
     check_pack_catalog_health,
     delete_pack_publication,
+    fetch_pack_preview,
     get_group_pack_publication,
     get_my_pack_status,
     get_pack_publish_status,
@@ -169,6 +170,19 @@ def search_catalog_packs(
             limit=limit,
             cursor=cursor
         )
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/packs/catalog/{pack_guid}/preview")
+def preview_catalog_pack(
+    pack_guid: str,
+    download_url: str = ""
+):
+    # Account-free, same as search/install: previewing what a pack contains
+    # is part of deciding whether to install it, not an authored action.
+    try:
+        return fetch_pack_preview(pack_guid, download_url)
     except PackCatalogError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

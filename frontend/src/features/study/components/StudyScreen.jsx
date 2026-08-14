@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { getStudySummary } from "../../../api/study";
+import {
+  numberLabel,
+  questionCountLabel,
+  recommendationFor
+} from "../studyRecommendation";
 import SvgMap from "../../map/components/SvgMap";
 import { formatDuration, formatRecordPercent } from "../../training/trainingRecordUtils";
 import { mapModeLabels } from "../../review/mapModes";
@@ -73,18 +78,6 @@ function stableScopeKey(scope) {
     scope.tag || scope.key || scope.id || "",
     scope.id || ""
   ].join(":");
-}
-
-
-function numberLabel(value) {
-  return Number(value || 0).toLocaleString("fr-FR");
-}
-
-
-function questionCountLabel(count) {
-  const value = Number(count || 0);
-
-  return `${numberLabel(value)} question${value > 1 ? "s" : ""}`;
 }
 
 
@@ -341,50 +334,6 @@ function relatedLearnItems(items, activeIndex) {
     .map(offset => items[activeIndex + offset])
     .filter(item => item?.answer)
     .slice(0, 4);
-}
-
-
-function recommendationFor(summary) {
-  const counts = summary?.counts || {};
-  const buckets = summary?.buckets || {};
-
-  if ((summary?.recent_misses?.item_count || 0) > 0) {
-    return {
-      title: "Reprendre les erreurs récentes",
-      detail: `${numberLabel(summary.recent_misses.item_count)} item${summary.recent_misses.item_count > 1 ? "s" : ""} à stabiliser`,
-      targetTab: "weak"
-    };
-  }
-
-  if ((summary?.confusions?.event_count || 0) > 0) {
-    return {
-      title: "Clarifier les confusions",
-      detail: `${numberLabel(summary.confusions.event_count)} confusion${summary.confusions.event_count > 1 ? "s" : ""} récente${summary.confusions.event_count > 1 ? "s" : ""}`,
-      targetTab: "weak"
-    };
-  }
-
-  if ((counts.due_now || 0) > 0) {
-    return {
-      title: "Faire la review due",
-      detail: questionCountLabel(counts.due_now),
-      mode: "quiz"
-    };
-  }
-
-  if ((buckets.unseen || 0) > 0) {
-    return {
-      title: "Apprendre les nouveaux items",
-      detail: questionCountLabel(buckets.unseen),
-      targetTab: "learn"
-    };
-  }
-
-  return {
-    title: "Entretenir ce scope",
-    detail: questionCountLabel(counts.active_questions || 0),
-    targetTab: "train"
-  };
 }
 
 

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addPackComment,
   backfillPackInstalls,
+  fetchPackPreview,
   getMyPackStatus,
   getPackPublishStatus,
   listPackComments,
@@ -25,6 +26,7 @@ import {
   unpublishPack,
   verifyPackPublishCode
 } from "../../../api/packs";
+import { getStudySummary } from "../../../api/study";
 import { listGroups } from "../../../api/groups";
 import { listCollections } from "../../../api/collections";
 import {
@@ -49,6 +51,7 @@ vi.mock("../../../api/collections", () => ({
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
   backfillPackInstalls: vi.fn(),
+  fetchPackPreview: vi.fn(),
   getMyPackStatus: vi.fn(),
   getPackPublishStatus: vi.fn(),
   listPackComments: vi.fn(),
@@ -62,6 +65,10 @@ vi.mock("../../../api/packs", () => ({
   signOutPackPublisher: vi.fn(),
   unpublishPack: vi.fn(),
   verifyPackPublishCode: vi.fn()
+}));
+
+vi.mock("../../../api/study", () => ({
+  getStudySummary: vi.fn()
 }));
 
 const mapEntry = {
@@ -196,6 +203,23 @@ describe("BrowsePacks", () => {
     unpublishPack.mockResolvedValue({
       status: "unpublished",
       publication: { pack_guid: "group-guid", publication_status: "archived" }
+    });
+    getStudySummary.mockResolvedValue({
+      scope: { type: "pack" },
+      counts: { total_atomic_questions: 48, active_questions: 48, due_now: 0 },
+      buckets: { unseen: 48, learning: 0, fragile: 0, stable: 0, mastered: 0 },
+      recent_misses: { item_count: 0 },
+      confusions: { event_count: 0 }
+    });
+    fetchPackPreview.mockResolvedValue({
+      pack_guid: "biology-text",
+      question_count: 48,
+      item_types: [{ type_q: "text", count: 48 }],
+      samples: [
+        { type_q: "text", question: "Mitochondrie", answer: "Organite" }
+      ],
+      sample_count: 1,
+      truncated: true
     });
   });
 
@@ -381,6 +405,96 @@ describe("BrowsePacks", () => {
       packGuid: "biology-text",
       name: "Biologie cellulaire"
     });
+  });
+
+  it("shows tags, themes, and an estimated time for the selected pack", () => {
+    defaultHook({
+      items: [
+        item(
+          { ...mapEntry, tags: ["europe"], themes: ["Géographie"], estimated_minutes: 63 },
+          "not_installed"
+        )
+      ],
+      total: 1,
+      hasMore: false
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    const detail = within(
+      screen.getByRole("complementary", { name: "Détail du pack" })
+    );
+
+    expect(detail.getByText("Géographie")).toBeInTheDocument();
+    expect(detail.getByText("europe")).toBeInTheDocument();
+    expect(detail.getByText("~1 h 03")).toBeInTheDocument();
+  });
+
+  it("loads and reveals a preview for the selected pack", async () => {
+    defaultHook({
+      items: [item(mapEntry, "not_installed")],
+      total: 1,
+      hasMore: false
+    });
+    fetchPackPreview.mockResolvedValue({
+      pack_guid: "world-map",
+      question_count: 252,
+      item_types: [{ type_q: "map", count: 252 }],
+      samples: [{ type_q: "map", question: "France", answer: "Paris" }],
+      sample_count: 1,
+      truncated: true
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Voir un aperçu" }));
+
+    expect(fetchPackPreview).toHaveBeenCalledWith(
+      "world-map",
+      mapEntry.download_url
+    );
+    expect(await screen.findByText("France")).toBeInTheDocument();
+    expect(screen.queryByText("Paris")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+
+    expect(screen.getByText("Paris")).toBeInTheDocument();
+  });
+
+  it("shows the installed pack's mastery progress and recommended action", async () => {
+    getStudySummary.mockResolvedValue({
+      scope: { type: "pack" },
+      counts: { total_atomic_questions: 48, active_questions: 48, due_now: 5 },
+      buckets: { unseen: 0, learning: 2, fragile: 1, stable: 10, mastered: 35 },
+      recent_misses: { item_count: 0 },
+      confusions: { event_count: 0 }
+    });
+    defaultHook({
+      items: [item(textEntry, "up_to_date", 1)],
+      total: 1,
+      hasMore: false
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} onOpenStudy={vi.fn()} />);
+
+    expect(getStudySummary).toHaveBeenCalledWith({
+      type: "pack",
+      packGuid: "biology-text"
+    });
+    expect(await screen.findByText("Maîtrisé")).toBeInTheDocument();
+    expect(screen.getByText("Faire la review due")).toBeInTheDocument();
+  });
+
+  it("does not fetch a progress summary for a not-installed pack", () => {
+    defaultHook({
+      items: [item(mapEntry, "not_installed")],
+      total: 1,
+      hasMore: false
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    expect(getStudySummary).not.toHaveBeenCalled();
   });
 
   it("publishes a group in a single click, with no draft step", async () => {
