@@ -147,6 +147,16 @@ export default function TextGroupReview({
   const allResolved = isMatch
     ? matchedIds.size >= items.length
     : foundIds.size >= items.length;
+  // Same M0 trust rule as the map and media groups: a generic completion
+  // button must not be able to fail every item at once before the learner has
+  // touched anything. Any recorded attempt counts, right or wrong --
+  // answersByQuestionId is written both on a typed guess and on a first match
+  // pick, so a wrong-but-real attempt still unlocks Terminer.
+  const canFinishAnswering = items.length > 0 && (
+    Object.keys(answersByQuestionId).length > 0 ||
+    foundIds.size > 0 ||
+    matchedIds.size > 0
+  );
 
   function finishAnswering() {
     const nextQualities = {};
@@ -744,12 +754,19 @@ export default function TextGroupReview({
       <div>
         <button
           type="button"
+          aria-label="Terminer le groupe"
+          disabled={!canFinishAnswering}
           onClick={finishAnswering}
+          title={canFinishAnswering
+            ? "Voir le récapitulatif"
+            : "Réponds à au moins un élément avant de terminer"}
           style={{
             ...buttonStyle,
             background: "#1e3a5f",
             border: "1px solid #345b7a",
-            color: "#dbeafe"
+            color: "#dbeafe",
+            cursor: canFinishAnswering ? "pointer" : "not-allowed",
+            opacity: canFinishAnswering ? 1 : 0.55
           }}
         >
           Terminer

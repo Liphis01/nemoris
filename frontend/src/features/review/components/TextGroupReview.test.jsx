@@ -49,3 +49,81 @@ describe("TextGroupReview reverse mode", () => {
     expect(onComplete).toHaveBeenCalledWith([]);
   });
 });
+
+
+describe("TextGroupReview completion guard", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  function renderGroup(submitAnswer) {
+    return render(
+      <TextGroupReview
+        group={{ type_group: "text" }}
+        reviewItems={[
+          {
+            question_id: 1,
+            question: "chat",
+            answer: "cat",
+            answer_policy: { preset: "relaxed" },
+            progress: {}
+          },
+          {
+            question_id: 2,
+            question: "chien",
+            answer: "dog",
+            answer_policy: { preset: "relaxed" },
+            progress: {}
+          }
+        ]}
+        mode="type_all"
+        showQualityControls={false}
+        submitAnswer={submitAnswer}
+        onComplete={vi.fn()}
+      />
+    );
+  }
+
+  // M0 trust breaker: pressing a generic completion button before touching
+  // anything used to grade every item in the group as a failure at once.
+  it("blocks Terminer until the learner has attempted something", () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    renderGroup(submitAnswer);
+
+    const finish = screen.getByRole("button", { name: "Terminer le groupe" });
+
+    expect(finish).toBeDisabled();
+
+    fireEvent.click(finish);
+
+    expect(submitAnswer).not.toHaveBeenCalled();
+  });
+
+  it("enables Terminer after a wrong attempt, not only a correct one", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    renderGroup(submitAnswer);
+
+    const input = screen.getAllByPlaceholderText("Réponse…")[0];
+    fireEvent.change(input, { target: { value: "totalement faux" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const finish = screen.getByRole("button", { name: "Terminer le groupe" });
+
+    await waitFor(() => expect(finish).toBeEnabled());
+
+    fireEvent.click(finish);
+
+    // The wrong attempt is still graded 0 -- the guard only stops an
+    // interaction-free submit, it never rescues a real miss.
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { 1: 0, 2: 0 },
+        "type_all",
+        expect.anything(),
+        { 1: "totalement faux" },
+        expect.anything()
+      );
+    });
+  });
+});
