@@ -77,6 +77,26 @@ export default function useInspectorEditorMode({
     setGroupDraft(emptyGroupDraft(type_group));
   }, [setGroupDraft]);
 
+  const selectCreationIntent = useCallback((intent) => {
+    if (intent?.kind === "group") {
+      setGroupDraft(emptyGroupDraft(intent.value));
+      setIsCreatingGroup(true);
+      setIsCreatingQuestion(false);
+      return;
+    }
+
+    setQuestionDraft((prev) => (
+      prepareQuestionDraftForType(prev, intent?.value || "text")
+    ));
+    setIsCreatingQuestion(true);
+    setIsCreatingGroup(false);
+  }, [
+    setGroupDraft,
+    setIsCreatingGroup,
+    setIsCreatingQuestion,
+    setQuestionDraft
+  ]);
+
   const createCurrentQuestion = useCallback(async (submittedDraft) => {
     await createQuestion(submittedDraft || questionDraft);
     setIsCreatingQuestion(false);
@@ -93,6 +113,7 @@ export default function useInspectorEditorMode({
     cancelCreateQuestion,
     createCurrentQuestion,
     mode,
+    selectCreationIntent,
     selectGroupCreationType,
     selectQuestionCreationType
   };

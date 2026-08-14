@@ -67,5 +67,5 @@ export function sortableOrderValue(item, kind) {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  return Number.isFinite(value?.year) ? value.year : null;
+  return Number.isFinite(value?.year) && Number(value.year) !== 0 ? value.year : null;
 }

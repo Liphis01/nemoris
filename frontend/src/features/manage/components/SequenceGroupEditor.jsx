@@ -368,6 +368,18 @@ export default function SequenceGroupEditor({
       })
       .map(entry => entry.item);
   }, [isDerived, items, order.kind]);
+  const invalidDerivedOrderRows = useMemo(() => (
+    isDerived
+      ? displayItems
+        .map((item, index) => (
+          sortableOrderValue(item, order.kind) === null ? index + 1 : null
+        ))
+        .filter(Boolean)
+      : []
+  ), [displayItems, isDerived, order.kind]);
+  const orderValidationError = invalidDerivedOrderRows.length
+    ? `Valeur d'ordre manquante ou invalide : ligne${invalidDerivedOrderRows.length > 1 ? "s" : ""} ${invalidDerivedOrderRows.join(", ")}.`
+    : "";
 
   useEffect(() => {
     currentGroupRef.current = group;
@@ -603,6 +615,14 @@ export default function SequenceGroupEditor({
       return { saved: false };
     }
 
+    if (orderValidationError) {
+      setSaveStatus(orderValidationError);
+      if (!autosave) {
+        alert(orderValidationError);
+      }
+      return { saved: false };
+    }
+
     // The group may not exist server-side yet: it is created at the first save
     // that has something worth keeping, so backing out of a mis-click leaves no
     // row behind.
@@ -746,14 +766,14 @@ export default function SequenceGroupEditor({
             <button
               type="button"
               onClick={() => saveSequenceItems()}
-              disabled={!hasUnsavedChanges}
+              disabled={!hasUnsavedChanges || Boolean(orderValidationError)}
               style={
-                hasUnsavedChanges
+                hasUnsavedChanges && !orderValidationError
                   ? { ...pendingSaveButtonStyle, ...compactHeaderButtonStyle }
                   : { ...disabledSaveButtonStyle, ...compactHeaderButtonStyle }
               }
             >
-              {hasUnsavedChanges && <span aria-hidden="true" style={pendingSaveDotStyle} />}
+              {hasUnsavedChanges && !orderValidationError && <span aria-hidden="true" style={pendingSaveDotStyle} />}
               Enregistrer
             </button>
           </div>
@@ -814,6 +834,9 @@ export default function SequenceGroupEditor({
           {saveStatus && (
             <span style={{ color: "#888", fontSize: "13px" }}>{saveStatus}</span>
           )}
+          {orderValidationError && (
+            <span style={{ color: "#ffb68a", fontSize: "13px" }}>{orderValidationError}</span>
+          )}
         </div>
 
         {orderOpen && (
@@ -853,8 +876,8 @@ export default function SequenceGroupEditor({
                 </select>
 
                 <span style={{ color: "#888", fontSize: "12px" }}>
-                  Le rang est recalculé à l'enregistrement. Les éléments sans
-                  valeur passent à la fin.
+                  Le rang est recalculé à l'enregistrement. Toutes les lignes
+                  doivent avoir une valeur valide.
                 </span>
               </>
             )}

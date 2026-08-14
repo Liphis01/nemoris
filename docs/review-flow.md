@@ -13,13 +13,17 @@ question. Review filtering is not a main `/review` responsibility anymore.
 queue. Every runtime object keeps its legacy `type_q` and also carries an
 additive `presentation_kind` discriminator:
 
-- `single_card`: one text/media question item.
+- `single_card`: one standalone card, including text, media, numeric, and
+  enumeration.
 - `map_group`: one runtime group per due map group, with only due zone questions in
   `items`.
 - `media_group`: one runtime group per due media group.
 - `text_group`: one runtime group per due text association group.
 - `timeline_group`: one runtime timeline screen containing due timeline items.
 - `sequence_group`: one runtime group per due sequence group.
+- `cloze_blank`: one generated cloze card in its authored note context.
+- `grid_cell` / `grid_row`: one generated grid cell or row-constrained subset.
+- `set_group`: one due-only membership-set collector.
 
 Runtime grouped objects are response shapes only. They are never stored as
 questions and never own progress.
@@ -63,6 +67,11 @@ Media, text and sequence groups follow the same runtime-group convention:
 identifies the screen shape, and `items` holds independently scheduled cards.
 Sequence groups additionally include their served `rail` or `recitation`
 presentation context.
+
+Cloze, grid and set groups are authored as groups but reviewed through generated
+atomic cards. The frontend renders the group context returned by the backend and
+submits raw answers for server grading; progress still belongs to the generated
+question rows.
 
 Timeline groups use:
 
@@ -142,6 +151,17 @@ Qualities are `0 = Again/Faux`, `1 = Hard/Dur`, `2 = Good/Bon`, and
 `3 = Easy/Facile`. Missing progress rows are created lazily before scheduling
 is applied.
 
+Server-graded types preview correction before scheduling. A backend hit accepts
+only `1`, `2`, or `3`; a backend miss accepts `0` or, where supported, `1` as a
+close/hard miss. A close miss is never upgraded to full success. History
+metadata records `backend_matched`, `user_marked_close`, `raw_quality`, and
+`effective_quality`.
+
+Set review hides the due count before submission. After preview it reports due
+hits, valid non-due hits, unmatched answers, and missed due items. Enumeration
+deduplicates answers with the backend relaxed normalization and reports matched,
+duplicate, unmatched, and missing-count feedback.
+
 Every scheduling-moving grouped/timeline/sequence answer writes legacy flat
 history keys plus a nested `answer_event` snapshot with raw response, resolved
 id when available, expected value, type, `presentation_kind`, mode, direction,
@@ -162,8 +182,16 @@ Failures are requeued inside the current session:
 - failed text cards are appended as the same item,
 - failed map zones are wrapped back into the same map runtime shape,
 - failed timeline items are wrapped back into the same timeline runtime shape.
-- failed media, text-group, and sequence items are likewise requeued in their
-  served runtime presentation.
+- failed media, text-group, sequence, cloze, set and enumeration items are
+  likewise requeued in their served runtime presentation.
+- if separate chunks from the same group fail, relearning retries coalesce by
+  presentation kind, group and mode where safe. Grid retries preserve their
+  row/cell presentation constraints.
+
+Android sync receives numeric, cloze, grid, set, and enumeration cards, but
+mobile review currently selects only supported text/media-style cards. Mobile
+status should show the count of synced desktop-only cards so they do not look
+lost.
 
 Global review shortcuts must not leak into map, timeline, input, textarea,
 select, or contenteditable targets.

@@ -11,6 +11,7 @@ from .sequence_order import (
     SEQUENCE_ORDER_VALUE_KEY,
     derive_sequence_positions,
     merge_sequence_order,
+    order_sort_value,
     sequence_order_settings
 )
 from .sequence_modes import merge_sequence_review_goal
@@ -213,6 +214,18 @@ def save_sequence_group_items(db, group_id: int, payload):
                 stored = existing_by_id.get(item_payload.id) if item_payload.id else None
 
                 return (stored.data or {}).get(SEQUENCE_ORDER_VALUE_KEY) if stored else None
+
+            invalid_order_rows = [
+                index + 1
+                for index, item_payload in enumerate(payload.items)
+                if order_sort_value(order_value_for(index, item_payload), order["kind"]) is None
+            ]
+
+            if invalid_order_rows:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Valeur d'ordre manquante ou invalide pour les lignes {invalid_order_rows}."
+                )
 
             derived_positions = derive_sequence_positions(
                 [

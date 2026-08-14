@@ -69,6 +69,7 @@ export default function NumericQuestionEditor({
   const numeric = value.data.numeric;
   const zero = isZero(numeric.value);
   const validationError = numericValidationError(numeric);
+  const isCreate = submitLabel === "Créer";
 
   useEffect(() => setTagInput(value._pendingTagInput || ""), [value._pendingTagInput]);
 
@@ -108,6 +109,19 @@ export default function NumericQuestionEditor({
         </div>
         <QuestionEditorField label="Décimales affichées"><input aria-label="Précision affichée" type="number" min="0" max="12" value={numeric.display_precision} onChange={(event) => setNumeric("display_precision", event.target.value)} style={inputStyle} /></QuestionEditorField>
         {zero ? <QuestionEditorField label="Tolérance absolue obligatoire"><input aria-label="Tolérance absolue" value={numeric.zero_absolute_tolerance} onChange={(event) => setNumeric("zero_absolute_tolerance", event.target.value)} placeholder="ex. 0,1" style={inputStyle} /></QuestionEditorField> : <QuestionEditorField label="Tolérance relative"><div style={{ alignItems: "center", display: "flex", gap: "8px" }}><input aria-label="Tolérance relative" type="number" min="0" max="100" step="0.1" value={Number(numeric.relative_tolerance || 0.1) * 100} onChange={(event) => setNumeric("relative_tolerance", String(Number(event.target.value) / 100))} style={inputStyle} /><span style={{ color: "#bbb" }}>%</span></div></QuestionEditorField>}
+        {!isCreate && (
+          <QuestionEditorField label="Type de modification">
+            <select
+              aria-label="Type de modification"
+              value={value.edit_policy || "replace_progress"}
+              onChange={(event) => commit({ ...value, edit_policy: event.target.value })}
+              style={inputStyle}
+            >
+              <option value="replace_progress">Changer le fait appris</option>
+              <option value="preserve_progress">Corriger une faute</option>
+            </select>
+          </QuestionEditorField>
+        )}
         {preview && <div style={{ background: "#211a11", borderRadius: "9px", color: "#f2d09b", padding: "10px 12px" }}>Affichage : {preview}</div>}
         {validationError && <div role="alert" style={{ color: "#ff9e9e" }}>{validationError}</div>}
       </EditorSection>

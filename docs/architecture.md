@@ -4,7 +4,8 @@
 
 Quiz App is a personal knowledge and review tool. It should feel closer to a
 fast knowledge workspace than a CRUD admin panel: quick review, quick editing,
-visual inspection, and grouped learning for maps and timelines.
+visual inspection, and grouped learning for maps, timelines, generated notes,
+grids, sets, and sequences.
 
 ## Repository Shape
 
@@ -26,7 +27,7 @@ Core fields:
 | --- | --- |
 | `question` | Prompt/title shown in Manage and review |
 | `answer` | Expected answer or display label |
-| `type_q` | `text`, `map`, `timeline`, `media`, or `sequence` |
+| `type_q` | `text`, `map`, `timeline`, `media`, `sequence`, `numeric`, `cloze`, `grid`, `set`, or `enumeration` |
 | `media` | Image, SVG, audio, or video path |
 | `tags` | Lightweight filters |
 | `group_id` | Optional presentation group membership |
@@ -74,6 +75,11 @@ the two cases above.
 
 ## Question Types
 
+Persisted question and group types are declared in
+`backend/app/services/type_contracts.py`. The registry is the source of truth
+for filters, labels, validation, review support, packs/sync, and mobile
+support.
+
 `text` is a normal prompt/answer card. Text questions may also belong to a
 `QuestionGroup(type_group="text")` for runtime association review. The group
 owns presentation metadata only; each question still owns its own progress.
@@ -115,10 +121,31 @@ media modes while scheduling remains per question.
 rails, multiple choice, reorder, or recitation, but every scheduled result still
 updates the item question's own `Progress`.
 
+`numeric` is one scalar value card. `Question.data.numeric` owns the canonical
+value, unit, display precision, and tolerance. The backend previews and grades
+the typed value.
+
+`cloze` stores one authored note in `QuestionGroup(type_group="cloze")` and
+generates one `Question(type_q="cloze")` per stable blank key. The group is the
+primary Manage row; generated cards are progress/details only.
+
+`grid` stores one authored table in `QuestionGroup(type_group="grid")` and
+generates one `Question(type_q="grid")` per reviewable cell. The group is the
+editable source; generated cells keep independent progress.
+
+`set` stores one authored membership set in `QuestionGroup(type_group="set")`
+and generates one `Question(type_q="set")` per member. Review may collect an
+unordered answer list, but scheduling still moves only due member cards.
+
+`enumeration` is a standalone quota card: one
+`Question(type_q="enumeration")` asks for any `k` accepted members. It is not a
+generated membership set.
+
 Runtime review responses include `presentation_kind` in addition to `type_q`.
 Use it to distinguish screen shapes such as `single_card`, `map_group`,
-`media_group`, `text_group`, `timeline_group`, and `sequence_group`; keep
-`type_q` as the stored atomic family.
+`media_group`, `text_group`, `timeline_group`, `sequence_group`, `cloze_blank`,
+`grid_cell`, `grid_row`, and `set_group`; keep `type_q` as the stored atomic
+family.
 
 Answer matching policy is JSON metadata, not schema. Store group-level
 overrides in `QuestionGroup.data.answer_policy` and future per-card overrides in
@@ -126,6 +153,12 @@ overrides in `QuestionGroup.data.answer_policy` and future per-card overrides in
 existing behavior for map/media/text/sequence matching; `exact` is available in
 Manage for orthography-sensitive groups. Effective policy resolution is
 question override, group override, then type default.
+
+Semantic edits may pass `edit_policy` in update payloads. The UI exposes it as
+two intents: typo correction preserves progress, while changing the fact learned
+replaces/tombstones affected cards. The replacement path is the default for
+dangerous generated-card edits such as numeric values, enumeration quota or
+members, cloze answers, grid cell values/coordinates, and set members/aliases.
 
 ## Manage UI
 
@@ -140,6 +173,11 @@ Stable expectations:
 
 - Prefer inline and embedded edits over form-heavy modal workflows.
 - Keep filters and sorting in dedicated utilities, not duplicated in components.
+- Create content from the intent chooser ("what do you want to learn?") and let
+  the UI map that intent to the internal question or group type.
+- For generated types (`cloze`, `grid`, `set`), keep the group/source as the
+  normal Manage row. Generated cards should appear as progress/detail rows, not
+  as ordinary editable items.
 - Preserve autosave of pending existing-item edits before selection or mode
   changes.
 - Deleting a group deletes its questions and frontend caches should reflect

@@ -61,8 +61,12 @@ class GridTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def save(self, grid, name="Parler"):
-        return save_grid_group(self.db, self.group.id, GridGroupUpdate(name=name, tags=[], grid=grid))
+    def save(self, grid, name="Parler", edit_policy=None):
+        return save_grid_group(
+            self.db,
+            self.group.id,
+            GridGroupUpdate(name=name, tags=[], grid=grid, edit_policy=edit_policy),
+        )
 
     def test_source_creates_deterministic_atomic_cards(self):
         grid = source()
@@ -88,13 +92,21 @@ class GridTests(unittest.TestCase):
         self.db.add(Progress(question_id=first["id"], reps=3, history=[]))
         self.db.commit()
         grid["cells"][0]["value"] = "parlais"
-        saved = self.save(grid)
+        saved = self.save(grid, edit_policy="preserve_progress")
         card = next(item for item in saved["cards"] if item["id"] == first["id"])
         self.assertEqual(saved["deletedQuestionIds"], [])
         self.assertEqual(card["answer"], "parlais")
         self.assertEqual(card["guid"], first["guid"])
         self.assertEqual(card["progress"]["reps"], 3)
         self.assertEqual(self.db.query(Tombstone).filter(Tombstone.guid == first["guid"]).count(), 0)
+
+    def test_changing_a_cell_value_replaces_by_default(self):
+        grid = source()
+        old = self.save(grid)["cards"][0]
+        grid["cells"][0]["value"] = "parlais"
+        saved = self.save(grid)
+        self.assertIn(old["id"], saved["deletedQuestionIds"])
+        self.assertEqual(self.db.query(Tombstone).filter(Tombstone.guid == old["guid"]).count(), 1)
 
     def test_moving_a_cell_to_another_coordinate_tombstones_its_old_card(self):
         grid = source()

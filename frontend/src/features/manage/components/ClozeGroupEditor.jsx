@@ -68,6 +68,7 @@ export default function ClozeGroupEditor({
   const [source, setSource] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [selectedLinkKey, setSelectedLinkKey] = useState("");
+  const [editPolicy, setEditPolicy] = useState("replace_progress");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const selectionRef = useRef(null);
@@ -76,6 +77,7 @@ export default function ClozeGroupEditor({
   useEffect(() => {
     let cancelled = false;
     setEditableGroup(group);
+    setEditPolicy("replace_progress");
     setError("");
     savedSignatureRef.current = editorSignature(group, "");
     if (!group?.id) {
@@ -154,6 +156,11 @@ export default function ClozeGroupEditor({
     setSource((value) => value.replace(expression, "$1"));
   }, []);
 
+  const setHoleAnswer = useCallback((key, answer) => {
+    const expression = new RegExp(`\\{\\{cloze:${key}::([\\s\\S]*?)\\}\\}`, "g");
+    setSource((value) => value.replace(expression, markerSource(key, answer)));
+  }, []);
+
   const editVisibleSource = useCallback((nextVisible) => {
     const previousVisible = visibleSource(source);
     if (!source.includes("{{cloze:")) {
@@ -212,7 +219,8 @@ export default function ClozeGroupEditor({
         name: editableGroup.name,
         tags: editableGroup.tags || [],
         answer_policy: answerPolicyFromGroup(editableGroup),
-        source
+        source,
+        edit_policy: editPolicy
       });
       setEditableGroup((current) => ({ ...current, ...result.group }));
       setSource(result.group.source || source);
@@ -228,7 +236,7 @@ export default function ClozeGroupEditor({
       setError(saveError.message || "Enregistrement impossible");
       return null;
     }
-  }, [editableGroup, ensurePersistedGroup, group, holes.length, onSave, source]);
+  }, [editPolicy, editableGroup, ensurePersistedGroup, group, holes.length, onSave, source]);
 
   useEffect(() => registerPendingSaveHandler?.(() => (dirty ? save() : null)), [dirty, registerPendingSaveHandler, save]);
 
@@ -243,12 +251,20 @@ export default function ClozeGroupEditor({
           <QuestionEditorField label="Nom"><input value={editableGroup?.name || ""} onChange={(event) => setEditableGroup((current) => ({ ...current, name: event.target.value }))} style={inputStyle} /></QuestionEditorField>
           <TagEditor tags={editableGroup?.tags || []} tagInput={tagInput} availableTags={availableTags} onTagInputChange={setTagInput} onAddTag={addTag} onRemoveTag={removeTag} />
           <AnswerPolicyControl policy={answerPolicyFromGroup(editableGroup)} onChange={(answer_policy) => setEditableGroup((current) => ({ ...current, data: { ...(current?.data || {}), answer_policy } }))} />
+          {group?.id && (
+            <QuestionEditorField label="Type de modification">
+              <select value={editPolicy} onChange={(event) => setEditPolicy(event.target.value)} style={inputStyle}>
+                <option value="replace_progress">Changer le fait appris</option>
+                <option value="preserve_progress">Corriger une faute</option>
+              </select>
+            </QuestionEditorField>
+          )}
         </EditorSection>
         <EditorSection title="Texte et trous" accent="#ef9cff">
           <textarea value={visibleSource(source)} onChange={(event) => editVisibleSource(event.target.value)} onSelect={captureSelection} rows={8} style={{ ...inputStyle, fontFamily: "inherit", lineHeight: 1.55, resize: "vertical" }} />
-          <div style={{ color: "#888", fontSize: "12px" }}>Sélectionne un passage, puis crée un trou. Le contexte reste éditable ; pour changer une réponse, retire puis recrée le trou.</div>
+          <div style={{ color: "#888", fontSize: "12px" }}>Sélectionne un passage, puis crée un trou. Le contexte reste éditable ; les réponses des trous se corrigent dans la liste ci-dessous.</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}><button type="button" onClick={() => addHole()} style={buttonStyle}>Créer un trou</button>{holes.length > 0 && <><select value={selectedLinkKey} onChange={(event) => setSelectedLinkKey(event.target.value)} style={inputStyle}><option value="">Lier à un trou…</option>{holes.map((hole, index) => <option key={hole.key} value={hole.key}>Trou {index + 1} : {hole.answer}</option>)}</select><button type="button" onClick={() => selectedLinkKey && addHole(selectedLinkKey)} disabled={!selectedLinkKey} style={buttonStyle}>Ajouter une occurrence liée</button></>}</div>
-          {holes.length > 0 && <div style={{ display: "grid", gap: "6px" }}>{holes.map((hole, index) => <div key={hole.key} style={{ alignItems: "center", background: "#211526", borderRadius: "8px", color: "#f5c6ff", display: "flex", gap: "8px", justifyContent: "space-between", padding: "8px 10px" }}><span>Trou {index + 1} — {hole.answer}</span><button type="button" onClick={() => removeHole(hole.key)} style={{ ...buttonStyle, background: "#4a2028" }}>Retirer</button></div>)}</div>}
+          {holes.length > 0 && <div style={{ display: "grid", gap: "6px" }}>{holes.map((hole, index) => <div key={hole.key} style={{ alignItems: "center", background: "#211526", borderRadius: "8px", color: "#f5c6ff", display: "grid", gap: "8px", gridTemplateColumns: "auto minmax(0, 1fr) auto", padding: "8px 10px" }}><span>Trou {index + 1}</span><input aria-label={`Réponse du trou ${index + 1}`} value={hole.answer} onChange={(event) => setHoleAnswer(hole.key, event.target.value)} style={inputStyle} /><button type="button" onClick={() => removeHole(hole.key)} style={{ ...buttonStyle, background: "#4a2028" }}>Retirer</button></div>)}</div>}
         </EditorSection>
         {(status || error) && <div style={{ color: error ? "#ff9494" : "#8ee9ac" }}>{error || status}</div>}
       </div>

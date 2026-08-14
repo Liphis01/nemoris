@@ -306,14 +306,13 @@ export function useReviewSession(active) {
       );
 
       if (failedItems.length > 0) {
-        setQuestions(prev => [
-          ...prev,
-          {
-            ...current,
-            items: failedItems,
-            _reviewRetryOfIndex: answerIndex
-          }
-        ]);
+        const retry = {
+          ...current,
+          items: failedItems,
+          _reviewRetryOfIndex: answerIndex
+        };
+
+        setQuestions(prev => appendOrMergeGroupRetry(prev, retry, answerIndex));
       }
     }
 
@@ -346,6 +345,41 @@ export function useReviewSession(active) {
     }
     setCurrentIndex(previous => previous + 1);
     setReturnToLastQuestionArmed(true);
+  }
+
+  function appendOrMergeGroupRetry(previous, retry, answerIndex) {
+    const retryKey = [
+      retry.presentation_kind,
+      retry.group_id,
+      retry.mode || ""
+    ].join(":");
+    const pendingIndex = previous.findIndex((item, index) => (
+      index > answerIndex &&
+      item?._reviewRetryOfIndex !== undefined &&
+      [item.presentation_kind, item.group_id, item.mode || ""].join(":") === retryKey
+    ));
+
+    if (pendingIndex < 0) {
+      return [...previous, retry];
+    }
+
+    const merged = [...previous];
+    const existing = merged[pendingIndex];
+    const seen = new Set((existing.items || []).map(item => item.question_id));
+    merged[pendingIndex] = {
+      ...existing,
+      items: [
+        ...(existing.items || []),
+        ...(retry.items || []).filter(item => {
+          if (seen.has(item.question_id)) return false;
+          seen.add(item.question_id);
+          return true;
+        })
+      ],
+      _reviewRetryOfIndex: Math.min(existing._reviewRetryOfIndex, retry._reviewRetryOfIndex)
+    };
+
+    return merged;
   }
   const handleNumericComplete = useCallback((failedQuestionIds = []) => {
     const answerIndex = currentIndex;

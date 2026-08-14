@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
+import CreationIntentChooser from "./CreationIntentChooser";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
-import GroupCreationTypeChooser from "./GroupCreationTypeChooser";
 import MediaGroupEditor from "./MediaGroupEditor";
 import TextGroupEditor from "./TextGroupEditor";
 import ClozeGroupEditor from "./ClozeGroupEditor";
@@ -9,7 +9,6 @@ import GridGroupEditor from "./GridGroupEditor";
 import SetGroupEditor from "./SetGroupEditor";
 import SequenceGroupEditor from "./SequenceGroupEditor";
 import PlaylistBuilder from "./PlaylistBuilder";
-import QuestionCreationTypeChooser from "./QuestionCreationTypeChooser";
 import ReviewCalendarAction from "./ReviewCalendarAction";
 import { getQuestionEditorAdapter } from "./questionEditorAdapters";
 import useInspectorAutosave from "../hooks/useInspectorAutosave";
@@ -235,8 +234,7 @@ export default function ManageInspector({
     cancelCreateQuestion,
     createCurrentQuestion,
     mode,
-    selectGroupCreationType,
-    selectQuestionCreationType
+    selectCreationIntent
   } = useInspectorEditorMode({
     createQuestion,
     isCreatingGroup,
@@ -383,8 +381,8 @@ export default function ManageInspector({
   if (mode === "createGroup") {
     if (!groupDraft.type_group) {
       return (
-        <GroupCreationTypeChooser
-          onSelect={selectGroupCreationType}
+        <CreationIntentChooser
+          onSelect={selectCreationIntent}
           onCancel={cancelCreateGroup}
         />
       );
@@ -468,8 +466,8 @@ export default function ManageInspector({
   if (mode === "createQuestion") {
     if (!canRenderQuestionEditor) {
       return (
-        <QuestionCreationTypeChooser
-          onSelect={selectQuestionCreationType}
+        <CreationIntentChooser
+          onSelect={selectCreationIntent}
           onCancel={cancelCreateQuestion}
         />
       );

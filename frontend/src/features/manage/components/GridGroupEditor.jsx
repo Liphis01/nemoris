@@ -69,6 +69,7 @@ export default function GridGroupEditor({
   const [pasteText, setPasteText] = useState("");
   const [firstRowIsHeader, setFirstRowIsHeader] = useState(true);
   const [firstColumnIsHeader, setFirstColumnIsHeader] = useState(true);
+  const [editPolicy, setEditPolicy] = useState("replace_progress");
   const savedStateRef = useRef(null);
 
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function GridGroupEditor({
     setTagInput("");
     setPasteOpen(false);
     setPasteText("");
+    setEditPolicy("replace_progress");
 
     if (!group?.id) {
       const next = blankGrid();
@@ -202,7 +204,8 @@ export default function GridGroupEditor({
         name: editableGroup.name,
         tags: editableGroup.tags || [],
         answer_policy: answerPolicyFromGroup(editableGroup),
-        grid: payload
+        grid: payload,
+        edit_policy: editPolicy
       });
       const nextGroup = { ...editableGroup, ...result.group };
       const nextGrid = result.group.grid;
@@ -226,7 +229,7 @@ export default function GridGroupEditor({
 
       return null;
     }
-  }, [editableGroup, ensurePersistedGroup, grid, group, onSave]);
+  }, [editPolicy, editableGroup, ensurePersistedGroup, grid, group, onSave]);
 
   useEffect(
     () => registerPendingSaveHandler?.(() => (dirty ? save() : null)),
@@ -327,6 +330,20 @@ export default function GridGroupEditor({
           }))}
           policy={answerPolicyFromGroup(editableGroup)}
         />
+
+        {group?.id && (
+          <QuestionEditorField compact label="Type de modification">
+            <select
+              aria-label="Type de modification"
+              onChange={event => setEditPolicy(event.target.value)}
+              style={compactInputStyle}
+              value={editPolicy}
+            >
+              <option value="replace_progress">Changer le fait appris</option>
+              <option value="preserve_progress">Corriger une faute</option>
+            </select>
+          </QuestionEditorField>
+        )}
 
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "8px" }}>
           <button

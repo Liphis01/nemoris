@@ -78,7 +78,8 @@ class EnumerationTests(unittest.TestCase):
         self.assertTrue(good["correct"])
         self.assertEqual([item["expected"] for item in good["matched"]], ["politique", "course"])
         self.assertFalse(duplicate["correct"])
-        self.assertEqual(duplicate["unmatched"], ["political"])
+        self.assertEqual(duplicate["duplicates"], ["political"])
+        self.assertEqual(duplicate["missing_count"], 1)
 
     def test_cosmetic_prompt_edit_preserves_but_content_edit_replaces(self):
         question = self.create()
@@ -103,6 +104,61 @@ class EnumerationTests(unittest.TestCase):
             self.db.query(Tombstone).filter(Tombstone.guid == question.guid).count(),
             1,
         )
+
+    def test_content_edit_can_preserve_progress_for_typo_correction(self):
+        question = self.create()
+        self.db.add(Progress(question_id=question.id, reps=2, history=[]))
+        self.db.commit()
+
+        updated = update_question(
+            self.db,
+            question.id,
+            QuestionUpdate(
+                data=enumeration_data(
+                    members=[
+                        {"value": "politique", "aliases": ["political", "politics"]},
+                        {"value": "course", "aliases": []},
+                        {"value": "fonctionner", "aliases": ["marcher"]},
+                    ],
+                ),
+                edit_policy="preserve_progress",
+            ),
+        )
+
+        self.assertEqual(updated.guid, question.guid)
+        self.assertEqual(updated.progress.reps, 2)
+        self.assertEqual(
+            self.db.query(Tombstone).filter(Tombstone.guid == question.guid).count(),
+            0,
+        )
+
+    def test_close_miss_records_effective_quality_without_backend_match(self):
+        question = self.create()
+        self.db.commit()
+
+        saved = answer_enumeration(
+            EnumerationAnswerRequest(
+                question_id=question.id,
+                answers=["politique"],
+                quality=1,
+                commit=True,
+                review_date=date(2026, 8, 10),
+            ),
+            self.db,
+        )
+
+        self.assertFalse(saved["correct"])
+        self.assertFalse(saved["backend_matched"])
+        self.assertTrue(saved["user_marked_close"])
+        self.assertEqual(saved["effective_quality"], 1)
+        history = saved["progress"]["history"][-1]
+        self.assertEqual(history["quality"], 1)
+        self.assertEqual(history["raw_quality"], 1)
+        self.assertEqual(history["effective_quality"], 1)
+        self.assertTrue(history["user_marked_close"])
+        event = history["answer_event"]
+        self.assertFalse(event["context"]["backend_matched"])
+        self.assertTrue(event["context"]["user_marked_close"])
 
     def test_review_history_and_training_use_the_same_contract(self):
         question = self.create()
@@ -144,4 +200,3 @@ class EnumerationTests(unittest.TestCase):
         )
         self.assertEqual(training[0]["type_q"], "enumeration")
         self.assertEqual(training[0]["mode"], "collect_quota")
-

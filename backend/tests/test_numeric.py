@@ -97,15 +97,15 @@ class NumericTests(unittest.TestCase):
             self.db,
             question.id,
             QuestionUpdate(question="Nouvel énoncé", data=numeric_data(
-                "12.5", "cm", display_precision=2, relative_tolerance="0.2"
+                "12.5", "m", display_precision=2, relative_tolerance="0.2"
             )),
         )
         self.assertEqual(updated.id, question.id)
         self.assertEqual(updated.guid, question.guid)
         self.assertEqual(updated.progress.reps, 2)
-        self.assertEqual(updated.answer, "12,50 cm")
+        self.assertEqual(updated.answer, "12,50 m")
 
-    def test_expected_value_replacement_tombstones_old_card(self):
+    def test_expected_value_or_unit_replacement_tombstones_old_card(self):
         question = self.create()
         old_guid = question.guid
         replacement = update_question(
@@ -119,6 +119,37 @@ class NumericTests(unittest.TestCase):
             self.db.query(Tombstone).filter(Tombstone.guid == old_guid).count(),
             1,
         )
+
+        old_unit_guid = replacement.guid
+        unit_replacement = update_question(
+            self.db,
+            replacement.id,
+            QuestionUpdate(data=numeric_data("101", "m")),
+        )
+        self.assertNotEqual(unit_replacement.id, replacement.id)
+        self.assertNotEqual(unit_replacement.guid, old_unit_guid)
+        self.assertEqual(
+            self.db.query(Tombstone).filter(Tombstone.guid == old_unit_guid).count(),
+            1,
+        )
+
+    def test_unit_typo_can_preserve_progress_explicitly(self):
+        question = self.create(numeric_data("12.5", "cm", display_precision=1))
+        self.db.add(Progress(question_id=question.id, reps=2, history=[]))
+        self.db.commit()
+
+        updated = update_question(
+            self.db,
+            question.id,
+            QuestionUpdate(
+                data=numeric_data("12.5", "m", display_precision=1),
+                edit_policy="preserve_progress",
+            ),
+        )
+        self.assertEqual(updated.id, question.id)
+        self.assertEqual(updated.guid, question.guid)
+        self.assertEqual(updated.progress.reps, 2)
+        self.assertEqual(updated.answer, "12,5 m")
 
     def test_server_grading_includes_tolerance_boundaries_and_history(self):
         question = self.create(numeric_data("-20", "°C"))

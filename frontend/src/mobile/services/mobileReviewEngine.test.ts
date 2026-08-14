@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyMobileAnswer,
+  countUnsupportedMobileQuestions,
   createInitialProgress,
   progressInRelearning,
   selectDueMobileReviewItems
@@ -78,6 +79,7 @@ describe("mobileReviewEngine", () => {
     });
 
     expect(result.map((item) => item.id)).toEqual([1]);
+    expect(countUnsupportedMobileQuestions([future, map, newText, due, cloze, numeric, grid, set, enumeration])).toBe(6);
   });
 
   it("matches backend-generated initial scheduling fixtures", () => {

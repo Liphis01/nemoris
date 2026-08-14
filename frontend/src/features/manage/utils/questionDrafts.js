@@ -18,7 +18,7 @@ export function buildQuestionSavePayload(source) {
   const tags = Array.isArray(source?.tags) ? source.tags : [];
   const pendingTag = (source?._pendingTagInput || "").trim();
 
-  return {
+  const payload = {
     question: source?.question || "",
     answer: source?.answer || "",
     media: source?.media || null,
@@ -29,6 +29,12 @@ export function buildQuestionSavePayload(source) {
       : tags,
     data: source?.data || {}
   };
+
+  if (source?.edit_policy) {
+    payload.edit_policy = source.edit_policy;
+  }
+
+  return payload;
 }
 
 export function buildQuestionDraft(source) {
@@ -39,7 +45,8 @@ export function buildQuestionDraft(source) {
     answer_media: source?.answer_media || "",
     type_q: source?.type_q || "text",
     tags: source?.tags || [],
-    data: source?.data || {}
+    data: source?.data || {},
+    edit_policy: source?.edit_policy
   };
 }
 

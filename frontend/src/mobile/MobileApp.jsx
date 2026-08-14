@@ -321,6 +321,8 @@ function StatusScreen({ status }) {
         <strong>{status?.question_count || 0}</strong>
         <span>Due now</span>
         <strong>{status?.due_count || 0}</strong>
+        <span>Desktop-only</span>
+        <strong>{status?.unsupported_question_count || 0}</strong>
         <span>Signed in</span>
         <strong>{status?.signed_in ? "Yes" : "No"}</strong>
         <span>Last sync</span>
@@ -328,6 +330,11 @@ function StatusScreen({ status }) {
         <span>Media cache</span>
         <strong>{formatMediaStatus(status?.last_media_status)}</strong>
       </div>
+      {status?.unsupported_question_count ? (
+        <p className="mobile-note">
+          Some synced cards use desktop-only review types and stay available on desktop.
+        </p>
+      ) : null}
       {status?.last_sync_error ? (
         <p className="mobile-error">{status.last_sync_error}</p>
       ) : null}

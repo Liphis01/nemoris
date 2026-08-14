@@ -53,7 +53,7 @@ describe("ClozeReview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Vérifier" }));
 
     await screen.findByText("Réponse attendue : Paris");
-    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Again" }));
 
     await waitFor(() => expect(submitAnswer).toHaveBeenLastCalledWith({
       groupId: 4,

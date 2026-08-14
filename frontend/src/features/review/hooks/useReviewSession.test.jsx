@@ -302,6 +302,63 @@ describe("useReviewSession", () => {
     });
   });
 
+  it("coalesces split retries from the same grouped presentation", async () => {
+    const firstItems = [
+      { question_id: 10, answer: "France" },
+      { question_id: 11, answer: "Germany" }
+    ];
+    const secondItems = [
+      { question_id: 12, answer: "Spain" },
+      { question_id: 13, answer: "Italy" }
+    ];
+    getReview.mockResolvedValue([
+      {
+        group_id: 5,
+        presentation_kind: "media_group",
+        type_q: "media",
+        name: "Flags",
+        mode: "type_prompt",
+        items: firstItems
+      },
+      {
+        group_id: 5,
+        presentation_kind: "media_group",
+        type_q: "media",
+        name: "Flags",
+        mode: "type_prompt",
+        items: secondItems
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(2);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([11]);
+    });
+    expect(result.current.questions).toHaveLength(3);
+    expect(result.current.questions[2].items).toEqual([
+      { question_id: 11, answer: "Germany" }
+    ]);
+
+    act(() => {
+      result.current.handleImageComplete([12]);
+    });
+
+    expect(result.current.questions).toHaveLength(3);
+    expect(result.current.questions[2]).toMatchObject({
+      group_id: 5,
+      presentation_kind: "media_group",
+      mode: "type_prompt",
+      items: [
+        { question_id: 11, answer: "Germany" },
+        { question_id: 12, answer: "Spain" }
+      ]
+    });
+  });
+
   it("ends the session when nothing is scheduled", async () => {
     getReview.mockResolvedValue([]);
     const { result } = renderHook(() => useReviewSession(true));

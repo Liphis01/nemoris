@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useManageTextPreview } from "./ManageTextPreview";
 import SuspendToggleButton from "./SuspendToggleButton";
-import { questionTypeChipStyles } from "../../../shared/questionTypes";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { useTagLabels } from "../../../shared/tagLabels";
 
 export default function GroupHeaderCard({
@@ -28,10 +28,9 @@ export default function GroupHeaderCard({
     groupQuestions.length > 0 && suspendedCount === groupQuestions.length
   );
   const someSuspended = suspendedCount > 0 && !allSuspended;
-  const mapTypeStyle = questionTypeChipStyles.map;
-  const imageTypeStyle = questionTypeChipStyles.media;
-  const textTypeStyle = questionTypeChipStyles.text;
-  const sequenceTypeStyle = questionTypeChipStyles.sequence;
+  const typeCounts = Object.entries(groupInfo.typeCounts || {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => left.localeCompare(right));
   const background = isOpen
     ? "#1a1a1a"
     : selectedInside
@@ -215,66 +214,26 @@ export default function GroupHeaderCard({
               +{tags.length - 3}
             </span>
           )}
-          {groupInfo.mapCount > 0 && (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                padding: "2px 6px",
-                borderRadius: "999px",
-                background: mapTypeStyle.background,
-                color: mapTypeStyle.color,
-                whiteSpace: "nowrap"
-              }}
-            >
-              {groupInfo.mapCount} MAP
-            </span>
-          )}
-          {groupInfo.imageCount > 0 && (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                padding: "2px 6px",
-                borderRadius: "999px",
-                background: imageTypeStyle.background,
-                color: imageTypeStyle.color,
-                whiteSpace: "nowrap"
-              }}
-            >
-              {groupInfo.imageCount} MÉDIA
-            </span>
-          )}
-          {groupInfo.textCount > 0 && (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                padding: "2px 6px",
-                borderRadius: "999px",
-                background: textTypeStyle.background,
-                color: textTypeStyle.color,
-                whiteSpace: "nowrap"
-              }}
-            >
-              {groupInfo.textCount} TEXT
-            </span>
-          )}
-          {groupInfo.sequenceCount > 0 && (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                padding: "2px 6px",
-                borderRadius: "999px",
-                background: sequenceTypeStyle.background,
-                color: sequenceTypeStyle.color,
-                whiteSpace: "nowrap"
-              }}
-            >
-              {groupInfo.sequenceCount} SÉQ
-            </span>
-          )}
+          {typeCounts.map(([type, count]) => {
+            const typeStyle = getQuestionTypeChipStyle(type);
+
+            return (
+              <span
+                key={type}
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "700",
+                  padding: "2px 6px",
+                  borderRadius: "999px",
+                  background: typeStyle.background,
+                  color: typeStyle.color,
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {count} {typeStyle.label}
+              </span>
+            );
+          })}
           {allSuspended && (
             <span
               style={{

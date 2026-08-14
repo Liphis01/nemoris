@@ -54,6 +54,7 @@ NumericMode = Literal["numeric_input"]
 GridMode = Literal["fill_cell", "fill_row"]
 SetMode = Literal["collect_members"]
 EnumerationMode = Literal["collect_quota"]
+EditPolicy = Literal["preserve_progress", "replace_progress"]
 
 SequenceMode = Literal[
     "type_position",
@@ -209,6 +210,10 @@ class QuestionUpdate(BaseModel):
 
     # Set aside by the user: excluded from reviews and from automatic intake.
     suspended: Optional[bool] = None
+
+    # How to treat semantic answer/content edits. "preserve_progress" is for
+    # typo/cosmetic corrections; "replace_progress" retires the old fact.
+    edit_policy: Optional[EditPolicy] = None
 
 
 class QuestionOut(BaseModel):
@@ -456,6 +461,7 @@ class ClozeGroupUpdate(BaseModel):
     tags: List[str] = Field(default_factory=list)
     answer_policy: Optional[dict[str, Any]] = None
     source: str = Field(min_length=1)
+    edit_policy: Optional[EditPolicy] = None
 
 
 class GridAxisItem(BaseModel):
@@ -475,6 +481,7 @@ class GridGroupUpdate(BaseModel):
     tags: List[str] = Field(default_factory=list)
     answer_policy: Optional[dict[str, Any]] = None
     grid: dict[str, Any]
+    edit_policy: Optional[EditPolicy] = None
 
 
 class GridAnswerItem(BaseModel):
@@ -495,6 +502,7 @@ class SetGroupUpdate(BaseModel):
     tags: List[str] = Field(default_factory=list)
     answer_policy: Optional[dict[str, Any]] = None
     members: List[dict[str, Any]] = Field(min_length=1)
+    edit_policy: Optional[EditPolicy] = None
 
 
 class SetAnswerRequest(BaseModel):

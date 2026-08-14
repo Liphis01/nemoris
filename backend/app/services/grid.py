@@ -146,6 +146,7 @@ def save_grid_group(db, group_id, payload):
     group = get_grid_group_or_404(db, group_id)
     incoming = normalize_grid_source(payload.grid)
     previous = normalize_grid_source(((group.data or {}).get("grid") or incoming)) if (group.data or {}).get("grid") else None
+    preserve_progress = payload.edit_policy == "preserve_progress"
     existing = {
         ((item.data or {}).get("grid") or {}).get("key"): item
         for item in group.questions or [] if item.type_q == "grid"
@@ -163,7 +164,11 @@ def save_grid_group(db, group_id, payload):
     replaced_keys = set()
     for cell in incoming["cells"]:
         old = previous_cells.get(cell["key"])
-        if old and (old["row_key"] != cell["row_key"] or old["column_key"] != cell["column_key"]):
+        if old and not preserve_progress and (
+            old["row_key"] != cell["row_key"] or
+            old["column_key"] != cell["column_key"] or
+            old["value"] != cell["value"]
+        ):
             replaced_keys.add(cell["key"])
             cell = {**cell, "key": str(uuid.uuid4())}
         normalized_cells.append(cell)

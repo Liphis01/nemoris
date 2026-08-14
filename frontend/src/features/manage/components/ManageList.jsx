@@ -4,7 +4,7 @@ import MapCard from "./MapCard";
 import GroupCardItem from "./GroupCardItem";
 import GroupHeaderCard from "./GroupHeaderCard";
 import { centerListItem } from "../../../shared/scroll";
-import { questionTypeChipStyles } from "../../../shared/questionTypes";
+import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { buildVisibleRows, getQuestionGroupId } from "../utils/manageRows";
 
 export default function ManageList({
@@ -417,6 +417,21 @@ export default function ManageList({
     });
   }
 
+  function selectGroupHeader(row) {
+    const group = row.groupInfo?.group || allGroups.find(item => String(item.id) === String(row.groupId));
+
+    closeQuestionCreation();
+    closeGroupCreation();
+    setOpenDeleteId(null);
+
+    if (group) {
+      setSelectedItem(group);
+      setEditingZone?.(null);
+    }
+
+    toggleGroup(row.groupId);
+  }
+
   function closeQuestionCreation() {
     if (!isCreatingQuestion) return;
 
@@ -531,11 +546,7 @@ export default function ManageList({
             style={{
               width: "3px",
               borderRadius: "999px",
-              background: q.type_q === "map"
-                ? questionTypeChipStyles.map.background
-                : q.type_q === "media"
-                  ? questionTypeChipStyles.media.background
-                  : questionTypeChipStyles.text.background,
+              background: getQuestionTypeChipStyle(q.type_q).background,
               opacity: sharedProps.selected || sharedProps.isHighlighted ? 1 : 0.55,
               margin: "6px 0",
               justifySelf: "center"
@@ -569,7 +580,7 @@ export default function ManageList({
         selectedInside={selectedInside}
         highlightedInside={highlightedInside}
         setRowRef={setRowRef(row.key)}
-        onToggle={() => toggleGroup(groupId)}
+        onToggle={() => runManageTransition(() => selectGroupHeader(row))}
         onToggleSuspended={(suspended) =>
           runManageTransition(() => setGroupSuspended?.(groupId, suspended))
         }

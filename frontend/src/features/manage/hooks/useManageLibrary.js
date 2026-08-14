@@ -188,10 +188,17 @@ export function useManageLibrary(mode) {
   }
 
   async function updateQuestion(id, updatedFields) {
-    await updateQuestionRequest(id, updatedFields);
+    const saved = await updateQuestionRequest(id, updatedFields);
 
     if (Object.prototype.hasOwnProperty.call(updatedFields || {}, "tags")) {
       invalidateTags().catch(() => {});
+    }
+
+    if (saved?.id && Number(saved.id) !== Number(id)) {
+      const { questions } = await reloadAllData();
+      const fullSaved = questions.find(question => Number(question.id) === Number(saved.id)) || saved;
+      setSelectedItem(fullSaved);
+      return fullSaved;
     }
 
     // Optimistic local patch keeps spreadsheet interactions quick. For fields
@@ -201,6 +208,8 @@ export function useManageLibrary(mode) {
       id,
       ...updatedFields
     });
+
+    return saved;
   }
 
   async function setGroupSuspended(groupId, suspended) {

@@ -8,6 +8,7 @@ machinery from 1.2/1.3.
 
 import unittest
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -199,13 +200,15 @@ class SequenceOrderSaveTests(unittest.TestCase):
 
         self.assertEqual(self.labels_in_rank_order(), ["Alpha", "Bêta", "Gamma"])
 
-    def test_an_item_without_a_value_lands_last_rather_than_failing(self):
-        self.save(
-            [("Sans date", None), ("Henri IV", year(1589))],
-            order={"mode": "derived", "kind": "date"}
-        )
+    def test_an_item_without_a_derived_value_blocks_save(self):
+        with self.assertRaises(HTTPException) as context:
+            self.save(
+                [("Sans date", None), ("Henri IV", year(1589))],
+                order={"mode": "derived", "kind": "date"}
+            )
 
-        self.assertEqual(self.labels_in_rank_order(), ["Henri IV", "Sans date"])
+        self.assertEqual(context.exception.status_code, 422)
+        self.assertIn("Valeur d'ordre manquante", context.exception.detail)
 
     def test_every_item_still_gets_an_integer_rank(self):
         # PATCH /questions/{id} rejects a sequence item without an integer

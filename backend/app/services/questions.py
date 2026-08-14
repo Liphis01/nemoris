@@ -162,6 +162,7 @@ def get_question_for_update(db, question_id: int):
 def update_question(db, question_id: int, payload):
     question = get_question_for_update(db, question_id)
     updates = payload.model_dump(exclude_unset=True)
+    edit_policy = updates.pop("edit_policy", None) or "replace_progress"
     old_pool_refs = read_media_pool(question.media, question.data)
     old_answer_media = question.answer_media
 
@@ -188,17 +189,24 @@ def update_question(db, question_id: int, payload):
     if "tags" in updates:
         updates["tags"] = ensure_tag_ids(db, updates["tags"])
 
-    numeric_value_changed = (
+    numeric_expected_changed = (
         question.type_q == "numeric" and
         future_type == "numeric" and
-        ((question.data or {}).get("numeric") or {}).get("value") !=
-        future_data["numeric"]["value"]
+        (
+            ((question.data or {}).get("numeric") or {}).get("value") !=
+            future_data["numeric"]["value"] or
+            ((question.data or {}).get("numeric") or {}).get("unit") !=
+            future_data["numeric"]["unit"]
+        )
     )
     enumeration_content_changed = (
         question.type_q == "enumeration" and future_type == "enumeration" and
         ((question.data or {}).get("enumeration") or {}) != future_data["enumeration"]
     )
-    if numeric_value_changed or enumeration_content_changed:
+    if (
+        edit_policy != "preserve_progress" and
+        (numeric_expected_changed or enumeration_content_changed)
+    ):
         # A new expected magnitude is a new fact. Retire the old GUID rather
         # than making historical success look like success on the replacement.
         replacement = Question(

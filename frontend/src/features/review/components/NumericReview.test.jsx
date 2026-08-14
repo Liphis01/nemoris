@@ -48,7 +48,7 @@ describe("NumericReview", () => {
     fireEvent.change(screen.getByPlaceholderText("Ta réponse"), { target: { value: "20" } });
     fireEvent.click(screen.getByRole("button", { name: "Vérifier" }));
     await screen.findByText("Réponse attendue : 12,5 km");
-    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Again" }));
 
     await waitFor(() => expect(submitAnswer).toHaveBeenLastCalledWith({
       questionId: 9,
@@ -57,5 +57,26 @@ describe("NumericReview", () => {
       commit: true
     }));
     expect(onComplete).toHaveBeenCalledWith([9]);
+  });
+
+  it("allows a close miss without scheduling a full success", async () => {
+    const submitAnswer = vi.fn()
+      .mockResolvedValueOnce({ correct: false, expected: "12,5 km" })
+      .mockResolvedValueOnce({ correct: false, user_marked_close: true, progress: {} });
+    const onComplete = vi.fn();
+    render(<NumericReview q={question} submitAnswer={submitAnswer} onComplete={onComplete} />);
+
+    fireEvent.change(screen.getByPlaceholderText("Ta réponse"), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Vérifier" }));
+    await screen.findByText("Réponse attendue : 12,5 km");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(submitAnswer).toHaveBeenLastCalledWith({
+      questionId: 9,
+      answer: "12",
+      quality: 1,
+      commit: true
+    }));
+    expect(onComplete).toHaveBeenCalledWith([]);
   });
 });

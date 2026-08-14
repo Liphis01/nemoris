@@ -39,8 +39,12 @@ class MembershipSetTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def save(self, source):
-        return save_set_group(self.db, self.group.id, SetGroupUpdate(name="Gaz nobles", tags=[], members=source))
+    def save(self, source, edit_policy=None):
+        return save_set_group(
+            self.db,
+            self.group.id,
+            SetGroupUpdate(name="Gaz nobles", tags=[], members=source, edit_policy=edit_policy),
+        )
 
     def test_creates_stable_member_cards_and_preserves_alias_edit_progress(self):
         source = members()
@@ -48,10 +52,18 @@ class MembershipSetTests(unittest.TestCase):
         self.db.add(Progress(question_id=first["id"], reps=2, history=[]))
         self.db.commit()
         source[0]["aliases"] = ["He", "gaz hélium"]
-        saved = self.save(source)
+        saved = self.save(source, edit_policy="preserve_progress")
         card = next(item for item in saved["cards"] if item["id"] == first["id"])
         self.assertEqual(card["guid"], set_question_guid(self.group.guid, source[0]["key"]))
         self.assertEqual(card["progress"]["reps"], 2)
+
+    def test_alias_edit_replaces_by_default(self):
+        source = members()
+        old = self.save(source)["cards"][0]
+        source[0]["aliases"] = ["He", "gaz hélium"]
+        saved = self.save(source)
+        self.assertIn(old["id"], saved["deletedQuestionIds"])
+        self.assertEqual(self.db.query(Tombstone).filter(Tombstone.guid == old["guid"]).count(), 1)
 
     def test_changed_member_value_retires_the_old_card(self):
         source = members()

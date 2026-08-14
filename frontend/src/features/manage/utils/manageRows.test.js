@@ -82,4 +82,30 @@ describe("manageRows", () => {
       groupId: "7"
     });
   });
+
+  it("keeps generated cloze grid and set cards behind their group source row", () => {
+    const generatedGroup = {
+      id: 8,
+      name: "Note générée",
+      type_group: "cloze",
+      tags: ["langue"]
+    };
+    const generatedRows = buildVisibleRows(
+      [
+        { id: 30, type_q: "cloze", question: "Texte à trous", answer: "mot", group_id: 8 },
+        { id: 31, type_q: "grid", question: "Ligne × colonne", answer: "valeur", group_id: 8 },
+        { id: 32, type_q: "set", question: "Membre", answer: "Hélium", group_id: 8 }
+      ],
+      [generatedGroup],
+      new Set(["8"]),
+      "id"
+    );
+
+    expect(generatedRows.map(row => row.key)).toEqual(["group:8"]);
+    expect(generatedRows[0].groupInfo.typeCounts).toMatchObject({
+      cloze: 1,
+      grid: 1,
+      set: 1
+    });
+  });
 });

@@ -78,6 +78,10 @@ export function isMobileReviewQuestion(question: any): boolean {
   return MOBILE_SUPPORTED_TYPES.has(String(question?.type_q || ""));
 }
 
+export function countUnsupportedMobileQuestions(questions: any[] = []): number {
+  return questions.filter((question) => !isMobileReviewQuestion(question)).length;
+}
+
 export function isUploadedMedia(media: unknown): boolean {
   return String(media || "").trim().startsWith("/static/");
 }
@@ -306,4 +310,3 @@ export function applyMobileAnswer({
 
   return { progress: nextProgress, reviewLog, historyEntry };
 }
-

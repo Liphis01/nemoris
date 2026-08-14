@@ -1,5 +1,9 @@
 import AutocompleteInput from "../../../shared/AutocompleteInput";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import {
+  groupTypeFilterOptions,
+  questionTypeFilterOptions
+} from "../../../shared/questionTypes";
 import TagFilterControl from "./TagFilterControl";
 
 const sortOptions = [
@@ -9,23 +13,6 @@ const sortOptions = [
   { value: "group", label: "Groupe" },
   { value: "next_review", label: "Prochaine review" },
   { value: "reps", label: "Moins revues" }
-];
-
-const questionTypeOptions = [
-  { value: "", label: "Tous les types" },
-  { value: "text", label: "Text" },
-  { value: "map", label: "Map" },
-  { value: "timeline", label: "Timeline" },
-  { value: "media", label: "Média" },
-  { value: "sequence", label: "Séquence" }
-];
-
-const groupTypeOptions = [
-  { value: "", label: "Tous les types" },
-  { value: "map", label: "Map" },
-  { value: "media", label: "Média" },
-  { value: "text", label: "Texte" },
-  { value: "sequence", label: "Séquence" }
 ];
 
 const groupSortOptions = [
@@ -450,7 +437,7 @@ export default function ManageSidebar({
               fontSize: "14px"
             }}
           >
-            ＋ Nouvelle question
+            ＋ Nouveau contenu
           </button>
         ) : (
           <button
@@ -467,7 +454,7 @@ export default function ManageSidebar({
               fontSize: "14px"
             }}
           >
-            ＋ Nouveau groupe
+            ＋ Nouveau contenu
           </button>
         )}
 
@@ -520,7 +507,7 @@ export default function ManageSidebar({
               style={filterSelectStyle}
               aria-label="Filtrer les questions par type"
             >
-              {questionTypeOptions.map((option) => (
+              {questionTypeFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -629,7 +616,7 @@ export default function ManageSidebar({
               style={filterSelectStyle}
               aria-label="Filtrer les groupes par type"
             >
-              {groupTypeOptions.map((option) => (
+              {groupTypeFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

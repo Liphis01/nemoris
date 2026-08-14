@@ -43,11 +43,17 @@ function getGroupInfo(groupId, question, groupById) {
       ["map", "media"].includes(question?.type_q) ? question?.tags : []
     ),
     questions: [],
+    typeCounts: {},
     mapCount: 0,
     imageCount: 0,
     textCount: 0,
     sequenceCount: 0
   };
+}
+
+
+function isGeneratedPrimaryType(type_q) {
+  return ["cloze", "grid", "set"].includes(type_q);
 }
 
 
@@ -126,6 +132,7 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortFie
     }
 
     groupInfo.questions.push(question);
+    groupInfo.typeCounts[question.type_q] = (groupInfo.typeCounts[question.type_q] || 0) + 1;
 
     if (question.type_q === "map") {
       groupInfo.mapCount += 1;
@@ -156,9 +163,11 @@ export function buildVisibleRows(questions, allGroups, expandedGroupIds, sortFie
           key: `question:${question.id}`,
           question,
           nested: true,
+          generatedDetail: isGeneratedPrimaryType(question.type_q),
           groupId: row.groupId
         })
       )
+      .filter(row => !row.generatedDetail)
     ];
   });
 }

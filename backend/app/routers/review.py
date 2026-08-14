@@ -128,6 +128,33 @@ def answer_progress_payload(progress, today=None):
     }
 
 
+def validate_server_graded_quality(has_hit, quality):
+    if has_hit:
+        if quality not in {1, 2, 3}:
+            raise HTTPException(status_code=422, detail="Une difficulté est requise après une bonne réponse.")
+        return
+
+    if quality not in {None, 0, 1}:
+        raise HTTPException(status_code=422, detail="Une réponse manquée accepte seulement Again ou Close.")
+
+
+def server_graded_quality(correct, quality, allow_close=False):
+    if correct:
+        return quality
+    if allow_close and quality == 1:
+        return 1
+    return 0
+
+
+def server_graded_feedback(correct, quality, allow_close=False):
+    effective_quality = server_graded_quality(correct, quality, allow_close=allow_close)
+    return {
+        "backend_matched": correct,
+        "user_marked_close": (not correct and effective_quality == 1),
+        "effective_quality": effective_quality,
+    }
+
+
 def review_settings_payload(db, settings):
     # The stored settings plus what the picker needs to render itself: the tier
     # to highlight, the tiers on offer, and the rate the tuner has actually
@@ -366,8 +393,7 @@ def answer_cloze(data: ClozeAnswerRequest, db: Session = Depends(get_db)):
     if not data.commit:
         return result
 
-    if result["correct"] and data.quality not in {1, 2, 3}:
-        raise HTTPException(status_code=422, detail="Une difficulté est requise après une bonne réponse.")
+    validate_server_graded_quality(result["correct"], data.quality)
 
     question = db.query(Question).filter(Question.id == data.question_id).first()
     progress = db.query(Progress).filter(Progress.question_id == question.id).first()
@@ -379,23 +405,26 @@ def answer_cloze(data: ClozeAnswerRequest, db: Session = Depends(get_db)):
     # Later misses remain queued locally; a later hit merely graduates the
     # frozen state, exactly like the other grouped review presentations.
     if progress_in_relearning(progress, data.review_date):
-        if result["correct"]:
+        if result["correct"] or data.quality == 1:
             graduate_relearning(db, [question.id], today=data.review_date)
         buried_ids = bury_cloze_siblings(db, question, today=data.review_date)
         db.commit()
         sync_generated_hard_collection(db)
         return {
             **result,
+            **server_graded_feedback(result["correct"], data.quality, allow_close=True),
             "buried_question_ids": buried_ids,
             "progress": answer_progress_payload(progress, today=data.review_date)
         }
 
-    quality = data.quality if result["correct"] else 0
+    quality = server_graded_quality(result["correct"], data.quality, allow_close=True)
     difficulty = cloze_mode_difficulty(DEFAULT_CLOZE_MODE)
+    feedback = server_graded_feedback(result["correct"], data.quality, allow_close=True)
     metadata = {
         "cloze_mode": DEFAULT_CLOZE_MODE,
         "raw_quality": data.quality,
         "effective_quality": quality,
+        "user_marked_close": feedback["user_marked_close"],
         "mode_adjusted": difficulty != 1.0,
         "mode_difficulty": difficulty,
         "answer": data.answer,
@@ -409,14 +438,19 @@ def answer_cloze(data: ClozeAnswerRequest, db: Session = Depends(get_db)):
             mode=DEFAULT_CLOZE_MODE,
             direction="context_to_deletion",
             answer_policy=result["answer_policy"],
-            context={"grading_authority": "backend", "backend_matched": result["correct"], "cloze_key": ((question.data or {}).get("cloze") or {}).get("key")}
+            context={
+                "grading_authority": "backend",
+                "backend_matched": result["correct"],
+                "user_marked_close": feedback["user_marked_close"],
+                "cloze_key": ((question.data or {}).get("cloze") or {}).get("key")
+            }
         )
     }
     apply_scheduling(db, progress, quality, today=data.review_date, metadata=metadata)
     buried_ids = bury_cloze_siblings(db, question, today=data.review_date)
     db.commit()
     sync_generated_hard_collection(db)
-    return {**result, "buried_question_ids": buried_ids, "progress": answer_progress_payload(progress, today=data.review_date)}
+    return {**result, **feedback, "buried_question_ids": buried_ids, "progress": answer_progress_payload(progress, today=data.review_date)}
 
 
 @router.post("/answer_numeric")
@@ -425,8 +459,7 @@ def answer_numeric(data: NumericAnswerRequest, db: Session = Depends(get_db)):
     if not data.commit:
         return result
 
-    if result["correct"] and data.quality not in {1, 2, 3}:
-        raise HTTPException(status_code=422, detail="Une difficulté est requise après une bonne réponse.")
+    validate_server_graded_quality(result["correct"], data.quality)
 
     question = db.query(Question).filter(Question.id == data.question_id).first()
     progress = db.query(Progress).filter(Progress.question_id == question.id).first()
@@ -435,19 +468,21 @@ def answer_numeric(data: NumericAnswerRequest, db: Session = Depends(get_db)):
         db.add(progress)
 
     if progress_in_relearning(progress, data.review_date):
-        if result["correct"]:
+        if result["correct"] or data.quality == 1:
             graduate_relearning(db, [question.id], today=data.review_date)
         db.commit()
         sync_generated_hard_collection(db)
-        return {**result, "progress": answer_progress_payload(progress, today=data.review_date)}
+        return {**result, **server_graded_feedback(result["correct"], data.quality, allow_close=True), "progress": answer_progress_payload(progress, today=data.review_date)}
 
-    quality = data.quality if result["correct"] else 0
+    quality = server_graded_quality(result["correct"], data.quality, allow_close=True)
     difficulty = numeric_mode_difficulty(DEFAULT_NUMERIC_MODE)
     numeric = result["numeric"]
+    feedback = server_graded_feedback(result["correct"], data.quality, allow_close=True)
     metadata = {
         "numeric_mode": DEFAULT_NUMERIC_MODE,
         "raw_quality": data.quality,
         "effective_quality": quality,
+        "user_marked_close": feedback["user_marked_close"],
         "mode_adjusted": difficulty != 1.0,
         "mode_difficulty": difficulty,
         "answer": data.answer,
@@ -463,6 +498,7 @@ def answer_numeric(data: NumericAnswerRequest, db: Session = Depends(get_db)):
             context={
                 "grading_authority": "backend",
                 "backend_matched": result["correct"],
+                "user_marked_close": feedback["user_marked_close"],
                 "parsed_value": result["parsed_value"],
                 "absolute_error": result.get("absolute_error"),
                 "relative_error": result.get("relative_error"),
@@ -474,7 +510,7 @@ def answer_numeric(data: NumericAnswerRequest, db: Session = Depends(get_db)):
     apply_scheduling(db, progress, quality, today=data.review_date, metadata=metadata)
     db.commit()
     sync_generated_hard_collection(db)
-    return {**result, "progress": answer_progress_payload(progress, today=data.review_date)}
+    return {**result, **feedback, "progress": answer_progress_payload(progress, today=data.review_date)}
 
 
 @router.post("/answer_grid")
@@ -484,8 +520,9 @@ def answer_grid(data: GridAnswerRequest, db: Session = Depends(get_db)):
     if not data.commit:
         return {"group_id": data.group_id, "items": response_items}
 
-    if any(result["correct"] for result in graded["items"]) and data.quality not in {1, 2, 3}:
-        raise HTTPException(status_code=422, detail="Une difficulté est requise après une bonne réponse.")
+    has_hit = any(result["correct"] for result in graded["items"])
+    allow_close = not has_hit
+    validate_server_graded_quality(has_hit, data.quality)
 
     difficulty = grid_mode_difficulty(data.mode)
     for result in graded["items"]:
@@ -496,15 +533,18 @@ def answer_grid(data: GridAnswerRequest, db: Session = Depends(get_db)):
             db.add(progress)
             db.flush()
         if progress_in_relearning(progress, data.review_date):
-            if result["correct"]:
+            if result["correct"] or (allow_close and data.quality == 1):
                 graduate_relearning(db, [question.id], today=data.review_date)
             result["progress"] = answer_progress_payload(progress, today=data.review_date)
+            result.update(server_graded_feedback(result["correct"], data.quality, allow_close=allow_close))
             continue
-        quality = data.quality if result["correct"] else 0
+        quality = server_graded_quality(result["correct"], data.quality, allow_close=allow_close)
+        feedback = server_graded_feedback(result["correct"], data.quality, allow_close=allow_close)
         metadata = {
             "grid_mode": data.mode,
             "raw_quality": data.quality,
             "effective_quality": quality,
+            "user_marked_close": feedback["user_marked_close"],
             "mode_adjusted": difficulty != 1.0,
             "mode_difficulty": difficulty,
             "answer": result["answer"],
@@ -514,11 +554,17 @@ def answer_grid(data: GridAnswerRequest, db: Session = Depends(get_db)):
                 expected_value=result["expected"], type_q="grid",
                 presentation_kind="grid_row" if data.mode == "fill_row" else "grid_cell",
                 mode=data.mode, direction="axes_to_cell", answer_policy=result["answer_policy"],
-                context={"grading_authority": "backend", "backend_matched": result["correct"], "grid": (question.data or {}).get("grid")},
+                context={
+                    "grading_authority": "backend",
+                    "backend_matched": result["correct"],
+                    "user_marked_close": feedback["user_marked_close"],
+                    "grid": (question.data or {}).get("grid")
+                },
             ),
         }
         apply_scheduling(db, progress, quality, today=data.review_date, metadata=metadata)
         result["progress"] = answer_progress_payload(progress, today=data.review_date)
+        result.update(feedback)
     db.commit()
     sync_generated_hard_collection(db)
     return {"group_id": data.group_id, "items": [{key: value for key, value in result.items() if key != "question"} for result in graded["items"]]}
@@ -531,8 +577,9 @@ def answer_set(data: SetAnswerRequest, db: Session = Depends(get_db)):
     response = {"group_id": data.group_id, "items": response_items, "recognized": graded["recognized"], "unmatched": graded["unmatched"]}
     if not data.commit:
         return response
-    if any(result["correct"] for result in graded["items"]) and data.quality not in {1, 2, 3}:
-        raise HTTPException(status_code=422, detail="Une difficulté est requise après une bonne réponse.")
+    has_hit = any(result["correct"] for result in graded["items"])
+    allow_close = not has_hit
+    validate_server_graded_quality(has_hit, data.quality)
 
     difficulty = set_mode_difficulty(data.mode)
     for result in graded["items"]:
@@ -543,15 +590,18 @@ def answer_set(data: SetAnswerRequest, db: Session = Depends(get_db)):
             db.add(progress)
             db.flush()
         if progress_in_relearning(progress, data.review_date):
-            if result["correct"]:
+            if result["correct"] or (allow_close and data.quality == 1):
                 graduate_relearning(db, [question.id], today=data.review_date)
             result["progress"] = answer_progress_payload(progress, today=data.review_date)
+            result.update(server_graded_feedback(result["correct"], data.quality, allow_close=allow_close))
             continue
-        quality = data.quality if result["correct"] else 0
+        quality = server_graded_quality(result["correct"], data.quality, allow_close=allow_close)
+        feedback = server_graded_feedback(result["correct"], data.quality, allow_close=allow_close)
         metadata = {
             "set_mode": data.mode,
             "raw_quality": data.quality,
             "effective_quality": quality,
+            "user_marked_close": feedback["user_marked_close"],
             "mode_adjusted": difficulty != 1.0,
             "mode_difficulty": difficulty,
             "answer": result["answer"],
@@ -561,11 +611,17 @@ def answer_set(data: SetAnswerRequest, db: Session = Depends(get_db)):
                 expected_value=result["expected"], type_q="set",
                 presentation_kind="set_group", mode=data.mode,
                 direction="set_recall", answer_policy=result["answer_policy"],
-                context={"grading_authority": "backend", "backend_matched": result["correct"], "set": (question.data or {}).get("set")},
+                context={
+                    "grading_authority": "backend",
+                    "backend_matched": result["correct"],
+                    "user_marked_close": feedback["user_marked_close"],
+                    "set": (question.data or {}).get("set")
+                },
             ),
         }
         apply_scheduling(db, progress, quality, today=data.review_date, metadata=metadata)
         result["progress"] = answer_progress_payload(progress, today=data.review_date)
+        result.update(feedback)
     db.commit()
     sync_generated_hard_collection(db)
     return {**response, "items": [{key: value for key, value in result.items() if key != "question"} for result in graded["items"]]}
@@ -581,21 +637,21 @@ def answer_enumeration(data: EnumerationAnswerRequest, db: Session = Depends(get
     response["required_count"] = result["enumeration"]["required_count"]
     if not data.commit:
         return response
-    if result["correct"] and data.quality not in {1, 2, 3}:
-        raise HTTPException(status_code=422, detail="Une difficulté est requise après une réussite.")
+    validate_server_graded_quality(result["correct"], data.quality)
     progress = question.progress
     if not progress:
         progress = create_initial_progress(question.id, today=data.review_date); db.add(progress)
     if progress_in_relearning(progress, data.review_date):
-        if result["correct"]:
+        if result["correct"] or data.quality == 1:
             graduate_relearning(db, [question.id], today=data.review_date)
         db.commit(); sync_generated_hard_collection(db)
-        return {**response, "progress": answer_progress_payload(progress, today=data.review_date)}
-    quality = data.quality if result["correct"] else 0
-    metadata = {"enumeration_mode": data.mode, "raw_quality": data.quality, "effective_quality": quality, "mode_difficulty": enumeration_mode_difficulty(data.mode), "answer": data.answers, "answer_event": answer_event(question=question, raw_response=data.answers, resolved_response_id=question.id if result["correct"] else None, expected_value=f"{result['enumeration']['required_count']} éléments distincts", type_q="enumeration", presentation_kind="single_card", mode=ENUMERATION_MODE_COLLECT_QUOTA, direction="quota_recall", answer_policy=result["answer_policy"], context={"grading_authority": "backend", "backend_matched": result["correct"], "matched": result["matched"], "unmatched": result["unmatched"]})}
+        return {**response, **server_graded_feedback(result["correct"], data.quality, allow_close=True), "progress": answer_progress_payload(progress, today=data.review_date)}
+    quality = server_graded_quality(result["correct"], data.quality, allow_close=True)
+    feedback = server_graded_feedback(result["correct"], data.quality, allow_close=True)
+    metadata = {"enumeration_mode": data.mode, "raw_quality": data.quality, "effective_quality": quality, "user_marked_close": feedback["user_marked_close"], "mode_difficulty": enumeration_mode_difficulty(data.mode), "answer": data.answers, "answer_event": answer_event(question=question, raw_response=data.answers, resolved_response_id=question.id if result["correct"] else None, expected_value=f"{result['enumeration']['required_count']} éléments distincts", type_q="enumeration", presentation_kind="single_card", mode=ENUMERATION_MODE_COLLECT_QUOTA, direction="quota_recall", answer_policy=result["answer_policy"], context={"grading_authority": "backend", "backend_matched": result["correct"], "user_marked_close": feedback["user_marked_close"], "matched": result["matched"], "unmatched": result["unmatched"]})}
     apply_scheduling(db, progress, quality, today=data.review_date, metadata=metadata)
     db.commit(); sync_generated_hard_collection(db)
-    return {**response, "progress": answer_progress_payload(progress, today=data.review_date)}
+    return {**response, **feedback, "progress": answer_progress_payload(progress, today=data.review_date)}
 
 
 def normalize_context_count(value):

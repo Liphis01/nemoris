@@ -101,6 +101,7 @@ def get_set_group(db, group_id):
 def save_set_group(db, group_id, payload):
     group = get_set_group_or_404(db, group_id)
     incoming = normalize_set_source(payload.members)
+    preserve_progress = payload.edit_policy == "preserve_progress"
     previous_source = ((group.data or {}).get("set") or {}).get("members")
     previous = normalize_set_source(previous_source)["members"] if previous_source else []
     existing = {((item.data or {}).get("set") or {}).get("key"): item for item in group.questions or [] if item.type_q == "set"}
@@ -109,7 +110,10 @@ def save_set_group(db, group_id, payload):
     members, replaced_keys = [], set()
     for member in incoming["members"]:
         old = previous_by_key.get(member["key"])
-        if old and old["value"] != member["value"]:
+        if old and not preserve_progress and (
+            old["value"] != member["value"] or
+            old["aliases"] != member["aliases"]
+        ):
             replaced_keys.add(member["key"])
             member = {**member, "key": str(uuid.uuid4())}
         members.append(member)

@@ -1,4 +1,8 @@
-import { applyMobileAnswer, selectDueMobileReviewItems } from "./mobileReviewEngine";
+import {
+  applyMobileAnswer,
+  countUnsupportedMobileQuestions,
+  selectDueMobileReviewItems
+} from "./mobileReviewEngine";
 import {
   exportMobileDatabase,
   insertMobileReviewLog,
@@ -50,6 +54,7 @@ export async function getMobileStatus() {
     collection_dirty: syncStatus.collection_dirty,
     question_count: collection.questions.length,
     due_count: selectDueMobileReviewItems(collection).length,
+    unsupported_question_count: countUnsupportedMobileQuestions(collection.questions),
     last_sync_status: syncStatus.last_sync_status,
     last_sync_error: syncStatus.last_sync_error
   };

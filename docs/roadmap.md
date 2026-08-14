@@ -32,6 +32,7 @@
 
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
+- si j'ai un groupe split en deux dans la review, je crois que le relearning les garde séparés en deux groupes au lieu de les regrouper
 
 ## to do when i have more time
 

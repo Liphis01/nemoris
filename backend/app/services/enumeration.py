@@ -59,14 +59,30 @@ def validate_enumeration_pack_entries(question_entries):
 def grade_enumeration_answers(question, answers):
     enumeration = validate_enumeration_data(question.data or {})
     policy = effective_answer_policy(question=question, type_q="enumeration")
-    claimed, matched, unmatched = set(), [], []
+    claimed, seen_responses, matched, duplicates, unmatched = set(), set(), [], [], []
     for raw in [str(value or "").strip() for value in answers]:
         if not raw:
             continue
         response = normalize_answer_text(raw, policy)
-        member = next((member for member in enumeration["members"] if member["value"] not in claimed and response in {normalize_answer_text(value, policy) for value in [member["value"], *member["aliases"]]}), None)
-        if member:
-            claimed.add(member["value"]); matched.append({"answer": raw, "expected": member["value"]})
+        if response in seen_responses:
+            duplicates.append(raw)
+            continue
+        seen_responses.add(response)
+        member = next((member for member in enumeration["members"] if response in {normalize_answer_text(value, policy) for value in [member["value"], *member["aliases"]]}), None)
+        if member and member["value"] not in claimed:
+            claimed.add(member["value"])
+            matched.append({"answer": raw, "expected": member["value"]})
+        elif member:
+            duplicates.append(raw)
         else:
             unmatched.append(raw)
-    return {"correct": len(matched) >= enumeration["required_count"], "matched": matched, "unmatched": unmatched, "enumeration": enumeration, "answer_policy": policy}
+    missing_count = max(0, enumeration["required_count"] - len(matched))
+    return {
+        "correct": len(matched) >= enumeration["required_count"],
+        "matched": matched,
+        "duplicates": duplicates,
+        "unmatched": unmatched,
+        "missing_count": missing_count,
+        "enumeration": enumeration,
+        "answer_policy": policy
+    }

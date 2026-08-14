@@ -61,6 +61,10 @@ def cloze_question_guid(group_guid, key):
     return str(uuid.uuid5(CLOZE_NAMESPACE, f"{group_guid}:{key}"))
 
 
+def cloze_marker_source(key, answer):
+    return f"{{{{cloze:{key}::{answer}}}}}"
+
+
 def validate_cloze_pack_entries(group_entries, question_entries):
     """Reject a pack whose cloze source and generated cards disagree."""
     groups = {
@@ -186,6 +190,34 @@ def save_cloze_group(db, group_id, payload):
         for question in group.questions or []
         if question.type_q == "cloze"
     }
+
+    if (payload.edit_policy or "replace_progress") != "preserve_progress":
+        changed_keys = [
+            key for key, answer in values.items()
+            if key in existing and existing[key].answer != answer
+        ]
+        if changed_keys:
+            replacement_keys = {
+                key: str(uuid.uuid4())
+                for key in changed_keys
+            }
+
+            def replace_changed_marker(match):
+                key = str(uuid.UUID(match.group(1)))
+                replacement = replacement_keys.get(key)
+                if not replacement:
+                    return match.group(0)
+                return cloze_marker_source(replacement, match.group(2))
+
+            source = CLOZE_MARKER_RE.sub(replace_changed_marker, source)
+            values = parse_cloze_source(source)
+
+            group_data = dict(group.data or {})
+            group_data["cloze"] = {"source": source, "format": 1}
+            if payload.answer_policy is not None:
+                group_data = merge_answer_policy(group_data, payload.answer_policy, type_q="cloze")
+            group.data = group_data
+
     active_keys = set(values)
     removed = [question for key, question in existing.items() if key not in active_keys]
     removed_ids = [question.id for question in removed]
@@ -201,10 +233,7 @@ def save_cloze_group(db, group_id, payload):
             question = existing.get(key)
             expected_guid = cloze_question_guid(group.guid, key)
             if question and question.answer != answer:
-                # A changed expected value is a different memory. Remove the old
-                # card (while retaining its append-only review log) and create a
-                # new hidden key from the editor, never transfer its progress.
-                _bad("Modifier le contenu d'un trou exige de créer un nouveau trou.")
+                question.answer = answer
             if question is None:
                 question = Question(
                     guid=expected_guid,
