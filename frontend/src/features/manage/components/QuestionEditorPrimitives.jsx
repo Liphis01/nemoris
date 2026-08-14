@@ -30,6 +30,67 @@ const DEFAULT_MEDIA_LABELS = {
   typeError: "Seules les images sont acceptées."
 };
 
+// A pasted image carries whatever resolution the source put on the clipboard:
+// copying from a web page yields the variant that page loaded (often a
+// thumbnail), and a screenshot yields screen pixels. Nothing downstream
+// degrades the file, so the only fix is to flag it while the user can still
+// re-copy the original instead of discovering the blur weeks later in review.
+const LOW_RES_PASTE_MIN_WIDTH = 400;
+
+function readImageSize(file) {
+  return new Promise((resolve) => {
+    // SVG is vector, so its intrinsic width says nothing about render quality.
+    if (
+      !file ||
+      !file.type?.startsWith("image/") ||
+      file.type === "image/svg+xml" ||
+      typeof URL?.createObjectURL !== "function"
+    ) {
+      resolve(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const probe = new Image();
+
+    function finish(size) {
+      URL.revokeObjectURL(objectUrl);
+      resolve(size);
+    }
+
+    probe.onload = () => finish({ height: probe.naturalHeight, width: probe.naturalWidth });
+    probe.onerror = () => finish(null);
+    probe.src = objectUrl;
+  });
+}
+
+async function lowResPasteNotice(file) {
+  const size = await readImageSize(file);
+
+  if (!size?.width || size.width >= LOW_RES_PASTE_MIN_WIDTH) return "";
+
+  return `Image de petite taille (${size.width} × ${size.height} px). ` +
+    "Pour la pleine résolution, copie l'adresse de l'image (clic droit → " +
+    "« Copier l'adresse de l'image ») et colle-la ici.";
+}
+
+function LowResNotice({ notice }) {
+  if (!notice) return null;
+
+  return (
+    <div
+      style={{
+        color: "#e9be74",
+        fontSize: "12px",
+        lineHeight: 1.45,
+        marginTop: "9px"
+      }}
+    >
+      {notice}
+    </div>
+  );
+}
+
 function QuestionTypeChip({ type }) {
   const typeStyle = getQuestionTypeChipStyle(type);
 
@@ -225,6 +286,7 @@ export function ImageMediaField({
   const [isImportingUrl, setIsImportingUrl] = useState(false);
   const [showUrl, setShowUrl] = useState(false);
   const [error, setError] = useState("");
+  const [lowResNotice, setLowResNotice] = useState("");
   const mediaValue = media || "";
   const hasMedia = Boolean(String(mediaValue).trim());
   const canImportUrl = Boolean(onImportMediaUrl) &&
@@ -246,7 +308,7 @@ export function ImageMediaField({
     );
   }
 
-  async function uploadFile(file) {
+  async function uploadFile(file, { fromPaste = false } = {}) {
     if (!file || !onUploadFile) return;
 
     if (file.type && !fileMatchesAccept(file)) {
@@ -255,6 +317,7 @@ export function ImageMediaField({
     }
 
     setError("");
+    setLowResNotice("");
     setIsUploading(true);
 
     try {
@@ -263,6 +326,11 @@ export function ImageMediaField({
 
       if (nextMedia) {
         onMediaChange?.(nextMedia);
+      }
+
+      // Deliberately not awaited: the probe must never hold up the busy state.
+      if (fromPaste && nextMedia) {
+        lowResPasteNotice(file).then(setLowResNotice);
       }
     } catch (uploadError) {
       setError(uploadError.message || "Import impossible.");
@@ -294,7 +362,7 @@ export function ImageMediaField({
 
     if (pastedFile) {
       event.preventDefault();
-      uploadFile(pastedFile);
+      uploadFile(pastedFile, { fromPaste: true });
       return;
     }
 
@@ -308,6 +376,8 @@ export function ImageMediaField({
         pastedText.startsWith("data:")
       )
     ) {
+      // Pasting the address is the full-resolution path the notice asks for.
+      setLowResNotice("");
       onMediaChange?.(pastedText);
     }
   }
@@ -336,6 +406,7 @@ export function ImageMediaField({
 
   async function removeMedia() {
     setError("");
+    setLowResNotice("");
 
     try {
       if (onRemoveMedia && hasMedia) {
@@ -519,6 +590,8 @@ export function ImageMediaField({
           {error}
         </div>
       )}
+
+      <LowResNotice notice={lowResNotice} />
     </div>
   );
 }
@@ -582,6 +655,7 @@ export function MediaPoolField({
   const [urlInput, setUrlInput] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
+  const [lowResNotice, setLowResNotice] = useState("");
   const [previewMedia, setPreviewMedia] = useState(null);
 
   const text = { ...DEFAULT_MEDIA_LABELS, ...labels };
@@ -612,12 +686,13 @@ export function MediaPoolField({
     commitPool([...images, value]);
   }
 
-  async function uploadFiles(fileList) {
+  async function uploadFiles(fileList, { fromPaste = false } = {}) {
     const files = Array.from(fileList || []).filter(fileMatchesAccept);
 
     if (files.length === 0 || !onUploadFile) return;
 
     setError("");
+    setLowResNotice("");
     setIsUploading(true);
 
     try {
@@ -631,6 +706,12 @@ export function MediaPoolField({
       }
 
       if (added.length) commitPool([...images, ...added]);
+
+      // Deliberately not awaited: the probes must never hold up the busy state.
+      if (fromPaste && added.length) {
+        Promise.all(files.map(lowResPasteNotice))
+          .then((notices) => setLowResNotice(notices.find(Boolean) || ""));
+      }
     } catch (uploadError) {
       setError(uploadError.message || "Import impossible.");
     } finally {
@@ -709,7 +790,7 @@ export function MediaPoolField({
 
     if (files.length) {
       event.preventDefault();
-      uploadFiles(files);
+      uploadFiles(files, { fromPaste: true });
       return;
     }
 
@@ -724,6 +805,8 @@ export function MediaPoolField({
       )
     ) {
       event.preventDefault();
+      // Pasting the address is the full-resolution path the notice asks for.
+      setLowResNotice("");
       addMedia(pastedText);
     }
   }
@@ -943,6 +1026,8 @@ export function MediaPoolField({
           {error}
         </div>
       )}
+
+      <LowResNotice notice={lowResNotice} />
 
       {open && createPortal(
         <>
