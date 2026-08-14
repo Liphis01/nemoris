@@ -42,6 +42,17 @@
   box-shadow: 0 14px 30px rgba(126, 226, 168, 0.12);
 }
 
+.review-outcome-button-secondary {
+  background: #20252e;
+  border: 1px solid #334156;
+  color: #cfe2ff;
+}
+
+.review-outcome-button-secondary:hover:not(:disabled) {
+  background: #253044;
+  border-color: #4a638c;
+}
+
 .session-end {
   background:
     linear-gradient(135deg, rgba(255, 204, 122, 0.1), transparent 48%),
@@ -53,6 +64,9 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
+  max-height: 100%;
+  min-height: 0;
+  overflow: auto;
   padding: 28px;
   width: 100%;
 }
@@ -92,6 +106,148 @@
   gap: 10px;
 }
 
+.session-debrief-stats {
+  border-bottom: 1px solid #2a2a2a;
+  border-top: 1px solid #2a2a2a;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.session-debrief-stat {
+  background: rgba(255, 255, 255, 0.025);
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.session-debrief-stat span,
+.session-debrief-stat small {
+  color: #8e8e8e;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.session-debrief-stat strong {
+  color: #f2f2f2;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.session-debrief-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.session-debrief-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.session-debrief-section h3 {
+  color: #e8e8e8;
+  font-size: 15px;
+  font-weight: 850;
+  margin: 0;
+}
+
+.session-debrief-muted {
+  color: #9b9b9b;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.session-debrief-list {
+  border-top: 1px solid #292929;
+  display: grid;
+}
+
+.session-debrief-list-row {
+  align-items: center;
+  border-bottom: 1px solid #292929;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 9px 0;
+}
+
+.session-debrief-list-row strong {
+  color: #efefef;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-debrief-list-row span {
+  color: #aaa;
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.session-debrief-details {
+  border-top: 1px solid #292929;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.session-debrief-detail-row {
+  align-items: center;
+  border-bottom: 1px solid #292929;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.4fr) 86px 98px 130px;
+  min-width: 0;
+  padding: 10px 0;
+}
+
+.session-debrief-detail-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-debrief-detail-row strong {
+  color: #f0f0f0;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-debrief-detail-row span {
+  color: #a8a8a8;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.session-debrief-detail-row [data-status="success"],
+.session-debrief-detail-row [data-status="hard"] {
+  color: #97e9b2;
+  font-weight: 800;
+}
+
+.session-debrief-detail-row [data-status="close"] {
+  color: #f3d36a;
+  font-weight: 800;
+}
+
+.session-debrief-detail-row [data-status="miss"],
+.session-debrief-detail-row [data-status="unattempted"] {
+  color: #ff9aa5;
+  font-weight: 800;
+}
+
 @media (max-width: 520px) {
   .review-outcome-button {
     width: 100%;
@@ -103,6 +259,28 @@
 
   .session-end-title {
     font-size: 25px;
+  }
+
+  .session-end-actions,
+  .session-end-head {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
+  .session-debrief-grid,
+  .session-debrief-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-debrief-list-row,
+  .session-debrief-detail-row {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-debrief-list-row span {
+    text-align: left;
   }
 }
 

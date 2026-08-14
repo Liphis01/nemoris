@@ -20,6 +20,10 @@ import {
   STILL_LEARNING_QUALITY,
   isRelearningQuestion
 } from "../relearningGrades";
+import {
+  buildSessionDebrief,
+  createReviewResultRecords
+} from "../sessionDebrief";
 
 
 function isEditableTarget(target) {
@@ -77,6 +81,19 @@ function localReviewDateString(now = new Date()) {
 }
 
 
+function atomicQuestionCount(question) {
+  return Array.isArray(question?.items) ? question.items.length : 1;
+}
+
+
+function pendingRelearningCount(questions, currentIndex) {
+  return questions
+    .slice(currentIndex)
+    .filter(isRelearningQuestion)
+    .reduce((total, question) => total + atomicQuestionCount(question), 0);
+}
+
+
 export function useReviewSession(active) {
   // Owns one review run: fetching due items, moving through the queue, and
   // re-queueing failures for another pass.
@@ -89,6 +106,9 @@ export function useReviewSession(active) {
   const [selectedTextQuality, setSelectedTextQuality] = useState(null);
   const [answeredTextByIndex, setAnsweredTextByIndex] = useState({});
   const [returnToLastQuestionArmed, setReturnToLastQuestionArmed] = useState(false);
+  const [sessionResults, setSessionResults] = useState([]);
+  const [skippedRetryCount, setSkippedRetryCount] = useState(0);
+  const [reviewDate, setReviewDate] = useState(null);
   const textAnswerTimeoutRef = useRef(null);
   const textAnswerPendingRef = useRef(false);
   const textAnswerRequestsRef = useRef({});
@@ -144,6 +164,34 @@ export function useReviewSession(active) {
     return Promise.allSettled(requests);
   }, []);
 
+  const replaceSessionRecords = useCallback((attemptKey, records) => {
+    setSessionResults(prev => [
+      ...prev.filter(record => !String(record.attemptKey || "").startsWith(`${attemptKey}:`)),
+      ...records
+    ]);
+  }, []);
+
+  const recordAnswerResult = useCallback((
+    presentation,
+    response,
+    submittedQualities,
+    attemptKey
+  ) => {
+    const records = createReviewResultRecords({
+      attemptKey,
+      presentation,
+      response,
+      submittedQualities,
+      reviewDate: reviewDateRef.current
+    });
+
+    if (records.length > 0) {
+      replaceSessionRecords(attemptKey, records);
+    }
+
+    return response;
+  }, [replaceSessionRecords]);
+
   const submitMapAnswer = useCallback((
     items,
     mode = undefined,
@@ -157,8 +205,13 @@ export function useReviewSession(active) {
     answers,
     candidates,
     reviewDateRef.current
-  ),
-  []);
+  ).then(response => recordAnswerResult(
+    current,
+    response,
+    items,
+    `group:${currentIndex}`
+  )),
+  [current, currentIndex, recordAnswerResult]);
 
   const submitMediaAnswer = useCallback((
     items,
@@ -173,8 +226,13 @@ export function useReviewSession(active) {
     answers,
     candidates,
     reviewDateRef.current
-  ),
-  []);
+  ).then(response => recordAnswerResult(
+    current,
+    response,
+    items,
+    `group:${currentIndex}`
+  )),
+  [current, currentIndex, recordAnswerResult]);
 
   const submitTextAnswer = useCallback((
     items,
@@ -189,25 +247,122 @@ export function useReviewSession(active) {
     answers,
     candidates,
     reviewDateRef.current
-  ),
-  []);
+  ).then(response => recordAnswerResult(
+    current,
+    response,
+    items,
+    `group:${currentIndex}`
+  )),
+  [current, currentIndex, recordAnswerResult]);
 
   const submitTimelineAnswer = useCallback((items, presentationContext = undefined) =>
-    sendTimelineAnswer(items, presentationContext, reviewDateRef.current),
-  []);
+    sendTimelineAnswer(items, presentationContext, reviewDateRef.current)
+      .then(response => recordAnswerResult(
+        current,
+        response,
+        {},
+        `timeline:${currentIndex}`
+      )),
+  [current, currentIndex, recordAnswerResult]);
 
   const submitSequenceAnswer = useCallback((
     payload,
     mode = undefined,
     contextCount = undefined
-  ) => sendSequenceAnswer(payload, mode, contextCount, reviewDateRef.current),
-  []);
+  ) => sendSequenceAnswer(payload, mode, contextCount, reviewDateRef.current)
+    .then(response => {
+      if (payload?.commit === false || response?.committed === false) {
+        return response;
+      }
 
-  const submitClozeAnswer = useCallback((payload) => sendClozeAnswer(payload, reviewDateRef.current), []);
-  const submitGridAnswer = useCallback((payload) => sendGridAnswer(payload, reviewDateRef.current), []);
-  const submitSetAnswer = useCallback((payload) => sendSetAnswer(payload, reviewDateRef.current), []);
-  const submitEnumerationAnswer = useCallback((payload) => sendEnumerationAnswer(payload, reviewDateRef.current), []);
-  const submitNumericAnswer = useCallback((payload) => sendNumericAnswer(payload, reviewDateRef.current), []);
+      return recordAnswerResult(
+        current,
+        response,
+        payload?.qualities || {},
+        `sequence:${currentIndex}`
+      );
+    }),
+  [current, currentIndex, recordAnswerResult]);
+
+  const submitClozeAnswer = useCallback((payload) =>
+    sendClozeAnswer(payload, reviewDateRef.current)
+      .then(response => {
+        if (!payload?.commit) return response;
+
+        return recordAnswerResult(
+          current,
+          response,
+          { [payload.questionId]: response?.effective_quality ?? payload.quality },
+          `cloze:${currentIndex}`
+        );
+      }),
+  [current, currentIndex, recordAnswerResult]);
+  const submitGridAnswer = useCallback((payload) =>
+    sendGridAnswer(payload, reviewDateRef.current)
+      .then(response => {
+        if (!payload?.commit) return response;
+
+        const submittedQualities = Object.fromEntries(
+          (response?.items || []).map(item => [
+            item.question_id,
+            item.effective_quality ?? item.quality ?? payload.quality
+          ])
+        );
+
+        return recordAnswerResult(
+          current,
+          response,
+          submittedQualities,
+          `grid:${currentIndex}`
+        );
+      }),
+  [current, currentIndex, recordAnswerResult]);
+  const submitSetAnswer = useCallback((payload) =>
+    sendSetAnswer(payload, reviewDateRef.current)
+      .then(response => {
+        if (!payload?.commit) return response;
+
+        const submittedQualities = Object.fromEntries(
+          (response?.items || []).map(item => [
+            item.question_id,
+            item.effective_quality ?? item.quality ?? payload.quality
+          ])
+        );
+
+        return recordAnswerResult(
+          current,
+          response,
+          submittedQualities,
+          `set:${currentIndex}`
+        );
+      }),
+  [current, currentIndex, recordAnswerResult]);
+  const submitEnumerationAnswer = useCallback((payload) =>
+    sendEnumerationAnswer(payload, reviewDateRef.current)
+      .then(response => {
+        if (!payload?.commit) return response;
+
+        return recordAnswerResult(
+          current,
+          response,
+          { [payload.questionId]: response?.effective_quality ?? payload.quality },
+          `enumeration:${currentIndex}`
+        );
+      }),
+  [current, currentIndex, recordAnswerResult]);
+  const submitNumericAnswer = useCallback((payload) =>
+    sendNumericAnswer(payload, reviewDateRef.current)
+      .then(response => {
+        if (!payload?.commit) return response;
+
+        return recordAnswerResult(
+          current,
+          response,
+          { [payload.questionId]: response?.effective_quality ?? payload.quality },
+          `numeric:${currentIndex}`
+        );
+      }),
+  [current, currentIndex, recordAnswerResult]);
 
   // "Acquis" for grouped items: graduate them from the frozen first-fail state
   // on the pinned session date, carrying no grade.
@@ -222,7 +377,8 @@ export function useReviewSession(active) {
     // they appear again after the current queue.
     const answerIndex = currentIndex;
     const relearning = isRelearningQuestion(current);
-    const existingAnswer = answeredTextByIndex[answerIndex]?.questionId === current.question_id
+    const questionId = current.question_id ?? current.id;
+    const existingAnswer = answeredTextByIndex[answerIndex]?.questionId === questionId
       ? answeredTextByIndex[answerIndex]
       : null;
     const previousQuality = existingAnswer?.quality;
@@ -233,23 +389,33 @@ export function useReviewSession(active) {
     const request = relearning
       ? (quality === STILL_LEARNING_QUALITY
         ? Promise.resolve()
-        : graduateRelearning([current.question_id], reviewDateRef.current))
+        : graduateRelearning([questionId], reviewDateRef.current))
       : existingAnswer
         ? previousRequest
           .catch(() => null)
           .then(() => reviseAnswer(
-            current.question_id,
+            questionId,
             quality,
             reviewDateRef.current
           ))
-        : sendAnswer(current.question_id, quality, reviewDateRef.current);
+        : sendAnswer(questionId, quality, reviewDateRef.current);
 
     textAnswerRequestsRef.current[answerIndex] = request;
+    if (!relearning) {
+      request
+        .then(progress => recordAnswerResult(
+          current,
+          { progress },
+          { [questionId]: quality },
+          `text:${answerIndex}`
+        ))
+        .catch(console.error);
+    }
     request.catch(console.error);
     setAnsweredTextByIndex(prev => ({
       ...prev,
       [answerIndex]: {
-        questionId: current.question_id,
+        questionId,
         quality
       }
     }));
@@ -291,7 +457,8 @@ export function useReviewSession(active) {
     answeredTextByIndex,
     clearTextAnswerTimeout,
     current,
-    currentIndex
+    currentIndex,
+    recordAnswerResult
   ]);
 
   // Every grouped type finishes the same way: one screen answers many atomic
@@ -415,8 +582,9 @@ export function useReviewSession(active) {
   // instead of grinding through them first. `questions`/`currentIndex` are
   // deliberately left alone so "modifier la dernière réponse" keeps working.
   const skipToSessionEnd = useCallback(() => {
+    setSkippedRetryCount(pendingRelearningCount(questions, currentIndex));
     completeSession({ current: false });
-  }, [completeSession]);
+  }, [completeSession, currentIndex, questions]);
 
   useEffect(() => {
     if (!active) {
@@ -427,6 +595,9 @@ export function useReviewSession(active) {
       setSessionComplete(false);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setSessionResults([]);
+      setSkippedRetryCount(0);
+      setReviewDate(null);
       textAnswerRequestsRef.current = {};
       reviewDateRef.current = null;
       return;
@@ -444,8 +615,12 @@ export function useReviewSession(active) {
       setSelectedTextQuality(null);
       setAnsweredTextByIndex({});
       setReturnToLastQuestionArmed(false);
+      setSessionResults([]);
+      setSkippedRetryCount(0);
       textAnswerRequestsRef.current = {};
-      reviewDateRef.current = localReviewDateString();
+      const nextReviewDate = localReviewDateString();
+      reviewDateRef.current = nextReviewDate;
+      setReviewDate(nextReviewDate);
 
       try {
         const data = await getReview();
@@ -604,6 +779,11 @@ export function useReviewSession(active) {
     reviewError,
     reviewLoading,
     setShowAnswer,
-    showAnswer
+    showAnswer,
+    sessionDebrief: buildSessionDebrief({
+      records: sessionResults,
+      reviewDate,
+      skippedRetryCount
+    })
   };
 }

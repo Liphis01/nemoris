@@ -308,11 +308,123 @@ describe("ReviewSession", () => {
     });
 
     expect(
-      screen.getByRole("heading", { name: "Session terminée" })
+      screen.getByRole("heading", { name: "Bilan de session" })
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Retour au menu" })
     ).toBeInTheDocument();
+  });
+
+  it("renders learner debrief metrics and the recommended action", () => {
+    const setMode = vi.fn();
+    renderReviewSession({
+      setMode,
+      questions: [],
+      currentIndex: 0,
+      sessionComplete: true,
+      sessionDebrief: {
+        completedCount: 3,
+        successCount: 1,
+        missCount: 1,
+        tomorrowCount: 1,
+        tomorrow: "2026-08-15",
+        recommendation: {
+          label: "Travailler les erreurs",
+          mode: "training",
+          text: "Commence par 1 erreur récurrente."
+        },
+        typeStats: [
+          {
+            key: "map",
+            label: "Carte",
+            total: 2,
+            success: 1,
+            close: 0,
+            miss: 1,
+            unattempted: 0
+          }
+        ],
+        groupStats: [
+          {
+            key: "group:7",
+            label: "Europe",
+            total: 2,
+            success: 1,
+            close: 0,
+            miss: 1,
+            unattempted: 0
+          }
+        ],
+        newMisses: [],
+        recurringMisses: [
+          {
+            attemptKey: "group:7:2",
+            label: "Germany",
+            groupName: "Europe",
+            typeLabel: "Carte"
+          }
+        ],
+        intervalChanges: [
+          {
+            attemptKey: "group:7:1",
+            label: "France"
+          }
+        ],
+        tomorrowRecords: [
+          {
+            attemptKey: "group:7:2",
+            label: "Germany"
+          }
+        ],
+        confusions: [
+          {
+            questionId: 2,
+            expected: "Germany",
+            selected: "Spain",
+            typeLabel: "Carte"
+          }
+        ],
+        records: [
+          {
+            attemptKey: "group:7:1",
+            label: "France",
+            groupName: "Europe",
+            typeLabel: "Carte",
+            type_q: "map",
+            quality: 2,
+            status: "success",
+            previousInterval: 3,
+            nextInterval: 8,
+            nextReview: "2026-08-22"
+          },
+          {
+            attemptKey: "group:7:2",
+            label: "Germany",
+            groupName: "Europe",
+            typeLabel: "Carte",
+            type_q: "map",
+            quality: 0,
+            status: "miss",
+            previousInterval: 5,
+            nextInterval: 0,
+            nextReview: "2026-08-15"
+          }
+        ]
+      }
+    });
+
+    expect(screen.getByText("Commence par 1 erreur récurrente.")).toBeInTheDocument();
+    expect(screen.getByText("Terminées")).toBeInTheDocument();
+    expect(screen.getByText("Par type")).toBeInTheDocument();
+    expect(screen.getAllByText("Carte").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Europe").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Germany").length).toBeGreaterThan(0);
+    expect(screen.getByText("Répondu : Spain")).toBeInTheDocument();
+    expect(screen.getByText("5 j -> 0 j")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Travailler les erreurs" }));
+
+    expect(setMode).toHaveBeenCalledWith("training");
   });
 
   it("keeps the revise-last-answer action reachable once the session ends", () => {

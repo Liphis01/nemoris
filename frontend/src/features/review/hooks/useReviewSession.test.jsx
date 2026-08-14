@@ -4,8 +4,15 @@ import { useReviewSession } from "./useReviewSession";
 import {
   getReview,
   graduateRelearning,
+  sendClozeAnswer,
+  sendEnumerationAnswer,
+  sendGridAnswer,
   sendMediaAnswer,
   sendMapAnswer,
+  sendNumericAnswer,
+  sendSequenceAnswer,
+  sendSetAnswer,
+  sendTextAnswer,
   sendTimelineAnswer,
   reviseAnswer,
   sendAnswer
@@ -14,11 +21,16 @@ import {
 vi.mock("../../../api/review", () => ({
   getReview: vi.fn(),
   graduateRelearning: vi.fn(),
+  sendClozeAnswer: vi.fn(),
+  sendEnumerationAnswer: vi.fn(),
+  sendGridAnswer: vi.fn(),
   sendMediaAnswer: vi.fn(),
   sendMapAnswer: vi.fn(),
+  sendNumericAnswer: vi.fn(),
+  sendSequenceAnswer: vi.fn(),
+  sendSetAnswer: vi.fn(),
   sendTextAnswer: vi.fn(),
   sendTimelineAnswer: vi.fn(),
-  sendSequenceAnswer: vi.fn(),
   reviseAnswer: vi.fn(),
   sendAnswer: vi.fn()
 }));
@@ -34,8 +46,15 @@ describe("useReviewSession", () => {
       }
     ]);
     sendAnswer.mockResolvedValue({});
+    sendClozeAnswer.mockResolvedValue({});
+    sendEnumerationAnswer.mockResolvedValue({});
+    sendGridAnswer.mockResolvedValue({});
     sendMapAnswer.mockResolvedValue({});
     sendMediaAnswer.mockResolvedValue({});
+    sendNumericAnswer.mockResolvedValue({});
+    sendSequenceAnswer.mockResolvedValue({});
+    sendSetAnswer.mockResolvedValue({});
+    sendTextAnswer.mockResolvedValue({});
     sendTimelineAnswer.mockResolvedValue({});
     reviseAnswer.mockResolvedValue({});
     graduateRelearning.mockResolvedValue({});

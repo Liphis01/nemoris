@@ -45,7 +45,7 @@ export function getReviewIntake() {
 
 
 export function sendAnswer(questionId, quality, reviewDate = undefined) {
-  return requestOk("/answer", {
+  return requestJson("/answer", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -60,7 +60,7 @@ export function sendAnswer(questionId, quality, reviewDate = undefined) {
 
 
 export function reviseAnswer(questionId, quality, reviewDate = undefined) {
-  return requestOk("/answer/revise", {
+  return requestJson("/answer/revise", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -143,7 +143,7 @@ export function sendMapAnswer(
   );
 
   // items is an object of question_id -> quality, one entry per atomic map zone.
-  return requestOk("/answer_map", {
+  return requestJson("/answer_map", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -181,7 +181,7 @@ export function sendMediaAnswer(
   );
 
   // items is an object of question_id -> quality, one entry per atomic image.
-  return requestOk("/answer_media", {
+  return requestJson("/answer_media", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -219,7 +219,7 @@ export function sendTextAnswer(
   );
 
   // items is an object of question_id -> quality, one entry per text pair.
-  return requestOk("/answer_text", {
+  return requestJson("/answer_text", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

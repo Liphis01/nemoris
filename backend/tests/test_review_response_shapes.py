@@ -49,6 +49,16 @@ PROGRESS_KEYS = {
     "relearning",
     "history"
 }
+GROUPED_ANSWER_ITEM_KEYS = {
+    "question_id",
+    "quality",
+    "raw_quality",
+    "effective_quality",
+    "backend_matched",
+    "user_marked_close",
+    "mode",
+    "progress"
+}
 TEXT_REVIEW_KEYS = {
     "type_q",
     "presentation_kind",
@@ -396,6 +406,13 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertIsInstance(result["unit"], str)
         self.assert_timeline_date_shape(result["guess"])
 
+    def assert_grouped_answer_item_shape(self, item):
+        self.assertEqual(set(item), GROUPED_ANSWER_ITEM_KEYS)
+        self.assertIn(item["quality"], {0, 1, 2, 3})
+        self.assertIn(item["effective_quality"], {0, 1, 2, 3})
+        self.assertFalse(item["user_marked_close"])
+        self.assert_progress_shape(item["progress"])
+
     def test_review_endpoint_returns_backend_grouped_runtime_shapes(self):
         fixture = self.seed_review_contract_fixture()
 
@@ -562,6 +579,40 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item["question_id"] for item in image_group["items"]},
             {item.id for item in fixture["image_items"]}
         )
+
+    def test_grouped_answer_endpoints_return_atomic_progress_rows(self):
+        fixture = self.seed_review_contract_fixture()
+        today = date(2026, 8, 14)
+
+        map_response = answer_map(
+            MapAnswerRequest(
+                items={
+                    fixture["map_zones"][0].id: 2,
+                    fixture["map_zones"][1].id: 0
+                },
+                mode="type_all",
+                review_date=today
+            ),
+            self.db
+        )
+        media_response = answer_media(
+            MediaAnswerRequest(
+                items={fixture["image_items"][0].id: 3},
+                mode="type_all",
+                review_date=today
+            ),
+            self.db
+        )
+
+        self.assertEqual(map_response["status"], "ok")
+        self.assertEqual(media_response["status"], "ok")
+        self.assertEqual(len(map_response["items"]), 2)
+        self.assertEqual(len(media_response["items"]), 1)
+
+        for item in map_response["items"] + media_response["items"]:
+            self.assert_grouped_answer_item_shape(item)
+            self.assertEqual(item["progress"]["last_review"], today)
+            self.assertTrue(item["progress"]["history"])
 
     def test_review_randomizes_question_order_inside_runtime_groups(self):
         today = date.today()
@@ -1174,7 +1225,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id for item in image_items}
         )
 
-    def test_answer_map_endpoint_returns_ack_shape_for_zone_grades(self):
+    def test_answer_map_endpoint_returns_atomic_progress_rows_for_zone_grades(self):
         fixture = self.seed_review_contract_fixture()
         zone_a, zone_b = fixture["map_zones"]
 
@@ -1186,7 +1237,19 @@ class ReviewResponseShapeTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response, {"status": "ok"})
+        self.assertEqual(response["status"], "ok")
+        self.assertEqual(
+            {
+                item["question_id"]: item["quality"]
+                for item in response["items"]
+            },
+            {
+                zone_a.id: 2,
+                zone_b.id: 0
+            }
+        )
+        for item in response["items"]:
+            self.assert_grouped_answer_item_shape(item)
 
         qualities_by_question_id = {
             progress.question_id: progress.history[-1]["quality"]
@@ -1240,7 +1303,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertEqual(zone_b.progress.next_review, date.today())
 
-    def test_answer_media_endpoint_returns_ack_shape_for_item_grades(self):
+    def test_answer_media_endpoint_returns_atomic_progress_rows_for_item_grades(self):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]
 
@@ -1252,7 +1315,19 @@ class ReviewResponseShapeTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response, {"status": "ok"})
+        self.assertEqual(response["status"], "ok")
+        self.assertEqual(
+            {
+                item["question_id"]: item["quality"]
+                for item in response["items"]
+            },
+            {
+                item_a.id: 3,
+                item_b.id: 0
+            }
+        )
+        for item in response["items"]:
+            self.assert_grouped_answer_item_shape(item)
 
         qualities_by_question_id = {
             progress.question_id: progress.history[-1]["quality"]
@@ -1347,7 +1422,13 @@ class ReviewResponseShapeTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(response, {"status": "ok"})
+        self.assertEqual(response["status"], "ok")
+        self.assertEqual(
+            {item["question_id"] for item in response["items"]},
+            {item.id for item in submitted_items}
+        )
+        for item in response["items"]:
+            self.assert_grouped_answer_item_shape(item)
 
         history = submitted_items[0].progress.history[-1]
         self.assertEqual(history["image_mode"], "multiple_choice_media")

@@ -113,6 +113,12 @@ router = APIRouter()
 
 
 def answer_progress_payload(progress, today=None):
+    fsrs_state = (
+        progress.fsrs_card.get("state")
+        if isinstance(progress.fsrs_card, dict)
+        else None
+    )
+
     return {
         "stability": progress.stability,
         "difficulty": progress.difficulty,
@@ -121,6 +127,8 @@ def answer_progress_payload(progress, today=None):
         "last_review": progress.last_review,
         "next_review": progress.next_review,
         "ideal_next_review": progress.ideal_next_review,
+        "fsrs_state": fsrs_state,
+        "fsrs_version": progress.fsrs_version,
         "reps": progress.reps,
         "lapses": progress.lapses,
         "relearning": progress_in_relearning(progress, today),
@@ -344,7 +352,7 @@ def graduate_relearning_cards(
 
 @router.post("/answer_map")
 def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
-    apply_answer_batch(
+    return apply_answer_batch(
         db,
         data.items,
         map_mode=data.mode or DEFAULT_MAP_MODE,
@@ -359,7 +367,7 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
 
 @router.post("/answer_media")
 def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
-    apply_answer_batch(
+    return apply_answer_batch(
         db,
         data.items,
         image_mode=data.mode or DEFAULT_IMAGE_MODE,
@@ -374,7 +382,7 @@ def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
 
 @router.post("/answer_text")
 def answer_text(data: TextAnswerRequest, db: Session = Depends(get_db)):
-    apply_answer_batch(
+    return apply_answer_batch(
         db,
         data.items,
         text_mode=data.mode or DEFAULT_TEXT_MODE,
@@ -824,6 +832,30 @@ def apply_answer_batch(
                 submitted_text_count = len(question_ids)
 
     progress_quality_pairs = []
+    response_items = []
+
+    def add_response_item(
+        question_id,
+        quality,
+        raw_quality=None,
+        mode=None,
+        backend_grade=None,
+        user_marked_close=False
+    ):
+        response_items.append({
+            "question_id": question_id,
+            "quality": quality,
+            "raw_quality": raw_quality if raw_quality is not None else quality,
+            "effective_quality": quality,
+            "backend_matched": (
+                backend_grade.get("matched")
+                if backend_grade is not None
+                else None
+            ),
+            "user_marked_close": bool(user_marked_close),
+            "mode": mode,
+            "progress": None
+        })
 
     for question_id, quality in items.items():
         question = question_map.get(question_id)
@@ -939,6 +971,13 @@ def apply_answer_batch(
             )
 
             progress_quality_pairs.append((progress, scheduled_quality, metadata))
+            add_response_item(
+                question_id,
+                scheduled_quality,
+                raw_quality=raw_quality,
+                mode=normalized_map_mode,
+                backend_grade=backend_grade
+            )
         elif normalized_image_mode:
             raw_quality = calibrate_image_quality(quality)
             scheduled_quality = authoritative_quality(raw_quality)
@@ -1002,6 +1041,13 @@ def apply_answer_batch(
                 scheduled_quality,
                 metadata
             ))
+            add_response_item(
+                question_id,
+                scheduled_quality,
+                raw_quality=raw_quality,
+                mode=normalized_image_mode,
+                backend_grade=backend_grade
+            )
         elif normalized_text_mode:
             raw_quality = calibrate_text_quality(quality)
             scheduled_quality = authoritative_quality(raw_quality)
@@ -1059,6 +1105,13 @@ def apply_answer_batch(
             )
 
             progress_quality_pairs.append((progress, scheduled_quality, metadata))
+            add_response_item(
+                question_id,
+                scheduled_quality,
+                raw_quality=raw_quality,
+                mode=normalized_text_mode,
+                backend_grade=backend_grade
+            )
         else:
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -1066,6 +1119,7 @@ def apply_answer_batch(
                 progress_map[question_id] = progress
 
             progress_quality_pairs.append((progress, quality))
+            add_response_item(question_id, quality)
 
     if progress_quality_pairs:
         apply_scheduling_batch(
@@ -1075,8 +1129,21 @@ def apply_answer_batch(
             today=today
         )
 
+    for item in response_items:
+        progress = progress_map.get(item["question_id"])
+        item["progress"] = (
+            answer_progress_payload(progress, today=today)
+            if progress is not None
+            else None
+        )
+
     db.commit()
     sync_generated_hard_collection(db)
+
+    return {
+        "status": "ok",
+        "items": response_items
+    }
 
 
 @router.post("/answer_timeline")

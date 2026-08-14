@@ -1,6 +1,10 @@
 import ReviewQuestionRenderer from "./ReviewQuestionRenderer";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import { isRelearningQuestion } from "../relearningGrades";
+import {
+  formatIntervalChange,
+  formatQualityLabel
+} from "../sessionDebrief";
 import "./ReviewSession.css";
 
 function isVisualQuestion(question) {
@@ -76,23 +80,135 @@ function RelearningCountChip({ count, compact = false }) {
   );
 }
 
+function plural(count, singular, pluralForm = `${singular}s`) {
+  return `${count} ${count > 1 ? pluralForm : singular}`;
+}
+
+function StatTile({ label, value, note }) {
+  return (
+    <div className="session-debrief-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {note && <small>{note}</small>}
+    </div>
+  );
+}
+
+function StatsList({ title, stats, emptyLabel }) {
+  if (!stats?.length) {
+    return (
+      <section className="session-debrief-section">
+        <h3>{title}</h3>
+        <p className="session-debrief-muted">{emptyLabel}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="session-debrief-section">
+      <h3>{title}</h3>
+      <div className="session-debrief-list">
+        {stats.map(stat => (
+          <div key={stat.key} className="session-debrief-list-row">
+            <strong>{stat.label}</strong>
+            <span>
+              {plural(stat.success, "réussite")} · {plural(stat.close, "proche")} · {plural(stat.miss, "raté")}
+              {stat.unattempted > 0 ? ` · ${plural(stat.unattempted, "non répondu")}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecordList({ title, records, emptyLabel }) {
+  return (
+    <section className="session-debrief-section">
+      <h3>{title}</h3>
+      {records?.length ? (
+        <div className="session-debrief-list">
+          {records.slice(0, 5).map(record => (
+            <div key={`${title}:${record.attemptKey}`} className="session-debrief-list-row">
+              <strong>{record.label}</strong>
+              <span>{record.groupName || record.typeLabel}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="session-debrief-muted">{emptyLabel}</p>
+      )}
+    </section>
+  );
+}
+
+function ConfusionList({ confusions }) {
+  return (
+    <section className="session-debrief-section">
+      <h3>Confusions</h3>
+      {confusions?.length ? (
+        <div className="session-debrief-list">
+          {confusions.slice(0, 4).map(confusion => (
+            <div key={`${confusion.questionId}:${confusion.selected}`} className="session-debrief-list-row">
+              <strong>{confusion.expected}</strong>
+              <span>Répondu : {confusion.selected}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="session-debrief-muted">Aucune confusion nette dans cette session.</p>
+      )}
+    </section>
+  );
+}
+
+function DetailRows({ records }) {
+  if (!records?.length) {
+    return (
+      <p className="session-debrief-muted">
+        Aucune réponse n'a été enregistrée pendant cette session.
+      </p>
+    );
+  }
+
+  return (
+    <div className="session-debrief-details app-scrollbar">
+      {records.map(record => (
+        <div key={record.attemptKey} className="session-debrief-detail-row">
+          <div>
+            <strong>{record.label}</strong>
+            <span>{record.groupName || record.typeLabel}</span>
+          </div>
+          <span data-status={record.status}>{formatQualityLabel(record)}</span>
+          <span>{formatIntervalChange(record)}</span>
+          <span>{record.nextReview ? `Retour : ${record.nextReview}` : "Retour non planifié"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SessionCompletePanel({
   setMode,
   canReturnToLastQuestion,
-  returnToLastQuestion
+  returnToLastQuestion,
+  sessionDebrief
 }) {
-  // The only screen once the queue ends, whether nothing was scheduled today or
-  // everything just got answered. New questions are introduced automatically by
-  // the backend, so there is nothing to pick here — just a way out.
+  const debrief = sessionDebrief || {};
+  const recommendation = debrief.recommendation || {
+    label: "Retour au menu",
+    mode: "menu",
+    text: "Session terminée."
+  };
+
   return (
     <section className="session-end" aria-label="Session terminée">
       <div className="session-end-head">
         <div>
           <div className="session-end-kicker">Révision</div>
-          <h2 className="session-end-title">Session terminée</h2>
+          <h2 className="session-end-title">Bilan de session</h2>
           <p className="session-end-copy">
-            Tu as fait tout ce qui était prévu aujourd'hui. De nouvelles
-            questions seront ajoutées automatiquement au fil de tes progrès.
+            {recommendation.text}
           </p>
         </div>
 
@@ -117,7 +233,75 @@ function SessionCompletePanel({
         </div>
       </div>
 
+      <div className="session-debrief-stats">
+        <StatTile label="Terminées" value={debrief.completedCount || 0} />
+        <StatTile label="Réussies" value={debrief.successCount || 0} />
+        <StatTile label="Ratées" value={debrief.missCount || 0} />
+        <StatTile
+          label="Demain"
+          value={debrief.tomorrowCount || 0}
+          note={debrief.tomorrow || ""}
+        />
+      </div>
+
+      <div className="session-debrief-grid">
+        <StatsList
+          title="Par type"
+          stats={debrief.typeStats}
+          emptyLabel="Aucune réponse planifiée dans cette session."
+        />
+        <StatsList
+          title="Par groupe"
+          stats={debrief.groupStats}
+          emptyLabel="Aucun groupe traité."
+        />
+      </div>
+
+      <div className="session-debrief-grid">
+        <RecordList
+          title="Nouveaux ratés"
+          records={debrief.newMisses}
+          emptyLabel="Aucun nouveau raté."
+        />
+        <RecordList
+          title="Ratés récurrents"
+          records={debrief.recurringMisses}
+          emptyLabel="Aucun raté récurrent."
+        />
+      </div>
+
+      <div className="session-debrief-grid">
+        <ConfusionList confusions={debrief.confusions} />
+        <section className="session-debrief-section">
+          <h3>Planification</h3>
+          <p className="session-debrief-muted">
+            {debrief.intervalChanges?.length
+              ? `${plural(debrief.intervalChanges.length, "intervalle")} modifié${debrief.intervalChanges.length > 1 ? "s" : ""}.`
+              : "Aucun intervalle modifié."}
+          </p>
+          <p className="session-debrief-muted">
+            {debrief.tomorrowRecords?.length
+              ? `${debrief.tomorrowRecords.slice(0, 3).map(record => record.label).join(", ")} revien${debrief.tomorrowRecords.length > 1 ? "nent" : "t"} demain.`
+              : "Rien ne revient demain depuis cette session."}
+          </p>
+        </section>
+      </div>
+
+      <section className="session-debrief-section">
+        <h3>Détail des réponses</h3>
+        <DetailRows records={debrief.records} />
+      </section>
+
       <div className="session-end-actions">
+        {recommendation.mode !== "menu" && (
+          <button
+            type="button"
+            className="review-outcome-button review-outcome-button-secondary"
+            onClick={() => setMode(recommendation.mode)}
+          >
+            {recommendation.label}
+          </button>
+        )}
         <button
           type="button"
           className="review-outcome-button review-outcome-button-primary"
@@ -149,6 +333,7 @@ export default function ReviewSession({
   canReturnToLastQuestion,
   returnToLastQuestion,
   sessionComplete,
+  sessionDebrief,
   skipToSessionEnd,
   reviewLoading,
   reviewError,
@@ -595,6 +780,7 @@ export default function ReviewSession({
             setMode={setMode}
             canReturnToLastQuestion={canReturnToLastQuestion}
             returnToLastQuestion={returnToLastQuestion}
+            sessionDebrief={sessionDebrief}
           />
         )}
 
