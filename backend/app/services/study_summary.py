@@ -13,6 +13,7 @@ from ..scheduler import parse_history_date
 from .collections import resolve_collection_questions
 from .map_eligibility import question_is_reviewable
 from .media import media_kind_from_name
+from .media_pool import read_media_pool
 from .progress import progress_has_started, progress_is_new
 from .tag_hierarchy import (
     descendants,
@@ -49,6 +50,7 @@ MASTERED_MIN_STABILITY_DAYS = 60
 MASTERED_MIN_REPS = 3
 WEAK_ITEM_LIMIT = 20
 CONFUSION_LIMIT = 20
+LEARN_ITEM_LIMIT = 500
 
 BUCKET_THRESHOLDS = {
     "recent_miss_days": RECENT_MISS_WINDOW_DAYS,
@@ -394,6 +396,25 @@ def _question_identity(question):
     }
 
 
+def _question_learn_identity(question, today):
+    data = question.data or {}
+    item = {
+        **_question_identity(question),
+        "aliases": data.get("aliases", []),
+        "signals": _question_signals(question, today)
+    }
+
+    if question.type_q == "map":
+        item["code"] = data.get("code")
+
+    if question.type_q == "media":
+        media_pool = read_media_pool(question.media, data)
+        item["media_pool"] = media_pool
+        item["media_kind"] = media_kind_from_name(media_pool[0]) if media_pool else ""
+
+    return item
+
+
 def _question_signals(question, today):
     progress = question.progress
     recent_misses = recent_miss_count(progress, today)
@@ -421,6 +442,54 @@ def _question_signals(question, today):
             if progress and progress.next_review
             else None
         )
+    }
+
+
+def _learn_for_scope(scope_type, source, questions, today):
+    if scope_type != "group" or source.type_group not in {"map", "media"}:
+        return {
+            "supported": False,
+            "family": None,
+            "items": [],
+            "item_count": 0,
+            "truncated": False,
+            "reason": "Learn is available for map and media groups first."
+        }
+
+    family = source.type_group
+    learnable_questions = [
+        question
+        for question in questions
+        if (
+            question.type_q == family and
+            question_is_reviewable(question)
+        )
+    ]
+    items = [
+        _question_learn_identity(question, today)
+        for question in learnable_questions[:LEARN_ITEM_LIMIT]
+    ]
+
+    return {
+        "supported": True,
+        "family": family,
+        "group": {
+            "id": source.id,
+            "guid": source.guid,
+            "name": source.name,
+            "type_group": source.type_group,
+            "media": source.media
+        },
+        "item_count": len(learnable_questions),
+        "truncated": len(learnable_questions) > LEARN_ITEM_LIMIT,
+        "items": items,
+        "hints": [
+            "first_letter",
+            "category",
+            "narrow_choices",
+            "related_items",
+            "reveal_answer"
+        ]
     }
 
 
@@ -864,6 +933,12 @@ def build_study_scope_summary(
             "by_day": load_by_day
         },
         "weak_items": sorted(weak_items, key=_weak_sort_key)[:WEAK_ITEM_LIMIT],
+        "learn": _learn_for_scope(
+            scope["type"],
+            source,
+            questions,
+            today
+        ),
         "available_modes": _available_modes(
             scope["type"],
             source,

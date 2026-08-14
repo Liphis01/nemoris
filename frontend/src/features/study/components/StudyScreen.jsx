@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { getMediaKind, resolveMediaUrl } from "../../../shared/media";
 import { getStudySummary } from "../../../api/study";
+import SvgMap from "../../map/components/SvgMap";
 import { formatDuration, formatRecordPercent } from "../../training/trainingRecordUtils";
 import { mapModeLabels } from "../../review/mapModes";
 import { imageModeLabels } from "../../review/imageModes";
@@ -51,6 +53,7 @@ const AUDIO_MEDIA_MODES = new Set([
   "multiple_choice_label",
   "multiple_choice_media"
 ]);
+const LEARN_SUPPORTED_FAMILIES = new Set(["map", "media"]);
 
 
 function stableScopeKey(scope) {
@@ -203,6 +206,82 @@ function recordLabel(record) {
   if (time === "—") return percent;
 
   return `${percent} · ${time}`;
+}
+
+
+function learnFamilyLabel(family) {
+  if (family === "map") return "Carte";
+  if (family === "media") return "Média";
+
+  return "Learn";
+}
+
+
+function learnItemButtonLabel(item, index, family, revealed) {
+  if (revealed && item?.answer) return item.answer;
+
+  if (family === "map" && item?.code) return `Zone ${item.code}`;
+  if (family === "media") return `Média ${index + 1}`;
+
+  return `Item ${index + 1}`;
+}
+
+
+function firstAnswerLetter(answer) {
+  const letters = Array.from(String(answer || "").trim());
+
+  return letters[0]?.toLocaleUpperCase("fr-FR") || "—";
+}
+
+
+function primaryCategory(item, scope) {
+  const tag = (item?.tags || []).find(value => String(value || "").trim());
+
+  return tag || scope?.name || scope?.label || "—";
+}
+
+
+function learnMediaSource(item) {
+  const pool = Array.isArray(item?.media_pool) ? item.media_pool : [];
+
+  return pool[0] || item?.media || "";
+}
+
+
+function buildLearnChoices(items, activeIndex) {
+  const activeItem = items[activeIndex];
+
+  if (!activeItem?.answer) return [];
+
+  const offsets = [0, 1, -1, 2, -2, 3, -3, 4, -4];
+  const seen = new Set();
+  const choices = [];
+
+  offsets.forEach(offset => {
+    const item = items[activeIndex + offset];
+    const label = String(item?.answer || "").trim();
+    const key = label.toLocaleLowerCase("fr-FR");
+
+    if (!item || !label || seen.has(key)) return;
+
+    seen.add(key);
+    choices.push({
+      id: item.id,
+      label
+    });
+  });
+
+  return choices
+    .slice(0, 4)
+    .sort((left, right) => left.label.localeCompare(right.label, "fr-FR"));
+}
+
+
+function relatedLearnItems(items, activeIndex) {
+  return [-2, -1, 1, 2]
+    .map(offset => items[activeIndex + offset])
+    .filter(item => item?.answer)
+    .slice(0, 4);
 }
 
 
@@ -589,51 +668,387 @@ function TrainTab({ onStartTraining, summary }) {
 }
 
 
-function LearnTab({ onStartTraining, setActiveTab, summary }) {
+function StudyMediaPreview({ item }) {
+  const media = learnMediaSource(item);
+  const src = resolveMediaUrl(media);
+  const kind = getMediaKind(media);
+
+  if (!src) {
+    return (
+      <div className="study-learn-empty-visual">
+        Aucun média
+      </div>
+    );
+  }
+
+  if (kind === "audio") {
+    return (
+      <div className="study-learn-media-frame study-learn-media-audio">
+        <audio controls src={src}>
+          Audio non pris en charge.
+        </audio>
+      </div>
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <div className="study-learn-media-frame">
+        <video controls src={src}>
+          Vidéo non prise en charge.
+        </video>
+      </div>
+    );
+  }
+
+  return (
+    <div className="study-learn-media-frame">
+      <img alt="Média à apprendre" src={src} />
+    </div>
+  );
+}
+
+
+function StudyLearnVisual({ activeItem, isRevealed, learn }) {
+  if (learn.family === "map") {
+    const mapSrc = resolveMediaUrl(learn.group?.media);
+    const activeCode = activeItem?.code;
+
+    if (!mapSrc || !activeCode) {
+      return (
+        <div className="study-learn-empty-visual">
+          Carte indisponible
+        </div>
+      );
+    }
+
+    return (
+      <div className="study-learn-map-frame">
+        <SvgMap
+          svgPath={mapSrc}
+          found={isRevealed ? [activeCode] : []}
+          missed={[]}
+          dueItems={[]}
+          selected={activeCode}
+          focusCode={activeCode}
+          focusVersion={activeItem?.id || 0}
+          clickableCodes={[]}
+          zoneLabels={isRevealed ? { [activeCode]: activeItem.answer } : {}}
+        />
+      </div>
+    );
+  }
+
+  return <StudyMediaPreview item={activeItem} />;
+}
+
+
+function LearnHintBlock({
+  activeHints,
+  activeItem,
+  choices,
+  isRevealed,
+  related,
+  scope
+}) {
+  return (
+    <div className="study-learn-hints">
+      {activeHints.firstLetter && (
+        <div className="study-learn-hint-block">
+          <span>Première lettre</span>
+          <strong>{firstAnswerLetter(activeItem?.answer)}</strong>
+        </div>
+      )}
+
+      {activeHints.category && (
+        <div className="study-learn-hint-block">
+          <span>Catégorie</span>
+          <strong>{primaryCategory(activeItem, scope)}</strong>
+        </div>
+      )}
+
+      {activeHints.choices && (
+        <div className="study-learn-hint-block">
+          <span>Choix réduits</span>
+          <div className="study-learn-choice-row">
+            {choices.map(choice => (
+              <span
+                className={isRevealed && choice.id === activeItem?.id ? "is-correct" : ""}
+                key={`${choice.id}-${choice.label}`}
+              >
+                {choice.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeHints.related && (
+        <div className="study-learn-hint-block">
+          <span>Repères proches</span>
+          <div className="study-learn-related-list">
+            {related.length > 0 ? related.map(item => (
+              <strong key={item.id}>{item.answer}</strong>
+            )) : (
+              <strong>—</strong>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function LearnTab({ onStartTraining, setActiveTab, setMode, summary }) {
   const buckets = summary.buckets || {};
   const counts = summary.counts || {};
   const trainingScope = scopeToTrainingScope(summary.scope);
+  const learn = summary.learn || {};
+  const items = useMemo(
+    () => (Array.isArray(learn.items) ? learn.items : []),
+    [learn.items]
+  );
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [revealedItemIds, setRevealedItemIds] = useState(() => new Set());
+  const [hintsByItemId, setHintsByItemId] = useState({});
+  const maxIndex = Math.max(items.length - 1, 0);
+  const safeActiveIndex = Math.min(activeIndex, maxIndex);
+  const activeItem = items[safeActiveIndex] || null;
+  const activeItemId = activeItem?.id;
+  const isRevealed = activeItemId !== undefined && revealedItemIds.has(activeItemId);
+  const activeHints = activeItemId !== undefined ? (hintsByItemId[activeItemId] || {}) : {};
+  const choices = useMemo(
+    () => buildLearnChoices(items, safeActiveIndex),
+    [items, safeActiveIndex]
+  );
+  const related = useMemo(
+    () => relatedLearnItems(items, safeActiveIndex),
+    [items, safeActiveIndex]
+  );
 
-  return (
-    <div className="study-two-column">
+  useEffect(() => {
+    setActiveIndex(0);
+    setRevealedItemIds(new Set());
+    setHintsByItemId({});
+  }, [learn.family, learn.item_count, summary.scope?.id, summary.scope?.type]);
+
+  function selectLearnItem(index) {
+    setActiveIndex(Math.min(Math.max(index, 0), maxIndex));
+  }
+
+  function toggleReveal() {
+    if (activeItemId === undefined) return;
+
+    setRevealedItemIds(previous => {
+      const next = new Set(previous);
+
+      if (next.has(activeItemId)) {
+        next.delete(activeItemId);
+      } else {
+        next.add(activeItemId);
+      }
+
+      return next;
+    });
+  }
+
+  function toggleHint(key) {
+    if (activeItemId === undefined) return;
+
+    setHintsByItemId(previous => ({
+      ...previous,
+      [activeItemId]: {
+        ...(previous[activeItemId] || {}),
+        [key]: !(previous[activeItemId] || {})[key]
+      }
+    }));
+  }
+
+  if (!learn.supported || !LEARN_SUPPORTED_FAMILIES.has(learn.family)) {
+    return (
+      <div className="study-two-column">
+        <section className="study-panel study-learn-panel">
+          <div className="study-panel-head">
+            <h2>Nouveaux items</h2>
+            <span>{questionCountLabel(buckets.unseen)}</span>
+          </div>
+
+          <div className="study-large-number">{numberLabel(buckets.unseen || 0)}</div>
+          <div className="study-muted">
+            {questionCountLabel(counts.active_questions)} actives dans ce scope.
+          </div>
+
+          <div className="study-action-row">
+            <ActionButton
+              primary
+              disabled={!trainingScope || !onStartTraining}
+              onClick={() => onStartTraining?.(trainingScope)}
+            >
+              Entraîner le scope
+            </ActionButton>
+            <ActionButton onClick={() => setActiveTab("weak")}>
+              Voir les fragiles
+            </ActionButton>
+          </div>
+        </section>
+
+        <section className="study-panel">
+          <div className="study-panel-head">
+            <h2>Modes disponibles</h2>
+            <span>{numberLabel(summary.available_modes?.length || 0)}</span>
+          </div>
+          <div className="study-mode-summary-list">
+            {(summary.available_modes || []).map((entry, index) => (
+              <div className="study-mode-summary" key={`${entry.scope}-${entry.type_q}-${index}`}>
+                <strong>{entry.type_group || entry.type_q || entry.scope}</strong>
+                <span>
+                  {(entry.training_modes || []).map(modeLabel).join(" · ") || "Lecture seule"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
       <section className="study-panel study-learn-panel">
         <div className="study-panel-head">
-          <h2>Nouveaux items</h2>
-          <span>{questionCountLabel(buckets.unseen)}</span>
+          <h2>Parcours guidé</h2>
+          <span>{learnFamilyLabel(learn.family)}</span>
         </div>
-
-        <div className="study-large-number">{numberLabel(buckets.unseen || 0)}</div>
         <div className="study-muted">
-          {questionCountLabel(counts.active_questions)} actives dans ce scope.
+          Aucun item prêt à apprendre dans ce groupe.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div className="study-learn-layout">
+      <section className="study-panel study-learn-workspace">
+        <div className="study-panel-head">
+          <h2>Parcours guidé</h2>
+          <span>
+            {safeActiveIndex + 1} / {numberLabel(learn.item_count || items.length)}
+          </span>
         </div>
 
-        <div className="study-action-row">
+        <div className="study-learn-stage">
+          <StudyLearnVisual
+            activeItem={activeItem}
+            isRevealed={isRevealed}
+            learn={learn}
+          />
+
+          <div className="study-learn-card">
+            <div className="study-chip-row">
+              <span className="study-scope-chip">{learnFamilyLabel(learn.family)}</span>
+              <span className="study-signal-chip study-signal-neutral">Lecture seule</span>
+              {activeItem?.signals?.bucket && (
+                <span className="study-signal-chip study-signal-neutral">
+                  {activeItem.signals.bucket}
+                </span>
+              )}
+            </div>
+
+            <h3>{isRevealed ? activeItem.answer : "Réponse masquée"}</h3>
+            <div className="study-learn-meta">
+              {learn.family === "map" && activeItem?.code && (
+                <span>Zone {activeItem.code}</span>
+              )}
+              {learn.family === "media" && (
+                <span>{getMediaKind(learnMediaSource(activeItem)) || "media"}</span>
+              )}
+              {activeItem?.aliases?.length > 0 && isRevealed && (
+                <span>{activeItem.aliases.join(" · ")}</span>
+              )}
+            </div>
+
+            <LearnHintBlock
+              activeHints={activeHints}
+              activeItem={activeItem}
+              choices={choices}
+              isRevealed={isRevealed}
+              related={related}
+              scope={summary.scope}
+            />
+
+            <div className="study-action-row">
+              <ActionButton onClick={() => toggleHint("firstLetter")}>
+                Première lettre
+              </ActionButton>
+              <ActionButton onClick={() => toggleHint("category")}>
+                Catégorie
+              </ActionButton>
+              <ActionButton onClick={() => toggleHint("choices")}>
+                Choix
+              </ActionButton>
+              <ActionButton onClick={() => toggleHint("related")}>
+                Repères
+              </ActionButton>
+              <ActionButton primary onClick={toggleReveal}>
+                {isRevealed ? "Masquer" : "Révéler la réponse"}
+              </ActionButton>
+            </div>
+          </div>
+        </div>
+
+        <div className="study-learn-navigation">
           <ActionButton
-            primary
+            disabled={safeActiveIndex <= 0}
+            onClick={() => selectLearnItem(safeActiveIndex - 1)}
+          >
+            Précédent
+          </ActionButton>
+          <ActionButton
+            disabled={safeActiveIndex >= items.length - 1}
+            onClick={() => selectLearnItem(safeActiveIndex + 1)}
+          >
+            Suivant
+          </ActionButton>
+          <ActionButton
             disabled={!trainingScope || !onStartTraining}
             onClick={() => onStartTraining?.(trainingScope)}
           >
-            Entraîner le scope
+            Entraîner
           </ActionButton>
-          <ActionButton onClick={() => setActiveTab("weak")}>
-            Voir les fragiles
+          <ActionButton
+            disabled={(counts.due_now || 0) <= 0}
+            onClick={() => setMode("quiz")}
+          >
+            Réviser due
           </ActionButton>
         </div>
       </section>
 
-      <section className="study-panel">
+      <section className="study-panel study-learn-index-panel">
         <div className="study-panel-head">
-          <h2>Modes disponibles</h2>
-          <span>{numberLabel(summary.available_modes?.length || 0)}</span>
+          <h2>Items</h2>
+          <span>{questionCountLabel(learn.item_count || items.length)}</span>
         </div>
-        <div className="study-mode-summary-list">
-          {(summary.available_modes || []).map((entry, index) => (
-            <div className="study-mode-summary" key={`${entry.scope}-${entry.type_q}-${index}`}>
-              <strong>{entry.type_group || entry.type_q || entry.scope}</strong>
-              <span>
-                {(entry.training_modes || []).map(modeLabel).join(" · ") || "Lecture seule"}
-              </span>
-            </div>
+        <div className="study-learn-index app-scrollbar" aria-label="Items à apprendre">
+          {items.map((item, index) => (
+            <button
+              type="button"
+              aria-current={index === safeActiveIndex ? "true" : undefined}
+              className={index === safeActiveIndex ? "is-active" : ""}
+              key={item.id}
+              onClick={() => selectLearnItem(index)}
+            >
+              <span>{index + 1}</span>
+              <strong>
+                {learnItemButtonLabel(
+                  item,
+                  index,
+                  learn.family,
+                  revealedItemIds.has(item.id)
+                )}
+              </strong>
+            </button>
           ))}
         </div>
       </section>
@@ -830,6 +1245,7 @@ function StudyContent({
       <LearnTab
         onStartTraining={onStartTraining}
         setActiveTab={setActiveTab}
+        setMode={setMode}
         summary={summary}
       />
     );

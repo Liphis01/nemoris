@@ -51,6 +51,7 @@ class StudySummaryTests(unittest.TestCase):
         type_q="text",
         question=None,
         answer=None,
+        media=None,
         tags=None,
         data=None,
         group=None,
@@ -62,6 +63,7 @@ class StudySummaryTests(unittest.TestCase):
             type_q=type_q,
             question=question or f"Question {question_id}",
             answer=answer if answer is not None else f"Answer {question_id}",
+            media=media,
             tags=tags or [],
             data=data or {},
             group=group,
@@ -279,6 +281,64 @@ class StudySummaryTests(unittest.TestCase):
             stable.id
         )
         self.assertEqual(summary["weak_items"][0]["id"], fragile.id)
+        self.assertEqual(summary["learn"]["supported"], True)
+        self.assertEqual(summary["learn"]["family"], "map")
+        self.assertEqual(summary["learn"]["group"]["media"], "france.svg")
+        self.assertEqual(summary["learn"]["item_count"], 5)
+        self.assertEqual(summary["learn"]["items"][0]["id"], unseen.id)
+        self.assertEqual(summary["learn"]["items"][0]["code"], "01")
+        self.assertEqual(summary["learn"]["items"][0]["answer"], "Ain")
+        self.assertEqual(
+            summary["learn"]["items"][0]["signals"]["bucket"],
+            "unseen"
+        )
+
+    def test_media_group_summary_surfaces_read_only_learn_items(self):
+        today = date(2026, 8, 14)
+        group = QuestionGroup(
+            id=15,
+            type_group="media",
+            name="Drapeaux",
+            media="cover.png",
+            data={}
+        )
+        self.db.add(group)
+        item = self.add_question(
+            1,
+            type_q="media",
+            question="Drapeaux - France",
+            answer="France",
+            media="flag-fr.png",
+            data={
+                "media_pool": ["flag-fr.png", "flag-fr-alt.png"],
+                "aliases": ["République française"]
+            },
+            group=group
+        )
+        self.db.commit()
+        progress_count = self.db.query(Progress).count()
+
+        summary = build_study_scope_summary(
+            self.db,
+            "group",
+            group_id=group.id,
+            today=today
+        )
+
+        self.assertEqual(self.db.query(Progress).count(), progress_count)
+        self.assertEqual(summary["learn"]["supported"], True)
+        self.assertEqual(summary["learn"]["family"], "media")
+        self.assertEqual(summary["learn"]["item_count"], 1)
+        self.assertEqual(summary["learn"]["items"][0]["id"], item.id)
+        self.assertEqual(
+            summary["learn"]["items"][0]["media_pool"],
+            ["flag-fr.png", "flag-fr-alt.png"]
+        )
+        self.assertEqual(summary["learn"]["items"][0]["media_kind"], "image")
+        self.assertEqual(
+            summary["learn"]["items"][0]["aliases"],
+            ["République française"]
+        )
 
     def test_group_summary_surfaces_current_and_stale_training_records(self):
         today = date(2026, 8, 14)

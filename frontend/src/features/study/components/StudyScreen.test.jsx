@@ -7,6 +7,12 @@ vi.mock("../../../api/study", () => ({
   getStudySummary: vi.fn()
 }));
 
+vi.mock("../../map/components/SvgMap", () => ({
+  default: ({ selected }) => (
+    <div data-selected={selected} data-testid="study-learn-map" />
+  )
+}));
+
 const summary = {
   generated_on: "2026-08-14",
   scope: {
@@ -110,6 +116,67 @@ const summary = {
       training_support: "supported"
     }
   ],
+  learn: {
+    supported: true,
+    family: "map",
+    group: {
+      id: 10,
+      name: "Départements français",
+      type_group: "map",
+      media: "france.svg"
+    },
+    item_count: 4,
+    truncated: false,
+    hints: [
+      "first_letter",
+      "category",
+      "narrow_choices",
+      "related_items",
+      "reveal_answer"
+    ],
+    items: [
+      {
+        id: 1,
+        type_q: "map",
+        question: "Départements français - 01",
+        answer: "Ain",
+        code: "01",
+        tags: ["Géographie"],
+        aliases: [],
+        signals: { bucket: "unseen", due: false }
+      },
+      {
+        id: 2,
+        type_q: "map",
+        question: "Départements français - 03",
+        answer: "Allier",
+        code: "03",
+        tags: ["Géographie"],
+        aliases: [],
+        signals: { bucket: "fragile", due: true }
+      },
+      {
+        id: 3,
+        type_q: "map",
+        question: "Départements français - 04",
+        answer: "Alpes",
+        code: "04",
+        tags: ["Géographie"],
+        aliases: [],
+        signals: { bucket: "stable", due: false }
+      },
+      {
+        id: 4,
+        type_q: "map",
+        question: "Départements français - 07",
+        answer: "Ardèche",
+        code: "07",
+        tags: ["Géographie"],
+        aliases: [],
+        signals: { bucket: "learning", due: false }
+      }
+    ]
+  },
   training: {
     training_record: null,
     previous_training_record: null,
@@ -165,6 +232,53 @@ describe("StudyScreen", () => {
         },
         "multiple_choice"
       );
+    });
+
+    expect(getStudySummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders read-only Learn hints and reveals answers deliberately", async () => {
+    const onStartTraining = vi.fn();
+    const setMode = vi.fn();
+
+    render(
+      <StudyScreen
+        scope={{ type: "group", id: 10 }}
+        setMode={setMode}
+        onStartTraining={onStartTraining}
+      />
+    );
+
+    await screen.findByRole("heading", {
+      name: "Départements français"
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Apprendre" }));
+
+    expect(screen.getByTestId("study-learn-map")).toHaveAttribute(
+      "data-selected",
+      "01"
+    );
+    expect(screen.getByRole("heading", { name: "Réponse masquée" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Première lettre" }));
+    expect(screen.getAllByText("Première lettre").length).toBeGreaterThan(0);
+    expect(screen.getByText("A")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choix" }));
+    expect(screen.getByText("Allier")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+    expect(screen.getByRole("heading", { name: "Ain" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Entraîner" }));
+    expect(onStartTraining).toHaveBeenCalledWith({
+      type: "group",
+      id: 10,
+      name: "Départements français",
+      type_group: "map",
+      audio_only: false,
+      reverse_mode_enabled: false
     });
 
     expect(getStudySummary).toHaveBeenCalledTimes(1);
