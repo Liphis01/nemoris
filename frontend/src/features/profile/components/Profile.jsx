@@ -172,6 +172,7 @@ function GroupGuidanceList({ emptyLabel, items, onOpenStudy, renderMeta }) {
           <button
             type="button"
             className="profile-guidance-row-button"
+            title={item.name}
             onClick={() => onOpenStudy?.({ type: "group", id: item.id, name: item.name })}
           >
             <span className="profile-guidance-row-name">{item.name}</span>
