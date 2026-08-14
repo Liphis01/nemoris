@@ -829,6 +829,7 @@ export default function MediaReview({
   const {
     activeQuestionId,
     answeredCount,
+    canFinishReview = false,
     choiceOptions,
     currentPromptItem,
     feedbackTone,
@@ -981,7 +982,7 @@ export default function MediaReview({
         projectedInterval
       };
     });
-  }, [gridItems, qualityByQuestionId, recapRows]);
+  }, [gridItems, group, qualityByQuestionId, recapRows]);
   const selectedRecapRow = useMemo(() => {
     if (effectiveRecapRows.length === 0) return null;
 
@@ -1532,6 +1533,19 @@ export default function MediaReview({
     const selectable = allowSelection && !resultMode && selectsImageByTile;
     const previewByThumbnail = !selectsImageByTile || resultMode;
     const showTileZoomControl = mediaSrc && selectsImageByTile && !resultMode;
+    const selectedByChoice = interactionFeedback
+      ? row.item.question_id === interactionFeedback.selectedQuestionId
+      : row.isActive;
+    const disabledByChoiceFeedback = selectable && Boolean(interactionFeedback);
+    const tileChoiceLabel = (() => {
+      if (!selectable) return undefined;
+
+      const base = "Média à sélectionner";
+      const state = tileFeedbackLabel(row.feedbackState);
+      const prefix = row.isActive ? "Média demandé" : "Choix média";
+
+      return state ? `${prefix} : ${base}, ${state}` : `${prefix} : ${base}`;
+    })();
 
     return (
       <div
@@ -1550,16 +1564,25 @@ export default function MediaReview({
           }
           : undefined}
         onClick={selectable
-          ? () => selectTile(row.item.question_id)
+          ? () => {
+            if (!disabledByChoiceFeedback) selectTile(row.item.question_id);
+          }
           : undefined}
         onKeyDown={(event) => {
-          if (!selectable || (event.key !== "Enter" && event.key !== " ")) {
+          if (
+            !selectable ||
+            disabledByChoiceFeedback ||
+            (event.key !== "Enter" && event.key !== " ")
+          ) {
             return;
           }
 
           event.preventDefault();
           selectTile(row.item.question_id);
         }}
+        aria-disabled={disabledByChoiceFeedback || undefined}
+        aria-label={tileChoiceLabel}
+        aria-pressed={selectable ? selectedByChoice : undefined}
         role={selectable ? "button" : undefined}
         tabIndex={selectable ? 0 : undefined}
         style={{
@@ -1783,6 +1806,22 @@ export default function MediaReview({
     );
     const feedbackBadgeLabel = tileFeedbackLabel(row.feedbackState);
     const previewByThumbnail = !selectable && mediaSrc;
+    const selectedByChoice = (
+      !prompt &&
+      selectable &&
+      row.item.question_id === interactionFeedback?.selectedQuestionId
+    );
+    const disabledByChoiceFeedback = !prompt && selectable && Boolean(interactionFeedback);
+    const tileChoiceLabel = (() => {
+      if (prompt || !selectable) return undefined;
+
+      const base = keyIndex != null ? `Choix ${keyIndex + 1}` : "Choix média";
+      const state = tileFeedbackLabel(row.feedbackState);
+
+      return state
+        ? `${base} : média, ${state}`
+        : `${base} : média`;
+    })();
     const tileMarkerProps = prompt
       ? { "data-image-prompt-tile": true }
       : { "data-image-choice-tile": true };
@@ -1805,10 +1844,17 @@ export default function MediaReview({
             row.item.question_id === activeQuestionId
           );
         }}
-        onClick={selectable ? () => selectTile(row.item.question_id) : undefined}
+        onClick={selectable
+          ? () => {
+            if (!disabledByChoiceFeedback) selectTile(row.item.question_id);
+          }
+          : undefined}
         onKeyDown={selectable
           ? (event) => {
-            if (event.key !== "Enter" && event.key !== " ") {
+            if (
+              disabledByChoiceFeedback ||
+              (event.key !== "Enter" && event.key !== " ")
+            ) {
               return;
             }
 
@@ -1816,6 +1862,9 @@ export default function MediaReview({
             selectTile(row.item.question_id);
           }
           : undefined}
+        aria-disabled={disabledByChoiceFeedback || undefined}
+        aria-label={tileChoiceLabel}
+        aria-pressed={!prompt && selectable ? selectedByChoice : undefined}
         role={selectable ? "button" : undefined}
         tabIndex={selectable ? 0 : undefined}
         style={{
@@ -2112,6 +2161,7 @@ export default function MediaReview({
       <button
         key={option.value}
         type="button"
+        aria-label={title}
         aria-pressed={selected}
         data-image-recap-quality={option.value}
         disabled={disabled}
@@ -2563,6 +2613,7 @@ export default function MediaReview({
                             renderImageRecapQualityButton({
                               option,
                               selected: displaySelectedQuality === option.value,
+                              title: `${answerLabel(row.item)} : ${option.title}`,
                               onClick: (event) => {
                                 event.stopPropagation();
                                 setQuality(row.item.question_id, option.value);
@@ -2967,11 +3018,17 @@ export default function MediaReview({
                   ...(interactionFeedback?.isCorrect ? { order: 1 } : null)
                 }}
               >
-                <button
-                  type="button"
-                  data-image-choice-feedback={imageChoiceFeedbackState(
-                    option,
-                    interactionFeedback
+                  <button
+                    type="button"
+                    aria-label={`Choix ${index + 1} : ${answerLabel(option)}${
+                      imageChoiceFeedbackLabel(option, interactionFeedback)
+                        ? `, ${imageChoiceFeedbackLabel(option, interactionFeedback)}`
+                        : ""
+                    }`}
+                    aria-pressed={option.question_id === interactionFeedback?.selectedQuestionId}
+                    data-image-choice-feedback={imageChoiceFeedbackState(
+                      option,
+                      interactionFeedback
                   )}
                   disabled={Boolean(interactionFeedback)}
                   onClick={() => handleChoiceSelect(option.question_id)}
@@ -3051,7 +3108,20 @@ export default function MediaReview({
                 </button>
               )}
 
-              <button type="button" onClick={finishReview} style={buttonStyle}>
+              <button
+                type="button"
+                aria-label="Terminer la série"
+                disabled={!canFinishReview}
+                onClick={finishReview}
+                style={{
+                  ...buttonStyle,
+                  cursor: canFinishReview ? "pointer" : "not-allowed",
+                  opacity: canFinishReview ? 1 : 0.55
+                }}
+                title={canFinishReview
+                  ? "Voir le récapitulatif"
+                  : "Réponds à au moins un média avant de terminer"}
+              >
                 Terminer
               </button>
             </div>

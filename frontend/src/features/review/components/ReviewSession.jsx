@@ -179,21 +179,29 @@ export default function ReviewSession({
   // the session goes. The counter denominator stays the number of distinct
   // questions the session started with, and the relearning retries are surfaced
   // separately instead of inflating the total.
-  const baseQuestionTotal = questions.reduce(
+  const freshQuestionTotal = questions.reduce(
     (total, question) => total + (isRelearningQuestion(question) ? 0 : 1),
     0
   );
+  const hasFreshQuestionTotal = freshQuestionTotal > 0;
+  const baseQuestionTotal = hasFreshQuestionTotal
+    ? freshQuestionTotal
+    : questions.length;
   const questionsReachedThroughCurrent = questions
     .slice(0, currentIndex + 1)
     .reduce(
       (total, question) => total + (isRelearningQuestion(question) ? 0 : 1),
       0
     );
-  // On a relearning pass every base question has already been reached, so the
-  // counter rests at the total rather than counting past it.
-  const questionNumber = relearning
-    ? baseQuestionTotal
-    : questionsReachedThroughCurrent;
+  const relearningOnlyQuestionNumber = Math.min(currentIndex + 1, baseQuestionTotal);
+  // On a relearning pass after fresh questions, every base question has already
+  // been reached, so the counter rests at the total. A retry-only run falls back
+  // to the visible queue position so it never reads as Question 0 / 0.
+  const questionNumber = hasFreshQuestionTotal
+    ? relearning
+      ? baseQuestionTotal
+      : questionsReachedThroughCurrent
+    : relearningOnlyQuestionNumber;
   // Failed questions still queued behind the current one. The current card, if
   // it is itself a retry, is left out: the RÉAPPRENTISSAGE badge already marks
   // it, so the count reads as "still waiting" rather than double-marking it.

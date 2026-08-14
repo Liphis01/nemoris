@@ -266,6 +266,7 @@ export default function MapReview({
   }, []);
   const {
     activeMissedCodes,
+    canFinishReview = false,
     choiceFeedback,
     choiceOptions,
     dueCodes,
@@ -1089,8 +1090,17 @@ export default function MapReview({
                   data-flip-key={`${choiceScope}:${option.question_id}`}
                   style={choiceSlotStyle}
                 >
+                  {(() => {
+                    const feedbackLabel = choiceFeedbackLabel(option, choiceFeedback);
+                    const optionLabel = option.label || "Zone";
+
+                    return (
                   <button
                     type="button"
+                    aria-label={`Choix ${index + 1} : ${optionLabel}${
+                      feedbackLabel ? `, ${feedbackLabel}` : ""
+                    }`}
+                    aria-pressed={option.question_id === choiceFeedback?.selectedQuestionId}
                     data-map-choice-feedback={choiceFeedbackState(option, choiceFeedback)}
                     disabled={Boolean(choiceFeedback)}
                     onClick={() => handleChoiceSelect(option.question_id)}
@@ -1106,14 +1116,16 @@ export default function MapReview({
                           {index + 1}
                         </span>
                       )}
-                      <span>{option.label}</span>
+                      <span>{optionLabel}</span>
                     </span>
-                    {choiceFeedbackLabel(option, choiceFeedback) && (
+                    {feedbackLabel && (
                       <span style={choiceFeedbackLabelStyle}>
-                        {choiceFeedbackLabel(option, choiceFeedback)}
+                        {feedbackLabel}
                       </span>
                     )}
                   </button>
+                    );
+                  })()}
                 </div>
               ))}
 
@@ -1234,8 +1246,18 @@ export default function MapReview({
                 )}
 
                 <button
+                  type="button"
+                  aria-label="Terminer la carte"
+                  disabled={!canFinishReview}
                   onClick={finishMap}
-                  style={buttonStyle}
+                  style={{
+                    ...buttonStyle,
+                    cursor: canFinishReview ? "pointer" : "not-allowed",
+                    opacity: canFinishReview ? 1 : 0.55
+                  }}
+                  title={canFinishReview
+                    ? "Voir le récapitulatif"
+                    : "Réponds à au moins une zone avant de terminer"}
                 >
                   Terminer
                 </button>
@@ -1428,11 +1450,16 @@ export default function MapReview({
                           const disabled = !allFoundRelearning && qVal === 0;
                           const selected = !disabled && foundBulkQuality === qVal;
                           const activeStyle = qualityButtonStyles[qVal];
+                          const buttonTitle = disabled
+                            ? "Faux indisponible pour les zones trouvées"
+                            : `Appliquer aux zones trouvées : ${title}`;
 
                           return (
                             <button
                               key={qVal}
                               type="button"
+                              aria-label={buttonTitle}
+                              aria-pressed={selected}
                               disabled={disabled}
                               onClick={() => setFoundZoneQualities(qVal)}
                               style={{
@@ -1455,9 +1482,7 @@ export default function MapReview({
                                     : "#999",
                                 opacity: disabled ? 0.65 : 1
                               }}
-                              title={disabled
-                                ? "Faux indisponible pour les zones trouvées"
-                                : `Appliquer aux zones trouvées : ${title}`}
+                              title={buttonTitle}
                             >
                               {icon}
                             </button>
@@ -1607,6 +1632,8 @@ export default function MapReview({
                                 <button
                                   key={qVal}
                                   type="button"
+                                  aria-label={`${item.label || "Zone"} : ${title}`}
+                                  aria-pressed={selected}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setQuality(item.question_id, qVal);

@@ -62,6 +62,10 @@ function renderMapReview(showQualityControls, props = {}) {
   );
 }
 
+function choiceButtonName(label) {
+  return new RegExp(`Choix \\d+ : ${label}`);
+}
+
 describe("MapReview recap map focus", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -77,9 +81,9 @@ describe("MapReview recap map focus", () => {
   it.each([true, false])(
     "selects zones without zooming, while answer rows still zoom when quality controls are %s",
     async (showQualityControls) => {
-      renderMapReview(showQualityControls);
+      renderMapReview(showQualityControls, { allowPartialSubmit: true });
 
-      fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+      fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
       expect(await screen.findByTestId("recap-map")).toHaveAttribute("data-focus-code", "");
 
@@ -90,7 +94,7 @@ describe("MapReview recap map focus", () => {
       });
       expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-code", "");
 
-      fireEvent.click(screen.getByRole("button", { name: /Beta/ }));
+      fireEvent.click(screen.getByText("Beta").closest(".map-recap-row"));
 
       await waitFor(() => {
         expect(screen.getByTestId("recap-map")).toHaveAttribute("data-focus-code", "beta");
@@ -100,13 +104,13 @@ describe("MapReview recap map focus", () => {
   );
 
   it("names every zone on hover in the recap, but not while answering", async () => {
-    renderMapReview(true);
+    renderMapReview(true, { allowPartialSubmit: true });
 
     // While answering, only found/missed zones are labelled — hovering an
     // untouched zone must not give its name away.
     expect(JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels)).toEqual({});
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
     // By the recap every zone is revealed, so all of them are hoverable by name.
     const recapMap = await screen.findByTestId("recap-map");
@@ -119,6 +123,7 @@ describe("MapReview recap map focus", () => {
 
   it("shows the training timer while answering map groups", async () => {
     renderMapReview(false, {
+      allowPartialSubmit: true,
       trainingElapsedMs: 12345,
       trainingBestTimeMs: 90000
     });
@@ -128,10 +133,23 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByText("Meilleur")).toBeInTheDocument();
     expect(screen.getByText("1:30")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
     expect(await screen.findByRole("button", { name: "Continuer" })).toBeInTheDocument();
     expect(screen.queryByText("Temps")).not.toBeInTheDocument();
+  });
+
+  it("disables finish before any zone has been attempted", () => {
+    renderMapReview(true, { mode: "type_all" });
+
+    const button = screen.getByRole("button", { name: "Terminer la carte" });
+
+    expect(button).toBeDisabled();
+
+    fireEvent.click(button);
+
+    expect(screen.queryByRole("button", { name: "Valider" }))
+      .not.toBeInTheDocument();
   });
 
   it("collapses duplicate map chrome in compact visual layout", () => {
@@ -450,7 +468,7 @@ describe("MapReview recap map focus", () => {
       .getAttribute("data-due-items");
     const wrongChoice = qcmZones.find(zone => zone.code !== targetCode);
 
-    fireEvent.click(screen.getByRole("button", { name: wrongChoice.label }));
+    fireEvent.click(screen.getByRole("button", { name: choiceButtonName(wrongChoice.label) }));
 
     await waitFor(() => {
       expect(screen.getByText("Faux").closest("button"))
@@ -480,11 +498,13 @@ describe("MapReview recap map focus", () => {
       .getAttribute("data-due-items");
     const targetChoice = reviewZones.find(zone => zone.code === targetCode);
 
-    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+    fireEvent.click(screen.getByRole("button", { name: choiceButtonName(targetChoice.label) }));
 
     await waitFor(() => {
       expect(screen.getByText("Correct").closest("button"))
         .toHaveAttribute("data-map-choice-feedback", "correct");
+      expect(screen.getByText("Correct").closest("button"))
+        .toHaveAttribute("aria-pressed", "true");
       expect(screen.getByText("Correct").closest("button")).toBeDisabled();
       expect(container.querySelector("[data-map-progress-correct]"))
         .toHaveStyle({ width: "50%" });
@@ -499,7 +519,7 @@ describe("MapReview recap map focus", () => {
     });
 
     expect(screen.queryByText("Zone surlignée")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: choiceButtonName("Alpha") })).toBeInTheDocument();
   });
 
   it("multiple_choice replaces the decoys with the quality buttons", async () => {
@@ -508,7 +528,7 @@ describe("MapReview recap map focus", () => {
       .getAttribute("data-due-items");
     const targetChoice = reviewZones.find(zone => zone.code === targetCode);
 
-    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+    fireEvent.click(screen.getByRole("button", { name: choiceButtonName(targetChoice.label) }));
 
     // Only the correct zone stays; the decoy slots become Dur/Bon/Facile.
     await waitFor(() => {
@@ -532,7 +552,7 @@ describe("MapReview recap map focus", () => {
       .getAttribute("data-due-items");
     const targetChoice = reviewZones.find(zone => zone.code === targetCode);
 
-    fireEvent.click(screen.getByRole("button", { name: targetChoice.label }));
+    fireEvent.click(screen.getByRole("button", { name: choiceButtonName(targetChoice.label) }));
 
     // Training: no quality buttons, and the lone correct zone is centered.
     await waitFor(() => {
@@ -557,6 +577,11 @@ describe("MapReview recap map focus", () => {
     // Each choice shows a discoverable keycap hint.
     expect(document.querySelectorAll("[data-map-choice-key]"))
       .toHaveLength(choiceButtons.length);
+    expect(choiceButtons[0]).toHaveAttribute(
+      "aria-label",
+      expect.stringMatching(/^Choix 1 : /)
+    );
+    expect(choiceButtons[0]).toHaveAttribute("aria-pressed", "false");
 
     const targetIndex = choiceButtons.findIndex(button =>
       button.textContent.includes(targetChoice.label)
@@ -628,7 +653,7 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
     await screen.findByRole("button", { name: "Valider" });
 
@@ -659,7 +684,7 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
     await screen.findByRole("button", { name: "Valider" });
 

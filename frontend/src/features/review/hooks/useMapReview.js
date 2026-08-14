@@ -808,6 +808,12 @@ export function useMapReview(
   }
 
   function finishMap() {
+    if (!(reviewZones.length > 0 && (
+      allowPartialSubmit || completedQuestionIdSet.size > 0
+    ))) {
+      return false;
+    }
+
     const nextQualities = buildMapRecapQualities(
       reviewZones, foundQuestionIdSet, resolvedQuestionIdSet, allowPartialSubmit
     );
@@ -815,6 +821,7 @@ export function useMapReview(
     setQualityByQuestionId(nextQualities);
     setShowRecap(true);
     onAnsweringComplete?.(failedMapQuestionIds(nextQualities));
+    return true;
   }
 
   async function sendResult() {
@@ -868,6 +875,9 @@ export function useMapReview(
   const completedCount = isPromptMode
     ? resolvedQuestionIds.length
     : foundQuestionIds.length;
+  const canFinishReview = reviewZones.length > 0 && (
+    allowPartialSubmit || completedCount > 0
+  );
   const progressPercent = reviewZones.length
     ? (completedCount / reviewZones.length) * 100
     : 0;
@@ -960,6 +970,7 @@ export function useMapReview(
 
   return {
     activeMissedCodes,
+    canFinishReview,
     choiceFeedback: activeChoiceFeedback,
     choiceOptions: visibleChoiceOptions,
     currentPromptItem,

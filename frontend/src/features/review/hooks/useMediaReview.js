@@ -565,6 +565,9 @@ export function useMediaReview(
     ? resolvedQuestionIdSet
     : foundQuestionIdSet;
   const completedCount = completedQuestionIdSet.size;
+  const canFinishReview = sessionItems.length > 0 && (
+    allowPartialSubmit || completedCount > 0
+  );
   const answeredCount = foundQuestionIds.length;
   const wrongAnsweredCount = resultMode
     ? lockedMissedQuestionIds.length
@@ -920,7 +923,10 @@ export function useMediaReview(
   }
 
   function finishReview() {
+    if (!canFinishReview) return false;
+
     enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
+    return true;
   }
 
   function setQuality(questionId, quality) {
@@ -1161,6 +1167,7 @@ export function useMediaReview(
     foundQuestionIdSet,
     qualityByQuestionId,
     recapSort,
+    relearningGroup,
     resolvedQuestionIdSet,
     sessionItems
   ]);
@@ -1169,6 +1176,7 @@ export function useMediaReview(
     activeItem,
     activeQuestionId: activeQuestionIdForGrid,
     answeredCount,
+    canFinishReview,
     choiceOptions: visibleChoiceOptions,
     currentPromptItem,
     feedbackTone,

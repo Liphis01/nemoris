@@ -107,6 +107,7 @@ function mockMediaReviewState({
   useMediaReview.mockReturnValue({
     activeQuestionId: row.isActive ? row.item.question_id : null,
     answeredCount: row.isFound ? 1 : 0,
+    canFinishReview: true,
     choiceOptions: [],
     currentPromptItem: item,
     feedbackTone: "",
@@ -186,6 +187,7 @@ function typeAllHookState({ rows, foundQuestionIds = [], hookOverrides = {} }) {
   return {
     activeQuestionId: null,
     answeredCount: foundQuestionIds.length,
+    canFinishReview: true,
     choiceOptions: [],
     currentPromptItem: null,
     feedbackTone: "",
@@ -286,6 +288,7 @@ function typePromptHookState({
   return {
     activeQuestionId,
     answeredCount: foundQuestionIds.length,
+    canFinishReview: true,
     choiceOptions: [],
     currentPromptItem: activeRow?.item || null,
     feedbackTone: "",
@@ -334,6 +337,7 @@ function imageClickHookState({
   return {
     activeQuestionId,
     answeredCount: foundQuestionIds.length,
+    canFinishReview: true,
     choiceOptions: [],
     currentPromptItem: activeRow?.item || null,
     feedbackTone: "",
@@ -467,6 +471,30 @@ describe("MediaReview answer label preview", () => {
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
     expect(screen.getByText("Terminer")).toBeInTheDocument();
+  });
+
+  it("disables finish before the hook reports a real interaction", () => {
+    const finishReview = vi.fn();
+    mockMediaReviewState({
+      mode: IMAGE_MODE_TYPE_ALL,
+      rowOverrides: {
+        isActive: false,
+        isFound: false
+      },
+      hookOverrides: {
+        canFinishReview: false,
+        finishReview
+      }
+    });
+    renderMediaReview();
+
+    const button = screen.getByRole("button", { name: "Terminer la série" });
+
+    expect(button).toBeDisabled();
+
+    fireEvent.click(button);
+
+    expect(finishReview).not.toHaveBeenCalled();
   });
 
   it("uses a viewport-bounded shell with only the image pane scrolling", () => {
@@ -820,10 +848,10 @@ describe("MediaReview answer label preview", () => {
       objectPosition: "center"
     });
     expect(controlBand).toContainElement(
-      screen.getByRole("button", { name: "Image 2" })
+      screen.getByRole("button", { name: "Choix 2 : Image 2" })
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Image 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choix 2 : Image 2" }));
 
     expect(handleChoiceSelect).toHaveBeenCalledWith(2);
 
@@ -868,6 +896,8 @@ describe("MediaReview answer label preview", () => {
     // Unified reveal: green = correct answer, red = the wrong pick.
     expect(screen.getByText("Correct").closest("button").style.border)
       .toContain("134, 239, 172");
+    expect(screen.getByRole("button", { name: "Choix 2 : Image 2, Faux" }))
+      .toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Faux").closest("button").style.background)
       .toContain("repeating-linear-gradient");
     expect(screen.getByText("Faux").closest("button").style.border)
@@ -890,6 +920,8 @@ describe("MediaReview answer label preview", () => {
 
     // Each choice shows a discoverable keycap hint.
     expect(container.querySelectorAll("[data-image-choice-key]")).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "Choix 1 : Image 1" }))
+      .toHaveAttribute("aria-pressed", "false");
 
     fireEvent.keyDown(window, { key: "3" });
 
@@ -910,6 +942,8 @@ describe("MediaReview answer label preview", () => {
     }));
 
     expect(container.querySelectorAll("[data-image-choice-key]")).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "Choix 2 : média" }))
+      .toHaveAttribute("aria-pressed", "false");
 
     fireEvent.keyDown(window, { key: "2" });
 

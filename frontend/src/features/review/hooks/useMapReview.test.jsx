@@ -211,6 +211,54 @@ describe("useMapReview recap sorting", () => {
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
 
+  it("refuses to finish before any zone has been attempted", () => {
+    const onAnsweringComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), { onAnsweringComplete })
+    );
+
+    expect(result.current.canFinishReview).toBe(false);
+
+    act(() => {
+      expect(result.current.finishMap()).toBe(false);
+    });
+
+    expect(result.current.showRecap).toBe(false);
+    expect(result.current.qualityByQuestionId).toEqual({});
+    expect(onAnsweringComplete).not.toHaveBeenCalled();
+  });
+
+  it("allows partial finish when that mode explicitly permits non-answers", () => {
+    const onAnsweringComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        allowPartialSubmit: true,
+        onAnsweringComplete
+      })
+    );
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishMap()).toBe(true);
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(Object.values(result.current.qualityByQuestionId)).toEqual([
+      "unanswered",
+      "unanswered"
+    ]);
+    expect(onAnsweringComplete).toHaveBeenCalledWith([]);
+  });
+
   it("continues tab focus after a correctly answered focused zone", () => {
     const reviewZones = [
       zone({ questionId: 1, code: "a", label: "Alpha" }),

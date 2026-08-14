@@ -226,6 +226,58 @@ describe("useMediaReview", () => {
     expect(onComplete).toHaveBeenCalledWith([missedIds[1]]);
   });
 
+  it("refuses to finish before any image has been attempted", () => {
+    const onAnsweringComplete = vi.fn();
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_ALL,
+        onAnsweringComplete
+      })
+    );
+
+    expect(result.current.canFinishReview).toBe(false);
+
+    act(() => {
+      expect(result.current.finishReview()).toBe(false);
+    });
+
+    expect(result.current.resultMode).toBe(false);
+    expect(result.current.qualityByQuestionId).toEqual({});
+    expect(onAnsweringComplete).not.toHaveBeenCalled();
+  });
+
+  it("allows partial finish when that mode explicitly permits non-answers", () => {
+    const onAnsweringComplete = vi.fn();
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), undefined, {
+        allowPartialSubmit: true,
+        mode: IMAGE_MODE_TYPE_ALL,
+        onAnsweringComplete
+      })
+    );
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishReview()).toBe(true);
+    });
+
+    expect(result.current.resultMode).toBe(true);
+    expect(Object.values(result.current.qualityByQuestionId)).toEqual([
+      "unanswered",
+      "unanswered"
+    ]);
+    expect(onAnsweringComplete).toHaveBeenCalledWith([]);
+  });
+
   it("enters result mode automatically when all images are found", () => {
     const items = [
       imageItem(1, "France"),

@@ -252,6 +252,24 @@ describe("ReviewSession", () => {
       .toBeInTheDocument();
   });
 
+  it("does not show Question 0 / 0 for a retry-only queue", () => {
+    renderReviewSession({
+      questions: [
+        {
+          id: 1,
+          type_q: "text",
+          question: "Q1",
+          answer: "A1",
+          _reviewRetryOfIndex: 0
+        }
+      ],
+      currentIndex: 0
+    });
+
+    expect(screen.getByText("Question 1 / 1")).toBeInTheDocument();
+    expect(screen.queryByText("Question 0 / 0")).not.toBeInTheDocument();
+  });
+
   it("drops the count on the last retry, leaving only the badge", () => {
     const { container } = renderReviewSession({
       questions: [
