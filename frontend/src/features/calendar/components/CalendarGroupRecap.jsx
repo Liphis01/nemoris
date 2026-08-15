@@ -298,7 +298,7 @@ export default function CalendarGroupRecap({
         className="app-scrollbar"
         style={{ ...rowListStyle, ...(expanded ? expandedRowListStyle : {}) }}
       >
-        {row.events.map((event) => {
+        {row.events.map((event, index) => {
           const question = event.question;
           const historyStats = getHistoryStats(question);
           const isFocused = question.id === focusedEvent?.question.id;
@@ -310,6 +310,7 @@ export default function CalendarGroupRecap({
             <div
               key={event.id}
               ref={setRowRef(question.id)}
+              className="calendar-recap-row"
               role="button"
               tabIndex={0}
               onClick={() => focusQuestion(event)}
@@ -323,6 +324,8 @@ export default function CalendarGroupRecap({
               }}
               style={{
                 ...answerRowStyle,
+                // Short stagger so the list unfurls instead of appearing at once.
+                animationDelay: `${Math.min(index, 8) * 28}ms`,
                 ...(isFocused ? answerRowFocusedStyle : {})
               }}
             >

@@ -811,6 +811,7 @@ function GroupEventCard({
   return (
     <div
       ref={cardRef}
+      className="calendar-group-card"
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
@@ -839,7 +840,8 @@ function GroupEventCard({
         marginBottom: "8px",
         textAlign: "left",
         font: "inherit",
-        transition: "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease"
+        transition:
+          "border 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease"
       }}
     >
       <div
@@ -1262,6 +1264,7 @@ export default function ReviewCalendar({
       <div
         style={{
           maxWidth: activeGroupRow ? "1480px" : "1240px",
+          transition: "max-width 0.26s cubic-bezier(0.22, 0.61, 0.36, 1)",
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
@@ -1832,6 +1835,10 @@ export default function ReviewCalendar({
             }}
           >
             <div
+              key={activeGroupRow ? `panel-head-${activeGroupRow.key}` : "panel-head-day"}
+              className={
+                activeGroupRow ? "calendar-panel-forward" : "calendar-panel-back"
+              }
               style={{
                 padding: "16px",
                 borderBottom: "1px solid #262626",
@@ -2029,6 +2036,8 @@ export default function ReviewCalendar({
 
             {activeGroupRow ? (
               <div
+                key={`panel-body-${activeGroupRow.key}`}
+                className="calendar-panel-forward"
                 style={{
                   flex: 1,
                   minHeight: 0,
@@ -2048,7 +2057,8 @@ export default function ReviewCalendar({
               </div>
             ) : (
               <div
-                className="app-scrollbar"
+                key="panel-body-day"
+                className="app-scrollbar calendar-panel-back"
                 ref={detailListRef}
                 style={{
                   flex: 1,

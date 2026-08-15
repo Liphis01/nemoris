@@ -56,6 +56,76 @@
   }
 }
 
+/* Calendar detail panel: opening a group slides the recap in from the right,
+   "← Retour" slides the day list back in from the left. */
+@keyframes calendar-panel-forward {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes calendar-panel-back {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes calendar-recap-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* backwards (not both): the transform is dropped once the animation ends, so
+   the finished panel never becomes a containing block for its children. */
+.calendar-panel-forward {
+  animation: calendar-panel-forward 220ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.calendar-panel-back {
+  animation: calendar-panel-back 200ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.calendar-recap-row {
+  animation: calendar-recap-row-in 220ms ease-out backwards;
+}
+
+.calendar-group-card:hover {
+  transform: translateY(-1px);
+}
+
+.calendar-group-card:active {
+  transform: scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-panel-forward,
+  .calendar-panel-back,
+  .calendar-recap-row {
+    animation: none;
+  }
+
+  .calendar-group-card:hover,
+  .calendar-group-card:active {
+    transform: none;
+  }
+}
+
 html,
 body,
 #root {
