@@ -38,10 +38,13 @@ from urllib.request import Request, urlopen
 
 from .sync_client import (
     AUTH_TIMEOUT,
+    OTP_TIMEOUT,
     TRANSFER_TIMEOUT,
     SyncClientAuthError,
     SyncClientConflict,
-    SyncClientError
+    SyncClientError,
+    SyncClientTimeout,
+    is_timeout
 )
 
 
@@ -167,6 +170,11 @@ class SupabaseSyncClient:
 
             return error.code, dict(error.headers), error_body
         except (URLError, TimeoutError, ValueError) as error:
+            if is_timeout(error):
+                raise SyncClientTimeout(
+                    "Le serveur met trop de temps à répondre"
+                ) from error
+
             raise SyncClientError("Sync server unreachable") from error
 
     def _json(self, path, **kwargs):
@@ -185,10 +193,13 @@ class SupabaseSyncClient:
     # --- auth ---------------------------------------------------------------
 
     def request_code(self, email):
+        # Supabase answers only once the e-mail has been handed to the mail
+        # server, so this one call gets a far larger budget than the rest.
         status, _, body = self._request(
             "/auth/v1/otp",
             method="POST",
-            payload={"email": email, "create_user": True}
+            payload={"email": email, "create_user": True},
+            timeout=OTP_TIMEOUT
         )
 
         if status >= 400:

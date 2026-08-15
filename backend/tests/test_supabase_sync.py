@@ -1,13 +1,16 @@
 import io
 import json
 import unittest
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from app.services.supabase_sync_client import SupabaseSyncClient
 from app.services.sync_client import (
+    AUTH_TIMEOUT,
+    OTP_TIMEOUT,
     SyncClientAuthError,
     SyncClientConflict,
-    SyncClientError
+    SyncClientError,
+    SyncClientTimeout
 )
 
 
@@ -33,12 +36,14 @@ class FakeTransportClient(SupabaseSyncClient):
     def __init__(self, *args, handler=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.calls = []
+        self.timeouts = []
         self.handler = handler
 
     def _http(self, request, timeout):
         method = request.get_method()
         path = request.full_url[len(self.base):]
         self.calls.append((method, path))
+        self.timeouts.append(timeout)
         status, body = self.handler(method, path, request)
 
         if status >= 400:
@@ -74,6 +79,52 @@ class SupabaseClientTests(unittest.TestCase):
     def test_missing_key_rejected(self):
         with self.assertRaises(SyncClientError):
             SupabaseSyncClient("https://proj.supabase.co", "")
+
+    def test_request_code_waits_longer_than_a_normal_auth_call(self):
+        # Supabase answers /auth/v1/otp only once the e-mail is sent, which is
+        # routinely slower than AUTH_TIMEOUT.
+        client = self.make(lambda m, p, r: (200, b"{}"))
+        client.request_code("a@b.c")
+
+        self.assertEqual(client.timeouts, [OTP_TIMEOUT])
+        self.assertGreater(OTP_TIMEOUT, AUTH_TIMEOUT)
+
+    def test_slow_send_is_reported_as_slow_not_as_unreachable(self):
+        def handler(method, path, request):
+            raise TimeoutError("timed out")
+
+        with self.assertRaises(SyncClientTimeout) as caught:
+            self.make(handler).request_code("a@b.c")
+
+        self.assertIn("trop de temps", str(caught.exception))
+
+    def test_request_code_gateway_timeout_reports_a_failed_send(self):
+        # The edge gateway gave up on the mailer: no code was sent.
+        def handler(method, path, request):
+            return (504, b"upstream request timeout")
+
+        with self.assertRaises(SyncClientError) as caught:
+            self.make(handler).request_code("a@b.c")
+
+        self.assertIn("Impossible d'envoyer le code", str(caught.exception))
+
+    def test_request_code_real_rejection_still_fails(self):
+        def handler(method, path, request):
+            return (422, json_body({"msg": "Signups not allowed for otp"}))
+
+        with self.assertRaises(SyncClientError) as caught:
+            self.make(handler).request_code("a@b.c")
+
+        self.assertIn("Signups not allowed", str(caught.exception))
+
+    def test_unreachable_server_is_not_reported_as_a_timeout(self):
+        def handler(method, path, request):
+            raise URLError("connection refused")
+
+        with self.assertRaises(SyncClientError) as caught:
+            self.make(handler).get_meta(TOKEN)
+
+        self.assertNotIsInstance(caught.exception, SyncClientTimeout)
 
     def test_verify_builds_token_dict(self):
         def handler(method, path, request):

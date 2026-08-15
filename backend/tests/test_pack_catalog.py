@@ -36,8 +36,12 @@ from app.schemas import (
     PackRatingRequest
 )
 from app.services.pack_catalog import (
+    PUBLISH_OTP_TIMEOUT,
+    PUBLISH_TIMEOUT,
     PackCatalogError,
+    PackCatalogTimeout,
     _annotate_publication_sources,
+    request_pack_publish_code,
     fetch_pack_preview,
     get_group_pack_publication,
     get_pack_publish_status,
@@ -779,6 +783,56 @@ class PackCatalogAuthTestCase(unittest.TestCase):
 
     def signed_out_state(self):
         return {"account_email": None, "token": None}
+
+
+class PackPublishSignInTests(PackCatalogAuthTestCase):
+    """Sending the sign-in e-mail is slow by nature (Supabase answers only
+    once the mail is handed off), so it must not be read as a dead server."""
+
+    def request_code(self, fake_urlopen):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen", fake_urlopen
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ):
+            return request_pack_publish_code(db, "author@example.com")
+
+    def test_send_gets_a_longer_budget_than_other_catalog_calls(self):
+        seen = []
+
+        def fake_urlopen(request, timeout):
+            seen.append(timeout)
+            return FakeResponse({})
+
+        self.request_code(fake_urlopen)
+
+        self.assertEqual(seen, [PUBLISH_OTP_TIMEOUT])
+        self.assertGreater(PUBLISH_OTP_TIMEOUT, PUBLISH_TIMEOUT)
+
+    def test_slow_send_is_reported_as_slow_not_as_inaccessible(self):
+        def fake_urlopen(request, timeout):
+            raise TimeoutError("timed out")
+
+        with self.assertRaises(PackCatalogTimeout) as caught:
+            self.request_code(fake_urlopen)
+
+        self.assertIn("trop de temps", str(caught.exception))
+
+    def test_real_rejection_still_fails(self):
+        def fake_urlopen(request, timeout):
+            raise HTTPError(
+                request.full_url, 422, "error", {},
+                io.BytesIO(json.dumps(
+                    {"msg": "Signups not allowed for otp"}
+                ).encode("utf-8"))
+            )
+
+        with self.assertRaises(PackCatalogError):
+            self.request_code(fake_urlopen)
 
 
 class PackCatalogPublishTests(PackCatalogAuthTestCase):

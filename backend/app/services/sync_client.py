@@ -18,6 +18,11 @@ from urllib.request import Request, urlopen
 
 
 AUTH_TIMEOUT = 15
+# Sending the sign-in e-mail is synchronous server-side (the response only
+# comes back once the SMTP hand-off is done), which regularly takes far longer
+# than a normal auth call — well past AUTH_TIMEOUT. Give that one request its
+# own budget so a slow send is not mistaken for an unreachable server.
+OTP_TIMEOUT = 60
 TRANSFER_TIMEOUT = 180
 
 
@@ -27,6 +32,20 @@ class SyncClientError(Exception):
 
 class SyncClientAuthError(SyncClientError):
     pass
+
+
+class SyncClientTimeout(SyncClientError):
+    """The server answered too slowly — distinct from not answering at all."""
+
+    pass
+
+
+def is_timeout(error):
+    # A read timeout surfaces as TimeoutError; a connect timeout comes wrapped
+    # in URLError(TimeoutError).
+    return isinstance(error, TimeoutError) or isinstance(
+        getattr(error, "reason", None), TimeoutError
+    )
 
 
 class SyncClientConflict(SyncClientError):

@@ -26,6 +26,7 @@ from .packs import (
     export_playlist_pack
 )
 from .settings import INTAKE_SECONDS_PER_QUESTION, get_pack_catalog_settings
+from .sync_client import is_timeout
 from .tag_hierarchy import (
     CORE_ROOT_IDS,
     CORE_ROOTS,
@@ -59,6 +60,9 @@ MAX_LIMIT = 60
 HEALTH_SAMPLE_LIMIT = 3
 PUBLISH_TIMEOUT = 12
 PUBLISH_TRANSFER_TIMEOUT = 60
+# Same story as services/sync_client.OTP_TIMEOUT: the sign-in e-mail is sent
+# before Supabase answers, so that one call needs its own, much larger budget.
+PUBLISH_OTP_TIMEOUT = 60
 PREVIEW_SAMPLE_LIMIT = 6
 PREVIEW_FETCH_TIMEOUT = 15
 PREVIEW_MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
@@ -70,6 +74,12 @@ class PackCatalogError(ValueError):
 
 
 class PackCatalogAuthError(PackCatalogError):
+    pass
+
+
+class PackCatalogTimeout(PackCatalogError):
+    """Supabase answered too slowly — distinct from not answering at all."""
+
     pass
 
 
@@ -1056,6 +1066,11 @@ def _supabase_request(
     except HTTPError as error:
         return error.code, dict(error.headers), error.read()
     except (TimeoutError, URLError, ValueError) as error:
+        if is_timeout(error):
+            raise PackCatalogTimeout(
+                "Le catalogue Supabase met trop de temps à répondre."
+            ) from error
+
         raise PackCatalogError("Catalogue Supabase inaccessible.") from error
 
 
@@ -1649,7 +1664,8 @@ def request_pack_publish_code(db, email):
         key,
         "/auth/v1/otp",
         method="POST",
-        payload={"email": clean_email, "create_user": True}
+        payload={"email": clean_email, "create_user": True},
+        timeout=PUBLISH_OTP_TIMEOUT
     )
     _raise_supabase_status(status, body, "Impossible d'envoyer le code")
 
