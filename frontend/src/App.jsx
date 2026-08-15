@@ -169,6 +169,7 @@ function AppContent() {
   // Top-level mode switching is intentionally simple: each feature owns its
   // internal state through hooks, while App only coordinates cross-feature jumps.
   const [mode, setMode] = useState("menu");
+  const modeRef = useRef("menu");
   const backStackRef = useRef([]);
   const forwardStackRef = useRef([]);
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
@@ -224,53 +225,58 @@ function AppContent() {
     document.body.style.overflow = "hidden";
   }, []);
 
-  const navigateMode = useCallback((nextModeOrUpdater) => {
-    setMode((currentMode) => {
-      const nextMode = typeof nextModeOrUpdater === "function"
-        ? nextModeOrUpdater(currentMode)
-        : nextModeOrUpdater;
-
-      if (!nextMode || nextMode === currentMode) {
-        return currentMode;
-      }
-
-      backStackRef.current.push(currentMode);
-      forwardStackRef.current = [];
-      return nextMode;
-    });
+  // The history stacks live in refs, so they must never be mutated from inside a
+  // setMode updater: React re-runs updaters (StrictMode, queue replays) and each
+  // replay would push or pop again, making one back press skip several screens.
+  const applyMode = useCallback((nextMode) => {
+    modeRef.current = nextMode;
+    setMode(nextMode);
   }, []);
+
+  const navigateMode = useCallback((nextModeOrUpdater) => {
+    const currentMode = modeRef.current;
+    const nextMode = typeof nextModeOrUpdater === "function"
+      ? nextModeOrUpdater(currentMode)
+      : nextModeOrUpdater;
+
+    if (!nextMode || nextMode === currentMode) {
+      return;
+    }
+
+    backStackRef.current.push(currentMode);
+    forwardStackRef.current = [];
+    applyMode(nextMode);
+  }, [applyMode]);
 
   const goBack = useCallback(() => {
-    setMode((currentMode) => {
-      let previousMode = backStackRef.current.pop();
-      while (previousMode === currentMode) {
-        previousMode = backStackRef.current.pop();
-      }
+    const currentMode = modeRef.current;
+    let previousMode = backStackRef.current.pop();
+    while (previousMode === currentMode) {
+      previousMode = backStackRef.current.pop();
+    }
 
-      if (!previousMode) {
-        return currentMode;
-      }
+    if (!previousMode) {
+      return;
+    }
 
-      forwardStackRef.current.push(currentMode);
-      return previousMode;
-    });
-  }, []);
+    forwardStackRef.current.push(currentMode);
+    applyMode(previousMode);
+  }, [applyMode]);
 
   const goForward = useCallback(() => {
-    setMode((currentMode) => {
-      let nextMode = forwardStackRef.current.pop();
-      while (nextMode === currentMode) {
-        nextMode = forwardStackRef.current.pop();
-      }
+    const currentMode = modeRef.current;
+    let nextMode = forwardStackRef.current.pop();
+    while (nextMode === currentMode) {
+      nextMode = forwardStackRef.current.pop();
+    }
 
-      if (!nextMode) {
-        return currentMode;
-      }
+    if (!nextMode) {
+      return;
+    }
 
-      backStackRef.current.push(currentMode);
-      return nextMode;
-    });
-  }, []);
+    backStackRef.current.push(currentMode);
+    applyMode(nextMode);
+  }, [applyMode]);
 
   useEffect(() => {
     function interceptBrowserMouseNavigation(event) {
