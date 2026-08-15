@@ -202,7 +202,7 @@ function SessionCompletePanel({
   };
 
   return (
-    <section className="session-end" aria-label="Session terminée">
+    <section className="session-end app-scrollbar" aria-label="Session terminée">
       <div className="session-end-head">
         <div>
           <div className="session-end-kicker">Révision</div>
