@@ -160,6 +160,7 @@
 .menu-review,
 .menu-context-action,
 .menu-pack-card-clickable,
+.menu-study-card-clickable,
 .menu-pack-arrow,
 .menu-pack-dot,
 .menu-account-chip,
@@ -218,6 +219,7 @@
 .menu-review,
 .menu-context-action,
 .menu-pack-card-clickable,
+.menu-study-card-clickable,
 .menu-pack-arrow,
 .menu-pack-dot,
 .menu-destination {
@@ -232,6 +234,7 @@
 
 .menu-review:hover,
 .menu-pack-card-clickable:hover,
+.menu-study-card-clickable:hover,
 .menu-context-action:hover,
 .menu-destination:hover {
   border-color: #444444;
@@ -241,6 +244,7 @@
 
 .menu-review:focus-visible,
 .menu-pack-card-clickable:focus-visible,
+.menu-study-card-clickable:focus-visible,
 .menu-context-action:focus-visible,
 .menu-pack-arrow:focus-visible,
 .menu-pack-dot:focus-visible,
@@ -518,7 +522,7 @@
 .menu-context {
   display: grid;
   gap: 12px;
-  grid-template-rows: minmax(0, 1.25fr) minmax(150px, 0.75fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   min-width: 0;
 }
@@ -592,34 +596,94 @@
 }
 
 .menu-study-card {
+  align-items: center;
   background:
-    linear-gradient(135deg, rgba(143, 199, 255, 0.1), transparent 48%),
+    linear-gradient(120deg, rgba(143, 199, 255, 0.11), transparent 55%),
     #171717;
   border-color: #263240;
-  gap: 16px;
+  flex-direction: row;
+  gap: 13px;
+  justify-content: flex-start;
+  padding: 13px 15px;
+}
+
+.menu-study-card-clickable {
+  text-align: left;
+  width: 100%;
 }
 
 .menu-study-card-error {
   border-color: rgba(255, 156, 156, 0.35);
 }
 
-.menu-study-meta {
-  color: #bcbcbc;
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 12px;
-  font-weight: 800;
-  gap: 8px;
-  line-height: 1.2;
-  margin: 2px 0 0;
-  text-transform: uppercase;
+.menu-study-card .menu-eyebrow {
+  color: #8fc7ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.menu-study-meta span {
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid #303030;
-  border-radius: 999px;
-  padding: 6px 9px;
+.menu-study-icon {
+  align-items: center;
+  background: rgba(143, 199, 255, 0.1);
+  border: 1px solid rgba(143, 199, 255, 0.26);
+  border-radius: 8px;
+  color: #8fc7ff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 17px;
+  height: 40px;
+  justify-content: center;
+  line-height: 1;
+  width: 40px;
+}
+
+.menu-study-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.menu-study-card h2 {
+  font-size: 17px;
+  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-study-card p {
+  font-size: 12px;
+  line-height: 1.3;
+  margin: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-study-arrow {
+  align-items: center;
+  background: rgba(143, 199, 255, 0.1);
+  border: 1px solid rgba(143, 199, 255, 0.24);
+  border-radius: 8px;
+  color: #8fc7ff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 15px;
+  height: 32px;
+  justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  width: 32px;
+}
+
+.menu-study-card-clickable:hover .menu-study-arrow {
+  background: rgba(143, 199, 255, 0.17);
+  border-color: rgba(143, 199, 255, 0.42);
 }
 
 .menu-pack-card {
@@ -627,12 +691,20 @@
     linear-gradient(135deg, rgba(94, 234, 212, 0.09), transparent 48%),
     #171717;
   border-color: #263532;
-  padding: 18px 44px 16px;
+  padding: 22px 48px 18px;
 }
 
 .menu-pack-card-clickable {
   text-align: left;
   width: 100%;
+}
+
+/* Loading and empty states have no emblem to fill the card, so their few lines
+   stay grouped in the middle instead of being spread apart. */
+.menu-pack-card-quiet {
+  align-items: flex-start;
+  gap: 4px;
+  justify-content: center;
 }
 
 .menu-pack-slide {
@@ -655,6 +727,52 @@
   -webkit-line-clamp: 4;
 }
 
+.menu-pack-visual {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.menu-pack-visual::before,
+.menu-pack-visual::after {
+  border: 1px solid rgba(94, 234, 212, 0.13);
+  border-radius: 999px;
+  content: "";
+  position: absolute;
+}
+
+.menu-pack-visual::before {
+  height: 96px;
+  width: min(78%, 300px);
+}
+
+.menu-pack-visual::after {
+  height: 56px;
+  width: min(54%, 210px);
+}
+
+.menu-pack-emblem {
+  align-items: center;
+  background: rgba(94, 234, 212, 0.07);
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  border-radius: 999px;
+  box-shadow: 0 0 34px rgba(94, 234, 212, 0.07);
+  color: #5eead4;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 36px;
+  font-weight: 800;
+  height: 92px;
+  justify-content: center;
+  line-height: 1;
+  width: 92px;
+  z-index: 1;
+}
+
 .menu-pack-meta {
   color: #bcbcbc;
   display: flex;
@@ -663,7 +781,7 @@
   font-weight: 800;
   gap: 8px;
   line-height: 1.2;
-  margin: 10px 0 42px;
+  margin: 14px 0 52px;
   text-transform: uppercase;
 }
 
@@ -713,10 +831,10 @@
   display: flex;
   gap: 12px;
   justify-content: center;
-  left: 44px;
+  left: 48px;
   min-width: 0;
   position: absolute;
-  right: 44px;
+  right: 48px;
 }
 
 .menu-pack-dots {
@@ -917,8 +1035,11 @@
 }
 
 @media (max-width: 1040px) {
+  /* Stacked layout: the context cards keep their content height and the review
+     card absorbs whatever is left, instead of the aside being squeezed flat. */
   .menu-primary-row {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   .menu-context {
@@ -926,8 +1047,61 @@
     grid-template-rows: none;
   }
 
+  /* Side by side there is no room for the tall carousel: it keeps the title and
+     a short pitch, and drops the emblem and the counters. */
+  .menu-pack-card {
+    padding: 15px 34px 28px;
+  }
+
+  .menu-pack-card h2 {
+    font-size: 20px;
+  }
+
+  .menu-pack-slide p {
+    -webkit-line-clamp: 2;
+  }
+
+  .menu-pack-visual,
+  .menu-pack-meta {
+    display: none;
+  }
+
+  .menu-pack-arrow {
+    height: 52px;
+  }
+
+  .menu-pack-bottom {
+    bottom: 10px;
+    left: 34px;
+    right: 34px;
+  }
+
+  /* The shell never scrolls, so the review card gives back the height the
+     context cards now keep. */
   .menu-review {
-    min-height: 320px;
+    gap: 16px;
+    min-height: 260px;
+    padding: 24px;
+  }
+
+  .menu-review-title {
+    font-size: 44px;
+  }
+
+  .menu-review-text {
+    margin-top: 12px;
+  }
+
+  /* The dial follows the height left over instead of holding a fixed size and
+     pushing the footer out of the clipped card. */
+  .menu-review-visual {
+    min-height: 0;
+  }
+
+  .menu-review-dial {
+    aspect-ratio: 1;
+    height: min(96px, 100%);
+    width: auto;
   }
 }
 

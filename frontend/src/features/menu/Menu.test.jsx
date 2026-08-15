@@ -173,7 +173,7 @@ describe("Menu", () => {
     expect(await screen.findByRole("heading", { name: "Europe" })).toBeInTheDocument();
     expect(await screen.findByText("Capitales du monde")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Étudier ce groupe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Étudier Europe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith({
       type: "group",

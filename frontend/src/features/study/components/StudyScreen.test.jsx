@@ -263,6 +263,80 @@ const summary = {
   }
 };
 
+const mediaSummary = {
+  ...summary,
+  scope: {
+    ...summary.scope,
+    id: 20,
+    name: "Drapeaux",
+    type_group: "media",
+    question_count: 2
+  },
+  counts: {
+    ...summary.counts,
+    total_atomic_questions: 2,
+    active_questions: 2,
+    due_now: 0,
+    upcoming_load: 0
+  },
+  buckets: {
+    unseen: 1,
+    learning: 1,
+    fragile: 0,
+    stable: 0,
+    mastered: 0
+  },
+  available_modes: [
+    {
+      scope: "group",
+      type_group: "media",
+      type_q: "media",
+      training_modes: ["type_prompt", "multiple_choice_media"],
+      review_modes: ["type_prompt", "multiple_choice_media"],
+      training_support: "supported"
+    }
+  ],
+  learn: {
+    supported: true,
+    family: "media",
+    group: {
+      id: 20,
+      name: "Drapeaux",
+      type_group: "media",
+      media: null
+    },
+    item_count: 2,
+    truncated: false,
+    hints: summary.learn.hints,
+    items: [
+      {
+        id: 11,
+        type_q: "media",
+        question: "Drapeau français",
+        answer: "France",
+        media: "france.png",
+        media_pool: ["france.png"],
+        media_kind: "image",
+        tags: ["Géographie"],
+        aliases: ["République française"],
+        signals: { bucket: "unseen", due: false }
+      },
+      {
+        id: 12,
+        type_q: "media",
+        question: "Drapeau allemand",
+        answer: "Allemagne",
+        media: "germany.png",
+        media_pool: ["germany.png"],
+        media_kind: "image",
+        tags: ["Géographie"],
+        aliases: [],
+        signals: { bucket: "learning", due: false }
+      }
+    ]
+  }
+};
+
 describe("StudyScreen", () => {
   beforeEach(() => {
     getStudySummary.mockResolvedValue(summary);
@@ -363,7 +437,7 @@ describe("StudyScreen", () => {
     }));
   });
 
-  it("renders read-only Learn hints and reveals answers deliberately", async () => {
+  it("renders map Learn as a guided path without raw zone labels", async () => {
     const onStartTraining = vi.fn();
     const setMode = vi.fn();
 
@@ -385,7 +459,20 @@ describe("StudyScreen", () => {
       "data-selected",
       "01"
     );
-    expect(screen.getByRole("heading", { name: "Réponse masquée" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", {
+      name: "Observe, puis retrouve la réponse"
+    })).toBeInTheDocument();
+    expect(screen.getByRole("heading", {
+      name: "Parcours d'apprentissage"
+    })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Étape 1 · Non vu"
+    })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Étape 2 · Fragile · Due"
+    })).toBeInTheDocument();
+    expect(screen.queryByText("Zone 01")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zone 03")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Première lettre" }));
     expect(screen.getAllByText("Première lettre").length).toBeGreaterThan(0);
@@ -396,6 +483,98 @@ describe("StudyScreen", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
     expect(screen.getByRole("heading", { name: "Ain" })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Ain · Vu"
+    })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Masquer" })).not.toBeInTheDocument();
+    expect(onStartTraining).not.toHaveBeenCalled();
+
+    expect(getStudySummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders media Learn without generic media labels", async () => {
+    getStudySummary.mockResolvedValueOnce(mediaSummary);
+
+    render(
+      <StudyScreen
+        scope={{ type: "group", id: 20 }}
+        setMode={vi.fn()}
+        onStartTraining={vi.fn()}
+      />
+    );
+
+    await screen.findByRole("heading", { name: "Drapeaux" });
+    fireEvent.click(screen.getByRole("tab", { name: "Apprendre" }));
+
+    expect(screen.getByAltText("Média à apprendre")).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Étape 1 · Non vu"
+    })).toBeInTheDocument();
+    expect(screen.queryByText("Média 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Média 2")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+
+    expect(screen.getByRole("heading", { name: "France" })).toBeInTheDocument();
+    expect(screen.getByText("République française")).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "France · Vu"
+    })).toBeInTheDocument();
+  });
+
+  it("tracks local Learn outcomes and restarts only items marked for review", async () => {
+    const onStartTraining = vi.fn();
+
+    render(
+      <StudyScreen
+        scope={{ type: "group", id: 10 }}
+        setMode={vi.fn()}
+        onStartTraining={onStartTraining}
+      />
+    );
+
+    await screen.findByRole("heading", {
+      name: "Départements français"
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Apprendre" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Je savais" }));
+    expect(onStartTraining).not.toHaveBeenCalled();
+    expect(screen.getByTestId("study-learn-map")).toHaveAttribute(
+      "data-selected",
+      "03"
+    );
+    expect(screen.getByRole("button", {
+      name: "Ain · Je savais"
+    })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+    fireEvent.click(screen.getByRole("button", { name: "À revoir" }));
+    expect(screen.getByRole("button", {
+      name: "Allier · À revoir"
+    })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Passer" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Je savais" }));
+
+    expect(screen.getByRole("heading", { name: "Parcours terminé" })).toBeInTheDocument();
+    expect(screen.getByText("Vus")).toBeInTheDocument();
+    expect(screen.getAllByText("Je savais").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("À revoir").length).toBeGreaterThan(0);
+    expect(onStartTraining).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reprendre les à revoir" }));
+    expect(screen.getByTestId("study-learn-map")).toHaveAttribute(
+      "data-selected",
+      "03"
+    );
+    expect(screen.getByRole("heading", {
+      name: "Observe, puis retrouve la réponse"
+    })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Entraîner" }));
     expect(onStartTraining).toHaveBeenCalledWith({
@@ -406,8 +585,6 @@ describe("StudyScreen", () => {
       audio_only: false,
       reverse_mode_enabled: false
     });
-
-    expect(getStudySummary).toHaveBeenCalledTimes(1);
   });
 
   it("hides Learn for unsupported scopes and keeps only enabled practice entries", async () => {

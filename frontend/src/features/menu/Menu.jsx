@@ -144,6 +144,15 @@ function packDownloadLabel(count) {
 }
 
 
+// The carousel is the tall card now, so each pack gets an emblem built from its
+// own name to fill the space between the title and the meta row.
+function packInitial(name) {
+  const letter = String(name || "").trim().charAt(0);
+
+  return letter ? letter.toUpperCase() : "◫";
+}
+
+
 function pickStudyTarget(guidance) {
   if (!guidance) return null;
 
@@ -272,6 +281,8 @@ function MenuAccountChip({
 }
 
 
+// Compact companion of the pack carousel: one line of guidance, no stat chips.
+// The whole row is the affordance, so the card stays short under the carousel.
 function MenuStudyCard({
   error,
   loading,
@@ -279,10 +290,14 @@ function MenuStudyCard({
   setMode,
   stats
 }) {
-  const counts = stats?.counts || {};
   const target = pickStudyTarget(stats?.guidance);
 
   function openTarget() {
+    if (error) {
+      setMode("profile");
+      return;
+    }
+
     if (target?.group && onOpenStudy) {
       onOpenStudy({
         type: "group",
@@ -299,53 +314,57 @@ function MenuStudyCard({
   if (loading) {
     return (
       <section className="menu-context-card menu-study-card">
-        <span className="menu-eyebrow">Étudier</span>
-        <h2>Analyse en cours</h2>
-        <p>Chargement des priorités de travail.</p>
+        <span className="menu-study-icon" aria-hidden="true">◎</span>
+
+        <span className="menu-study-copy">
+          <span className="menu-eyebrow">À étudier</span>
+          <h2>Analyse en cours</h2>
+          <p>Lecture de tes priorités.</p>
+        </span>
       </section>
     );
   }
 
-  if (error) {
-    return (
-      <section className="menu-context-card menu-study-card menu-study-card-error">
-        <span className="menu-eyebrow">Étudier</span>
-        <h2>Guidage indisponible</h2>
-        <p>{error}</p>
-        <button
-          type="button"
-          className="menu-context-action menu-context-action-blue"
-          onClick={() => setMode("profile")}
-        >
-          <span>Ouvrir le profil</span>
-          <span aria-hidden="true">→</span>
-        </button>
-      </section>
-    );
-  }
+  const eyebrow = error ? "À étudier" : (target?.label || "À étudier");
+  const title = error
+    ? "Guidage indisponible"
+    : (target?.title || "Rien d'urgent");
+  const detail = error
+    ? error
+    : (target?.detail || "Aucun groupe prioritaire pour le moment.");
+  const label = error
+    ? "Ouvrir le profil"
+    : target
+      ? `Étudier ${target.title}`
+      : "Ouvrir l'entraînement";
 
   return (
-    <section className="menu-context-card menu-study-card">
-      <span className="menu-eyebrow">À étudier</span>
-      <h2>{target?.title || "Aucun groupe prioritaire"}</h2>
-      <p>
-        {target?.detail || "Ta progression ne signale rien d'urgent pour le moment."}
-      </p>
+    <section
+      role="button"
+      tabIndex={0}
+      className={`menu-context-card menu-study-card menu-study-card-clickable${error ? " menu-study-card-error" : ""}`}
+      onClick={openTarget}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
 
-      <div className="menu-study-meta">
-        <span>{formatNumber(counts.total ?? 0)} questions</span>
-        <span>{formatNumber(counts.mastered ?? 0)} maîtrisées</span>
-        {target?.label && <span>{target.label}</span>}
-      </div>
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openTarget();
+        }
+      }}
+      aria-label={label}
+    >
+      <span className="menu-study-icon" aria-hidden="true">◎</span>
 
-      <button
-        type="button"
-        className="menu-context-action menu-context-action-blue"
-        onClick={openTarget}
-      >
-        <span>{target ? "Étudier ce groupe" : "Ouvrir l'entraînement"}</span>
-        <span aria-hidden="true">→</span>
-      </button>
+      <span className="menu-study-copy">
+        <span className="menu-eyebrow">{eyebrow}</span>
+        <h2>{title}</h2>
+        <p>{detail}</p>
+      </span>
+
+      <span className="menu-study-arrow" aria-hidden="true">→</span>
     </section>
   );
 }
@@ -385,7 +404,7 @@ function MenuPackCarousel({
 
   if (loading) {
     return (
-      <section className="menu-context-card menu-pack-card">
+      <section className="menu-context-card menu-pack-card menu-pack-card-quiet">
         <span className="menu-eyebrow">Catalogue</span>
         <h2>Packs populaires</h2>
         <p>Chargement du catalogue...</p>
@@ -395,7 +414,7 @@ function MenuPackCarousel({
 
   if (error || !activePack) {
     return (
-      <section className="menu-context-card menu-pack-card">
+      <section className="menu-context-card menu-pack-card menu-pack-card-quiet">
         <span className="menu-eyebrow">Catalogue</span>
         <h2>Packs populaires</h2>
         <p>{error || "Aucun pack populaire disponible."}</p>
@@ -442,6 +461,10 @@ function MenuPackCarousel({
         <span className="menu-eyebrow">Pack populaire</span>
         <h2>{activePack.name}</h2>
         {activePack.description && <p>{activePack.description}</p>}
+      </div>
+
+      <div className="menu-pack-visual" aria-hidden="true">
+        <span className="menu-pack-emblem">{packInitial(activePack.name)}</span>
       </div>
 
       <div className="menu-pack-meta">
@@ -789,14 +812,6 @@ export default function Menu({
             </button>
 
             <aside className="menu-context" aria-label="Résumé">
-              <MenuStudyCard
-                error={statsError}
-                loading={statsLoading}
-                onOpenStudy={onOpenStudy}
-                setMode={setMode}
-                stats={menuStats}
-              />
-
               <MenuPackCarousel
                 activeIndex={activePackIndexBounded}
                 cycleKey={packCycleSeed}
@@ -806,6 +821,14 @@ export default function Menu({
                 onSelect={selectPack}
                 packs={popularPacks}
                 setMode={setMode}
+              />
+
+              <MenuStudyCard
+                error={statsError}
+                loading={statsLoading}
+                onOpenStudy={onOpenStudy}
+                setMode={setMode}
+                stats={menuStats}
               />
             </aside>
           </div>
