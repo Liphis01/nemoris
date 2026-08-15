@@ -16,12 +16,9 @@ import { sequenceModeLabels } from "../../review/sequenceModes";
 import "./StudyScreen.css";
 
 
-const TABS = [
-  { id: "overview", label: "Vue" },
-  { id: "learn", label: "Apprendre" },
-  { id: "train", label: "Entraîner" },
-  { id: "weak", label: "Faibles" },
-  { id: "history", label: "Historique" }
+const BASE_TABS = [
+  { id: "today", label: "Aujourd'hui" },
+  { id: "train", label: "Entraîner" }
 ];
 
 const BUCKETS = [
@@ -59,6 +56,13 @@ const AUDIO_MEDIA_MODES = new Set([
   "multiple_choice_media"
 ]);
 const LEARN_SUPPORTED_FAMILIES = new Set(["map", "media"]);
+const LEARN_BUCKET_PRIORITY = {
+  unseen: 0,
+  fragile: 1,
+  learning: 2,
+  stable: 3,
+  mastered: 4
+};
 const CONFUSION_PRACTICE_MODES = {
   mapMode: "multiple_choice",
   imageMode: "multiple_choice_media",
@@ -112,7 +116,7 @@ function scopeTypeLabel(scope) {
 
 
 function scopeTitle(scope) {
-  if (!scope) return "Study";
+  if (!scope) return "Étudier";
 
   if (scope.type === "tag") {
     return `#${scope.label || scope.name || scope.id || scope.tag || ""}`;
@@ -337,13 +341,49 @@ function relatedLearnItems(items, activeIndex) {
 }
 
 
+function supportsLearnTab(summary) {
+  const learn = summary?.learn || {};
+
+  return Boolean(
+    learn.supported &&
+    LEARN_SUPPORTED_FAMILIES.has(learn.family) &&
+    (learn.items || []).length > 0
+  );
+}
+
+
+function tabsForSummary(summary) {
+  if (!supportsLearnTab(summary)) return BASE_TABS;
+
+  return [
+    BASE_TABS[0],
+    { id: "learn", label: "Apprendre" },
+    BASE_TABS[1]
+  ];
+}
+
+
+function orderedLearnItems(items) {
+  return [...(items || [])].sort((left, right) => {
+    const leftBucket = left?.signals?.bucket || "";
+    const rightBucket = right?.signals?.bucket || "";
+    const leftPriority = LEARN_BUCKET_PRIORITY[leftBucket] ?? 9;
+    const rightPriority = LEARN_BUCKET_PRIORITY[rightBucket] ?? 9;
+
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+    return (left?.id || 0) - (right?.id || 0);
+  });
+}
+
+
 function EmptyStudy({ setMode }) {
   return (
     <div className="study-screen">
       <div className="study-shell">
         <header className="study-header">
           <div>
-            <div className="study-overline">Study</div>
+            <div className="study-overline">Étudier</div>
             <h1>Étudier</h1>
           </div>
           <ReturnToMenuButton onClick={() => setMode("menu")} className="study-back" />
@@ -461,10 +501,10 @@ function ActionButton({
 }
 
 
-function OverviewTab({
+function TodayTab({
   onStartTraining,
+  onStartReview,
   setActiveTab,
-  setMode,
   summary
 }) {
   const counts = summary.counts || {};
@@ -472,18 +512,41 @@ function OverviewTab({
   const activeQuestions = counts.active_questions || 0;
   const trainingScope = scopeToTrainingScope(summary.scope);
   const recommendation = recommendationFor(summary);
+  const weakItems = (summary.weak_items || []).slice(0, 5);
+  const recentItems = (summary.recent_misses?.items || []).slice(0, 5);
+  const confusions = (summary.confusions?.items || []).slice(0, 4);
+  const canReviewScope = (counts.due_now || 0) > 0 && Boolean(onStartReview);
+  const canTrainScope = Boolean(trainingScope && onStartTraining);
 
   function runRecommendation() {
-    if (recommendation.mode) {
-      setMode(recommendation.mode);
+    if (recommendation.action === "review" && canReviewScope) {
+      onStartReview(summary.scope);
       return;
     }
 
-    setActiveTab(recommendation.targetTab || "train");
+    if (recommendation.practiceId) {
+      const entry = summary.practice?.selectors?.[recommendation.practiceId];
+      const practiceScope = practiceScopeFromEntry(entry, summary);
+
+      if (entry?.enabled && practiceScope && onStartTraining) {
+        onStartTraining(practiceScope);
+        return;
+      }
+    }
+
+    if (
+      recommendation.targetTab &&
+      (recommendation.targetTab !== "learn" || supportsLearnTab(summary))
+    ) {
+      setActiveTab(recommendation.targetTab);
+      return;
+    }
+
+    setActiveTab("train");
   }
 
   return (
-    <div className="study-tab-grid">
+    <div className="study-today-layout">
       <section className="study-panel study-overview-main">
         <div className="study-panel-head">
           <h2>Progression</h2>
@@ -514,24 +577,23 @@ function OverviewTab({
         </div>
 
         <div className="study-action-grid">
-          <ActionButton primary onClick={runRecommendation}>
+          <ActionButton
+            primary
+            disabled={recommendation.action === "review" && !canReviewScope}
+            onClick={runRecommendation}
+          >
             Continuer
           </ActionButton>
-          <ActionButton
-            disabled={!trainingScope || !onStartTraining}
-            onClick={() => onStartTraining?.(trainingScope)}
-          >
-            Entraîner
-          </ActionButton>
-          <ActionButton
-            disabled={(counts.due_now || 0) <= 0}
-            onClick={() => setMode("quiz")}
-          >
-            Réviser due
-          </ActionButton>
-          <ActionButton onClick={() => setActiveTab("weak")}>
-            Items faibles
-          </ActionButton>
+          {canReviewScope && (
+            <ActionButton onClick={() => onStartReview(summary.scope)}>
+              Réviser ce scope
+            </ActionButton>
+          )}
+          {canTrainScope && (
+            <ActionButton onClick={() => onStartTraining(trainingScope)}>
+              Entraîner
+            </ActionButton>
+          )}
         </div>
       </section>
 
@@ -543,6 +605,75 @@ function OverviewTab({
       </div>
 
       <UpcomingLoad upcomingLoad={summary.upcoming_load} />
+
+      <PracticeEntryPanel
+        onStartTraining={onStartTraining}
+        summary={summary}
+      />
+
+      <section className="study-panel">
+        <div className="study-panel-head">
+          <h2>Items faibles</h2>
+          <span>{numberLabel(summary.weak_items?.length || 0)}</span>
+        </div>
+
+        {weakItems.length > 0 ? (
+          <div className="study-item-list">
+            {weakItems.map(item => (
+              <WeakItemRow
+                item={item}
+                key={item.id}
+                onStartTraining={onStartTraining}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="study-muted">Aucun item faible détecté.</div>
+        )}
+      </section>
+
+      <section className="study-panel">
+        <div className="study-panel-head">
+          <h2>Erreurs récentes</h2>
+          <span>{numberLabel(summary.recent_misses?.event_count || 0)}</span>
+        </div>
+
+        {recentItems.length > 0 ? (
+          <div className="study-item-list">
+            {recentItems.map(item => (
+              <WeakItemRow
+                item={item}
+                key={item.id}
+                onStartTraining={onStartTraining}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="study-muted">Aucune erreur récente.</div>
+        )}
+      </section>
+
+      <section className="study-panel">
+        <div className="study-panel-head">
+          <h2>Confusions</h2>
+          <span>{numberLabel(summary.confusions?.event_count || 0)}</span>
+        </div>
+
+        {confusions.length > 0 ? (
+          <div className="study-confusion-list">
+            {confusions.map(item => (
+              <ConfusionRow
+                item={item}
+                key={`${item.expected_id}-${item.selected_id}`}
+                onStartTraining={onStartTraining}
+                summary={summary}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="study-muted">Aucune confusion récente.</div>
+        )}
+      </section>
     </div>
   );
 }
@@ -808,13 +939,13 @@ function LearnHintBlock({
 }
 
 
-function LearnTab({ onStartTraining, setActiveTab, setMode, summary }) {
+function LearnTab({ onStartTraining, summary }) {
   const buckets = summary.buckets || {};
   const counts = summary.counts || {};
   const trainingScope = scopeToTrainingScope(summary.scope);
   const learn = summary.learn || {};
   const items = useMemo(
-    () => (Array.isArray(learn.items) ? learn.items : []),
+    () => orderedLearnItems(Array.isArray(learn.items) ? learn.items : []),
     [learn.items]
   );
   const [activeIndex, setActiveIndex] = useState(0);
@@ -888,33 +1019,14 @@ function LearnTab({ onStartTraining, setActiveTab, setMode, summary }) {
           </div>
 
           <div className="study-action-row">
-            <ActionButton
-              primary
-              disabled={!trainingScope || !onStartTraining}
-              onClick={() => onStartTraining?.(trainingScope)}
-            >
-              Entraîner le scope
-            </ActionButton>
-            <ActionButton onClick={() => setActiveTab("weak")}>
-              Voir les fragiles
-            </ActionButton>
-          </div>
-        </section>
-
-        <section className="study-panel">
-          <div className="study-panel-head">
-            <h2>Modes disponibles</h2>
-            <span>{numberLabel(summary.available_modes?.length || 0)}</span>
-          </div>
-          <div className="study-mode-summary-list">
-            {(summary.available_modes || []).map((entry, index) => (
-              <div className="study-mode-summary" key={`${entry.scope}-${entry.type_q}-${index}`}>
-                <strong>{entry.type_group || entry.type_q || entry.scope}</strong>
-                <span>
-                  {(entry.training_modes || []).map(modeLabel).join(" · ") || "Lecture seule"}
-                </span>
-              </div>
-            ))}
+            {trainingScope && onStartTraining && (
+              <ActionButton
+                primary
+                onClick={() => onStartTraining(trainingScope)}
+              >
+                Entraîner le scope
+              </ActionButton>
+            )}
           </div>
         </section>
       </div>
@@ -1024,12 +1136,6 @@ function LearnTab({ onStartTraining, setActiveTab, setMode, summary }) {
           >
             Entraîner
           </ActionButton>
-          <ActionButton
-            disabled={(counts.due_now || 0) <= 0}
-            onClick={() => setMode("quiz")}
-          >
-            Réviser due
-          </ActionButton>
         </div>
       </section>
 
@@ -1115,95 +1221,36 @@ function WeakItemRow({ item, onStartTraining }) {
 
 
 function PracticeEntryPanel({ onStartTraining, summary }) {
-  const entries = summary.practice?.entry_points || [];
+  const entries = (summary.practice?.entry_points || [])
+    .filter(entry => entry.enabled);
 
-  if (entries.length === 0) return null;
+  if (entries.length === 0 || !onStartTraining) return null;
 
   return (
     <section className="study-panel study-practice-panel">
       <div className="study-panel-head">
         <h2>Pratique ciblée</h2>
-        <span>{numberLabel(entries.filter(entry => entry.enabled).length)}</span>
+        <span>{numberLabel(entries.length)}</span>
       </div>
 
       <div className="study-practice-grid">
         {entries.map(entry => {
           const practiceScope = practiceScopeFromEntry(entry, summary);
 
-          return (
+          return practiceScope ? (
             <button
               type="button"
               className="study-practice-button"
-              disabled={!entry.enabled || !practiceScope || !onStartTraining}
               key={entry.id}
-              onClick={() => onStartTraining?.(practiceScope)}
+              onClick={() => onStartTraining(practiceScope)}
             >
               <strong>{entry.label}</strong>
               <span>{questionCountLabel(entry.count)}</span>
             </button>
-          );
+          ) : null;
         })}
       </div>
     </section>
-  );
-}
-
-
-function WeakItemsTab({ onStartTraining, summary }) {
-  const weakItems = summary.weak_items || [];
-  const recentItems = summary.recent_misses?.items || [];
-
-  return (
-    <div className="study-weak-layout">
-      <PracticeEntryPanel
-        onStartTraining={onStartTraining}
-        summary={summary}
-      />
-
-      <div className="study-two-column">
-        <section className="study-panel">
-          <div className="study-panel-head">
-            <h2>Items faibles</h2>
-            <span>{numberLabel(weakItems.length)}</span>
-          </div>
-
-          {weakItems.length > 0 ? (
-            <div className="study-item-list">
-              {weakItems.map(item => (
-                <WeakItemRow
-                  item={item}
-                  key={item.id}
-                  onStartTraining={onStartTraining}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="study-muted">Aucun item faible détecté.</div>
-          )}
-        </section>
-
-        <section className="study-panel">
-          <div className="study-panel-head">
-            <h2>Erreurs récentes</h2>
-            <span>{numberLabel(summary.recent_misses?.event_count || 0)}</span>
-          </div>
-
-          {recentItems.length > 0 ? (
-            <div className="study-item-list">
-              {recentItems.map(item => (
-                <WeakItemRow
-                  item={item}
-                  key={item.id}
-                  onStartTraining={onStartTraining}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="study-muted">Aucune erreur récente.</div>
-          )}
-        </section>
-      </div>
-    </div>
   );
 }
 
@@ -1232,66 +1279,11 @@ function ConfusionRow({ item, onStartTraining, summary }) {
         <span>Fois</span>
         <strong>{numberLabel(item.count)}</strong>
       </div>
-      <ActionButton
-        disabled={!practiceScope || !onStartTraining}
-        onClick={() => onStartTraining?.(practiceScope)}
-      >
-        Entraîner paire
-      </ActionButton>
-    </div>
-  );
-}
-
-
-function HistoryTab({ onStartTraining, summary }) {
-  const confusions = summary.confusions?.items || [];
-  const record = summary.training?.training_record;
-  const previousRecord = summary.training?.previous_training_record;
-
-  return (
-    <div className="study-two-column">
-      <section className="study-panel">
-        <div className="study-panel-head">
-          <h2>Confusions</h2>
-          <span>{numberLabel(summary.confusions?.event_count || 0)}</span>
-        </div>
-
-        {confusions.length > 0 ? (
-          <div className="study-confusion-list">
-            {confusions.map(item => (
-              <ConfusionRow
-                item={item}
-                key={`${item.expected_id}-${item.selected_id}`}
-                onStartTraining={onStartTraining}
-                summary={summary}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="study-muted">Aucune confusion récente.</div>
-        )}
-      </section>
-
-      <section className="study-panel">
-        <div className="study-panel-head">
-          <h2>Records</h2>
-          <span>{record ? "Actuel" : previousRecord ? "Ancien" : "—"}</span>
-        </div>
-
-        <div className="study-record-grid">
-          <MetricCard label="Score" value={record?.best_found_percent ?? previousRecord?.best_found_percent ?? 0} />
-          <div className="study-record-card">
-            <span>Temps</span>
-            <strong>{formatDuration(record?.best_time_ms || previousRecord?.best_time_ms)}</strong>
-          </div>
-        </div>
-
-        {previousRecord && !record && (
-          <div className="study-muted">
-            Record issu d'un contenu modifié.
-          </div>
-        )}
-      </section>
+      {practiceScope && onStartTraining && (
+        <ActionButton onClick={() => onStartTraining(practiceScope)}>
+          Entraîner paire
+        </ActionButton>
+      )}
     </div>
   );
 }
@@ -1299,17 +1291,15 @@ function HistoryTab({ onStartTraining, summary }) {
 
 function StudyContent({
   activeTab,
+  onStartReview,
   onStartTraining,
   setActiveTab,
-  setMode,
   summary
 }) {
   if (activeTab === "learn") {
     return (
       <LearnTab
         onStartTraining={onStartTraining}
-        setActiveTab={setActiveTab}
-        setMode={setMode}
         summary={summary}
       />
     );
@@ -1319,24 +1309,11 @@ function StudyContent({
     return <TrainTab onStartTraining={onStartTraining} summary={summary} />;
   }
 
-  if (activeTab === "weak") {
-    return <WeakItemsTab onStartTraining={onStartTraining} summary={summary} />;
-  }
-
-  if (activeTab === "history") {
-    return (
-      <HistoryTab
-        onStartTraining={onStartTraining}
-        summary={summary}
-      />
-    );
-  }
-
   return (
-    <OverviewTab
+    <TodayTab
+      onStartReview={onStartReview}
       onStartTraining={onStartTraining}
       setActiveTab={setActiveTab}
-      setMode={setMode}
       summary={summary}
     />
   );
@@ -1344,6 +1321,7 @@ function StudyContent({
 
 
 export default function StudyScreen({
+  onStartReview = null,
   onStartTraining = null,
   scope,
   setMode
@@ -1351,9 +1329,10 @@ export default function StudyScreen({
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("today");
   const [reloadNonce, setReloadNonce] = useState(0);
   const scopeKey = useMemo(() => stableScopeKey(scope), [scope]);
+  const tabs = useMemo(() => tabsForSummary(summary), [summary]);
 
   useEffect(() => {
     if (!scopeKey || !scope) {
@@ -1377,7 +1356,7 @@ export default function StudyScreen({
         console.error(loadError);
 
         if (!cancelled) {
-          setError(loadError.message || "Impossible de charger Study.");
+          setError(loadError.message || "Impossible de charger l'étude.");
           setLoading(false);
         }
       });
@@ -1388,8 +1367,14 @@ export default function StudyScreen({
   }, [reloadNonce, scope, scopeKey]);
 
   useEffect(() => {
-    setActiveTab("overview");
+    setActiveTab("today");
   }, [scopeKey]);
+
+  useEffect(() => {
+    if (!tabs.some(tab => tab.id === activeTab)) {
+      setActiveTab("today");
+    }
+  }, [activeTab, tabs]);
 
   if (!scope) {
     return <EmptyStudy setMode={setMode} />;
@@ -1402,7 +1387,7 @@ export default function StudyScreen({
       <div className="study-shell">
         <header className="study-header">
           <div className="study-title-block">
-            <div className="study-overline">Study · {scopeTypeLabel(displayScope)}</div>
+            <div className="study-overline">Étudier · {scopeTypeLabel(displayScope)}</div>
             <h1>{scopeTitle(displayScope)}</h1>
             <p>
               {summary
@@ -1429,8 +1414,8 @@ export default function StudyScreen({
 
         {!loading && !error && summary && (
           <>
-            <nav className="study-tabs" role="tablist" aria-label="Study">
-              {TABS.map(tab => (
+            <nav className="study-tabs" role="tablist" aria-label="Étudier">
+              {tabs.map(tab => (
                 <button
                   type="button"
                   role="tab"
@@ -1447,9 +1432,9 @@ export default function StudyScreen({
             <main className="study-content app-scrollbar" role="tabpanel">
               <StudyContent
                 activeTab={activeTab}
+                onStartReview={onStartReview}
                 onStartTraining={onStartTraining}
                 setActiveTab={setActiveTab}
-                setMode={setMode}
                 summary={summary}
               />
             </main>

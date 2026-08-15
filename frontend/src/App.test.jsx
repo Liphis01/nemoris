@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { useReviewSession } from "./features/review/hooks/useReviewSession";
 
 vi.mock("./api/review", () => ({
   getReviewSummary: vi.fn(() => Promise.resolve({ due_count: 0 })),
@@ -39,9 +40,21 @@ vi.mock("./features/sync/AutoSyncBanner", () => ({
 }));
 
 vi.mock("./features/menu/Menu", () => ({
-  default: ({ setMode }) => (
+  default: ({ onOpenStudy, onStartReview, setMode }) => (
     <main>
       <h1>Menu</h1>
+      <button type="button" onClick={() => onStartReview()}>Démarrer review</button>
+      <button
+        type="button"
+        onClick={() => onOpenStudy({
+          type: "group",
+          id: 6,
+          name: "Italie",
+          type_group: "map"
+        })}
+      >
+        Étudier Italie
+      </button>
       <button type="button" onClick={() => setMode("manage")}>Gestionnaire</button>
       <button type="button" onClick={() => setMode("calendar")}>Calendrier</button>
       <button type="button" onClick={() => setMode("training")}>Entrainement</button>
@@ -86,16 +99,22 @@ vi.mock("./features/training/components/TrainingSession", () => ({
           type_group: "map"
         })}
       >
-        Study Europe
+        Étudier Europe
       </button>
     </main>
   )
 }));
 
 vi.mock("./features/study/components/StudyScreen", () => ({
-  default: ({ onStartTraining, scope }) => (
+  default: ({ onStartReview, onStartTraining, scope }) => (
     <main>
-      <h1>Study {scope?.name}</h1>
+      <h1>Étudier {scope?.name}</h1>
+      <button
+        type="button"
+        onClick={() => onStartReview(scope)}
+      >
+        Réviser ce scope
+      </button>
       <button
         type="button"
         onClick={() => onStartTraining(scope, "multiple_choice")}
@@ -116,6 +135,7 @@ vi.mock("./features/packs/components/BrowsePacks", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 describe("App mouse navigation", () => {
@@ -156,15 +176,38 @@ describe("App mouse navigation", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Entrainement" }));
-    fireEvent.click(screen.getByRole("button", { name: "Study Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Étudier Europe" }));
 
-    expect(screen.getByRole("heading", { name: "Study Europe" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Étudier Europe" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Start scoped training" }));
 
     expect(screen.getByRole("heading", { name: "Entrainement" })).toBeInTheDocument();
     expect(screen.getByTestId("training-target")).toHaveTextContent(
       "group:5:multiple_choice"
+    );
+  });
+
+  it("opens scoped review from Study while keeping menu review global", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer review" }));
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(useReviewSession).toHaveBeenLastCalledWith(true, null, 0);
+
+    fireEvent.mouseDown(window, { button: 3 });
+    fireEvent.click(screen.getByRole("button", { name: "Étudier Italie" }));
+    fireEvent.click(screen.getByRole("button", { name: "Réviser ce scope" }));
+
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(useReviewSession).toHaveBeenLastCalledWith(
+      true,
+      expect.objectContaining({
+        type: "group",
+        id: 6,
+        name: "Italie"
+      }),
+      expect.any(Number)
     );
   });
 });

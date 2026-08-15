@@ -398,7 +398,7 @@ describe("BrowsePacks", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+    fireEvent.click(screen.getByRole("button", { name: "Étudier ce pack" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith({
       type: "pack",

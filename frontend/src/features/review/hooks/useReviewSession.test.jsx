@@ -78,6 +78,18 @@ describe("useReviewSession", () => {
     expect(result.current.reviewLoading).toBe(false);
   });
 
+  it("loads review questions for an active scoped target", async () => {
+    const scope = { type: "group", id: 5, name: "Europe" };
+
+    const { result } = renderHook(() => useReviewSession(true, scope, 1));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    expect(getReview).toHaveBeenCalledWith(scope);
+  });
+
   it("requeues failed text questions and sends one quality per answer", async () => {
     const { result } = renderHook(() => useReviewSession(true));
 

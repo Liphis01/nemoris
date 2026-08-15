@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Menu from "./Menu";
 import { getProfile } from "../../api/profile";
+import { getStats } from "../../api/stats";
 
 vi.mock("../../api/stats", () => ({
   getStats: vi.fn(() => Promise.resolve({
@@ -114,6 +115,72 @@ describe("Menu", () => {
         name: /Révision du jour: 3 questions, À faire/
       })
     ).toBeInTheDocument();
+  });
+
+  it("starts global review through the primary review card", () => {
+    const onStartReview = vi.fn();
+    const setMode = vi.fn();
+
+    render(
+      <Menu
+        onStartReview={onStartReview}
+        setMode={setMode}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 2, has_due: true }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /Révision du jour: 2 questions, À faire/
+    }));
+
+    expect(onStartReview).toHaveBeenCalledTimes(1);
+    expect(setMode).not.toHaveBeenCalledWith("quiz");
+  });
+
+  it("opens the study-first recommendation while keeping pack discovery visible", async () => {
+    const onOpenStudy = vi.fn();
+
+    getStats.mockResolvedValueOnce({
+      counts: {
+        total: 12,
+        mastered: 3
+      },
+      guidance: {
+        weakest_groups: [
+          {
+            id: 42,
+            name: "Europe",
+            type_group: "map",
+            fragile_count: 3,
+            total: 10
+          }
+        ]
+      }
+    });
+
+    render(
+      <Menu
+        onOpenStudy={onOpenStudy}
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 0, has_due: false }}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Europe" })).toBeInTheDocument();
+    expect(await screen.findByText("Capitales du monde")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Étudier ce groupe" }));
+
+    expect(onOpenStudy).toHaveBeenCalledWith({
+      type: "group",
+      id: 42,
+      name: "Europe",
+      type_group: "map"
+    });
   });
 
   it("shows the signed-in user's username and avatar in the account chip, not their email", async () => {

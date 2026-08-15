@@ -137,7 +137,7 @@ describe("ManageInspector pack publishing", () => {
 
     renderInspector({ onOpenStudy, requestManageTransition });
 
-    await userEvent.click(screen.getByRole("button", { name: "Study" }));
+    await userEvent.click(screen.getByRole("button", { name: "Étudier ce groupe" }));
 
     expect(requestManageTransition).toHaveBeenCalledTimes(1);
     expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({

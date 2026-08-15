@@ -220,7 +220,7 @@ function StudyHeaderAction({ group, onOpenStudy, requestManageTransition }) {
       onClick={openStudy}
       style={studyButtonStyle}
     >
-      Study
+      Étudier ce groupe
     </button>
   );
 }

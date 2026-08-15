@@ -962,7 +962,7 @@ function GroupEventCard({
               }}
               style={cardStudyButtonStyle}
             >
-              Study
+              Étudier
             </button>
           )}
           <button

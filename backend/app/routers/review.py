@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -59,7 +60,8 @@ from ..services.intake import (
 )
 from ..services.review import (
     get_review_items,
-    get_review_summary
+    get_review_summary,
+    get_scoped_review_items
 )
 from ..services.settings import (
     clear_pace_pressure_notice,
@@ -241,7 +243,24 @@ def dismiss_pace_notice(db: Session = Depends(get_db)):
 
 
 @router.get("/review")
-def get_review(db: Session = Depends(get_db)):
+def get_review(
+    scope_type: Optional[Literal["group", "tag", "collection", "pack"]] = None,
+    group_id: Optional[int] = None,
+    collection_id: Optional[int] = None,
+    tag: Optional[str] = None,
+    pack_guid: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    if scope_type:
+        return get_scoped_review_items(
+            db,
+            scope_type,
+            group_id=group_id,
+            collection_id=collection_id,
+            tag=tag,
+            pack_guid=pack_guid
+        )
+
     # Lazy once-per-day intake tuning. This is the only write on this route: one
     # AppSetting row, and a no-op on every call after the first of the day. It
     # is committed before the session is assembled so get_review_items still

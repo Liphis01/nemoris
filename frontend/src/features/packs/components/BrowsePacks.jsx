@@ -571,7 +571,7 @@ function PackDetailPanel({
               name: entry.name
             })}
           >
-            Study
+            Étudier ce pack
           </button>
         )}
 

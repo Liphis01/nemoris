@@ -182,9 +182,14 @@ function AppContent() {
   const [settingsScrollTarget, setSettingsScrollTarget] = useState(null);
   const [packOpenTarget, setPackOpenTarget] = useState(null);
   const [studyScope, setStudyScope] = useState(null);
+  const [reviewOpenTarget, setReviewOpenTarget] = useState(null);
   const [trainingOpenTarget, setTrainingOpenTarget] = useState(null);
   const manageLibrary = useManageLibrary(mode);
-  const reviewSession = useReviewSession(mode === "quiz");
+  const reviewSession = useReviewSession(
+    mode === "quiz",
+    reviewOpenTarget?.scope || null,
+    reviewOpenTarget?.nonce || 0
+  );
   const autoSync = useAutoSync();
 
   const appStyle = {
@@ -441,6 +446,23 @@ function AppContent() {
     navigateMode("study");
   }, [navigateMode]);
 
+  const openGlobalReview = useCallback(() => {
+    setReviewOpenTarget(null);
+    navigateMode("quiz");
+  }, [navigateMode]);
+
+  const openScopedReview = useCallback((scope) => {
+    const nextScope = normalizeStudyScope(scope);
+
+    if (!nextScope || nextScope.type === "questions") return;
+
+    setReviewOpenTarget({
+      nonce: Date.now(),
+      scope: nextScope
+    });
+    navigateMode("quiz");
+  }, [navigateMode]);
+
   const openTrainingScope = useCallback((scope, modeName = null) => {
     const nextScope = scopeToTrainingTarget(scope);
 
@@ -475,6 +497,8 @@ function AppContent() {
             reviewSummaryError={reviewSummaryError}
             onOpenSettingsSection={openSettingsSection}
             onOpenPack={openPackInCatalog}
+            onOpenStudy={openStudyScope}
+            onStartReview={openGlobalReview}
           />
         )}
 
@@ -500,6 +524,7 @@ function AppContent() {
           <StudyScreen
             setMode={navigateMode}
             scope={studyScope}
+            onStartReview={openScopedReview}
             onStartTraining={openTrainingScope}
           />
         )}

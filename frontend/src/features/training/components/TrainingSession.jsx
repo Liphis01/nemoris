@@ -497,7 +497,7 @@ function TagTile({ onOpenStudy, startScope, tag }) {
           className="training-tag-study-button"
           onClick={() => onOpenStudy(scope)}
         >
-          Study
+          Étudier
         </button>
       )}
     </div>
@@ -596,7 +596,7 @@ function CollectionDetailPanel({
               type: "collection"
             })}
           >
-            Study
+            Étudier cette playlist
           </button>
         )}
       </div>
@@ -689,7 +689,7 @@ function GroupDetailPanel({ group, onOpenStudy, startScope }) {
             type: "group"
           })}
         >
-          Study
+          Étudier ce groupe
         </button>
       )}
 

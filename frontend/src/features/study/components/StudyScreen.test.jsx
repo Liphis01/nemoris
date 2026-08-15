@@ -274,14 +274,16 @@ describe("StudyScreen", () => {
   });
 
   it("loads a study summary without mutating review state and routes actions", async () => {
+    const onStartReview = vi.fn();
     const onStartTraining = vi.fn();
     const setMode = vi.fn();
 
     render(
       <StudyScreen
+        onStartReview={onStartReview}
+        onStartTraining={onStartTraining}
         scope={{ type: "group", id: 10 }}
         setMode={setMode}
-        onStartTraining={onStartTraining}
       />
     );
 
@@ -289,10 +291,16 @@ describe("StudyScreen", () => {
       name: "Départements français"
     })).toBeInTheDocument();
     expect(getStudySummary).toHaveBeenCalledWith({ type: "group", id: 10 });
-    expect(screen.getByText("Reprendre les erreurs récentes")).toBeInTheDocument();
+    expect(screen.getByText("Faire la review due")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Aujourd'hui" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Apprendre" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Entraîner" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Faibles" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Historique" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Réviser due" }));
-    expect(setMode).toHaveBeenCalledWith("quiz");
+    fireEvent.click(screen.getByRole("button", { name: "Réviser ce scope" }));
+    expect(onStartReview).toHaveBeenCalledWith(summary.scope);
+    expect(setMode).not.toHaveBeenCalledWith("quiz");
 
     fireEvent.click(screen.getByRole("tab", { name: "Entraîner" }));
     fireEvent.click(screen.getByRole("button", { name: "QCM" }));
@@ -330,7 +338,6 @@ describe("StudyScreen", () => {
       name: "Départements français"
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Faibles" }));
     fireEvent.click(screen.getByRole("button", {
       name: /Travailler les erreurs récentes/
     }));
@@ -401,5 +408,51 @@ describe("StudyScreen", () => {
     });
 
     expect(getStudySummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides Learn for unsupported scopes and keeps only enabled practice entries", async () => {
+    const unsupportedSummary = {
+      ...summary,
+      scope: {
+        ...summary.scope,
+        type_group: "sequence"
+      },
+      learn: {
+        ...summary.learn,
+        supported: false,
+        item_count: 0,
+        items: []
+      },
+      practice: {
+        ...summary.practice,
+        entry_points: [
+          ...summary.practice.entry_points,
+          {
+            id: "disabled",
+            label: "Mode indisponible",
+            question_ids: [],
+            count: 0,
+            enabled: false
+          }
+        ]
+      }
+    };
+    getStudySummary.mockResolvedValueOnce(unsupportedSummary);
+
+    render(
+      <StudyScreen
+        scope={{ type: "group", id: 10 }}
+        setMode={vi.fn()}
+        onStartTraining={vi.fn()}
+      />
+    );
+
+    await screen.findByRole("heading", {
+      name: "Départements français"
+    });
+
+    expect(screen.queryByRole("tab", { name: "Apprendre" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Modes disponibles")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mode indisponible/ })).not.toBeInTheDocument();
   });
 });

@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Progress, Question, QuestionGroup
+from app.models import Collection, PackSubscription, Progress, Question, QuestionGroup
 from app.routers.review import answer_media, answer_map, answer_timeline, get_review
 from app.schemas import (
     MediaAnswerRequest,
@@ -31,6 +31,7 @@ from app.services.map_modes import map_mode_difficulty
 from app.services.settings import load_scheduler_tuning_settings
 from app.services.image_modes import image_mode_difficulty
 from app.services.review import get_review_items
+from app.services.tag_hierarchy import apply_tag_actions, load_tag_hierarchy
 from app.scheduler import preview_intervals
 
 
@@ -189,6 +190,20 @@ def interval_timeline(start_year, end_year):
     }
 
 
+def review_question_ids(response):
+    question_ids = set()
+
+    for item in response:
+        if "question_id" in item:
+            question_ids.add(item["question_id"])
+
+        for child in item.get("items") or []:
+            if "question_id" in child:
+                question_ids.add(child["question_id"])
+
+    return question_ids
+
+
 class ReviewResponseShapeTests(unittest.TestCase):
     def setUp(self):
         engine = create_engine("sqlite:///:memory:")
@@ -209,6 +224,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         tags=None,
         data=None,
         group=None,
+        pack_guid=None,
         next_review=None
     ):
         item = Question(
@@ -219,7 +235,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
             media=media,
             tags=tags or [],
             data=data or {},
-            group=group
+            group=group,
+            pack_guid=pack_guid
         )
         progress = Progress(
             stability=1.0,
@@ -412,6 +429,157 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertIn(item["effective_quality"], {0, 1, 2, 3})
         self.assertFalse(item["user_marked_close"])
         self.assert_progress_shape(item["progress"])
+
+    def add_unstarted_question(self, question_id, **kwargs):
+        item = Question(
+            id=question_id,
+            type_q=kwargs.get("type_q", "text"),
+            question=kwargs.get("question") or f"Question {question_id}",
+            answer=kwargs.get("answer") or f"Answer {question_id}",
+            media=kwargs.get("media"),
+            tags=kwargs.get("tags") or [],
+            data=kwargs.get("data") or {},
+            group=kwargs.get("group"),
+            pack_guid=kwargs.get("pack_guid")
+        )
+        self.db.add(item)
+        return item
+
+    def test_scoped_group_review_returns_only_due_started_scope_cards(self):
+        today = date.today()
+        group = QuestionGroup(id=310, type_group="text", name="Europe")
+        self.db.add(group)
+
+        due = self.add_question(3101, group=group, next_review=today)
+        future = self.add_question(
+            3102,
+            group=group,
+            next_review=today + timedelta(days=1)
+        )
+        unseen = self.add_unstarted_question(3103, group=group)
+        unrelated_due = self.add_question(3104, next_review=today)
+        self.db.commit()
+
+        response = get_review(scope_type="group", group_id=group.id, db=self.db)
+
+        self.assertEqual(review_question_ids(response), {due.id})
+        self.assertNotIn(future.id, review_question_ids(response))
+        self.assertNotIn(unseen.id, review_question_ids(response))
+        self.assertNotIn(unrelated_due.id, review_question_ids(response))
+
+    def test_scoped_collection_review_returns_only_due_started_collection_cards(self):
+        today = date.today()
+        collection = Collection(id=320, guid="collection-guid", name="Playlist")
+        due = self.add_question(3201, next_review=today)
+        future = self.add_question(3202, next_review=today + timedelta(days=1))
+        unseen = self.add_unstarted_question(3203)
+        unrelated_due = self.add_question(3204, next_review=today)
+        collection.questions = [due, future, unseen]
+        self.db.add(collection)
+        self.db.commit()
+
+        response = get_review(
+            scope_type="collection",
+            collection_id=collection.id,
+            db=self.db
+        )
+
+        self.assertEqual(review_question_ids(response), {due.id})
+        self.assertNotIn(unrelated_due.id, review_question_ids(response))
+
+    def test_scoped_tag_review_includes_descendant_due_cards_only(self):
+        today = date.today()
+        parent_id = "11111111-1111-4111-8111-111111111111"
+        child_id = "22222222-2222-4222-8222-222222222222"
+        hierarchy = load_tag_hierarchy(self.db)
+        apply_tag_actions(self.db, hierarchy["revision"], [
+            {
+                "type": "create",
+                "tag_id": parent_id,
+                "label": "Europe",
+                "parent_ids": ["core:geography"]
+            },
+            {
+                "type": "create",
+                "tag_id": child_id,
+                "label": "Capitales",
+                "parent_ids": [parent_id]
+            }
+        ])
+
+        due_child = self.add_question(3301, tags=[child_id], next_review=today)
+        future_child = self.add_question(
+            3302,
+            tags=[child_id],
+            next_review=today + timedelta(days=1)
+        )
+        unseen_child = self.add_unstarted_question(3303, tags=[child_id])
+        unrelated_due = self.add_question(
+            3304,
+            tags=["core:science"],
+            next_review=today
+        )
+        self.db.commit()
+
+        response = get_review(scope_type="tag", tag=parent_id, db=self.db)
+
+        self.assertEqual(review_question_ids(response), {due_child.id})
+        self.assertNotIn(future_child.id, review_question_ids(response))
+        self.assertNotIn(unseen_child.id, review_question_ids(response))
+        self.assertNotIn(unrelated_due.id, review_question_ids(response))
+
+    def test_scoped_pack_review_returns_only_due_started_pack_cards(self):
+        today = date.today()
+        subscription = PackSubscription(
+            pack_guid="pack-guid-a",
+            installed_version=3,
+            name="Pack A",
+            source="pack-a.zip",
+            subscribed_at="2026-08-15T00:00:00Z"
+        )
+        self.db.add(subscription)
+        due = self.add_question(
+            3401,
+            pack_guid=subscription.pack_guid,
+            next_review=today
+        )
+        future = self.add_question(
+            3402,
+            pack_guid=subscription.pack_guid,
+            next_review=today + timedelta(days=1)
+        )
+        unseen = self.add_unstarted_question(
+            3403,
+            pack_guid=subscription.pack_guid
+        )
+        unrelated_due = self.add_question(
+            3404,
+            pack_guid="pack-guid-b",
+            next_review=today
+        )
+        self.db.commit()
+
+        response = get_review(
+            scope_type="pack",
+            pack_guid=subscription.pack_guid,
+            db=self.db
+        )
+
+        self.assertEqual(review_question_ids(response), {due.id})
+        self.assertNotIn(future.id, review_question_ids(response))
+        self.assertNotIn(unseen.id, review_question_ids(response))
+        self.assertNotIn(unrelated_due.id, review_question_ids(response))
+
+    def test_unscoped_review_still_returns_due_and_intake_new_cards(self):
+        today = date.today()
+        due = self.add_question(3501, next_review=today)
+        new = self.add_unstarted_question(3502)
+        self.db.commit()
+
+        response = get_review(db=self.db)
+
+        self.assertIn(due.id, review_question_ids(response))
+        self.assertIn(new.id, review_question_ids(response))
 
     def test_review_endpoint_returns_backend_grouped_runtime_shapes(self):
         fixture = self.seed_review_contract_fixture()

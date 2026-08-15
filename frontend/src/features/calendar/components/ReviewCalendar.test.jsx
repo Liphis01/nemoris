@@ -102,7 +102,7 @@ describe("ReviewCalendar", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+    fireEvent.click(screen.getByRole("button", { name: "Étudier" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
       id: 10,

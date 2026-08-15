@@ -294,7 +294,7 @@ describe("TrainingSession", () => {
     render(<TrainingSession setMode={vi.fn()} onOpenStudy={onOpenStudy} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
-    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+    fireEvent.click(screen.getByRole("button", { name: "Étudier ce groupe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
       id: 5,
@@ -304,7 +304,7 @@ describe("TrainingSession", () => {
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "Tags" }));
-    fireEvent.click(screen.getByRole("button", { name: "Study" }));
+    fireEvent.click(screen.getByRole("button", { name: "Étudier" }));
 
     expect(onOpenStudy).toHaveBeenLastCalledWith({
       type: "tag",

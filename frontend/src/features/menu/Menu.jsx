@@ -143,6 +143,54 @@ function packDownloadLabel(count) {
   return `${formatNumber(count)} téléchargement${count > 1 ? "s" : ""}`;
 }
 
+
+function pickStudyTarget(guidance) {
+  if (!guidance) return null;
+
+  const fragileLoad = guidance.fragile_upcoming_load_groups?.[0];
+  if (fragileLoad) {
+    return {
+      group: fragileLoad,
+      title: fragileLoad.name,
+      detail: `${fragileLoad.fragile_count} fragiles · ${fragileLoad.upcoming_load} dues bientôt`,
+      label: "Charge fragile"
+    };
+  }
+
+  const weakest = guidance.weakest_groups?.[0];
+  if (weakest) {
+    return {
+      group: weakest,
+      title: weakest.name,
+      detail: `${weakest.fragile_count}/${weakest.total} fragiles`,
+      label: "Groupe fragile"
+    };
+  }
+
+  const closeToMastery = guidance.close_to_mastery_groups?.[0];
+  if (closeToMastery) {
+    return {
+      group: closeToMastery,
+      title: closeToMastery.name,
+      detail: `${closeToMastery.mastered}/${closeToMastery.total} maîtrisées`,
+      label: "Proche maîtrise"
+    };
+  }
+
+  const improving = guidance.improving_groups?.[0];
+  if (improving) {
+    return {
+      group: improving,
+      title: improving.name,
+      detail: `+${improving.delta} pts de rétention`,
+      label: "En progression"
+    };
+  }
+
+  return null;
+}
+
+
 function MenuAccountChip({
   loading,
   onOpenSettingsSection,
@@ -222,6 +270,86 @@ function MenuAccountChip({
     </div>
   );
 }
+
+
+function MenuStudyCard({
+  error,
+  loading,
+  onOpenStudy,
+  setMode,
+  stats
+}) {
+  const counts = stats?.counts || {};
+  const target = pickStudyTarget(stats?.guidance);
+
+  function openTarget() {
+    if (target?.group && onOpenStudy) {
+      onOpenStudy({
+        type: "group",
+        id: target.group.id,
+        name: target.group.name,
+        type_group: target.group.type_group
+      });
+      return;
+    }
+
+    setMode("training");
+  }
+
+  if (loading) {
+    return (
+      <section className="menu-context-card menu-study-card">
+        <span className="menu-eyebrow">Étudier</span>
+        <h2>Analyse en cours</h2>
+        <p>Chargement des priorités de travail.</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="menu-context-card menu-study-card menu-study-card-error">
+        <span className="menu-eyebrow">Étudier</span>
+        <h2>Guidage indisponible</h2>
+        <p>{error}</p>
+        <button
+          type="button"
+          className="menu-context-action menu-context-action-blue"
+          onClick={() => setMode("profile")}
+        >
+          <span>Ouvrir le profil</span>
+          <span aria-hidden="true">→</span>
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="menu-context-card menu-study-card">
+      <span className="menu-eyebrow">À étudier</span>
+      <h2>{target?.title || "Aucun groupe prioritaire"}</h2>
+      <p>
+        {target?.detail || "Ta progression ne signale rien d'urgent pour le moment."}
+      </p>
+
+      <div className="menu-study-meta">
+        <span>{formatNumber(counts.total ?? 0)} questions</span>
+        <span>{formatNumber(counts.mastered ?? 0)} maîtrisées</span>
+        {target?.label && <span>{target.label}</span>}
+      </div>
+
+      <button
+        type="button"
+        className="menu-context-action menu-context-action-blue"
+        onClick={openTarget}
+      >
+        <span>{target ? "Étudier ce groupe" : "Ouvrir l'entraînement"}</span>
+        <span aria-hidden="true">→</span>
+      </button>
+    </section>
+  );
+}
+
 
 function MenuPackCarousel({
   activeIndex,
@@ -372,64 +500,6 @@ function MenuPackCarousel({
   );
 }
 
-function MenuProgressCard({ error, loading, setMode, stats }) {
-  const counts = stats?.counts || {};
-  const metrics = [
-    {
-      label: "Questions",
-      value: loading ? "..." : formatNumber(counts.total ?? 0)
-    },
-    {
-      label: "Maîtrisées",
-      value: loading ? "..." : formatNumber(counts.mastered ?? 0)
-    }
-  ];
-
-  function openProfile() {
-    setMode("profile");
-  }
-
-  return (
-    <section
-      role="button"
-      tabIndex={0}
-      className={`menu-context-card menu-profile-card menu-profile-card-clickable${error ? " menu-profile-card-error" : ""}`}
-      onClick={openProfile}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) {
-          return;
-        }
-
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openProfile();
-        }
-      }}
-      aria-label="Voir la progression"
-    >
-      <div>
-        <span className="menu-eyebrow">Progression</span>
-        <h2>Profil</h2>
-      </div>
-
-      <div className="menu-stats-grid menu-stats-grid-compact">
-        {metrics.map((metric) => (
-          <div className="menu-stat-tile" key={metric.label}>
-            <strong>{metric.value}</strong>
-            <span>{metric.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {error && (
-        <div className="menu-stats-footer">
-          <span>{error}</span>
-        </div>
-      )}
-    </section>
-  );
-}
-
 export default function Menu({
   setMode,
   startupNotice,
@@ -438,7 +508,9 @@ export default function Menu({
   reviewSummaryLoading = false,
   reviewSummaryError = "",
   onOpenSettingsSection = null,
-  onOpenPack = null
+  onOpenPack = null,
+  onOpenStudy = null,
+  onStartReview = null
 }) {
   const [menuStats, setMenuStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -467,7 +539,6 @@ export default function Menu({
   const reviewNewCount = reviewSummary?.new_count ?? 0;
   const reviewSessionCount = reviewSummary?.session_count
     ?? (reviewDueCount + reviewNewCount);
-  const reviewTargetMode = "quiz";
   const reviewActionLabel = "Démarrer";
   const reviewIsClear = (
     !reviewSummaryLoading && !reviewSummaryError && reviewSessionCount <= 0
@@ -494,6 +565,15 @@ export default function Menu({
   const reviewDialStyle = {
     "--menu-review-dial-angle": `${reviewDialAngle}deg`
   };
+
+  function startGlobalReview() {
+    if (onStartReview) {
+      onStartReview();
+      return;
+    }
+
+    setMode("quiz");
+  }
 
   const selectPack = useCallback((index) => {
     setActivePackIndex(index);
@@ -662,7 +742,7 @@ export default function Menu({
               type="button"
               className={`menu-review${reviewSummaryError ? " menu-review-error" : ""}`}
               aria-label={`${reviewTitle}: ${reviewCountValue} questions, ${reviewCountCaption}`}
-              onClick={() => setMode(reviewTargetMode)}
+              onClick={startGlobalReview}
             >
               <span className="menu-review-content">
                 <span className="menu-pill menu-pill-amber">Review</span>
@@ -709,6 +789,14 @@ export default function Menu({
             </button>
 
             <aside className="menu-context" aria-label="Résumé">
+              <MenuStudyCard
+                error={statsError}
+                loading={statsLoading}
+                onOpenStudy={onOpenStudy}
+                setMode={setMode}
+                stats={menuStats}
+              />
+
               <MenuPackCarousel
                 activeIndex={activePackIndexBounded}
                 cycleKey={packCycleSeed}
@@ -718,13 +806,6 @@ export default function Menu({
                 onSelect={selectPack}
                 packs={popularPacks}
                 setMode={setMode}
-              />
-
-              <MenuProgressCard
-                error={statsError}
-                loading={statsLoading}
-                setMode={setMode}
-                stats={menuStats}
               />
             </aside>
           </div>

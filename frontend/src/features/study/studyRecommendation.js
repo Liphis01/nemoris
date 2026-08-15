@@ -19,11 +19,19 @@ export function recommendationFor(summary) {
   const counts = summary?.counts || {};
   const buckets = summary?.buckets || {};
 
+  if ((counts.due_now || 0) > 0) {
+    return {
+      title: "Faire la review due",
+      detail: questionCountLabel(counts.due_now),
+      action: "review"
+    };
+  }
+
   if ((summary?.recent_misses?.item_count || 0) > 0) {
     return {
       title: "Reprendre les erreurs récentes",
       detail: `${numberLabel(summary.recent_misses.item_count)} item${summary.recent_misses.item_count > 1 ? "s" : ""} à stabiliser`,
-      targetTab: "weak"
+      practiceId: "recent_misses"
     };
   }
 
@@ -31,15 +39,7 @@ export function recommendationFor(summary) {
     return {
       title: "Clarifier les confusions",
       detail: `${numberLabel(summary.confusions.event_count)} confusion${summary.confusions.event_count > 1 ? "s" : ""} récente${summary.confusions.event_count > 1 ? "s" : ""}`,
-      targetTab: "weak"
-    };
-  }
-
-  if ((counts.due_now || 0) > 0) {
-    return {
-      title: "Faire la review due",
-      detail: questionCountLabel(counts.due_now),
-      mode: "quiz"
+      practiceId: "commonly_confused_pairs"
     };
   }
 

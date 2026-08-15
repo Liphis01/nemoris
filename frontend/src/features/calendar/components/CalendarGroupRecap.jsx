@@ -256,7 +256,7 @@ export default function CalendarGroupRecap({
             })}
             style={studyButtonStyle}
           >
-            Study
+            Étudier ce groupe
           </button>
         </div>
       )}
