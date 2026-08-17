@@ -921,6 +921,55 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {zone.id for zone in (*due_zones, *future_zones)}
         )
 
+    def test_supported_only_mature_map_payload_uses_recall_probe_mode(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=33,
+            type_group="map",
+            name="Recall gate map",
+            media="/static/recall.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        due_zones = [
+            self.add_question(
+                140 + index,
+                type_q="map",
+                answer=f"Zone {index}",
+                data={"code": f"z{index}"},
+                group=map_group,
+                next_review=today
+            )
+            for index in range(5)
+        ]
+
+        for zone in due_zones:
+            zone.progress.reps = 4
+            zone.progress.difficulty = 3.0
+            zone.progress.history = [{
+                "map_mode": "multiple_choice",
+                "quality": 2
+            }]
+
+        self.db.commit()
+
+        with patch("app.services.mode_selection.random.random", return_value=0):
+            response = get_review(db=self.db)
+
+        map_payload = next(item for item in response if item["type_q"] == "map")
+
+        self.assertEqual(map_payload["mode"], "type_prompt")
+        self.assertEqual(set(map_payload), MAP_GROUP_KEYS)
+        self.assertEqual(
+            {item["question_id"] for item in map_payload["items"]},
+            {zone.id for zone in due_zones}
+        )
+
+        for item in map_payload["items"] + map_payload["context_items"]:
+            self.assertEqual(set(item), MAP_ZONE_KEYS)
+            self.assert_progress_shape(item["progress"])
+            self.assert_projected_intervals_shape(item["projected_intervals"])
+
     def test_small_scheduled_map_falls_back_below_choice_context_minimum(self):
         today = date.today()
         map_group = QuestionGroup(
@@ -1302,6 +1351,10 @@ class ReviewResponseShapeTests(unittest.TestCase):
             else:
                 item.progress.reps = 4
                 item.progress.difficulty = 3.0
+                item.progress.history = [{
+                    "image_mode": "type_prompt",
+                    "quality": 2
+                }]
 
             image_items.append(item)
 

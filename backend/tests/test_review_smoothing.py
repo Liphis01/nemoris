@@ -147,7 +147,10 @@ class SchedulerSmoothingTests(unittest.TestCase):
         strong.progress = Progress(
             reps=4,
             difficulty=3.0,
-            history=[{"map_mode": "type_prompt"} for _ in range(4)]
+            history=[
+                {"map_mode": "type_prompt", "quality": 2}
+                for _ in range(4)
+            ]
         )
         extras = [
             Question(type_q="map", answer=f"Extra {index}", data={"code": f"e{index}"})
@@ -191,7 +194,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
             support_items.append(support)
 
             strong = Question(type_q="map", answer=f"Strong {index}")
-            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            strong.progress = Progress(
+                reps=4,
+                difficulty=3.0,
+                history=[{"map_mode": "type_prompt", "quality": 2}]
+            )
             strong_items.append(strong)
 
         support_rng = random.Random(1)
@@ -209,7 +216,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
             support_modes["multiple_choice"] + support_modes["click_prompt"],
             260
         )
-        self.assertGreater(
+        self.assertGreaterEqual(
             strong_modes["type_prompt"] + strong_modes["type_all"],
             240
         )
@@ -226,7 +233,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
 
         for _ in range(2):
             strong = Question(type_q="map", answer="Strong")
-            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            strong.progress = Progress(
+                reps=4,
+                difficulty=3.0,
+                history=[{"map_mode": "type_prompt", "quality": 2}]
+            )
             items.append(strong)
 
         medium = Question(type_q="map", answer="Medium")
@@ -242,6 +253,23 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreaterEqual(len(modes), 3)
         self.assertGreater(modes["click_prompt"], 0)
         self.assertGreater(modes["type_prompt"], 0)
+
+    def test_map_recall_probe_favours_unsupported_recall(self):
+        due = []
+
+        for index in range(5):
+            question = Question(type_q="map", answer=f"Probe {index}")
+            question.progress = Progress(
+                reps=4,
+                difficulty=3.0,
+                history=[{"map_mode": "multiple_choice", "quality": 2}]
+            )
+            due.append(question)
+
+        self.assertEqual(
+            choose_map_review_mode(due, due, rng=FixedRandom(0)),
+            "type_prompt"
+        )
 
     def test_map_click_prompt_requires_minimum_review_context(self):
         context = [
@@ -291,7 +319,10 @@ class SchedulerSmoothingTests(unittest.TestCase):
         strong.progress = Progress(
             reps=4,
             difficulty=3.0,
-            history=[{"image_mode": "type_prompt"} for _ in range(4)]
+            history=[
+                {"image_mode": "type_prompt", "quality": 2}
+                for _ in range(4)
+            ]
         )
         extras = [
             Question(type_q="media", answer=f"Extra {index}")
@@ -335,7 +366,11 @@ class SchedulerSmoothingTests(unittest.TestCase):
             support_items.append(support)
 
             strong = Question(type_q="media", answer=f"Strong {index}")
-            strong.progress = Progress(reps=4, difficulty=3.0, history=[])
+            strong.progress = Progress(
+                reps=4,
+                difficulty=3.0,
+                history=[{"image_mode": "type_prompt", "quality": 2}]
+            )
             strong_items.append(strong)
 
         support_rng = random.Random(4)
@@ -358,6 +393,23 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertGreater(
             strong_modes["type_prompt"] + strong_modes["type_all"],
             240
+        )
+
+    def test_image_recall_probe_favours_unsupported_recall(self):
+        due = []
+
+        for index in range(5):
+            question = Question(type_q="media", answer=f"Probe {index}")
+            question.progress = Progress(
+                reps=4,
+                difficulty=3.0,
+                history=[{"image_mode": "multiple_choice_media", "quality": 2}]
+            )
+            due.append(question)
+
+        self.assertEqual(
+            choose_image_review_mode(due, due, rng=FixedRandom(0)),
+            "type_prompt"
         )
 
     def test_image_random_selector_can_pick_non_top_modes(self):

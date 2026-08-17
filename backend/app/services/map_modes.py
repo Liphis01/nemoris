@@ -1,6 +1,7 @@
 from .mode_difficulty import click_prompt_base_difficulty
 from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
+    MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
@@ -105,6 +106,7 @@ def choose_map_review_mode(
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
+    recall_probe_count = affinity_counts[MODE_AFFINITY_RECALL_PROBE]
     strong_count = affinity_counts[MODE_AFFINITY_STRONG]
 
     if support_count / len(due_questions) >= 0.55:
@@ -113,6 +115,13 @@ def choose_map_review_mode(
             MAP_MODE_CLICK_PROMPT: 3.3,
             MAP_MODE_TYPE_PROMPT: 2.0,
             MAP_MODE_TYPE_ALL: 0.9
+        }
+    elif recall_probe_count / len(due_questions) >= 0.55:
+        base_scores = {
+            MAP_MODE_TYPE_PROMPT: 4.2,
+            MAP_MODE_TYPE_ALL: 3.6,
+            MAP_MODE_CLICK_PROMPT: 0.8,
+            MAP_MODE_MULTIPLE_CHOICE: 0.6
         }
     elif strong_count / len(due_questions) >= 0.55:
         base_scores = {

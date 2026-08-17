@@ -1,5 +1,6 @@
 from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
+    MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
@@ -118,6 +119,7 @@ def choose_image_review_mode(
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
+    recall_probe_count = affinity_counts[MODE_AFFINITY_RECALL_PROBE]
     strong_count = affinity_counts[MODE_AFFINITY_STRONG]
 
     if support_count / len(due_questions) >= 0.55:
@@ -126,6 +128,13 @@ def choose_image_review_mode(
             IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 3.8,
             IMAGE_MODE_TYPE_PROMPT: 2.1,
             IMAGE_MODE_TYPE_ALL: 0.8
+        }
+    elif recall_probe_count / len(due_questions) >= 0.55:
+        base_scores = {
+            IMAGE_MODE_TYPE_PROMPT: 4.2,
+            IMAGE_MODE_TYPE_ALL: 3.5,
+            IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 0.8,
+            IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 0.7
         }
     elif strong_count / len(due_questions) >= 0.55:
         base_scores = {

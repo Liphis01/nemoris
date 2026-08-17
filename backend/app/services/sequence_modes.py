@@ -1,6 +1,7 @@
 from .mode_difficulty import click_prompt_base_difficulty
 from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
+    MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
@@ -255,6 +256,7 @@ def choose_sequence_review_mode(
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
+    recall_probe_count = affinity_counts[MODE_AFFINITY_RECALL_PROBE]
     strong_count = affinity_counts[MODE_AFFINITY_STRONG]
 
     if support_count / len(due_questions) >= 0.55:
@@ -265,6 +267,14 @@ def choose_sequence_review_mode(
             SEQUENCE_MODE_REORDER: 3.3,
             SEQUENCE_MODE_RECITE: 0.6,
             SEQUENCE_MODE_TYPE_POSITION: 0.9
+        }
+    elif recall_probe_count / len(due_questions) >= 0.55:
+        base_scores = {
+            SEQUENCE_MODE_RECITE: 4.2,
+            SEQUENCE_MODE_TYPE_POSITION: 3.8,
+            SEQUENCE_MODE_GAP_FILL: 1.2,
+            SEQUENCE_MODE_REORDER: 1.0,
+            SEQUENCE_MODE_MULTIPLE_CHOICE: 0.6
         }
     elif strong_count / len(due_questions) >= 0.55:
         # Confident set -> favour producing the chain over reading it. This is

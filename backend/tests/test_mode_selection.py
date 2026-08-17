@@ -2,13 +2,81 @@ import unittest
 from types import SimpleNamespace
 
 from app.services.mode_selection import (
+    MODE_AFFINITY_RECALL_PROBE,
+    MODE_AFFINITY_STRONG,
     apply_recent_mode_penalty,
+    question_mode_affinity,
     recent_mode_counts
 )
 
 
 def _question(history):
     return SimpleNamespace(progress=SimpleNamespace(history=history))
+
+
+def _review_question(history, reps=4, difficulty=3.0, lapses=0):
+    return SimpleNamespace(
+        progress=SimpleNamespace(
+            reps=reps,
+            difficulty=difficulty,
+            lapses=lapses,
+            last_review=None,
+            history=history
+        )
+    )
+
+
+class QuestionModeAffinityTests(unittest.TestCase):
+    def test_supported_successes_need_a_recall_probe_before_strong(self):
+        question = _review_question([
+            {"quality": 2, "map_mode": "multiple_choice"},
+            {"quality": 2, "map_mode": "click_prompt"}
+        ])
+
+        self.assertEqual(question_mode_affinity(question), MODE_AFFINITY_RECALL_PROBE)
+
+    def test_successful_recall_after_supported_practice_is_strong(self):
+        question = _review_question([
+            {"quality": 2, "map_mode": "multiple_choice"},
+            {"quality": 2, "map_mode": "type_prompt"}
+        ])
+
+        self.assertEqual(question_mode_affinity(question), MODE_AFFINITY_STRONG)
+
+    def test_recall_before_a_later_miss_does_not_prove_mastery(self):
+        question = _review_question([
+            {"quality": 2, "text_mode": "type_all"},
+            {"quality": 0, "text_mode": "type_all"}
+        ])
+
+        self.assertEqual(question_mode_affinity(question), MODE_AFFINITY_RECALL_PROBE)
+
+    def test_close_recall_does_not_prove_mastery(self):
+        question = _review_question([
+            {"quality": 1, "text_mode": "type_all"}
+        ])
+
+        self.assertEqual(question_mode_affinity(question), MODE_AFFINITY_RECALL_PROBE)
+
+    def test_legacy_media_multiple_choice_is_supported_not_recall(self):
+        question = _review_question([
+            {"quality": 3, "image_mode": "multiple_choice_image"}
+        ])
+
+        self.assertEqual(question_mode_affinity(question), MODE_AFFINITY_RECALL_PROBE)
+
+    def test_answer_event_recall_metadata_can_prove_mastery(self):
+        question = _review_question([
+            {
+                "effective_quality": 2,
+                "answer_event": {
+                    "type_q": "sequence",
+                    "mode": "recite"
+                }
+            }
+        ])
+
+        self.assertEqual(question_mode_affinity(question), MODE_AFFINITY_STRONG)
 
 
 class RecentModeCountsTests(unittest.TestCase):

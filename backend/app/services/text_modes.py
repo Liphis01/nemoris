@@ -1,5 +1,6 @@
 from .mode_selection import (
     CHOICE_MODE_MIN_CONTEXT,
+    MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
@@ -87,6 +88,7 @@ def choose_text_review_mode(
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
+    recall_probe_count = affinity_counts[MODE_AFFINITY_RECALL_PROBE]
     strong_count = affinity_counts[MODE_AFFINITY_STRONG]
 
     if support_count / len(due_questions) >= 0.55:
@@ -95,6 +97,12 @@ def choose_text_review_mode(
             TEXT_MODE_MATCH: 3.4,
             TEXT_MODE_TYPE_REVERSE: 1.5,
             TEXT_MODE_TYPE_ALL: 1.4
+        }
+    elif recall_probe_count / len(due_questions) >= 0.55:
+        base_scores = {
+            TEXT_MODE_TYPE_ALL: 4.0,
+            TEXT_MODE_TYPE_REVERSE: 3.3,
+            TEXT_MODE_MATCH: 0.7
         }
     elif strong_count / len(due_questions) >= 0.55:
         # Confident set -> favour recall.

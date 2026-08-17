@@ -374,6 +374,32 @@ class SequenceModeTests(SequenceTestCase):
 
         self.assertEqual(mode, SEQUENCE_MODE_MULTIPLE_CHOICE)
 
+    def test_recall_probe_sets_favour_unsupported_recall(self):
+        group = self.add_group()
+        due = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                reps=4,
+                difficulty=3.0,
+                history=[{
+                    "sequence_mode": SEQUENCE_MODE_MULTIPLE_CHOICE,
+                    "quality": 2
+                }]
+            )
+            for index in range(1, 7)
+        ]
+
+        mode = choose_sequence_review_mode(
+            due,
+            due,
+            multiple_choice_context_count=len(due),
+            rng=FixedRandom(0)
+        )
+
+        self.assertEqual(mode, SEQUENCE_MODE_RECITE)
+
     def test_recency_penalty_stays_proportionate_on_a_large_due_set(self):
         # Every one of 30 support-affinity items shares a history spread
         # evenly across three modes. Unnormalized, the accumulated counts
@@ -432,7 +458,11 @@ class SequenceModeTests(SequenceTestCase):
                 1,
                 reps=9,
                 difficulty=3.0,
-                next_review=date.today()
+                next_review=date.today(),
+                history=[{
+                    "sequence_mode": SEQUENCE_MODE_RECITE,
+                    "quality": 2
+                }]
             )
         ]
 

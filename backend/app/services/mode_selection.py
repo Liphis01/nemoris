@@ -3,10 +3,12 @@ import random
 
 
 MODE_AFFINITY_SUPPORT = "support"
+MODE_AFFINITY_RECALL_PROBE = "recall_probe"
 MODE_AFFINITY_MEDIUM = "medium"
 MODE_AFFINITY_STRONG = "strong"
 MODE_AFFINITIES = (
     MODE_AFFINITY_SUPPORT,
+    MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_MEDIUM,
     MODE_AFFINITY_STRONG
 )
@@ -21,6 +23,35 @@ CHOICE_MODE_MIN_CONTEXT = 5
 RECENT_MODE_LOOKBACK = 6
 RECENT_MODE_WEIGHT = 0.55
 
+HISTORY_MODE_KEYS = (
+    "map_mode",
+    "image_mode",
+    "text_mode",
+    "sequence_mode"
+)
+ANSWER_EVENT_MODE_KEYS = {
+    "map": "map_mode",
+    "media": "image_mode",
+    "text": "text_mode",
+    "sequence": "sequence_mode"
+}
+UNSUPPORTED_RECALL_MODES = {
+    "map_mode": {"type_all", "type_prompt"},
+    "image_mode": {"type_all", "type_prompt"},
+    "text_mode": {"type_all", "type_reverse"},
+    "sequence_mode": {"type_position", "recite"}
+}
+SUPPORTED_MODES = {
+    "map_mode": {"multiple_choice", "click_prompt"},
+    "image_mode": {
+        "multiple_choice_label",
+        "multiple_choice_media",
+        "multiple_choice_image"
+    },
+    "text_mode": {"match"},
+    "sequence_mode": {"multiple_choice", "gap_fill", "reorder"}
+}
+
 
 def _progress_started(progress):
     history = progress.history if progress else []
@@ -32,6 +63,72 @@ def _progress_started(progress):
             len(history or []) > 0
         )
     )
+
+
+def _history_quality(entry):
+    value = entry.get("effective_quality", entry.get("quality"))
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _history_mode(entry):
+    for key in HISTORY_MODE_KEYS:
+        mode = entry.get(key)
+
+        if mode:
+            return key, str(mode)
+
+    event = entry.get("answer_event")
+
+    if not isinstance(event, dict):
+        return None, None
+
+    key = ANSWER_EVENT_MODE_KEYS.get(event.get("type_q"))
+    mode = event.get("mode")
+
+    if key and mode:
+        return key, str(mode)
+
+    return None, None
+
+
+def history_entry_is_recall_proof(entry):
+    """A successful unsupported recall row proves mastery for mode selection."""
+    if not isinstance(entry, dict):
+        return False
+
+    quality = _history_quality(entry)
+
+    if quality is None or quality < 2:
+        return False
+
+    key, mode = _history_mode(entry)
+
+    if mode in SUPPORTED_MODES.get(key, set()):
+        return False
+
+    return mode in UNSUPPORTED_RECALL_MODES.get(key, set())
+
+
+def has_recall_proof_since_latest_miss(progress):
+    history = list(progress.history or []) if progress else []
+
+    for entry in reversed(history):
+        if not isinstance(entry, dict):
+            continue
+
+        quality = _history_quality(entry)
+
+        if quality == 0:
+            return False
+
+        if history_entry_is_recall_proof(entry):
+            return True
+
+    return False
 
 
 def question_mode_affinity(question):
@@ -51,6 +148,9 @@ def question_mode_affinity(question):
         return MODE_AFFINITY_SUPPORT
 
     if difficulty <= 4.2:
+        if not has_recall_proof_since_latest_miss(progress):
+            return MODE_AFFINITY_RECALL_PROBE
+
         return MODE_AFFINITY_STRONG
 
     return MODE_AFFINITY_MEDIUM

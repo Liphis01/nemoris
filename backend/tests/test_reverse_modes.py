@@ -28,6 +28,14 @@ from app.services.text_modes import (
 )
 
 
+class FixedRandom:
+    def __init__(self, value):
+        self.value = value
+
+    def random(self):
+        return self.value
+
+
 class ReverseModeTests(unittest.TestCase):
     def setUp(self):
         engine = create_engine("sqlite:///:memory:")
@@ -77,6 +85,25 @@ class ReverseModeTests(unittest.TestCase):
                 ),
                 TEXT_MODE_TYPE_REVERSE
             )
+
+    def test_supported_only_text_successes_are_probed_with_recall(self):
+        question = SimpleNamespace(progress=SimpleNamespace(
+            reps=4,
+            difficulty=3.0,
+            lapses=0,
+            last_review=None,
+            history=[{"text_mode": "match", "quality": 2}]
+        ))
+
+        self.assertEqual(
+            choose_text_review_mode(
+                [question],
+                [question] * 5,
+                reverse_mode_enabled=False,
+                rng=FixedRandom(0)
+            ),
+            DEFAULT_TEXT_MODE
+        )
 
     def test_reverse_text_answer_is_graded_against_the_original_prompt(self):
         group = QuestionGroup(
