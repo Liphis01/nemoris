@@ -308,6 +308,8 @@ export default function MapReview({
     showRecap,
     showRecapSections,
     skipCurrentPrompt,
+    submitError,
+    submitting,
     toggleRecapSort
   } = useMapReview(reviewZones, onComplete, submitAnswer, {
     allowPartialSubmit,
@@ -1303,12 +1305,26 @@ export default function MapReview({
               </div>
 
               <button
+                type="button"
+                disabled={submitting}
                 onClick={sendResult}
-                style={successButton}
+                style={{
+                  ...successButton,
+                  cursor: submitting ? "default" : successButton.cursor,
+                  opacity: submitting ? 0.72 : 1
+                }}
               >
-                {showQualityControls ? "Valider" : "Continuer"}
+                {submitting
+                  ? "Enregistrement..."
+                  : showQualityControls ? "Valider" : "Continuer"}
               </button>
             </div>
+
+            {submitError && (
+              <div role="alert" style={recapErrorStyle}>
+                {submitError}
+              </div>
+            )}
 
             <div
               style={{
@@ -1835,6 +1851,17 @@ const recapKeyboardHintStyle = {
   fontSize: "12px",
   fontWeight: "600",
   marginTop: "6px"
+};
+
+const recapErrorStyle = {
+  background: "rgba(127, 29, 29, 0.26)",
+  border: "1px solid rgba(248, 113, 113, 0.45)",
+  borderRadius: "10px",
+  color: "#fecaca",
+  fontSize: "13px",
+  fontWeight: "700",
+  marginBottom: "16px",
+  padding: "10px 12px"
 };
 
 const recapStatStyle = {

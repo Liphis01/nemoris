@@ -321,6 +321,8 @@ export function useMapReview(
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
+  const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const reviewKey = `${mode}:${itemKey(reviewZones)}`;
   const distractorUsageRef = useRef({
@@ -351,6 +353,9 @@ export function useMapReview(
     setZoneFeedback(null);
     setRecapSort(initialRecapSort);
     setActivePromptQuestionId(null);
+    setSubmitError("");
+    setSubmitting(false);
+    submittingRef.current = false;
     distractorUsageRef.current = {
       reviewKey,
       counts: new Map(),
@@ -534,8 +539,10 @@ export function useMapReview(
   async function submitQualities(qualityMap) {
     // Send one quality per atomic map question, then tell the parent review
     // session which zones should be re-queued. Unanswered items are omitted.
-    if (submittingRef.current) return;
+    if (submittingRef.current) return false;
     submittingRef.current = true;
+    setSubmitting(true);
+    setSubmitError("");
 
     try {
       const qualities = submittedMapQualities(qualityMap);
@@ -581,8 +588,14 @@ export function useMapReview(
       setChoiceFeedback(null);
 
       onComplete(failedQuestionIds);
+      return true;
+    } catch (error) {
+      console.error(error);
+      setSubmitError(error?.message || "Enregistrement impossible.");
+      return false;
     } finally {
       submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -1001,6 +1014,8 @@ export function useMapReview(
     recapSuccessCount,
     recapSuccessRate,
     recapUnansweredCount,
+    submitError,
+    submitting,
     manualFocusCode: remainingFocusCode,
     remainingFocusCode: targetHighlightCode || remainingFocusCode,
     remainingZones,

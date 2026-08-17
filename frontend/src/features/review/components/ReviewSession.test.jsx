@@ -1,6 +1,23 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ReviewSession from "./ReviewSession";
+
+vi.mock("../../map/components/SvgMap", () => ({
+  default: (props) => {
+    const isRecap = props.flashCodes === undefined;
+    const selectableCode = (props.clickableCodes || props.dueItems || [])[0];
+
+    return (
+      <button
+        type="button"
+        data-testid={isRecap ? "recap-map" : "active-map"}
+        onClick={() => selectableCode && props.onSelect?.(selectableCode)}
+      >
+        {isRecap ? "Recap map" : "Active map"}
+      </button>
+    );
+  }
+}));
 
 const baseProps = {
   setMode: vi.fn(),
@@ -93,6 +110,51 @@ describe("ReviewSession", () => {
     expect(bar).not.toHaveTextContent("Image");
     expect(screen.queryByRole("heading", { name: "Révision" }))
       .not.toBeInTheDocument();
+  });
+
+  it("validates a click-prompt map recap through the session completion handler", async () => {
+    const handleMapComplete = vi.fn();
+    const submitMapAnswer = vi.fn().mockResolvedValue({ status: "ok", items: [] });
+
+    renderReviewSession({
+      questions: [
+        {
+          presentation_kind: "map_group",
+          type_q: "map",
+          name: "Numéro des départements français",
+          media: "/static/departements.svg",
+          mode: "click_prompt",
+          items: [
+            {
+              question_id: 667,
+              code: "16",
+              label: "16",
+              answer: "16",
+              progress: {}
+            }
+          ]
+        }
+      ],
+      currentIndex: 0,
+      handleMapComplete,
+      submitMapAnswer
+    });
+
+    fireEvent.click(screen.getByTestId("active-map"));
+
+    const validateButton = await screen.findByRole("button", { name: "Valider" });
+    fireEvent.click(validateButton);
+
+    await waitFor(() => {
+      expect(submitMapAnswer).toHaveBeenCalledWith(
+        { 667: 2 },
+        "click_prompt",
+        1,
+        { 667: 667 },
+        { 667: [667] }
+      );
+      expect(handleMapComplete).toHaveBeenCalledWith([]);
+    });
   });
 
   it("uses presentation_kind to detect grouped visual review", () => {

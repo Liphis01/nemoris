@@ -671,6 +671,25 @@ describe("MapReview recap map focus", () => {
       .toContain("repeating-linear-gradient");
   });
 
+  it("keeps the recap open with an error when validation cannot be saved", async () => {
+    const submitAnswer = vi.fn().mockRejectedValue(new Error("Serveur indisponible"));
+
+    renderMapReview(true, {
+      mode: "type_all",
+      submitAnswer
+    });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Serveur indisponible");
+    expect(screen.getByRole("button", { name: "Valider" })).toBeInTheDocument();
+  });
+
   it("collapses the bulk 'found zones' row to Encore/Acquis when every found zone is relearning", async () => {
     renderMapReview(true, {
       mode: "type_all",
