@@ -6,6 +6,7 @@
 - dans les relearning il y a un problème de regroupement des mêmes groupes
 - dans les relearning, mettre la même image qui a posé problème
 
+
 ## Urgent
 - il reste un dossier qui s'appelle blueprint
 - bouton synchroniser depuis le menu (push pull)
