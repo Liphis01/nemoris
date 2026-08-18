@@ -9,10 +9,39 @@ permissions:
 
 jobs:
   release:
-    name: Build Windows installer (Tauri)
-    runs-on: windows-latest
+    name: Build ${{ matrix.label }} bundle (Tauri)
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            platform: windows-latest
+            backend_executable: dist/nemoris-backend/nemoris-backend.exe
+            tauri_args: ""
+          - label: Linux
+            platform: ubuntu-22.04
+            backend_executable: dist/nemoris-backend/nemoris-backend
+            tauri_args: "--bundles appimage"
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install Linux Tauri dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            patchelf \
+            wget \
+            xdg-utils
 
       - uses: actions/setup-node@v5
         with:
@@ -42,55 +71,12 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-          pyinstaller --name nemoris-backend --onedir --clean --noconfirm --collect-data countryinfo run_sidecar.py
+          python -m pip install -r requirements.txt pyinstaller
+          python -m PyInstaller --name nemoris-backend --onedir --clean --noconfirm --collect-data countryinfo run_sidecar.py
 
       - name: Smoke-test backend sidecar
-        shell: pwsh
         working-directory: backend
-        run: |
-          $backend = Resolve-Path "dist/nemoris-backend/nemoris-backend.exe"
-          if (-not (Test-Path "dist/nemoris-backend/_internal" -PathType Container)) {
-            throw "PyInstaller onedir support directory is missing."
-          }
-
-          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-          $listener.Start()
-          $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
-          $listener.Stop()
-
-          $smokeData = Join-Path $env:RUNNER_TEMP "nemoris-sidecar-smoke"
-          New-Item -ItemType Directory -Force -Path $smokeData | Out-Null
-          $env:APPDATA = $smokeData
-          $env:QUIZ_APP_PORT = "$port"
-          $startedAt = [System.Diagnostics.Stopwatch]::StartNew()
-          $process = Start-Process -FilePath $backend -PassThru -NoNewWindow
-
-          try {
-            $ready = $false
-            $deadline = [DateTime]::UtcNow.AddSeconds(30)
-            while ([DateTime]::UtcNow -lt $deadline -and -not $ready) {
-              if ($process.HasExited) {
-                throw "Backend exited before becoming ready (code $($process.ExitCode))."
-              }
-              try {
-                $client = [System.Net.Sockets.TcpClient]::new()
-                $client.Connect("127.0.0.1", $port)
-                $client.Dispose()
-                $ready = $true
-              } catch {
-                Start-Sleep -Milliseconds 200
-              }
-            }
-            if (-not $ready) {
-              throw "Backend did not become ready within 30 seconds."
-            }
-            Write-Host "Backend ready after $($startedAt.Elapsed.TotalSeconds.ToString('0.000')) s"
-          } finally {
-            if (-not $process.HasExited) {
-              Stop-Process -Id $process.Id -Force
-            }
-          }
+        run: python tools/smoke_sidecar.py "${{ matrix.backend_executable }}"
 
       # The updater compares this against the installed app's version, so a
       # forgotten manual bump here would silently break update detection
@@ -99,12 +85,19 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          jq --arg v "$VERSION" '.version = $v' frontend/src-tauri/tauri.conf.json > tmp.json
-          mv tmp.json frontend/src-tauri/tauri.conf.json
+          export VERSION
+          node <<'NODE'
+          const fs = require("fs");
+          const path = "frontend/src-tauri/tauri.conf.json";
+          const data = JSON.parse(fs.readFileSync(path, "utf8"));
+          data.version = process.env.VERSION;
+          fs.writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
+          NODE
 
       # tauri-action runs the beforeBuildCommand (npm run build) then bundles
-      # the NSIS installer + MSI and uploads them to the tag's release, along
-      # with the signed latest.json the updater plugin polls.
+      # the Windows installer(s) or Linux AppImage and uploads them to the
+      # tag's release, along with the signed latest.json the updater plugin
+      # polls.
       - name: Build Tauri app and publish release
         uses: tauri-apps/tauri-action@v1
         env:
@@ -118,3 +111,5 @@ jobs:
           releaseDraft: false
           prerelease: false
           updaterJsonPreferNsis: true
+          retryAttempts: 2
+          args: ${{ matrix.tauri_args }}

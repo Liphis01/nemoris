@@ -89,14 +89,24 @@ controls.
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the
 backend sidecar (PyInstaller onedir), smoke-tests it, then `tauri-action`
-bundles the Windows NSIS installer and attaches it to the release. Keep `version` in
-`frontend/src-tauri/tauri.conf.json` in sync with the tag.
+publishes the desktop bundles and signed updater metadata to the release.
+
+- Windows keeps the existing installer path.
+- Linux builds an AppImage: one downloadable file that the user marks
+  executable once, then runs directly.
+- Installed desktop apps check the signed `latest.json` endpoint from the app
+  banner and from Paramètres -> Application, so users can update without
+  opening GitHub in a browser.
+
+Keep `version` in `frontend/src-tauri/tauri.conf.json` in sync with the tag;
+the CI job also rewrites it from the tag as a release safety net.
 
 ### Local build / iteration
 
 Prerequisites: Node.js, Python 3.12, the Rust toolchain, and Tauri's system
-libraries (on Ubuntu: `libwebkit2gtk-4.1-dev`, `librsvg2-dev`, plus the usual
-build tools).
+libraries (on Ubuntu: `libwebkit2gtk-4.1-dev`,
+`libayatana-appindicator3-dev`, `librsvg2-dev`, `libxdo-dev`,
+`libssl-dev`, plus the usual build tools).
 
 Build the sidecar once, then run Tauri. PyInstaller's complete onedir output is
 bundled as the `backend/` resource; do not copy only its executable because it
@@ -110,8 +120,12 @@ cd backend
   --collect-data countryinfo run_sidecar.py
 
 cd ../frontend
-npm run tauri dev      # or: npm run tauri build
+npm run tauri dev      # or: npm run tauri -- build --bundles appimage
 ```
+
+`frontend/src-tauri/tauri.linux.conf.json` also limits normal Linux release
+bundles to AppImage, so `npm run tauri build` on Linux does not produce extra
+`.deb`/`.rpm` packages unless that file is overridden.
 
 On Windows PowerShell, use `;` as PyInstaller's data separator:
 
