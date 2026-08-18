@@ -79,6 +79,22 @@ class AnswerPolicyTests(unittest.TestCase):
         self.assertTrue(grade_answer_submission(question, 5)["matched"])
         self.assertFalse(grade_answer_submission(question, 6)["matched"])
 
+    def test_numeric_string_submission_is_typed_answer_not_id(self):
+        question = Question(id=675, type_q="map", answer="64")
+
+        grade = grade_answer_submission(question, "64")
+
+        self.assertTrue(grade["matched"])
+        self.assertEqual(grade["resolved_response_id"], 675)
+
+    def test_stringified_selection_id_still_resolves_when_not_an_answer(self):
+        question = Question(id=675, type_q="map", answer="Pyrénées-Atlantiques")
+
+        grade = grade_answer_submission(question, "675")
+
+        self.assertTrue(grade["matched"])
+        self.assertEqual(grade["resolved_response_id"], 675)
+
     def test_unknown_policy_normalizes_to_relaxed(self):
         self.assertEqual(
             normalize_answer_policy({"preset": "unknown"}, type_q="map"),

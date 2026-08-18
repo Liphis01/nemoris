@@ -200,6 +200,10 @@ def matches_answer_value(question, raw_response, policy=None):
 
 
 def coerce_response_id(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -221,6 +225,14 @@ def candidate_ids_for(question_id, candidates):
 
 
 def grade_answer_submission(question, raw_response, policy=None):
+    if isinstance(raw_response, str):
+        matched = matches_answer_value(question, raw_response, policy=policy)
+        if matched:
+            return {
+                "matched": True,
+                "resolved_response_id": getattr(question, "id", None)
+            }
+
     response_id = coerce_response_id(raw_response)
 
     if response_id is not None:

@@ -88,6 +88,27 @@ class GivenAnswerTests(unittest.TestCase):
         # right answer.
         self.assertEqual(self.latest_entry(2)["answer"], "Belgique")
 
+    def test_numeric_map_answer_is_not_treated_as_candidate_id(self):
+        self.add_question(64, "map", answer="Autre zone")
+        self.add_question(675, "map", answer="64")
+        self.add_question(700, "map", answer="65")
+        self.db.commit()
+
+        response = answer_map(
+            MapAnswerRequest(
+                items={675: 2},
+                answers={675: "64"},
+                candidates={675: [675, 700]}
+            ),
+            db=self.db
+        )
+
+        self.assertEqual(response["status"], "ok")
+        entry = self.latest_entry(675)
+        self.assertEqual(entry["quality"], 2)
+        self.assertEqual(entry["answer_event"]["resolved_response_id"], 675)
+        self.assertEqual(entry["answer_event"]["candidate_ids"], [675, 700])
+
     def test_map_answers_are_absent_when_the_client_omits_them(self):
         self.add_question(1, "map")
         self.db.commit()
