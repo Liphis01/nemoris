@@ -127,6 +127,17 @@ npm run tauri dev      # or: npm run tauri -- build --bundles appimage
 bundles to AppImage, so `npm run tauri build` on Linux does not produce extra
 `.deb`/`.rpm` packages unless that file is overridden.
 
+If a downloaded AppImage exits with
+`Could not create default EGL display: EGL_BAD_PARAMETER`, launch that build
+once with:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Nemoris_*.AppImage
+```
+
+Release builds set those WebKitGTK fallbacks automatically on Linux unless the
+user has already provided different values.
+
 On Windows PowerShell, use `;` as PyInstaller's data separator:
 
 ```powershell

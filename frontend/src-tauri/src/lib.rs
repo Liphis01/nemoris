@@ -179,8 +179,25 @@ fn sync_window_resizable<R: Runtime>(window: &WebviewWindow<R>) {
     set_window_resizable(window, !maximized);
 }
 
+#[cfg(target_os = "linux")]
+fn configure_linux_webkit_graphics_workarounds() {
+    for key in [
+        "WEBKIT_DISABLE_DMABUF_RENDERER",
+        "WEBKIT_DISABLE_COMPOSITING_MODE",
+    ] {
+        if std::env::var_os(key).is_none() {
+            std::env::set_var(key, "1");
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_linux_webkit_graphics_workarounds() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    configure_linux_webkit_graphics_workarounds();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
