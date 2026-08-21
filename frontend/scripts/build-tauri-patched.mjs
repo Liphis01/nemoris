@@ -113,6 +113,13 @@ function normalizeGioExtraModules(appDir, hook) {
   return `${hook.trimEnd()}\n${exportLine}`;
 }
 
+function removeLegacyCompositingFallback(hook) {
+  return hook.replace(
+    /^export WEBKIT_DISABLE_COMPOSITING_MODE="\$\{WEBKIT_DISABLE_COMPOSITING_MODE:-1\}"\n?/m,
+    "",
+  );
+}
+
 function patchGtkHook(appDir) {
   const hookPath = path.join(appDir, "apprun-hooks", "linuxdeploy-plugin-gtk.sh");
   if (!fs.existsSync(hookPath)) {
@@ -122,11 +129,11 @@ function patchGtkHook(appDir) {
   let hook = fs.readFileSync(hookPath, "utf8");
   hook = hook.split(appDir).join("$APPDIR");
   hook = normalizeGioExtraModules(appDir, hook);
+  hook = removeLegacyCompositingFallback(hook);
 
   if (!hook.includes(PATCH_MARKER)) {
     const patchBlock = `${PATCH_MARKER}
 export WEBKIT_DISABLE_DMABUF_RENDERER="\${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
-export WEBKIT_DISABLE_COMPOSITING_MODE="\${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"
 
 nemoris_preload_system_wayland_client() {
   if [ -n "\${NEMORIS_DISABLE_SYSTEM_WAYLAND_PRELOAD:-}" ]; then
@@ -265,6 +272,11 @@ function assertPatched(appDir, appImage) {
   }
   if (hook.includes(appDir)) {
     throw new Error("GTK AppRun hook still contains the build-machine AppDir path");
+  }
+  if (
+    /^export WEBKIT_DISABLE_COMPOSITING_MODE="\$\{WEBKIT_DISABLE_COMPOSITING_MODE:-1\}"/m.test(hook)
+  ) {
+    throw new Error("GTK AppRun hook still forces WebKit compositing fallback");
   }
 
   const libDir = path.join(appDir, "usr", "lib");

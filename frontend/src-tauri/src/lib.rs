@@ -181,13 +181,12 @@ fn sync_window_resizable<R: Runtime>(window: &WebviewWindow<R>) {
 
 #[cfg(target_os = "linux")]
 fn configure_linux_webkit_graphics_workarounds() {
-    for key in [
-        "WEBKIT_DISABLE_DMABUF_RENDERER",
-        "WEBKIT_DISABLE_COMPOSITING_MODE",
-    ] {
-        if std::env::var_os(key).is_none() {
-            std::env::set_var(key, "1");
-        }
+    // Keep the AppImage/WebKitGTK EGL fallback scoped to the DMABUF renderer.
+    // Disabling compositing globally forces a slower paint path and makes the
+    // whole UI lag on recent Arch/WebKitGTK stacks.
+    const DMABUF_RENDERER_FLAG: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    if std::env::var_os(DMABUF_RENDERER_FLAG).is_none() {
+        std::env::set_var(DMABUF_RENDERER_FLAG, "1");
     }
 }
 
