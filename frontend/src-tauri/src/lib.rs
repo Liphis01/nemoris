@@ -180,22 +180,24 @@ fn sync_window_resizable<R: Runtime>(window: &WebviewWindow<R>) {
 }
 
 #[cfg(target_os = "linux")]
-fn configure_linux_webkit_graphics_workarounds() {
-    // Keep the AppImage/WebKitGTK EGL fallback scoped to the DMABUF renderer.
-    // Disabling compositing globally forces a slower paint path and makes the
-    // whole UI lag on recent Arch/WebKitGTK stacks.
-    const DMABUF_RENDERER_FLAG: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
-    if std::env::var_os(DMABUF_RENDERER_FLAG).is_none() {
-        std::env::set_var(DMABUF_RENDERER_FLAG, "1");
+fn configure_linux_graphics_environment() {
+    // Keep WebKitGTK on its accelerated renderer by default. The
+    // WEBKIT_DISABLE_* fallbacks are useful diagnostics for broken driver
+    // stacks, but shipping them globally makes the whole UI crawl in AppImages.
+    const NVIDIA_EXPLICIT_SYNC_FLAG: &str = "__NV_DISABLE_EXPLICIT_SYNC";
+    if std::env::var_os("WAYLAND_DISPLAY").is_some()
+        && std::env::var_os(NVIDIA_EXPLICIT_SYNC_FLAG).is_none()
+    {
+        std::env::set_var(NVIDIA_EXPLICIT_SYNC_FLAG, "1");
     }
 }
 
 #[cfg(not(target_os = "linux"))]
-fn configure_linux_webkit_graphics_workarounds() {}
+fn configure_linux_graphics_environment() {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    configure_linux_webkit_graphics_workarounds();
+    configure_linux_graphics_environment();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

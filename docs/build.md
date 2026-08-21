@@ -129,12 +129,12 @@ bundles to AppImage, so `npm run tauri build` on Linux does not produce extra
 
 Release AppImages are built through `npm run tauri:patched`, which wraps
 `tauri build`, then patches the generated AppDir before `tauri-action` uploads
-the artifact. The patch keeps the WebKitGTK DMABUF fallback in the AppRun
-environment, rewrites GTK hook paths to use `$APPDIR`, removes bundled
-`libwayland-*` libraries so the user's compositor stack supplies them, repacks
-the AppImage, and regenerates updater signatures. Do not set
-`WEBKIT_DISABLE_COMPOSITING_MODE` by default: it disables accelerated
-compositing and can make the whole app lag on recent WebKitGTK stacks.
+the artifact. The patch rewrites GTK hook paths to use `$APPDIR`, removes
+bundled `libwayland-*` libraries so the user's compositor stack supplies them,
+prefers the native Wayland GTK backend with X11 fallback, repacks the AppImage,
+and regenerates updater signatures. Do not set `WEBKIT_DISABLE_DMABUF_RENDERER`
+or `WEBKIT_DISABLE_COMPOSITING_MODE` by default: both disable faster WebKitGTK
+rendering paths and can make the whole app lag on recent Arch/WebKitGTK stacks.
 
 If an older downloaded AppImage exits with
 `Could not create default EGL display: EGL_BAD_PARAMETER`, try launching that
@@ -148,10 +148,10 @@ WEBKIT_DISABLE_DMABUF_RENDERER=1 \
 
 On Fedora-like systems the path is often `/usr/lib64/libwayland-client.so.0`;
 on Arch it is usually `/usr/lib/libwayland-client.so.0`. New release AppImages
-apply this class of workaround automatically. If a specific machine still fails
-before the window appears, adding
-`WEBKIT_DISABLE_COMPOSITING_MODE=1` is a last-resort diagnostic fallback, not a
-normal launch setting.
+use the system Wayland client automatically without disabling the accelerated
+WebKitGTK renderer. If a specific machine still fails before the window appears,
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` and then `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+are diagnostic fallbacks, not normal launch settings.
 
 On Windows PowerShell, use `;` as PyInstaller's data separator:
 

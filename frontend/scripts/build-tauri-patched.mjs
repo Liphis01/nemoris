@@ -113,11 +113,30 @@ function normalizeGioExtraModules(appDir, hook) {
   return `${hook.trimEnd()}\n${exportLine}`;
 }
 
-function removeLegacyCompositingFallback(hook) {
-  return hook.replace(
-    /^export WEBKIT_DISABLE_COMPOSITING_MODE="\$\{WEBKIT_DISABLE_COMPOSITING_MODE:-1\}"\n?/m,
-    "",
-  );
+function removeSlowWebKitFallbacks(hook) {
+  return hook
+    .replace(
+      /^export WEBKIT_DISABLE_DMABUF_RENDERER="\$\{WEBKIT_DISABLE_DMABUF_RENDERER:-1\}"\n?/gm,
+      "",
+    )
+    .replace(
+      /^export WEBKIT_DISABLE_COMPOSITING_MODE="\$\{WEBKIT_DISABLE_COMPOSITING_MODE:-1\}"\n?/gm,
+      "",
+    );
+}
+
+function preferNativeWayland(hook) {
+  const backendPattern = /^export GDK_BACKEND=x11(?:\s+#.*)?$/m;
+  const backendLine =
+    'export GDK_BACKEND="${GDK_BACKEND:-wayland,x11}" # Prefer native Wayland; keep X11 fallback for older hosts.';
+
+  if (backendPattern.test(hook)) {
+    return hook.replace(backendPattern, backendLine);
+  }
+  if (/^export GDK_BACKEND=/m.test(hook)) {
+    return hook;
+  }
+  return `${hook.trimEnd()}\n${backendLine}\n`;
 }
 
 function patchGtkHook(appDir) {
@@ -129,12 +148,11 @@ function patchGtkHook(appDir) {
   let hook = fs.readFileSync(hookPath, "utf8");
   hook = hook.split(appDir).join("$APPDIR");
   hook = normalizeGioExtraModules(appDir, hook);
-  hook = removeLegacyCompositingFallback(hook);
+  hook = removeSlowWebKitFallbacks(hook);
+  hook = preferNativeWayland(hook);
 
   if (!hook.includes(PATCH_MARKER)) {
     const patchBlock = `${PATCH_MARKER}
-export WEBKIT_DISABLE_DMABUF_RENDERER="\${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
-
 nemoris_preload_system_wayland_client() {
   if [ -n "\${NEMORIS_DISABLE_SYSTEM_WAYLAND_PRELOAD:-}" ]; then
     return 0
@@ -274,9 +292,12 @@ function assertPatched(appDir, appImage) {
     throw new Error("GTK AppRun hook still contains the build-machine AppDir path");
   }
   if (
-    /^export WEBKIT_DISABLE_COMPOSITING_MODE="\$\{WEBKIT_DISABLE_COMPOSITING_MODE:-1\}"/m.test(hook)
+    /^export WEBKIT_DISABLE_(?:DMABUF_RENDERER|COMPOSITING_MODE)=/m.test(hook)
   ) {
-    throw new Error("GTK AppRun hook still forces WebKit compositing fallback");
+    throw new Error("GTK AppRun hook still forces a slow WebKit fallback");
+  }
+  if (!/^export GDK_BACKEND="\$\{GDK_BACKEND:-wayland,x11\}"/m.test(hook)) {
+    throw new Error("GTK AppRun hook does not prefer native Wayland");
   }
 
   const libDir = path.join(appDir, "usr", "lib");
