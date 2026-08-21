@@ -5,6 +5,7 @@
 - il faut split en deux dans la review les groupes (pas 30 + 1 questions mais 16 + 15)
 - dans les relearning il y a un problème de regroupement des mêmes groupes
 - dans les relearning, mettre la même image qui a posé problème
+- on peut pas commenter si on était pas connecté au moment de l'import du pack
 
 
 ## Urgent
@@ -23,7 +24,6 @@
 - ajouter "déjà répondu" quand on fait entrer
 - pour type prompt valider automatiquement au lieu de entrer
 - permission denied for table pack_catalog
-- on peut pas commenter si on était pas connecté au moment de l'import du pack
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 
 ## quick fixes

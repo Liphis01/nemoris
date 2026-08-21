@@ -100,6 +100,45 @@ class FakeResponse:
         return raw if size is None else raw[:size]
 
 
+class PackCatalogSchemaSqlTests(unittest.TestCase):
+    def test_supabase_schema_repairs_pack_catalog_permission_paths(self):
+        sql_path = (
+            Path(__file__).resolve().parents[2]
+            / "docs"
+            / "supabase-pack-catalog-schema.sql"
+        )
+        sql = sql_path.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "alter table public.pack_catalog enable row level security;",
+            sql
+        )
+        self.assertIn(
+            "grant select on public.pack_catalog to anon, authenticated;",
+            sql
+        )
+        self.assertIn("create policy pack_catalog_select_public", sql)
+        self.assertIn("create policy pack_catalog_select_own", sql)
+        self.assertIn(
+            "alter function public.pack_catalog_refresh_rating_stats()\n"
+            "  security definer;",
+            sql
+        )
+        self.assertIn(
+            "alter function public.pack_catalog_refresh_comment_stats()\n"
+            "  security definer;",
+            sql
+        )
+        self.assertIn(
+            "security definer\n set search_path to 'public'\nas $function$",
+            sql
+        )
+        self.assertIn(
+            "grant execute on function public.search_pack_catalog",
+            sql
+        )
+
+
 class PackCatalogSearchTests(unittest.TestCase):
     def configure(self, db, key="sb_publishable_test"):
         use_catalog(self, key=key)

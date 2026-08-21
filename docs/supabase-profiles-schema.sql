@@ -108,7 +108,7 @@ create policy profiles_update_own
 -- 4. Upsert RPC -- same shape as rate_pack (direct grant + owner RLS above
 --    is what actually authorizes the write; no SECURITY DEFINER needed,
 --    unlike unpublish_my_pack which exists specifically because
---    pack_catalog has NO direct grant at all).
+--    pack_catalog has no direct write grant).
 -- =========================================================
 
 create or replace function public.upsert_my_profile(

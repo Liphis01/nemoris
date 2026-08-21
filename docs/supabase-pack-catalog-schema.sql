@@ -1,5 +1,5 @@
--- Supabase setup for the pack catalog: unpublishing, permanent deletion,
--- install tracking, ratings, and comments.
+-- Supabase setup for the pack catalog: safe catalog reads, unpublishing,
+-- permanent deletion, install tracking, ratings, and comments.
 --
 -- Run this once in the Supabase SQL editor for the project configured in
 -- Settings -> Catalogue. The app uses only the publishable key at
@@ -18,7 +18,9 @@
 --     nothing on publication_status -- so unpublish_my_pack clearing
 --     is_public is sufficient on its own, no extra filter needed here.
 -- Section 5 has the exact CREATE OR REPLACE diff for search_pack_catalog
--- based on its real body as pulled from the live project.
+-- based on its real body as pulled from the live project. It now runs as
+-- SECURITY DEFINER because the app intentionally does not rely on broad
+-- pack_catalog table grants for public catalog search.
 
 begin;
 
@@ -104,6 +106,15 @@ begin
 end;
 $$;
 
+alter function public.pack_catalog_refresh_rating_stats()
+  owner to postgres;
+
+alter function public.pack_catalog_refresh_rating_stats()
+  security definer;
+
+alter function public.pack_catalog_refresh_rating_stats()
+  set search_path to 'public';
+
 drop trigger if exists pack_ratings_refresh_stats on public.pack_ratings;
 create trigger pack_ratings_refresh_stats
   after insert or update or delete on public.pack_ratings
@@ -121,6 +132,15 @@ begin
 end;
 $$;
 
+alter function public.pack_catalog_refresh_comment_stats()
+  owner to postgres;
+
+alter function public.pack_catalog_refresh_comment_stats()
+  security definer;
+
+alter function public.pack_catalog_refresh_comment_stats()
+  set search_path to 'public';
+
 drop trigger if exists pack_comments_refresh_stats on public.pack_comments;
 create trigger pack_comments_refresh_stats
   after insert or delete on public.pack_comments
@@ -132,19 +152,40 @@ create trigger pack_comments_refresh_stats
 -- "Signed in AND installed" is enforced here, not just hidden client-side:
 -- a rating/comment insert is only allowed if a matching pack_installs row
 -- already exists for that (pack_guid, user_id).
+--
+-- pack_catalog itself needs SELECT policies because the app reads public
+-- rows anonymously and owner rows through PostgREST, but it still receives
+-- no direct INSERT/UPDATE/DELETE grant. Mutations continue to go through
+-- owner-checking RPCs.
 
+alter table public.pack_catalog enable row level security;
 alter table public.pack_installs enable row level security;
 alter table public.pack_ratings enable row level security;
 alter table public.pack_comments enable row level security;
 
+grant select on public.pack_catalog to anon, authenticated;
 grant select, insert, update on public.pack_installs to authenticated;
 grant select, insert, update on public.pack_ratings to authenticated;
 grant select, insert on public.pack_comments to authenticated;
 grant select on public.pack_comments to anon;
 
+drop policy if exists pack_catalog_select_public on public.pack_catalog;
+drop policy if exists pack_catalog_select_own on public.pack_catalog;
 drop policy if exists pack_installs_select_own on public.pack_installs;
 drop policy if exists pack_installs_insert_own on public.pack_installs;
 drop policy if exists pack_installs_update_own on public.pack_installs;
+
+create policy pack_catalog_select_public
+  on public.pack_catalog
+  for select
+  to anon, authenticated
+  using (is_public = true);
+
+create policy pack_catalog_select_own
+  on public.pack_catalog
+  for select
+  to authenticated
+  using (auth.uid() = owner_id);
 
 create policy pack_installs_select_own
   on public.pack_installs
@@ -425,7 +466,7 @@ grant execute on function public.add_pack_comment(text, text) to authenticated;
 -- =========================================================
 -- This is the real function body as pulled from the live project via
 -- `select pg_get_functiondef(oid) from pg_proc where proname =
--- 'search_pack_catalog';`, with three changes from the original:
+-- 'search_pack_catalog';`, with four changes from the original:
 --   1. avg_rating, rating_count, comment_count added to the per-row JSON
 --      (they flow through for free from section 2's new columns, since
 --      every CTE here selects b.*/filtered.* rather than naming columns).
@@ -434,6 +475,8 @@ grant execute on function public.add_pack_comment(text, text) to authenticated;
 --      only) instead of from `filtered` -- the theme sidebar is a snapshot
 --      of the catalog and no longer reacts to query/theme/type/status or to
 --      your own install state (2026-08-05).
+--   4. SECURITY DEFINER + fixed search_path, so public catalog search does
+--      not fail when anon/authenticated callers have no table write access.
 -- No change was needed to exclude archived/unpublished packs -- the WHERE
 -- clause already filters on is_public = true only (confirmed against the
 -- live body below), and unpublish_my_pack already clears that flag.
@@ -447,6 +490,8 @@ create or replace function public.search_pack_catalog(p_query text DEFAULT ''::t
  returns jsonb
  language sql
  stable
+ security definer
+ set search_path to 'public'
 as $function$
 with params as (
   select
@@ -596,6 +641,10 @@ select jsonb_build_object(
   end
 );
 $function$;
+
+grant execute on function public.search_pack_catalog(
+  text, text, text, text, text, integer, integer, jsonb
+) to anon, authenticated;
 
 select pg_notify('pgrst', 'reload schema');
 
