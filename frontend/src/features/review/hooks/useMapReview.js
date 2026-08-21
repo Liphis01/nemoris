@@ -64,14 +64,16 @@ function getDifficultyScore(item, historyStats) {
 }
 
 
-function getNextRemainingZone(reviewZones, completedQuestionIdSet, currentCode) {
+function getNextRemainingZone(reviewZones, completedQuestionIdSet, currentCode, direction = 1) {
   if (reviewZones.length === 0) return null;
 
+  const step = direction < 0 ? -1 : 1;
   const currentIndex = reviewZones.findIndex(item => item.code === currentCode);
-  const startIndex = currentIndex >= 0 ? currentIndex : -1;
+  const startIndex = currentIndex >= 0 ? currentIndex : step > 0 ? -1 : 0;
 
   for (let offset = 1; offset <= reviewZones.length; offset += 1) {
-    const item = reviewZones[(startIndex + offset) % reviewZones.length];
+    const index = (startIndex + (offset * step) + reviewZones.length) % reviewZones.length;
+    const item = reviewZones[index];
 
     if (item && !completedQuestionIdSet.has(item.question_id)) {
       return item;
@@ -801,7 +803,7 @@ export function useMapReview(
     selectNextPrompt(1);
   }
 
-  function focusNextRemainingZone() {
+  function focusNextRemainingZone(direction = 1) {
     if (currentPromptItem) {
       setRemainingFocusCode(currentPromptItem.code);
       setFocusVersion(version => version + 1);
@@ -811,7 +813,8 @@ export function useMapReview(
     const nextCode = getNextRemainingZone(
       reviewZones,
       completedQuestionIdSet,
-      remainingFocusCode
+      remainingFocusCode,
+      direction
     )?.code;
 
     if (!nextCode) return;

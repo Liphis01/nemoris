@@ -532,8 +532,8 @@ export default function MapReview({
     }
   }, [focusRecapCode, focusedCode, recapAutoZoomEnabled]);
 
-  const handleZoomRemaining = useCallback(() => {
-    focusNextRemainingZone();
+  const handleZoomRemaining = useCallback((direction = 1) => {
+    focusNextRemainingZone(direction);
     inputRef.current?.focus({ preventScroll: true });
   }, [focusNextRemainingZone]);
 
@@ -572,7 +572,6 @@ export default function MapReview({
       if (
         event.defaultPrevented ||
         event.key !== "Tab" ||
-        event.shiftKey ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey
@@ -581,7 +580,7 @@ export default function MapReview({
       }
 
       event.preventDefault();
-      handleZoomRemaining();
+      handleZoomRemaining(event.shiftKey ? -1 : 1);
     }
 
     window.addEventListener("keydown", handleMapKeyDown);

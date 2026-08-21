@@ -237,6 +237,36 @@ describe("MapReview recap map focus", () => {
     expect(input).toHaveFocus();
   });
 
+  it("uses Shift+Tab as the previous remaining zone in type_all", async () => {
+    renderMapReview(false, {
+      mode: "type_all"
+    });
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    input.focus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", "alpha");
+    });
+
+    fireEvent.keyDown(window, { key: "Tab" });
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", "beta");
+    });
+
+    expect(fireEvent.keyDown(window, { key: "Tab", shiftKey: true })).toBe(false);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-code", "alpha");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "3");
+    });
+    expect(input).toHaveFocus();
+  });
+
   it.each([
     ["type_all", "Tape une zone..."],
     ["type_prompt", "Nom de la zone..."]
