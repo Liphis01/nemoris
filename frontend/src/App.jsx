@@ -23,6 +23,7 @@ function startupNoticeStorageKey(notice) {
 
 const BACK_MOUSE_BUTTON = 3;
 const FORWARD_MOUSE_BUTTON = 4;
+const HOME_MODE = "menu";
 
 
 function firstDefined(...values) {
@@ -172,6 +173,7 @@ function AppContent() {
   const modeRef = useRef("menu");
   const backStackRef = useRef([]);
   const forwardStackRef = useRef([]);
+  const lastWorkspaceModeRef = useRef(null);
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [manageOpenGroupId, setManageOpenGroupId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
@@ -248,6 +250,9 @@ function AppContent() {
       return;
     }
 
+    if (currentMode !== HOME_MODE) {
+      lastWorkspaceModeRef.current = currentMode;
+    }
     backStackRef.current.push(currentMode);
     forwardStackRef.current = [];
     applyMode(nextMode);
@@ -262,6 +267,17 @@ function AppContent() {
 
     if (!previousMode) {
       return;
+    }
+
+    if (
+      previousMode === HOME_MODE &&
+      lastWorkspaceModeRef.current &&
+      lastWorkspaceModeRef.current !== currentMode
+    ) {
+      backStackRef.current.push(HOME_MODE);
+      previousMode = lastWorkspaceModeRef.current;
+    } else if (previousMode === HOME_MODE && currentMode !== HOME_MODE) {
+      lastWorkspaceModeRef.current = currentMode;
     }
 
     forwardStackRef.current.push(currentMode);

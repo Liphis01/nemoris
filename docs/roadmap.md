@@ -24,7 +24,6 @@
 - pour type prompt valider automatiquement au lieu de entrer
 - permission denied for table pack_catalog
 - on peut pas commenter si on était pas connecté au moment de l'import du pack
-- retour arrière prend la dernière page
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 
 ## quick fixes

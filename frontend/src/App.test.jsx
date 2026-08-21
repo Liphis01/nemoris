@@ -172,6 +172,26 @@ describe("App mouse navigation", () => {
     expect(screen.getByRole("heading", { name: "Calendrier" })).toBeInTheDocument();
   });
 
+  it("goes back to the last visited workspace instead of stopping on the menu hub", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gestionnaire" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reglages" }));
+    expect(screen.getByRole("heading", { name: "Reglages" })).toBeInTheDocument();
+
+    fireEvent.mouseDown(window, { button: 3 });
+    expect(screen.getByRole("heading", { name: "Gestionnaire" })).toBeInTheDocument();
+
+    fireEvent.mouseDown(window, { button: 3 });
+    expect(screen.getByRole("heading", { name: "Menu" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendrier" }));
+    expect(screen.getByRole("heading", { name: "Calendrier" })).toBeInTheDocument();
+
+    fireEvent.mouseDown(window, { button: 3 });
+    expect(screen.getByRole("heading", { name: "Gestionnaire" })).toBeInTheDocument();
+  });
+
   it("opens Study from a feature and can launch scoped training", () => {
     render(<App />);
 
