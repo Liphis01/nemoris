@@ -117,7 +117,7 @@ On Linux:
 ```bash
 cd backend
 ./venv/bin/pyinstaller --name nemoris-backend --onedir --clean --noconfirm \
-  --collect-data countryinfo run_sidecar.py
+  --collect-data countryinfo --collect-data certifi run_sidecar.py
 
 cd ../frontend
 npm run tauri dev      # or: npm run tauri -- build --bundles appimage

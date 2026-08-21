@@ -90,6 +90,10 @@ if __name__ == "__main__":
     if sys.stderr is None:
         sys.stderr = sys.stdout
 
+    from app.services.tls import configure_https_ca_bundle
+
+    configure_https_ca_bundle()
+
     from app.main import app
 
     port = int(os.environ.get("QUIZ_APP_PORT", "8000"))

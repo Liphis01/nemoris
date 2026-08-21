@@ -74,7 +74,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
-          python -m PyInstaller --name nemoris-backend --onedir --clean --noconfirm --collect-data countryinfo run_sidecar.py
+          python -m PyInstaller --name nemoris-backend --onedir --clean --noconfirm --collect-data countryinfo --collect-data certifi run_sidecar.py
 
       - name: Smoke-test backend sidecar
         working-directory: backend
