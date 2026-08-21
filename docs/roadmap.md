@@ -23,7 +23,6 @@
 - quand on se trompe pour une proposition, sélectionner le texte pour le corriger rapidement
 - ajouter "déjà répondu" quand on fait entrer
 - pour type prompt valider automatiquement au lieu de entrer
-- permission denied for table pack_catalog
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 
 ## quick fixes

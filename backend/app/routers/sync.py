@@ -60,6 +60,18 @@ def _client():
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+def _status_server_meta(meta):
+    if not isinstance(meta, dict):
+        return None
+
+    return {
+        "version": meta.get("version"),
+        "schema_version": meta.get("schema_version"),
+        "updated_at": meta.get("updated_at"),
+        "last_device_id": meta.get("last_device_id")
+    }
+
+
 def _status_payload():
     state = load_sync_state()
     payload = {
@@ -75,18 +87,23 @@ def _status_payload():
         "last_auto_sync_status": state.get("last_auto_sync_status"),
         "last_auto_sync_error": state.get("last_auto_sync_error"),
         "code_schema_version": code_schema_version(),
-        "server_meta": None
+        "server_meta": None,
+        "server_reachable": None,
+        "server_error": None
     }
 
     if payload["signed_in"] and payload["server_url"]:
         # Best-effort: a signed-in status still returns even if the server is
         # briefly unreachable.
         try:
-            payload["server_meta"] = _build_client(state).get_meta(
-                state["token"]
+            payload["server_meta"] = _status_server_meta(
+                _build_client(state).get_meta(state["token"])
             )
-        except SyncClientError:
+            payload["server_reachable"] = True
+        except SyncClientError as error:
             payload["server_meta"] = None
+            payload["server_reachable"] = False
+            payload["server_error"] = str(error)
 
     return payload
 

@@ -19,7 +19,10 @@ function formatAutoSyncStatus(status) {
 
   const label = labels[value] || value;
 
-  if (status?.last_auto_sync_error) {
+  const staleReachabilityFailure =
+    value === "skipped" && status?.server_reachable === true;
+
+  if (status?.last_auto_sync_error && !staleReachabilityFailure) {
     return `${label} · ${status.last_auto_sync_error}`;
   }
 
@@ -33,7 +36,16 @@ function SyncAccountSectionFromHook() {
 }
 
 function SyncAccountSectionView({ sync }) {
+  const status = sync.status || {};
   const serverVersion = sync.serverVersion;
+  const serverError = status.server_reachable === false
+    ? status.server_error || "Serveur de synchronisation injoignable"
+    : "";
+  const cloudStatus = serverError
+    ? ` · cloud inaccessible : ${serverError}`
+    : serverVersion
+      ? ` · cloud : v${serverVersion}`
+      : "";
 
   return (
     <section className="settings-group settings-group-sync" id="settings-sync">
@@ -70,7 +82,7 @@ function SyncAccountSectionView({ sync }) {
                 <span>
                   Dernière version synchronisée : v
                   {sync.status.last_server_version}
-                  {serverVersion ? ` · cloud : v${serverVersion}` : ""}
+                  {cloudStatus}
                 </span>
               </div>
 

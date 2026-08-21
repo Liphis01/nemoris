@@ -35,7 +35,9 @@ const SIGNED_OUT = {
   last_auto_sync_status: null,
   last_auto_sync_error: null,
   code_schema_version: "0016",
-  server_meta: null
+  server_meta: null,
+  server_reachable: null,
+  server_error: null
 };
 
 const SIGNED_IN = {
@@ -51,7 +53,9 @@ const SIGNED_IN = {
   last_auto_sync_status: null,
   last_auto_sync_error: null,
   code_schema_version: "0016",
-  server_meta: { version: 1, schema_version: "0016", updated_at: "x" }
+  server_meta: { version: 1, schema_version: "0016", updated_at: "x" },
+  server_reachable: true,
+  server_error: null
 };
 
 describe("SyncAccountSection", () => {
@@ -191,6 +195,40 @@ describe("SyncAccountSection", () => {
     });
     expect(
       await screen.findByText("Synchronisation automatique activée.")
+    ).toBeInTheDocument();
+  });
+
+  it("does not show a stale unreachable auto-sync error when cloud status is reachable", async () => {
+    getSyncStatus.mockResolvedValue({
+      ...SIGNED_IN,
+      auto_sync_enabled: true,
+      last_auto_sync_status: "skipped",
+      last_auto_sync_error: "Sync server unreachable"
+    });
+    render(<SyncAccountSection />);
+
+    expect(await screen.findByText("Active · Ignorée")).toBeInTheDocument();
+    expect(screen.getByText(/cloud : v1/)).toBeInTheDocument();
+    expect(screen.queryByText(/Sync server unreachable/)).not.toBeInTheDocument();
+  });
+
+  it("shows the current cloud error when the status probe cannot reach it", async () => {
+    getSyncStatus.mockResolvedValue({
+      ...SIGNED_IN,
+      auto_sync_enabled: true,
+      server_meta: null,
+      server_reachable: false,
+      server_error: "Sync server unreachable",
+      last_auto_sync_status: "skipped",
+      last_auto_sync_error: "Sync server unreachable"
+    });
+    render(<SyncAccountSection />);
+
+    expect(
+      await screen.findByText(/cloud inaccessible : Sync server unreachable/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Active · Ignorée · Sync server unreachable")
     ).toBeInTheDocument();
   });
 
