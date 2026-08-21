@@ -19,10 +19,12 @@ jobs:
             platform: windows-latest
             backend_executable: dist/nemoris-backend/nemoris-backend.exe
             tauri_args: ""
+            tauri_script: ""
           - label: Linux
             platform: ubuntu-22.04
             backend_executable: dist/nemoris-backend/nemoris-backend
             tauri_args: "--bundles appimage"
+            tauri_script: "npm run tauri:patched"
     steps:
       - uses: actions/checkout@v5
 
@@ -97,7 +99,9 @@ jobs:
       # tauri-action runs the beforeBuildCommand (npm run build) then bundles
       # the Windows installer(s) or Linux AppImage and uploads them to the
       # tag's release, along with the signed latest.json the updater plugin
-      # polls.
+      # polls. Linux uses a small wrapper that patches the generated AppDir
+      # before upload so WebKitGTK does not load the AppImage's bundled
+      # Wayland client libraries on the user's machine.
       - name: Build Tauri app and publish release
         uses: tauri-apps/tauri-action@v1
         env:
@@ -112,4 +116,5 @@ jobs:
           prerelease: false
           updaterJsonPreferNsis: true
           retryAttempts: 2
+          tauriScript: ${{ matrix.tauri_script }}
           args: ${{ matrix.tauri_args }}

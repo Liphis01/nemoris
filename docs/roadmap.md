@@ -26,7 +26,6 @@
 - on peut pas commenter si on était pas connecté au moment de l'import du pack
 - retour arrière prend la dernière page
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
-- enlever la barre de sauvegarde des boutons
 
 ## quick fixes
 

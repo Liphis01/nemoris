@@ -127,16 +127,26 @@ npm run tauri dev      # or: npm run tauri -- build --bundles appimage
 bundles to AppImage, so `npm run tauri build` on Linux does not produce extra
 `.deb`/`.rpm` packages unless that file is overridden.
 
-If a downloaded AppImage exits with
-`Could not create default EGL display: EGL_BAD_PARAMETER`, launch that build
-once with:
+Release AppImages are built through `npm run tauri:patched`, which wraps
+`tauri build`, then patches the generated AppDir before `tauri-action` uploads
+the artifact. The patch keeps the WebKitGTK graphics fallbacks in the AppRun
+environment, rewrites GTK hook paths to use `$APPDIR`, removes bundled
+`libwayland-*` libraries so the user's compositor stack supplies them, repacks
+the AppImage, and regenerates updater signatures.
+
+If an older downloaded AppImage exits with
+`Could not create default EGL display: EGL_BAD_PARAMETER`, try launching that
+old build with the host Wayland client preloaded:
 
 ```bash
-WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Nemoris_*.AppImage
+LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libwayland-client.so.0 \
+WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+./Nemoris_*.AppImage
 ```
 
-Release builds set those WebKitGTK fallbacks automatically on Linux unless the
-user has already provided different values.
+On Fedora-like systems the path is often `/usr/lib64/libwayland-client.so.0`.
+New release AppImages apply this class of workaround automatically.
 
 On Windows PowerShell, use `;` as PyInstaller's data separator:
 
