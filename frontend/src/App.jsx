@@ -23,11 +23,28 @@ function startupNoticeStorageKey(notice) {
 
 const BACK_MOUSE_BUTTON = 3;
 const FORWARD_MOUSE_BUTTON = 4;
-const HOME_MODE = "menu";
 
 
 function firstDefined(...values) {
   return values.find(value => value !== undefined && value !== null);
+}
+
+
+function isEditableNavigationTarget(target) {
+  if (!target || typeof target.closest !== "function") {
+    return false;
+  }
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
+
+
+function hasBlockingEscapeSurface() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  return Boolean(document.querySelector("[role='dialog'], [data-media-zoom-overlay]"));
 }
 
 
@@ -173,7 +190,6 @@ function AppContent() {
   const modeRef = useRef("menu");
   const backStackRef = useRef([]);
   const forwardStackRef = useRef([]);
-  const lastWorkspaceModeRef = useRef(null);
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [manageOpenGroupId, setManageOpenGroupId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
@@ -250,9 +266,6 @@ function AppContent() {
       return;
     }
 
-    if (currentMode !== HOME_MODE) {
-      lastWorkspaceModeRef.current = currentMode;
-    }
     backStackRef.current.push(currentMode);
     forwardStackRef.current = [];
     applyMode(nextMode);
@@ -267,17 +280,6 @@ function AppContent() {
 
     if (!previousMode) {
       return;
-    }
-
-    if (
-      previousMode === HOME_MODE &&
-      lastWorkspaceModeRef.current &&
-      lastWorkspaceModeRef.current !== currentMode
-    ) {
-      backStackRef.current.push(HOME_MODE);
-      previousMode = lastWorkspaceModeRef.current;
-    } else if (previousMode === HOME_MODE && currentMode !== HOME_MODE) {
-      lastWorkspaceModeRef.current = currentMode;
     }
 
     forwardStackRef.current.push(currentMode);
@@ -333,6 +335,33 @@ function AppContent() {
       window.removeEventListener("auxclick", interceptBrowserMouseNavigation, true);
     };
   }, [goBack, goForward]);
+
+  useEffect(() => {
+    function handleKeyboardNavigation(event) {
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        isEditableNavigationTarget(event.target) ||
+        hasBlockingEscapeSurface()
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      goBack();
+    }
+
+    window.addEventListener("keydown", handleKeyboardNavigation);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyboardNavigation);
+    };
+  }, [goBack]);
 
   useEffect(() => {
     getStartupRebalanceNotice()

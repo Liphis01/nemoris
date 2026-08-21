@@ -66,6 +66,7 @@ vi.mock("./features/manage/components/Manage", () => ({
   default: ({ setMode }) => (
     <main>
       <h1>Gestionnaire</h1>
+      <input aria-label="Recherche gestionnaire" />
       <button type="button" onClick={() => setMode("settings")}>Reglages</button>
     </main>
   )
@@ -172,7 +173,7 @@ describe("App mouse navigation", () => {
     expect(screen.getByRole("heading", { name: "Calendrier" })).toBeInTheDocument();
   });
 
-  it("goes back to the last visited workspace instead of stopping on the menu hub", () => {
+  it("keeps the menu in history like any other page", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Gestionnaire" }));
@@ -189,6 +190,27 @@ describe("App mouse navigation", () => {
     expect(screen.getByRole("heading", { name: "Calendrier" })).toBeInTheDocument();
 
     fireEvent.mouseDown(window, { button: 3 });
+    expect(screen.getByRole("heading", { name: "Menu" })).toBeInTheDocument();
+  });
+
+  it("uses Escape as keyboard back navigation", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gestionnaire" }));
+    expect(screen.getByRole("heading", { name: "Gestionnaire" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("heading", { name: "Menu" })).toBeInTheDocument();
+  });
+
+  it("does not use Escape for app navigation while editing text", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gestionnaire" }));
+    const input = screen.getByRole("textbox", { name: "Recherche gestionnaire" });
+    input.focus();
+
+    fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.getByRole("heading", { name: "Gestionnaire" })).toBeInTheDocument();
   });
 
