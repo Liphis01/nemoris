@@ -1,4 +1,37 @@
+const toastBaseStyle = {
+  position: "fixed",
+  right: "20px",
+  bottom: "20px",
+  zIndex: 30,
+  maxWidth: "min(460px, calc(100vw - 40px))"
+};
+
+const syncingStyle = {
+  ...toastBaseStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  color: "#a7b2ab",
+  background: "rgba(18, 18, 18, 0.72)",
+  border: "1px solid rgba(255, 255, 255, 0.08)",
+  borderRadius: "999px",
+  padding: "6px 10px",
+  fontSize: "12px",
+  lineHeight: 1,
+  pointerEvents: "none",
+  userSelect: "none"
+};
+
+const syncDotStyle = {
+  width: "6px",
+  height: "6px",
+  borderRadius: "999px",
+  background: "#6f8f7d",
+  flex: "0 0 auto"
+};
+
 const bannerStyle = {
+  ...toastBaseStyle,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -8,6 +41,7 @@ const bannerStyle = {
   border: "1px solid #2f4b3a",
   borderRadius: "8px",
   padding: "10px 16px",
+  boxShadow: "0 10px 28px rgba(0, 0, 0, 0.28)",
   fontSize: "14px",
   pointerEvents: "auto"
 };
@@ -40,8 +74,14 @@ export default function AutoSyncBanner({
 }) {
   if (phase === "syncing") {
     return (
-      <div style={bannerStyle} role="status">
-        <span>Synchronisation...</span>
+      <div
+        style={syncingStyle}
+        role="status"
+        aria-label="Synchronisation en cours"
+        title="Synchronisation en cours"
+      >
+        <span style={syncDotStyle} aria-hidden="true" />
+        <span>Synchro</span>
       </div>
     );
   }

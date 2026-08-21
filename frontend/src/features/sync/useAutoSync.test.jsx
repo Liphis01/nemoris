@@ -125,6 +125,21 @@ describe("useAutoSync", () => {
     expect(syncAuto).toHaveBeenCalledTimes(1);
   });
 
+  it("shows routine syncing as a discreet click-through indicator", () => {
+    render(<AutoSyncBanner phase="syncing" />);
+
+    const status = screen.getByRole("status", {
+      name: "Synchronisation en cours"
+    });
+
+    expect(status).toHaveTextContent("Synchro");
+    expect(status).toHaveStyle({
+      position: "fixed",
+      pointerEvents: "none",
+      bottom: "20px"
+    });
+  });
+
   it("shows conflicts and force-pushes through the existing sync API", async () => {
     syncAuto.mockResolvedValue({ status: "conflict", server_version: 5 });
     render(<HookProbe withBanner />);
