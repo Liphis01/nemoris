@@ -82,6 +82,27 @@ describe("PackReviewsSection", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the comment form after backfilling a pack installed before sign-in", async () => {
+    getPackPublishStatus.mockResolvedValue({
+      configured: true,
+      signed_in: true,
+      account_email: "learner@example.com",
+      project_url: "https://project.supabase.co"
+    });
+    backfillPackInstalls.mockResolvedValue({ recorded: 1 });
+    getMyPackStatus.mockResolvedValue({ is_installed: true, my_rating: null });
+
+    render(<PackReviewsSection entry={entry} setMode={vi.fn()} />);
+
+    expect(await screen.findByLabelText("Ton commentaire")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Installe ce pack pour le noter et laisser un commentaire.")
+    ).not.toBeInTheDocument();
+    expect(backfillPackInstalls.mock.invocationCallOrder[0]).toBeLessThan(
+      getMyPackStatus.mock.invocationCallOrder[0]
+    );
+  });
+
   it("renders the star input and comment form when eligible, and submits both", async () => {
     getPackPublishStatus.mockResolvedValue({
       configured: true,

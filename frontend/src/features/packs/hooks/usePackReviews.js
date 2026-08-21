@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   addPackComment,
+  backfillPackInstalls,
   getMyPackStatus,
   listPackComments,
   ratePack
 } from "../../../api/packs";
 
 // Comments load unconditionally (no auth needed to read). my-status only
-// loads when signed in -- its server-side is_installed is the eligibility
-// source of truth (a pack could be installed on another device under the
-// same account, so the locally-computed install status isn't enough).
+// loads when signed in. Before reading it, we sync local PackSubscription rows
+// so anonymous installs become eligible under the account that signs in later.
 export function usePackReviews(packGuid, { signedIn = false, initialAggregate = null } = {}) {
   const [comments, setComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(true);
@@ -61,15 +61,31 @@ export function usePackReviews(packGuid, { signedIn = false, initialAggregate = 
       return undefined;
     }
 
-    getMyPackStatus(packGuid)
-      .then((status) => {
+    setMyStatus(null);
+
+    async function loadMyStatus() {
+      try {
+        await backfillPackInstalls();
+      } catch (error) {
+        console.error(error);
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        const status = await getMyPackStatus(packGuid);
+
         if (!cancelled) {
           setMyStatus(status);
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error(error);
-      });
+      }
+    }
+
+    loadMyStatus();
 
     return () => {
       cancelled = true;

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePackReviews } from "./usePackReviews";
 import {
   addPackComment,
+  backfillPackInstalls,
   getMyPackStatus,
   listPackComments,
   ratePack
@@ -10,6 +11,7 @@ import {
 
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
+  backfillPackInstalls: vi.fn(),
   getMyPackStatus: vi.fn(),
   listPackComments: vi.fn(),
   ratePack: vi.fn()
@@ -23,6 +25,7 @@ describe("usePackReviews", () => {
       ]
     });
     getMyPackStatus.mockResolvedValue({ is_installed: true, my_rating: null });
+    backfillPackInstalls.mockResolvedValue({ recorded: 0 });
     ratePack.mockResolvedValue({ my_rating: 4, avg_rating: 4.5, rating_count: 2 });
     addPackComment.mockResolvedValue({
       comment: { id: 2, author_label: "me@example.com", body: "Merci !" }
@@ -43,11 +46,29 @@ describe("usePackReviews", () => {
 
     expect(listPackComments).toHaveBeenCalledWith("pack-1");
     expect(result.current.comments).toHaveLength(1);
+    expect(backfillPackInstalls).not.toHaveBeenCalled();
     expect(getMyPackStatus).not.toHaveBeenCalled();
     expect(result.current.myStatus).toBeNull();
   });
 
-  it("only fetches my-status when signed in", async () => {
+  it("backfills local installs before fetching my-status when signed in", async () => {
+    const { result } = renderHook(() =>
+      usePackReviews("pack-1", { signedIn: true })
+    );
+
+    await waitFor(() => expect(result.current.myStatus).not.toBeNull());
+
+    expect(backfillPackInstalls).toHaveBeenCalledTimes(1);
+    expect(getMyPackStatus).toHaveBeenCalledWith("pack-1");
+    expect(backfillPackInstalls.mock.invocationCallOrder[0]).toBeLessThan(
+      getMyPackStatus.mock.invocationCallOrder[0]
+    );
+    expect(result.current.myStatus.is_installed).toBe(true);
+  });
+
+  it("still fetches my-status if the best-effort backfill fails", async () => {
+    backfillPackInstalls.mockRejectedValue(new Error("rpc unavailable"));
+
     const { result } = renderHook(() =>
       usePackReviews("pack-1", { signedIn: true })
     );
