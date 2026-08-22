@@ -428,6 +428,65 @@ describe("useReviewSession", () => {
     });
   });
 
+  it("reopens the completed session and requeues a correct text answer revised to wrong", async () => {
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    vi.useFakeTimers();
+
+    act(() => {
+      result.current.handleTextAnswer(3);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(240);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.sessionComplete).toBe(true);
+
+    act(() => {
+      result.current.returnToLastQuestion();
+    });
+
+    expect(result.current.sessionComplete).toBe(false);
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.showAnswer).toBe(true);
+
+    act(() => {
+      result.current.handleTextAnswer(0);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(reviseAnswer).toHaveBeenCalledWith(
+      10,
+      0,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(240);
+    });
+
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.sessionComplete).toBe(false);
+    expect(result.current.questions).toHaveLength(2);
+    expect(result.current.questions[1]).toMatchObject({
+      question_id: 10,
+      _reviewRetryOfIndex: 0
+    });
+  });
+
   it("lets the user end the session early while retries remain", async () => {
     const { result } = renderHook(() => useReviewSession(true));
 

@@ -163,6 +163,7 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
     if (!canReturnToLastQuestion) return;
 
     clearTextAnswerTimeout();
+    setSessionComplete(false);
     setSelectedTextQuality(null);
     setShowAnswer(true);
     setReturnToLastQuestionArmed(false);
