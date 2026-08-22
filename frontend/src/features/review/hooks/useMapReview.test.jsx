@@ -245,10 +245,13 @@ describe("useMapReview recap sorting", () => {
     act(() => {
       result.current.setInput("wrong");
     });
+    let submitResult;
     act(() => {
-      result.current.handleSubmit();
+      submitResult = result.current.handleSubmit();
     });
 
+    expect(submitResult).toBe(false);
+    expect(result.current.input).toBe("wrong");
     expect(result.current.canFinishReview).toBe(true);
 
     act(() => {
@@ -259,6 +262,40 @@ describe("useMapReview recap sorting", () => {
     expect(result.current.foundQuestionIds).toEqual([]);
     expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
     expect(onAnsweringComplete).toHaveBeenCalledWith([1, 2]);
+  });
+
+  it("reports duplicate typed type_all answers without marking them wrong", () => {
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn())
+    );
+
+    let firstSubmit;
+    act(() => {
+      result.current.setInput("Alpha");
+    });
+    act(() => {
+      firstSubmit = result.current.handleSubmit();
+    });
+
+    expect(firstSubmit).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([1]);
+
+    let duplicateSubmit;
+    act(() => {
+      result.current.setInput("Alpha");
+    });
+    act(() => {
+      duplicateSubmit = result.current.handleSubmit();
+    });
+
+    expect(duplicateSubmit).toBe("duplicate");
+    expect(result.current.feedbackTone).toBe("duplicate");
+    expect(result.current.foundQuestionIds).toEqual([1]);
+    expect(result.current.input).toBe("Alpha");
   });
 
   it("allows finishing type_prompt after a wrong typed attempt with no found zones", () => {
@@ -277,10 +314,13 @@ describe("useMapReview recap sorting", () => {
     act(() => {
       result.current.setInput("wrong");
     });
+    let submitResult;
     act(() => {
-      result.current.handleSubmit();
+      submitResult = result.current.handleSubmit();
     });
 
+    expect(submitResult).toBe(false);
+    expect(result.current.input).toBe("wrong");
     expect(result.current.canFinishReview).toBe(true);
 
     act(() => {

@@ -1910,4 +1910,59 @@ describe("MediaReview answer label preview", () => {
       expect(tileFor(container, 3).scrollIntoView).not.toHaveBeenCalled();
     });
   });
+
+  it("selects a wrong typed image after Enter so it can be edited", () => {
+    const handleSubmit = vi.fn(() => false);
+    renderMediaReviewWithState(
+      typeAllHookState({
+        rows: [imageGridRow(1), imageGridRow(2)],
+        hookOverrides: {
+          feedbackTone: "incorrect",
+          handleSubmit,
+          input: "wrong"
+        }
+      })
+    );
+
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    input.focus();
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(handleSubmit).toHaveBeenCalled();
+    expect(document.activeElement).toBe(input);
+    expect(input).toHaveClass("review-input-shake");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe("wrong".length);
+  });
+
+  it("labels a repeated typed image as already answered", () => {
+    const handleSubmit = vi.fn(() => "duplicate");
+    renderMediaReviewWithState(
+      typeAllHookState({
+        rows: [
+          imageGridRow(1, { isFound: true, quality: 2 }),
+          imageGridRow(2)
+        ],
+        foundQuestionIds: [1],
+        hookOverrides: {
+          feedbackTone: "duplicate",
+          handleSubmit,
+          input: "Image 1"
+        }
+      })
+    );
+
+    const input = screen.getByPlaceholderText("Tape une image...");
+
+    input.focus();
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(handleSubmit).toHaveBeenCalled();
+    expect(screen.getByText("Déjà répondu.")).toBeInTheDocument();
+    expect(document.activeElement).toBe(input);
+    expect(input).not.toHaveClass("review-input-shake");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe("Image 1".length);
+  });
 });

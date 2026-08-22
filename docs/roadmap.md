@@ -19,12 +19,10 @@
 - app mobile
 - dire clairement qu'il faut attendre 5 min pour refaire les erreurs
 - enlever les pauses quand il y a pas de timers
-- maj tab pour revenir en arriere
 - quand on se trompe pour une proposition, sélectionner le texte pour le corriger rapidement
 - ajouter "déjà répondu" quand on fait entrer
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
-- on peut pas faire terminer sur type prompt si on a pas au moins une bonne réponse
 
 ## quick fixes
 

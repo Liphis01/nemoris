@@ -369,6 +369,7 @@ export default function MapReview({
   const [recapAutoZoomEnabled, setRecapAutoZoomEnabled] = useState(readRecapAutoZoomPreference);
   const [recapFocusCode, setRecapFocusCode] = useState(null);
   const [recapFocusVersion, setRecapFocusVersion] = useState(0);
+  const [wrongInputShakeId, setWrongInputShakeId] = useState(0);
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
   const recapGridColumns = showQualityControls
     ? recapTableGridColumns
@@ -405,7 +406,9 @@ export default function MapReview({
   const wrongProgressPercent = reviewZones.length
     ? Math.min((wrongQuestionCount / reviewZones.length) * 100, 100)
     : 0;
-  const baseFeedbackCopy = feedbackTone === "incorrect"
+  const baseFeedbackCopy = feedbackTone === "duplicate"
+    ? "Déjà répondu."
+    : feedbackTone === "incorrect"
     ? mode === MAP_MODE_TYPE_PROMPT
       ? "Réponse incorrecte."
       : "Mauvaise zone."
@@ -552,6 +555,16 @@ export default function MapReview({
     handleZoneSelect(code);
     focusAnswerInput();
   }, [focusAnswerInput, handleZoneSelect]);
+
+  useEffect(() => {
+    if (!wrongInputShakeId) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setWrongInputShakeId(0);
+    }, 420);
+
+    return () => window.clearTimeout(timeout);
+  }, [wrongInputShakeId]);
 
   const toggleAutoZoom = useCallback(() => {
     setAutoZoomEnabled(enabled => {
@@ -1034,6 +1047,7 @@ export default function MapReview({
           {showTextInput && (
             <input
               autoFocus
+              className={wrongInputShakeId ? "review-input-shake" : undefined}
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1045,23 +1059,33 @@ export default function MapReview({
                   return;
                 }
 
-                if (e.key === "Enter") {
-                  handleSubmit();
-                }
-              }}
+		                if (e.key === "Enter") {
+		                  const matched = handleSubmit();
+		                  if (matched === false) {
+		                    setWrongInputShakeId(Date.now());
+		                  }
+		                  if (matched === false || matched === "duplicate") {
+		                    e.currentTarget.select();
+		                  }
+	                }
+	              }}
               placeholder={mode === MAP_MODE_TYPE_PROMPT ? "Nom de la zone..." : "Tape une zone..."}
               style={{
                 ...inputStyle,
-                border: feedbackTone === "incorrect"
-                  ? "1px solid rgba(248, 113, 113, 0.9)"
-                  : feedbackTone === "correct"
-                    ? "1px solid rgba(134, 239, 172, 0.85)"
-                  : inputStyle.border,
-                boxShadow: feedbackTone === "incorrect"
-                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
-                  : feedbackTone === "correct"
-                    ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
-                  : "none",
+	                border: feedbackTone === "incorrect"
+	                  ? "1px solid rgba(248, 113, 113, 0.9)"
+	                  : feedbackTone === "correct"
+	                    ? "1px solid rgba(134, 239, 172, 0.85)"
+	                    : feedbackTone === "duplicate"
+	                      ? "1px solid rgba(250, 204, 21, 0.85)"
+	                      : inputStyle.border,
+	                boxShadow: feedbackTone === "incorrect"
+	                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
+	                  : feedbackTone === "correct"
+	                    ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
+	                    : feedbackTone === "duplicate"
+	                      ? "0 0 0 4px rgba(250, 204, 21, 0.1)"
+	                      : "none",
                 transition: "border 0.18s ease, box-shadow 0.18s ease"
               }}
             />
@@ -1195,11 +1219,13 @@ export default function MapReview({
             >
               <div
                 style={{
-                  color: feedbackTone === "incorrect"
-                    ? "#fca5a5"
-                    : feedbackTone === "correct"
-                      ? "#86efac"
-                      : "#666",
+	                  color: feedbackTone === "incorrect"
+	                    ? "#fca5a5"
+	                    : feedbackTone === "correct"
+	                      ? "#86efac"
+	                      : feedbackTone === "duplicate"
+	                        ? "#facc15"
+	                        : "#666",
                   fontSize: "13px",
                   transition: "color 0.18s ease"
                 }}

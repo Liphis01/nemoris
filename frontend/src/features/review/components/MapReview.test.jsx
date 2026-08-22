@@ -701,6 +701,44 @@ describe("MapReview recap map focus", () => {
       .toContain("repeating-linear-gradient");
   });
 
+  it("selects a wrong typed zone after Enter so it can be edited", () => {
+    renderMapReview(true, {
+      mode: "type_all"
+    });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    input.focus();
+    fireEvent.change(input, { target: { value: "wrong" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(input).toHaveValue("wrong");
+    expect(document.activeElement).toBe(input);
+    expect(input).toHaveClass("review-input-shake");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe("wrong".length);
+  });
+
+  it("labels a repeated typed zone as already answered", () => {
+    renderMapReview(true, {
+      mode: "type_all"
+    });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("Déjà répondu.")).toBeInTheDocument();
+    expect(input).toHaveValue("Alpha");
+    expect(document.activeElement).toBe(input);
+    expect(input).not.toHaveClass("review-input-shake");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe("Alpha".length);
+  });
+
   it("keeps the recap open with an error when validation cannot be saved", async () => {
     const submitAnswer = vi.fn().mockRejectedValue(new Error("Serveur indisponible"));
 

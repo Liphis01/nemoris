@@ -825,6 +825,7 @@ export default function MediaReview({
   const previousFoundQuestionIdsRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const [selectedRecapQuestionId, setSelectedRecapQuestionId] = useState(null);
+  const [wrongInputShakeId, setWrongInputShakeId] = useState(0);
   const imageRecapRowRefs = useRef(new Map());
   const {
     activeQuestionId,
@@ -1082,7 +1083,9 @@ export default function MediaReview({
   const tileImageHeight = fillAvailableHeight ? 154 : 188;
   const tileImageMaxHeight = fillAvailableHeight ? 140 : 174;
   const tileMinHeight = fillAvailableHeight ? "212px" : "250px";
-  const feedbackCopy = feedbackTone === "incorrect"
+  const feedbackCopy = feedbackTone === "duplicate"
+    ? "Déjà répondu."
+    : feedbackTone === "incorrect"
     ? answersByClick
       ? "Mauvais média."
       : showLabelChoices
@@ -1098,13 +1101,23 @@ export default function MediaReview({
             ? "Choisis le bon nom."
             : "Tape le nom de l'image.";
 
-  const focusAnswerInput = useCallback(() => {
-    if (!showTextInput) return;
+	  const focusAnswerInput = useCallback(() => {
+	    if (!showTextInput) return;
 
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focus({ preventScroll: true });
-    });
-  }, [showTextInput]);
+	    window.requestAnimationFrame(() => {
+	      inputRef.current?.focus({ preventScroll: true });
+	    });
+	  }, [showTextInput]);
+
+	  useEffect(() => {
+	    if (!wrongInputShakeId) return undefined;
+
+	    const timeout = window.setTimeout(() => {
+	      setWrongInputShakeId(0);
+	    }, 420);
+
+	    return () => window.clearTimeout(timeout);
+	  }, [wrongInputShakeId]);
 
   const registerTileElement = useCallback((questionId, element, isActive) => {
     if (element) {
@@ -2962,29 +2975,40 @@ export default function MediaReview({
 
         {!resultMode && showTextInput && (
           <div style={{ marginBottom: "10px" }}>
-            <input
-              autoFocus
-              ref={inputRef}
+	            <input
+	              autoFocus
+	              className={wrongInputShakeId ? "review-input-shake" : undefined}
+	              ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  handleSubmit();
-                  focusAnswerInput();
-                }
-              }}
+	              onKeyDown={(event) => {
+	                if (event.key === "Enter") {
+		                  event.preventDefault();
+		                  const matched = handleSubmit();
+		                  if (matched === false) {
+		                    setWrongInputShakeId(Date.now());
+		                  }
+		                  if (matched === false || matched === "duplicate") {
+		                    event.currentTarget.select();
+		                  }
+	                  focusAnswerInput();
+	                }
+	              }}
               placeholder={normalizedMode === IMAGE_MODE_TYPE_PROMPT
                 ? "Nom de l'image..."
                 : "Tape une image..."}
               style={{
                 ...inputStyle,
-                border: feedbackTone === "incorrect"
-                  ? "1px solid rgba(248, 113, 113, 0.9)"
-                  : inputStyle.border,
-                boxShadow: feedbackTone === "incorrect"
-                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
-                  : "none"
+	                border: feedbackTone === "incorrect"
+	                  ? "1px solid rgba(248, 113, 113, 0.9)"
+	                  : feedbackTone === "duplicate"
+	                    ? "1px solid rgba(250, 204, 21, 0.85)"
+	                    : inputStyle.border,
+	                boxShadow: feedbackTone === "incorrect"
+	                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
+	                  : feedbackTone === "duplicate"
+	                    ? "0 0 0 4px rgba(250, 204, 21, 0.1)"
+	                    : "none"
               }}
             />
           </div>
@@ -3076,11 +3100,13 @@ export default function MediaReview({
         >
           <div
             style={{
-              color: feedbackTone === "incorrect"
-                ? "#fca5a5"
-                : feedbackTone === "correct"
-                  ? "#86efac"
-                  : "#777",
+	              color: feedbackTone === "incorrect"
+	                ? "#fca5a5"
+	                : feedbackTone === "correct"
+	                  ? "#86efac"
+	                  : feedbackTone === "duplicate"
+	                    ? "#facc15"
+	                    : "#777",
               fontSize: "13px"
             }}
           >

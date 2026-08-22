@@ -126,4 +126,44 @@ describe("TextGroupReview completion guard", () => {
       );
     });
   });
+
+  it("selects a wrong typed answer after Enter so it can be edited", () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    renderGroup(submitAnswer);
+
+    const inputs = screen.getAllByPlaceholderText("Réponse…");
+    const wrongInput = inputs[0];
+
+    wrongInput.focus();
+    fireEvent.change(wrongInput, { target: { value: "totalement faux" } });
+    fireEvent.keyDown(wrongInput, { key: "Enter" });
+
+    expect(document.activeElement).toBe(wrongInput);
+    expect(wrongInput).toHaveClass("review-input-shake");
+    expect(wrongInput.selectionStart).toBe(0);
+    expect(wrongInput.selectionEnd).toBe("totalement faux".length);
+    expect(document.activeElement).not.toBe(inputs[1]);
+  });
+
+  it("labels a repeated typed text answer as already answered", () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    renderGroup(submitAnswer);
+
+    let inputs = screen.getAllByPlaceholderText("Réponse…");
+
+    fireEvent.change(inputs[0], { target: { value: "cat" } });
+    fireEvent.keyDown(inputs[0], { key: "Enter" });
+
+    inputs = screen.getAllByPlaceholderText("Réponse…");
+    const duplicateInput = inputs[0];
+
+    fireEvent.change(duplicateInput, { target: { value: "cat" } });
+    fireEvent.keyDown(duplicateInput, { key: "Enter" });
+
+    expect(screen.getByText("Déjà répondu.")).toBeInTheDocument();
+    expect(document.activeElement).toBe(duplicateInput);
+    expect(duplicateInput).not.toHaveClass("review-input-shake");
+    expect(duplicateInput.selectionStart).toBe(0);
+    expect(duplicateInput.selectionEnd).toBe("cat".length);
+  });
 });

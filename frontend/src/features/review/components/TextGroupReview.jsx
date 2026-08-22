@@ -112,6 +112,8 @@ export default function TextGroupReview({
   // type_all
   const [inputs, setInputs] = useState({});
   const [foundIds, setFoundIds] = useState(() => new Set());
+  const [duplicateNoticeByQuestionId, setDuplicateNoticeByQuestionId] = useState({});
+  const [wrongShakeByQuestionId, setWrongShakeByQuestionId] = useState({});
   // match
   const [selectedPromptId, setSelectedPromptId] = useState(null);
   const [matchedIds, setMatchedIds] = useState(() => new Set());
@@ -231,10 +233,16 @@ export default function TextGroupReview({
   // ---- type_all ----
   const handleInputChange = useCallback((questionId, value) => {
     setInputs(prev => ({ ...prev, [questionId]: value }));
+    setDuplicateNoticeByQuestionId(prev => {
+      if (!prev[questionId]) return prev;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
   }, []);
 
   const checkTypedAnswer = useCallback((item) => {
-    if (foundIds.has(item.question_id)) return;
+    if (foundIds.has(item.question_id)) return true;
 
     const typed = inputs[item.question_id];
 
@@ -244,14 +252,61 @@ export default function TextGroupReview({
 
     if (itemAccepts(item, typed, isReverse)) {
       setFoundIds(prev => new Set(prev).add(item.question_id));
+      setWrongShakeByQuestionId(prev => {
+        if (!prev[item.question_id]) return prev;
+        const next = { ...prev };
+        delete next[item.question_id];
+        return next;
+      });
+      setDuplicateNoticeByQuestionId(prev => {
+        if (!prev[item.question_id]) return prev;
+        const next = { ...prev };
+        delete next[item.question_id];
+        return next;
+      });
+      return true;
     }
-  }, [foundIds, inputs, isReverse]);
+
+    const duplicate = typed && items.some(candidate =>
+      candidate.question_id !== item.question_id &&
+      foundIds.has(candidate.question_id) &&
+      itemAccepts(candidate, typed, isReverse)
+    );
+
+    if (duplicate) {
+      setWrongShakeByQuestionId(prev => {
+        if (!prev[item.question_id]) return prev;
+        const next = { ...prev };
+        delete next[item.question_id];
+        return next;
+      });
+      setDuplicateNoticeByQuestionId(prev => ({
+        ...prev,
+        [item.question_id]: true
+      }));
+      return "duplicate";
+    }
+
+    if (typed) {
+      setWrongShakeByQuestionId(prev => ({
+        ...prev,
+        [item.question_id]: Date.now()
+      }));
+    }
+
+    return false;
+  }, [foundIds, inputs, isReverse, items]);
 
   const handleInputKeyDown = useCallback((event, item, index) => {
     if (event.key !== "Enter") return;
 
     event.preventDefault();
-    checkTypedAnswer(item);
+    const matched = checkTypedAnswer(item);
+
+    if ((matched === false || matched === "duplicate") && inputs[item.question_id]) {
+      event.currentTarget.select();
+      return;
+    }
 
     const next = items[index + 1];
     if (next) {
@@ -347,6 +402,16 @@ export default function TextGroupReview({
     // finishAnswering reads current state each render; the guard makes it fire once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allResolved, items.length, phase]);
+
+  useEffect(() => {
+    if (Object.keys(wrongShakeByQuestionId).length === 0) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setWrongShakeByQuestionId({});
+    }, 420);
+
+    return () => window.clearTimeout(timeout);
+  }, [wrongShakeByQuestionId]);
 
   const setItemQuality = useCallback((questionId, quality) => {
     setQualities(prev => ({ ...prev, [questionId]: quality }));
@@ -737,15 +802,23 @@ export default function TextGroupReview({
                   <RichText>{isReverse ? item.question : item.answer}</RichText>
                 </div>
               ) : (
-                <input
-                  ref={(element) => { inputRefs.current[item.question_id] = element; }}
-                  value={inputs[item.question_id] || ""}
-                  onChange={(event) => handleInputChange(item.question_id, event.target.value)}
-                  onKeyDown={(event) => handleInputKeyDown(event, item, index)}
-                  onBlur={() => checkTypedAnswer(item)}
-                  placeholder={isReverse ? "Indice d’origine…" : "Réponse…"}
-                  style={inputStyle}
-                />
+                <div style={{ display: "grid", gap: "5px" }}>
+                  <input
+                    className={wrongShakeByQuestionId[item.question_id] ? "review-input-shake" : undefined}
+                    ref={(element) => { inputRefs.current[item.question_id] = element; }}
+                    value={inputs[item.question_id] || ""}
+                    onChange={(event) => handleInputChange(item.question_id, event.target.value)}
+                    onKeyDown={(event) => handleInputKeyDown(event, item, index)}
+                    onBlur={() => checkTypedAnswer(item)}
+                    placeholder={isReverse ? "Indice d’origine…" : "Réponse…"}
+                    style={inputStyle}
+                  />
+                  {duplicateNoticeByQuestionId[item.question_id] && (
+                    <div style={{ color: "#facc15", fontSize: "12px", fontWeight: 700 }}>
+                      Déjà répondu.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           );

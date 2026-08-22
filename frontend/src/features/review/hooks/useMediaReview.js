@@ -834,29 +834,38 @@ export function useMediaReview(
   ]);
 
   function handleSubmit() {
-    if (resultMode) return;
+    if (resultMode) return null;
 
     if (mode === IMAGE_MODE_TYPE_PROMPT) {
       if (currentPromptItem && matchesImageAnswer(currentPromptItem, input)) {
         markFound(currentPromptItem, input);
+        return true;
       } else if (input.trim()) {
         recordAnswer(currentPromptItem, input);
         setFeedbackTone("incorrect");
+        return false;
       }
 
-      return;
+      return null;
     }
 
-    if (mode !== IMAGE_MODE_TYPE_ALL) return;
+    if (mode !== IMAGE_MODE_TYPE_ALL) return null;
 
     const match = sessionItems.find(item => matchesImageAnswer(item, input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match, input);
+      return true;
+    } else if (match) {
+      setFeedbackTone("duplicate");
+      return "duplicate";
     } else if (input.trim()) {
       recordAnswer(null, input);
       setFeedbackTone("incorrect");
+      return false;
     }
+
+    return null;
   }
 
   function handleImageSelect(questionId) {

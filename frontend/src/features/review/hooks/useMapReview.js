@@ -320,6 +320,7 @@ export function useMapReview(
   const [focusVersion, setFocusVersion] = useState(0);
   const [incorrectFlashId, setIncorrectFlashId] = useState(0);
   const [correctFlashId, setCorrectFlashId] = useState(0);
+  const [duplicateFlashId, setDuplicateFlashId] = useState(0);
   const [choiceFeedback, setChoiceFeedback] = useState(null);
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
@@ -353,6 +354,7 @@ export function useMapReview(
     setFocusVersion(0);
     setIncorrectFlashId(0);
     setCorrectFlashId(0);
+    setDuplicateFlashId(0);
     setChoiceFeedback(null);
     setZoneFeedback(null);
     setRecapSort(initialRecapSort);
@@ -368,17 +370,18 @@ export function useMapReview(
   }, [reviewKey]);
 
   useEffect(() => {
-    if (!incorrectFlashId && !correctFlashId) {
+    if (!incorrectFlashId && !correctFlashId && !duplicateFlashId) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
       setIncorrectFlashId(0);
       setCorrectFlashId(0);
+      setDuplicateFlashId(0);
     }, 800);
 
     return () => window.clearTimeout(timeout);
-  }, [incorrectFlashId, correctFlashId]);
+  }, [incorrectFlashId, correctFlashId, duplicateFlashId]);
 
   useEffect(() => {
     // Inline rating keeps the reveal on screen until the user rates/continues.
@@ -705,6 +708,7 @@ export function useMapReview(
     rememberResolved(item);
     setCorrectFlashId(Date.now());
     setIncorrectFlashId(0);
+    setDuplicateFlashId(0);
     setInput("");
     advanceAfterResolved(item);
   }
@@ -716,6 +720,7 @@ export function useMapReview(
     rememberResolved(item);
     setIncorrectFlashId(Date.now());
     setCorrectFlashId(0);
+    setDuplicateFlashId(0);
     setInput("");
     advanceAfterResolved(item);
   }
@@ -724,29 +729,39 @@ export function useMapReview(
     if (mode === MAP_MODE_TYPE_PROMPT) {
       if (currentPromptItem && itemMatchesInput(currentPromptItem, input)) {
         markFound(currentPromptItem, input);
+        return true;
       } else if (input.trim()) {
         recordAnswer(currentPromptItem, input);
         setIncorrectFlashId(Date.now());
         setCorrectFlashId(0);
-        setInput("");
+        return false;
       }
 
-      return;
+      return null;
     }
 
-    if (mode !== MAP_MODE_TYPE_ALL) return;
+    if (mode !== MAP_MODE_TYPE_ALL) return null;
 
     const match = reviewZones.find(item => itemMatchesInput(item, input));
 
     if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match, input);
+      return true;
+    } else if (match) {
+      setDuplicateFlashId(Date.now());
+      setCorrectFlashId(0);
+      setIncorrectFlashId(0);
+      return "duplicate";
     } else if (input.trim()) {
       recordAnswer(null, input);
       setIncorrectFlashId(Date.now());
       setCorrectFlashId(0);
+      setDuplicateFlashId(0);
+      return false;
     }
 
     setInput("");
+    return null;
   }
 
   function handleZoneSelect(code) {
@@ -908,7 +923,14 @@ export function useMapReview(
     : 0;
   const isIncorrectFlash = incorrectFlashId > 0;
   const isCorrectFlash = correctFlashId > 0;
-  const feedbackTone = isIncorrectFlash ? "incorrect" : isCorrectFlash ? "correct" : null;
+  const isDuplicateFlash = duplicateFlashId > 0;
+  const feedbackTone = isDuplicateFlash
+    ? "duplicate"
+    : isIncorrectFlash
+      ? "incorrect"
+      : isCorrectFlash
+        ? "correct"
+        : null;
   const recapSubmittedQualities = Object.values(qualityByQuestionId)
     .filter(q => q !== MAP_RECAP_UNANSWERED);
   const recapSuccessCount = recapSubmittedQualities

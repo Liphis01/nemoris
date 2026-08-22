@@ -56,6 +56,10 @@
   }
 }
 
+.review-input-shake {
+  animation: answer-shake 0.4s ease;
+}
+
 /* Calendar detail panel: opening a group slides the recap in from the right,
    "← Retour" slides the day list back in from the left. */
 @keyframes calendar-panel-forward {
@@ -114,6 +118,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .review-input-shake,
   .calendar-panel-forward,
   .calendar-panel-back,
   .calendar-recap-row {
