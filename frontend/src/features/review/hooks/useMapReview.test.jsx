@@ -232,6 +232,67 @@ describe("useMapReview recap sorting", () => {
     expect(onAnsweringComplete).not.toHaveBeenCalled();
   });
 
+  it("allows finishing after a wrong typed attempt even when no zone was found", () => {
+    const onAnsweringComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), { onAnsweringComplete })
+    );
+
+    act(() => {
+      result.current.setInput("wrong");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishMap()).toBe(true);
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+    expect(onAnsweringComplete).toHaveBeenCalledWith([1, 2]);
+  });
+
+  it("allows finishing type_prompt after a wrong typed attempt with no found zones", () => {
+    const onAnsweringComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "type_prompt",
+        onAnsweringComplete
+      })
+    );
+
+    act(() => {
+      result.current.setInput("wrong");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishMap()).toBe(true);
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+    expect(onAnsweringComplete).toHaveBeenCalledWith([1, 2]);
+  });
+
   it("allows partial finish when that mode explicitly permits non-answers", () => {
     const onAnsweringComplete = vi.fn();
     const reviewZones = [

@@ -313,6 +313,7 @@ export function useMapReview(
   // What the learner actually typed/clicked/picked per zone, for M0 0.1
   // (storing the given answer). Keyed like qualityByQuestionId.
   const [answerByQuestionId, setAnswerByQuestionId] = useState({});
+  const [hasAttemptedAnswer, setHasAttemptedAnswer] = useState(false);
   const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
   const [remainingFocusCode, setRemainingFocusCode] = useState(null);
@@ -345,6 +346,7 @@ export function useMapReview(
     setShowRecap(false);
     setQualityByQuestionId({});
     setAnswerByQuestionId({});
+    setHasAttemptedAnswer(false);
     setCandidateIdsByQuestionId({});
     setFocusedCode(null);
     setRemainingFocusCode(null);
@@ -583,6 +585,7 @@ export function useMapReview(
       setResolvedQuestionIds([]);
       setQualityByQuestionId({});
       setAnswerByQuestionId({});
+      setHasAttemptedAnswer(false);
       setCandidateIdsByQuestionId({});
       setFocusedCode(null);
       setRemainingFocusCode(null);
@@ -684,6 +687,10 @@ export function useMapReview(
   }
 
   function recordAnswer(item, guess) {
+    if (guess !== undefined && guess !== null && String(guess).trim()) {
+      setHasAttemptedAnswer(true);
+    }
+
     if (!item || guess === undefined || guess === null) return;
 
     setAnswerByQuestionId(prev => ({ ...prev, [item.question_id]: guess }));
@@ -718,6 +725,7 @@ export function useMapReview(
       if (currentPromptItem && itemMatchesInput(currentPromptItem, input)) {
         markFound(currentPromptItem, input);
       } else if (input.trim()) {
+        recordAnswer(currentPromptItem, input);
         setIncorrectFlashId(Date.now());
         setCorrectFlashId(0);
         setInput("");
@@ -733,6 +741,7 @@ export function useMapReview(
     if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match, input);
     } else if (input.trim()) {
+      recordAnswer(null, input);
       setIncorrectFlashId(Date.now());
       setCorrectFlashId(0);
     }
@@ -825,7 +834,7 @@ export function useMapReview(
 
   function finishMap() {
     if (!(reviewZones.length > 0 && (
-      allowPartialSubmit || completedQuestionIdSet.size > 0
+      allowPartialSubmit || hasAttemptedAnswer || completedQuestionIdSet.size > 0
     ))) {
       return false;
     }
@@ -892,7 +901,7 @@ export function useMapReview(
     ? resolvedQuestionIds.length
     : foundQuestionIds.length;
   const canFinishReview = reviewZones.length > 0 && (
-    allowPartialSubmit || completedCount > 0
+    allowPartialSubmit || hasAttemptedAnswer || completedCount > 0
   );
   const progressPercent = reviewZones.length
     ? (completedCount / reviewZones.length) * 100

@@ -442,6 +442,7 @@ export function useMediaReview(
   // What the learner actually typed/picked per item, for M0 0.1 (storing the
   // given answer). Keyed like qualityByQuestionId.
   const [answerByQuestionId, setAnswerByQuestionId] = useState({});
+  const [hasAttemptedAnswer, setHasAttemptedAnswer] = useState(false);
   const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
   const [interactionFeedback, setInteractionFeedback] = useState(null);
@@ -458,6 +459,7 @@ export function useMediaReview(
     setRevealedQuestionIds([]);
     setQualityByQuestionId({});
     setAnswerByQuestionId({});
+    setHasAttemptedAnswer(false);
     setCandidateIdsByQuestionId({});
     setFeedbackTone(null);
     setInteractionFeedback(null);
@@ -566,7 +568,7 @@ export function useMediaReview(
     : foundQuestionIdSet;
   const completedCount = completedQuestionIdSet.size;
   const canFinishReview = sessionItems.length > 0 && (
-    allowPartialSubmit || completedCount > 0
+    allowPartialSubmit || hasAttemptedAnswer || completedCount > 0
   );
   const answeredCount = foundQuestionIds.length;
   const wrongAnsweredCount = resultMode
@@ -705,6 +707,10 @@ export function useMediaReview(
   }
 
   function recordAnswer(item, guess) {
+    if (guess !== undefined && guess !== null && String(guess).trim()) {
+      setHasAttemptedAnswer(true);
+    }
+
     if (!item || guess === undefined || guess === null) return;
 
     setAnswerByQuestionId(prev => ({ ...prev, [item.question_id]: guess }));
@@ -787,6 +793,7 @@ export function useMediaReview(
       setRevealedQuestionIds([]);
       setQualityByQuestionId({});
       setAnswerByQuestionId({});
+      setHasAttemptedAnswer(false);
       setCandidateIdsByQuestionId({});
       setFeedbackTone(null);
       setInteractionFeedback(null);
@@ -833,6 +840,7 @@ export function useMediaReview(
       if (currentPromptItem && matchesImageAnswer(currentPromptItem, input)) {
         markFound(currentPromptItem, input);
       } else if (input.trim()) {
+        recordAnswer(currentPromptItem, input);
         setFeedbackTone("incorrect");
       }
 
@@ -846,6 +854,7 @@ export function useMediaReview(
     if (match && !foundQuestionIdSet.has(match.question_id)) {
       markFound(match, input);
     } else if (input.trim()) {
+      recordAnswer(null, input);
       setFeedbackTone("incorrect");
     }
   }

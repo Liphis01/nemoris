@@ -250,6 +250,72 @@ describe("useMediaReview", () => {
     expect(onAnsweringComplete).not.toHaveBeenCalled();
   });
 
+  it("allows finishing after a wrong typed attempt even when no image was found", () => {
+    const onAnsweringComplete = vi.fn();
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_ALL,
+        onAnsweringComplete
+      })
+    );
+
+    act(() => {
+      result.current.setInput("wrong");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishReview()).toBe(true);
+    });
+
+    expect(result.current.resultMode).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+    expect(onAnsweringComplete.mock.calls[0][0].sort((a, b) => a - b))
+      .toEqual([1, 2]);
+  });
+
+  it("allows finishing type_prompt after a wrong typed attempt with no found images", () => {
+    const onAnsweringComplete = vi.fn();
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_PROMPT,
+        onAnsweringComplete
+      })
+    );
+
+    act(() => {
+      result.current.setInput("wrong");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishReview()).toBe(true);
+    });
+
+    expect(result.current.resultMode).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+    expect(onAnsweringComplete.mock.calls[0][0].sort((a, b) => a - b))
+      .toEqual([1, 2]);
+  });
+
   it("allows partial finish when that mode explicitly permits non-answers", () => {
     const onAnsweringComplete = vi.fn();
     const items = [

@@ -25,7 +25,6 @@
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 - on peut pas faire terminer sur type prompt si on a pas au moins une bonne réponse
-- si j'ai bien répondu mais que je change au recap en erreur, ça ne me le repropose pas dans le relearning
 
 ## quick fixes
 
