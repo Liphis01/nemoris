@@ -472,8 +472,7 @@ function AppContent() {
 
   const openPackInCatalog = useCallback((pack) => {
     setPackOpenTarget({
-      guid: pack?.pack_guid || null,
-      search: pack?.name || ""
+      guid: pack?.pack_guid || null
     });
     navigateMode("packs");
   }, [navigateMode]);
@@ -621,7 +620,6 @@ function AppContent() {
             onOpenGroup={openGroupIdInManage}
             onOpenStudy={openStudyScope}
             initialPackGuid={packOpenTarget?.guid || null}
-            initialSearch={packOpenTarget?.search || ""}
             onInitialPackHandled={clearPackOpenTarget}
           />
         )}

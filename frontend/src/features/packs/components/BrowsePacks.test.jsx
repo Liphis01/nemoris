@@ -298,6 +298,37 @@ describe("BrowsePacks", () => {
     );
   });
 
+  it("selects a menu-targeted pack without using the search input", () => {
+    const onInitialPackHandled = vi.fn();
+    defaultHook();
+
+    render(
+      <BrowsePacks
+        setMode={vi.fn()}
+        initialPackGuid="biology-text"
+        onInitialPackHandled={onInitialPackHandled}
+      />
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Rechercher un pack" }))
+      .toHaveValue("");
+    expect(screen.queryByText("Pack sélectionné")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Désélectionner" }))
+      .not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("complementary", { name: "Détail du pack" }))
+        .getByRole("heading", { name: "Biologie cellulaire" })
+    ).toBeInTheDocument();
+    expect(useBrowsePacks).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: "",
+        sort: "populaires",
+        theme: POPULAR_THEME
+      })
+    );
+    expect(onInitialPackHandled).toHaveBeenCalledTimes(1);
+  });
+
   it("loads the next catalogue page", async () => {
     const hook = defaultHook();
     render(<BrowsePacks setMode={vi.fn()} />);

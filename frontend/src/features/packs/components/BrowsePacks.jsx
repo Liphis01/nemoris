@@ -675,8 +675,11 @@ function ImporterScreen({
   } = useBrowsePacks(filters);
 
   const themes = facets?.themes || [];
+  const activeItem = activeGuid
+    ? items.find((item) => item.entry.pack_guid === activeGuid)
+    : null;
   const selectedItem = (
-    items.find((item) => item.entry.pack_guid === activeGuid) ||
+    activeItem ||
     items[0] ||
     null
   );
