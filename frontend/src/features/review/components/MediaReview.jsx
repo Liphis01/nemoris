@@ -236,6 +236,69 @@ const inputStyle = {
   fontSize: "14px"
 };
 
+const typedRatingPanelStyle = {
+  alignItems: "center",
+  background: "#121212",
+  border: "1px solid #2a2a2a",
+  borderRadius: "10px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px 14px",
+  justifyContent: "space-between",
+  marginBottom: "12px",
+  padding: "10px 12px"
+};
+
+const typedRatingCopyStyle = {
+  alignItems: "center",
+  display: "flex",
+  flex: "1 1 180px",
+  gap: "8px",
+  minWidth: 0
+};
+
+const typedRatingKickerStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const typedRatingAnswerStyle = {
+  color: "#dbeafe",
+  fontSize: "13px",
+  fontWeight: 800,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const typedRatingControlsStyle = {
+  display: "flex",
+  flex: "0 0 auto",
+  flexWrap: "wrap",
+  gap: "8px",
+  justifyContent: "flex-end"
+};
+
+const typedRatingButtonStyle = {
+  ...buttonStyle,
+  alignItems: "center",
+  background: "#181818",
+  display: "inline-flex",
+  gap: "8px",
+  minHeight: "36px",
+  padding: "8px 11px"
+};
+
+const typedRatingIntervalStyle = {
+  color: "#8a8a8a",
+  fontSize: "12px",
+  fontWeight: 700
+};
+
 const answerTooltipGap = 8;
 const answerTooltipGutter = 12;
 const answerTooltipMaxWidth = 360;
@@ -847,6 +910,7 @@ export default function MediaReview({
     promptLabel,
     qualityByQuestionId = {},
     rateChoice = () => {},
+    rateTypedAnswer = () => {},
     recapMissCount,
     recapRows = [],
     recapSort = { key: null, direction: "asc" },
@@ -865,11 +929,13 @@ export default function MediaReview({
     setQuality,
     skipCurrentPrompt,
     toggleRecapSort = () => {},
+    typedRatingFeedback,
     wrongAnsweredCount
   } = useMediaReview(reviewItems, onComplete, submitAnswer, {
     allowPartialSubmit,
     contextItems,
     inlineChoiceRating: showQualityControls,
+    inlineTypedRating: showQualityControls,
     mode: requestedMode,
     onAnsweringComplete,
     group,
@@ -915,8 +981,12 @@ export default function MediaReview({
     separateResolvedItems &&
     normalizedMode === IMAGE_MODE_TYPE_PROMPT
   );
+  const typedRatingQuestionId = typedRatingFeedback?.questionId || null;
   const activeGridItems = shouldSeparateResolvedItems
-    ? gridItems.filter(row => !resolvedQuestionIdOrder.has(row.item.question_id))
+    ? gridItems.filter(row =>
+      !resolvedQuestionIdOrder.has(row.item.question_id) ||
+      row.item.question_id === typedRatingQuestionId
+    )
     : gridItems;
   const promptImageRow = showPromptImageBoard
     ? activeGridItems.find(row => row.item.question_id === activeQuestionId) ||
@@ -928,7 +998,10 @@ export default function MediaReview({
     : null;
   const resolvedGridItems = shouldSeparateResolvedItems
     ? gridItems
-      .filter(row => resolvedQuestionIdOrder.has(row.item.question_id))
+      .filter(row =>
+        resolvedQuestionIdOrder.has(row.item.question_id) &&
+        row.item.question_id !== typedRatingQuestionId
+      )
       .sort((left, right) => (
         resolvedQuestionIdOrder.get(left.item.question_id) -
         resolvedQuestionIdOrder.get(right.item.question_id)
@@ -1048,6 +1121,20 @@ export default function MediaReview({
     showQualityControls &&
     (showLabelChoices || showImageChoiceBoard)
   );
+  const showTypedRating = (
+    showTextInput &&
+    !resultMode &&
+    Boolean(typedRatingFeedback) &&
+    showQualityControls
+  );
+  const typedRatingItem = typedRatingFeedback?.item || null;
+  const typedRatingItemRelearning = Boolean(
+    typedRatingItem && isRelearningGroupItem(group, typedRatingItem)
+  );
+  const typedRatingOptions = typedRatingItemRelearning
+    ? acquisOnlyOptions
+    : choiceQualityOptions;
+  const typedRatingDefaultQuality = typedRatingItemRelearning ? GOT_IT_QUALITY : 2;
   // Training has no quality buttons to fill the freed slots, so instead of leaving
   // dead space beside the lone surviving tile, center the surviving answer(s) in
   // the row.
@@ -1484,6 +1571,38 @@ export default function MediaReview({
 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showChoiceRating, interactionFeedback, previewRow, rateChoice]);
+
+  // Keyboard grading for typed recall mirrors QCM: 1/2/3 grade explicitly, and
+  // Enter keeps the fast default on "Bon".
+  useEffect(() => {
+    if (!showTypedRating || previewRow) return undefined;
+
+    function handleTypedRatingKeyDown(event) {
+      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+      const quality = ["1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality !== null) {
+        event.preventDefault();
+        rateTypedAnswer(quality);
+        focusAnswerInput();
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateTypedAnswer(typedRatingDefaultQuality);
+        focusAnswerInput();
+      }
+    }
+
+    window.addEventListener("keydown", handleTypedRatingKeyDown);
+
+    return () => window.removeEventListener("keydown", handleTypedRatingKeyDown);
+  }, [focusAnswerInput, previewRow, rateTypedAnswer, showTypedRating, typedRatingDefaultQuality]);
 
   // Quick answer: number keys pick the matching option before the reveal,
   // mirroring the keyboard flow of text review (Enter reveals, digits grade).
@@ -2981,7 +3100,17 @@ export default function MediaReview({
 	              ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
+              readOnly={showTypedRating}
 	              onKeyDown={(event) => {
+                if (showTypedRating) {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    rateTypedAnswer(typedRatingDefaultQuality);
+                    focusAnswerInput();
+                  }
+                  return;
+                }
+
 	                if (event.key === "Enter") {
 		                  event.preventDefault();
 		                  const matched = handleSubmit();
@@ -3011,6 +3140,47 @@ export default function MediaReview({
 	                    : "none"
               }}
             />
+          </div>
+        )}
+
+        {showTypedRating && typedRatingItem && (
+          <div data-image-typed-rating style={typedRatingPanelStyle}>
+            <div style={typedRatingCopyStyle}>
+              <span style={typedRatingKickerStyle}>Qualité</span>
+              <span style={typedRatingAnswerStyle}>
+                {answerLabel(typedRatingItem)}
+              </span>
+            </div>
+            <div style={typedRatingControlsStyle}>
+              {typedRatingOptions.map(option => {
+                const interval = typedRatingItemRelearning
+                  ? typedRatingItem.relearning_interval
+                  : projectedIntervalForImage(typedRatingItem, option.value);
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    data-image-typed-quality={option.value}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      rateTypedAnswer(option.value);
+                      focusAnswerInput();
+                    }}
+                    style={typedRatingButtonStyle}
+                    title={option.title}
+                  >
+                    <span aria-hidden="true" style={keyCapStyle}>
+                      {option.value}
+                    </span>
+                    <span>{option.title}</span>
+                    {Number(interval) > 0 && (
+                      <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

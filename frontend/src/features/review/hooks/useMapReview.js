@@ -298,6 +298,10 @@ export function useMapReview(
   // Review grades each QCM pick inline (reveal + quality) then auto-submits the
   // group when the last zone is rated. Training keeps the legacy flash + recap.
   const inlineChoiceRating = Boolean(options.inlineChoiceRating) && mode === MAP_MODE_MULTIPLE_CHOICE;
+  const inlineTypedRating = Boolean(options.inlineTypedRating) && (
+    mode === MAP_MODE_TYPE_ALL ||
+    mode === MAP_MODE_TYPE_PROMPT
+  );
   const contextItems = options.contextItems?.length
     ? options.contextItems
     : reviewZones;
@@ -322,6 +326,7 @@ export function useMapReview(
   const [correctFlashId, setCorrectFlashId] = useState(0);
   const [duplicateFlashId, setDuplicateFlashId] = useState(0);
   const [choiceFeedback, setChoiceFeedback] = useState(null);
+  const [typedRatingFeedback, setTypedRatingFeedback] = useState(null);
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
@@ -356,6 +361,7 @@ export function useMapReview(
     setCorrectFlashId(0);
     setDuplicateFlashId(0);
     setChoiceFeedback(null);
+    setTypedRatingFeedback(null);
     setZoneFeedback(null);
     setRecapSort(initialRecapSort);
     setActivePromptQuestionId(null);
@@ -610,6 +616,7 @@ export function useMapReview(
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
     if (mode === MAP_MODE_MULTIPLE_CHOICE && choiceFeedback) return;
+    if (typedRatingFeedback) return;
 
     const allZonesComplete = reviewZones.every(item =>
       completedQuestionIdSet.has(item.question_id)
@@ -640,7 +647,8 @@ export function useMapReview(
     qualityByQuestionId,
     resolvedQuestionIdSet,
     reviewZones,
-    showRecap
+    showRecap,
+    typedRatingFeedback
   ]);
 
   function rememberFound(item) {
@@ -674,6 +682,7 @@ export function useMapReview(
   }
 
   function selectNextPrompt(direction = 1) {
+    if (typedRatingFeedback) return;
     if (!isPromptMode || !currentPromptItem) return;
 
     const target = nextUnresolvedMapItem(
@@ -710,6 +719,16 @@ export function useMapReview(
     setIncorrectFlashId(0);
     setDuplicateFlashId(0);
     setInput("");
+
+    if (inlineTypedRating) {
+      setTypedRatingFeedback({
+        id: Date.now(),
+        item,
+        questionId: item.question_id
+      });
+      return;
+    }
+
     advanceAfterResolved(item);
   }
 
@@ -726,6 +745,8 @@ export function useMapReview(
   }
 
   function handleSubmit() {
+    if (typedRatingFeedback) return null;
+
     if (mode === MAP_MODE_TYPE_PROMPT) {
       if (currentPromptItem && itemMatchesInput(currentPromptItem, input)) {
         markFound(currentPromptItem, input);
@@ -824,6 +845,7 @@ export function useMapReview(
   }
 
   function skipCurrentPrompt() {
+    if (typedRatingFeedback) return;
     selectNextPrompt(1);
   }
 
@@ -848,7 +870,7 @@ export function useMapReview(
   }
 
   function finishMap() {
-    if (!(reviewZones.length > 0 && (
+    if (typedRatingFeedback || !(reviewZones.length > 0 && (
       allowPartialSubmit || hasAttemptedAnswer || completedQuestionIdSet.size > 0
     ))) {
       return false;
@@ -878,6 +900,18 @@ export function useMapReview(
     }
 
     setChoiceFeedback(null);
+  }
+
+  function rateTypedAnswer(quality = 2) {
+    if (!typedRatingFeedback || !inlineTypedRating) return;
+
+    const nextQuality = Number(quality);
+
+    if (![1, 2, 3].includes(nextQuality)) return;
+
+    setQuality(typedRatingFeedback.questionId, nextQuality);
+    setTypedRatingFeedback(null);
+    advanceAfterResolved(typedRatingFeedback.item);
   }
 
   function setQuality(id, quality) {
@@ -917,7 +951,7 @@ export function useMapReview(
     : foundQuestionIds.length;
   const canFinishReview = reviewZones.length > 0 && (
     allowPartialSubmit || hasAttemptedAnswer || completedCount > 0
-  );
+  ) && !typedRatingFeedback;
   const progressPercent = reviewZones.length
     ? (completedCount / reviewZones.length) * 100
     : 0;
@@ -1006,12 +1040,17 @@ export function useMapReview(
     : choiceOptions;
   const visibleDueCodes = activeChoiceFeedback?.correctCode
     ? [activeChoiceFeedback.correctCode]
+    : typedRatingFeedback?.item?.code
+      ? [typedRatingFeedback.item.code]
     : dueCodes;
   const targetHighlightCode = (
     mode === MAP_MODE_TYPE_PROMPT ||
     mode === MAP_MODE_MULTIPLE_CHOICE
   )
-    ? activeChoiceFeedback?.correctCode || currentPromptItem?.code || null
+    ? activeChoiceFeedback?.correctCode ||
+      typedRatingFeedback?.item?.code ||
+      currentPromptItem?.code ||
+      null
     : null;
   const selectedCode = activeChoiceFeedback ? null : targetHighlightCode;
 
@@ -1042,6 +1081,7 @@ export function useMapReview(
     promptCode: currentPromptItem?.code || null,
     promptLabel: currentPromptItem?.label || "",
     rateChoice,
+    rateTypedAnswer,
     recapMissCount,
     recapRows,
     recapSort,
@@ -1063,6 +1103,7 @@ export function useMapReview(
     showRecap,
     showRecapSections: hasCorrectRecapRows && hasWrongRecapRows,
     skipCurrentPrompt,
+    typedRatingFeedback,
     toggleRecapSort
   };
 }

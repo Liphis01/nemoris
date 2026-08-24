@@ -211,6 +211,55 @@ describe("useMapReview recap sorting", () => {
     expect(onComplete).toHaveBeenCalledWith([2]);
   });
 
+  it("asks for inline quality after a correct typed map answer", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, onComplete, submitAnswer, {
+        inlineTypedRating: true,
+        mode: "type_all"
+      })
+    );
+
+    act(() => {
+      result.current.setInput("Alpha");
+    });
+    act(() => {
+      expect(result.current.handleSubmit()).toBe(true);
+    });
+
+    expect(result.current.typedRatingFeedback?.questionId).toBe(1);
+    expect(result.current.showRecap).toBe(false);
+    expect(result.current.canFinishReview).toBe(false);
+    expect(result.current.qualityByQuestionId[1]).toBeUndefined();
+
+    act(() => {
+      result.current.rateTypedAnswer(3);
+    });
+
+    expect(result.current.typedRatingFeedback).toBeNull();
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.qualityByQuestionId[1]).toBe(3);
+
+    act(() => {
+      result.current.setQuality(1, 1);
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { 1: 1 },
+      "type_all",
+      1,
+      { 1: "Alpha" },
+      { 1: [1] }
+    );
+    expect(onComplete).toHaveBeenCalledWith([]);
+  });
+
   it("refuses to finish before any zone has been attempted", () => {
     const onAnsweringComplete = vi.fn();
     const reviewZones = [

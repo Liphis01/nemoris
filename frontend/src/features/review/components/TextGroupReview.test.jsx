@@ -50,6 +50,84 @@ describe("TextGroupReview reverse mode", () => {
   });
 });
 
+describe("TextGroupReview inline typed quality", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  function renderTypedGroup(submitAnswer) {
+    return render(
+      <TextGroupReview
+        group={{ type_group: "text" }}
+        reviewItems={[{
+          question_id: 1,
+          question: "chat",
+          answer: "cat",
+          answer_policy: { preset: "relaxed" },
+          progress: {}
+        }]}
+        mode="type_all"
+        submitAnswer={submitAnswer}
+        onComplete={vi.fn()}
+      />
+    );
+  }
+
+  it("asks inline quality after a correct typed answer and keeps recap editable", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    const { container } = renderTypedGroup(submitAnswer);
+
+    const input = screen.getByPlaceholderText("Réponse…");
+    fireEvent.change(input, { target: { value: "cat" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(container.querySelector("[data-text-typed-rating]")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-text-typed-quality]")).toHaveLength(3);
+    expect(submitAnswer).not.toHaveBeenCalled();
+
+    fireEvent.click(container.querySelector("[data-text-typed-quality='3']"));
+
+    expect(await screen.findByRole("button", { name: "Valider" }))
+      .toBeInTheDocument();
+
+    fireEvent.click(container.querySelector("[data-text-recap-quality='1']"));
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { 1: 1 },
+        "type_all",
+        1,
+        { 1: "cat" },
+        { 1: [1] }
+      );
+    });
+  });
+
+  it("uses Enter as the inline Bon default", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    renderTypedGroup(submitAnswer);
+
+    const input = screen.getByPlaceholderText("Réponse…");
+    fireEvent.change(input, { target: { value: "cat" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
+
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { 1: 2 },
+        "type_all",
+        1,
+        { 1: "cat" },
+        { 1: [1] }
+      );
+    });
+  });
+});
+
 
 describe("TextGroupReview completion guard", () => {
   afterEach(() => {

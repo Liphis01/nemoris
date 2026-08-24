@@ -66,6 +66,14 @@ function choiceButtonName(label) {
   return new RegExp(`Choix \\d+ : ${label}`);
 }
 
+function rateTypedMapQuality(quality = 2) {
+  const button = document.querySelector(`[data-map-typed-quality="${quality}"]`);
+
+  if (button) {
+    fireEvent.click(button);
+  }
+}
+
 describe("MapReview recap map focus", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -683,6 +691,7 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(2);
     fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
     await screen.findByRole("button", { name: "Valider" });
@@ -728,6 +737,7 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(2);
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -737,6 +747,42 @@ describe("MapReview recap map focus", () => {
     expect(input).not.toHaveClass("review-input-shake");
     expect(input.selectionStart).toBe(0);
     expect(input.selectionEnd).toBe("Alpha".length);
+  });
+
+  it("asks inline quality after a correct typed zone and uses Enter for Bon", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+
+    renderMapReview(true, {
+      mode: "type_all",
+      submitAnswer
+    });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(document.querySelector("[data-map-typed-rating]")).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-map-typed-quality]")).toHaveLength(3);
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-map-typed-rating]")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
+
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { 1: 2, 2: 0 },
+        "type_all",
+        2,
+        { 1: "Alpha" },
+        { 1: [1, 2], 2: [1, 2] }
+      );
+    });
   });
 
   it("keeps the recap open with an error when validation cannot be saved", async () => {
@@ -751,6 +797,7 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(2);
     fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
     fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
 
@@ -771,6 +818,7 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(1);
     fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
     await screen.findByRole("button", { name: "Valider" });

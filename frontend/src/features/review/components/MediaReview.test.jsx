@@ -1010,6 +1010,37 @@ describe("MediaReview answer label preview", () => {
     expect(rateChoice).toHaveBeenCalledWith(2);
   });
 
+  it("asks inline quality after a correct typed image and uses Enter for Bon", () => {
+    const rateTypedAnswer = vi.fn();
+    const rows = [
+      imageGridRow(1, {
+        isFound: true,
+        quality: 2
+      })
+    ];
+    const { container } = renderMediaReviewWithState(typeAllHookState({
+      rows,
+      foundQuestionIds: [1],
+      hookOverrides: {
+        canFinishReview: false,
+        rateTypedAnswer,
+        typedRatingFeedback: {
+          item: rows[0].item,
+          questionId: 1
+        }
+      }
+    }));
+
+    expect(container.querySelector("[data-image-typed-rating]")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-image-typed-quality]")).toHaveLength(3);
+
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(rateTypedAnswer).toHaveBeenCalledWith(2);
+
+    fireEvent.click(container.querySelector("[data-image-typed-quality='3']"));
+    expect(rateTypedAnswer).toHaveBeenCalledWith(3);
+  });
+
   it("collapses the choice rating to a single Acquis for a relearning card", () => {
     const rateChoice = vi.fn();
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];

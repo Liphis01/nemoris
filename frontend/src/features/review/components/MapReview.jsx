@@ -290,6 +290,7 @@ export default function MapReview({
     promptCode,
     promptLabel,
     rateChoice = () => {},
+    rateTypedAnswer = () => {},
     recapMissCount,
     recapRows,
     recapSort,
@@ -310,12 +311,14 @@ export default function MapReview({
     skipCurrentPrompt,
     submitError,
     submitting,
+    typedRatingFeedback,
     toggleRecapSort
   } = useMapReview(reviewZones, onComplete, submitAnswer, {
     allowPartialSubmit,
     mode: normalizedMode,
     contextItems,
     inlineChoiceRating: showQualityControls,
+    inlineTypedRating: showQualityControls,
     onAnsweringComplete,
     group,
     graduateAnswer,
@@ -379,6 +382,20 @@ export default function MapReview({
     : recapHeaderColumns.filter(column => column.key === "answer");
   const showTrainingTimer = trainingElapsedMs !== null && !showRecap;
   const showTextInput = mode === MAP_MODE_TYPE_ALL || mode === MAP_MODE_TYPE_PROMPT;
+  const showTypedRating = (
+    showTextInput &&
+    !showRecap &&
+    Boolean(typedRatingFeedback) &&
+    showQualityControls
+  );
+  const typedRatingItem = typedRatingFeedback?.item || null;
+  const typedRatingItemRelearning = Boolean(
+    typedRatingItem && isRelearningGroupItem(group, typedRatingItem)
+  );
+  const typedRatingOptions = typedRatingItemRelearning
+    ? acquisOnlyOptions
+    : choiceQualityOptions;
+  const typedRatingDefaultQuality = typedRatingItemRelearning ? GOT_IT_QUALITY : 2;
   const showPromptPanel = (
     mode !== MAP_MODE_TYPE_ALL &&
     mode !== MAP_MODE_TYPE_PROMPT &&
@@ -669,6 +686,40 @@ export default function MapReview({
       window.removeEventListener("keydown", handleChoiceRatingKeyDown);
     };
   }, [showChoiceRating, choiceFeedback, rateChoice]);
+
+  // Keyboard grading for typed recall: after a correct typed answer, Enter keeps
+  // the fast path on the default "Bon" grade while 1/2/3 lets the learner adjust.
+  useEffect(() => {
+    if (!showTypedRating) return undefined;
+
+    function handleTypedRatingKeyDown(event) {
+      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+      const quality = ["1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality !== null) {
+        event.preventDefault();
+        rateTypedAnswer(quality);
+        inputRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateTypedAnswer(typedRatingDefaultQuality);
+        inputRef.current?.focus({ preventScroll: true });
+      }
+    }
+
+    window.addEventListener("keydown", handleTypedRatingKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleTypedRatingKeyDown);
+    };
+  }, [rateTypedAnswer, showTypedRating, typedRatingDefaultQuality]);
 
   // Quick answer: number keys pick the matching option before the reveal,
   // mirroring the keyboard flow of text review (Enter reveals, digits grade).
@@ -1051,7 +1102,17 @@ export default function MapReview({
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              readOnly={showTypedRating}
               onKeyDown={(e) => {
+                if (showTypedRating) {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    rateTypedAnswer(typedRatingDefaultQuality);
+                    inputRef.current?.focus({ preventScroll: true });
+                  }
+                  return;
+                }
+
                 if (e.key === "Tab" && mode === MAP_MODE_TYPE_PROMPT) {
                   e.preventDefault();
                   selectNextPrompt(e.shiftKey ? -1 : 1);
@@ -1079,7 +1140,7 @@ export default function MapReview({
 	                    : feedbackTone === "duplicate"
 	                      ? "1px solid rgba(250, 204, 21, 0.85)"
 	                      : inputStyle.border,
-	                boxShadow: feedbackTone === "incorrect"
+                boxShadow: feedbackTone === "incorrect"
 	                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
 	                  : feedbackTone === "correct"
 	                    ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
@@ -1089,6 +1150,45 @@ export default function MapReview({
                 transition: "border 0.18s ease, box-shadow 0.18s ease"
               }}
             />
+          )}
+
+          {showTypedRating && typedRatingItem && (
+            <div data-map-typed-rating style={typedRatingPanelStyle}>
+              <div style={typedRatingCopyStyle}>
+                <span style={typedRatingKickerStyle}>Qualité</span>
+                <span style={typedRatingAnswerStyle}>{typedRatingItem.label || "Zone"}</span>
+              </div>
+              <div style={typedRatingControlsStyle}>
+                {typedRatingOptions.map(option => {
+                  const interval = typedRatingItemRelearning
+                    ? typedRatingItem.relearning_interval
+                    : typedRatingItem.projected_intervals?.[option.value];
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      data-map-typed-quality={option.value}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        rateTypedAnswer(option.value);
+                        inputRef.current?.focus({ preventScroll: true });
+                      }}
+                      style={typedRatingButtonStyle}
+                      title={option.title}
+                    >
+                      <span aria-hidden="true" style={choiceKeyBadgeStyle}>
+                        {option.value}
+                      </span>
+                      <span>{option.title}</span>
+                      {Number(interval) > 0 && (
+                        <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
@@ -1844,6 +1944,69 @@ const choiceFeedbackLabelStyle = {
   fontWeight: 900,
   padding: "3px 8px",
   textTransform: "uppercase"
+};
+
+const typedRatingPanelStyle = {
+  alignItems: "center",
+  background: "#121212",
+  border: "1px solid #2a2a2a",
+  borderRadius: "12px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px 14px",
+  justifyContent: "space-between",
+  marginTop: "10px",
+  padding: "10px 12px"
+};
+
+const typedRatingCopyStyle = {
+  alignItems: "center",
+  display: "flex",
+  flex: "1 1 180px",
+  gap: "8px",
+  minWidth: 0
+};
+
+const typedRatingKickerStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const typedRatingAnswerStyle = {
+  color: "#dbeafe",
+  fontSize: "13px",
+  fontWeight: 800,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const typedRatingControlsStyle = {
+  display: "flex",
+  flex: "0 0 auto",
+  flexWrap: "wrap",
+  gap: "8px",
+  justifyContent: "flex-end"
+};
+
+const typedRatingButtonStyle = {
+  ...buttonStyle,
+  alignItems: "center",
+  background: "#181818",
+  display: "inline-flex",
+  gap: "8px",
+  minHeight: "38px",
+  padding: "8px 11px"
+};
+
+const typedRatingIntervalStyle = {
+  color: "#8a8a8a",
+  fontSize: "12px",
+  fontWeight: 700
 };
 
 const overlayStyle = {

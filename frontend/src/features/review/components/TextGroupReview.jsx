@@ -33,6 +33,12 @@ const relearningButtonColors = {
   1: { background: "#203a2a", border: "1px solid #2c5c3e", color: "#7ee2a8" }
 };
 
+const typedQualityOptions = qualityOptions.filter(option => option.value > 0);
+
+const acquisOnlyOptions = relearningQualityOptions.filter(
+  option => option.value === GOT_IT_QUALITY
+);
+
 // One colour per matched pair, so crossing connector lines stay tellable apart.
 const pairPalette = [
   "#f87171",
@@ -67,6 +73,61 @@ const buttonStyle = {
   cursor: "pointer",
   fontWeight: 700,
   padding: "10px 16px"
+};
+
+const keyCapStyle = {
+  alignItems: "center",
+  background: "#0d0d0d",
+  border: "1px solid #363636",
+  borderRadius: "5px",
+  color: "#8a8a8a",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: 800,
+  height: "16px",
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "16px",
+  padding: "0 4px"
+};
+
+const textTypedRatingStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "7px 9px",
+  justifyContent: "space-between"
+};
+
+const textTypedRatingLabelStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const textTypedRatingControlsStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "6px",
+  justifyContent: "flex-end"
+};
+
+const textTypedRatingButtonStyle = {
+  alignItems: "center",
+  background: "#181818",
+  border: "1px solid #333",
+  borderRadius: "8px",
+  color: "#c9c9c9",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontSize: "12px",
+  fontWeight: 800,
+  gap: "6px",
+  minHeight: "30px",
+  padding: "6px 8px"
 };
 
 function itemAccepts(item, guess, reverse = false) {
@@ -125,6 +186,7 @@ export default function TextGroupReview({
   const [answersByQuestionId, setAnswersByQuestionId] = useState({});
   // recap
   const [qualities, setQualities] = useState({});
+  const [pendingQualityQuestionId, setPendingQualityQuestionId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [selectedRecapIndex, setSelectedRecapIndex] = useState(0);
 
@@ -158,20 +220,34 @@ export default function TextGroupReview({
     Object.keys(answersByQuestionId).length > 0 ||
     foundIds.size > 0 ||
     matchedIds.size > 0
-  );
+  ) && !(showQualityControls && pendingQualityQuestionId !== null);
+
+  const defaultPassQuality = useCallback((item) => {
+    return isRelearningGroupItem(group, item)
+      ? GOT_IT_QUALITY
+      : 2;
+  }, [group]);
 
   function finishAnswering() {
+    if (showQualityControls && !isMatch) {
+      const unratedFound = items.find(item =>
+        foundIds.has(item.question_id) &&
+        qualities[item.question_id] === undefined
+      );
+
+      if (unratedFound) {
+        setPendingQualityQuestionId(unratedFound.question_id);
+        return;
+      }
+    }
+
     const nextQualities = {};
 
     items.forEach(item => {
       const resolvedOk = isMatch
         ? matchedIds.has(item.question_id) && !failedIds.has(item.question_id)
         : foundIds.has(item.question_id);
-      // A relearning item collapses to the binary "Acquis" on success so the
-      // recap shows the two-way choice, not a graded one.
-      const passQuality = isRelearningGroupItem(group, item)
-        ? GOT_IT_QUALITY
-        : 2;
+      const passQuality = qualities[item.question_id] ?? defaultPassQuality(item);
 
       nextQualities[item.question_id] = resolvedOk ? passQuality : 0;
     });
@@ -252,6 +328,14 @@ export default function TextGroupReview({
 
     if (itemAccepts(item, typed, isReverse)) {
       setFoundIds(prev => new Set(prev).add(item.question_id));
+      if (showQualityControls) {
+        setPendingQualityQuestionId(item.question_id);
+      } else {
+        setQualities(prev => ({
+          ...prev,
+          [item.question_id]: defaultPassQuality(item)
+        }));
+      }
       setWrongShakeByQuestionId(prev => {
         if (!prev[item.question_id]) return prev;
         const next = { ...prev };
@@ -264,7 +348,7 @@ export default function TextGroupReview({
         delete next[item.question_id];
         return next;
       });
-      return true;
+      return showQualityControls ? "needs_quality" : true;
     }
 
     const duplicate = typed && items.some(candidate =>
@@ -295,7 +379,7 @@ export default function TextGroupReview({
     }
 
     return false;
-  }, [foundIds, inputs, isReverse, items]);
+  }, [defaultPassQuality, foundIds, inputs, isReverse, items, showQualityControls]);
 
   const handleInputKeyDown = useCallback((event, item, index) => {
     if (event.key !== "Enter") return;
@@ -308,11 +392,15 @@ export default function TextGroupReview({
       return;
     }
 
+    if (matched === "needs_quality") {
+      return;
+    }
+
     const next = items[index + 1];
     if (next) {
       inputRefs.current[next.question_id]?.focus();
     }
-  }, [checkTypedAnswer, items]);
+  }, [checkTypedAnswer, inputs, items]);
 
   // ---- match ----
   const handlePromptClick = useCallback((item) => {
@@ -396,12 +484,17 @@ export default function TextGroupReview({
   }, [isMatch, measureMatchLinks, phase]);
 
   useEffect(() => {
-    if (items.length > 0 && allResolved && phase === "answer") {
+    if (
+      items.length > 0 &&
+      allResolved &&
+      phase === "answer" &&
+      pendingQualityQuestionId === null
+    ) {
       finishAnswering();
     }
     // finishAnswering reads current state each render; the guard makes it fire once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allResolved, items.length, phase]);
+  }, [allResolved, items.length, pendingQualityQuestionId, phase]);
 
   useEffect(() => {
     if (Object.keys(wrongShakeByQuestionId).length === 0) return undefined;
@@ -416,6 +509,80 @@ export default function TextGroupReview({
   const setItemQuality = useCallback((questionId, quality) => {
     setQualities(prev => ({ ...prev, [questionId]: quality }));
   }, []);
+
+  const ratePendingTypedQuality = useCallback((quality = 2) => {
+    if (pendingQualityQuestionId === null) return;
+
+    const item = items.find(candidate =>
+      candidate.question_id === pendingQualityQuestionId
+    );
+    if (!item) return;
+
+    const nextQuality = Number(quality);
+    const allowedQualities = isRelearningGroupItem(group, item)
+      ? [GOT_IT_QUALITY]
+      : [1, 2, 3];
+
+    if (!allowedQualities.includes(nextQuality)) return;
+
+    setQualities(prev => ({
+      ...prev,
+      [pendingQualityQuestionId]: nextQuality
+    }));
+    setPendingQualityQuestionId(null);
+
+    const currentIndex = items.findIndex(candidate =>
+      candidate.question_id === pendingQualityQuestionId
+    );
+    const nextItem = items
+      .slice(currentIndex + 1)
+      .find(candidate => !foundIds.has(candidate.question_id));
+
+    if (nextItem) {
+      window.requestAnimationFrame(() => {
+        inputRefs.current[nextItem.question_id]?.focus();
+      });
+    }
+  }, [foundIds, group, items, pendingQualityQuestionId]);
+
+  useEffect(() => {
+    if (phase !== "answer" || pendingQualityQuestionId === null) {
+      return undefined;
+    }
+
+    const pendingItem = items.find(item =>
+      item.question_id === pendingQualityQuestionId
+    );
+
+    function handleKeyDown(event) {
+      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+      const quality = ["1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality !== null) {
+        event.preventDefault();
+        ratePendingTypedQuality(quality);
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        ratePendingTypedQuality(pendingItem ? defaultPassQuality(pendingItem) : 2);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    defaultPassQuality,
+    items,
+    pendingQualityQuestionId,
+    phase,
+    ratePendingTypedQuality
+  ]);
 
   // Keyboard: up/down to move through the rows, 0-3 to grade the selected one.
   useEffect(() => {
@@ -770,6 +937,11 @@ export default function TextGroupReview({
       >
         {items.map((item, index) => {
           const found = foundIds.has(item.question_id);
+          const pendingQuality = pendingQualityQuestionId === item.question_id;
+          const relearning = isRelearningGroupItem(group, item);
+          const inlineQualityOptions = relearning
+            ? acquisOnlyOptions
+            : typedQualityOptions;
 
           return (
             <div
@@ -798,8 +970,32 @@ export default function TextGroupReview({
                 <RichText>{isReverse ? item.answer : item.question}</RichText>
               </div>
               {found ? (
-                <div style={{ color: "#7ee2a8", fontWeight: 700 }}>
-                  <RichText>{isReverse ? item.question : item.answer}</RichText>
+                <div style={{ display: "grid", gap: "8px", minWidth: 0 }}>
+                  <div style={{ color: "#7ee2a8", fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <RichText>{isReverse ? item.question : item.answer}</RichText>
+                  </div>
+                  {pendingQuality && (
+                    <div data-text-typed-rating style={textTypedRatingStyle}>
+                      <span style={textTypedRatingLabelStyle}>Qualité</span>
+                      <div style={textTypedRatingControlsStyle}>
+                        {inlineQualityOptions.map(option => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            data-text-typed-quality={option.value}
+                            onClick={() => ratePendingTypedQuality(option.value)}
+                            style={textTypedRatingButtonStyle}
+                            title={option.title}
+                          >
+                            <span aria-hidden="true" style={keyCapStyle}>
+                              {option.value}
+                            </span>
+                            <span>{option.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: "5px" }}>

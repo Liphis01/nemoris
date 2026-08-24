@@ -6,6 +6,7 @@
 - dans les relearning il y a un problème de regroupement des mêmes groupes
 - dans les relearning, mettre la même image qui a posé problème
 - on peut pas commenter si on était pas connecté au moment de l'import du pack
+- problème de split de groupes : j'ai eu 25/1/2 pour formes de pays
 
 
 ## Urgent
@@ -19,8 +20,6 @@
 - app mobile
 - dire clairement qu'il faut attendre 5 min pour refaire les erreurs
 - enlever les pauses quand il y a pas de timers
-- quand on se trompe pour une proposition, sélectionner le texte pour le corriger rapidement
-- ajouter "déjà répondu" quand on fait entrer
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 

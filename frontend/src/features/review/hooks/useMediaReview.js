@@ -380,6 +380,10 @@ export function useMediaReview(
   // Review grades each choice inline (reveal + quality), then auto-submits the
   // group when the last item is rated. Training keeps the legacy flash + recap.
   const inlineChoiceRating = Boolean(options.inlineChoiceRating) && isChoiceMode(mode);
+  const inlineTypedRating = Boolean(options.inlineTypedRating) && (
+    mode === IMAGE_MODE_TYPE_ALL ||
+    mode === IMAGE_MODE_TYPE_PROMPT
+  );
   const contextItemsInput = options.contextItems?.length
     ? options.contextItems
     : reviewItemsInput;
@@ -446,6 +450,7 @@ export function useMediaReview(
   const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
   const [interactionFeedback, setInteractionFeedback] = useState(null);
+  const [typedRatingFeedback, setTypedRatingFeedback] = useState(null);
   const [resultMode, setResultMode] = useState(false);
   const [activePromptQuestionId, setActivePromptQuestionId] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
@@ -463,6 +468,7 @@ export function useMediaReview(
     setCandidateIdsByQuestionId({});
     setFeedbackTone(null);
     setInteractionFeedback(null);
+    setTypedRatingFeedback(null);
     setResultMode(false);
     setActivePromptQuestionId(null);
     setRecapSort(initialRecapSort);
@@ -569,7 +575,7 @@ export function useMediaReview(
   const completedCount = completedQuestionIdSet.size;
   const canFinishReview = sessionItems.length > 0 && (
     allowPartialSubmit || hasAttemptedAnswer || completedCount > 0
-  );
+  ) && !typedRatingFeedback;
   const answeredCount = foundQuestionIds.length;
   const wrongAnsweredCount = resultMode
     ? lockedMissedQuestionIds.length
@@ -595,6 +601,7 @@ export function useMediaReview(
   }, [interactionFeedback, inlineChoiceRating]);
 
   function selectItem(questionId) {
+    if (typedRatingFeedback) return false;
     if (mode !== IMAGE_MODE_TYPE_PROMPT || resultMode) return false;
     if (resolvedQuestionIdSet.has(questionId)) return false;
 
@@ -612,6 +619,7 @@ export function useMediaReview(
   }
 
   function selectNextItem(direction = 1) {
+    if (typedRatingFeedback) return false;
     if (!isPromptMode(mode) || resultMode || !currentPromptItem) {
       return false;
     }
@@ -669,6 +677,7 @@ export function useMediaReview(
     setInput("");
     setFeedbackTone(null);
     setInteractionFeedback(null);
+    setTypedRatingFeedback(null);
     setResultMode(true);
     setActivePromptQuestionId(null);
     onAnsweringComplete?.(missedIds);
@@ -726,6 +735,16 @@ export function useMediaReview(
     rememberResolved(item);
     setInput("");
     setFeedbackTone("correct");
+
+    if (inlineTypedRating) {
+      setTypedRatingFeedback({
+        id: Date.now(),
+        item,
+        questionId: item.question_id
+      });
+      return;
+    }
+
     advanceTypePromptAfterResolved(item);
 
     if (
@@ -810,6 +829,7 @@ export function useMediaReview(
   useEffect(() => {
     if (resultMode || sessionItems.length === 0) return;
     if (interactionFeedback) return;
+    if (typedRatingFeedback) return;
 
     const allComplete = sessionItems.every(item =>
       completedQuestionIdSet.has(item.question_id)
@@ -830,10 +850,12 @@ export function useMediaReview(
     qualityByQuestionId,
     allowPartialSubmit,
     resultMode,
-    sessionItems
+    sessionItems,
+    typedRatingFeedback
   ]);
 
   function handleSubmit() {
+    if (typedRatingFeedback) return null;
     if (resultMode) return null;
 
     if (mode === IMAGE_MODE_TYPE_PROMPT) {
@@ -935,13 +957,14 @@ export function useMediaReview(
   }
 
   function skipCurrentPrompt() {
+    if (typedRatingFeedback) return;
     if (mode !== IMAGE_MODE_TYPE_PROMPT || !currentPromptItem) return;
 
     selectNextItem(1);
   }
 
   function finishReview() {
-    if (!canFinishReview) return false;
+    if (!canFinishReview || typedRatingFeedback) return false;
 
     enterResultMode(foundQuestionIds, qualityByQuestionId, resolvedQuestionIds);
     return true;
@@ -1010,6 +1033,18 @@ export function useMediaReview(
     setInteractionFeedback(null);
   }
 
+  function rateTypedAnswer(quality = defaultImageSuccessQuality()) {
+    if (!typedRatingFeedback || !inlineTypedRating) return;
+
+    const nextQuality = Number(quality);
+
+    if (![1, 2, 3].includes(nextQuality)) return;
+
+    setQuality(typedRatingFeedback.questionId, nextQuality);
+    setTypedRatingFeedback(null);
+    advanceTypePromptAfterResolved(typedRatingFeedback.item);
+  }
+
   const displayItems = useMemo(() => {
     if (mode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE && !resultMode) {
       return visibleChoiceOptions;
@@ -1028,6 +1063,7 @@ export function useMediaReview(
     visualPromptItem
   ]);
   const activeQuestionIdForGrid = (
+    typedRatingFeedback?.questionId ||
     activeInteractionFeedback?.correctQuestionId ||
     activeItem?.question_id ||
     null
@@ -1213,6 +1249,7 @@ export function useMediaReview(
     promptLabel: visualPromptItem?.label || visualPromptItem?.answer || "",
     qualityByQuestionId,
     rateChoice,
+    rateTypedAnswer,
     recapMissCount,
     recapRows,
     recapSort,
@@ -1231,6 +1268,7 @@ export function useMediaReview(
     setInput,
     setQuality,
     skipCurrentPrompt,
+    typedRatingFeedback,
     toggleRecapSort,
     wrongAnsweredCount
   };

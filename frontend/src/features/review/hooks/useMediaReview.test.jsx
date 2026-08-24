@@ -133,6 +133,54 @@ describe("useMediaReview", () => {
     expect(result.current.resultMode).toBe(false);
   });
 
+  it("asks for inline quality after a correct typed image answer", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const items = [imageItem(1, "France")];
+    const { result } = renderHook(() =>
+      useMediaReview(items, onComplete, submitAnswer, {
+        inlineTypedRating: true,
+        mode: IMAGE_MODE_TYPE_ALL
+      })
+    );
+
+    act(() => {
+      result.current.setInput("France");
+    });
+    act(() => {
+      expect(result.current.handleSubmit()).toBe(true);
+    });
+
+    expect(result.current.typedRatingFeedback?.questionId).toBe(1);
+    expect(result.current.resultMode).toBe(false);
+    expect(result.current.canFinishReview).toBe(false);
+
+    act(() => {
+      result.current.rateTypedAnswer(3);
+    });
+
+    expect(result.current.typedRatingFeedback).toBeNull();
+    expect(result.current.resultMode).toBe(true);
+    expect(result.current.qualityByQuestionId[1]).toBe(3);
+
+    act(() => {
+      result.current.setQuality(1, 1);
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { 1: 1 },
+      IMAGE_MODE_TYPE_ALL,
+      1,
+      { 1: "France" },
+      { 1: [1] }
+    );
+    expect(onComplete).toHaveBeenCalledWith([]);
+  });
+
   it("type_all ignores image selection and keeps the shared input", () => {
     const items = [
       imageItem(1, "France"),
