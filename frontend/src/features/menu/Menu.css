@@ -845,17 +845,54 @@
 }
 
 .menu-pack-dot {
-  background: #575757;
+  align-items: center;
+  background: transparent;
   border: 0;
   border-radius: 999px;
-  height: 7px;
+  display: inline-flex;
+  height: 18px;
+  justify-content: center;
   padding: 0;
+  position: relative;
+  width: 18px;
+}
+
+.menu-pack-dot::before {
+  background: #575757;
+  border-radius: 999px;
+  content: "";
+  display: block;
+  height: 7px;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease,
+    width 0.15s ease;
   width: 7px;
 }
 
+.menu-pack-dot:hover::before {
+  background: #d0d0d0;
+  box-shadow: 0 0 0 5px rgba(94, 234, 212, 0.14);
+  transform: scale(1.2);
+}
+
+.menu-pack-dot:active::before {
+  transform: scale(0.95);
+}
+
 .menu-pack-dot.is-active {
+  width: 28px;
+}
+
+.menu-pack-dot.is-active::before {
   background: #5eead4;
   width: 19px;
+}
+
+.menu-pack-dot.is-active:hover::before {
+  background: #85f2e0;
+  transform: scaleX(1.08) scaleY(1.2);
 }
 
 .menu-pack-progress-edge {
@@ -876,6 +913,10 @@
   height: 100%;
   transform-origin: left;
   width: 100%;
+}
+
+.menu-pack-card.is-paused .menu-pack-progress-edge span {
+  animation-play-state: paused;
 }
 
 .menu-account-avatar {

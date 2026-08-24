@@ -1,6 +1,14 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Menu from "./Menu";
+import { searchPackCatalog } from "../../api/packs";
 import { getProfile } from "../../api/profile";
 import { getStats } from "../../api/stats";
 
@@ -39,6 +47,7 @@ describe("Menu", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("renders the main menu actions", () => {
@@ -172,6 +181,9 @@ describe("Menu", () => {
 
     expect(await screen.findByRole("heading", { name: "Europe" })).toBeInTheDocument();
     expect(await screen.findByText("Capitales du monde")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Voir Capitales du monde" })
+    ).toHaveAttribute("title", "Voir Capitales du monde");
 
     fireEvent.click(screen.getByRole("button", { name: "Étudier Europe" }));
 
@@ -181,6 +193,65 @@ describe("Menu", () => {
       name: "Europe",
       type_group: "map"
     });
+  });
+
+  it("pauses the suggested pack carousel while hovered", async () => {
+    vi.useFakeTimers();
+    searchPackCatalog.mockResolvedValueOnce({
+      packs: [
+        {
+          pack_guid: "pack-1",
+          name: "Capitales du monde",
+          description: "Un pack pour réviser les capitales.",
+          question_count: 50,
+          download_count: 8
+        },
+        {
+          pack_guid: "pack-2",
+          name: "Biologie cellulaire",
+          description: "Organites et mitose.",
+          question_count: 24,
+          download_count: 4
+        }
+      ]
+    });
+
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 0, has_due: false }}
+      />
+    );
+
+    await act(async () => {});
+
+    const carousel = screen.getByRole("button", {
+      name: "Voir le pack Capitales du monde"
+    });
+
+    fireEvent.pointerEnter(carousel);
+    expect(carousel).toHaveClass("is-paused");
+
+    await act(async () => {
+      vi.advanceTimersByTime(7100);
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Capitales du monde" })
+    ).toBeInTheDocument();
+
+    fireEvent.pointerLeave(carousel);
+    expect(carousel).not.toHaveClass("is-paused");
+
+    await act(async () => {
+      vi.advanceTimersByTime(7100);
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Biologie cellulaire" })
+    ).toBeInTheDocument();
   });
 
   it("shows the signed-in user's username and avatar in the account chip, not their email", async () => {

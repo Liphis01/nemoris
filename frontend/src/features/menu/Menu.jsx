@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { searchPackCatalog } from "../../api/packs";
 import { getProfile } from "../../api/profile";
 import { getStats } from "../../api/stats";
@@ -374,7 +374,9 @@ function MenuPackCarousel({
   activeIndex,
   cycleKey,
   error,
+  isPaused,
   loading,
+  onPauseChange,
   onOpenPack,
   onSelect,
   packs,
@@ -434,8 +436,14 @@ function MenuPackCarousel({
     <section
       role="button"
       tabIndex={0}
-      className="menu-context-card menu-pack-card menu-pack-card-clickable"
+      className={`menu-context-card menu-pack-card menu-pack-card-clickable${isPaused ? " is-paused" : ""}`}
       onClick={openPack}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          onPauseChange(false);
+        }
+      }}
+      onFocusCapture={() => onPauseChange(true)}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) {
           return;
@@ -446,6 +454,8 @@ function MenuPackCarousel({
           openPack();
         }
       }}
+      onPointerEnter={() => onPauseChange(true)}
+      onPointerLeave={() => onPauseChange(false)}
       aria-label={`Voir le pack ${activePack.name}`}
     >
       {hasMultiple && (
@@ -513,8 +523,9 @@ function MenuPackCarousel({
                 event.stopPropagation();
                 onSelect(index);
               }}
-              aria-label={`Voir le pack ${index + 1}`}
+              aria-label={`Voir ${pack.name || `le pack ${index + 1}`}`}
               aria-pressed={index === activeIndex}
+              title={`Voir ${pack.name || `le pack ${index + 1}`}`}
             />
           ))}
         </div>
@@ -545,6 +556,8 @@ export default function Menu({
   const [packsError, setPacksError] = useState("");
   const [activePackIndex, setActivePackIndex] = useState(0);
   const [packCycleSeed, setPackCycleSeed] = useState(0);
+  const [isPackCarouselPaused, setIsPackCarouselPaused] = useState(false);
+  const packCarouselPausedRef = useRef(false);
 
   const reviewCountValue = reviewDueValue(
     reviewSummary,
@@ -601,6 +614,19 @@ export default function Menu({
   const selectPack = useCallback((index) => {
     setActivePackIndex(index);
     setPackCycleSeed((seed) => seed + 1);
+  }, []);
+
+  const setPackCarouselPaused = useCallback((paused) => {
+    if (packCarouselPausedRef.current === paused) {
+      return;
+    }
+
+    packCarouselPausedRef.current = paused;
+    setIsPackCarouselPaused(paused);
+
+    if (!paused) {
+      setPackCycleSeed((seed) => seed + 1);
+    }
   }, []);
 
   useEffect(() => {
@@ -697,7 +723,7 @@ export default function Menu({
   }, []);
 
   useEffect(() => {
-    if (popularPacks.length <= 1) {
+    if (isPackCarouselPaused || popularPacks.length <= 1) {
       return undefined;
     }
 
@@ -706,7 +732,13 @@ export default function Menu({
     }, PACK_CAROUSEL_MS);
 
     return () => window.clearTimeout(timer);
-  }, [activePackIndex, packCycleSeed, popularPacks.length, selectPack]);
+  }, [
+    activePackIndex,
+    isPackCarouselPaused,
+    packCycleSeed,
+    popularPacks.length,
+    selectPack
+  ]);
 
   const activePackIndexBounded = useMemo(() => {
     if (popularPacks.length === 0) {
@@ -816,7 +848,9 @@ export default function Menu({
                 activeIndex={activePackIndexBounded}
                 cycleKey={packCycleSeed}
                 error={packsError}
+                isPaused={isPackCarouselPaused}
                 loading={packsLoading}
+                onPauseChange={setPackCarouselPaused}
                 onOpenPack={onOpenPack}
                 onSelect={selectPack}
                 packs={popularPacks}
