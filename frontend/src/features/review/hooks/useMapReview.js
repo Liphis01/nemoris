@@ -298,6 +298,7 @@ export function useMapReview(
   // Review grades each QCM pick inline (reveal + quality) then auto-submits the
   // group when the last zone is rated. Training keeps the legacy flash + recap.
   const inlineChoiceRating = Boolean(options.inlineChoiceRating) && mode === MAP_MODE_MULTIPLE_CHOICE;
+  const inlineClickRating = Boolean(options.inlineClickRating) && mode === MAP_MODE_CLICK_PROMPT;
   const inlineTypedRating = Boolean(options.inlineTypedRating) && (
     mode === MAP_MODE_TYPE_ALL ||
     mode === MAP_MODE_TYPE_PROMPT
@@ -326,6 +327,7 @@ export function useMapReview(
   const [correctFlashId, setCorrectFlashId] = useState(0);
   const [duplicateFlashId, setDuplicateFlashId] = useState(0);
   const [choiceFeedback, setChoiceFeedback] = useState(null);
+  const [clickRatingFeedback, setClickRatingFeedback] = useState(null);
   const [typedRatingFeedback, setTypedRatingFeedback] = useState(null);
   const [zoneFeedback, setZoneFeedback] = useState(null);
   const [recapSort, setRecapSort] = useState(initialRecapSort);
@@ -361,6 +363,7 @@ export function useMapReview(
     setCorrectFlashId(0);
     setDuplicateFlashId(0);
     setChoiceFeedback(null);
+    setClickRatingFeedback(null);
     setTypedRatingFeedback(null);
     setZoneFeedback(null);
     setRecapSort(initialRecapSort);
@@ -600,6 +603,8 @@ export function useMapReview(
       setRemainingFocusCode(null);
       setFocusVersion(0);
       setChoiceFeedback(null);
+      setClickRatingFeedback(null);
+      setTypedRatingFeedback(null);
 
       onComplete(failedQuestionIds);
       return true;
@@ -616,6 +621,7 @@ export function useMapReview(
   useEffect(() => {
     if (showRecap || reviewZones.length === 0) return;
     if (mode === MAP_MODE_MULTIPLE_CHOICE && choiceFeedback) return;
+    if (clickRatingFeedback) return;
     if (typedRatingFeedback) return;
 
     const allZonesComplete = reviewZones.every(item =>
@@ -641,6 +647,7 @@ export function useMapReview(
     allowPartialSubmit,
     completedQuestionIdSet,
     choiceFeedback,
+    clickRatingFeedback,
     foundQuestionIdSet,
     mode,
     onAnsweringComplete,
@@ -682,6 +689,7 @@ export function useMapReview(
   }
 
   function selectNextPrompt(direction = 1) {
+    if (clickRatingFeedback) return;
     if (typedRatingFeedback) return;
     if (!isPromptMode || !currentPromptItem) return;
 
@@ -729,6 +737,15 @@ export function useMapReview(
       return;
     }
 
+    if (inlineClickRating) {
+      setClickRatingFeedback({
+        id: Date.now(),
+        item,
+        questionId: item.question_id
+      });
+      return;
+    }
+
     advanceAfterResolved(item);
   }
 
@@ -745,6 +762,7 @@ export function useMapReview(
   }
 
   function handleSubmit() {
+    if (clickRatingFeedback) return null;
     if (typedRatingFeedback) return null;
 
     if (mode === MAP_MODE_TYPE_PROMPT) {
@@ -786,7 +804,7 @@ export function useMapReview(
   }
 
   function handleZoneSelect(code) {
-    if (mode !== MAP_MODE_CLICK_PROMPT || !currentPromptItem) {
+    if (mode !== MAP_MODE_CLICK_PROMPT || !currentPromptItem || clickRatingFeedback) {
       return;
     }
 
@@ -845,6 +863,7 @@ export function useMapReview(
   }
 
   function skipCurrentPrompt() {
+    if (clickRatingFeedback) return;
     if (typedRatingFeedback) return;
     selectNextPrompt(1);
   }
@@ -870,7 +889,7 @@ export function useMapReview(
   }
 
   function finishMap() {
-    if (typedRatingFeedback || !(reviewZones.length > 0 && (
+    if (clickRatingFeedback || typedRatingFeedback || !(reviewZones.length > 0 && (
       allowPartialSubmit ||
       mode === MAP_MODE_TYPE_PROMPT ||
       hasAttemptedAnswer ||
@@ -903,6 +922,18 @@ export function useMapReview(
     }
 
     setChoiceFeedback(null);
+  }
+
+  function rateClickAnswer(quality = 2) {
+    if (!clickRatingFeedback || !inlineClickRating) return;
+
+    const nextQuality = Number(quality);
+
+    if (![1, 2, 3].includes(nextQuality)) return;
+
+    setQuality(clickRatingFeedback.questionId, nextQuality);
+    setClickRatingFeedback(null);
+    advanceAfterResolved(clickRatingFeedback.item);
   }
 
   function rateTypedAnswer(quality = 2) {
@@ -955,7 +986,7 @@ export function useMapReview(
   const canGiveUpPrompt = mode === MAP_MODE_TYPE_PROMPT;
   const canFinishReview = reviewZones.length > 0 && (
     allowPartialSubmit || canGiveUpPrompt || hasAttemptedAnswer || completedCount > 0
-  ) && !typedRatingFeedback;
+  ) && !clickRatingFeedback && !typedRatingFeedback;
   const progressPercent = reviewZones.length
     ? (completedCount / reviewZones.length) * 100
     : 0;
@@ -1044,18 +1075,25 @@ export function useMapReview(
     : choiceOptions;
   const visibleDueCodes = activeChoiceFeedback?.correctCode
     ? [activeChoiceFeedback.correctCode]
+    : clickRatingFeedback?.item?.code
+      ? [clickRatingFeedback.item.code]
     : typedRatingFeedback?.item?.code
       ? [typedRatingFeedback.item.code]
     : dueCodes;
   const targetHighlightCode = (
-    mode === MAP_MODE_TYPE_PROMPT ||
-    mode === MAP_MODE_MULTIPLE_CHOICE
-  )
-    ? activeChoiceFeedback?.correctCode ||
-      typedRatingFeedback?.item?.code ||
-      currentPromptItem?.code ||
-      null
-    : null;
+    mode === MAP_MODE_CLICK_PROMPT
+      ? clickRatingFeedback?.item?.code || null
+      : (
+        mode === MAP_MODE_TYPE_PROMPT ||
+        mode === MAP_MODE_MULTIPLE_CHOICE
+      )
+        ? activeChoiceFeedback?.correctCode ||
+          typedRatingFeedback?.item?.code ||
+          currentPromptItem?.code ||
+          null
+        : null
+  );
+  const promptDisplayItem = clickRatingFeedback?.item || currentPromptItem;
   const selectedCode = activeChoiceFeedback ? null : targetHighlightCode;
 
   return {
@@ -1063,6 +1101,7 @@ export function useMapReview(
     canFinishReview,
     choiceFeedback: activeChoiceFeedback,
     choiceOptions: visibleChoiceOptions,
+    clickRatingFeedback,
     currentPromptItem,
     dueCodes: visibleDueCodes,
     feedbackTone,
@@ -1082,9 +1121,10 @@ export function useMapReview(
     qualityByQuestionId,
     missedCodes,
     progressPercent,
-    promptCode: currentPromptItem?.code || null,
-    promptLabel: currentPromptItem?.label || "",
+    promptCode: promptDisplayItem?.code || null,
+    promptLabel: promptDisplayItem?.label || "",
     rateChoice,
+    rateClickAnswer,
     rateTypedAnswer,
     recapMissCount,
     recapRows,

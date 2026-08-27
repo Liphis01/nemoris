@@ -450,6 +450,41 @@ describe("MapReview recap map focus", () => {
     }
   });
 
+  it("asks inline quality after a correct clicked zone and uses Enter for Bon", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const clickedZone = reviewZones[1];
+
+    renderMapReview(true, {
+      mode: "click_prompt",
+      reviewZones: [clickedZone],
+      submitAnswer
+    });
+
+    fireEvent.click(screen.getByTestId("active-map"));
+
+    expect(document.querySelector("[data-map-click-rating]")).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-map-click-quality]")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Terminer la carte" })).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-map-click-rating]")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
+
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { 2: 2 },
+        "click_prompt",
+        1,
+        { 2: 2 },
+        { 2: [2] }
+      );
+    });
+  });
+
   it("advances type_prompt without a wrong segment when skipping", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"

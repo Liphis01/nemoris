@@ -260,6 +260,54 @@ describe("useMapReview recap sorting", () => {
     expect(onComplete).toHaveBeenCalledWith([]);
   });
 
+  it("asks for inline quality after a correct clicked map answer", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+    const reviewZones = [zone({ questionId: 1, code: "a", label: "Alpha" })];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, onComplete, submitAnswer, {
+        inlineClickRating: true,
+        mode: "click_prompt"
+      })
+    );
+
+    act(() => {
+      result.current.handleZoneSelect("a");
+    });
+
+    expect(result.current.clickRatingFeedback?.questionId).toBe(1);
+    expect(result.current.promptLabel).toBe("Alpha");
+    expect(result.current.dueCodes).toEqual(["a"]);
+    expect(result.current.showRecap).toBe(false);
+    expect(result.current.canFinishReview).toBe(false);
+    expect(result.current.qualityByQuestionId[1]).toBeUndefined();
+
+    act(() => {
+      result.current.rateClickAnswer(3);
+    });
+
+    expect(result.current.clickRatingFeedback).toBeNull();
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.qualityByQuestionId[1]).toBe(3);
+
+    act(() => {
+      result.current.setQuality(1, 1);
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { 1: 1 },
+      "click_prompt",
+      1,
+      { 1: 1 },
+      { 1: [1] }
+    );
+    expect(onComplete).toHaveBeenCalledWith([]);
+  });
+
   it("refuses to finish before any zone has been attempted", () => {
     const onAnsweringComplete = vi.fn();
     const reviewZones = [

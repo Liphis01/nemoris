@@ -269,6 +269,7 @@ export default function MapReview({
     canFinishReview = false,
     choiceFeedback,
     choiceOptions,
+    clickRatingFeedback,
     dueCodes,
     feedbackTone,
     flashCodes,
@@ -290,6 +291,7 @@ export default function MapReview({
     promptCode,
     promptLabel,
     rateChoice = () => {},
+    rateClickAnswer = () => {},
     rateTypedAnswer = () => {},
     recapMissCount,
     recapRows,
@@ -318,6 +320,7 @@ export default function MapReview({
     mode: normalizedMode,
     contextItems,
     inlineChoiceRating: showQualityControls,
+    inlineClickRating: showQualityControls,
     inlineTypedRating: showQualityControls,
     onAnsweringComplete,
     group,
@@ -396,6 +399,20 @@ export default function MapReview({
     ? acquisOnlyOptions
     : choiceQualityOptions;
   const typedRatingDefaultQuality = typedRatingItemRelearning ? GOT_IT_QUALITY : 2;
+  const showClickRating = (
+    mode === MAP_MODE_CLICK_PROMPT &&
+    !showRecap &&
+    Boolean(clickRatingFeedback) &&
+    showQualityControls
+  );
+  const clickRatingItem = clickRatingFeedback?.item || null;
+  const clickRatingItemRelearning = Boolean(
+    clickRatingItem && isRelearningGroupItem(group, clickRatingItem)
+  );
+  const clickRatingOptions = clickRatingItemRelearning
+    ? acquisOnlyOptions
+    : choiceQualityOptions;
+  const clickRatingDefaultQuality = clickRatingItemRelearning ? GOT_IT_QUALITY : 2;
   const showPromptPanel = (
     mode !== MAP_MODE_TYPE_ALL &&
     mode !== MAP_MODE_TYPE_PROMPT &&
@@ -720,6 +737,38 @@ export default function MapReview({
       window.removeEventListener("keydown", handleTypedRatingKeyDown);
     };
   }, [rateTypedAnswer, showTypedRating, typedRatingDefaultQuality]);
+
+  // Keyboard grading for click prompts: the correct zone is already known, so
+  // Enter keeps the fast default while 1/2/3 lets the learner adjust.
+  useEffect(() => {
+    if (!showClickRating) return undefined;
+
+    function handleClickRatingKeyDown(event) {
+      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+      const quality = ["1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality !== null) {
+        event.preventDefault();
+        rateClickAnswer(quality);
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        rateClickAnswer(clickRatingDefaultQuality);
+      }
+    }
+
+    window.addEventListener("keydown", handleClickRatingKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleClickRatingKeyDown);
+    };
+  }, [clickRatingDefaultQuality, rateClickAnswer, showClickRating]);
 
   // Quick answer: number keys pick the matching option before the reveal,
   // mirroring the keyboard flow of text review (Enter reveals, digits grade).
@@ -1174,6 +1223,41 @@ export default function MapReview({
                         rateTypedAnswer(option.value);
                         inputRef.current?.focus({ preventScroll: true });
                       }}
+                      style={typedRatingButtonStyle}
+                      title={option.title}
+                    >
+                      <span aria-hidden="true" style={choiceKeyBadgeStyle}>
+                        {option.value}
+                      </span>
+                      <span>{option.title}</span>
+                      {Number(interval) > 0 && (
+                        <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {showClickRating && clickRatingItem && (
+            <div data-map-click-rating style={typedRatingPanelStyle}>
+              <div style={typedRatingCopyStyle}>
+                <span style={typedRatingKickerStyle}>Qualité</span>
+                <span style={typedRatingAnswerStyle}>{clickRatingItem.label || "Zone"}</span>
+              </div>
+              <div style={typedRatingControlsStyle}>
+                {clickRatingOptions.map(option => {
+                  const interval = clickRatingItemRelearning
+                    ? clickRatingItem.relearning_interval
+                    : clickRatingItem.projected_intervals?.[option.value];
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      data-map-click-quality={option.value}
+                      onClick={() => rateClickAnswer(option.value)}
                       style={typedRatingButtonStyle}
                       title={option.title}
                     >

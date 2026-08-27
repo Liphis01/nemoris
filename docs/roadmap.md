@@ -26,6 +26,7 @@
 - résultat de map qcm pas au bon endroit
 - inline quality pas fait pour les maps ?
 - mettre un bleu plus pimpant
+- how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
 
 ## quick fixes
 
