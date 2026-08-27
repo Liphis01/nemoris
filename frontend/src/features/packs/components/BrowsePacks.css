@@ -1363,6 +1363,39 @@
   padding: 8px 10px;
 }
 
+.pack-release-nudge {
+  align-items: center;
+  background: rgba(94, 234, 212, 0.08);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 8px;
+  color: #dffbf6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.pack-release-nudge span {
+  display: grid;
+  gap: 3px;
+  min-width: min(100%, 260px);
+}
+
+.pack-release-nudge strong {
+  color: #f1f1f1;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.pack-release-nudge small {
+  color: #9ddfd4;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .pack-export-group {
   align-items: flex-start;
   flex-direction: column;

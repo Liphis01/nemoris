@@ -151,7 +151,7 @@ function SuggestedEditValue({ label, value }) {
 }
 
 
-function SuggestedEditsPanel({ publication }) {
+function SuggestedEditsPanel({ onApplied, publication }) {
   const [state, setState] = useState({
     status: "loading",
     suggestions: [],
@@ -236,6 +236,7 @@ function SuggestedEditsPanel({ publication }) {
         )),
         error: ""
       }));
+      onApplied?.(publication, nextSuggestion);
     } catch (error) {
       console.error(error);
       setState((current) => ({
@@ -910,8 +911,10 @@ function PackDetail({
   onDelete,
   onPublish,
   onStartRelease,
+  onSuggestedEditApplied,
   onUnpublish,
   publication,
+  publishPrompt,
   setMode
 }) {
   const ratingLabel = formatRatingLabel(publication.avg_rating, publication.rating_count);
@@ -996,7 +999,7 @@ function PackDetail({
       ) : null}
 
       <div className="pack-action-row">
-        {canStartRelease && (
+        {canStartRelease && !publishPrompt && (
           <button
             type="button"
             className="pack-primary-button"
@@ -1041,11 +1044,29 @@ function PackDetail({
         )}
       </div>
 
+      {canStartRelease && publishPrompt && (
+        <div className="pack-release-nudge" role="status">
+          <span>
+            <strong>Correction appliquée localement.</strong>
+            <small>Publie les changements pour mettre le catalogue à jour.</small>
+          </span>
+          <button
+            type="button"
+            className="pack-primary-button"
+            disabled={action.busy}
+            onClick={() => onStartRelease(publication)}
+          >
+            Publier les changements
+          </button>
+        </div>
+      )}
+
       {action.error && (
         <div className="pack-alert" role="alert">{action.error}</div>
       )}
 
       <SuggestedEditsPanel
+        onApplied={onSuggestedEditApplied}
         publication={publication}
         key={`suggestions-${publication.pack_guid}`}
       />
@@ -1078,6 +1099,7 @@ export default function PublicationsManager({
   const [justPublished, setJustPublished] = useState(null);
   const [releaseBase, setReleaseBase] = useState(null);
   const [variantSource, setVariantSource] = useState(null);
+  const [publishPrompts, setPublishPrompts] = useState({});
 
   useEffect(() => {
     if (!initialVariantSource) {
@@ -1229,6 +1251,11 @@ export default function PublicationsManager({
     setJustPublished(publication);
     setReleaseBase(null);
     setVariantSource(null);
+    setPublishPrompts((current) => {
+      const next = { ...current };
+      delete next[publication.pack_guid];
+      return next;
+    });
     setSelectedKey(publication.pack_guid);
     loadPublications(publication);
   }
@@ -1237,6 +1264,13 @@ export default function PublicationsManager({
     setReleaseBase(publication);
     setVariantSource(null);
     setSelectedKey(NEW_PACK_KEY);
+  }
+
+  function handleSuggestedEditApplied(publication) {
+    setPublishPrompts((current) => ({
+      ...current,
+      [publication.pack_guid]: true
+    }));
   }
 
   const selectedPublication = (
@@ -1419,8 +1453,10 @@ export default function PublicationsManager({
           onOpenGroup={onOpenGroup}
           onPublish={handlePublish}
           onStartRelease={handleStartRelease}
+          onSuggestedEditApplied={handleSuggestedEditApplied}
           onUnpublish={handleUnpublish}
           publication={selectedPublication}
+          publishPrompt={publishPrompts[selectedPublication.pack_guid]}
           setMode={setMode}
         />
       )}

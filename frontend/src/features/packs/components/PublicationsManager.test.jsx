@@ -287,6 +287,21 @@ describe("PublicationsManager", () => {
   });
 
   it("applies an accepted suggested edit to the local source", async () => {
+    listPackPublications.mockResolvedValue({
+      publications: [{
+        ...published,
+        source: { kind: "group", id: 42, name: "Territoires du monde" },
+        orphaned: false
+      }]
+    });
+    listGroups.mockResolvedValue([
+      {
+        id: 42,
+        name: "Territoires du monde",
+        type_group: "map",
+        question_count: 253
+      }
+    ]);
     listPackSuggestedEdits.mockResolvedValueOnce({
       pending_count: 0,
       suggestions: [{
@@ -336,6 +351,26 @@ describe("PublicationsManager", () => {
     });
     expect(await screen.findByText("Appliquée")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Appliquer" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Correction appliquée localement.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Publie les changements pour mettre le catalogue à jour.")
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Publier les changements" })
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Publier les changements" })
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Annuler" }));
+
+    expect(
+      await screen.findByText("Correction appliquée localement.")
+    ).toBeInTheDocument();
   });
 
   it("declining the confirm dialog does not call unpublishPack", async () => {
