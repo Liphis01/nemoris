@@ -74,6 +74,43 @@ export function createPackVariantSource(packGuid) {
 }
 
 
+export function listPackSuggestedEditTargets(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/suggested-edit-targets`);
+}
+
+
+export function submitPackSuggestedEdit(packGuid, payload) {
+  return requestJson(`/packs/catalog/${packGuid}/suggested-edits`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+
+export function listPackSuggestedEdits(packGuid, { limit = 50 } = {}) {
+  const query = new URLSearchParams({ limit: String(limit) });
+
+  return requestJson(`/packs/catalog/${packGuid}/suggested-edits?${query.toString()}`);
+}
+
+
+export function resolvePackSuggestedEdit(editId, payload) {
+  return requestJson(`/packs/catalog/suggested-edits/${editId}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+
+export function applyPackSuggestedEdit(editId) {
+  return requestJson(`/packs/catalog/suggested-edits/${editId}/apply`, {
+    method: "POST"
+  });
+}
+
+
 export function listPackActivity({ limit = 20 } = {}) {
   const query = new URLSearchParams({ limit: String(limit) });
 

@@ -1,5 +1,6 @@
 -- Supabase setup for the pack catalog: safe catalog reads, variants,
--- permanent deletion, install tracking, ratings, comments, and activity.
+-- suggested edits, permanent deletion, install tracking, ratings, comments,
+-- and activity.
 --
 -- Run this once in the Supabase SQL editor for the project configured in
 -- Settings -> Catalogue. The app uses only the publishable key at
@@ -74,6 +75,53 @@ end $$;
 create index if not exists pack_comments_pack_guid_created_at_idx
   on public.pack_comments (pack_guid, created_at desc);
 
+create table if not exists public.pack_suggested_edits (
+  id bigint generated always as identity primary key,
+  pack_guid text not null references public.pack_catalog(pack_guid) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  author_label text not null,
+  target_question_guid text,
+  target_group_guid text,
+  target_label text,
+  target_snapshot jsonb not null default '{}'::jsonb,
+  proposed_question text not null default '',
+  proposed_answer text not null default '',
+  note text not null,
+  status text not null default 'pending',
+  owner_note text not null default '',
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  resolved_at timestamptz,
+  applied_at timestamptz
+);
+
+alter table public.pack_suggested_edits
+  add column if not exists applied_at timestamptz;
+
+do $$
+begin
+  alter table public.pack_suggested_edits
+    add constraint pack_suggested_edits_note_length
+    check (char_length(note) between 1 and 2000);
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter table public.pack_suggested_edits
+    add constraint pack_suggested_edits_status_check
+    check (status in ('pending', 'accepted', 'rejected'));
+exception
+  when duplicate_object then null;
+end $$;
+
+create index if not exists pack_suggested_edits_pack_status_created_idx
+  on public.pack_suggested_edits (pack_guid, status, created_at desc);
+
+create index if not exists pack_suggested_edits_user_created_idx
+  on public.pack_suggested_edits (user_id, created_at desc);
+
 create table if not exists public.pack_activity_events (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -89,8 +137,11 @@ create table if not exists public.pack_activity_events (
 do $$
 begin
   alter table public.pack_activity_events
+    drop constraint if exists pack_activity_events_type_check;
+
+  alter table public.pack_activity_events
     add constraint pack_activity_events_type_check
-    check (event_type in ('variant_published'));
+    check (event_type in ('variant_published', 'suggested_edit_created'));
 exception
   when duplicate_object then null;
 end $$;
@@ -236,6 +287,7 @@ alter table public.pack_catalog enable row level security;
 alter table public.pack_installs enable row level security;
 alter table public.pack_ratings enable row level security;
 alter table public.pack_comments enable row level security;
+alter table public.pack_suggested_edits enable row level security;
 alter table public.pack_activity_events enable row level security;
 
 grant select on public.pack_catalog to anon, authenticated;
@@ -243,6 +295,8 @@ grant select, insert, update on public.pack_installs to authenticated;
 grant select, insert, update on public.pack_ratings to authenticated;
 grant select, insert on public.pack_comments to authenticated;
 grant select on public.pack_comments to anon;
+grant select, insert, update(status, owner_note, resolved_at, updated_at, applied_at)
+  on public.pack_suggested_edits to authenticated;
 grant select, update(read_at) on public.pack_activity_events to authenticated;
 
 drop policy if exists pack_catalog_select_public on public.pack_catalog;
@@ -319,6 +373,9 @@ create policy pack_ratings_update_own_if_installed
 
 drop policy if exists pack_comments_select_all on public.pack_comments;
 drop policy if exists pack_comments_insert_own_if_installed on public.pack_comments;
+drop policy if exists pack_suggested_edits_select_related on public.pack_suggested_edits;
+drop policy if exists pack_suggested_edits_insert_own_if_installed on public.pack_suggested_edits;
+drop policy if exists pack_suggested_edits_owner_resolve on public.pack_suggested_edits;
 drop policy if exists pack_activity_events_select_own on public.pack_activity_events;
 drop policy if exists pack_activity_events_mark_read_own on public.pack_activity_events;
 
@@ -351,6 +408,56 @@ create policy pack_comments_insert_own_if_installed
         select 1 from public.pack_catalog pc
         where pc.pack_guid = pack_comments.pack_guid and pc.owner_id = auth.uid()
       )
+    )
+  );
+
+create policy pack_suggested_edits_select_related
+  on public.pack_suggested_edits
+  for select
+  to authenticated
+  using (
+    auth.uid() = user_id
+    or exists (
+      select 1 from public.pack_catalog pc
+      where pc.pack_guid = pack_suggested_edits.pack_guid
+        and pc.owner_id = auth.uid()
+    )
+  );
+
+create policy pack_suggested_edits_insert_own_if_installed
+  on public.pack_suggested_edits
+  for insert
+  to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.pack_installs pi
+      where pi.pack_guid = pack_suggested_edits.pack_guid
+        and pi.user_id = auth.uid()
+    )
+    and not exists (
+      select 1 from public.pack_catalog pc
+      where pc.pack_guid = pack_suggested_edits.pack_guid
+        and pc.owner_id = auth.uid()
+    )
+  );
+
+create policy pack_suggested_edits_owner_resolve
+  on public.pack_suggested_edits
+  for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.pack_catalog pc
+      where pc.pack_guid = pack_suggested_edits.pack_guid
+        and pc.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.pack_catalog pc
+      where pc.pack_guid = pack_suggested_edits.pack_guid
+        and pc.owner_id = auth.uid()
     )
   );
 
@@ -398,6 +505,10 @@ drop function if exists public.upsert_my_pack_draft(
 drop function if exists public.get_pack_family(text);
 drop function if exists public.list_pack_activity_events(integer);
 drop function if exists public.mark_pack_activity_events_read(bigint[]);
+drop function if exists public.submit_pack_suggested_edit(text, text, text, text, jsonb, text, text, text);
+drop function if exists public.list_pack_suggested_edits(text, integer);
+drop function if exists public.resolve_pack_suggested_edit(bigint, text, text);
+drop function if exists public.mark_pack_suggested_edit_applied(bigint);
 
 create or replace function public.pack_catalog_recommendation_score(
   p_avg_rating numeric,
@@ -808,6 +919,246 @@ as $$
   returning *;
 $$;
 
+create or replace function public.submit_pack_suggested_edit(
+  p_pack_guid text,
+  p_target_question_guid text default null::text,
+  p_target_group_guid text default null::text,
+  p_target_label text default ''::text,
+  p_target_snapshot jsonb default '{}'::jsonb,
+  p_proposed_question text default ''::text,
+  p_proposed_answer text default ''::text,
+  p_note text default ''::text
+)
+returns public.pack_suggested_edits
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_pack public.pack_catalog;
+  v_note text := trim(coalesce(p_note, ''));
+  v_row public.pack_suggested_edits;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  if char_length(v_note) < 1 or char_length(v_note) > 2000 then
+    raise exception 'Ajoute une note pour expliquer la correction.';
+  end if;
+
+  select *
+  into v_pack
+  from public.pack_catalog
+  where pack_guid = p_pack_guid
+    and is_public = true
+  limit 1;
+
+  if not found then
+    raise exception 'Pack introuvable.';
+  end if;
+
+  if v_pack.owner_id = v_uid then
+    raise exception 'Tu possèdes déjà ce pack.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.pack_installs pi
+    where pi.pack_guid = p_pack_guid
+      and pi.user_id = v_uid
+  ) then
+    raise exception 'Installe ce pack avant de proposer une correction.';
+  end if;
+
+  insert into public.pack_suggested_edits (
+    pack_guid,
+    user_id,
+    author_label,
+    target_question_guid,
+    target_group_guid,
+    target_label,
+    target_snapshot,
+    proposed_question,
+    proposed_answer,
+    note
+  )
+  values (
+    p_pack_guid,
+    v_uid,
+    coalesce(auth.jwt() ->> 'email', 'Utilisateur'),
+    nullif(trim(coalesce(p_target_question_guid, '')), ''),
+    nullif(trim(coalesce(p_target_group_guid, '')), ''),
+    left(trim(coalesce(p_target_label, '')), 160),
+    coalesce(p_target_snapshot, '{}'::jsonb),
+    left(trim(coalesce(p_proposed_question, '')), 2000),
+    left(trim(coalesce(p_proposed_answer, '')), 2000),
+    v_note
+  )
+  returning *
+  into v_row;
+
+  insert into public.pack_activity_events (
+    user_id,
+    actor_id,
+    event_type,
+    pack_guid,
+    related_pack_guid,
+    payload
+  )
+  values (
+    v_pack.owner_id,
+    v_uid,
+    'suggested_edit_created',
+    p_pack_guid,
+    p_pack_guid,
+    jsonb_build_object(
+      'suggested_edit_id', v_row.id,
+      'pack_name', v_pack.name,
+      'target_label', v_row.target_label,
+      'author_label', v_row.author_label
+    )
+  );
+
+  return v_row;
+end;
+$$;
+
+create or replace function public.list_pack_suggested_edits(
+  p_pack_guid text,
+  p_limit integer default 50
+)
+returns jsonb
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+with params as (
+  select
+    auth.uid() as uid,
+    greatest(1, least(coalesce(p_limit, 50), 60)) as limit_value
+),
+authorized as (
+  select pc.pack_guid
+  from public.pack_catalog pc
+  join params on params.uid = pc.owner_id
+  where pc.pack_guid = p_pack_guid
+  limit 1
+),
+rows as (
+  select pse.*
+  from public.pack_suggested_edits pse
+  join authorized on authorized.pack_guid = pse.pack_guid
+  order by
+    case when pse.status = 'pending' then 0 else 1 end,
+    pse.created_at desc
+  limit (select limit_value from params)
+)
+select jsonb_build_object(
+  'suggestions',
+  coalesce((
+    select jsonb_agg(to_jsonb(rows) order by
+      case when rows.status = 'pending' then 0 else 1 end,
+      rows.created_at desc
+    )
+    from rows
+  ), '[]'::jsonb),
+  'pending_count',
+  (
+    select count(*)
+    from public.pack_suggested_edits pse
+    join authorized on authorized.pack_guid = pse.pack_guid
+    where pse.status = 'pending'
+  )
+);
+$$;
+
+create or replace function public.resolve_pack_suggested_edit(
+  p_edit_id bigint,
+  p_status text,
+  p_owner_note text default ''::text
+)
+returns public.pack_suggested_edits
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_status text := trim(coalesce(p_status, ''));
+  v_row public.pack_suggested_edits;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  if v_status not in ('accepted', 'rejected') then
+    raise exception 'Statut de suggestion invalide.';
+  end if;
+
+  update public.pack_suggested_edits pse
+  set status = v_status,
+      owner_note = left(trim(coalesce(p_owner_note, '')), 1000),
+      resolved_at = timezone('utc', now()),
+      updated_at = timezone('utc', now())
+  where pse.id = p_edit_id
+    and exists (
+      select 1
+      from public.pack_catalog pc
+      where pc.pack_guid = pse.pack_guid
+        and pc.owner_id = v_uid
+    )
+  returning *
+  into v_row;
+
+  if not found then
+    raise exception 'Suggestion introuvable.';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+create or replace function public.mark_pack_suggested_edit_applied(
+  p_edit_id bigint
+)
+returns public.pack_suggested_edits
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.pack_suggested_edits;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  update public.pack_suggested_edits pse
+  set applied_at = coalesce(pse.applied_at, timezone('utc', now())),
+      updated_at = timezone('utc', now())
+  where pse.id = p_edit_id
+    and pse.status = 'accepted'
+    and exists (
+      select 1
+      from public.pack_catalog pc
+      where pc.pack_guid = pse.pack_guid
+        and pc.owner_id = v_uid
+    )
+  returning *
+  into v_row;
+
+  if not found then
+    raise exception 'Suggestion acceptée introuvable.';
+  end if;
+
+  return v_row;
+end;
+$$;
+
 create or replace function public.get_pack_family(p_pack_guid text)
 returns jsonb
 language sql
@@ -1000,6 +1351,12 @@ grant execute on function public.record_pack_installs_bulk(jsonb) to authenticat
 grant execute on function public.get_my_pack_status(text) to authenticated;
 grant execute on function public.rate_pack(text, smallint) to authenticated;
 grant execute on function public.add_pack_comment(text, text) to authenticated;
+grant execute on function public.submit_pack_suggested_edit(
+  text, text, text, text, jsonb, text, text, text
+) to authenticated;
+grant execute on function public.list_pack_suggested_edits(text, integer) to authenticated;
+grant execute on function public.resolve_pack_suggested_edit(bigint, text, text) to authenticated;
+grant execute on function public.mark_pack_suggested_edit_applied(bigint) to authenticated;
 grant execute on function public.get_pack_family(text) to anon, authenticated;
 grant execute on function public.list_pack_activity_events(integer) to authenticated;
 grant execute on function public.mark_pack_activity_events_read(bigint[]) to authenticated;

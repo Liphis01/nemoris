@@ -573,8 +573,9 @@ export function useMediaReview(
     ? resolvedQuestionIdSet
     : foundQuestionIdSet;
   const completedCount = completedQuestionIdSet.size;
+  const canGiveUpPrompt = mode === IMAGE_MODE_TYPE_PROMPT;
   const canFinishReview = sessionItems.length > 0 && (
-    allowPartialSubmit || hasAttemptedAnswer || completedCount > 0
+    allowPartialSubmit || canGiveUpPrompt || hasAttemptedAnswer || completedCount > 0
   ) && !typedRatingFeedback;
   const answeredCount = foundQuestionIds.length;
   const wrongAnsweredCount = resultMode

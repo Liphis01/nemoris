@@ -11,12 +11,15 @@ from ..schemas import (
     PackCommentCreateRequest,
     PackInstallRecordRequest,
     PackPublishDraftRequest,
-    PackRatingRequest
+    PackRatingRequest,
+    PackSuggestedEditCreateRequest,
+    PackSuggestedEditResolveRequest
 )
 from ..services.pack_catalog import (
     PackCatalogAuthError,
     PackCatalogError,
     add_pack_comment,
+    apply_pack_suggested_edit,
     backfill_pack_installs,
     check_pack_catalog_health,
     create_pack_variant_source,
@@ -29,6 +32,8 @@ from ..services.pack_catalog import (
     list_pack_activity_events,
     list_pack_comments,
     list_pack_publications,
+    list_pack_suggested_edit_targets,
+    list_pack_suggested_edits,
     mark_pack_activity_events_read,
     preview_group_pack_changes,
     publish_pack_publication,
@@ -36,10 +41,12 @@ from ..services.pack_catalog import (
     preview_pack_release,
     rate_pack,
     record_pack_install,
+    resolve_pack_suggested_edit,
     request_pack_publish_code,
     save_pack_publish_draft,
     save_playlist_publish_draft,
     sign_out_pack_publisher,
+    submit_pack_suggested_edit,
     unpublish_pack_publication,
     verify_pack_publish_code,
     search_pack_catalog
@@ -490,6 +497,81 @@ def backfill_pack_installs_route(db: Session = Depends(get_db)):
 def pack_my_status(pack_guid: str, db: Session = Depends(get_db)):
     try:
         return get_my_pack_status(db, pack_guid)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/catalog/suggested-edits/{edit_id}/resolve")
+def resolve_pack_suggested_edit_route(
+    edit_id: int,
+    payload: PackSuggestedEditResolveRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return resolve_pack_suggested_edit(
+            db,
+            edit_id,
+            status=payload.status,
+            owner_note=payload.owner_note
+        )
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/catalog/suggested-edits/{edit_id}/apply")
+def apply_pack_suggested_edit_route(
+    edit_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        return apply_pack_suggested_edit(db, edit_id)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/packs/catalog/{pack_guid}/suggested-edit-targets")
+def pack_suggested_edit_targets(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return list_pack_suggested_edit_targets(db, pack_guid)
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/packs/catalog/{pack_guid}/suggested-edits")
+def pack_suggested_edits(
+    pack_guid: str,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    try:
+        return list_pack_suggested_edits(db, pack_guid, limit=limit)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/catalog/{pack_guid}/suggested-edits")
+def submit_pack_suggested_edit_route(
+    pack_guid: str,
+    payload: PackSuggestedEditCreateRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return submit_pack_suggested_edit(
+            db,
+            pack_guid,
+            target_question_guid=payload.target_question_guid,
+            proposed_question=payload.proposed_question,
+            proposed_answer=payload.proposed_answer,
+            note=payload.note
+        )
     except PackCatalogAuthError as error:
         raise HTTPException(status_code=401, detail=str(error)) from error
     except PackCatalogError as error:

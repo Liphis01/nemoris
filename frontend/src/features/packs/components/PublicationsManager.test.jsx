@@ -5,16 +5,19 @@ import PublicationsManager from "./PublicationsManager";
 import { listCollections } from "../../../api/collections";
 import { listGroups } from "../../../api/groups";
 import {
+  applyPackSuggestedEdit,
   deletePackPublication,
   getMyPackStatus,
   listPackComments,
   backfillPackInstalls,
   getPackPublishStatus,
+  listPackSuggestedEdits,
   listPackPublications,
   previewPackRelease,
   publishPack,
   publishPackDraft,
   requestPackPublishCode,
+  resolvePackSuggestedEdit,
   signOutPackPublisher,
   unpublishPack,
   verifyPackPublishCode
@@ -30,17 +33,20 @@ vi.mock("../../../api/groups", () => ({
 
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
+  applyPackSuggestedEdit: vi.fn(),
   deletePackPublication: vi.fn(),
   getMyPackStatus: vi.fn(),
   listPackComments: vi.fn(),
   ratePack: vi.fn(),
   backfillPackInstalls: vi.fn(),
   getPackPublishStatus: vi.fn(),
+  listPackSuggestedEdits: vi.fn(),
   listPackPublications: vi.fn(),
   previewPackRelease: vi.fn(),
   publishPack: vi.fn(),
   publishPackDraft: vi.fn(),
   requestPackPublishCode: vi.fn(),
+  resolvePackSuggestedEdit: vi.fn(),
   signOutPackPublisher: vi.fn(),
   unpublishPack: vi.fn(),
   verifyPackPublishCode: vi.fn()
@@ -146,6 +152,33 @@ describe("PublicationsManager", () => {
     // these to resolve, not just the tests that assert on review content.
     getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
     listPackComments.mockResolvedValue({ comments: [] });
+    listPackSuggestedEdits.mockResolvedValue({
+      suggestions: [],
+      pending_count: 0
+    });
+    resolvePackSuggestedEdit.mockResolvedValue({
+      suggestion: {
+        id: 12,
+        status: "accepted",
+        target_label: "Capitale de la France ?",
+        target_question_guid: "france-question-guid",
+        proposed_answer: "Paris",
+        note: "Correction."
+      }
+    });
+    applyPackSuggestedEdit.mockResolvedValue({
+      status: "applied",
+      suggestion: {
+        id: 12,
+        status: "accepted",
+        target_label: "Capitale de la France ?",
+        target_question_guid: "france-question-guid",
+        proposed_answer: "Paris",
+        note: "Correction.",
+        applied_at: "2026-08-27T10:10:00Z"
+      },
+      question: { id: 44, answer: "Paris" }
+    });
   });
 
   afterEach(() => {
@@ -197,6 +230,112 @@ describe("PublicationsManager", () => {
     await waitFor(() => {
       expect(unpublishPack).toHaveBeenCalledWith("published-guid");
     });
+  });
+
+  it("shows suggested edits for a publication and resolves one", async () => {
+    listPackSuggestedEdits.mockResolvedValueOnce({
+      pending_count: 1,
+      suggestions: [{
+        id: 12,
+        pack_guid: "published-guid",
+        author_label: "reader@example.com",
+        status: "pending",
+        target_label: "Capitale de la France ?",
+        target_snapshot: {
+          question: "Capitale de la France ?",
+          answer: "Lyon"
+        },
+        proposed_question: "",
+        proposed_answer: "Paris",
+        note: "La capitale est Paris."
+      }]
+    });
+    resolvePackSuggestedEdit.mockResolvedValueOnce({
+      suggestion: {
+        id: 12,
+        pack_guid: "published-guid",
+        author_label: "reader@example.com",
+        status: "accepted",
+        target_label: "Capitale de la France ?",
+        target_snapshot: {
+          question: "Capitale de la France ?",
+          answer: "Lyon"
+        },
+        proposed_question: "",
+        proposed_answer: "Paris",
+        note: "La capitale est Paris."
+      }
+    });
+
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    await openPackInRail(/Territoires du monde/);
+
+    expect(
+      (await screen.findAllByText("Capitale de la France ?")).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Paris")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Accepter" }));
+
+    await waitFor(() => {
+      expect(resolvePackSuggestedEdit).toHaveBeenCalledWith(12, {
+        status: "accepted",
+        owner_note: ""
+      });
+    });
+    expect(await screen.findByText("Acceptée")).toBeInTheDocument();
+  });
+
+  it("applies an accepted suggested edit to the local source", async () => {
+    listPackSuggestedEdits.mockResolvedValueOnce({
+      pending_count: 0,
+      suggestions: [{
+        id: 12,
+        pack_guid: "published-guid",
+        author_label: "reader@example.com",
+        status: "accepted",
+        target_question_guid: "france-question-guid",
+        target_label: "Capitale de la France ?",
+        target_snapshot: {
+          question: "Capitale de la France ?",
+          answer: "Lyon"
+        },
+        proposed_question: "",
+        proposed_answer: "Paris",
+        note: "La capitale est Paris."
+      }]
+    });
+    applyPackSuggestedEdit.mockResolvedValueOnce({
+      status: "applied",
+      suggestion: {
+        id: 12,
+        pack_guid: "published-guid",
+        author_label: "reader@example.com",
+        status: "accepted",
+        target_question_guid: "france-question-guid",
+        target_label: "Capitale de la France ?",
+        target_snapshot: {
+          question: "Capitale de la France ?",
+          answer: "Lyon"
+        },
+        proposed_question: "",
+        proposed_answer: "Paris",
+        note: "La capitale est Paris.",
+        applied_at: "2026-08-27T10:10:00Z"
+      },
+      question: { id: 44, answer: "Paris" }
+    });
+
+    render(<PublicationsManager setMode={vi.fn()} />);
+
+    await openPackInRail(/Territoires du monde/);
+    await userEvent.click(await screen.findByRole("button", { name: "Appliquer" }));
+
+    await waitFor(() => {
+      expect(applyPackSuggestedEdit).toHaveBeenCalledWith(12);
+    });
+    expect(await screen.findByText("Appliquée")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appliquer" })).not.toBeInTheDocument();
   });
 
   it("declining the confirm dialog does not call unpublishPack", async () => {

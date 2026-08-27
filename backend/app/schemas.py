@@ -349,6 +349,18 @@ class PackCommentCreateRequest(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
 
+class PackSuggestedEditCreateRequest(BaseModel):
+    target_question_guid: Optional[str] = Field(default=None, max_length=120)
+    proposed_question: str = Field(default="", max_length=2000)
+    proposed_answer: str = Field(default="", max_length=2000)
+    note: str = Field(min_length=1, max_length=2000)
+
+
+class PackSuggestedEditResolveRequest(BaseModel):
+    status: Literal["accepted", "rejected"]
+    owner_note: str = Field(default="", max_length=1000)
+
+
 class PackActivityReadRequest(BaseModel):
     event_ids: List[int] = Field(default_factory=list, max_length=100)
 

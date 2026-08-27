@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { listGroups } from "../../../api/groups";
 import { listCollections } from "../../../api/collections";
 import {
+  applyPackSuggestedEdit,
   deletePackPublication,
   previewPackRelease,
   publishPack,
   publishPackDraft,
   listPackPublications,
+  listPackSuggestedEdits,
+  resolvePackSuggestedEdit,
   unpublishPack
 } from "../../../api/packs";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
@@ -123,6 +126,237 @@ function ReleaseDiffPreview({ preview }) {
     </div>
   );
 }
+
+
+function suggestedEditStatusLabel(suggestion) {
+  const status = suggestion?.status || suggestion;
+
+  if (suggestion?.applied_at) return "Appliquée";
+  if (status === "accepted") return "Acceptée";
+  if (status === "rejected") return "Rejetée";
+
+  return "En attente";
+}
+
+
+function SuggestedEditValue({ label, value }) {
+  if (!value) return null;
+
+  return (
+    <div className="pack-suggestion-value">
+      <span className="pack-field-label">{label}</span>
+      <p>{value}</p>
+    </div>
+  );
+}
+
+
+function SuggestedEditsPanel({ publication }) {
+  const [state, setState] = useState({
+    status: "loading",
+    suggestions: [],
+    pendingCount: 0,
+    error: ""
+  });
+  const [resolvingId, setResolvingId] = useState(null);
+  const [applyingId, setApplyingId] = useState(null);
+
+  const loadSuggestions = useCallback(async () => {
+    setState((current) => ({ ...current, status: "loading", error: "" }));
+
+    try {
+      const data = await listPackSuggestedEdits(publication.pack_guid, {
+        limit: 50
+      });
+      setState({
+        status: "ready",
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+        pendingCount: data.pending_count || 0,
+        error: ""
+      });
+    } catch (error) {
+      console.error(error);
+      setState({
+        status: "error",
+        suggestions: [],
+        pendingCount: 0,
+        error: error.message || "Suggestions indisponibles."
+      });
+    }
+  }, [publication.pack_guid]);
+
+  useEffect(() => {
+    loadSuggestions();
+  }, [loadSuggestions]);
+
+  async function resolveSuggestion(suggestion, status) {
+    setResolvingId(suggestion.id);
+
+    try {
+      const result = await resolvePackSuggestedEdit(suggestion.id, {
+        status,
+        owner_note: ""
+      });
+      const nextSuggestion = result.suggestion;
+
+      setState((current) => {
+        const suggestions = current.suggestions.map((item) => (
+          item.id === nextSuggestion.id ? nextSuggestion : item
+        ));
+
+        return {
+          ...current,
+          suggestions,
+          pendingCount: suggestions.filter((item) => item.status === "pending").length,
+          error: ""
+        };
+      });
+    } catch (error) {
+      console.error(error);
+      setState((current) => ({
+        ...current,
+        error: error.message || "Suggestion impossible à traiter."
+      }));
+    } finally {
+      setResolvingId(null);
+    }
+  }
+
+  async function applySuggestion(suggestion) {
+    setApplyingId(suggestion.id);
+
+    try {
+      const result = await applyPackSuggestedEdit(suggestion.id);
+      const nextSuggestion = result.suggestion;
+
+      setState((current) => ({
+        ...current,
+        suggestions: current.suggestions.map((item) => (
+          item.id === nextSuggestion.id ? nextSuggestion : item
+        )),
+        error: ""
+      }));
+    } catch (error) {
+      console.error(error);
+      setState((current) => ({
+        ...current,
+        error: error.message || "Suggestion impossible à appliquer."
+      }));
+    } finally {
+      setApplyingId(null);
+    }
+  }
+
+  return (
+    <section className="pack-suggested-edits">
+      <div className="pack-section-head">
+        <div>
+          <h3>Suggestions</h3>
+          <p>{state.pendingCount} en attente</p>
+        </div>
+      </div>
+
+      {state.status === "loading" && (
+        <div className="pack-status" role="status">Chargement des suggestions...</div>
+      )}
+
+      {state.error && (
+        <div className="pack-alert" role="alert">{state.error}</div>
+      )}
+
+      {state.status === "ready" && state.suggestions.length === 0 && (
+        <div className="pack-theme-empty">Aucune suggestion.</div>
+      )}
+
+      {state.status === "ready" && state.suggestions.length > 0 && (
+        <div className="pack-suggestion-list">
+          {state.suggestions.map((suggestion) => {
+            const pending = suggestion.status === "pending";
+            const canApply = (
+              suggestion.status === "accepted" &&
+              !suggestion.applied_at &&
+              suggestion.target_question_guid &&
+              (
+                suggestion.proposed_question ||
+                suggestion.proposed_answer
+              )
+            );
+            const snapshot = suggestion.target_snapshot || {};
+            const statusClass = suggestion.applied_at
+              ? "is-applied"
+              : `is-${suggestion.status}`;
+
+            return (
+              <article className="pack-suggestion-item" key={suggestion.id}>
+                <div className="pack-suggestion-head">
+                  <span>
+                    <strong>{suggestion.target_label || "Pack entier"}</strong>
+                    <small>{suggestion.author_label}</small>
+                  </span>
+                  <em className={`pack-suggestion-status ${statusClass}`}>
+                    {suggestedEditStatusLabel(suggestion)}
+                  </em>
+                </div>
+
+                <SuggestedEditValue
+                  label="Question actuelle"
+                  value={snapshot.question}
+                />
+                <SuggestedEditValue
+                  label="Réponse actuelle"
+                  value={snapshot.answer}
+                />
+                <SuggestedEditValue
+                  label="Question proposée"
+                  value={suggestion.proposed_question}
+                />
+                <SuggestedEditValue
+                  label="Réponse proposée"
+                  value={suggestion.proposed_answer}
+                />
+                <SuggestedEditValue label="Note" value={suggestion.note} />
+
+                {pending && (
+                  <div className="pack-action-row">
+                    <button
+                      type="button"
+                      className="pack-secondary-button"
+                      disabled={resolvingId === suggestion.id}
+                      onClick={() => resolveSuggestion(suggestion, "accepted")}
+                    >
+                      Accepter
+                    </button>
+                    <button
+                      type="button"
+                      className="pack-secondary-button"
+                      disabled={resolvingId === suggestion.id}
+                      onClick={() => resolveSuggestion(suggestion, "rejected")}
+                    >
+                      Rejeter
+                    </button>
+                  </div>
+                )}
+                {canApply && (
+                  <div className="pack-action-row">
+                    <button
+                      type="button"
+                      className="pack-secondary-button"
+                      disabled={applyingId === suggestion.id}
+                      onClick={() => applySuggestion(suggestion)}
+                    >
+                      Appliquer
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 
 // Two steps, not one shared pane: picking a source and filling in metadata
 // are different tasks that both want the full width, and at a few hundred
@@ -810,6 +1044,11 @@ function PackDetail({
       {action.error && (
         <div className="pack-alert" role="alert">{action.error}</div>
       )}
+
+      <SuggestedEditsPanel
+        publication={publication}
+        key={`suggestions-${publication.pack_guid}`}
+      />
 
       <PackReviewsSection entry={publication} setMode={setMode} isOwner />
     </section>

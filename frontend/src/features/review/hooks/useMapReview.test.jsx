@@ -382,6 +382,31 @@ describe("useMapReview recap sorting", () => {
     expect(onAnsweringComplete).toHaveBeenCalledWith([1, 2]);
   });
 
+  it("allows giving up on type_prompt without typing an answer", () => {
+    const onAnsweringComplete = vi.fn();
+    const reviewZones = [
+      zone({ questionId: 1, code: "a", label: "Alpha" }),
+      zone({ questionId: 2, code: "b", label: "Beta" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "type_prompt",
+        onAnsweringComplete
+      })
+    );
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishMap()).toBe(true);
+    });
+
+    expect(result.current.showRecap).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+    expect(onAnsweringComplete).toHaveBeenCalledWith([1, 2]);
+  });
+
   it("allows partial finish when that mode explicitly permits non-answers", () => {
     const onAnsweringComplete = vi.fn();
     const reviewZones = [

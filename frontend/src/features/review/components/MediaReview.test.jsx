@@ -497,6 +497,33 @@ describe("MediaReview answer label preview", () => {
     expect(finishReview).not.toHaveBeenCalled();
   });
 
+  it("allows type_prompt finish when the hook reports no found image yet", () => {
+    const finishReview = vi.fn();
+    mockMediaReviewState({
+      mode: IMAGE_MODE_TYPE_PROMPT,
+      rowOverrides: {
+        isActive: true,
+        isFound: false
+      },
+      hookOverrides: {
+        canFinishReview: true,
+        finishReview,
+        foundQuestionIds: [],
+        progressPercent: 0,
+        remainingCount: 1
+      }
+    });
+    renderMediaReview();
+
+    const button = screen.getByRole("button", { name: "Terminer la série" });
+
+    expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+
+    expect(finishReview).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a viewport-bounded shell with only the image pane scrolling", () => {
     const rows = [
       imageGridRow(1),

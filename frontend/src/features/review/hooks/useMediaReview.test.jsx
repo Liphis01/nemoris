@@ -406,6 +406,32 @@ describe("useMediaReview", () => {
       .toEqual([1, 2]);
   });
 
+  it("allows giving up on type_prompt without typing an answer", () => {
+    const onAnsweringComplete = vi.fn();
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), undefined, {
+        mode: IMAGE_MODE_TYPE_PROMPT,
+        onAnsweringComplete
+      })
+    );
+
+    expect(result.current.canFinishReview).toBe(true);
+
+    act(() => {
+      expect(result.current.finishReview()).toBe(true);
+    });
+
+    expect(result.current.resultMode).toBe(true);
+    expect(result.current.foundQuestionIds).toEqual([]);
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+    expect(onAnsweringComplete.mock.calls[0][0].sort((a, b) => a - b))
+      .toEqual([1, 2]);
+  });
+
   it("allows partial finish when that mode explicitly permits non-answers", () => {
     const onAnsweringComplete = vi.fn();
     const items = [

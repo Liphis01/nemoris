@@ -17,6 +17,7 @@ import {
   getPackFamily,
   getMyPackStatus,
   getPackPublishStatus,
+  listPackSuggestedEditTargets,
   listPackActivity,
   listPackComments,
   listPackPublications,
@@ -27,6 +28,7 @@ import {
   recordPackInstall,
   requestPackPublishCode,
   signOutPackPublisher,
+  submitPackSuggestedEdit,
   unpublishPack,
   verifyPackPublishCode
 } from "../../../api/packs";
@@ -60,6 +62,7 @@ vi.mock("../../../api/packs", () => ({
   getPackFamily: vi.fn(),
   getMyPackStatus: vi.fn(),
   getPackPublishStatus: vi.fn(),
+  listPackSuggestedEditTargets: vi.fn(),
   listPackActivity: vi.fn(),
   listPackComments: vi.fn(),
   listPackPublications: vi.fn(),
@@ -71,6 +74,7 @@ vi.mock("../../../api/packs", () => ({
   requestPackPublishCode: vi.fn(),
   savePlaylistDraft: vi.fn(),
   signOutPackPublisher: vi.fn(),
+  submitPackSuggestedEdit: vi.fn(),
   unpublishPack: vi.fn(),
   verifyPackPublishCode: vi.fn()
 }));
@@ -224,6 +228,27 @@ describe("BrowsePacks", () => {
       base_pack_name: "Territoires du monde"
     });
     listPackComments.mockResolvedValue({ comments: [] });
+    listPackSuggestedEditTargets.mockResolvedValue({
+      pack_guid: "biology-text",
+      targets: [{
+        question_guid: "mitochondrie-guid",
+        group_guid: "bio-group",
+        group_name: "Organites",
+        type_q: "text",
+        question: "Mitochondrie",
+        answer: "Organite"
+      }]
+    });
+    submitPackSuggestedEdit.mockResolvedValue({
+      suggestion: {
+        id: 4,
+        pack_guid: "biology-text",
+        status: "pending",
+        target_label: "Mitochondrie",
+        proposed_answer: "Organite producteur d'énergie",
+        note: "Réponse plus précise."
+      }
+    });
     getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
     ratePack.mockResolvedValue({ my_rating: 5, avg_rating: 5, rating_count: 1 });
     addPackComment.mockResolvedValue({
@@ -497,6 +522,47 @@ describe("BrowsePacks", () => {
       await screen.findByRole("heading", { name: "Publier une variante" })
     ).toBeInTheDocument();
     expect(screen.getByText("Variante de")).toBeInTheDocument();
+  });
+
+  it("submits a suggested edit for an installed pack", async () => {
+    defaultHook();
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Biologie cellulaire/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Suggérer une correction" })
+    );
+
+    await waitFor(() => {
+      expect(listPackSuggestedEditTargets).toHaveBeenCalledWith("biology-text");
+    });
+    await screen.findByRole("option", { name: /Mitochondrie/ });
+    await userEvent.selectOptions(
+      screen.getByLabelText("Question concernée"),
+      "mitochondrie-guid"
+    );
+    await userEvent.type(
+      screen.getByLabelText("Réponse proposée"),
+      "Organite producteur d'énergie"
+    );
+    await userEvent.type(
+      screen.getByLabelText("Note"),
+      "Réponse plus précise."
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Envoyer" }));
+
+    await waitFor(() => {
+      expect(submitPackSuggestedEdit).toHaveBeenCalledWith("biology-text", {
+        target_question_guid: "mitochondrie-guid",
+        proposed_question: "",
+        proposed_answer: "Organite producteur d'énergie",
+        note: "Réponse plus précise."
+      });
+    });
+    expect(await screen.findByText("Suggestion envoyée.")).toBeInTheDocument();
   });
 
   it("shows unread pack activity and marks it read", async () => {

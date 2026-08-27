@@ -19,6 +19,7 @@ from app.models import (
 )
 from app.routers.packs import (
     add_pack_comment_route,
+    apply_pack_suggested_edit_route,
     backfill_pack_installs_route,
     delete_group_pack_publication,
     diagnose_pack_catalog,
@@ -26,19 +27,25 @@ from app.routers.packs import (
     pack_catalog_family,
     pack_comments,
     pack_my_status,
+    pack_suggested_edit_targets,
+    pack_suggested_edits,
     pack_variant_source,
     preview_catalog_pack,
     rate_pack_route,
     read_pack_catalog_activity,
     record_pack_install_route,
+    resolve_pack_suggested_edit_route,
     search_catalog_packs,
+    submit_pack_suggested_edit_route,
     unpublish_group_pack
 )
 from app.schemas import (
     PackActivityReadRequest,
     PackCommentCreateRequest,
     PackInstallRecordRequest,
-    PackRatingRequest
+    PackRatingRequest,
+    PackSuggestedEditCreateRequest,
+    PackSuggestedEditResolveRequest
 )
 from app.services.pack_catalog import (
     PUBLISH_OTP_TIMEOUT,
@@ -164,6 +171,24 @@ class PackCatalogSchemaSqlTests(unittest.TestCase):
         self.assertIn("create or replace function public.list_pack_activity_events", sql)
         self.assertIn("create or replace function public.mark_pack_activity_events_read", sql)
         self.assertIn("'variant_published'", sql)
+
+    def test_supabase_schema_adds_pack_suggested_edits(self):
+        sql_path = (
+            Path(__file__).resolve().parents[2]
+            / "docs"
+            / "supabase-pack-catalog-schema.sql"
+        )
+        sql = sql_path.read_text(encoding="utf-8")
+
+        self.assertIn("create table if not exists public.pack_suggested_edits", sql)
+        self.assertIn("pack_suggested_edits_insert_own_if_installed", sql)
+        self.assertIn("pack_suggested_edits_owner_resolve", sql)
+        self.assertIn("create or replace function public.submit_pack_suggested_edit", sql)
+        self.assertIn("create or replace function public.list_pack_suggested_edits", sql)
+        self.assertIn("create or replace function public.resolve_pack_suggested_edit", sql)
+        self.assertIn("applied_at timestamptz", sql)
+        self.assertIn("create or replace function public.mark_pack_suggested_edit_applied", sql)
+        self.assertIn("'suggested_edit_created'", sql)
 
 
 class PackCatalogSearchTests(unittest.TestCase):
@@ -2254,6 +2279,510 @@ class PackCatalogEligibilityTests(PackCatalogAuthTestCase):
                 pack_my_status("group-guid", db=db)
 
         self.assertEqual(context.exception.status_code, 401)
+
+
+class PackCatalogSuggestedEditTests(PackCatalogAuthTestCase):
+    def configure_installed_pack(self, db):
+        use_catalog(self, url="https://project.supabase.co")
+        group = QuestionGroup(
+            guid="country-group-guid",
+            type_group="text",
+            name="Capitales",
+            pack_guid="world-map",
+            pack_version=2,
+            content_hash="group-hash"
+        )
+        question = Question(
+            guid="france-question-guid",
+            type_q="text",
+            question="Capitale de la France ?",
+            answer="Lyon",
+            tags=["core:geography"],
+            group=group,
+            pack_guid="world-map",
+            pack_version=2,
+            content_hash="question-hash"
+        )
+        db.add(group)
+        db.add(question)
+        db.add(PackSubscription(
+            pack_guid="world-map",
+            installed_version=2,
+            name="Pays du monde",
+            source="world.zip",
+            subscribed_at="2026-08-01T10:00:00Z"
+        ))
+        db.commit()
+
+    def configure_owned_pack_source(self, db, *, answer="Lyon"):
+        use_catalog(self, url="https://project.supabase.co")
+        group = QuestionGroup(
+            guid="world-map",
+            type_group="text",
+            name="Pays du monde"
+        )
+        question = Question(
+            guid="france-question-guid",
+            type_q="text",
+            question="Capitale de la France ?",
+            answer=answer,
+            tags=["core:geography"],
+            group=group
+        )
+        db.add(group)
+        db.add(question)
+        db.commit()
+
+        return question.id
+
+    def configure_owned_playlist_source(self, db, *, answer="Lyon"):
+        use_catalog(self, url="https://project.supabase.co")
+        group = QuestionGroup(
+            guid="country-group-guid",
+            type_group="text",
+            name="Capitales"
+        )
+        question = Question(
+            guid="france-question-guid",
+            type_q="text",
+            question="Capitale de la France ?",
+            answer=answer,
+            tags=["core:geography"],
+            group=group
+        )
+        collection = Collection(
+            guid="world-map",
+            name="Pays du monde",
+            questions=[question]
+        )
+        db.add(group)
+        db.add(question)
+        db.add(collection)
+        db.commit()
+
+        return question.id
+
+    def suggestion_row(self, *, status="accepted", applied_at=None):
+        return {
+            "id": 12,
+            "pack_guid": "world-map",
+            "author_label": "reader@example.com",
+            "status": status,
+            "target_question_guid": "france-question-guid",
+            "target_group_guid": "world-map",
+            "target_label": "Capitale de la France ?",
+            "target_snapshot": {
+                "question_guid": "france-question-guid",
+                "group_guid": "world-map",
+                "group_name": "Pays du monde",
+                "type_q": "text",
+                "question": "Capitale de la France ?",
+                "answer": "Lyon"
+            },
+            "proposed_question": "",
+            "proposed_answer": "Paris",
+            "note": "La capitale est Paris.",
+            "owner_note": "",
+            "created_at": "2026-08-27T10:00:00Z",
+            "resolved_at": "2026-08-27T10:05:00Z",
+            "applied_at": applied_at
+        }
+
+    def publication_row(self):
+        return {
+            "pack_guid": "world-map",
+            "name": "Pays du monde",
+            "description": "",
+            "type_group": "text",
+            "question_count": 1,
+            "version": 1,
+            "size_bytes": 1024,
+            "license": "CC0",
+            "tags": ["core:geography"],
+            "themes": ["Géographie"],
+            "storage_path": "user-123/world-map/world.zip",
+            "is_public": True,
+            "publication_status": "published"
+        }
+
+    def test_targets_list_installed_pack_questions(self):
+        db = make_db()
+        self.configure_installed_pack(db)
+
+        result = pack_suggested_edit_targets("world-map", db=db)
+
+        self.assertEqual(result["pack_guid"], "world-map")
+        self.assertEqual(result["name"], "Pays du monde")
+        self.assertEqual(result["targets"], [{
+            "question_guid": "france-question-guid",
+            "group_guid": "country-group-guid",
+            "group_name": "Capitales",
+            "type_q": "text",
+            "question": "Capitale de la France ?",
+            "answer": "Lyon"
+        }])
+
+    def test_targets_require_local_install(self):
+        db = make_db()
+        use_catalog(self, url="https://project.supabase.co")
+
+        with self.assertRaises(HTTPException) as context:
+            pack_suggested_edit_targets("world-map", db=db)
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("Installe ce pack", context.exception.detail)
+
+    def test_submit_suggested_edit_posts_snapshot_to_authenticated_rpc(self):
+        db = make_db()
+        self.configure_installed_pack(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if request.full_url.endswith("/rpc/record_pack_install"):
+                return FakeResponse({"recorded": True})
+
+            return FakeResponse({
+                "id": 12,
+                "pack_guid": "world-map",
+                "author_label": "author@example.com",
+                "status": "pending",
+                "target_question_guid": "france-question-guid",
+                "target_group_guid": "country-group-guid",
+                "target_label": "Capitale de la France ?",
+                "target_snapshot": {
+                    "question_guid": "france-question-guid",
+                    "group_guid": "country-group-guid",
+                    "group_name": "Capitales",
+                    "type_q": "text",
+                    "question": "Capitale de la France ?",
+                    "answer": "Lyon"
+                },
+                "proposed_question": "",
+                "proposed_answer": "Paris",
+                "note": "La capitale est Paris.",
+                "owner_note": "",
+                "created_at": "2026-08-27T10:00:00Z"
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = submit_pack_suggested_edit_route(
+                "world-map",
+                PackSuggestedEditCreateRequest(
+                    target_question_guid="france-question-guid",
+                    proposed_answer="Paris",
+                    note="La capitale est Paris."
+                ),
+                db=db
+            )
+
+        self.assertEqual(result["suggestion"]["id"], 12)
+        self.assertEqual(result["suggestion"]["proposed_answer"], "Paris")
+        self.assertEqual(
+            calls[0][0].full_url,
+            "https://project.supabase.co/rest/v1/rpc/record_pack_install"
+        )
+        self.assertEqual(
+            calls[1][0].full_url,
+            "https://project.supabase.co/rest/v1/rpc/submit_pack_suggested_edit"
+        )
+        payload = json.loads(calls[1][0].data.decode("utf-8"))
+        self.assertEqual(payload["p_pack_guid"], "world-map")
+        self.assertEqual(payload["p_target_question_guid"], "france-question-guid")
+        self.assertEqual(payload["p_target_group_guid"], "country-group-guid")
+        self.assertEqual(payload["p_target_snapshot"]["answer"], "Lyon")
+        self.assertEqual(payload["p_proposed_answer"], "Paris")
+        self.assertEqual(payload["p_note"], "La capitale est Paris.")
+
+    def test_submit_suggested_edit_requires_sign_in(self):
+        db = make_db()
+        self.configure_installed_pack(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                submit_pack_suggested_edit_route(
+                    "world-map",
+                    PackSuggestedEditCreateRequest(note="Corriger la réponse."),
+                    db=db
+                )
+
+        self.assertEqual(context.exception.status_code, 401)
+
+    def test_owner_lists_suggested_edits(self):
+        db = make_db()
+        use_catalog(self, url="https://project.supabase.co")
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "pending_count": 1,
+                "suggestions": [{
+                    "id": 12,
+                    "pack_guid": "world-map",
+                    "author_label": "reader@example.com",
+                    "status": "pending",
+                    "target_label": "Capitale de la France ?",
+                    "proposed_answer": "Paris",
+                    "note": "La capitale est Paris."
+                }]
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = pack_suggested_edits("world-map", db=db)
+
+        self.assertEqual(result["pending_count"], 1)
+        self.assertEqual(result["suggestions"][0]["proposed_answer"], "Paris")
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/list_pack_suggested_edits"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "world-map", "p_limit": 50}
+        )
+
+    def test_owner_resolves_suggested_edit(self):
+        db = make_db()
+        use_catalog(self, url="https://project.supabase.co")
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "id": 12,
+                "pack_guid": "world-map",
+                "author_label": "reader@example.com",
+                "status": "accepted",
+                "target_label": "Capitale de la France ?",
+                "proposed_answer": "Paris",
+                "note": "La capitale est Paris.",
+                "owner_note": "Corrigé localement.",
+                "resolved_at": "2026-08-27T10:05:00Z"
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = resolve_pack_suggested_edit_route(
+                12,
+                PackSuggestedEditResolveRequest(
+                    status="accepted",
+                    owner_note="Corrigé localement."
+                ),
+                db=db
+            )
+
+        self.assertEqual(result["suggestion"]["status"], "accepted")
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/resolve_pack_suggested_edit"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "p_edit_id": 12,
+                "p_status": "accepted",
+                "p_owner_note": "Corrigé localement."
+            }
+        )
+
+    def test_owner_applies_accepted_suggested_edit_to_local_source(self):
+        db = make_db()
+        question_id = self.configure_owned_pack_source(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if "/pack_suggested_edits?" in request.full_url:
+                return FakeResponse([self.suggestion_row()])
+
+            if "/pack_catalog?" in request.full_url:
+                return FakeResponse([self.publication_row()])
+
+            if request.full_url.endswith("/rpc/mark_pack_suggested_edit_applied"):
+                return FakeResponse(self.suggestion_row(
+                    applied_at="2026-08-27T10:10:00Z"
+                ))
+
+            raise AssertionError(f"unexpected URL {request.full_url}")
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = apply_pack_suggested_edit_route(12, db=db)
+
+        db.expire_all()
+        question = db.query(Question).filter(Question.id == question_id).first()
+        self.assertEqual(question.answer, "Paris")
+        self.assertIsNone(question.pack_guid)
+        self.assertEqual(result["status"], "applied")
+        self.assertEqual(result["question"]["answer"], "Paris")
+        self.assertEqual(
+            result["suggestion"]["applied_at"],
+            "2026-08-27T10:10:00Z"
+        )
+        self.assertEqual(
+            calls[0][0].full_url,
+            "https://project.supabase.co/rest/v1/pack_suggested_edits"
+            "?select=*&id=eq.12&limit=1"
+        )
+        self.assertEqual(
+            calls[-1][0].full_url,
+            "https://project.supabase.co/rest/v1/rpc/mark_pack_suggested_edit_applied"
+        )
+        self.assertEqual(
+            json.loads(calls[-1][0].data.decode("utf-8")),
+            {"p_edit_id": 12}
+        )
+
+    def test_owner_applies_suggested_edit_to_playlist_source(self):
+        db = make_db()
+        question_id = self.configure_owned_playlist_source(db)
+
+        def fake_urlopen(request, timeout):
+            if "/pack_suggested_edits?" in request.full_url:
+                return FakeResponse([self.suggestion_row()])
+
+            if "/pack_catalog?" in request.full_url:
+                return FakeResponse([self.publication_row()])
+
+            if request.full_url.endswith("/rpc/mark_pack_suggested_edit_applied"):
+                return FakeResponse(self.suggestion_row(
+                    applied_at="2026-08-27T10:10:00Z"
+                ))
+
+            raise AssertionError(f"unexpected URL {request.full_url}")
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = apply_pack_suggested_edit_route(12, db=db)
+
+        db.expire_all()
+        question = db.query(Question).filter(Question.id == question_id).first()
+        self.assertEqual(question.answer, "Paris")
+        self.assertEqual(result["question"]["answer"], "Paris")
+
+    def test_apply_suggested_edit_requires_acceptance_first(self):
+        db = make_db()
+        question_id = self.configure_owned_pack_source(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse([self.suggestion_row(status="pending")])
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            with self.assertRaises(HTTPException) as context:
+                apply_pack_suggested_edit_route(12, db=db)
+
+        db.expire_all()
+        question = db.query(Question).filter(Question.id == question_id).first()
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("Accepte la suggestion", context.exception.detail)
+        self.assertEqual(question.answer, "Lyon")
+        self.assertEqual(len(calls), 1)
+
+    def test_apply_suggested_edit_stops_on_stale_local_question(self):
+        db = make_db()
+        question_id = self.configure_owned_pack_source(db, answer="Marseille")
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if "/pack_suggested_edits?" in request.full_url:
+                return FakeResponse([self.suggestion_row()])
+
+            if "/pack_catalog?" in request.full_url:
+                return FakeResponse([self.publication_row()])
+
+            raise AssertionError(f"unexpected URL {request.full_url}")
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            with self.assertRaises(HTTPException) as context:
+                apply_pack_suggested_edit_route(12, db=db)
+
+        db.expire_all()
+        question = db.query(Question).filter(Question.id == question_id).first()
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("a changé", context.exception.detail)
+        self.assertEqual(question.answer, "Marseille")
+        self.assertFalse(any(
+            call[0].full_url.endswith("/rpc/mark_pack_suggested_edit_applied")
+            for call in calls
+        ))
 
 
 class PackCatalogCommentsTests(PackCatalogAuthTestCase):

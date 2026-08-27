@@ -418,6 +418,8 @@
 .pack-toolbar-field select,
 .pack-export-panel input,
 .pack-export-panel textarea,
+.pack-suggest-edit-form select,
+.pack-suggest-edit-form textarea,
 .pack-publish-auth input {
   appearance: none;
   background: #111111;
@@ -434,6 +436,7 @@
 .pack-toolbar-search input,
 .pack-toolbar-field select,
 .pack-export-panel input,
+.pack-suggest-edit-form select,
 .pack-publish-auth input {
   height: 40px;
   padding: 0 10px;
@@ -455,6 +458,12 @@
 
 .pack-export-panel textarea {
   min-height: 68px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.pack-suggest-edit-form textarea {
+  min-height: 64px;
   padding: 10px;
   resize: vertical;
 }
@@ -525,6 +534,8 @@
 .pack-toolbar-field select:focus-visible,
 .pack-export-panel input:focus-visible,
 .pack-export-panel textarea:focus-visible,
+.pack-suggest-edit-form select:focus-visible,
+.pack-suggest-edit-form textarea:focus-visible,
 .pack-export-group:focus-visible,
 .pack-publication-item:focus-visible,
 .pack-family-item:focus-visible,
@@ -874,7 +885,9 @@
 
 .pack-progress-panel,
 .pack-preview-panel,
-.pack-family-panel {
+.pack-family-panel,
+.pack-suggest-edit,
+.pack-suggested-edits {
   border-top: 1px solid #282828;
   display: grid;
   gap: 12px;
@@ -884,6 +897,7 @@
 .pack-progress-panel h3,
 .pack-preview-panel h3,
 .pack-family-panel h3,
+.pack-suggested-edits h3,
 .pack-activity-popover h3 {
   color: #f2f2f2;
   font-size: 15px;
@@ -938,6 +952,114 @@
   font-weight: 700;
   line-height: 1.35;
   margin-top: 3px;
+}
+
+.pack-suggest-edit-form,
+.pack-suggestion-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pack-suggest-edit-form {
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.pack-suggest-current,
+.pack-suggestion-item,
+.pack-suggestion-value {
+  background: #171717;
+  border: 1px solid #282828;
+  border-radius: 8px;
+}
+
+.pack-suggest-current {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+
+.pack-suggest-current strong,
+.pack-suggest-current span:last-child {
+  color: #eeeeee;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pack-suggest-current span:last-child {
+  color: #a7a7a7;
+}
+
+.pack-suggestion-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pack-suggestion-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.pack-suggestion-head > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pack-suggestion-head strong {
+  color: #f1f1f1;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.pack-suggestion-head small,
+.pack-suggestion-value p {
+  color: #a0a0a0;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pack-suggestion-status {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  color: #cbd5e1;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.pack-suggestion-status.is-accepted {
+  border-color: rgba(126, 226, 168, 0.3);
+  color: #7ee2a8;
+}
+
+.pack-suggestion-status.is-applied {
+  border-color: rgba(125, 211, 252, 0.34);
+  color: #7dd3fc;
+}
+
+.pack-suggestion-status.is-rejected {
+  border-color: rgba(248, 113, 113, 0.34);
+  color: #fca5a5;
+}
+
+.pack-suggestion-value {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
 }
 
 .pack-progress-bars {

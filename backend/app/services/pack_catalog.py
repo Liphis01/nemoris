@@ -11,6 +11,9 @@ from zipfile import BadZipFile, ZipFile
 from sqlalchemy.orm import joinedload
 
 from ..models import Collection, PackSubscription, Question, QuestionGroup
+from ..models import question_collection
+from ..schemas import QuestionUpdate
+from ..serializers import serialize_manage_question
 from .map_zones import merge_tags
 from .pack_publish_state import (
     is_pack_publisher_signed_in,
@@ -26,6 +29,7 @@ from .packs import (
     export_pack,
     export_playlist_pack
 )
+from .questions import update_question as update_question_service
 from .settings import INTAKE_SECONDS_PER_QUESTION, get_pack_catalog_settings
 from .sync_client import is_timeout
 from .tag_hierarchy import (
@@ -71,6 +75,10 @@ PREVIEW_TEXT_LIMIT = 160
 PACK_VARIANTS_SCHEMA_MESSAGE = (
     "Mets à jour le schéma Supabase du catalogue avant d'utiliser les "
     "variantes de packs."
+)
+PACK_SUGGESTED_EDITS_SCHEMA_MESSAGE = (
+    "Mets à jour le schéma Supabase du catalogue avant d'utiliser les "
+    "suggestions de correction."
 )
 PUBLICATION_SELECT_BASE = (
     "pack_guid,name,description,type_group,question_count,"
@@ -229,6 +237,22 @@ def _is_activity_schema_gap(body_or_message):
             "list_pack_activity_events" in text
             or "mark_pack_activity_events_read" in text
             or "pack_activity_events" in text
+        )
+    )
+
+
+def _is_suggested_edit_schema_gap(body_or_message):
+    message = _body_error_text(body_or_message)
+    text = message.casefold()
+
+    return (
+        _is_supabase_schema_gap(message)
+        and (
+            "pack_suggested_edits" in text
+            or "submit_pack_suggested_edit" in text
+            or "list_pack_suggested_edits" in text
+            or "resolve_pack_suggested_edit" in text
+            or "mark_pack_suggested_edit_applied" in text
         )
     )
 
@@ -2484,6 +2508,431 @@ def get_my_pack_status(db, pack_guid):
         "is_installed": bool(body.get("is_installed")),
         "my_rating": _int_or_none(body.get("my_rating"))
     }
+
+
+def _pack_subscription_or_error(db, pack_guid):
+    clean_guid = str(pack_guid or "").strip()
+
+    if not clean_guid:
+        raise PackCatalogError("Pack introuvable.")
+
+    subscription = (
+        db.query(PackSubscription)
+        .filter(PackSubscription.pack_guid == clean_guid)
+        .first()
+    )
+
+    if not subscription:
+        raise PackCatalogError(
+            "Installe ce pack avant de proposer une correction."
+        )
+
+    return clean_guid, subscription
+
+
+def _suggested_edit_target_from_question(question):
+    group = question.group
+
+    return {
+        "question_guid": question.guid,
+        "group_guid": group.guid if group else None,
+        "group_name": group.name if group else "",
+        "type_q": question.type_q,
+        "question": question.question or "",
+        "answer": question.answer or ""
+    }
+
+
+def list_pack_suggested_edit_targets(db, pack_guid, *, limit=200):
+    clean_guid, subscription = _pack_subscription_or_error(db, pack_guid)
+    safe_limit = max(1, min(int(limit or 200), 500))
+    questions = (
+        db.query(Question)
+        .options(joinedload(Question.group))
+        .filter(Question.pack_guid == clean_guid)
+        .order_by(Question.group_id.asc(), Question.id.asc())
+        .limit(safe_limit + 1)
+        .all()
+    )
+    visible_questions = questions[:safe_limit]
+
+    return {
+        "pack_guid": clean_guid,
+        "name": subscription.name or clean_guid,
+        "targets": [
+            _suggested_edit_target_from_question(question)
+            for question in visible_questions
+        ],
+        "truncated": len(questions) > safe_limit
+    }
+
+
+def _suggested_edit_target_snapshot(db, pack_guid, target_question_guid):
+    clean_question_guid = str(target_question_guid or "").strip()
+
+    if not clean_question_guid:
+        return {
+            "target_question_guid": None,
+            "target_group_guid": None,
+            "target_label": "",
+            "target_snapshot": {}
+        }
+
+    question = (
+        db.query(Question)
+        .options(joinedload(Question.group))
+        .filter(
+            Question.pack_guid == pack_guid,
+            Question.guid == clean_question_guid
+        )
+        .first()
+    )
+
+    if not question:
+        raise PackCatalogError("Question introuvable dans le pack installé.")
+
+    target = _suggested_edit_target_from_question(question)
+    target_label = target["question"] or target["answer"] or clean_question_guid
+
+    return {
+        "target_question_guid": clean_question_guid,
+        "target_group_guid": target["group_guid"],
+        "target_label": _preview_text(target_label, limit=160),
+        "target_snapshot": target
+    }
+
+
+def _normalize_suggested_edit(row):
+    if isinstance(row, list):
+        row = row[0] if row else {}
+
+    if not isinstance(row, dict):
+        return None
+
+    edit_id = _int_or_none(row.get("id"))
+
+    if edit_id is None:
+        return None
+
+    snapshot = (
+        row.get("target_snapshot")
+        if isinstance(row.get("target_snapshot"), dict)
+        else {}
+    )
+
+    return {
+        "id": edit_id,
+        "pack_guid": str(row.get("pack_guid") or ""),
+        "author_label": str(row.get("author_label") or "Utilisateur"),
+        "status": str(row.get("status") or "pending"),
+        "target_question_guid": (
+            str(row.get("target_question_guid"))
+            if row.get("target_question_guid") else None
+        ),
+        "target_group_guid": (
+            str(row.get("target_group_guid"))
+            if row.get("target_group_guid") else None
+        ),
+        "target_label": str(row.get("target_label") or ""),
+        "target_snapshot": snapshot,
+        "proposed_question": str(row.get("proposed_question") or ""),
+        "proposed_answer": str(row.get("proposed_answer") or ""),
+        "note": str(row.get("note") or ""),
+        "owner_note": str(row.get("owner_note") or ""),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "resolved_at": row.get("resolved_at"),
+        "applied_at": row.get("applied_at")
+    }
+
+
+def _suggested_edit_select_path(edit_id):
+    safe_id = _int_or_none(edit_id)
+
+    if safe_id is None:
+        raise PackCatalogError("Suggestion introuvable.")
+
+    return (
+        "/rest/v1/pack_suggested_edits"
+        "?select=*"
+        f"&id=eq.{safe_id}"
+        "&limit=1"
+    )
+
+
+def _get_suggested_edit(db, edit_id):
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        _suggested_edit_select_path(edit_id)
+    )
+
+    if status >= 400 and _is_suggested_edit_schema_gap(body):
+        raise PackCatalogError(PACK_SUGGESTED_EDITS_SCHEMA_MESSAGE)
+
+    _raise_supabase_status(status, body, "Suggestion introuvable")
+    rows = _decode_json_body(body)
+
+    if not isinstance(rows, list) or not rows:
+        raise PackCatalogError("Suggestion introuvable.")
+
+    suggestion = _normalize_suggested_edit(rows[0])
+
+    if not suggestion:
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return suggestion
+
+
+def _source_question_for_suggested_edit(db, pack_guid, question_guid):
+    clean_question_guid = str(question_guid or "").strip()
+
+    if not clean_question_guid:
+        raise PackCatalogError(
+            "Suggestion sans question ciblée : applique-la manuellement."
+        )
+
+    source = _local_publication_source(db, pack_guid)
+
+    if source["kind"] == "group":
+        question = (
+            db.query(Question)
+            .filter(
+                Question.guid == clean_question_guid,
+                Question.group_id == source["id"]
+            )
+            .first()
+        )
+    else:
+        question = (
+            db.query(Question)
+            .join(question_collection)
+            .filter(
+                Question.guid == clean_question_guid,
+                question_collection.c.collection_id == source["id"]
+            )
+            .first()
+        )
+
+    if not question:
+        raise PackCatalogError(
+            "Question introuvable dans la source locale du pack."
+        )
+
+    return question
+
+
+def _suggested_edit_patch(suggestion):
+    patch = {}
+    proposed_question = str(suggestion.get("proposed_question") or "").strip()
+    proposed_answer = str(suggestion.get("proposed_answer") or "").strip()
+
+    if proposed_question:
+        patch["question"] = proposed_question
+
+    if proposed_answer:
+        patch["answer"] = proposed_answer
+
+    if not patch:
+        raise PackCatalogError(
+            "Cette suggestion ne contient aucun champ applicable automatiquement."
+        )
+
+    return patch
+
+
+def _check_suggested_edit_snapshot(question, suggestion, patch):
+    snapshot = suggestion.get("target_snapshot") or {}
+    conflicts = []
+
+    for field in ("question", "answer"):
+        if field not in patch or field not in snapshot:
+            continue
+
+        current_value = str(getattr(question, field) or "")
+        snapshot_value = str(snapshot.get(field) or "")
+        proposed_value = str(patch[field] or "")
+
+        if current_value not in {snapshot_value, proposed_value}:
+            conflicts.append(field)
+
+    if conflicts:
+        raise PackCatalogError(
+            "La question locale a changé depuis la suggestion : "
+            "vérifie-la manuellement."
+        )
+
+
+def _mark_suggested_edit_applied(db, edit_id):
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/mark_pack_suggested_edit_applied",
+        method="POST",
+        payload={"p_edit_id": int(edit_id)}
+    )
+
+    if status >= 400 and _is_suggested_edit_schema_gap(body):
+        raise PackCatalogError(PACK_SUGGESTED_EDITS_SCHEMA_MESSAGE)
+
+    _raise_supabase_status(status, body, "Suggestion impossible à marquer appliquée")
+    suggestion = _normalize_suggested_edit(_decode_json_body(body))
+
+    if not suggestion:
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return suggestion
+
+
+def apply_pack_suggested_edit(db, edit_id):
+    suggestion = _get_suggested_edit(db, edit_id)
+
+    if suggestion["status"] != "accepted":
+        raise PackCatalogError("Accepte la suggestion avant de l'appliquer.")
+
+    _get_owned_publication(db, suggestion["pack_guid"], required=True)
+    question = _source_question_for_suggested_edit(
+        db,
+        suggestion["pack_guid"],
+        suggestion["target_question_guid"]
+    )
+    patch = _suggested_edit_patch(suggestion)
+    _check_suggested_edit_snapshot(question, suggestion, patch)
+
+    updated_question = update_question_service(
+        db,
+        question.id,
+        QuestionUpdate(**patch, edit_policy="preserve_progress")
+    )
+    marked = _mark_suggested_edit_applied(db, suggestion["id"])
+
+    return {
+        "status": "applied",
+        "suggestion": marked,
+        "question": serialize_manage_question(updated_question)
+    }
+
+
+def submit_pack_suggested_edit(
+    db,
+    pack_guid,
+    *,
+    target_question_guid=None,
+    proposed_question="",
+    proposed_answer="",
+    note=""
+):
+    clean_guid, subscription = _pack_subscription_or_error(db, pack_guid)
+    clean_note = str(note or "").strip()
+
+    if not clean_note:
+        raise PackCatalogError("Ajoute une note pour expliquer la correction.")
+
+    target = _suggested_edit_target_snapshot(
+        db,
+        clean_guid,
+        target_question_guid
+    )
+
+    try:
+        record_pack_install(
+            db,
+            clean_guid,
+            installed_version=subscription.installed_version
+        )
+    except PackCatalogError:
+        pass
+
+    payload = {
+        "p_pack_guid": clean_guid,
+        "p_target_question_guid": target["target_question_guid"],
+        "p_target_group_guid": target["target_group_guid"],
+        "p_target_label": target["target_label"],
+        "p_target_snapshot": target["target_snapshot"],
+        "p_proposed_question": str(proposed_question or "").strip(),
+        "p_proposed_answer": str(proposed_answer or "").strip(),
+        "p_note": clean_note
+    }
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/submit_pack_suggested_edit",
+        method="POST",
+        payload=payload
+    )
+
+    if status >= 400 and _is_suggested_edit_schema_gap(body):
+        raise PackCatalogError(PACK_SUGGESTED_EDITS_SCHEMA_MESSAGE)
+
+    _raise_supabase_status(status, body, "Suggestion impossible à envoyer")
+    suggestion = _normalize_suggested_edit(_decode_json_body(body))
+
+    if not suggestion:
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return {"suggestion": suggestion}
+
+
+def list_pack_suggested_edits(db, pack_guid, *, limit=50):
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/list_pack_suggested_edits",
+        method="POST",
+        payload={
+            "p_pack_guid": str(pack_guid or "").strip(),
+            "p_limit": _clamp_limit(limit)
+        }
+    )
+
+    if status >= 400 and _is_suggested_edit_schema_gap(body):
+        return {"suggestions": [], "pending_count": 0}
+
+    _raise_supabase_status(status, body, "Suggestions indisponibles")
+    payload = _decode_json_body(body)
+
+    if not isinstance(payload, dict):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    rows = payload.get("suggestions")
+    suggestions = [
+        suggestion
+        for suggestion in (
+            _normalize_suggested_edit(row)
+            for row in (rows if isinstance(rows, list) else [])
+        )
+        if suggestion
+    ]
+
+    return {
+        "suggestions": suggestions,
+        "pending_count": _int_or_none(payload.get("pending_count")) or 0
+    }
+
+
+def resolve_pack_suggested_edit(db, edit_id, *, status, owner_note=""):
+    clean_status = str(status or "").strip()
+
+    if clean_status not in {"accepted", "rejected"}:
+        raise PackCatalogError("Statut de suggestion invalide.")
+
+    _, _, remote_status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/resolve_pack_suggested_edit",
+        method="POST",
+        payload={
+            "p_edit_id": int(edit_id),
+            "p_status": clean_status,
+            "p_owner_note": str(owner_note or "").strip()
+        }
+    )
+
+    if remote_status >= 400 and _is_suggested_edit_schema_gap(body):
+        raise PackCatalogError(PACK_SUGGESTED_EDITS_SCHEMA_MESSAGE)
+
+    _raise_supabase_status(remote_status, body, "Suggestion impossible à traiter")
+    suggestion = _normalize_suggested_edit(_decode_json_body(body))
+
+    if not suggestion:
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    return {"suggestion": suggestion}
 
 
 def _normalize_activity_event(row):

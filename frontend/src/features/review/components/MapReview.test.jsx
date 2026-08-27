@@ -160,6 +160,18 @@ describe("MapReview recap map focus", () => {
       .not.toBeInTheDocument();
   });
 
+  it("enables finish immediately in type_prompt so the learner can give up", async () => {
+    renderMapReview(true, { mode: "type_prompt" });
+
+    const button = screen.getByRole("button", { name: "Terminer la carte" });
+
+    expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+
+    expect(await screen.findByRole("button", { name: "Valider" })).toBeInTheDocument();
+  });
+
   it("collapses duplicate map chrome in compact visual layout", () => {
     const { container } = renderMapReview(false, {
       fillAvailableHeight: true,

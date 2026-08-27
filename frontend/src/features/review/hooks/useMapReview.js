@@ -871,7 +871,10 @@ export function useMapReview(
 
   function finishMap() {
     if (typedRatingFeedback || !(reviewZones.length > 0 && (
-      allowPartialSubmit || hasAttemptedAnswer || completedQuestionIdSet.size > 0
+      allowPartialSubmit ||
+      mode === MAP_MODE_TYPE_PROMPT ||
+      hasAttemptedAnswer ||
+      completedQuestionIdSet.size > 0
     ))) {
       return false;
     }
@@ -949,8 +952,9 @@ export function useMapReview(
   const completedCount = isPromptMode
     ? resolvedQuestionIds.length
     : foundQuestionIds.length;
+  const canGiveUpPrompt = mode === MAP_MODE_TYPE_PROMPT;
   const canFinishReview = reviewZones.length > 0 && (
-    allowPartialSubmit || hasAttemptedAnswer || completedCount > 0
+    allowPartialSubmit || canGiveUpPrompt || hasAttemptedAnswer || completedCount > 0
   ) && !typedRatingFeedback;
   const progressPercent = reviewZones.length
     ? (completedCount / reviewZones.length) * 100

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import {
   getPackTypeChipStyle,
@@ -10,8 +10,10 @@ import {
   createPackVariantSource,
   fetchPackPreview,
   getPackFamily,
+  listPackSuggestedEditTargets,
   listPackActivity,
-  markPackActivityRead
+  markPackActivityRead,
+  submitPackSuggestedEdit
 } from "../../../api/packs";
 import {
   numberLabel,
@@ -269,6 +271,32 @@ function familyBadgeLabel(entry, family) {
 }
 
 
+function suggestedEditTargetLabel(target, index) {
+  const source = target.question || target.answer || `Question ${index + 1}`;
+  const prefix = target.group_name ? `${target.group_name} · ` : "";
+
+  return `${prefix}${source}`;
+}
+
+
+function activityTitle(event) {
+  if (event.event_type === "suggested_edit_created") {
+    return event.payload?.target_label || "Suggestion de correction";
+  }
+
+  return event.related_pack_name || "Nouvelle variante";
+}
+
+
+function activityDetail(event) {
+  if (event.event_type === "suggested_edit_created") {
+    return `Correction proposée pour ${event.pack_name || event.pack_guid || "ton pack"}`;
+  }
+
+  return `Variante de ${event.pack_name || event.pack_guid || "ton pack"}`;
+}
+
+
 function PackFamilyPanel({ entry, onSelectEntry, selectedPackGuid }) {
   const [state, setState] = useState({
     status: "idle",
@@ -473,10 +501,8 @@ function PackActivityMenu() {
                   className={`pack-activity-item${event.read_at ? "" : " is-unread"}`}
                   key={event.id}
                 >
-                  <strong>{event.related_pack_name || "Nouvelle variante"}</strong>
-                  <span>
-                    Variante de {event.pack_name || event.pack_guid || "ton pack"}
-                  </span>
+                  <strong>{activityTitle(event)}</strong>
+                  <span>{activityDetail(event)}</span>
                 </div>
               ))}
             </div>
@@ -687,6 +713,221 @@ function PackProgressPanel({ entry }) {
 }
 
 
+function PackSuggestedEditPanel({ entry, canSuggest }) {
+  const [open, setOpen] = useState(false);
+  const [targetsState, setTargetsState] = useState({
+    status: "idle",
+    targets: [],
+    error: ""
+  });
+  const [targetGuid, setTargetGuid] = useState("");
+  const [proposedQuestion, setProposedQuestion] = useState("");
+  const [proposedAnswer, setProposedAnswer] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [sent, setSent] = useState(false);
+  const targetsRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    targetsRequestIdRef.current += 1;
+    setOpen(false);
+    setTargetsState({ status: "idle", targets: [], error: "" });
+    setTargetGuid("");
+    setProposedQuestion("");
+    setProposedAnswer("");
+    setNote("");
+    setSubmitError("");
+    setSent(false);
+  }, [entry.pack_guid]);
+
+  async function loadTargets() {
+    const requestId = targetsRequestIdRef.current + 1;
+    targetsRequestIdRef.current = requestId;
+
+    setTargetsState({ status: "loading", targets: [], error: "" });
+
+    try {
+      const data = await listPackSuggestedEditTargets(entry.pack_guid);
+      if (targetsRequestIdRef.current === requestId) {
+        setTargetsState({
+          status: "ready",
+          targets: Array.isArray(data.targets) ? data.targets : [],
+          error: ""
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      if (targetsRequestIdRef.current === requestId) {
+        setTargetsState({
+          status: "error",
+          targets: [],
+          error: error.message || "Questions indisponibles."
+        });
+      }
+    }
+  }
+
+  function handleToggleOpen() {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+    if (nextOpen && targetsState.status === "idle") {
+      void loadTargets();
+    }
+  }
+
+  if (!canSuggest) {
+    return null;
+  }
+
+  const selectedTarget = targetsState.targets.find(
+    (target) => target.question_guid === targetGuid
+  );
+  const hasPayload = (
+    note.trim() ||
+    proposedQuestion.trim() ||
+    proposedAnswer.trim()
+  );
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!note.trim() || busy) {
+      return;
+    }
+
+    setBusy(true);
+    setSubmitError("");
+    setSent(false);
+
+    try {
+      await submitPackSuggestedEdit(entry.pack_guid, {
+        target_question_guid: targetGuid || null,
+        proposed_question: proposedQuestion.trim(),
+        proposed_answer: proposedAnswer.trim(),
+        note: note.trim()
+      });
+      setTargetGuid("");
+      setProposedQuestion("");
+      setProposedAnswer("");
+      setNote("");
+      setSent(true);
+    } catch (error) {
+      console.error(error);
+      setSubmitError(error.message || "Suggestion impossible à envoyer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="pack-suggest-edit">
+      <button
+        type="button"
+        className="pack-secondary-button"
+        onClick={handleToggleOpen}
+        aria-expanded={open}
+      >
+        Suggérer une correction
+      </button>
+
+      {open && (
+        <form className="pack-suggest-edit-form" onSubmit={handleSubmit}>
+          <label className="pack-field">
+            <span className="pack-field-label">Question concernée</span>
+            <select
+              value={targetGuid}
+              disabled={busy}
+              onChange={(event) => setTargetGuid(event.target.value)}
+            >
+              <option value="">Pack entier</option>
+              {targetsState.targets.map((target, index) => (
+                <option key={target.question_guid} value={target.question_guid}>
+                  {suggestedEditTargetLabel(target, index)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {targetsState.status === "loading" && (
+            <div className="pack-status" role="status">Chargement des questions...</div>
+          )}
+
+          {targetsState.error && (
+            <div className="pack-alert" role="alert">{targetsState.error}</div>
+          )}
+
+          {selectedTarget && (
+            <div className="pack-suggest-current">
+              <span className="pack-field-label">Actuel</span>
+              <strong>{selectedTarget.question || "Question sans texte"}</strong>
+              {selectedTarget.answer && <span>{selectedTarget.answer}</span>}
+            </div>
+          )}
+
+          <label className="pack-field">
+            <span className="pack-field-label">Question proposée</span>
+            <textarea
+              value={proposedQuestion}
+              disabled={busy}
+              placeholder="Laisse vide si elle ne change pas"
+              onChange={(event) => setProposedQuestion(event.target.value)}
+            />
+          </label>
+
+          <label className="pack-field">
+            <span className="pack-field-label">Réponse proposée</span>
+            <textarea
+              value={proposedAnswer}
+              disabled={busy}
+              placeholder="Laisse vide si elle ne change pas"
+              onChange={(event) => setProposedAnswer(event.target.value)}
+            />
+          </label>
+
+          <label className="pack-field">
+            <span className="pack-field-label">Note</span>
+            <textarea
+              value={note}
+              disabled={busy}
+              placeholder="Explique la correction"
+              required
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+
+          <div className="pack-action-row">
+            <button
+              type="submit"
+              className="pack-primary-button"
+              disabled={busy || !hasPayload || !note.trim()}
+            >
+              {busy ? "Envoi..." : "Envoyer"}
+            </button>
+            <button
+              type="button"
+              className="pack-secondary-button"
+              disabled={busy}
+              onClick={() => setOpen(false)}
+            >
+              Fermer
+            </button>
+          </div>
+
+          {sent && (
+            <div className="pack-status" role="status">Suggestion envoyée.</div>
+          )}
+
+          {submitError && (
+            <div className="pack-alert" role="alert">{submitError}</div>
+          )}
+        </form>
+      )}
+    </section>
+  );
+}
+
+
 function PackDetailPanel({
   auth,
   item,
@@ -728,6 +969,11 @@ function PackDetailPanel({
     !isMine &&
     auth?.publishStatus?.signed_in &&
     onCreateVariant
+  );
+  const canSuggestEdit = Boolean(
+    canUnsubscribe &&
+    !isMine &&
+    auth?.publishStatus?.signed_in
   );
 
   return (
@@ -876,6 +1122,12 @@ function PackDetailPanel({
           {variantError}
         </div>
       )}
+
+      <PackSuggestedEditPanel
+        entry={entry}
+        canSuggest={canSuggestEdit}
+        key={`suggest-${entry.pack_guid}`}
+      />
 
       {canOpenStudy && (
         <PackProgressPanel entry={entry} key={`progress-${entry.pack_guid}`} />

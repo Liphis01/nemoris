@@ -23,6 +23,9 @@
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 - changer liste d'images en visionneuse d'images
+- résultat de map qcm pas au bon endroit
+- inline quality pas fait pour les maps ?
+- mettre un bleu plus pimpant
 
 ## quick fixes
 
