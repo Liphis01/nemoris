@@ -101,9 +101,10 @@ const qualityOptions = [
   { value: 3, icon: "✅", title: "Facile" }
 ];
 
-// A correct pick is never "Faux", and dropping it leaves exactly three options —
-// which is exactly how many slots the three decoys free up.
+// A correct pick is never "Faux"; the grades occupy slots 1, 2, and 3 while the
+// revealed correct answer moves to slot 4.
 const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+const correctChoiceRevealOrder = 4;
 
 // A relearning zone never re-grades: FSRS is frozen for the day, so any success
 // graduates it identically. The three "how easy" grades collapse to the single
@@ -1276,10 +1277,9 @@ export default function MapReview({
           )}
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
-            // Answering keeps the same four slots: the decoys drop out, the correct
-            // zone slides into the first slot, and the freed slots become the
-            // quality buttons (or "Continuer" after a wrong pick). Nothing grows,
-            // so the map above never resizes.
+            // Answering keeps the same four slots: the decoys drop out, the quality
+            // buttons take slots 1, 2, and 3, and the correct zone slides to slot 4.
+            // Nothing grows, so the map above never resizes.
             <div
               ref={choiceGridRef}
               data-map-choice-grid
@@ -1297,7 +1297,12 @@ export default function MapReview({
                 <div
                   key={option.question_id}
                   data-flip-key={`${choiceScope}:${option.question_id}`}
-                  style={choiceSlotStyle}
+                  style={{
+                    ...choiceSlotStyle,
+                    ...(choiceFeedback?.isCorrect
+                      ? { order: correctChoiceRevealOrder }
+                      : null)
+                  }}
                 >
                   {(() => {
                     const feedbackLabel = choiceFeedbackLabel(option, choiceFeedback);
@@ -1364,7 +1369,10 @@ export default function MapReview({
                         title={option.title}
                         data-map-choice-quality={option.value}
                         onClick={() => rateChoice(option.value)}
-                        style={choiceQualityButtonStyle()}
+                        style={{
+                          ...choiceQualityButtonStyle(),
+                          order: option.value
+                        }}
                       >
                         <span aria-hidden="true" style={choiceKeyBadgeStyle}>{option.value}</span>
                         <span>{option.icon} {option.title}</span>

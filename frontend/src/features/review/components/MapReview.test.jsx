@@ -74,6 +74,24 @@ function rateTypedMapQuality(quality = 2) {
   }
 }
 
+function orderedChoiceSlots(grid) {
+  return Array.from(grid.children)
+    .map((element, index) => ({
+      element,
+      index,
+      order: Number(element.style.order || 0)
+    }))
+    .sort((left, right) => left.order - right.order || left.index - right.index)
+    .map(({ element }) => {
+      const quality = element.getAttribute("data-map-choice-quality") ||
+        element.querySelector("[data-map-choice-quality]")?.getAttribute("data-map-choice-quality");
+
+      if (quality) return `quality:${quality}`;
+      if (element.querySelector("[data-map-choice-feedback='correct']")) return "correct";
+      return "other";
+    });
+}
+
 describe("MapReview recap map focus", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -622,6 +640,12 @@ describe("MapReview recap map focus", () => {
     expect(document.querySelectorAll("[data-map-choice-feedback]")).toHaveLength(1);
     // A correct pick is never "Faux".
     expect(document.querySelector("[data-map-choice-quality='0']")).toBeNull();
+    expect(orderedChoiceSlots(document.querySelector("[data-map-choice-grid]"))).toEqual([
+      "quality:1",
+      "quality:2",
+      "quality:3",
+      "correct"
+    ]);
 
     fireEvent.keyDown(window, { key: "3" });
 

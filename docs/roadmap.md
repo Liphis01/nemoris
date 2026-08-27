@@ -7,6 +7,7 @@
 - dans les relearning, mettre la même image qui a posé problème
 - on peut pas commenter si on était pas connecté au moment de l'import du pack
 - problème de split de groupes : j'ai eu 25/1/2 pour formes de pays
+- résultat de map qcm pas au bon endroit
 
 
 ## Urgent
@@ -23,10 +24,9 @@
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 - changer liste d'images en visionneuse d'images
-- résultat de map qcm pas au bon endroit
-- inline quality pas fait pour les maps ?
 - mettre un bleu plus pimpant
 - how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
+- le zoom d'image est un peu naze
 
 ## quick fixes
 

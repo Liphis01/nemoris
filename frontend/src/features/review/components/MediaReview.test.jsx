@@ -83,6 +83,32 @@ function tileFor(container, questionId) {
   return container.querySelector(`[data-image-question-id="${questionId}"]`);
 }
 
+function orderedChoiceSlots(grid, correctQuestionId = null) {
+  return Array.from(grid.children)
+    .map((element, index) => ({
+      element,
+      index,
+      order: Number(element.style.order || 0)
+    }))
+    .sort((left, right) => left.order - right.order || left.index - right.index)
+    .map(({ element }) => {
+      const quality = element.getAttribute("data-image-choice-quality") ||
+        element.querySelector("[data-image-choice-quality]")?.getAttribute("data-image-choice-quality");
+
+      if (quality) return `quality:${quality}`;
+      if (
+        element.querySelector("[data-image-choice-feedback='correct']") ||
+        (
+          correctQuestionId !== null &&
+          element.querySelector(`[data-image-question-id="${correctQuestionId}"]`)
+        )
+      ) {
+        return "correct";
+      }
+      return "other";
+    });
+}
+
 function mockMediaReviewState({
   mode = IMAGE_MODE_TYPE_PROMPT,
   resultMode = false,
@@ -1029,12 +1055,43 @@ describe("MediaReview answer label preview", () => {
     expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(3);
     // A correct pick is never "Faux".
     expect(container.querySelector("[data-image-choice-quality='0']")).toBeNull();
+    expect(orderedChoiceSlots(container.querySelector("[data-image-choice-grid]"))).toEqual([
+      "quality:1",
+      "quality:2",
+      "quality:3",
+      "correct"
+    ]);
 
     fireEvent.keyDown(window, { key: "3" });
     expect(rateChoice).toHaveBeenCalledWith(3);
 
     fireEvent.keyDown(window, { key: "2" });
     expect(rateChoice).toHaveBeenCalledWith(2);
+  });
+
+  it("places image choice quality buttons before the correct tile", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(imageClickHookState({
+      rows,
+      mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+      activeQuestionId: 1,
+      hookOverrides: {
+        choiceOptions: rows.map(row => row.item),
+        interactionFeedback: {
+          correctQuestionId: 1,
+          isCorrect: true,
+          selectedQuestionId: 1
+        }
+      }
+    }));
+
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(3);
+    expect(orderedChoiceSlots(container.querySelector("[data-image-choice-board]"), 1)).toEqual([
+      "quality:1",
+      "quality:2",
+      "quality:3",
+      "correct"
+    ]);
   });
 
   it("asks inline quality after a correct typed image and uses Enter for Bon", () => {

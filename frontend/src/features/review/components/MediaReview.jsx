@@ -57,9 +57,10 @@ const qualityOptions = [
   { value: 3, icon: "✅", title: "Facile" }
 ];
 
-// A correct pick is never "Faux", and dropping it leaves exactly three options —
-// which is exactly how many slots the three decoys free up.
+// A correct pick is never "Faux"; the grades occupy slots 1, 2, and 3 while the
+// revealed correct answer moves to slot 4.
 const choiceQualityOptions = qualityOptions.filter(option => option.value > 0);
+const correctChoiceRevealOrder = 4;
 
 // A relearning card never re-grades: FSRS is frozen for the day, so any success
 // graduates it identically. The three "how easy" grades collapse to the single
@@ -2249,7 +2250,8 @@ export default function MediaReview({
           onClick={() => rateChoice(option.value)}
           style={{
             ...choiceQualityButtonStyle(),
-            ...(onTiles ? choiceQualityTileStyle : null)
+            ...(onTiles ? choiceQualityTileStyle : null),
+            order: option.value
           }}
         >
           {onTiles ? (
@@ -2939,7 +2941,9 @@ export default function MediaReview({
                 data-flip-key={`${choiceScope}:${row.item.question_id}`}
                 style={{
                   ...choiceSlotStyle,
-                  ...(interactionFeedback?.isCorrect ? { order: 1 } : null)
+                  ...(interactionFeedback?.isCorrect
+                    ? { order: correctChoiceRevealOrder }
+                    : null)
                 }}
               >
                 {renderImageChoiceTile(row, {
@@ -3209,7 +3213,9 @@ export default function MediaReview({
                 data-flip-key={`${choiceScope}:${option.question_id}`}
                 style={{
                   ...choiceSlotStyle,
-                  ...(interactionFeedback?.isCorrect ? { order: 1 } : null)
+                  ...(interactionFeedback?.isCorrect
+                    ? { order: correctChoiceRevealOrder }
+                    : null)
                 }}
               >
                   <button
