@@ -76,9 +76,12 @@ const maxZoom = 80;
 // deep fits back out, and the deeper the fit the more it pulls.
 const autoZoomFalloff = 0.75;
 
-// Island hit-area shapes always render at this opacity so they stay see-through
-// (the map shows through them) while behaving like any other zone.
+// Baseline island hit-area opacity; unresolved due hit areas get a stronger
+// overlay below so tiny cyan shapes do not disappear into grey map detail.
 const hitAreaRevealOpacity = "0.35";
+const hitAreaDueOpacity = "0.55";
+const hitAreaDueColor = "#22d3ee";
+const hitAreaDueHoverColor = "#7dd3fc";
 
 export default function SvgMap({
     svgPath,
@@ -367,45 +370,54 @@ export default function SvgMap({
         const flashSet = new Set(flashCodes);
         const unsavedSet = new Set(unsaved);
 
-        const getColor = (code) => {
+        const getColor = (code, isHitArea = false) => {
             if (flashSet.has(code)) return "#fb7185";
             if (selected === code) return "#f39c12";
             if (unsavedSet.has(code)) return "#facc15";
             if (foundSet.has(code)) return "#21eb75";
             if (missedSet.has(code)) return "#e93723";
+            if (isHitArea && dueSet.has(code)) return hitAreaDueColor;
             if (dueSet.has(code)) return "#0e3e5adc";
             return "#444";
         };
 
-        const getHoverColor = (code) => {
+        const getHoverColor = (code, isHitArea = false) => {
             if (flashSet.has(code)) return "#fecdd3";
             if (selected === code) return "#fbbf24";
             if (unsavedSet.has(code)) return "#fde047";
             if (foundSet.has(code)) return "#34d399";
             if (missedSet.has(code)) return "#fb7185";
+            if (isHitArea && dueSet.has(code)) return hitAreaDueHoverColor;
             if (dueSet.has(code)) return "#38bdf8";
             return "#888";
         };
+
+        const getHitAreaOpacity = (code) => (
+            dueSet.has(code)
+            && !flashSet.has(code)
+            && selected !== code
+            && !unsavedSet.has(code)
+            && !foundSet.has(code)
+            && !missedSet.has(code)
+                ? hitAreaDueOpacity
+                : hitAreaRevealOpacity
+        );
 
         const canSelectCode = (code) => (
             !clickableCodeSet || clickableCodeSet.has(code)
         );
 
-        const getDisplayColor = (code) => (
-            hoveredCode === code
-                ? getHoverColor(code)
-                : getColor(code)
-        );
-
         const cleanupFns = zoneElementsRef.current.map(({ el, code, isHitArea }) => {
             const isClickable = canSelectCode(code);
             // Hit-area shapes cover islands too small to draw. They behave like any
-            // other zone (same neutral/state colors, always visible and clickable)
-            // but stay permanently translucent, reading as a see-through overlay so
-            // the underlying map still shows through.
-            setSvgStyle(el, "fill", getDisplayColor(code));
+            // other zone but use a brighter unresolved-due blue than country paths:
+            // at fixed translucency, the normal dark blue reads too close to grey.
+            const displayColor = hoveredCode === code
+                ? getHoverColor(code, isHitArea)
+                : getColor(code, isHitArea);
+            setSvgStyle(el, "fill", displayColor);
             setSvgStyle(el, "cursor", "pointer");
-            if (isHitArea) setSvgStyle(el, "opacity", hitAreaRevealOpacity);
+            if (isHitArea) setSvgStyle(el, "opacity", getHitAreaOpacity(code));
             const tooltipLabel = String(zoneLabels[code] || "");
             const flashAnimation = flashSet.has(code) && typeof el.animate === "function"
                 ? el.animate(
@@ -439,7 +451,7 @@ export default function SvgMap({
 
             const handleEnter = (event) => {
                 setHoveredCode(code);
-                setSvgStyle(el, "fill", getHoverColor(code));
+                setSvgStyle(el, "fill", getHoverColor(code, isHitArea));
 
                 if (tooltipLabel) {
                     showTooltip(event, tooltipLabel);
@@ -454,7 +466,7 @@ export default function SvgMap({
 
             const handleLeave = () => {
                 setHoveredCode(currentCode => currentCode === code ? null : currentCode);
-                setSvgStyle(el, "fill", getColor(code));
+                setSvgStyle(el, "fill", getColor(code, isHitArea));
                 hideTooltip();
             };
 

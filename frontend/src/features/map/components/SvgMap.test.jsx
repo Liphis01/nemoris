@@ -272,6 +272,30 @@ describe("SvgMap package v2", () => {
     expect(onSelect).not.toHaveBeenCalledWith("ignored-source-answer");
   });
 
+  it("makes due hit-area island shapes more visible than normal due country shapes", async () => {
+    mockSvgFetch(v2SvgMarkup);
+    const { container } = renderTestMap({
+      mapManifest: v2Manifest,
+      dueItems: ["logical"]
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-nemoris-shape="s000001"]')).toBeInTheDocument();
+    });
+
+    const countryShape = container.querySelector('[data-nemoris-shape="s000001"]');
+    const hitAreaShape = container.querySelector('[data-nemoris-shape="s000002"]');
+
+    expectFill(countryShape, "#0e3e5adc");
+    expectFill(hitAreaShape, "#22d3ee");
+    expect(hitAreaShape).toHaveStyle({ opacity: "0.55" });
+
+    fireEvent.mouseEnter(hitAreaShape);
+    expectFill(hitAreaShape, "#7dd3fc");
+    fireEvent.mouseLeave(hitAreaShape);
+    expectFill(hitAreaShape, "#22d3ee");
+  });
+
   it("fails closed when a manifest shape is missing", async () => {
     mockSvgFetch(v2SvgMarkup);
     const missingManifest = {
