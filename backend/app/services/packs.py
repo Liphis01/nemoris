@@ -17,9 +17,11 @@ installs packs independently by pack_guid).
 """
 
 from datetime import datetime, timezone
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
+import uuid
 from zipfile import ZIP_DEFLATED, ZipFile, is_zipfile
 
 from urllib.parse import urlparse
@@ -411,6 +413,160 @@ def export_playlist_pack(
         static_dir=static_dir,
         pack_dir=pack_dir
     )
+
+
+def _copy_json(value, fallback):
+    if value is None:
+        return deepcopy(fallback)
+
+    return deepcopy(value)
+
+
+def _unique_collection_name(db, base_name):
+    root = str(base_name or "Variante").strip() or "Variante"
+    candidate = root
+    suffix = 2
+
+    while (
+        db.query(Collection)
+        .filter(Collection.name == candidate)
+        .first()
+    ):
+        candidate = f"{root} {suffix}"
+        suffix += 1
+
+    return candidate
+
+
+def clone_installed_pack_as_variant_source(db, pack_guid):
+    """Create a local, editable source copied from an installed pack.
+
+    The clone deliberately has no pack provenance and no Progress rows. Its
+    fresh guids make the eventual variant installable next to the original
+    pack in another local database.
+    """
+    clean_guid = str(pack_guid or "").strip()
+
+    if not clean_guid:
+        raise ValueError("Pack introuvable")
+
+    subscription = (
+        db.query(PackSubscription)
+        .filter(PackSubscription.pack_guid == clean_guid)
+        .first()
+    )
+
+    if not subscription:
+        raise ValueError("This pack is not installed")
+
+    source_questions = (
+        db.query(Question)
+        .options(joinedload(Question.group))
+        .filter(Question.pack_guid == clean_guid)
+        .order_by(Question.id)
+        .all()
+    )
+
+    if not source_questions:
+        raise ValueError("Installed pack content is missing")
+
+    source_groups = {}
+    standalone_questions = []
+
+    for question in source_questions:
+        if question.group is None:
+            if question.type_q in {"numeric", "enumeration"}:
+                standalone_questions.append(question)
+                continue
+
+            raise ValueError("Installed pack content is incomplete")
+
+        source_groups[question.group.guid] = question.group
+
+    created_groups = {}
+
+    for source_group in sorted(source_groups.values(), key=lambda group: group.id):
+        source_name = source_group.name or subscription.name or "Pack"
+        created = QuestionGroup(
+            guid=str(uuid.uuid4()),
+            type_group=source_group.type_group,
+            name=f"{source_name} - variante",
+            media=source_group.media,
+            data=_copy_json(source_group.data, {})
+        )
+        db.add(created)
+        db.flush()
+        created_groups[source_group.guid] = created
+
+    cloned_questions = []
+
+    for source_question in source_questions:
+        target_group = (
+            created_groups.get(source_question.group.guid)
+            if source_question.group is not None
+            else None
+        )
+        cloned = Question(
+            guid=str(uuid.uuid4()),
+            type_q=source_question.type_q,
+            question=source_question.question,
+            answer=source_question.answer,
+            media=source_question.media,
+            answer_media=source_question.answer_media,
+            tags=_copy_json(source_question.tags, []),
+            data=_copy_json(source_question.data, {}),
+            suspended=False,
+            group_id=target_group.id if target_group else None
+        )
+        db.add(cloned)
+        cloned_questions.append(cloned)
+
+    single_group = len(created_groups) == 1 and not standalone_questions
+
+    if single_group:
+        db.commit()
+        group = next(iter(created_groups.values()))
+
+        return {
+            "status": "created",
+            "source_kind": "group",
+            "source_id": group.id,
+            "source_guid": group.guid,
+            "name": group.name,
+            "type_group": group.type_group,
+            "question_count": len(cloned_questions),
+            "variant_of_pack_guid": clean_guid,
+            "base_pack_name": subscription.name or clean_guid
+        }
+
+    base_name = subscription.name or "Pack"
+    source_types = {
+        question.group.type_group if question.group is not None else question.type_q
+        for question in source_questions
+    }
+    collection = Collection(
+        guid=str(uuid.uuid4()),
+        name=_unique_collection_name(db, f"{base_name} - variante"),
+        data={},
+        questions=cloned_questions
+    )
+    db.add(collection)
+    db.commit()
+
+    return {
+        "status": "created",
+        "source_kind": "playlist",
+        "source_id": collection.id,
+        "source_guid": collection.guid,
+        "name": collection.name,
+        "type_group": (
+            next(iter(source_types)) if len(source_types) == 1 else "mixed"
+        ),
+        "question_count": len(cloned_questions),
+        "group_count": len(created_groups),
+        "variant_of_pack_guid": clean_guid,
+        "base_pack_name": subscription.name or clean_guid
+    }
 
 
 def _read_json_member(zip_file, name, error_message):

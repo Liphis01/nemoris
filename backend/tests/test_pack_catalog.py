@@ -22,15 +22,20 @@ from app.routers.packs import (
     backfill_pack_installs_route,
     delete_group_pack_publication,
     diagnose_pack_catalog,
+    pack_catalog_activity,
+    pack_catalog_family,
     pack_comments,
     pack_my_status,
+    pack_variant_source,
     preview_catalog_pack,
     rate_pack_route,
+    read_pack_catalog_activity,
     record_pack_install_route,
     search_catalog_packs,
     unpublish_group_pack
 )
 from app.schemas import (
+    PackActivityReadRequest,
     PackCommentCreateRequest,
     PackInstallRecordRequest,
     PackRatingRequest
@@ -45,6 +50,7 @@ from app.services.pack_catalog import (
     fetch_pack_preview,
     get_group_pack_publication,
     get_pack_publish_status,
+    list_pack_publications,
     publish_group_pack_changes,
     preview_pack_release,
     publish_pack_publication,
@@ -137,6 +143,27 @@ class PackCatalogSchemaSqlTests(unittest.TestCase):
             "grant execute on function public.search_pack_catalog",
             sql
         )
+
+    def test_supabase_schema_adds_pack_variant_lineage_and_activity(self):
+        sql_path = (
+            Path(__file__).resolve().parents[2]
+            / "docs"
+            / "supabase-pack-catalog-schema.sql"
+        )
+        sql = sql_path.read_text(encoding="utf-8")
+
+        self.assertIn("add column if not exists variant_of_pack_guid text", sql)
+        self.assertIn("add column if not exists root_pack_guid text", sql)
+        self.assertIn("pack_catalog_variant_of_pack_guid_idx", sql)
+        self.assertIn("pack_catalog_root_pack_guid_idx", sql)
+        self.assertIn("create table if not exists public.pack_activity_events", sql)
+        self.assertIn("pack_activity_events_select_own", sql)
+        self.assertIn("p_variant_of_pack_guid text default null::text", sql)
+        self.assertIn("Installe ce pack avant de publier une variante.", sql)
+        self.assertIn("create or replace function public.get_pack_family", sql)
+        self.assertIn("create or replace function public.list_pack_activity_events", sql)
+        self.assertIn("create or replace function public.mark_pack_activity_events_read", sql)
+        self.assertIn("'variant_published'", sql)
 
 
 class PackCatalogSearchTests(unittest.TestCase):
@@ -371,6 +398,48 @@ class PackCatalogSearchTests(unittest.TestCase):
         # Flat heuristic shared with the intake pace-tier estimate
         # (settings.INTAKE_SECONDS_PER_QUESTION): 120 * 15s / 60 = 30.
         self.assertEqual(entry["estimated_minutes"], 30)
+
+    def test_search_normalizes_grouped_family_metadata(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse({
+                "packs": [{
+                    "pack_guid": "variant-pack",
+                    "name": "Pays du monde corrigé",
+                    "type_group": "map",
+                    "question_count": 253,
+                    "version": 1,
+                    "storage_path": "variants/world.zip",
+                    "variant_of_pack_guid": "world-map",
+                    "root_pack_guid": "world-map",
+                    "original_pack_guid": "world-map",
+                    "recommended_pack_guid": "variant-pack",
+                    "original_name": "Pays du monde",
+                    "variant_count": 3,
+                    "avg_rating": 4.8,
+                    "rating_count": 12
+                }],
+                "facets": {"themes": []},
+                "total": 1,
+                "next_cursor": None
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = search_catalog_packs(db=db)
+
+        entry = result["packs"][0]
+        self.assertEqual(entry["variant_of_pack_guid"], "world-map")
+        self.assertEqual(entry["root_pack_guid"], "world-map")
+        self.assertEqual(entry["original_pack_guid"], "world-map")
+        self.assertEqual(entry["recommended_pack_guid"], "variant-pack")
+        self.assertEqual(entry["original_name"], "Pays du monde")
+        self.assertEqual(entry["variant_count"], 3)
+        self.assertTrue(entry["is_recommended_variant"])
 
     def test_popular_theme_switches_to_popular_sort(self):
         db = make_db()
@@ -992,6 +1061,174 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         self.assertEqual(payload["p_tags"], ["capitales"])
         self.assertEqual(payload["p_themes"], ["Géographie"])
 
+    def test_list_publications_retries_without_lineage_on_old_schema(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+
+            if "variant_of_pack_guid" in request.full_url:
+                raise HTTPError(
+                    request.full_url,
+                    400,
+                    "Bad Request",
+                    {},
+                    io.BytesIO(
+                        b'{"message":"column pack_catalog.variant_of_pack_guid '
+                        b'does not exist"}'
+                    )
+                )
+
+            return FakeResponse([{
+                "pack_guid": "group-guid",
+                "name": "Atlas des capitales",
+                "description": "Cartes de capitales.",
+                "type_group": "map",
+                "question_count": 1,
+                "version": 2,
+                "storage_path": "user-123/group-guid/v2-atlas.zip",
+                "is_public": True,
+                "publication_status": "published"
+            }])
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = list_pack_publications(db)
+
+        self.assertEqual(len(calls), 2)
+        self.assertIn("variant_of_pack_guid", calls[0][0].full_url)
+        self.assertNotIn("variant_of_pack_guid", calls[1][0].full_url)
+        self.assertEqual(result["publications"][0]["pack_guid"], "group-guid")
+        self.assertIsNone(result["publications"][0]["variant_of_pack_guid"])
+
+    def test_save_draft_retries_legacy_upsert_signature_for_normal_pack(self):
+        db = make_db()
+        group_id = self.configure(db)
+        calls = []
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_zip:
+            temp_zip.write(b"zip-bytes")
+            temp_zip.flush()
+
+            def fake_urlopen(request, timeout):
+                calls.append((request, timeout))
+
+                if "/rest/v1/pack_catalog?select=" in request.full_url:
+                    return FakeResponse([])
+
+                if "/storage/v1/object/pack-zips/" in request.full_url:
+                    return FakeResponse({})
+
+                payload = json.loads(request.data.decode("utf-8"))
+
+                if "p_variant_of_pack_guid" in payload:
+                    raise HTTPError(
+                        request.full_url,
+                        400,
+                        "Bad Request",
+                        {},
+                        io.BytesIO(
+                            b'{"message":"Could not find the function '
+                            b'public.upsert_my_pack_draft('
+                            b'p_variant_of_pack_guid) in the schema cache"}'
+                        )
+                    )
+
+                return FakeResponse({
+                    "pack_guid": "group-guid",
+                    "name": "Atlas des capitales",
+                    "version": 1,
+                    "question_count": 1,
+                    "storage_path": "user-123/group-guid/v1-atlas.zip",
+                    "is_public": False,
+                    "publication_status": "draft"
+                })
+
+            with mock.patch(
+                "app.services.pack_catalog.load_sync_state",
+                return_value=self.empty_sync_state()
+            ), mock.patch(
+                "app.services.pack_catalog.load_pack_publish_state",
+                return_value=self.publish_state()
+            ), mock.patch(
+                "app.services.pack_catalog.export_pack",
+                return_value=Path(temp_zip.name)
+            ), mock.patch(
+                "app.services.pack_catalog.urlopen",
+                fake_urlopen
+            ):
+                result = save_pack_publish_draft(
+                    db,
+                    group_id,
+                    name="Atlas des capitales"
+                )
+
+        first_rpc_payload = json.loads(calls[2][0].data.decode("utf-8"))
+        retry_rpc_payload = json.loads(calls[3][0].data.decode("utf-8"))
+        self.assertIn("p_variant_of_pack_guid", first_rpc_payload)
+        self.assertNotIn("p_variant_of_pack_guid", retry_rpc_payload)
+        self.assertEqual(result["publication"]["pack_guid"], "group-guid")
+
+    def test_save_variant_draft_requires_updated_variant_schema(self):
+        db = make_db()
+        group_id = self.configure(db)
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_zip:
+            temp_zip.write(b"zip-bytes")
+            temp_zip.flush()
+
+            def fake_urlopen(request, timeout):
+                if "/rest/v1/pack_catalog?select=" in request.full_url:
+                    return FakeResponse([])
+
+                if "/storage/v1/object/pack-zips/" in request.full_url:
+                    return FakeResponse({})
+
+                raise HTTPError(
+                    request.full_url,
+                    400,
+                    "Bad Request",
+                    {},
+                    io.BytesIO(
+                        b'{"message":"Could not find the function '
+                        b'public.upsert_my_pack_draft('
+                        b'p_variant_of_pack_guid) in the schema cache"}'
+                    )
+                )
+
+            with mock.patch(
+                "app.services.pack_catalog.load_sync_state",
+                return_value=self.empty_sync_state()
+            ), mock.patch(
+                "app.services.pack_catalog.load_pack_publish_state",
+                return_value=self.publish_state()
+            ), mock.patch(
+                "app.services.pack_catalog.export_pack",
+                return_value=Path(temp_zip.name)
+            ), mock.patch(
+                "app.services.pack_catalog.urlopen",
+                fake_urlopen
+            ):
+                with self.assertRaises(PackCatalogError) as context:
+                    save_pack_publish_draft(
+                        db,
+                        group_id,
+                        name="Atlas corrigé",
+                        variant_of_pack_guid="base-pack-guid"
+                    )
+
+        self.assertIn("schéma Supabase", str(context.exception))
+
     def test_save_draft_auto_increments_public_pack_version(self):
         db = make_db()
         group_id = self.configure(db)
@@ -1052,6 +1289,63 @@ class PackCatalogPublishTests(PackCatalogAuthTestCase):
         rpc_payload = json.loads(calls[2][0].data.decode("utf-8"))
         self.assertEqual(rpc_payload["p_version"], 3)
         self.assertIn("/v3-atlas-des-capitales.zip", calls[1][0].full_url)
+
+    def test_save_variant_draft_sends_locked_base_guid(self):
+        db = make_db()
+        group_id = self.configure(db)
+        calls = []
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_zip:
+            temp_zip.write(b"zip-bytes")
+            temp_zip.flush()
+
+            def fake_urlopen(request, timeout):
+                calls.append((request, timeout))
+
+                if "/rest/v1/pack_catalog?select=" in request.full_url:
+                    return FakeResponse([])
+
+                if "/storage/v1/object/pack-zips/" in request.full_url:
+                    return FakeResponse({})
+
+                return FakeResponse({
+                    "pack_guid": "group-guid",
+                    "name": "Atlas corrigé",
+                    "version": 1,
+                    "question_count": 1,
+                    "storage_path": "user-123/group-guid/v1-atlas.zip",
+                    "is_public": False,
+                    "publication_status": "draft",
+                    "variant_of_pack_guid": "base-pack-guid",
+                    "root_pack_guid": "base-pack-guid"
+                })
+
+            with mock.patch(
+                "app.services.pack_catalog.load_sync_state",
+                return_value=self.empty_sync_state()
+            ), mock.patch(
+                "app.services.pack_catalog.load_pack_publish_state",
+                return_value=self.publish_state()
+            ), mock.patch(
+                "app.services.pack_catalog.export_pack",
+                return_value=Path(temp_zip.name)
+            ), mock.patch(
+                "app.services.pack_catalog.urlopen",
+                fake_urlopen
+            ):
+                result = save_pack_publish_draft(
+                    db,
+                    group_id,
+                    name="Atlas corrigé",
+                    variant_of_pack_guid="base-pack-guid"
+                )
+
+        rpc_payload = json.loads(calls[2][0].data.decode("utf-8"))
+        self.assertEqual(rpc_payload["p_variant_of_pack_guid"], "base-pack-guid")
+        self.assertEqual(
+            result["publication"]["variant_of_pack_guid"],
+            "base-pack-guid"
+        )
 
     def test_preview_release_compares_published_zip_with_local_source(self):
         db = make_db()
@@ -1660,6 +1954,259 @@ class PackCatalogInstallTrackingTests(PackCatalogAuthTestCase):
         )
 
 
+class PackCatalogActivityTests(PackCatalogAuthTestCase):
+    def test_activity_list_calls_authenticated_rpc(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "unread_count": 1,
+                "events": [{
+                    "id": 42,
+                    "event_type": "variant_published",
+                    "pack_guid": "base-pack",
+                    "pack_name": "Pack original",
+                    "related_pack_guid": "variant-pack",
+                    "related_pack_name": "Pack corrigé",
+                    "read_at": None,
+                    "created_at": "2026-08-26T10:00:00Z"
+                }]
+            })
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = pack_catalog_activity(limit=99, db=db)
+
+        self.assertEqual(result["unread_count"], 1)
+        self.assertEqual(result["events"][0]["id"], 42)
+        self.assertEqual(result["events"][0]["related_pack_name"], "Pack corrigé")
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/list_pack_activity_events"
+        )
+        self.assertEqual(
+            request.headers.get("Authorization"),
+            "Bearer access-token"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_limit": 60}
+        )
+
+    def test_activity_list_returns_empty_when_rpc_missing(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            raise HTTPError(
+                request.full_url,
+                404,
+                "Not Found",
+                {},
+                io.BytesIO(
+                    b'{"message":"Could not find the function '
+                    b'public.list_pack_activity_events(p_limit) '
+                    b'in the schema cache"}'
+                )
+            )
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = pack_catalog_activity(limit=20, db=db)
+
+        self.assertEqual(result, {"events": [], "unread_count": 0})
+
+    def test_activity_mark_read_posts_event_ids(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({"updated": 2})
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = read_pack_catalog_activity(
+                PackActivityReadRequest(event_ids=[42, 43]),
+                db=db
+            )
+
+        self.assertEqual(result, {"updated": 2})
+        request, _ = calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/mark_pack_activity_events_read"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_event_ids": [42, 43]}
+        )
+
+    def test_activity_mark_read_ignores_missing_rpc(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            raise HTTPError(
+                request.full_url,
+                404,
+                "Not Found",
+                {},
+                io.BytesIO(
+                    b'{"message":"Could not find the function '
+                    b'public.mark_pack_activity_events_read(p_event_ids) '
+                    b'in the schema cache"}'
+                )
+            )
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            fake_urlopen
+        ):
+            result = read_pack_catalog_activity(
+                PackActivityReadRequest(event_ids=[42]),
+                db=db
+            )
+
+        self.assertEqual(result, {"updated": 0})
+
+    def test_activity_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ), mock.patch(
+            "app.services.pack_catalog.urlopen",
+            side_effect=AssertionError("network should not be called")
+        ):
+            with self.assertRaises(HTTPException) as context:
+                pack_catalog_activity(db=db)
+
+        self.assertEqual(context.exception.status_code, 401)
+
+
+class PackCatalogVariantSourceRouteTests(PackCatalogAuthTestCase):
+    def test_variant_source_requires_sign_in(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.signed_out_state()
+        ):
+            with self.assertRaises(HTTPException) as context:
+                pack_variant_source("base-pack", db=db)
+
+        self.assertEqual(context.exception.status_code, 401)
+
+    def test_variant_source_requires_local_subscription(self):
+        db = make_db()
+        self.configure(db)
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ):
+            with self.assertRaises(HTTPException) as context:
+                pack_variant_source("base-pack", db=db)
+
+        self.assertEqual(context.exception.status_code, 404)
+
+    def test_variant_source_creates_local_clone_for_installed_pack(self):
+        db = make_db()
+        base_guid = "base-pack"
+        group = QuestionGroup(
+            guid=base_guid,
+            type_group="text",
+            name="Base",
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="group-hash"
+        )
+        db.add(group)
+        db.flush()
+        db.add(Question(
+            guid="question-guid",
+            type_q="text",
+            question="Q",
+            answer="A",
+            tags=[],
+            data={},
+            group_id=group.id,
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="question-hash"
+        ))
+        db.add(PackSubscription(
+            pack_guid=base_guid,
+            installed_version=1,
+            name="Base",
+            source="base.zip",
+            subscribed_at="2026-08-01T10:00:00Z"
+        ))
+        db.commit()
+
+        with mock.patch(
+            "app.services.pack_catalog.load_sync_state",
+            return_value=self.empty_sync_state()
+        ), mock.patch(
+            "app.services.pack_catalog.load_pack_publish_state",
+            return_value=self.publish_state()
+        ):
+            result = pack_variant_source(base_guid, db=db)
+
+        self.assertEqual(result["source_kind"], "group")
+        self.assertEqual(result["variant_of_pack_guid"], base_guid)
+        self.assertEqual(db.query(QuestionGroup).count(), 2)
+        self.assertEqual(db.query(Question).count(), 2)
+
+
 class PackCatalogEligibilityTests(PackCatalogAuthTestCase):
     def test_my_status_calls_authenticated_rpc(self):
         db = make_db()
@@ -1903,6 +2450,114 @@ class PackCatalogRatingTests(PackCatalogAuthTestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 401)
+
+
+class PackCatalogFamilyTests(unittest.TestCase):
+    def configure(self, db):
+        use_catalog(self)
+        db.add(PackSubscription(
+            pack_guid="world-map",
+            installed_version=2,
+            name="Pays du monde",
+            source="world.zip",
+            subscribed_at="2026-08-01T10:00:00Z"
+        ))
+        db.commit()
+
+    def test_family_rpc_returns_original_and_variants_with_local_status(self):
+        db = make_db()
+        self.configure(db)
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            return FakeResponse({
+                "pack_guid": "variant-pack",
+                "original_pack_guid": "world-map",
+                "recommended_pack_guid": "variant-pack",
+                "variant_count": 1,
+                "packs": [
+                    {
+                        "pack_guid": "world-map",
+                        "name": "Pays du monde",
+                        "type_group": "map",
+                        "question_count": 252,
+                        "version": 2,
+                        "storage_path": "world.zip",
+                        "root_pack_guid": "world-map",
+                        "original_pack_guid": "world-map",
+                        "recommended_pack_guid": "variant-pack",
+                        "variant_count": 1
+                    },
+                    {
+                        "pack_guid": "variant-pack",
+                        "name": "Pays du monde corrigé",
+                        "type_group": "map",
+                        "question_count": 253,
+                        "version": 1,
+                        "storage_path": "variant.zip",
+                        "variant_of_pack_guid": "world-map",
+                        "root_pack_guid": "world-map",
+                        "original_pack_guid": "world-map",
+                        "recommended_pack_guid": "variant-pack",
+                        "original_name": "Pays du monde",
+                        "variant_count": 1
+                    }
+                ]
+            })
+
+        with mock.patch("app.services.pack_catalog.urlopen", fake_urlopen):
+            result = pack_catalog_family("variant-pack", db=db)
+
+        self.assertEqual(result["original_pack_guid"], "world-map")
+        self.assertEqual(result["recommended_pack_guid"], "variant-pack")
+        self.assertEqual(result["variant_count"], 1)
+        self.assertEqual([pack["pack_guid"] for pack in result["packs"]], [
+            "world-map",
+            "variant-pack"
+        ])
+        self.assertEqual(
+            result["packs"][0]["local_status"]["status"],
+            "up_to_date"
+        )
+        self.assertTrue(result["packs"][1]["is_recommended_variant"])
+        request, timeout = calls[0]
+        self.assertEqual(timeout, 12)
+        self.assertEqual(
+            request.full_url,
+            "https://project.supabase.co/rest/v1/rpc/get_pack_family"
+        )
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"p_pack_guid": "variant-pack"}
+        )
+
+    def test_family_rpc_missing_returns_empty_family(self):
+        db = make_db()
+        self.configure(db)
+
+        def fake_urlopen(request, timeout):
+            raise HTTPError(
+                request.full_url,
+                404,
+                "Not Found",
+                {},
+                io.BytesIO(
+                    b'{"message":"Could not find the function '
+                    b'public.get_pack_family(p_pack_guid) in the schema cache"}'
+                )
+            )
+
+        with mock.patch("app.services.pack_catalog.urlopen", fake_urlopen):
+            result = pack_catalog_family("world-map", db=db)
+
+        self.assertEqual(result, {
+            "pack_guid": "world-map",
+            "original_pack_guid": "world-map",
+            "recommended_pack_guid": "world-map",
+            "variant_count": 0,
+            "packs": []
+        })
 
 
 class PackPreviewTests(unittest.TestCase):

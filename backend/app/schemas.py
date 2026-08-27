@@ -334,6 +334,7 @@ class PackExportRequest(BaseModel):
 class PackPublishDraftRequest(PackExportRequest):
     tags: List[str] = Field(default_factory=list, max_length=20)
     themes: List[str] = Field(default_factory=list, max_length=12)
+    variant_of_pack_guid: Optional[str] = Field(default=None, max_length=120)
 
 
 class PackInstallRecordRequest(BaseModel):
@@ -346,6 +347,10 @@ class PackRatingRequest(BaseModel):
 
 class PackCommentCreateRequest(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
+
+
+class PackActivityReadRequest(BaseModel):
+    event_ids: List[int] = Field(default_factory=list, max_length=100)
 
 
 class ProfileUpdateRequest(BaseModel):

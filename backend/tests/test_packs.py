@@ -33,6 +33,7 @@ from app.routers.packs import (
     update_pack_zip
 )
 from app.services.packs import (
+    clone_installed_pack_as_variant_source,
     content_hash,
     export_pack,
     export_playlist_pack,
@@ -1371,6 +1372,255 @@ class PackFormatV1CompatTests(PackFixtureMixin, unittest.TestCase):
             import_pack(
                 make_db(), future_zip, static_dir=self.make_static_dir()
             )
+
+
+class PackVariantSourceCloneTests(PackFixtureMixin, unittest.TestCase):
+    def build_installed_single_group_pack(self):
+        db = make_db()
+        static_dir = self.make_static_dir()
+        media = self.write_media(static_dir, "map.svg", SVG_BYTES)
+        base_guid = "base-pack-guid"
+        group = QuestionGroup(
+            guid=base_guid,
+            type_group="map",
+            name="Countries",
+            media=media,
+            data={"projection": "mercator"},
+            pack_guid=base_guid,
+            pack_version=2,
+            content_hash="group-hash"
+        )
+        db.add(group)
+        db.flush()
+        question = Question(
+            guid="base-question-guid",
+            type_q="map",
+            question="France",
+            answer="Paris",
+            media=media,
+            tags=["europe"],
+            data={"code": "fr", "aliases": ["France"]},
+            group_id=group.id,
+            pack_guid=base_guid,
+            pack_version=2,
+            content_hash="question-hash"
+        )
+        db.add(question)
+        db.flush()
+        db.add(create_initial_progress(question.id, today=date(2026, 1, 1)))
+        db.add(PackSubscription(
+            pack_guid=base_guid,
+            installed_version=2,
+            name="Countries",
+            source="base.zip",
+            subscribed_at="2026-08-01T10:00:00Z"
+        ))
+        db.commit()
+
+        return db, static_dir, base_guid, group, question
+
+    def test_single_group_clone_uses_fresh_identities_and_no_progress(self):
+        db, _static_dir, base_guid, group, question = (
+            self.build_installed_single_group_pack()
+        )
+
+        result = clone_installed_pack_as_variant_source(db, base_guid)
+
+        self.assertEqual(result["source_kind"], "group")
+        self.assertEqual(result["variant_of_pack_guid"], base_guid)
+        self.assertEqual(result["base_pack_name"], "Countries")
+
+        cloned_group = db.query(QuestionGroup).get(result["source_id"])
+        self.assertIsNotNone(cloned_group)
+        self.assertNotEqual(cloned_group.guid, group.guid)
+        self.assertIsNone(cloned_group.pack_guid)
+        self.assertIsNone(cloned_group.pack_version)
+        self.assertIsNone(cloned_group.content_hash)
+        self.assertEqual(cloned_group.name, "Countries - variante")
+        self.assertEqual(cloned_group.media, group.media)
+        self.assertEqual(cloned_group.data, group.data)
+
+        cloned_question = (
+            db.query(Question)
+            .filter(Question.group_id == cloned_group.id)
+            .one()
+        )
+        self.assertNotEqual(cloned_question.guid, question.guid)
+        self.assertEqual(cloned_question.question, question.question)
+        self.assertEqual(cloned_question.tags, question.tags)
+        self.assertEqual(cloned_question.data, question.data)
+        self.assertIsNone(cloned_question.pack_guid)
+        self.assertIsNone(cloned_question.pack_version)
+        self.assertIsNone(cloned_question.content_hash)
+        self.assertFalse(cloned_question.suspended)
+        self.assertIsNone(
+            db.query(Progress)
+            .filter(Progress.question_id == cloned_question.id)
+            .first()
+        )
+        self.assertEqual(
+            db.query(Progress)
+            .filter(Progress.question_id == question.id)
+            .count(),
+            1
+        )
+
+    def test_single_group_variant_exports_and_imports_next_to_original(self):
+        db, static_dir, base_guid, group, question = (
+            self.build_installed_single_group_pack()
+        )
+        result = clone_installed_pack_as_variant_source(db, base_guid)
+        cloned_group = db.query(QuestionGroup).get(result["source_id"])
+        variant_zip = export_pack(
+            db,
+            cloned_group.id,
+            version=1,
+            name="Countries variant",
+            static_dir=static_dir,
+            pack_dir=self.make_static_dir()
+        )
+
+        target_db = make_db()
+        target_group = QuestionGroup(
+            guid=group.guid,
+            type_group=group.type_group,
+            name=group.name,
+            media=group.media,
+            data=group.data,
+            pack_guid=base_guid,
+            pack_version=2,
+            content_hash="group-hash"
+        )
+        target_db.add(target_group)
+        target_db.flush()
+        target_db.add(Question(
+            guid=question.guid,
+            type_q=question.type_q,
+            question=question.question,
+            answer=question.answer,
+            media=question.media,
+            tags=question.tags,
+            data=question.data,
+            group_id=target_group.id,
+            pack_guid=base_guid,
+            pack_version=2,
+            content_hash="question-hash"
+        ))
+        target_db.add(PackSubscription(
+            pack_guid=base_guid,
+            installed_version=2,
+            name="Countries",
+            source="base.zip",
+            subscribed_at="2026-08-01T10:00:00Z"
+        ))
+        target_db.commit()
+
+        import_result = import_pack(
+            target_db,
+            variant_zip,
+            static_dir=static_dir,
+            source="variant.zip"
+        )
+
+        self.assertEqual(import_result["questions_imported"], 1)
+        self.assertEqual(target_db.query(PackSubscription).count(), 2)
+        self.assertEqual(target_db.query(QuestionGroup).count(), 2)
+        self.assertEqual(target_db.query(Question).count(), 2)
+
+    def test_multi_group_clone_creates_playlist_source(self):
+        db = make_db()
+        base_guid = "mixed-pack-guid"
+        map_group = QuestionGroup(
+            guid="map-group-guid",
+            type_group="map",
+            name="Cartes",
+            media="/static/map.svg",
+            data={"projection": "mercator"},
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="map-group-hash"
+        )
+        text_group = QuestionGroup(
+            guid="text-group-guid",
+            type_group="text",
+            name="Questions",
+            data={},
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="text-group-hash"
+        )
+        db.add_all([map_group, text_group])
+        db.flush()
+        map_question = Question(
+            guid="map-question-guid",
+            type_q="map",
+            question="France",
+            answer="FR",
+            tags=["geo"],
+            data={"code": "fr"},
+            group_id=map_group.id,
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="map-question-hash"
+        )
+        text_question = Question(
+            guid="text-question-guid",
+            type_q="text",
+            question="Capitale ?",
+            answer="Paris",
+            tags=["geo"],
+            data={},
+            group_id=text_group.id,
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="text-question-hash"
+        )
+        numeric_question = Question(
+            guid="numeric-question-guid",
+            type_q="numeric",
+            question="2 + 2",
+            answer="4",
+            tags=["math"],
+            data={"numeric": {"value": "4"}},
+            pack_guid=base_guid,
+            pack_version=1,
+            content_hash="numeric-question-hash"
+        )
+        db.add_all([map_question, text_question, numeric_question])
+        db.add(PackSubscription(
+            pack_guid=base_guid,
+            installed_version=1,
+            name="Pack mixte",
+            source="mixed.zip",
+            subscribed_at="2026-08-01T10:00:00Z"
+        ))
+        db.commit()
+
+        result = clone_installed_pack_as_variant_source(db, base_guid)
+
+        self.assertEqual(result["source_kind"], "playlist")
+        self.assertEqual(result["question_count"], 3)
+        self.assertEqual(result["group_count"], 2)
+        collection = db.query(Collection).get(result["source_id"])
+        self.assertIsNotNone(collection)
+        self.assertEqual(len(collection.questions), 3)
+        self.assertNotEqual(collection.guid, base_guid)
+
+        cloned_questions = sorted(collection.questions, key=lambda item: item.question)
+        self.assertTrue(all(question.pack_guid is None for question in cloned_questions))
+        self.assertEqual(
+            {question.question for question in cloned_questions},
+            {"2 + 2", "Capitale ?", "France"}
+        )
+        cloned_groups = db.query(QuestionGroup).filter(
+            QuestionGroup.pack_guid.is_(None)
+        ).all()
+        self.assertEqual(len(cloned_groups), 2)
+        self.assertEqual(
+            {group.guid for group in cloned_groups}
+            & {"map-group-guid", "text-group-guid"},
+            set()
+        )
 
 
 class PlaylistPackTests(PackFixtureMixin, unittest.TestCase):

@@ -22,6 +22,7 @@
 - enlever les pauses quand il y a pas de timers
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
+- changer liste d'images en visionneuse d'images
 
 ## quick fixes
 

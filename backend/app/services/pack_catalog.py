@@ -21,6 +21,7 @@ from .packs import (
     GROUP_HASH_FIELDS,
     QUESTION_HASH_FIELDS,
     _read_manifest_and_content,
+    clone_installed_pack_as_variant_source,
     content_hash,
     export_pack,
     export_playlist_pack
@@ -67,6 +68,16 @@ PREVIEW_SAMPLE_LIMIT = 6
 PREVIEW_FETCH_TIMEOUT = 15
 PREVIEW_MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 PREVIEW_TEXT_LIMIT = 160
+PACK_VARIANTS_SCHEMA_MESSAGE = (
+    "Mets à jour le schéma Supabase du catalogue avant d'utiliser les "
+    "variantes de packs."
+)
+PUBLICATION_SELECT_BASE = (
+    "pack_guid,name,description,type_group,question_count,"
+    "version,size_bytes,license,tags,themes,storage_path,is_public,"
+    "publication_status,published_at,updated_at,avg_rating,"
+    "rating_count,comment_count,download_count"
+)
 
 
 class PackCatalogError(ValueError):
@@ -164,6 +175,76 @@ def _message_from_body(body):
         )
 
     return None
+
+
+def _body_error_text(body):
+    if isinstance(body, str):
+        return body
+
+    if not isinstance(body, bytes):
+        return ""
+
+    message = _message_from_body(body)
+
+    if message:
+        return str(message)
+
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError:
+        return ""
+
+
+def _is_supabase_schema_gap(message):
+    text = str(message or "").casefold()
+
+    return (
+        "schema cache" in text
+        or "does not exist" in text
+        or "could not find" in text
+    )
+
+
+def _is_pack_lineage_schema_gap(body_or_message):
+    message = _body_error_text(body_or_message)
+    text = message.casefold()
+
+    return (
+        _is_supabase_schema_gap(message)
+        and "pack_catalog" in text
+        and (
+            "variant_of_pack_guid" in text
+            or "root_pack_guid" in text
+        )
+    )
+
+
+def _is_activity_schema_gap(body_or_message):
+    message = _body_error_text(body_or_message)
+    text = message.casefold()
+
+    return (
+        _is_supabase_schema_gap(message)
+        and (
+            "list_pack_activity_events" in text
+            or "mark_pack_activity_events_read" in text
+            or "pack_activity_events" in text
+        )
+    )
+
+
+def _is_upsert_variant_signature_gap(body_or_message):
+    message = _body_error_text(body_or_message)
+    text = message.casefold()
+
+    return (
+        _is_supabase_schema_gap(message)
+        and "upsert_my_pack_draft" in text
+        and (
+            "p_variant_of_pack_guid" in text
+            or "function" in text
+        )
+    )
 
 
 def _supabase_headers(key):
@@ -459,8 +540,27 @@ def _normalize_pack(row, project_url):
     if not isinstance(row, dict):
         return None
 
+    pack_guid = str(row.get("pack_guid") or row.get("blueprint_guid") or "")
+    variant_of_pack_guid = str(row.get("variant_of_pack_guid") or "").strip()
+    root_pack_guid = str(row.get("root_pack_guid") or "").strip()
+    original_pack_guid = str(row.get("original_pack_guid") or "").strip()
+    recommended_pack_guid = str(row.get("recommended_pack_guid") or "").strip()
+    original_name = str(row.get("original_name") or "").strip()
+    variant_count = _int_or_none(row.get("variant_count")) or 0
+
+    if not original_pack_guid:
+        original_pack_guid = root_pack_guid or (
+            variant_of_pack_guid if variant_of_pack_guid else pack_guid
+        )
+
+    if not root_pack_guid:
+        root_pack_guid = original_pack_guid or pack_guid
+
+    if not recommended_pack_guid:
+        recommended_pack_guid = pack_guid
+
     entry = {
-        "pack_guid": str(row.get("pack_guid") or row.get("blueprint_guid") or ""),
+        "pack_guid": pack_guid,
         "name": str(row.get("name") or "Pack sans titre"),
         "description": str(row.get("description") or ""),
         "type_group": str(row.get("type_group") or "text"),
@@ -478,6 +578,15 @@ def _normalize_pack(row, project_url):
         "avg_rating": _float_or_none(row.get("avg_rating")),
         "rating_count": _int_or_none(row.get("rating_count")) or 0,
         "comment_count": _int_or_none(row.get("comment_count")) or 0,
+        "variant_of_pack_guid": variant_of_pack_guid or None,
+        "root_pack_guid": root_pack_guid or None,
+        "original_pack_guid": original_pack_guid or None,
+        "recommended_pack_guid": recommended_pack_guid or None,
+        "original_name": original_name or None,
+        "variant_count": variant_count,
+        "is_recommended_variant": bool(
+            variant_of_pack_guid and recommended_pack_guid == pack_guid
+        ),
         "estimated_minutes": _estimated_minutes(row.get("question_count"))
     }
     entry["download_url"] = (
@@ -696,6 +805,32 @@ def _normalize_response(payload, project_url):
     }
 
 
+def _normalize_family_response(payload, project_url):
+    if isinstance(payload, list):
+        payload = payload[0] if payload else {}
+
+    if not isinstance(payload, dict):
+        raise PackCatalogError("Réponse Supabase invalide.")
+
+    rows = payload.get("packs")
+    packs = [
+        entry
+        for entry in (
+            _normalize_pack(row, project_url)
+            for row in (rows if isinstance(rows, list) else [])
+        )
+        if entry
+    ]
+
+    return {
+        "pack_guid": str(payload.get("pack_guid") or ""),
+        "original_pack_guid": str(payload.get("original_pack_guid") or ""),
+        "recommended_pack_guid": str(payload.get("recommended_pack_guid") or ""),
+        "variant_count": _int_or_none(payload.get("variant_count")) or 0,
+        "packs": packs
+    }
+
+
 def search_pack_catalog(
     db,
     *,
@@ -752,6 +887,43 @@ def search_pack_catalog(
         if normalized_status == "local_copy":
             result["total"] = len(result["packs"])
             result["next_cursor"] = None
+
+    return result
+
+
+def get_pack_family(db, pack_guid):
+    clean_guid = str(pack_guid or "").strip()
+
+    if not clean_guid:
+        raise PackCatalogError("Pack introuvable.")
+
+    project_url, key = _publish_config(db)
+    status, _, body = _supabase_request(
+        project_url,
+        key,
+        "/rest/v1/rpc/get_pack_family",
+        method="POST",
+        payload={"p_pack_guid": clean_guid}
+    )
+    if (
+        status >= 400
+        and (
+            _is_pack_lineage_schema_gap(body)
+            or "get_pack_family" in _body_error_text(body).casefold()
+        )
+        and _is_supabase_schema_gap(_body_error_text(body))
+    ):
+        return {
+            "pack_guid": clean_guid,
+            "original_pack_guid": clean_guid,
+            "recommended_pack_guid": clean_guid,
+            "variant_count": 0,
+            "packs": []
+        }
+    _raise_supabase_status(status, body, "Famille de packs indisponible")
+
+    result = _normalize_family_response(_decode_json_body(body), project_url)
+    _annotate_local_pack_status(db, result["packs"])
 
     return result
 
@@ -1378,6 +1550,8 @@ def _normalize_publication(row, project_url):
         raise PackCatalogError("Réponse Supabase invalide.")
 
     storage_path = str(row.get("storage_path") or "").strip()
+    variant_of_pack_guid = str(row.get("variant_of_pack_guid") or "").strip()
+    root_pack_guid = str(row.get("root_pack_guid") or "").strip()
 
     return {
         "pack_guid": str(row.get("pack_guid") or ""),
@@ -1403,17 +1577,24 @@ def _normalize_publication(row, project_url):
         "updated_at": row.get("updated_at"),
         "avg_rating": _float_or_none(row.get("avg_rating")),
         "rating_count": _int_or_none(row.get("rating_count")) or 0,
-        "comment_count": _int_or_none(row.get("comment_count")) or 0
+        "comment_count": _int_or_none(row.get("comment_count")) or 0,
+        "download_count": _int_or_none(row.get("download_count")) or 0,
+        "variant_of_pack_guid": variant_of_pack_guid or None,
+        "root_pack_guid": root_pack_guid or None
     }
 
 
-def _owned_publication_select_path(pack_guid, owner_id):
+def _publication_select_columns(*, include_lineage=True):
+    if include_lineage:
+        return f"{PUBLICATION_SELECT_BASE},variant_of_pack_guid,root_pack_guid"
+
+    return PUBLICATION_SELECT_BASE
+
+
+def _owned_publication_select_path(pack_guid, owner_id, *, include_lineage=True):
     return (
         "/rest/v1/pack_catalog"
-        "?select=pack_guid,name,description,type_group,question_count,"
-        "version,size_bytes,license,tags,themes,storage_path,is_public,"
-        "publication_status,published_at,updated_at,avg_rating,"
-        "rating_count,comment_count"
+        f"?select={_publication_select_columns(include_lineage=include_lineage)}"
         f"&pack_guid=eq.{quote(str(pack_guid or '').strip(), safe='')}"
         f"&owner_id=eq.{quote(str(owner_id or '').strip(), safe='')}"
         "&limit=1"
@@ -1433,6 +1614,15 @@ def _get_owned_publication(db, pack_guid, *, required=False):
         db,
         _owned_publication_select_path(clean_guid, owner_id)
     )
+    if status >= 400 and _is_pack_lineage_schema_gap(body):
+        project_url, _, status, _, body = _authed_supabase_request(
+            db,
+            _owned_publication_select_path(
+                clean_guid,
+                owner_id,
+                include_lineage=False
+            )
+        )
     _raise_supabase_status(status, body, "Publication introuvable")
     rows = _decode_json_body(body)
 
@@ -1652,6 +1842,19 @@ def get_pack_publish_status(db):
     }
 
 
+def create_pack_variant_source(db, pack_guid):
+    """Create the local editable source for a catalog variant.
+
+    The remote publish RPC still validates the user's install when the draft is
+    saved; this endpoint only gates the local clone behind a signed-in catalog
+    session and a local PackSubscription.
+    """
+    project_url, _ = _publish_config(db)
+    _effective_publish_state(project_url)
+
+    return clone_installed_pack_as_variant_source(db, pack_guid)
+
+
 def request_pack_publish_code(db, email):
     project_url, key = _publish_config(db)
     clean_email = str(email or "").strip().lower()
@@ -1719,21 +1922,29 @@ def sign_out_pack_publisher():
     return state
 
 
+def _owned_publications_select_path(owner_id, *, include_lineage=True):
+    return (
+        "/rest/v1/pack_catalog"
+        f"?select={_publication_select_columns(include_lineage=include_lineage)}"
+        f"&owner_id=eq.{owner_id}"
+        "&order=updated_at.desc"
+        "&limit=50"
+    )
+
+
 def list_pack_publications(db):
     project_url, _ = _publish_config(db)
     state, _ = _effective_publish_state(project_url)
     owner_id = quote(str(state["token"].get("user_id") or ""), safe="")
     project_url, _, status, _, body = _authed_supabase_request(
         db,
-        "/rest/v1/pack_catalog"
-        "?select=pack_guid,name,description,type_group,question_count,"
-        "version,size_bytes,license,tags,themes,storage_path,is_public,"
-        "publication_status,published_at,updated_at,avg_rating,"
-        "rating_count,comment_count"
-        f"&owner_id=eq.{owner_id}"
-        "&order=updated_at.desc"
-        "&limit=50"
+        _owned_publications_select_path(owner_id)
     )
+    if status >= 400 and _is_pack_lineage_schema_gap(body):
+        project_url, _, status, _, body = _authed_supabase_request(
+            db,
+            _owned_publications_select_path(owner_id, include_lineage=False)
+        )
     _raise_supabase_status(status, body, "Brouillons indisponibles")
     rows = _decode_json_body(body)
 
@@ -1858,7 +2069,8 @@ def _source_release_payload(publication, source):
         "name": source.name or publication.get("name") or "Pack sans titre",
         "description": publication.get("description") or "",
         "license": publication.get("license") or "",
-        "tags": publication.get("tags") or []
+        "tags": publication.get("tags") or [],
+        "variant_of_pack_guid": publication.get("variant_of_pack_guid")
     }
 
 
@@ -1959,7 +2171,8 @@ def save_pack_publish_draft(
     description="",
     license="",
     tags=None,
-    themes=None
+    themes=None,
+    variant_of_pack_guid=None
 ):
     summary = _group_publish_summary(db, group_id)
 
@@ -1987,7 +2200,8 @@ def save_pack_publish_draft(
         description=description,
         license=license,
         tags=tags,
-        themes=themes
+        themes=themes,
+        variant_of_pack_guid=variant_of_pack_guid
     )
 
 
@@ -2000,7 +2214,8 @@ def save_playlist_publish_draft(
     description="",
     license="",
     tags=None,
-    themes=None
+    themes=None,
+    variant_of_pack_guid=None
 ):
     """Publish a playlist as a multi-group pack.
 
@@ -2033,7 +2248,8 @@ def save_playlist_publish_draft(
         description=description,
         license=license,
         tags=tags,
-        themes=themes
+        themes=themes,
+        variant_of_pack_guid=variant_of_pack_guid
     )
 
 
@@ -2047,9 +2263,15 @@ def _upload_publish_draft(
     description="",
     license="",
     tags=None,
-    themes=None
+    themes=None,
+    variant_of_pack_guid=None
 ):
     safe_version = int(version)
+    clean_variant_of = str(variant_of_pack_guid or "").strip()
+
+    if clean_variant_of and clean_variant_of == summary["pack_guid"]:
+        raise PackCatalogError("Un pack ne peut pas être sa propre variante.")
+
     zip_bytes = zip_path.read_bytes()
     project_url, _ = _publish_config(db)
     state, _ = _effective_publish_state(project_url)
@@ -2089,7 +2311,8 @@ def _upload_publish_draft(
         "p_license": str(license or "").strip(),
         "p_tags": draft_tags,
         "p_themes": draft_themes,
-        "p_storage_path": storage_path
+        "p_storage_path": storage_path,
+        "p_variant_of_pack_guid": clean_variant_of or None
     }
 
     project_url, _, status, _, body = _authed_supabase_request(
@@ -2098,6 +2321,24 @@ def _upload_publish_draft(
         method="POST",
         payload=payload
     )
+    if (
+        status >= 400
+        and (
+            _is_upsert_variant_signature_gap(body)
+            or _is_pack_lineage_schema_gap(body)
+        )
+    ):
+        if clean_variant_of or _is_pack_lineage_schema_gap(body):
+            raise PackCatalogError(PACK_VARIANTS_SCHEMA_MESSAGE)
+
+        legacy_payload = dict(payload)
+        legacy_payload.pop("p_variant_of_pack_guid", None)
+        project_url, _, status, _, body = _authed_supabase_request(
+            db,
+            "/rest/v1/rpc/upsert_my_pack_draft",
+            method="POST",
+            payload=legacy_payload
+        )
     _raise_supabase_status(status, body, "Brouillon impossible à enregistrer")
 
     publication = _normalize_publication(_decode_json_body(body), project_url)
@@ -2243,6 +2484,89 @@ def get_my_pack_status(db, pack_guid):
         "is_installed": bool(body.get("is_installed")),
         "my_rating": _int_or_none(body.get("my_rating"))
     }
+
+
+def _normalize_activity_event(row):
+    if not isinstance(row, dict):
+        return None
+
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    event_id = _int_or_none(row.get("id"))
+
+    if event_id is None:
+        return None
+
+    return {
+        "id": event_id,
+        "event_type": str(row.get("event_type") or ""),
+        "pack_guid": str(row.get("pack_guid") or ""),
+        "pack_name": str(row.get("pack_name") or payload.get("pack_name") or ""),
+        "related_pack_guid": str(row.get("related_pack_guid") or ""),
+        "related_pack_name": str(
+            row.get("related_pack_name")
+            or payload.get("related_pack_name")
+            or ""
+        ),
+        "created_at": row.get("created_at"),
+        "read_at": row.get("read_at"),
+        "payload": payload
+    }
+
+
+def list_pack_activity_events(db, *, limit=20):
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/list_pack_activity_events",
+        method="POST",
+        payload={"p_limit": _clamp_limit(limit)}
+    )
+    if status >= 400 and _is_activity_schema_gap(body):
+        return {"events": [], "unread_count": 0}
+
+    _raise_supabase_status(status, body, "Activité des packs indisponible")
+    body = _decode_json_body(body)
+
+    payload = body if isinstance(body, dict) else {}
+    rows = payload.get("events")
+    events = [
+        event
+        for event in (
+            _normalize_activity_event(row)
+            for row in (rows if isinstance(rows, list) else [])
+        )
+        if event
+    ]
+
+    return {
+        "events": events,
+        "unread_count": _int_or_none(payload.get("unread_count")) or 0
+    }
+
+
+def mark_pack_activity_events_read(db, event_ids=None):
+    clean_ids = [
+        int(value)
+        for value in (event_ids or [])
+        if _int_or_none(value) is not None
+    ]
+    _, _, status, _, body = _authed_supabase_request(
+        db,
+        "/rest/v1/rpc/mark_pack_activity_events_read",
+        method="POST",
+        payload={"p_event_ids": clean_ids}
+    )
+    if status >= 400 and _is_activity_schema_gap(body):
+        return {"updated": 0}
+
+    _raise_supabase_status(status, body, "Activité des packs indisponible")
+    body = _decode_json_body(body)
+
+    if isinstance(body, dict):
+        updated = body.get("updated")
+    else:
+        updated = body
+
+    return {"updated": _int_or_none(updated) or 0}
 
 
 def rate_pack(db, pack_guid, rating):

@@ -46,6 +46,37 @@ function normalizeFacets(facets) {
   };
 }
 
+export function buildBrowsePackItem(entry, installedByGuid = {}, actionState = {}) {
+  const localStatus = entry.local_status || null;
+  const installed = (
+    installedByGuid[entry.pack_guid] ||
+    (
+      localStatus?.installed_version !== null &&
+      localStatus?.installed_version !== undefined
+        ? { installed_version: localStatus.installed_version }
+        : null
+    )
+  );
+  const statusValue = packStatus(entry, installed, localStatus);
+
+  return {
+    entry,
+    status: statusValue,
+    installedVersion:
+      installed?.installed_version ??
+      localStatus?.installed_version ??
+      null,
+    localPackVersion: localStatus?.local_pack_version ?? null,
+    localGroupId: localStatus?.local_group_id ?? null,
+    localGroupName: localStatus?.local_group_name ?? null,
+    hasLocalContent: Boolean(
+      installed || localStatus?.has_local_content
+    ),
+    isMine: Boolean(entry.is_mine || localStatus?.is_mine),
+    action: actionState[entry.pack_guid] || {}
+  };
+}
+
 export function useBrowsePacks(filters = {}) {
   const search = filters.search || "";
   const theme = filters.theme || "";
@@ -221,36 +252,14 @@ export function useBrowsePacks(filters = {}) {
     }
   }
 
-  const items = useMemo(() => entries.map((entry) => {
-    const localStatus = entry.local_status || null;
-    const installed = (
-      installedByGuid[entry.pack_guid] ||
-      (
-        localStatus?.installed_version !== null &&
-        localStatus?.installed_version !== undefined
-          ? { installed_version: localStatus.installed_version }
-          : null
-      )
-    );
-    const statusValue = packStatus(entry, installed, localStatus);
-
-    return {
-      entry,
-      status: statusValue,
-      installedVersion:
-        installed?.installed_version ??
-        localStatus?.installed_version ??
-        null,
-      localPackVersion: localStatus?.local_pack_version ?? null,
-      localGroupId: localStatus?.local_group_id ?? null,
-      localGroupName: localStatus?.local_group_name ?? null,
-      hasLocalContent: Boolean(
-        installed || localStatus?.has_local_content
-      ),
-      isMine: Boolean(entry.is_mine || localStatus?.is_mine),
-      action: actionState[entry.pack_guid] || {}
-    };
-  }), [actionState, entries, installedByGuid]);
+  const itemForEntry = useCallback(
+    (entry) => buildBrowsePackItem(entry, installedByGuid, actionState),
+    [actionState, installedByGuid]
+  );
+  const items = useMemo(
+    () => entries.map(itemForEntry),
+    [entries, itemForEntry]
+  );
 
   return {
     facets,
@@ -269,6 +278,7 @@ export function useBrowsePacks(filters = {}) {
     install,
     update,
     unsubscribe,
+    itemForEntry,
     unplacedTagRoots,
     clearUnplacedTagRoots: () => setUnplacedTagRoots([])
   };

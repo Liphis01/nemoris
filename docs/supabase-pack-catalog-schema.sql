@@ -1,5 +1,5 @@
--- Supabase setup for the pack catalog: safe catalog reads, unpublishing,
--- permanent deletion, install tracking, ratings, and comments.
+-- Supabase setup for the pack catalog: safe catalog reads, variants,
+-- permanent deletion, install tracking, ratings, comments, and activity.
 --
 -- Run this once in the Supabase SQL editor for the project configured in
 -- Settings -> Catalogue. The app uses only the publishable key at
@@ -74,8 +74,36 @@ end $$;
 create index if not exists pack_comments_pack_guid_created_at_idx
   on public.pack_comments (pack_guid, created_at desc);
 
+create table if not exists public.pack_activity_events (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  actor_id uuid references auth.users(id) on delete set null,
+  event_type text not null,
+  pack_guid text not null references public.pack_catalog(pack_guid) on delete cascade,
+  related_pack_guid text not null references public.pack_catalog(pack_guid) on delete cascade,
+  payload jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+do $$
+begin
+  alter table public.pack_activity_events
+    add constraint pack_activity_events_type_check
+    check (event_type in ('variant_published'));
+exception
+  when duplicate_object then null;
+end $$;
+
+create index if not exists pack_activity_events_user_unread_idx
+  on public.pack_activity_events (user_id, read_at, created_at desc);
+
+create unique index if not exists pack_activity_events_variant_once_idx
+  on public.pack_activity_events (user_id, event_type, related_pack_guid)
+  where event_type = 'variant_published';
+
 -- =========================================================
--- 2. Denormalized aggregates on pack_catalog
+-- 2. Denormalized aggregates and lineage on pack_catalog
 -- =========================================================
 -- Avoids a join on every search page and makes "top rated" sort a plain
 -- indexed ORDER BY. Kept in sync by triggers below -- application code
@@ -84,10 +112,56 @@ create index if not exists pack_comments_pack_guid_created_at_idx
 alter table public.pack_catalog
   add column if not exists avg_rating numeric(3,2) not null default 0,
   add column if not exists rating_count integer not null default 0,
-  add column if not exists comment_count integer not null default 0;
+  add column if not exists comment_count integer not null default 0,
+  add column if not exists variant_of_pack_guid text,
+  add column if not exists root_pack_guid text;
+
+update public.pack_catalog
+set root_pack_guid = pack_guid
+where root_pack_guid is null;
+
+alter table public.pack_catalog
+  alter column root_pack_guid set not null;
+
+do $$
+begin
+  alter table public.pack_catalog
+    add constraint pack_catalog_variant_not_self
+    check (variant_of_pack_guid is null or variant_of_pack_guid <> pack_guid);
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter table public.pack_catalog
+    add constraint pack_catalog_variant_of_pack_guid_fkey
+    foreign key (variant_of_pack_guid)
+    references public.pack_catalog(pack_guid)
+    on delete restrict;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter table public.pack_catalog
+    add constraint pack_catalog_root_pack_guid_fkey
+    foreign key (root_pack_guid)
+    references public.pack_catalog(pack_guid)
+    on delete restrict;
+exception
+  when duplicate_object then null;
+end $$;
 
 create index if not exists pack_catalog_avg_rating_idx
   on public.pack_catalog (avg_rating desc, rating_count desc);
+
+create index if not exists pack_catalog_variant_of_pack_guid_idx
+  on public.pack_catalog (variant_of_pack_guid);
+
+create index if not exists pack_catalog_root_pack_guid_idx
+  on public.pack_catalog (root_pack_guid);
 
 create or replace function public.pack_catalog_refresh_rating_stats()
 returns trigger language plpgsql as $$
@@ -162,12 +236,14 @@ alter table public.pack_catalog enable row level security;
 alter table public.pack_installs enable row level security;
 alter table public.pack_ratings enable row level security;
 alter table public.pack_comments enable row level security;
+alter table public.pack_activity_events enable row level security;
 
 grant select on public.pack_catalog to anon, authenticated;
 grant select, insert, update on public.pack_installs to authenticated;
 grant select, insert, update on public.pack_ratings to authenticated;
 grant select, insert on public.pack_comments to authenticated;
 grant select on public.pack_comments to anon;
+grant select, update(read_at) on public.pack_activity_events to authenticated;
 
 drop policy if exists pack_catalog_select_public on public.pack_catalog;
 drop policy if exists pack_catalog_select_own on public.pack_catalog;
@@ -243,6 +319,8 @@ create policy pack_ratings_update_own_if_installed
 
 drop policy if exists pack_comments_select_all on public.pack_comments;
 drop policy if exists pack_comments_insert_own_if_installed on public.pack_comments;
+drop policy if exists pack_activity_events_select_own on public.pack_activity_events;
+drop policy if exists pack_activity_events_mark_read_own on public.pack_activity_events;
 
 -- Anyone can read the thread, signed in or not.
 create policy pack_comments_select_all
@@ -276,6 +354,19 @@ create policy pack_comments_insert_own_if_installed
     )
   );
 
+create policy pack_activity_events_select_own
+  on public.pack_activity_events
+  for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy pack_activity_events_mark_read_own
+  on public.pack_activity_events
+  for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 -- =========================================================
 -- 4. New RPCs
 -- =========================================================
@@ -297,6 +388,270 @@ create policy pack_comments_insert_own_if_installed
 -- since the calling role can't touch the row directly.
 drop function if exists public.unpublish_my_pack(text);
 drop function if exists public.delete_my_pack(text);
+drop function if exists public.publish_my_pack(text);
+drop function if exists public.upsert_my_pack_draft(
+  text, text, text, text, integer, integer, integer, text, text[], text[], text
+);
+drop function if exists public.upsert_my_pack_draft(
+  text, text, text, text, integer, integer, integer, text, text[], text[], text, text
+);
+drop function if exists public.get_pack_family(text);
+drop function if exists public.list_pack_activity_events(integer);
+drop function if exists public.mark_pack_activity_events_read(bigint[]);
+
+create or replace function public.pack_catalog_recommendation_score(
+  p_avg_rating numeric,
+  p_rating_count integer,
+  p_download_count integer,
+  p_updated_at timestamptz
+)
+returns numeric
+language sql
+stable
+as $$
+  select
+    (
+      (
+        coalesce(p_avg_rating, 0) * greatest(coalesce(p_rating_count, 0), 0)
+        + 3.5 * 5
+      )
+      / (greatest(coalesce(p_rating_count, 0), 0) + 5)
+    )
+    + ln(greatest(coalesce(p_rating_count, 0), 0) + 1) * 0.12
+    + ln(greatest(coalesce(p_download_count, 0), 0) + 1) * 0.08
+    + case
+        when p_updated_at > now() - interval '90 days'
+          then 0.05
+        else 0
+      end;
+$$;
+
+create or replace function public.upsert_my_pack_draft(
+  p_pack_guid text default ''::text,
+  p_name text default ''::text,
+  p_description text default ''::text,
+  p_type_group text default 'text'::text,
+  p_question_count integer default 0,
+  p_version integer default 1,
+  p_size_bytes integer default 0,
+  p_license text default ''::text,
+  p_tags text[] default '{}'::text[],
+  p_themes text[] default '{}'::text[],
+  p_storage_path text default ''::text,
+  p_variant_of_pack_guid text default null::text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_pack_guid text := nullif(trim(coalesce(p_pack_guid, '')), '');
+  v_variant_of text := nullif(trim(coalesce(p_variant_of_pack_guid, '')), '');
+  v_root_guid text;
+  v_existing public.pack_catalog;
+  v_base public.pack_catalog;
+  v_row public.pack_catalog;
+  v_tags text[] := coalesce(p_tags, '{}'::text[]);
+  v_themes text[] := coalesce(p_themes, '{}'::text[]);
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  if v_pack_guid is null then
+    raise exception 'Pack introuvable.';
+  end if;
+
+  select *
+  into v_existing
+  from public.pack_catalog
+  where pack_guid = v_pack_guid;
+
+  if v_existing.id is not null and v_existing.owner_id <> v_uid then
+    raise exception 'Pack introuvable pour ce compte.';
+  end if;
+
+  if v_existing.id is not null then
+    v_variant_of := v_existing.variant_of_pack_guid;
+    v_root_guid := coalesce(v_existing.root_pack_guid, v_existing.pack_guid);
+  elsif v_variant_of is not null then
+    if v_variant_of = v_pack_guid then
+      raise exception 'Un pack ne peut pas être sa propre variante.';
+    end if;
+
+    select *
+    into v_base
+    from public.pack_catalog
+    where pack_guid = v_variant_of
+      and is_public = true;
+
+    if v_base.id is null then
+      raise exception 'Pack de base introuvable.';
+    end if;
+
+    if v_base.owner_id = v_uid then
+      raise exception 'Utilise Publier les changements pour ton propre pack.';
+    end if;
+
+    if not exists (
+      select 1
+      from public.pack_installs pi
+      where pi.pack_guid = v_variant_of
+        and pi.user_id = v_uid
+    ) then
+      raise exception 'Installe ce pack avant de publier une variante.';
+    end if;
+
+    v_root_guid := coalesce(v_base.root_pack_guid, v_base.pack_guid);
+  else
+    v_root_guid := v_pack_guid;
+  end if;
+
+  insert into public.pack_catalog as existing (
+    pack_guid,
+    owner_id,
+    name,
+    description,
+    type_group,
+    question_count,
+    version,
+    size_bytes,
+    license,
+    tags,
+    themes,
+    storage_path,
+    is_public,
+    publication_status,
+    variant_of_pack_guid,
+    root_pack_guid,
+    search_vector,
+    updated_at
+  )
+  values (
+    v_pack_guid,
+    v_uid,
+    nullif(trim(coalesce(p_name, '')), ''),
+    coalesce(p_description, ''),
+    coalesce(nullif(trim(p_type_group), ''), 'text'),
+    greatest(coalesce(p_question_count, 0), 0),
+    greatest(coalesce(p_version, 1), 1),
+    greatest(coalesce(p_size_bytes, 0), 0),
+    coalesce(p_license, ''),
+    v_tags,
+    v_themes,
+    coalesce(p_storage_path, ''),
+    false,
+    'draft',
+    v_variant_of,
+    v_root_guid,
+    to_tsvector(
+      'simple',
+      concat_ws(
+        ' ',
+        p_name,
+        p_description,
+        p_license,
+        array_to_string(v_tags, ' '),
+        array_to_string(v_themes, ' ')
+      )
+    ),
+    timezone('utc', now())
+  )
+  on conflict (pack_guid) do update
+    set name = excluded.name,
+        description = excluded.description,
+        type_group = excluded.type_group,
+        question_count = excluded.question_count,
+        version = excluded.version,
+        size_bytes = excluded.size_bytes,
+        license = excluded.license,
+        tags = excluded.tags,
+        themes = excluded.themes,
+        storage_path = excluded.storage_path,
+        is_public = false,
+        publication_status = 'draft',
+        variant_of_pack_guid = existing.variant_of_pack_guid,
+        root_pack_guid = existing.root_pack_guid,
+        search_vector = excluded.search_vector,
+        updated_at = timezone('utc', now())
+    where existing.owner_id = v_uid
+  returning * into v_row;
+
+  if v_row.id is null then
+    raise exception 'Pack introuvable pour ce compte.';
+  end if;
+
+  return to_jsonb(v_row);
+end;
+$function$;
+
+create or replace function public.publish_my_pack(p_pack_guid text default ''::text)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_previous public.pack_catalog;
+  v_row public.pack_catalog;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  select *
+  into v_previous
+  from public.pack_catalog
+  where pack_guid = nullif(trim(p_pack_guid), '')
+    and owner_id = v_uid;
+
+  if v_previous.id is null then
+    raise exception 'Pack introuvable pour ce compte.';
+  end if;
+
+  update public.pack_catalog
+  set is_public = true,
+      publication_status = 'published',
+      published_at = coalesce(published_at, timezone('utc', now())),
+      updated_at = timezone('utc', now())
+  where id = v_previous.id
+  returning * into v_row;
+
+  if v_row.variant_of_pack_guid is not null then
+    insert into public.pack_activity_events (
+      user_id,
+      actor_id,
+      event_type,
+      pack_guid,
+      related_pack_guid,
+      payload
+    )
+    select distinct
+      recipient.owner_id,
+      v_uid,
+      'variant_published',
+      recipient.pack_guid,
+      v_row.pack_guid,
+      jsonb_build_object(
+        'pack_name', recipient.name,
+        'related_pack_name', v_row.name,
+        'root_pack_guid', v_row.root_pack_guid
+      )
+    from public.pack_catalog recipient
+    where recipient.pack_guid in (
+        v_row.variant_of_pack_guid,
+        v_row.root_pack_guid
+      )
+      and recipient.owner_id <> v_uid
+    on conflict do nothing;
+  end if;
+
+  return to_jsonb(v_row);
+end;
+$function$;
 
 create or replace function public.unpublish_my_pack(p_pack_guid text default ''::text)
 returns jsonb
@@ -453,6 +808,191 @@ as $$
   returning *;
 $$;
 
+create or replace function public.get_pack_family(p_pack_guid text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+with selected as (
+  select coalesce(root_pack_guid, pack_guid) as root_guid
+  from public.pack_catalog
+  where pack_guid = p_pack_guid
+    and is_public = true
+  limit 1
+),
+family as (
+  select
+    pc.*,
+    public.pack_catalog_recommendation_score(
+      pc.avg_rating,
+      pc.rating_count,
+      pc.download_count,
+      pc.updated_at
+    ) as recommendation_score
+  from public.pack_catalog pc
+  join selected on coalesce(pc.root_pack_guid, pc.pack_guid) = selected.root_guid
+  where pc.is_public = true
+),
+recommended as (
+  select pack_guid
+  from family
+  order by
+    recommendation_score desc,
+    case when variant_of_pack_guid is null then 0 else 1 end,
+    updated_at desc,
+    lower(name) asc
+  limit 1
+),
+original as (
+  select *
+  from family
+  where pack_guid = (select root_guid from selected)
+  limit 1
+),
+counts as (
+  select count(*) filter (where variant_of_pack_guid is not null) as variant_count
+  from family
+)
+select jsonb_build_object(
+  'pack_guid', p_pack_guid,
+  'original_pack_guid', (select root_guid from selected),
+  'recommended_pack_guid', (select pack_guid from recommended),
+  'variant_count', coalesce((select variant_count from counts), 0),
+  'packs',
+  coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'pack_guid', family.pack_guid,
+        'name', family.name,
+        'description', family.description,
+        'type_group', family.type_group,
+        'question_count', family.question_count,
+        'version', family.version,
+        'size_bytes', family.size_bytes,
+        'license', family.license,
+        'tags', family.tags,
+        'themes', family.themes,
+        'download_count', family.download_count,
+        'featured', family.featured,
+        'published_at', family.published_at,
+        'updated_at', family.updated_at,
+        'storage_path', family.storage_path,
+        'avg_rating', family.avg_rating,
+        'rating_count', family.rating_count,
+        'comment_count', family.comment_count,
+        'variant_of_pack_guid', family.variant_of_pack_guid,
+        'root_pack_guid', family.root_pack_guid,
+        'original_pack_guid', (select root_guid from selected),
+        'recommended_pack_guid', (select pack_guid from recommended),
+        'original_name', (select name from original),
+        'variant_count', (select variant_count from counts)
+      )
+      order by
+        case when family.pack_guid = (select root_guid from selected) then 0 else 1 end,
+        case when family.pack_guid = (select pack_guid from recommended) then 0 else 1 end,
+        family.recommendation_score desc,
+        family.updated_at desc,
+        lower(family.name) asc
+    )
+    from family
+  ), '[]'::jsonb)
+);
+$$;
+
+create or replace function public.list_pack_activity_events(p_limit integer default 20)
+returns jsonb
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+with params as (
+  select auth.uid() as uid, greatest(1, least(coalesce(p_limit, 20), 60)) as limit_value
+),
+events as (
+  select
+    pae.id,
+    pae.event_type,
+    pae.pack_guid,
+    base.name as pack_name,
+    pae.related_pack_guid,
+    related.name as related_pack_name,
+    pae.payload,
+    pae.read_at,
+    pae.created_at
+  from public.pack_activity_events pae
+  join params on params.uid = pae.user_id
+  left join public.pack_catalog base on base.pack_guid = pae.pack_guid
+  left join public.pack_catalog related on related.pack_guid = pae.related_pack_guid
+  order by pae.created_at desc
+  limit (select limit_value from params)
+)
+select jsonb_build_object(
+  'events',
+  coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'id', id,
+        'event_type', event_type,
+        'pack_guid', pack_guid,
+        'pack_name', pack_name,
+        'related_pack_guid', related_pack_guid,
+        'related_pack_name', related_pack_name,
+        'payload', payload,
+        'read_at', read_at,
+        'created_at', created_at
+      )
+      order by created_at desc
+    )
+    from events
+  ), '[]'::jsonb),
+  'unread_count',
+  (
+    select count(*)
+    from public.pack_activity_events pae
+    join params on params.uid = pae.user_id
+    where pae.read_at is null
+  )
+);
+$$;
+
+create or replace function public.mark_pack_activity_events_read(
+  p_event_ids bigint[] default '{}'::bigint[]
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_uid uuid := auth.uid();
+  affected integer;
+begin
+  if v_uid is null then
+    raise exception 'Connexion Supabase requise.';
+  end if;
+
+  update public.pack_activity_events
+  set read_at = coalesce(read_at, timezone('utc', now()))
+  where user_id = v_uid
+    and read_at is null
+    and (
+      cardinality(coalesce(p_event_ids, '{}'::bigint[])) = 0
+      or id = any(p_event_ids)
+    );
+
+  get diagnostics affected = row_count;
+
+  return jsonb_build_object('updated', affected);
+end;
+$$;
+
+grant execute on function public.upsert_my_pack_draft(
+  text, text, text, text, integer, integer, integer, text, text[], text[], text, text
+) to authenticated;
+grant execute on function public.publish_my_pack(text) to authenticated;
 grant execute on function public.unpublish_my_pack(text) to authenticated;
 grant execute on function public.delete_my_pack(text) to authenticated;
 grant execute on function public.record_pack_install(text, integer) to authenticated;
@@ -460,31 +1000,23 @@ grant execute on function public.record_pack_installs_bulk(jsonb) to authenticat
 grant execute on function public.get_my_pack_status(text) to authenticated;
 grant execute on function public.rate_pack(text, smallint) to authenticated;
 grant execute on function public.add_pack_comment(text, text) to authenticated;
+grant execute on function public.get_pack_family(text) to anon, authenticated;
+grant execute on function public.list_pack_activity_events(integer) to authenticated;
+grant execute on function public.mark_pack_activity_events_read(bigint[]) to authenticated;
 
 -- =========================================================
 -- 5. Replaces the EXISTING search_pack_catalog RPC
 -- =========================================================
--- This is the real function body as pulled from the live project via
--- `select pg_get_functiondef(oid) from pg_proc where proname =
--- 'search_pack_catalog';`, with four changes from the original:
---   1. avg_rating, rating_count, comment_count added to the per-row JSON
---      (they flow through for free from section 2's new columns, since
---      every CTE here selects b.*/filtered.* rather than naming columns).
---   2. A 'note' branch added to the ORDER BY inside the `ordered` CTE.
---   3. theme_rows now groups straight from public.pack_catalog (is_public
---      only) instead of from `filtered` -- the theme sidebar is a snapshot
---      of the catalog and no longer reacts to query/theme/type/status or to
---      your own install state (2026-08-05).
---   4. SECURITY DEFINER + fixed search_path, so public catalog search does
---      not fail when anon/authenticated callers have no table write access.
+-- This keeps the old response envelope/row fields but now groups public
+-- rows by root_pack_guid and returns one recommended representative per
+-- family. The representative score is deterministic and smoothed; ties keep
+-- the original above variants. theme_rows still groups straight from
+-- public.pack_catalog (is_public only) so the theme sidebar is a stable
+-- snapshot of the catalog instead of reacting to query/theme/type/status or
+-- to your own install state.
 -- No change was needed to exclude archived/unpublished packs -- the WHERE
 -- clause already filters on is_public = true only (confirmed against the
 -- live body below), and unpublish_my_pack already clears that flag.
---
--- Known, deliberate limitation: this is a plain average, so one 5-star
--- rating can outrank a pack with hundreds of 4.9-average ratings. A
--- Bayesian/Wilson-score smoothed sort would fix this but is a separate,
--- later concern -- not implemented here.
 
 create or replace function public.search_pack_catalog(p_query text DEFAULT ''::text, p_theme text DEFAULT ''::text, p_type_group text DEFAULT ''::text, p_status text DEFAULT 'all'::text, p_sort text DEFAULT 'pertinence'::text, p_limit integer DEFAULT 24, p_cursor integer DEFAULT 0, p_installed_versions jsonb DEFAULT '{}'::jsonb)
  returns jsonb
@@ -507,6 +1039,7 @@ with params as (
 base as (
   select
     b.*,
+    coalesce(b.root_pack_guid, b.pack_guid) as family_guid,
     case
       when params.installed ? b.pack_guid
         then (params.installed ->> b.pack_guid)::integer
@@ -523,7 +1056,13 @@ base as (
     case
       when params.query_text is null then 0
       else ts_rank(b.search_vector, websearch_to_tsquery('simple', params.query_text))
-    end as rank
+    end as rank,
+    public.pack_catalog_recommendation_score(
+      b.avg_rating,
+      b.rating_count,
+      b.download_count,
+      b.updated_at
+    ) as recommendation_score
   from public.pack_catalog b
   cross join params
   where b.is_public = true
@@ -541,26 +1080,68 @@ filtered as (
   where params.status_text = 'all'
      or base.install_status = params.status_text
 ),
+family_counts as (
+  select
+    coalesce(root_pack_guid, pack_guid) as family_guid,
+    count(*) filter (where variant_of_pack_guid is not null) as variant_count
+  from public.pack_catalog
+  where is_public = true
+  group by coalesce(root_pack_guid, pack_guid)
+),
+family_originals as (
+  select
+    original.pack_guid as family_guid,
+    original.name as original_name
+  from public.pack_catalog original
+  where original.is_public = true
+    and coalesce(original.root_pack_guid, original.pack_guid) = original.pack_guid
+),
+family_representatives as (
+  select *
+  from (
+    select
+      filtered.*,
+      row_number() over (
+        partition by filtered.family_guid
+        order by
+          filtered.recommendation_score desc,
+          case when filtered.variant_of_pack_guid is null then 0 else 1 end,
+          filtered.updated_at desc,
+          lower(filtered.name) asc
+      ) as family_rank
+    from filtered
+  ) ranked
+  where family_rank = 1
+),
 ordered as (
   select
     sorted.*,
     row_number() over () as page_order
   from (
-    select filtered.*
-    from filtered
+    select
+      family_representatives.*,
+      coalesce(family_counts.variant_count, 0) as variant_count,
+      family_originals.original_name
+    from family_representatives
     cross join params
+    left join family_counts
+      on family_counts.family_guid = family_representatives.family_guid
+    left join family_originals
+      on family_originals.family_guid = family_representatives.family_guid
     order by
-      case when params.sort_text = 'pertinence' then filtered.rank end desc nulls last,
-      case when params.sort_text = 'populaires' then filtered.featured end desc,
-      case when params.sort_text = 'populaires' then filtered.download_count end desc,
-      case when params.sort_text = 'note' then filtered.avg_rating end desc nulls last,
-      case when params.sort_text = 'note' then filtered.rating_count end desc nulls last,
-      case when params.sort_text = 'récents' then filtered.updated_at end desc,
-      case when params.sort_text = 'nom' then lower(filtered.name) end asc,
-      case when params.sort_text = 'questions' then filtered.question_count end desc,
-      filtered.featured desc,
-      filtered.download_count desc,
-      lower(filtered.name) asc
+      case when params.sort_text = 'pertinence' then family_representatives.rank end desc nulls last,
+      case when params.sort_text = 'populaires' then family_representatives.featured end desc,
+      case when params.sort_text = 'populaires' then family_representatives.download_count end desc,
+      case when params.sort_text = 'note' then family_representatives.avg_rating end desc nulls last,
+      case when params.sort_text = 'note' then family_representatives.rating_count end desc nulls last,
+      case when params.sort_text = 'récents' then family_representatives.updated_at end desc,
+      case when params.sort_text = 'nom' then lower(family_representatives.name) end asc,
+      case when params.sort_text = 'questions' then family_representatives.question_count end desc,
+      family_representatives.featured desc,
+      family_representatives.recommendation_score desc,
+      family_representatives.download_count desc,
+      case when family_representatives.variant_of_pack_guid is null then 0 else 1 end,
+      lower(family_representatives.name) asc
     limit (select page_limit + 1 from params)
     offset (select page_offset from params)
   ) sorted
@@ -608,7 +1189,13 @@ select jsonb_build_object(
         'storage_path', storage_path,
         'avg_rating', avg_rating,
         'rating_count', rating_count,
-        'comment_count', comment_count
+        'comment_count', comment_count,
+        'variant_of_pack_guid', variant_of_pack_guid,
+        'root_pack_guid', root_pack_guid,
+        'original_pack_guid', family_guid,
+        'recommended_pack_guid', pack_guid,
+        'original_name', original_name,
+        'variant_count', variant_count
       )
       order by page_order
     )
@@ -632,7 +1219,7 @@ select jsonb_build_object(
       from theme_rows
     ), '[]'::jsonb)
   ),
-  'total', (select count(*) from filtered),
+  'total', (select count(*) from family_representatives),
   'next_cursor',
   case
     when (select count(*) from ordered) > (select page_limit from params)

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..dependencies import get_db
 from ..models import PackSubscription
 from ..schemas import (
+    PackActivityReadRequest,
     PackCommentCreateRequest,
     PackInstallRecordRequest,
     PackPublishDraftRequest,
@@ -18,13 +19,17 @@ from ..services.pack_catalog import (
     add_pack_comment,
     backfill_pack_installs,
     check_pack_catalog_health,
+    create_pack_variant_source,
     delete_pack_publication,
     fetch_pack_preview,
     get_group_pack_publication,
     get_my_pack_status,
+    get_pack_family,
     get_pack_publish_status,
+    list_pack_activity_events,
     list_pack_comments,
     list_pack_publications,
+    mark_pack_activity_events_read,
     preview_group_pack_changes,
     publish_pack_publication,
     publish_group_pack_changes,
@@ -123,6 +128,29 @@ def pack_publish_sign_out(db: Session = Depends(get_db)):
     return get_pack_publish_status(db)
 
 
+@router.get("/packs/catalog/activity")
+def pack_catalog_activity(limit: int = 20, db: Session = Depends(get_db)):
+    try:
+        return list_pack_activity_events(db, limit=limit)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/catalog/activity/read")
+def read_pack_catalog_activity(
+    payload: PackActivityReadRequest,
+    db: Session = Depends(get_db)
+):
+    try:
+        return mark_pack_activity_events_read(db, payload.event_ids)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.get("/blueprints/catalog/publish/drafts", include_in_schema=False)
 @router.get("/packs/catalog/publish/drafts")
 def pack_publish_drafts(db: Session = Depends(get_db)):
@@ -172,6 +200,32 @@ def search_catalog_packs(
         )
     except PackCatalogError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/packs/catalog/{pack_guid}/family")
+def pack_catalog_family(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return get_pack_family(db, pack_guid)
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/packs/catalog/{pack_guid}/variants/source")
+def pack_variant_source(pack_guid: str, db: Session = Depends(get_db)):
+    try:
+        return create_pack_variant_source(db, pack_guid)
+    except PackCatalogAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    except PackCatalogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        detail = str(error)
+        status_code = 404 if detail in {
+            "Pack introuvable",
+            "This pack is not installed",
+            "Installed pack content is missing"
+        } else 400
+        raise HTTPException(status_code=status_code, detail=detail) from error
 
 
 @router.get("/packs/catalog/{pack_guid}/preview")
@@ -235,7 +289,8 @@ def save_group_pack_draft(
             description=payload.description,
             license=payload.license,
             tags=payload.tags,
-            themes=payload.themes
+            themes=payload.themes,
+            variant_of_pack_guid=payload.variant_of_pack_guid
         )
     except PackCatalogAuthError as error:
         raise HTTPException(status_code=401, detail=str(error)) from error
@@ -261,7 +316,8 @@ def save_playlist_pack_draft(
             description=payload.description,
             license=payload.license,
             tags=payload.tags,
-            themes=payload.themes
+            themes=payload.themes,
+            variant_of_pack_guid=payload.variant_of_pack_guid
         )
     except PackCatalogAuthError as error:
         raise HTTPException(status_code=401, detail=str(error)) from error

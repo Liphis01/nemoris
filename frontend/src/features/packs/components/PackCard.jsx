@@ -52,6 +52,26 @@ function actionCopy(status, busy) {
   return "Installé";
 }
 
+function familyBadges(entry) {
+  const badges = [];
+
+  if (entry.variant_of_pack_guid) {
+    badges.push("Variante");
+  } else {
+    badges.push("Original");
+  }
+
+  if (entry.is_recommended_variant) {
+    badges.push("Recommandé");
+  }
+
+  if (entry.variant_count > 0) {
+    badges.push(`${entry.variant_count} variante${entry.variant_count > 1 ? "s" : ""}`);
+  }
+
+  return badges;
+}
+
 export default function PackCard({
   density = "grid",
   item,
@@ -75,6 +95,10 @@ export default function PackCard({
   const ratingLabel = formatRatingLabel(entry.avg_rating, entry.rating_count);
   const canAct = status === "not_installed" || status === "update_available";
   const canOpenGroup = Boolean(localGroupId && onOpenGroup);
+  const badges = familyBadges(entry);
+  const familyNote = entry.is_recommended_variant && entry.original_name
+    ? `Variante recommandée de ${entry.original_name}`
+    : "";
 
   function handleAction(event) {
     event.stopPropagation();
@@ -119,6 +143,18 @@ export default function PackCard({
             </span>
           </span>
         </div>
+
+        {badges.length > 0 && (
+          <div className="pack-family-badges" aria-label="Famille du pack">
+            {badges.map((badge) => (
+              <span key={badge}>{badge}</span>
+            ))}
+          </div>
+        )}
+
+        {familyNote && (
+          <div className="pack-family-note">{familyNote}</div>
+        )}
 
         <div>
           <h3>{entry.name}</h3>

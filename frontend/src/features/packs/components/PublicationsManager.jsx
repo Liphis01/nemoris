@@ -53,7 +53,8 @@ function releasePayloadKey(payload) {
     name: payload.name,
     description: payload.description,
     license: payload.license,
-    tags: payload.tags
+    tags: payload.tags,
+    variant_of_pack_guid: payload.variant_of_pack_guid || null
   });
 }
 
@@ -130,27 +131,51 @@ function ReleaseDiffPreview({ preview }) {
 // one group or playlist (never a mix -- a pack ships a whole group or a
 // playlist's selection, which may itself span several groups and types);
 // step 2 owns the pane to itself for the metadata fields.
-function PublishForm({ auth, basePublication = null, onCancelRelease, onPublished }) {
+function PublishForm({
+  auth,
+  basePublication = null,
+  variantSource = null,
+  onCancelRelease,
+  onCancelVariant,
+  onPublished
+}) {
   const releaseMode = Boolean(basePublication);
-  const releaseSourceKind = basePublication?.source?.kind === "playlist" ? "playlist" : "group";
-  const releaseSourceId = basePublication?.source?.id ? String(basePublication.source.id) : "";
-  const [step, setStep] = useState(releaseMode ? "form" : "select");
+  const variantMode = Boolean(variantSource) && !releaseMode;
+  const fixedSource = basePublication || variantSource;
+  const fixedSourceKind = (
+    fixedSource?.source?.kind === "playlist" ||
+    fixedSource?.source_kind === "playlist"
+  ) ? "playlist" : "group";
+  const fixedSourceId = (
+    fixedSource?.source?.id ||
+    fixedSource?.source_id ||
+    ""
+  );
+  const [step, setStep] = useState(
+    releaseMode || variantMode ? "form" : "select"
+  );
   const [groups, setGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [groupsError, setGroupsError] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState(
-    releaseMode && releaseSourceKind === "group" ? releaseSourceId : ""
+    (releaseMode || variantMode) && fixedSourceKind === "group"
+      ? String(fixedSourceId)
+      : ""
   );
-  const [sourceKind, setSourceKind] = useState(releaseSourceKind);
+  const [sourceKind, setSourceKind] = useState(fixedSourceKind);
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(
-    releaseMode && releaseSourceKind === "playlist" ? releaseSourceId : ""
+    (releaseMode || variantMode) && fixedSourceKind === "playlist"
+      ? String(fixedSourceId)
+      : ""
   );
   const [sourceSearch, setSourceSearch] = useState("");
-  const [title, setTitle] = useState(basePublication?.name || "");
-  const [license, setLicense] = useState(basePublication?.license || "");
-  const [description, setDescription] = useState(basePublication?.description || "");
-  const [tagsDraft, setTagsDraft] = useState(termsToDraft(basePublication?.tags));
+  const [title, setTitle] = useState(basePublication?.name || variantSource?.name || "");
+  const [license, setLicense] = useState(basePublication?.license || variantSource?.base_pack?.license || "");
+  const [description, setDescription] = useState(basePublication?.description || variantSource?.base_pack?.description || "");
+  const [tagsDraft, setTagsDraft] = useState(termsToDraft(
+    basePublication?.tags || variantSource?.base_pack?.tags
+  ));
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [preview, setPreview] = useState(null);
@@ -210,14 +235,32 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
   const selectedPlaylist = playlists.find(
     (playlist) => String(playlist.id) === selectedPlaylistId
   );
-  const selectedSource = sourceKind === "playlist"
+  const listedSource = sourceKind === "playlist"
     ? selectedPlaylist
     : selectedGroup;
+  const selectedSource = listedSource || (
+    variantMode
+      ? {
+        id: variantSource.source_id,
+        name: variantSource.name,
+        question_count: variantSource.question_count,
+        generated: false,
+        type_group: variantSource.type_group
+      }
+      : null
+  );
+  const variantBaseGuid = (
+    basePublication?.variant_of_pack_guid ||
+    variantSource?.variant_of_pack_guid ||
+    variantSource?.base_pack_guid ||
+    null
+  );
   const publishPayload = {
     name: title.trim(),
     description: description.trim(),
     license: license.trim(),
-    tags: splitTerms(tagsDraft)
+    tags: splitTerms(tagsDraft),
+    ...(variantBaseGuid ? { variant_of_pack_guid: variantBaseGuid } : {})
   };
   const previewKey = releasePayloadKey(publishPayload);
   const previewReady = releaseMode && preview?.payloadKey === previewKey;
@@ -431,31 +474,44 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
     );
   }
 
-  const sourceTypeStyle = sourceKind === "group" && selectedGroup
-    ? getQuestionTypeChipStyle(selectedGroup.type_group)
+  const sourceTypeStyle = sourceKind === "group" && selectedSource
+    ? getQuestionTypeChipStyle(selectedSource.type_group)
     : null;
+  const titleText = releaseMode
+    ? "Publier les changements"
+    : variantMode
+    ? "Publier une variante"
+    : "Nouveau pack";
+  const subtitleText = releaseMode
+    ? "Préparer les changements pour le catalogue"
+    : variantMode
+    ? "Créer une publication indépendante dans la famille du pack"
+    : (
+      sourceKind === "playlist"
+        ? "Mettre une playlist dans le catalogue"
+        : "Mettre un groupe dans le catalogue"
+    );
 
   return (
     <section
       className="pack-export-panel app-scrollbar"
-      aria-label={releaseMode ? "Publier les changements" : "Nouveau pack"}
+      aria-label={titleText}
     >
       <div className="pack-section-head">
         <div>
-          <h2>{releaseMode ? "Publier les changements" : "Nouveau pack"}</h2>
-          <p>
-            {releaseMode
-              ? "Préparer les changements pour le catalogue"
-              : (
-                sourceKind === "playlist"
-                  ? "Mettre une playlist dans le catalogue"
-                  : "Mettre un groupe dans le catalogue"
-              )}
-          </p>
+          <h2>{titleText}</h2>
+          <p>{subtitleText}</p>
         </div>
       </div>
 
-      {releaseMode ? (
+      {variantMode && (
+        <div className="pack-variant-summary">
+          <span className="pack-field-label">Variante de</span>
+          <strong>{variantSource.base_pack_name || variantBaseGuid}</strong>
+        </div>
+      )}
+
+      {releaseMode || variantMode ? (
         <div className="pack-source-summary pack-source-summary-static">
           <span className="pack-source-summary-text">
             <span className="pack-field-label">Source</span>
@@ -576,14 +632,30 @@ function PublishForm({ auth, basePublication = null, onCancelRelease, onPublishe
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              className="pack-primary-button"
-              disabled={!canPublish}
-              onClick={handlePublish}
-            >
-              {publishingBusy ? "Publication..." : "Publier"}
-            </button>
+            <>
+              <button
+                type="button"
+                className="pack-primary-button"
+                disabled={!canPublish}
+                onClick={handlePublish}
+              >
+                {publishingBusy
+                  ? "Publication..."
+                  : variantMode
+                  ? "Publier la variante"
+                  : "Publier"}
+              </button>
+              {variantMode && (
+                <button
+                  type="button"
+                  className="pack-secondary-button"
+                  disabled={publishingBusy}
+                  onClick={onCancelVariant}
+                >
+                  Annuler
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -744,7 +816,12 @@ function PackDetail({
   );
 }
 
-export default function PublicationsManager({ setMode, onOpenGroup }) {
+export default function PublicationsManager({
+  initialVariantSource = null,
+  onInitialVariantHandled = null,
+  setMode,
+  onOpenGroup
+}) {
   const auth = usePackPublishAuth();
   const [publications, setPublications] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -761,6 +838,19 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
   // with no confirmation that anything happened.
   const [justPublished, setJustPublished] = useState(null);
   const [releaseBase, setReleaseBase] = useState(null);
+  const [variantSource, setVariantSource] = useState(null);
+
+  useEffect(() => {
+    if (!initialVariantSource) {
+      return;
+    }
+
+    setVariantSource(initialVariantSource);
+    setReleaseBase(null);
+    setPublicationView("active");
+    setSelectedKey(NEW_PACK_KEY);
+    onInitialVariantHandled?.();
+  }, [initialVariantSource, onInitialVariantHandled]);
 
   const loadPublications = useCallback(async (fallbackPublication = null) => {
     // publishStatus is null until the session check resolves -- that is
@@ -899,12 +989,14 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
     // exists, without leaving the user staring at an empty form meanwhile.
     setJustPublished(publication);
     setReleaseBase(null);
+    setVariantSource(null);
     setSelectedKey(publication.pack_guid);
     loadPublications(publication);
   }
 
   function handleStartRelease(publication) {
     setReleaseBase(publication);
+    setVariantSource(null);
     setSelectedKey(NEW_PACK_KEY);
   }
 
@@ -964,6 +1056,7 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
           className={`pack-rail-new${selectedKey === NEW_PACK_KEY ? " is-active" : ""}`}
           onClick={() => {
             setReleaseBase(null);
+            setVariantSource(null);
             setSelectedKey(NEW_PACK_KEY);
           }}
         >
@@ -1066,12 +1159,17 @@ export default function PublicationsManager({ setMode, onOpenGroup }) {
 
       {selectedKey === NEW_PACK_KEY || !selectedPublication ? (
         <PublishForm
-          key={releaseBase?.pack_guid || "new"}
+          key={releaseBase?.pack_guid || variantSource?.source_guid || "new"}
           auth={auth}
           basePublication={releaseBase}
+          variantSource={variantSource}
           onCancelRelease={() => {
             setReleaseBase(null);
             setSelectedKey(releaseBase?.pack_guid || null);
+          }}
+          onCancelVariant={() => {
+            setVariantSource(null);
+            setSelectedKey(NEW_PACK_KEY);
           }}
           onPublished={handlePublished}
         />

@@ -62,6 +62,34 @@ export function getGroupPackPublication(groupId) {
 }
 
 
+export function getPackFamily(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/family`);
+}
+
+
+export function createPackVariantSource(packGuid) {
+  return requestJson(`/packs/catalog/${packGuid}/variants/source`, {
+    method: "POST"
+  });
+}
+
+
+export function listPackActivity({ limit = 20 } = {}) {
+  const query = new URLSearchParams({ limit: String(limit) });
+
+  return requestJson(`/packs/catalog/activity?${query.toString()}`);
+}
+
+
+export function markPackActivityRead(eventIds = []) {
+  return requestJson("/packs/catalog/activity/read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event_ids: eventIds })
+  });
+}
+
+
 export function previewGroupPackChanges(groupId) {
   return requestJson(`/packs/sources/groups/${groupId}/release-preview`, {
     method: "POST"

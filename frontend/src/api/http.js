@@ -43,6 +43,7 @@ const collectionMutationRules = [
   ["POST", /^\/blueprints\/import\/?$/],
   ["POST", /^\/packs\/update\/?$/],
   ["POST", /^\/blueprints\/update\/?$/],
+  ["POST", /^\/packs\/catalog\/[^/]+\/variants\/source\/?$/],
   ["POST", /^\/packs\/[^/]+\/unsubscribe\/?$/],
   ["POST", /^\/blueprints\/[^/]+\/unsubscribe\/?$/]
 ];

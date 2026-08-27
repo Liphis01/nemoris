@@ -12,11 +12,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addPackComment,
   backfillPackInstalls,
+  createPackVariantSource,
   fetchPackPreview,
+  getPackFamily,
   getMyPackStatus,
   getPackPublishStatus,
+  listPackActivity,
   listPackComments,
   listPackPublications,
+  markPackActivityRead,
   publishPack,
   publishPackDraft,
   ratePack,
@@ -51,11 +55,15 @@ vi.mock("../../../api/collections", () => ({
 vi.mock("../../../api/packs", () => ({
   addPackComment: vi.fn(),
   backfillPackInstalls: vi.fn(),
+  createPackVariantSource: vi.fn(),
   fetchPackPreview: vi.fn(),
+  getPackFamily: vi.fn(),
   getMyPackStatus: vi.fn(),
   getPackPublishStatus: vi.fn(),
+  listPackActivity: vi.fn(),
   listPackComments: vi.fn(),
   listPackPublications: vi.fn(),
+  markPackActivityRead: vi.fn(),
   publishPack: vi.fn(),
   publishPackDraft: vi.fn(),
   ratePack: vi.fn(),
@@ -128,6 +136,7 @@ function defaultHook(overrides = {}) {
     install: vi.fn(),
     update: vi.fn(),
     unsubscribe: vi.fn(),
+    itemForEntry: (entry) => item(entry, "not_installed"),
     ...overrides
   };
 
@@ -194,6 +203,26 @@ describe("BrowsePacks", () => {
     });
     backfillPackInstalls.mockResolvedValue({ recorded: 0 });
     recordPackInstall.mockResolvedValue({ recorded: true });
+    listPackActivity.mockResolvedValue({ events: [], unread_count: 0 });
+    markPackActivityRead.mockResolvedValue({ updated: 0 });
+    getPackFamily.mockResolvedValue({
+      pack_guid: "world-map",
+      original_pack_guid: "world-map",
+      recommended_pack_guid: "world-map",
+      variant_count: 0,
+      packs: []
+    });
+    createPackVariantSource.mockResolvedValue({
+      status: "created",
+      source_kind: "group",
+      source_id: 42,
+      source_guid: "variant-source-guid",
+      name: "Territoires du monde - variante",
+      type_group: "map",
+      question_count: 252,
+      variant_of_pack_guid: "world-map",
+      base_pack_name: "Territoires du monde"
+    });
     listPackComments.mockResolvedValue({ comments: [] });
     getMyPackStatus.mockResolvedValue({ is_installed: false, my_rating: null });
     ratePack.mockResolvedValue({ my_rating: 5, avg_rating: 5, rating_count: 1 });
@@ -364,6 +393,144 @@ describe("BrowsePacks", () => {
     );
 
     expect(hook.install).toHaveBeenCalledWith(mapEntry);
+  });
+
+  it("shows grouped family badges on catalog cards", () => {
+    defaultHook({
+      items: [
+        item({
+          ...mapEntry,
+          variant_of_pack_guid: "world-original",
+          root_pack_guid: "world-original",
+          original_pack_guid: "world-original",
+          recommended_pack_guid: "world-map",
+          original_name: "Pays du monde",
+          variant_count: 4,
+          is_recommended_variant: true
+        }, "not_installed")
+      ],
+      total: 1,
+      hasMore: false
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    const card = screen.getByTestId("pack-card-row-world-map");
+    expect(within(card).getByText("Variante")).toBeInTheDocument();
+    expect(within(card).getByText("Recommandé")).toBeInTheDocument();
+    expect(within(card).getByText("4 variantes")).toBeInTheDocument();
+    expect(within(card).getByText("Variante recommandée de Pays du monde"))
+      .toBeInTheDocument();
+  });
+
+  it("lets the detail panel select another pack from the family list", async () => {
+    defaultHook({
+      items: [
+        item({
+          ...mapEntry,
+          variant_count: 1,
+          root_pack_guid: "world-map",
+          original_pack_guid: "world-map",
+          recommended_pack_guid: "variant-map"
+        }, "not_installed")
+      ],
+      total: 1,
+      hasMore: false
+    });
+    getPackFamily.mockResolvedValue({
+      pack_guid: "world-map",
+      original_pack_guid: "world-map",
+      recommended_pack_guid: "variant-map",
+      variant_count: 1,
+      packs: [
+        {
+          ...mapEntry,
+          root_pack_guid: "world-map",
+          original_pack_guid: "world-map",
+          recommended_pack_guid: "variant-map",
+          variant_count: 1
+        },
+        {
+          ...mapEntry,
+          pack_guid: "variant-map",
+          name: "Territoires du monde corrigé",
+          variant_of_pack_guid: "world-map",
+          root_pack_guid: "world-map",
+          original_pack_guid: "world-map",
+          recommended_pack_guid: "variant-map",
+          original_name: "Territoires du monde",
+          variant_count: 1,
+          is_recommended_variant: true
+        }
+      ]
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Territoires du monde corrigé/ })
+    );
+
+    expect(
+      within(screen.getByRole("complementary", { name: "Détail du pack" }))
+        .getByRole("heading", { name: "Territoires du monde corrigé" })
+    ).toBeInTheDocument();
+  });
+
+  it("creates a variant source and opens the publish form in variant mode", async () => {
+    defaultHook({
+      items: [item(mapEntry, "up_to_date", 2)],
+      total: 1,
+      hasMore: false
+    });
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Créer une variante" })
+    );
+
+    await waitFor(() => {
+      expect(createPackVariantSource).toHaveBeenCalledWith("world-map");
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Publier une variante" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Variante de")).toBeInTheDocument();
+  });
+
+  it("shows unread pack activity and marks it read", async () => {
+    listPackActivity.mockResolvedValue({
+      unread_count: 1,
+      events: [{
+        id: 42,
+        event_type: "variant_published",
+        pack_guid: "world-map",
+        pack_name: "Territoires du monde",
+        related_pack_guid: "variant-map",
+        related_pack_name: "Territoires corrigés",
+        read_at: null
+      }]
+    });
+    defaultHook();
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Activité/ }))
+        .toHaveTextContent("1");
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Activité/ }));
+
+    expect(screen.getByRole("dialog", { name: "Activité des packs" }))
+      .toHaveTextContent("Territoires corrigés");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tout marquer comme lu" })
+    );
+
+    await waitFor(() => {
+      expect(markPackActivityRead).toHaveBeenCalledWith([42]);
+    });
   });
 
   it("shows mine and local-copy checks without install actions", () => {

@@ -6,7 +6,13 @@ import {
   packTypeChipStyles
 } from "../../../shared/questionTypes";
 import { getStudySummary } from "../../../api/study";
-import { fetchPackPreview } from "../../../api/packs";
+import {
+  createPackVariantSource,
+  fetchPackPreview,
+  getPackFamily,
+  listPackActivity,
+  markPackActivityRead
+} from "../../../api/packs";
 import {
   numberLabel,
   questionCountLabel,
@@ -16,6 +22,7 @@ import {
   POPULAR_THEME,
   useBrowsePacks
 } from "../hooks/useBrowsePacks";
+import { usePackPublishAuth } from "../hooks/usePackPublishAuth";
 import PackCard from "./PackCard";
 import PackReviewsSection from "./PackReviewsSection";
 import UnplacedTagRootsDialog from "./UnplacedTagRootsDialog";
@@ -249,6 +256,249 @@ function PackChipGroup({ label, values }) {
 }
 
 
+function familyBadgeLabel(entry, family) {
+  if (entry.pack_guid === family?.original_pack_guid) {
+    return "Original";
+  }
+
+  if (entry.pack_guid === family?.recommended_pack_guid) {
+    return "Recommandé";
+  }
+
+  return "Variante";
+}
+
+
+function PackFamilyPanel({ entry, onSelectEntry, selectedPackGuid }) {
+  const [state, setState] = useState({
+    status: "idle",
+    data: null,
+    error: ""
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setState({ status: "loading", data: null, error: "" });
+    getPackFamily(entry.pack_guid)
+      .then((data) => {
+        if (!cancelled) setState({ status: "ready", data, error: "" });
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setState({
+            status: "error",
+            data: null,
+            error: error.message || "Famille indisponible."
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.pack_guid]);
+
+  const packs = state.data?.packs || [];
+  const shouldShow = (
+    entry.variant_of_pack_guid ||
+    entry.variant_count > 0 ||
+    packs.length > 1
+  );
+
+  if (!shouldShow && state.status !== "loading") {
+    return null;
+  }
+
+  return (
+    <div className="pack-family-panel">
+      <div className="pack-section-head">
+        <div>
+          <h3>Famille</h3>
+          <p>
+            {state.status === "ready"
+              ? `${packs.length} pack${packs.length > 1 ? "s" : ""}`
+              : "Chargement"}
+          </p>
+        </div>
+      </div>
+
+      {state.status === "loading" && (
+        <div className="pack-status" role="status">Chargement de la famille...</div>
+      )}
+
+      {state.status === "error" && (
+        <div className="pack-alert" role="alert">{state.error}</div>
+      )}
+
+      {state.status === "ready" && packs.length > 0 && (
+        <div className="pack-family-list">
+          {packs.map((familyEntry) => {
+            const active = familyEntry.pack_guid === selectedPackGuid;
+            const recommended = (
+              familyEntry.pack_guid === state.data.recommended_pack_guid
+            );
+
+            return (
+              <button
+                key={familyEntry.pack_guid}
+                type="button"
+                className={`pack-family-item${active ? " is-active" : ""}${recommended ? " is-recommended" : ""}`}
+                onClick={() => onSelectEntry(familyEntry)}
+                aria-pressed={active}
+              >
+                <span>
+                  <strong>{familyEntry.name}</strong>
+                  <small>
+                    {questionCountLabel(familyEntry.question_count)}
+                    {familyEntry.avg_rating ? ` · ${familyEntry.avg_rating}/5` : ""}
+                  </small>
+                </span>
+                <em>{familyBadgeLabel(familyEntry, state.data)}</em>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function PackActivityMenu() {
+  const [state, setState] = useState({
+    status: "loading",
+    events: [],
+    unreadCount: 0,
+    error: ""
+  });
+  const [open, setOpen] = useState(false);
+  const [marking, setMarking] = useState(false);
+
+  function loadActivity() {
+    listPackActivity({ limit: 20 })
+      .then((data) => {
+        setState({
+          status: "ready",
+          events: Array.isArray(data.events) ? data.events : [],
+          unreadCount: data.unread_count || 0,
+          error: ""
+        });
+      })
+      .catch((error) => {
+        if (error.status === 401) {
+          setState({ status: "signed_out", events: [], unreadCount: 0, error: "" });
+          return;
+        }
+
+        console.error(error);
+        setState({
+          status: "error",
+          events: [],
+          unreadCount: 0,
+          error: error.message || "Activité indisponible."
+        });
+      });
+  }
+
+  useEffect(() => {
+    loadActivity();
+  }, []);
+
+  async function markRead() {
+    setMarking(true);
+
+    try {
+      await markPackActivityRead(
+        state.events
+          .filter((event) => !event.read_at)
+          .map((event) => event.id)
+      );
+      loadActivity();
+    } catch (error) {
+      console.error(error);
+      setState((current) => ({
+        ...current,
+        error: error.message || "Lecture impossible."
+      }));
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  if (state.status === "signed_out") {
+    return null;
+  }
+
+  return (
+    <div className="pack-activity">
+      <button
+        type="button"
+        className="pack-secondary-button pack-activity-button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        Activité
+        {state.unreadCount > 0 && (
+          <span>{state.unreadCount}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="pack-activity-popover" role="dialog" aria-label="Activité des packs">
+          <div className="pack-section-head">
+            <div>
+              <h3>Activité</h3>
+              <p>{state.unreadCount} non lue{state.unreadCount > 1 ? "s" : ""}</p>
+            </div>
+          </div>
+
+          {state.status === "loading" && (
+            <div className="pack-status" role="status">Chargement...</div>
+          )}
+
+          {state.error && (
+            <div className="pack-alert" role="alert">{state.error}</div>
+          )}
+
+          {state.status === "ready" && state.events.length === 0 && (
+            <div className="pack-theme-empty">Aucune activité.</div>
+          )}
+
+          {state.status === "ready" && state.events.length > 0 && (
+            <div className="pack-activity-list">
+              {state.events.map((event) => (
+                <div
+                  className={`pack-activity-item${event.read_at ? "" : " is-unread"}`}
+                  key={event.id}
+                >
+                  <strong>{event.related_pack_name || "Nouvelle variante"}</strong>
+                  <span>
+                    Variante de {event.pack_name || event.pack_guid || "ton pack"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {state.unreadCount > 0 && (
+            <button
+              type="button"
+              className="pack-secondary-button"
+              disabled={marking}
+              onClick={markRead}
+            >
+              {marking ? "..." : "Tout marquer comme lu"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function PackPreviewPanel({ entry }) {
   const [state, setState] = useState({ status: "idle", data: null, error: "" });
   const [revealed, setRevealed] = useState(() => new Set());
@@ -438,13 +688,18 @@ function PackProgressPanel({ entry }) {
 
 
 function PackDetailPanel({
+  auth,
   item,
+  onCreateVariant,
   onInstall,
   onOpenGroup,
   onOpenStudy,
+  onSelectFamilyEntry,
   onUnsubscribe,
   onUpdate,
-  setMode
+  setMode,
+  variantBusy = false,
+  variantError = ""
 }) {
   if (!item) {
     return (
@@ -468,6 +723,12 @@ function PackDetailPanel({
   );
   const canOpenGroup = Boolean(localGroupId && onOpenGroup);
   const canOpenStudy = Boolean(canUnsubscribe && entry.pack_guid && onOpenStudy);
+  const canCreateVariant = Boolean(
+    canUnsubscribe &&
+    !isMine &&
+    auth?.publishStatus?.signed_in &&
+    onCreateVariant
+  );
 
   return (
     <aside className="pack-detail-panel app-scrollbar" aria-label="Détail du pack">
@@ -575,6 +836,17 @@ function PackDetailPanel({
           </button>
         )}
 
+        {canCreateVariant && (
+          <button
+            type="button"
+            className="pack-secondary-button"
+            disabled={action.busy || variantBusy}
+            onClick={() => onCreateVariant(item)}
+          >
+            {variantBusy ? "Création..." : "Créer une variante"}
+          </button>
+        )}
+
         {canUnsubscribe && (
           <button
             type="button"
@@ -599,9 +871,22 @@ function PackDetailPanel({
         </div>
       )}
 
+      {variantError && (
+        <div className="pack-alert" role="alert">
+          {variantError}
+        </div>
+      )}
+
       {canOpenStudy && (
         <PackProgressPanel entry={entry} key={`progress-${entry.pack_guid}`} />
       )}
+
+      <PackFamilyPanel
+        entry={entry}
+        onSelectEntry={onSelectFamilyEntry}
+        selectedPackGuid={entry.pack_guid}
+        key={`family-${entry.pack_guid}`}
+      />
 
       <PackPreviewPanel entry={entry} key={`preview-${entry.pack_guid}`} />
 
@@ -616,8 +901,10 @@ function ImporterScreen({
   onInitialPackHandled,
   onOpenGroup,
   onOpenStudy,
+  onVariantSourceCreated,
   setMode
 }) {
+  const auth = usePackPublishAuth();
   const [activeTheme, setActiveTheme] = useState(POPULAR_THEME);
   const [searchDraft, setSearchDraft] = useState(initialSearch || "");
   const [search, setSearch] = useState((initialSearch || "").trim());
@@ -625,6 +912,9 @@ function ImporterScreen({
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState(initialPackGuid ? "populaires" : "pertinence");
   const [activeGuid, setActiveGuid] = useState(initialPackGuid || null);
+  const [familySelectedEntry, setFamilySelectedEntry] = useState(null);
+  const [variantBusyGuid, setVariantBusyGuid] = useState(null);
+  const [variantError, setVariantError] = useState("");
 
   useEffect(() => {
     if (!initialPackGuid && !initialSearch) {
@@ -637,6 +927,7 @@ function ImporterScreen({
     setStatusFilter("all");
     setSort("populaires");
     setActiveGuid(initialPackGuid || null);
+    setFamilySelectedEntry(null);
     onInitialPackHandled?.();
   }, [initialPackGuid, initialSearch, onInitialPackHandled]);
 
@@ -670,20 +961,49 @@ function ImporterScreen({
     install,
     update,
     unsubscribe,
+    itemForEntry,
     unplacedTagRoots = [],
     clearUnplacedTagRoots
   } = useBrowsePacks(filters);
 
   const themes = facets?.themes || [];
+  const familySelectedItem = (
+    familySelectedEntry && familySelectedEntry.pack_guid === activeGuid
+      ? itemForEntry(familySelectedEntry)
+      : null
+  );
   const activeItem = activeGuid
     ? items.find((item) => item.entry.pack_guid === activeGuid)
     : null;
   const selectedItem = (
     activeItem ||
+    familySelectedItem ||
     items[0] ||
     null
   );
   const showStatePanel = loading || Boolean(error);
+
+  async function handleCreateVariant(item) {
+    const entry = item.entry;
+
+    setVariantBusyGuid(entry.pack_guid);
+    setVariantError("");
+
+    try {
+      const source = await createPackVariantSource(entry.pack_guid);
+      onVariantSourceCreated?.({
+        ...source,
+        base_pack_guid: entry.pack_guid,
+        base_pack_name: entry.name,
+        base_pack: entry
+      });
+    } catch (error) {
+      console.error(error);
+      setVariantError(error.message || "Création de variante impossible.");
+    } finally {
+      setVariantBusyGuid(null);
+    }
+  }
 
   return (
     <div className="pack-import-layout">
@@ -744,7 +1064,10 @@ function ImporterScreen({
                     item={item}
                     onInstall={install}
                     onOpenGroup={onOpenGroup}
-                    onSelect={(nextItem) => setActiveGuid(nextItem.entry.pack_guid)}
+                    onSelect={(nextItem) => {
+                      setFamilySelectedEntry(null);
+                      setActiveGuid(nextItem.entry.pack_guid);
+                    }}
                     onUpdate={update}
                     selected={selectedItem?.entry.pack_guid === item.entry.pack_guid}
                   />
@@ -767,13 +1090,21 @@ function ImporterScreen({
       </section>
 
       <PackDetailPanel
+        auth={auth}
         item={selectedItem}
+        onCreateVariant={handleCreateVariant}
         onInstall={install}
         onOpenGroup={onOpenGroup}
         onOpenStudy={onOpenStudy}
+        onSelectFamilyEntry={(entry) => {
+          setFamilySelectedEntry(entry);
+          setActiveGuid(entry.pack_guid);
+        }}
         onUnsubscribe={unsubscribe}
         onUpdate={update}
         setMode={setMode}
+        variantBusy={variantBusyGuid === selectedItem?.entry.pack_guid}
+        variantError={variantError}
       />
     </div>
   );
@@ -788,6 +1119,7 @@ export default function BrowsePacks({
   onInitialPackHandled = null
 }) {
   const [activeTab, setActiveTab] = useState("import");
+  const [initialVariantSource, setInitialVariantSource] = useState(null);
 
   useEffect(() => {
     if (initialPackGuid || initialSearch) {
@@ -835,6 +1167,8 @@ export default function BrowsePacks({
               </button>
             </div>
 
+            <PackActivityMenu />
+
             <ReturnToMenuButton
               onClick={() => setMode("menu")}
               className="pack-back"
@@ -849,11 +1183,20 @@ export default function BrowsePacks({
             onInitialPackHandled={onInitialPackHandled}
             onOpenGroup={onOpenGroup}
             onOpenStudy={onOpenStudy}
+            onVariantSourceCreated={(source) => {
+              setInitialVariantSource(source);
+              setActiveTab("manage");
+            }}
             setMode={setMode}
           />
         )}
         {activeTab === "manage" && (
-          <PublicationsManager setMode={setMode} onOpenGroup={onOpenGroup} />
+          <PublicationsManager
+            initialVariantSource={initialVariantSource}
+            onInitialVariantHandled={() => setInitialVariantSource(null)}
+            setMode={setMode}
+            onOpenGroup={onOpenGroup}
+          />
         )}
       </div>
     </div>

@@ -385,6 +385,74 @@ describe("PublicationsManager", () => {
     });
   });
 
+  it("opens a cloned variant source in locked variant publish mode", async () => {
+    const onInitialVariantHandled = vi.fn();
+    listGroups.mockResolvedValue([
+      {
+        id: 42,
+        name: "Territoires du monde - variante",
+        type_group: "map",
+        question_count: 252
+      }
+    ]);
+
+    render(
+      <PublicationsManager
+        initialVariantSource={{
+          source_kind: "group",
+          source_id: 42,
+          source_guid: "variant-source-guid",
+          name: "Territoires du monde - variante",
+          type_group: "map",
+          question_count: 252,
+          variant_of_pack_guid: "world-map",
+          base_pack_name: "Territoires du monde",
+          base_pack: {
+            description: "Carte complète.",
+            license: "CC0",
+            tags: ["géographie"]
+          }
+        }}
+        onInitialVariantHandled={onInitialVariantHandled}
+        setMode={vi.fn()}
+      />
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Publier une variante" })
+    ).toBeInTheDocument();
+    expect(onInitialVariantHandled).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Variante de")).toBeInTheDocument();
+    expect(screen.getAllByText("Territoires du monde").length)
+      .toBeGreaterThan(0);
+    expect(screen.getByLabelText("Titre du pack")).toHaveValue(
+      "Territoires du monde - variante"
+    );
+    expect(screen.getByLabelText("Licence du pack")).toHaveValue("CC0");
+    expect(screen.getByLabelText("Mots-clés de recherche du pack")).toHaveValue(
+      "géographie"
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Publier la variante" })
+      ).toBeEnabled();
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Publier la variante" })
+    );
+
+    await waitFor(() => {
+      expect(publishPack).toHaveBeenCalledWith(
+        { groupId: 42 },
+        expect.objectContaining({
+          name: "Territoires du monde - variante",
+          variant_of_pack_guid: "world-map"
+        })
+      );
+    });
+  });
+
   it("warns when the pack outlived its local source", async () => {
     listPackPublications.mockResolvedValue({
       publications: [

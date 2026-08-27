@@ -76,6 +76,80 @@
   justify-content: flex-end;
 }
 
+.pack-activity {
+  position: relative;
+}
+
+.pack-activity-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.pack-activity-button span {
+  align-items: center;
+  background: #ffcc7a;
+  border-radius: 999px;
+  color: #241708;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 20px;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
+.pack-activity-popover {
+  background: #171717;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(340px, calc(100vw - 32px));
+  z-index: 30;
+}
+
+.pack-activity-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.pack-activity-item {
+  background: #111111;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+}
+
+.pack-activity-item.is-unread {
+  border-color: rgba(255, 204, 122, 0.34);
+}
+
+.pack-activity-item strong {
+  color: #f1f1f1;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.pack-activity-item span {
+  color: #9d9d9d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .pack-mark {
   align-items: center;
   background: #122d2e;
@@ -453,6 +527,7 @@
 .pack-export-panel textarea:focus-visible,
 .pack-export-group:focus-visible,
 .pack-publication-item:focus-visible,
+.pack-family-item:focus-visible,
 .pack-publish-auth input:focus-visible {
   outline: 2px solid #ffcc7a;
   outline-offset: 2px;
@@ -554,6 +629,33 @@
   border-top: 1px solid #262626;
   justify-content: space-between;
   padding: 11px 14px;
+}
+
+.pack-family-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pack-family-badges span,
+.pack-family-item em {
+  background: rgba(125, 211, 252, 0.08);
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 999px;
+  color: #9adffc;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.pack-family-note {
+  color: #a8a8a8;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .pack-card-row .pack-card-actions {
@@ -771,7 +873,8 @@
 }
 
 .pack-progress-panel,
-.pack-preview-panel {
+.pack-preview-panel,
+.pack-family-panel {
   border-top: 1px solid #282828;
   display: grid;
   gap: 12px;
@@ -779,11 +882,62 @@
 }
 
 .pack-progress-panel h3,
-.pack-preview-panel h3 {
+.pack-preview-panel h3,
+.pack-family-panel h3,
+.pack-activity-popover h3 {
   color: #f2f2f2;
   font-size: 15px;
   font-weight: 900;
   margin: 0;
+}
+
+.pack-family-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pack-family-item {
+  align-items: center;
+  appearance: none;
+  background: #1d1d1d;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 9px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.pack-family-item.is-active,
+.pack-family-item.is-recommended {
+  border-color: rgba(94, 234, 212, 0.36);
+}
+
+.pack-family-item.is-active {
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.pack-family-item strong {
+  color: #f1f1f1;
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.pack-family-item small {
+  color: #9a9a9a;
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 3px;
 }
 
 .pack-progress-bars {
@@ -994,6 +1148,23 @@
   background: rgba(148, 163, 184, 0.08);
   border-color: rgba(148, 163, 184, 0.24);
   color: #cbd5e1;
+}
+
+.pack-variant-summary {
+  background: rgba(125, 211, 252, 0.07);
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+}
+
+.pack-variant-summary strong {
+  color: #e7f7ff;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .pack-release-preview {

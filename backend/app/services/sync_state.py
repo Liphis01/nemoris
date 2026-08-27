@@ -146,6 +146,7 @@ COLLECTION_MUTATION_RULES = [
     ("POST", re.compile(r"^/blueprints/import/?$")),
     ("POST", re.compile(r"^/packs/update/?$")),
     ("POST", re.compile(r"^/blueprints/update/?$")),
+    ("POST", re.compile(r"^/packs/catalog/[^/]+/variants/source/?$")),
     ("POST", re.compile(r"^/packs/[^/]+/unsubscribe/?$")),
     ("POST", re.compile(r"^/blueprints/[^/]+/unsubscribe/?$")),
 ]
