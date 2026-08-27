@@ -43,7 +43,13 @@ function fitPromptMedia(element) {
   // Subtract the tile's own padding (10px each side) and the media's border
   // (1px each side) so the fitted size never overflows the tile's edges.
   const maxWidthPx = board.clientWidth - 24;
-  const maxHeightPx = Math.min(window.innerHeight * 0.48, 480);
+  const boardHeightBudget = board.clientHeight
+    ? board.clientHeight - 24
+    : window.innerHeight * 0.56;
+  const maxHeightPx = Math.max(
+    160,
+    Math.min(boardHeightBudget, window.innerHeight * 0.56, 560)
+  );
   const scale = Math.min(maxWidthPx / naturalWidth, maxHeightPx / naturalHeight);
 
   element.style.width = `${naturalWidth * scale}px`;
@@ -223,6 +229,126 @@ const choiceKeyBadgeStyle = {
   left: "6px",
   position: "absolute",
   top: "6px"
+};
+
+const typePromptStageStyle = {
+  display: "grid",
+  gap: "14px",
+  gridTemplateRows: "minmax(0, 1fr) auto",
+  height: "100%",
+  minHeight: 0
+};
+
+const typePromptViewerStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "12px",
+  gridTemplateColumns: "42px minmax(0, 1fr) 42px",
+  minHeight: 0
+};
+
+const typePromptBoardStyle = {
+  alignItems: "center",
+  display: "flex",
+  justifyContent: "center",
+  margin: "0 auto",
+  maxHeight: "100%",
+  maxWidth: "min(100%, 940px)",
+  minHeight: 0,
+  width: "100%"
+};
+
+const typePromptNavButtonStyle = {
+  ...buttonStyle,
+  alignItems: "center",
+  alignSelf: "center",
+  borderRadius: "10px",
+  display: "flex",
+  fontSize: "22px",
+  height: "56px",
+  justifyContent: "center",
+  lineHeight: 1,
+  padding: 0,
+  width: "42px"
+};
+
+const typePromptNavButtonDisabledStyle = {
+  cursor: "not-allowed",
+  opacity: 0.45
+};
+
+const typePromptRailStyle = {
+  display: "flex",
+  gap: "8px",
+  minHeight: "86px",
+  overflowX: "auto",
+  overflowY: "hidden",
+  padding: "1px 1px 6px",
+  scrollbarGutter: "stable",
+  width: "100%"
+};
+
+const typePromptRailItemStyle = {
+  appearance: "none",
+  borderRadius: "9px",
+  boxSizing: "border-box",
+  color: "#eee",
+  display: "grid",
+  flex: "0 0 86px",
+  gap: "5px",
+  gridTemplateRows: "50px 16px",
+  minHeight: "76px",
+  padding: "6px",
+  position: "relative",
+  textAlign: "center",
+  transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease"
+};
+
+const typePromptRailThumbStyle = {
+  alignItems: "center",
+  background: letterboxPatternBg,
+  border: "1px solid #262626",
+  borderRadius: "6px",
+  display: "flex",
+  justifyContent: "center",
+  minHeight: 0,
+  minWidth: 0,
+  overflow: "hidden",
+  width: "100%"
+};
+
+const typePromptRailMediaStyle = {
+  display: "block",
+  height: "100%",
+  objectFit: "contain",
+  width: "100%"
+};
+
+const typePromptRailMissingStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: 800,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const typePromptRailLabelStyle = {
+  color: "#dbeafe",
+  fontSize: "11px",
+  fontWeight: 800,
+  lineHeight: "16px",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap"
+};
+
+const typePromptRailIndexStyle = {
+  color: "#777",
+  fontSize: "11px",
+  fontWeight: 800,
+  lineHeight: "16px"
 };
 
 const inputStyle = {
@@ -962,6 +1088,10 @@ export default function MediaReview({
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_IMAGE &&
     !resultMode
   );
+  const showFocusedTypePromptBoard = (
+    normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
+    !resultMode
+  );
   const showPromptImageBoard = (
     normalizedMode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL &&
     !resultMode
@@ -975,12 +1105,12 @@ export default function MediaReview({
   const resolvedQuestionIdOrder = new Map(
     recentResolvedQuestionIds.map((questionId, index) => [questionId, index])
   );
-  // type_prompt already parts the tiles as the run goes: solved ones drop into
-  // the resolved strip, the rest stay put. The result screen keeps that exact
-  // layout and only reveals the answers, so no tile ever jumps.
+  // The old type_prompt grid could split solved items into a separate strip.
+  // The focused layout keeps every thumbnail in one compact rail instead.
   const shouldSeparateResolvedItems = (
     separateResolvedItems &&
-    normalizedMode === IMAGE_MODE_TYPE_PROMPT
+    normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
+    !showFocusedTypePromptBoard
   );
   const typedRatingQuestionId = typedRatingFeedback?.questionId || null;
   const activeGridItems = shouldSeparateResolvedItems
@@ -997,6 +1127,19 @@ export default function MediaReview({
       activeGridItems[0] ||
       null
     : null;
+  const typePromptStageRow = showFocusedTypePromptBoard
+    ? gridItems.find(row => row.item.question_id === activeQuestionId) ||
+      gridItems.find(row =>
+        row.item.question_id === currentPromptItem?.question_id
+      ) ||
+      gridItems.find(row => !resolvedQuestionIdOrder.has(row.item.question_id)) ||
+      gridItems[0] ||
+      null
+    : null;
+  const typePromptNavigationDisabled = (
+    !currentPromptItem ||
+    Boolean(typedRatingFeedback)
+  );
   const resolvedGridItems = shouldSeparateResolvedItems
     ? gridItems
       .filter(row =>
@@ -2089,7 +2232,7 @@ export default function MediaReview({
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   boxSizing: "border-box",
                   display: "block",
-                  maxHeight: prompt ? "min(48vh, 480px)" : "100%",
+                  maxHeight: prompt ? "min(56vh, 560px)" : "100%",
                   maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
@@ -2107,7 +2250,7 @@ export default function MediaReview({
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   boxSizing: "border-box",
                   display: "block",
-                  maxHeight: prompt ? "min(48vh, 480px)" : "100%",
+                  maxHeight: prompt ? "min(56vh, 560px)" : "100%",
                   maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
@@ -2189,6 +2332,165 @@ export default function MediaReview({
           label={answerLabel(row.item)}
           revealed={revealed}
         />
+      </div>
+    );
+  }
+
+  function typePromptRowIsResolved(row) {
+    return (
+      resolvedQuestionIdOrder.has(row.item.question_id) ||
+      row.isFound ||
+      row.isMissed ||
+      row.isLockedMissed
+    );
+  }
+
+  function renderTypePromptNavButton(direction) {
+    const isPrevious = direction < 0;
+
+    return (
+      <button
+        type="button"
+        aria-label={isPrevious ? "Image précédente" : "Image suivante"}
+        data-image-type-prompt-prev={isPrevious ? "true" : undefined}
+        data-image-type-prompt-next={!isPrevious ? "true" : undefined}
+        disabled={typePromptNavigationDisabled}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          selectNextItem(direction);
+          focusAnswerInput();
+        }}
+        style={{
+          ...typePromptNavButtonStyle,
+          ...(typePromptNavigationDisabled ? typePromptNavButtonDisabledStyle : null)
+        }}
+        title={isPrevious ? "Image précédente" : "Image suivante"}
+      >
+        {isPrevious ? "<" : ">"}
+      </button>
+    );
+  }
+
+  function renderTypePromptRailMedia(row, revealed) {
+    const mediaSrc = resolveMediaUrl(row.item.media);
+    const mediaKind = getMediaKind(row.item.media);
+
+    if (!mediaSrc) {
+      return (
+        <span style={typePromptRailMissingStyle}>
+          Média manquant
+        </span>
+      );
+    }
+
+    if (mediaKind === "audio") {
+      return (
+        <span style={typePromptRailMissingStyle}>
+          Audio
+        </span>
+      );
+    }
+
+    if (mediaKind === "video") {
+      return (
+        <video
+          src={mediaSrc}
+          muted
+          playsInline
+          aria-label={revealed ? answerLabel(row.item) : "image"}
+          style={typePromptRailMediaStyle}
+        />
+      );
+    }
+
+    return (
+      <img
+        src={mediaSrc}
+        alt={revealed ? answerLabel(row.item) : "image"}
+        style={typePromptRailMediaStyle}
+      />
+    );
+  }
+
+  function renderTypePromptRailItem(row, index) {
+    const revealed = isImageAnswerRevealed(row, resultMode);
+    const isActive = row.item.question_id === activeQuestionId;
+    const isResolved = typePromptRowIsResolved(row);
+    const selectable = !isResolved && !typedRatingFeedback;
+    const statusLabel = isActive
+      ? "actif"
+      : isResolved
+        ? "traité"
+        : "non traité";
+
+    return (
+      <button
+        key={row.item.question_id}
+        type="button"
+        aria-current={isActive ? "true" : undefined}
+        aria-label={`Média ${index + 1}, ${statusLabel}${
+          revealed ? ` : ${answerLabel(row.item)}` : ""
+        }`}
+        data-image-question-id={row.item.question_id}
+        data-image-feedback={row.feedbackState || (row.isMissed ? "missed" : "")}
+        data-image-revealed={revealed ? "true" : "false"}
+        data-image-type-prompt-rail-item
+        disabled={!selectable}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          if (!selectable) return;
+          selectItem(row.item.question_id);
+          focusAnswerInput();
+        }}
+        style={{
+          ...typePromptRailItemStyle,
+          background: tileBackground({ ...row, isActive }),
+          border: tileBorder({ ...row, isActive }),
+          boxShadow: tileBoxShadow({ ...row, isActive }),
+          cursor: selectable ? "pointer" : "default",
+          opacity: isResolved && !isActive ? 0.78 : 1
+        }}
+        title={revealed ? answerLabel(row.item) : undefined}
+      >
+        <span style={typePromptRailThumbStyle}>
+          {renderTypePromptRailMedia(row, revealed)}
+        </span>
+        {revealed ? (
+          <span data-image-type-prompt-rail-label style={typePromptRailLabelStyle}>
+            {answerLabel(row.item)}
+          </span>
+        ) : (
+          <span aria-hidden="true" style={typePromptRailIndexStyle}>
+            {index + 1}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  function renderTypePromptStage() {
+    return (
+      <div data-image-type-prompt-stage style={typePromptStageStyle}>
+        <div style={typePromptViewerStyle}>
+          {renderTypePromptNavButton(-1)}
+          <div data-image-prompt-board style={typePromptBoardStyle}>
+            {typePromptStageRow
+              ? renderImageChoiceTile(typePromptStageRow, {
+                prompt: true,
+                selectable: false
+              })
+              : null}
+          </div>
+          {renderTypePromptNavButton(1)}
+        </div>
+
+        <div
+          className="app-scrollbar"
+          data-image-type-prompt-rail
+          style={typePromptRailStyle}
+        >
+          {gridItems.map((row, index) => renderTypePromptRailItem(row, index))}
+        </div>
       </div>
     );
   }
@@ -2953,6 +3255,8 @@ export default function MediaReview({
             ))}
             {renderChoiceRatingSlots()}
           </div>
+        ) : showFocusedTypePromptBoard ? (
+          renderTypePromptStage()
         ) : showPromptImageBoard ? (
           <div
             data-image-prompt-board

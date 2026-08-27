@@ -403,8 +403,10 @@ describe("MediaReview answer label preview", () => {
 
   it("shows the full answer on hover when the revealed label overflows", async () => {
     const row = mockMediaReviewState();
-    renderMediaReview();
-    const label = screen.getByText(row.item.label);
+    const { container } = renderMediaReview();
+    const label = container.querySelector(
+      "[data-image-prompt-board] [data-image-answer-label]"
+    );
 
     setElementWidth(label, { clientWidth: 80, scrollWidth: 240 });
     fireEvent.pointerEnter(label);
@@ -415,9 +417,11 @@ describe("MediaReview answer label preview", () => {
   });
 
   it("does not show a tooltip when the revealed label fits", async () => {
-    const row = mockMediaReviewState();
-    renderMediaReview();
-    const label = screen.getByText(row.item.label);
+    mockMediaReviewState();
+    const { container } = renderMediaReview();
+    const label = container.querySelector(
+      "[data-image-prompt-board] [data-image-answer-label]"
+    );
 
     setElementWidth(label, { clientWidth: 240, scrollWidth: 240 });
     fireEvent.pointerEnter(label);
@@ -629,17 +633,35 @@ describe("MediaReview answer label preview", () => {
     });
   });
 
-  it("does not show the type_prompt prompt card", () => {
-    renderMediaReviewWithState(typePromptHookState({
-      rows: [imageGridRow(1)]
+  it("renders type_prompt as one focused image with a thumbnail rail", () => {
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3)
+    ];
+    const { container } = renderMediaReviewWithState(typePromptHookState({
+      rows,
+      activeQuestionId: 2
     }));
+    const stage = container.querySelector("[data-image-type-prompt-stage]");
+    const rail = container.querySelector("[data-image-type-prompt-rail]");
+    const promptBoard = container.querySelector("[data-image-prompt-board]");
 
+    expect(container.querySelector("[data-image-active-grid]"))
+      .not.toBeInTheDocument();
+    expect(stage).toBeInTheDocument();
+    expect(promptBoard.querySelectorAll("[data-image-prompt-tile]"))
+      .toHaveLength(1);
+    expect(promptBoard.querySelector("[data-image-question-id='2']"))
+      .toBeInTheDocument();
+    expect(rail.querySelectorAll("[data-image-type-prompt-rail-item]"))
+      .toHaveLength(3);
     expect(screen.queryByText("Image surlignée")).not.toBeInTheDocument();
     expect(screen.queryByText("Trouve son nom")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("Nom de l'image...")).toBeInTheDocument();
   });
 
-  it("selects a type_prompt image tile by click and restores input focus", async () => {
+  it("selects a type_prompt rail thumbnail by click and restores input focus", async () => {
     const selectItem = vi.fn();
     const rows = [
       imageGridRow(1),
@@ -654,14 +676,47 @@ describe("MediaReview answer label preview", () => {
       })
     );
     const input = screen.getByPlaceholderText("Nom de l'image...");
+    const rail = container.querySelector("[data-image-type-prompt-rail]");
+    const secondThumb = rail.querySelector("[data-image-question-id='2']");
 
     input.blur();
-    fireEvent.click(tileFor(container, 2));
+    fireEvent.click(secondThumb);
 
     expect(selectItem).toHaveBeenCalledWith(2);
     await waitFor(() => {
       expect(document.activeElement).toBe(input);
     });
+  });
+
+  it("uses previous and next controls for type_prompt navigation", async () => {
+    const selectNextItem = vi.fn();
+    const rows = [
+      imageGridRow(1),
+      imageGridRow(2),
+      imageGridRow(3)
+    ];
+    renderMediaReviewWithState(
+      typePromptHookState({
+        rows,
+        hookOverrides: {
+          selectNextItem
+        }
+      })
+    );
+    const input = screen.getByPlaceholderText("Nom de l'image...");
+
+    input.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Image précédente" }));
+    expect(selectNextItem).toHaveBeenCalledWith(-1);
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+
+    selectNextItem.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Image suivante" }));
+
+    expect(selectNextItem).toHaveBeenCalledWith(1);
   });
 
   it("uses Tab and Shift+Tab to select type_prompt images without moving focus", async () => {
@@ -1319,7 +1374,7 @@ describe("MediaReview answer label preview", () => {
     expect(tileFor(container, 2)).toHaveTextContent("Image 2");
   });
 
-  it("separates resolved type_prompt images newest first while answering", () => {
+  it("keeps resolved type_prompt images in the rail while answering", () => {
     const selectItem = vi.fn();
     const rows = [
       imageGridRow(1, { isFound: true, quality: 2 }),
@@ -1327,7 +1382,8 @@ describe("MediaReview answer label preview", () => {
       imageGridRow(3, {
         isMissed: true,
         isRevealed: true
-      })
+      }),
+      imageGridRow(4)
     ];
     useMediaReview.mockReturnValue(
       typePromptHookState({
@@ -1342,27 +1398,33 @@ describe("MediaReview answer label preview", () => {
       reviewItems: rows.map(row => row.item),
       separateResolvedItems: true
     });
-    const activeGrid = container.querySelector("[data-image-active-grid]");
-    const resolvedSection = container.querySelector("[data-image-resolved-section]");
-    const resolvedTiles = Array.from(
-      resolvedSection.querySelectorAll("[data-image-question-id]")
+    const stage = container.querySelector("[data-image-type-prompt-stage]");
+    const rail = container.querySelector("[data-image-type-prompt-rail]");
+    const railItems = Array.from(
+      rail.querySelectorAll("[data-image-type-prompt-rail-item]")
     );
 
-    expect(activeGrid.querySelector('[data-image-question-id="1"]'))
+    expect(container.querySelector("[data-image-active-grid]"))
       .not.toBeInTheDocument();
-    expect(activeGrid.querySelector('[data-image-question-id="2"]'))
+    expect(container.querySelector("[data-image-resolved-section]"))
+      .not.toBeInTheDocument();
+    expect(stage.querySelector("[data-image-prompt-board] [data-image-question-id='2']"))
       .toBeInTheDocument();
-    expect(activeGrid.querySelector('[data-image-question-id="3"]'))
-      .not.toBeInTheDocument();
-    expect(resolvedSection).toHaveTextContent("Traitées");
-    expect(resolvedTiles.map(tile => tile.getAttribute("data-image-question-id")))
-      .toEqual(["3", "1"]);
-    expect(resolvedSection.querySelector('[data-image-question-id="3"]'))
-      .toHaveTextContent("Image 3");
+    expect(railItems.map(tile => tile.getAttribute("data-image-question-id")))
+      .toEqual(["1", "2", "3", "4"]);
+    expect(railItems[0]).toBeDisabled();
+    expect(railItems[2]).toBeDisabled();
+    expect(railItems[1]).toHaveAttribute("aria-current", "true");
+    expect(railItems[0]).toHaveTextContent("Image 1");
+    expect(railItems[2]).toHaveTextContent("Image 3");
 
-    fireEvent.click(resolvedSection.querySelector('[data-image-question-id="3"]'));
+    fireEvent.click(railItems[2]);
 
     expect(selectItem).not.toHaveBeenCalled();
+
+    fireEvent.click(railItems[3]);
+
+    expect(selectItem).toHaveBeenCalledWith(4);
   });
 
   it("keeps the full grid together in image result mode", () => {
