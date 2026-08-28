@@ -901,8 +901,10 @@ describe("MediaReview answer label preview", () => {
       justifyContent: "center"
     });
     expect(choiceImage).toHaveStyle({
+      height: "100%",
       objectFit: "contain",
-      objectPosition: "center"
+      objectPosition: "center",
+      width: "100%"
     });
   });
 
