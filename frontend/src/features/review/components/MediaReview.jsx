@@ -239,6 +239,11 @@ const typePromptStageStyle = {
   minHeight: 0
 };
 
+const typePromptStageWithRatingStyle = {
+  ...typePromptStageStyle,
+  gridTemplateRows: "minmax(0, 1fr) auto auto"
+};
+
 const typePromptViewerStyle = {
   alignItems: "center",
   display: "grid",
@@ -286,6 +291,13 @@ const typePromptRailStyle = {
   padding: "1px 1px 6px",
   scrollbarGutter: "stable",
   width: "100%"
+};
+
+const typePromptRatingSlotStyle = {
+  alignItems: "center",
+  display: "flex",
+  justifyContent: "center",
+  minHeight: "54px"
 };
 
 const typePromptRailItemStyle = {
@@ -424,6 +436,28 @@ const typedRatingIntervalStyle = {
   color: "#8a8a8a",
   fontSize: "12px",
   fontWeight: 700
+};
+
+const typePromptInlineRatingStyle = {
+  ...typedRatingPanelStyle,
+  background: "linear-gradient(180deg, rgba(20, 20, 20, 0.96), rgba(16, 16, 16, 0.96))",
+  border: "1px solid rgba(96, 165, 250, 0.28)",
+  boxShadow: "0 14px 34px rgba(0, 0, 0, 0.34)",
+  margin: "0 auto",
+  maxWidth: "760px",
+  padding: "9px 10px",
+  width: "min(100%, 760px)"
+};
+
+const typePromptInlineRatingControlsStyle = {
+  ...typedRatingControlsStyle,
+  justifyContent: "center"
+};
+
+const typePromptInlineRatingButtonStyle = {
+  ...typedRatingButtonStyle,
+  minHeight: "38px",
+  padding: "8px 12px"
 };
 
 const answerTooltipGap = 8;
@@ -1271,6 +1305,7 @@ export default function MediaReview({
     Boolean(typedRatingFeedback) &&
     showQualityControls
   );
+  const showControlBandTypedRating = showTypedRating && !showFocusedTypePromptBoard;
   const typedRatingItem = typedRatingFeedback?.item || null;
   const typedRatingItemRelearning = Boolean(
     typedRatingItem && isRelearningGroupItem(group, typedRatingItem)
@@ -2468,9 +2503,68 @@ export default function MediaReview({
     );
   }
 
-  function renderTypePromptStage() {
+  function renderTypedRatingPanel({ inlineTypePrompt = false } = {}) {
+    if (!showTypedRating || !typedRatingItem) return null;
+
     return (
-      <div data-image-type-prompt-stage style={typePromptStageStyle}>
+      <div
+        data-image-typed-rating
+        data-image-type-prompt-rating={inlineTypePrompt ? "true" : undefined}
+        style={inlineTypePrompt ? typePromptInlineRatingStyle : typedRatingPanelStyle}
+      >
+        <div style={typedRatingCopyStyle}>
+          <span style={typedRatingKickerStyle}>Qualité</span>
+          <span style={typedRatingAnswerStyle}>
+            {answerLabel(typedRatingItem)}
+          </span>
+        </div>
+        <div style={inlineTypePrompt
+          ? typePromptInlineRatingControlsStyle
+          : typedRatingControlsStyle}
+        >
+          {typedRatingOptions.map(option => {
+            const interval = typedRatingItemRelearning
+              ? typedRatingItem.relearning_interval
+              : projectedIntervalForImage(typedRatingItem, option.value);
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                data-image-typed-quality={option.value}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  rateTypedAnswer(option.value);
+                  focusAnswerInput();
+                }}
+                style={inlineTypePrompt
+                  ? typePromptInlineRatingButtonStyle
+                  : typedRatingButtonStyle}
+                title={option.title}
+              >
+                <span aria-hidden="true" style={keyCapStyle}>
+                  {option.value}
+                </span>
+                <span>{option.title}</span>
+                {Number(interval) > 0 && (
+                  <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderTypePromptStage() {
+    const hasInlineRating = showTypedRating && typedRatingItem;
+
+    return (
+      <div
+        data-image-type-prompt-stage
+        style={hasInlineRating ? typePromptStageWithRatingStyle : typePromptStageStyle}
+      >
         <div style={typePromptViewerStyle}>
           {renderTypePromptNavButton(-1)}
           <div data-image-prompt-board style={typePromptBoardStyle}>
@@ -2483,6 +2577,15 @@ export default function MediaReview({
           </div>
           {renderTypePromptNavButton(1)}
         </div>
+
+        {hasInlineRating && (
+          <div
+            data-image-type-prompt-rating-slot
+            style={typePromptRatingSlotStyle}
+          >
+            {renderTypedRatingPanel({ inlineTypePrompt: true })}
+          </div>
+        )}
 
         <div
           className="app-scrollbar"
@@ -3451,46 +3554,7 @@ export default function MediaReview({
           </div>
         )}
 
-        {showTypedRating && typedRatingItem && (
-          <div data-image-typed-rating style={typedRatingPanelStyle}>
-            <div style={typedRatingCopyStyle}>
-              <span style={typedRatingKickerStyle}>Qualité</span>
-              <span style={typedRatingAnswerStyle}>
-                {answerLabel(typedRatingItem)}
-              </span>
-            </div>
-            <div style={typedRatingControlsStyle}>
-              {typedRatingOptions.map(option => {
-                const interval = typedRatingItemRelearning
-                  ? typedRatingItem.relearning_interval
-                  : projectedIntervalForImage(typedRatingItem, option.value);
-
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    data-image-typed-quality={option.value}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      rateTypedAnswer(option.value);
-                      focusAnswerInput();
-                    }}
-                    style={typedRatingButtonStyle}
-                    title={option.title}
-                  >
-                    <span aria-hidden="true" style={keyCapStyle}>
-                      {option.value}
-                    </span>
-                    <span>{option.title}</span>
-                    {Number(interval) > 0 && (
-                      <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {showControlBandTypedRating && renderTypedRatingPanel()}
 
         {showLabelChoices && (
           // Same four slots throughout: the decoy names drop out, the freed

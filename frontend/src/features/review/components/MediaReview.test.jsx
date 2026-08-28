@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MediaReview from "./MediaReview";
 import { useMediaReview } from "../hooks/useMediaReview";
@@ -659,6 +659,56 @@ describe("MediaReview answer label preview", () => {
     expect(screen.queryByText("Image surlignée")).not.toBeInTheDocument();
     expect(screen.queryByText("Trouve son nom")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("Nom de l'image...")).toBeInTheDocument();
+  });
+
+  it("renders pending type_prompt quality inside the focused stage", async () => {
+    const rateTypedAnswer = vi.fn();
+    const answeredItem = {
+      ...imageItem(1),
+      projected_intervals: { 1: 4, 2: 12, 3: 30 }
+    };
+    const rows = [
+      imageGridRow(1, {
+        isFound: true,
+        item: answeredItem,
+        quality: 2
+      }),
+      imageGridRow(2)
+    ];
+    const { container } = renderMediaReviewWithState(typePromptHookState({
+      rows,
+      activeQuestionId: 1,
+      foundQuestionIds: [1],
+      resolvedQuestionIds: [1],
+      hookOverrides: {
+        canFinishReview: false,
+        rateTypedAnswer,
+        typedRatingFeedback: {
+          item: answeredItem,
+          questionId: 1
+        }
+      }
+    }));
+    const stage = container.querySelector("[data-image-type-prompt-stage]");
+    const rating = stage.querySelector("[data-image-type-prompt-rating='true']");
+    const input = screen.getByPlaceholderText("Nom de l'image...");
+
+    expect(rating).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-image-typed-rating]")).toHaveLength(1);
+    expect(container.querySelector("[data-image-control-band] [data-image-typed-rating]"))
+      .not.toBeInTheDocument();
+    expect(within(rating).getByText("Image 1")).toBeInTheDocument();
+    expect(rating.querySelectorAll("[data-image-typed-quality]")).toHaveLength(3);
+    expect(within(rating).getByText("≈ 12 j")).toBeInTheDocument();
+    expect(input).toHaveAttribute("readonly");
+
+    input.blur();
+    fireEvent.click(rating.querySelector("[data-image-typed-quality='2']"));
+
+    expect(rateTypedAnswer).toHaveBeenCalledWith(2);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
   });
 
   it("selects a type_prompt rail thumbnail by click and restores input focus", async () => {
