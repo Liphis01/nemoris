@@ -376,6 +376,8 @@ export default function MapReview({
   const [recapAutoZoomEnabled, setRecapAutoZoomEnabled] = useState(readRecapAutoZoomPreference);
   const [recapFocusCode, setRecapFocusCode] = useState(null);
   const [recapFocusVersion, setRecapFocusVersion] = useState(0);
+  const [activeMapZoom, setActiveMapZoom] = useState({ direction: 0, version: 0 });
+  const [recapMapZoom, setRecapMapZoom] = useState({ direction: 0, version: 0 });
   const [wrongInputShakeId, setWrongInputShakeId] = useState(0);
   const recapRowKey = recapRows.map(row => row.item.code).join("|");
   const recapGridColumns = showQualityControls
@@ -591,6 +593,20 @@ export default function MapReview({
     focusAnswerInput();
   }, [focusAnswerInput, handleZoneSelect]);
 
+  const zoomActiveMap = useCallback((direction) => {
+    setActiveMapZoom(command => ({
+      direction,
+      version: command.version + 1
+    }));
+  }, []);
+
+  const zoomRecapMap = useCallback((direction) => {
+    setRecapMapZoom(command => ({
+      direction,
+      version: command.version + 1
+    }));
+  }, []);
+
   useEffect(() => {
     if (!wrongInputShakeId) return undefined;
 
@@ -637,6 +653,36 @@ export default function MapReview({
       window.removeEventListener("keydown", handleMapKeyDown);
     };
   }, [handleZoomRemaining, mode, remainingZones.length, showRecap]);
+
+  useEffect(() => {
+    function handleMapZoomKeyDown(event) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+
+      const direction = mapZoomDirectionFromKey(event);
+      if (!direction) return;
+
+      event.preventDefault();
+      if (showRecap) {
+        zoomRecapMap(direction);
+      } else {
+        zoomActiveMap(direction);
+      }
+    }
+
+    window.addEventListener("keydown", handleMapZoomKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleMapZoomKeyDown);
+    };
+  }, [showRecap, zoomActiveMap, zoomRecapMap]);
 
   useEffect(() => {
     if (
@@ -1095,6 +1141,8 @@ export default function MapReview({
               focusVersion={focusVersion}
               selected={selectedCode || undefined}
               zoneLabels={foundZoneLabels}
+              zoomDirection={activeMapZoom.direction}
+              zoomVersion={activeMapZoom.version}
               onSelect={handleActiveMapSelect}
               onGeometryLoaded={handleMapGeometryLoaded}
             />
@@ -1591,6 +1639,8 @@ export default function MapReview({
                   focusCode={recapFocusCode}
                   focusVersion={recapFocusVersion}
                   zoneLabels={recapZoneLabels}
+                  zoomDirection={recapMapZoom.direction}
+                  zoomVersion={recapMapZoom.version}
                   onSelect={selectRecapCode}
                 />
                 <button
@@ -2005,6 +2055,26 @@ function isEditableTarget(target) {
   }
 
   return Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
+
+function mapZoomDirectionFromKey(event) {
+  if (
+    event.key === "+" ||
+    event.code === "NumpadAdd"
+  ) {
+    return 1;
+  }
+
+  if (
+    event.key === "-" ||
+    event.key === "−" ||
+    event.code === "Minus" ||
+    event.code === "NumpadSubtract"
+  ) {
+    return -1;
+  }
+
+  return 0;
 }
 
 const choiceButtonStyle = {

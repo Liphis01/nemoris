@@ -195,6 +195,69 @@ describe("SvgMap zone hover colors", () => {
     expect(onSelect).toHaveBeenCalledWith("neutral");
   });
 
+  it("zooms around the viewport center from external zoom commands", async () => {
+    mockSvgFetch();
+    const { container, rerender } = renderTestMap({
+      zoomDirection: 0,
+      zoomVersion: 0
+    });
+
+    await waitFor(() => {
+      expectFill(zone(container, "neutral"), "#444");
+    });
+
+    const layer = mapLayer(container);
+    const wrapper = layer.parentElement;
+
+    wrapper.getBoundingClientRect = vi.fn(() => ({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 100,
+      width: 200,
+      height: 100
+    }));
+
+    rerender(
+      <div style={{ height: "320px", width: "480px" }}>
+        <SvgMap
+          svgPath="/maps/test.svg"
+          found={["found"]}
+          missed={["missed"]}
+          dueItems={["due"]}
+          unsaved={["unsaved"]}
+          selected="selected"
+          zoomDirection={1}
+          zoomVersion={1}
+        />
+      </div>
+    );
+
+    await waitFor(() => {
+      expect(layer.style.transform)
+        .toBe("translate(-25px, -12.5px) scale(1.25)");
+    });
+
+    rerender(
+      <div style={{ height: "320px", width: "480px" }}>
+        <SvgMap
+          svgPath="/maps/test.svg"
+          found={["found"]}
+          missed={["missed"]}
+          dueItems={["due"]}
+          unsaved={["unsaved"]}
+          selected="selected"
+          zoomDirection={-1}
+          zoomVersion={2}
+        />
+      </div>
+    );
+
+    await waitFor(() => {
+      expect(layer.style.transform).toBe("translate(0px, 0px) scale(1)");
+    });
+  });
+
   it("limits selection to clickable zone codes without changing hover behavior", async () => {
     mockSvgFetch();
     const onSelect = vi.fn();

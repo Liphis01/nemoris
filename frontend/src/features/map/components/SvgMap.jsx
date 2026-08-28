@@ -71,6 +71,7 @@ const dragThresholdPx = 4;
 // Maximum wheel-zoom factor. Kept high so the tiny island hit-areas can be
 // zoomed in far enough to see and click comfortably.
 const maxZoom = 80;
+const keyboardZoomFactor = 1.25;
 
 // Exponent applied to the auto-zoom fit (see fitFocusedZone). Below 1 it pulls
 // deep fits back out, and the deeper the fit the more it pulls.
@@ -96,6 +97,8 @@ export default function SvgMap({
     flashCodes = [],
     clickableCodes = null,
     zoneLabels = emptyZoneLabels,
+    zoomDirection = 0,
+    zoomVersion = 0,
     onSelect,
     onCodesLoaded,
     onGeometryLoaded
@@ -135,6 +138,49 @@ export default function SvgMap({
         // should not close over stale scale/offset values.
         transformRef.current = { scale, offset };
     }, [scale, offset]);
+
+    const hideTooltip = useCallback(() => {
+        setTooltip(null);
+    }, []);
+
+    const zoomAtPoint = useCallback((point, factor) => {
+        const wrapper = wrapperRef.current;
+        if (!wrapper || !Number.isFinite(factor) || factor === 0) return;
+
+        const currentTransform = transformRef.current || {};
+        const currentScale = currentTransform.scale || 1;
+        const currentOffset = currentTransform.offset || { x: 0, y: 0 };
+        const nextScale = Math.min(Math.max(1, currentScale * factor), maxZoom);
+        const worldX = (point.x - currentOffset.x) / currentScale;
+        const worldY = (point.y - currentOffset.y) / currentScale;
+
+        userAdjustedRef.current = true;
+        hideTooltip();
+        setScale(nextScale);
+        setOffset({
+            x: point.x - worldX * nextScale,
+            y: point.y - worldY * nextScale
+        });
+    }, [hideTooltip]);
+
+    const zoomAtCenter = useCallback((direction) => {
+        const wrapper = wrapperRef.current;
+        if (!wrapper || direction === 0) return;
+
+        const rect = wrapper.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        zoomAtPoint({
+            x: rect.width / 2,
+            y: rect.height / 2
+        }, direction > 0 ? keyboardZoomFactor : 1 / keyboardZoomFactor);
+    }, [zoomAtPoint]);
+
+    useEffect(() => {
+        if (!zoomVersion || !zoomDirection) return;
+
+        zoomAtCenter(zoomDirection);
+    }, [zoomAtCenter, zoomDirection, zoomVersion]);
 
     function handleMouseDown(e) {
         if (e.button !== 0 && e.button !== 2) return;
@@ -194,10 +240,6 @@ export default function SvgMap({
         didDragRef.current = false;
         setIsDragging(false);
     }
-
-    const hideTooltip = useCallback(() => {
-        setTooltip(null);
-    }, []);
 
     const showTooltip = useCallback((event, label) => {
         if (!label || !wrapperRef.current) {
@@ -652,24 +694,11 @@ export default function SvgMap({
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
 
-            // World coordinate under the cursor before applying the new scale.
-            const worldX = (mouseX - offset.x) / scale;
-            const worldY = (mouseY - offset.y) / scale;
-
             const zoomIntensity = 0.0015;
-            const newScale = Math.min(
-                Math.max(1, scale * (1 - e.deltaY * zoomIntensity)),
-                maxZoom
+            zoomAtPoint(
+                { x: mouseX, y: mouseY },
+                1 - e.deltaY * zoomIntensity
             );
-
-            const newOffset = {
-                x: mouseX - worldX * newScale,
-                y: mouseY - worldY * newScale
-            };
-
-            userAdjustedRef.current = true;
-            setScale(newScale);
-            setOffset(newOffset);
         }
 
         el.addEventListener("wheel", wheelHandler, { passive: false });
@@ -677,7 +706,7 @@ export default function SvgMap({
         return () => {
             el.removeEventListener("wheel", wheelHandler);
         };
-    }, [scale, offset]);
+    }, [zoomAtPoint]);
 
     return (
         <div

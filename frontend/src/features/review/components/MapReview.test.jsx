@@ -24,6 +24,8 @@ vi.mock("../../map/components/SvgMap", () => ({
         data-missed={(props.missed || []).join("|")}
         data-selected={props.selected || ""}
         data-zone-labels={JSON.stringify(props.zoneLabels || {})}
+        data-zoom-direction={props.zoomDirection ?? ""}
+        data-zoom-version={props.zoomVersion ?? ""}
         onClick={() => {
           if (canSelectBeta) props.onSelect?.("beta");
         }}
@@ -303,6 +305,74 @@ describe("MapReview recap map focus", () => {
         .toHaveAttribute("data-focus-version", "3");
     });
     expect(input).toHaveFocus();
+  });
+
+  it("uses plus and minus to zoom the active map", async () => {
+    renderMapReview(false, {
+      mode: "click_prompt"
+    });
+
+    fireEvent.keyDown(window, { key: "+" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-zoom-direction", "1");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-zoom-version", "1");
+    });
+
+    fireEvent.keyDown(window, { key: "-" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-zoom-direction", "-1");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-zoom-version", "2");
+    });
+  });
+
+  it("uses plus and minus to zoom the recap map while the recap is open", async () => {
+    renderMapReview(false, {
+      allowPartialSubmit: true,
+      mode: "type_prompt"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    await screen.findByTestId("recap-map");
+
+    fireEvent.keyDown(window, { key: "+" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recap-map"))
+        .toHaveAttribute("data-zoom-direction", "1");
+      expect(screen.getByTestId("recap-map"))
+        .toHaveAttribute("data-zoom-version", "1");
+    });
+
+    fireEvent.keyDown(window, { key: "-" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recap-map"))
+        .toHaveAttribute("data-zoom-direction", "-1");
+      expect(screen.getByTestId("recap-map"))
+        .toHaveAttribute("data-zoom-version", "2");
+    });
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-zoom-version", "0");
+  });
+
+  it("does not steal plus or minus from map answer inputs", () => {
+    renderMapReview(false, {
+      mode: "type_all"
+    });
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: "-" })).toBe(true);
+    expect(fireEvent.keyDown(input, { key: "+" })).toBe(true);
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-zoom-version", "0");
   });
 
   it.each([
