@@ -282,6 +282,7 @@ export default function MapReview({
     foundQuestionIdSet,
     finishMap,
     handleChoiceSelect,
+    handleInputChange,
     handleSubmit,
     handleZoneSelect,
     input,
@@ -307,7 +308,6 @@ export default function MapReview({
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,
-    setInput,
     setQuality,
     showRecap,
     showRecapSections,
@@ -1166,46 +1166,6 @@ export default function MapReview({
                 Zoom auto
               </button>
             )}
-            {showTypedRating && typedRatingItem && (
-              <div style={inlineRatingOverlayStyle}>
-                <div data-map-typed-rating style={mapInlineRatingPanelStyle}>
-                  <div style={typedRatingCopyStyle}>
-                    <span style={typedRatingKickerStyle}>Qualité</span>
-                    <span style={typedRatingAnswerStyle}>{typedRatingItem.label || "Zone"}</span>
-                  </div>
-                  <div style={typedRatingControlsStyle}>
-                    {typedRatingOptions.map(option => {
-                      const interval = typedRatingItemRelearning
-                        ? typedRatingItem.relearning_interval
-                        : typedRatingItem.projected_intervals?.[option.value];
-
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          data-map-typed-quality={option.value}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            rateTypedAnswer(option.value);
-                            inputRef.current?.focus({ preventScroll: true });
-                          }}
-                          style={typedRatingButtonStyle}
-                          title={option.title}
-                        >
-                          <span aria-hidden="true" style={choiceKeyBadgeStyle}>
-                            {option.value}
-                          </span>
-                          <span>{option.title}</span>
-                          {Number(interval) > 0 && (
-                            <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
             {showClickRating && clickRatingItem && (
               <div style={inlineRatingOverlayStyle}>
                 <div data-map-click-rating style={mapInlineRatingPanelStyle}>
@@ -1271,60 +1231,94 @@ export default function MapReview({
           )}
 
           {showTextInput && (
-            <input
-              autoFocus
-              className={wrongInputShakeId ? "review-input-shake" : undefined}
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              readOnly={showTypedRating}
-              onKeyDown={(e) => {
-                if (showTypedRating) {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    rateTypedAnswer(typedRatingDefaultQuality);
-                    inputRef.current?.focus({ preventScroll: true });
+            <div data-map-typed-input-area style={typedInputAreaStyle}>
+              <input
+                autoFocus
+                className={wrongInputShakeId ? "review-input-shake" : undefined}
+                ref={inputRef}
+                value={input}
+                onChange={(e) => handleInputChange(e.target.value)}
+                readOnly={showTypedRating}
+                onKeyDown={(e) => {
+                  if (showTypedRating) {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      rateTypedAnswer(typedRatingDefaultQuality);
+                      inputRef.current?.focus({ preventScroll: true });
+                    }
+                    return;
                   }
-                  return;
-                }
 
-                if (e.key === "Tab" && mode === MAP_MODE_TYPE_PROMPT) {
-                  e.preventDefault();
-                  selectNextPrompt(e.shiftKey ? -1 : 1);
-                  inputRef.current?.focus({ preventScroll: true });
-                  return;
-                }
+                  if (e.key === "Tab" && mode === MAP_MODE_TYPE_PROMPT) {
+                    e.preventDefault();
+                    selectNextPrompt(e.shiftKey ? -1 : 1);
+                    inputRef.current?.focus({ preventScroll: true });
+                    return;
+                  }
 
-		                if (e.key === "Enter") {
-		                  const matched = handleSubmit();
-		                  if (matched === false) {
-		                    setWrongInputShakeId(Date.now());
-		                  }
-		                  if (matched === false || matched === "duplicate") {
-		                    e.currentTarget.select();
-		                  }
-	                }
-	              }}
-              placeholder={mode === MAP_MODE_TYPE_PROMPT ? "Nom de la zone..." : "Tape une zone..."}
-              style={{
-                ...inputStyle,
-	                border: feedbackTone === "incorrect"
-	                  ? "1px solid rgba(248, 113, 113, 0.9)"
-	                  : feedbackTone === "correct"
-	                    ? "1px solid rgba(134, 239, 172, 0.85)"
-	                    : feedbackTone === "duplicate"
-	                      ? "1px solid rgba(250, 204, 21, 0.85)"
-	                      : inputStyle.border,
-                boxShadow: feedbackTone === "incorrect"
-	                  ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
-	                  : feedbackTone === "correct"
-	                    ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
-	                    : feedbackTone === "duplicate"
-	                      ? "0 0 0 4px rgba(250, 204, 21, 0.1)"
-	                      : "none",
-                transition: "border 0.18s ease, box-shadow 0.18s ease"
-              }}
-            />
+                  if (e.key === "Enter") {
+                    const matched = handleSubmit();
+                    if (matched === false) {
+                      setWrongInputShakeId(Date.now());
+                    }
+                    if (matched === false || matched === "duplicate") {
+                      e.currentTarget.select();
+                    }
+                  }
+                }}
+                placeholder={mode === MAP_MODE_TYPE_PROMPT ? "Nom de la zone..." : "Tape une zone..."}
+                style={{
+                  ...inputStyle,
+                  border: feedbackTone === "incorrect"
+                    ? "1px solid rgba(248, 113, 113, 0.9)"
+                    : feedbackTone === "correct"
+                      ? "1px solid rgba(134, 239, 172, 0.85)"
+                      : feedbackTone === "duplicate"
+                        ? "1px solid rgba(250, 204, 21, 0.85)"
+                        : inputStyle.border,
+                  boxShadow: feedbackTone === "incorrect"
+                    ? "0 0 0 4px rgba(248, 113, 113, 0.1)"
+                    : feedbackTone === "correct"
+                      ? "0 0 0 4px rgba(134, 239, 172, 0.1)"
+                      : feedbackTone === "duplicate"
+                        ? "0 0 0 4px rgba(250, 204, 21, 0.1)"
+                        : "none",
+                  minHeight: "54px",
+                  transition: "border 0.18s ease, box-shadow 0.18s ease"
+                }}
+              />
+              {showTypedRating && typedRatingItem && (
+                <div style={typedInputRatingOverlayStyle}>
+                  <div data-map-typed-rating style={mapTypedInputRatingPanelStyle}>
+                    <div style={typedInputRatingCopyStyle}>
+                      <span style={typedRatingKickerStyle}>Qualité</span>
+                      <span style={typedRatingAnswerStyle}>{typedRatingItem.label || "Zone"}</span>
+                    </div>
+                    <div style={typedInputRatingControlsStyle}>
+                      {typedRatingOptions.map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          data-map-typed-quality={option.value}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            rateTypedAnswer(option.value);
+                            inputRef.current?.focus({ preventScroll: true });
+                          }}
+                          style={typedInputRatingButtonStyle}
+                          title={option.title}
+                        >
+                          <span aria-hidden="true" style={choiceKeyBadgeStyle}>
+                            {option.value}
+                          </span>
+                          <span>{option.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
@@ -2124,6 +2118,18 @@ const typedRatingPanelStyle = {
   padding: "10px 12px"
 };
 
+const typedInputAreaStyle = {
+  minHeight: "54px",
+  position: "relative"
+};
+
+const typedInputRatingOverlayStyle = {
+  inset: 0,
+  pointerEvents: "none",
+  position: "absolute",
+  zIndex: 4
+};
+
 const inlineRatingOverlayStyle = {
   bottom: "10px",
   boxSizing: "border-box",
@@ -2142,12 +2148,29 @@ const mapInlineRatingPanelStyle = {
   pointerEvents: "auto"
 };
 
+const mapTypedInputRatingPanelStyle = {
+  ...typedRatingPanelStyle,
+  background: "rgba(18, 18, 18, 0.98)",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.32)",
+  boxSizing: "border-box",
+  gap: "8px 10px",
+  height: "100%",
+  marginTop: 0,
+  padding: "7px 9px",
+  pointerEvents: "auto"
+};
+
 const typedRatingCopyStyle = {
   alignItems: "center",
   display: "flex",
   flex: "1 1 180px",
   gap: "8px",
   minWidth: 0
+};
+
+const typedInputRatingCopyStyle = {
+  ...typedRatingCopyStyle,
+  flex: "1 1 140px"
 };
 
 const typedRatingKickerStyle = {
@@ -2176,6 +2199,11 @@ const typedRatingControlsStyle = {
   justifyContent: "flex-end"
 };
 
+const typedInputRatingControlsStyle = {
+  ...typedRatingControlsStyle,
+  flexWrap: "nowrap"
+};
+
 const typedRatingButtonStyle = {
   ...buttonStyle,
   alignItems: "center",
@@ -2184,6 +2212,13 @@ const typedRatingButtonStyle = {
   gap: "8px",
   minHeight: "38px",
   padding: "8px 11px"
+};
+
+const typedInputRatingButtonStyle = {
+  ...typedRatingButtonStyle,
+  minHeight: "34px",
+  padding: "6px 9px",
+  whiteSpace: "nowrap"
 };
 
 const typedRatingIntervalStyle = {

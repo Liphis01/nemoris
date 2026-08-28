@@ -23,7 +23,6 @@
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 - how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
 - le zoom d'image est un peu naze
-- centrer le media dans multiple choice text
 
 ## quick fixes
 

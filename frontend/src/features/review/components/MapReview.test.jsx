@@ -51,6 +51,23 @@ const reviewZones = [
   }
 ];
 
+const departmentReviewZones = [
+  {
+    question_id: 267,
+    code: "39",
+    label: "Jura",
+    aliases: [],
+    progress: {}
+  },
+  {
+    question_id: 234,
+    code: "23",
+    label: "Creuse",
+    aliases: [],
+    progress: {}
+  }
+];
+
 function renderMapReview(showQualityControls, props = {}) {
   return render(
     <MapReview
@@ -893,24 +910,28 @@ describe("MapReview recap map focus", () => {
     expect(input.selectionEnd).toBe("Alpha".length);
   });
 
-  it("asks inline quality after a correct typed zone and uses Enter for Bon", async () => {
+  it("asks inline quality as soon as today's department type_all answer matches", async () => {
     const submitAnswer = vi.fn().mockResolvedValue({});
 
     renderMapReview(true, {
+      group: { name: "Départements français", media: "france.svg" },
       mode: "type_all",
+      reviewZones: departmentReviewZones,
+      contextItems: departmentReviewZones,
       submitAnswer
     });
 
     const input = screen.getByPlaceholderText("Tape une zone...");
 
-    fireEvent.change(input, { target: { value: "Alpha" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.change(input, { target: { value: "jura" } });
 
     const ratingPanel = document.querySelector("[data-map-typed-rating]");
     expect(ratingPanel).toBeInTheDocument();
-    expect(screen.getByTestId("active-map").parentElement).toContainElement(ratingPanel);
+    expect(document.querySelector("[data-map-typed-input-area]")).toContainElement(ratingPanel);
+    expect(screen.getByTestId("active-map").parentElement).not.toContainElement(ratingPanel);
     expect(ratingPanel.parentElement).toHaveStyle({ position: "absolute" });
     expect(document.querySelectorAll("[data-map-typed-quality]")).toHaveLength(3);
+    expect(screen.getByText("Jura")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Enter" });
 
@@ -923,11 +944,11 @@ describe("MapReview recap map focus", () => {
 
     await waitFor(() => {
       expect(submitAnswer).toHaveBeenCalledWith(
-        { 1: 2, 2: 0 },
+        { 267: 2, 234: 0 },
         "type_all",
         2,
-        { 1: "Alpha" },
-        { 1: [1, 2], 2: [1, 2] }
+        { 267: "jura" },
+        { 267: [267, 234], 234: [267, 234] }
       );
     });
   });

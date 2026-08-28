@@ -141,6 +141,7 @@ describe("ReviewSession", () => {
     });
 
     fireEvent.click(screen.getByTestId("active-map"));
+    fireEvent.click(await screen.findByRole("button", { name: "Bon" }));
 
     const validateButton = await screen.findByRole("button", { name: "Valider" });
     fireEvent.click(validateButton);

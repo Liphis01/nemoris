@@ -260,6 +260,29 @@ describe("useMapReview recap sorting", () => {
     expect(onComplete).toHaveBeenCalledWith([]);
   });
 
+  it("asks for inline quality immediately when typed map input matches", () => {
+    const reviewZones = [
+      zone({ questionId: 267, code: "39", label: "Jura" }),
+      zone({ questionId: 234, code: "23", label: "Creuse" })
+    ];
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), vi.fn().mockResolvedValue({}), {
+        inlineTypedRating: true,
+        mode: "type_all"
+      })
+    );
+
+    act(() => {
+      result.current.handleInputChange("jura");
+    });
+
+    expect(result.current.input).toBe("");
+    expect(result.current.typedRatingFeedback?.questionId).toBe(267);
+    expect(result.current.foundQuestionIds).toEqual([267]);
+    expect(result.current.qualityByQuestionId[267]).toBeUndefined();
+    expect(result.current.showRecap).toBe(false);
+  });
+
   it("asks for inline quality after a correct clicked map answer", async () => {
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
