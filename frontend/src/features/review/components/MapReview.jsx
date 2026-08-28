@@ -1166,6 +1166,83 @@ export default function MapReview({
                 Zoom auto
               </button>
             )}
+            {showTypedRating && typedRatingItem && (
+              <div style={inlineRatingOverlayStyle}>
+                <div data-map-typed-rating style={mapInlineRatingPanelStyle}>
+                  <div style={typedRatingCopyStyle}>
+                    <span style={typedRatingKickerStyle}>Qualité</span>
+                    <span style={typedRatingAnswerStyle}>{typedRatingItem.label || "Zone"}</span>
+                  </div>
+                  <div style={typedRatingControlsStyle}>
+                    {typedRatingOptions.map(option => {
+                      const interval = typedRatingItemRelearning
+                        ? typedRatingItem.relearning_interval
+                        : typedRatingItem.projected_intervals?.[option.value];
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          data-map-typed-quality={option.value}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            rateTypedAnswer(option.value);
+                            inputRef.current?.focus({ preventScroll: true });
+                          }}
+                          style={typedRatingButtonStyle}
+                          title={option.title}
+                        >
+                          <span aria-hidden="true" style={choiceKeyBadgeStyle}>
+                            {option.value}
+                          </span>
+                          <span>{option.title}</span>
+                          {Number(interval) > 0 && (
+                            <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+            {showClickRating && clickRatingItem && (
+              <div style={inlineRatingOverlayStyle}>
+                <div data-map-click-rating style={mapInlineRatingPanelStyle}>
+                  <div style={typedRatingCopyStyle}>
+                    <span style={typedRatingKickerStyle}>Qualité</span>
+                    <span style={typedRatingAnswerStyle}>{clickRatingItem.label || "Zone"}</span>
+                  </div>
+                  <div style={typedRatingControlsStyle}>
+                    {clickRatingOptions.map(option => {
+                      const interval = clickRatingItemRelearning
+                        ? clickRatingItem.relearning_interval
+                        : clickRatingItem.projected_intervals?.[option.value];
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          data-map-click-quality={option.value}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => rateClickAnswer(option.value)}
+                          style={typedRatingButtonStyle}
+                          title={option.title}
+                        >
+                          <span aria-hidden="true" style={choiceKeyBadgeStyle}>
+                            {option.value}
+                          </span>
+                          <span>{option.title}</span>
+                          {Number(interval) > 0 && (
+                            <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1248,80 +1325,6 @@ export default function MapReview({
                 transition: "border 0.18s ease, box-shadow 0.18s ease"
               }}
             />
-          )}
-
-          {showTypedRating && typedRatingItem && (
-            <div data-map-typed-rating style={typedRatingPanelStyle}>
-              <div style={typedRatingCopyStyle}>
-                <span style={typedRatingKickerStyle}>Qualité</span>
-                <span style={typedRatingAnswerStyle}>{typedRatingItem.label || "Zone"}</span>
-              </div>
-              <div style={typedRatingControlsStyle}>
-                {typedRatingOptions.map(option => {
-                  const interval = typedRatingItemRelearning
-                    ? typedRatingItem.relearning_interval
-                    : typedRatingItem.projected_intervals?.[option.value];
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      data-map-typed-quality={option.value}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        rateTypedAnswer(option.value);
-                        inputRef.current?.focus({ preventScroll: true });
-                      }}
-                      style={typedRatingButtonStyle}
-                      title={option.title}
-                    >
-                      <span aria-hidden="true" style={choiceKeyBadgeStyle}>
-                        {option.value}
-                      </span>
-                      <span>{option.title}</span>
-                      {Number(interval) > 0 && (
-                        <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {showClickRating && clickRatingItem && (
-            <div data-map-click-rating style={typedRatingPanelStyle}>
-              <div style={typedRatingCopyStyle}>
-                <span style={typedRatingKickerStyle}>Qualité</span>
-                <span style={typedRatingAnswerStyle}>{clickRatingItem.label || "Zone"}</span>
-              </div>
-              <div style={typedRatingControlsStyle}>
-                {clickRatingOptions.map(option => {
-                  const interval = clickRatingItemRelearning
-                    ? clickRatingItem.relearning_interval
-                    : clickRatingItem.projected_intervals?.[option.value];
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      data-map-click-quality={option.value}
-                      onClick={() => rateClickAnswer(option.value)}
-                      style={typedRatingButtonStyle}
-                      title={option.title}
-                    >
-                      <span aria-hidden="true" style={choiceKeyBadgeStyle}>
-                        {option.value}
-                      </span>
-                      <span>{option.title}</span>
-                      {Number(interval) > 0 && (
-                        <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           )}
 
           {mode === MAP_MODE_MULTIPLE_CHOICE && !showRecap && (
@@ -2119,6 +2122,24 @@ const typedRatingPanelStyle = {
   justifyContent: "space-between",
   marginTop: "10px",
   padding: "10px 12px"
+};
+
+const inlineRatingOverlayStyle = {
+  bottom: "10px",
+  boxSizing: "border-box",
+  left: "10px",
+  pointerEvents: "none",
+  position: "absolute",
+  right: "10px",
+  zIndex: 8
+};
+
+const mapInlineRatingPanelStyle = {
+  ...typedRatingPanelStyle,
+  background: "rgba(18, 18, 18, 0.94)",
+  boxShadow: "0 14px 32px rgba(0, 0, 0, 0.38)",
+  marginTop: 0,
+  pointerEvents: "auto"
 };
 
 const typedRatingCopyStyle = {

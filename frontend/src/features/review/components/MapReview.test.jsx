@@ -550,7 +550,10 @@ describe("MapReview recap map focus", () => {
 
     fireEvent.click(screen.getByTestId("active-map"));
 
-    expect(document.querySelector("[data-map-click-rating]")).toBeInTheDocument();
+    const ratingPanel = document.querySelector("[data-map-click-rating]");
+    expect(ratingPanel).toBeInTheDocument();
+    expect(screen.getByTestId("active-map").parentElement).toContainElement(ratingPanel);
+    expect(ratingPanel.parentElement).toHaveStyle({ position: "absolute" });
     expect(document.querySelectorAll("[data-map-click-quality]")).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Terminer la carte" })).toBeDisabled();
 
@@ -903,7 +906,10 @@ describe("MapReview recap map focus", () => {
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(document.querySelector("[data-map-typed-rating]")).toBeInTheDocument();
+    const ratingPanel = document.querySelector("[data-map-typed-rating]");
+    expect(ratingPanel).toBeInTheDocument();
+    expect(screen.getByTestId("active-map").parentElement).toContainElement(ratingPanel);
+    expect(ratingPanel.parentElement).toHaveStyle({ position: "absolute" });
     expect(document.querySelectorAll("[data-map-typed-quality]")).toHaveLength(3);
 
     fireEvent.keyDown(window, { key: "Enter" });
