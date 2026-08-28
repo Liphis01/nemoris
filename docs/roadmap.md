@@ -21,7 +21,6 @@
 - dire clairement qu'il faut attendre 5 min pour refaire les erreurs
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
-- changer liste d'images en visionneuse d'images
 - how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
 - le zoom d'image est un peu naze
 

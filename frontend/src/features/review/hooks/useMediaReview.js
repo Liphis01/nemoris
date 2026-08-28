@@ -7,7 +7,7 @@ import {
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
   IMAGE_MODE_TYPE_PROMPT,
-  normalizeImageMode
+  normalizeImageModeForItemCount
 } from "../imageModes";
 import {
   matchesAnswerValue,
@@ -374,7 +374,10 @@ export function useMediaReview(
   submitAnswer = sendMediaAnswer,
   options = {}
 ) {
-  const mode = normalizeImageMode(options.mode);
+  const reviewItemCount = Array.isArray(reviewItemsInput)
+    ? reviewItemsInput.length
+    : 0;
+  const mode = normalizeImageModeForItemCount(options.mode, reviewItemCount);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
   // Review grades each choice inline (reveal + quality), then auto-submits the

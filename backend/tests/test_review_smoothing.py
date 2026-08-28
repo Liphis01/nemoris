@@ -340,7 +340,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
         self.assertEqual(
             choose_image_review_mode([strong], context, rng=FixedRandom(0)),
-            "type_all"
+            "type_prompt"
         )
         self.assertNotIn(
             choose_image_review_mode([hard], context[:4], rng=FixedRandom(0)),
@@ -412,17 +412,17 @@ class SchedulerSmoothingTests(unittest.TestCase):
             "type_prompt"
         )
 
-    def test_image_random_selector_can_pick_non_top_modes(self):
+    def test_single_image_review_mode_does_not_pick_type_all(self):
         support = Question(type_q="media", answer="Support")
         support.progress = Progress(reps=1, difficulty=3.0, history=[])
 
-        self.assertNotEqual(
+        self.assertEqual(
             choose_image_review_mode(
                 [support],
                 [support],
                 rng=FixedRandom(0.999999)
             ),
-            "multiple_choice_label"
+            "type_prompt"
         )
 
     def test_again_projected_interval_is_immediate_retry(self):

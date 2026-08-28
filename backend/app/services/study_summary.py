@@ -1084,7 +1084,8 @@ def _group_training_entries(db, questions):
             "training_records": serialize_training_records(
                 group.data,
                 fingerprint,
-                group.type_group
+                group.type_group,
+                len(group_questions)
             ),
             "previous_training_record": serialize_previous_training_record(
                 group.data,
@@ -1093,7 +1094,8 @@ def _group_training_entries(db, questions):
             "previous_training_records": serialize_previous_training_records(
                 group.data,
                 fingerprint,
-                group.type_group
+                group.type_group,
+                len(group_questions)
             )
         })
 
@@ -1112,7 +1114,8 @@ def _scope_training_records(db, scope_type, source, questions):
         scope_records = serialize_training_records(
             source.data,
             fingerprint,
-            source.type_group
+            source.type_group,
+            len(questions)
         )
         previous_scope_record = serialize_previous_training_record(
             source.data,
@@ -1121,7 +1124,8 @@ def _scope_training_records(db, scope_type, source, questions):
         previous_scope_records = serialize_previous_training_records(
             source.data,
             fingerprint,
-            source.type_group
+            source.type_group,
+            len(questions)
         )
     elif scope_type == "collection":
         fingerprint = collection_training_fingerprint(db, source)

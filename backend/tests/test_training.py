@@ -321,6 +321,77 @@ class TrainingTests(unittest.TestCase):
             group_training_fingerprint(self.db, group)
         )
 
+    def test_single_image_group_training_uses_type_prompt_instead_of_type_all(self):
+        group = QuestionGroup(
+            id=12,
+            type_group="media",
+            name="Solo flag",
+            media=None,
+            data={}
+        )
+        self.db.add(group)
+        self.add_question(
+            1,
+            type_q="media",
+            answer="France",
+            media="/static/france.png",
+            tags=["Geo"],
+            group=group
+        )
+        self.db.commit()
+        fingerprint = group_training_fingerprint(self.db, group)
+        group.data = {
+            "training_records": {
+                "type_all": {
+                    "content_fingerprint": fingerprint,
+                    "best_found_percent": 100,
+                    "best_found_count": 1,
+                    "best_found_elapsed_ms": 2000,
+                    "best_found_at": "2026-06-01T10:00:00+00:00",
+                    "best_time_ms": 2000,
+                    "best_time_at": "2026-06-01T10:00:00+00:00",
+                    "question_count": 1
+                }
+            }
+        }
+        self.db.commit()
+
+        scopes = list_training_scopes(self.db)
+        served_group = next(
+            item for item in scopes["groups"] if item["id"] == group.id
+        )
+        self.assertIn("type_prompt", served_group["training_records"])
+        self.assertNotIn("type_all", served_group["training_records"])
+        self.assertEqual(
+            served_group["training_records"]["type_prompt"]["best_time_ms"],
+            2000
+        )
+
+        response = get_training_items(
+            self.db,
+            scope_type="group",
+            group_id=group.id,
+            image_mode="type_all"
+        )
+
+        self.assertEqual(len(response), 1)
+        self.assertEqual(response[0]["type_q"], "media")
+        self.assertEqual(response[0]["mode"], "type_prompt")
+        self.assertEqual(len(response[0]["items"]), 1)
+
+        record_response = record_training_attempt(
+            self.db,
+            group.id,
+            self.record_request(group, 3000, 1, 1, mode="type_all")
+        )
+
+        self.assertIn("type_prompt", record_response["training_records"])
+        self.assertNotIn("type_all", record_response["training_records"])
+        self.assertEqual(
+            record_response["training_records"]["type_prompt"]["best_time_ms"],
+            2000
+        )
+
     def test_tag_training_is_exact_case_insensitive(self):
         today = date.today()
         group = QuestionGroup(

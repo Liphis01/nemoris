@@ -58,6 +58,20 @@ def normalize_image_mode(mode):
     return value if value is not None else DEFAULT_IMAGE_MODE
 
 
+def normalize_image_mode_for_item_count(mode, item_count=None):
+    normalized = normalize_image_mode(mode)
+
+    try:
+        count = int(item_count)
+    except (TypeError, ValueError):
+        return normalized
+
+    if count <= 1 and normalized == IMAGE_MODE_TYPE_ALL:
+        return IMAGE_MODE_TYPE_PROMPT
+
+    return normalized
+
+
 def _tuned_number(tuning, key, default):
     if not isinstance(tuning, dict):
         return default
@@ -178,6 +192,13 @@ def choose_image_review_mode(
         IMAGE_MODE_TYPE_ALL: 3
     }
     eligible_modes = list(IMAGE_MODES)
+
+    if len(due_questions) <= 1:
+        eligible_modes = [
+            mode
+            for mode in eligible_modes
+            if mode != IMAGE_MODE_TYPE_ALL
+        ]
 
     if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
         eligible_modes = [

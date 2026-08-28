@@ -776,6 +776,11 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(media_response["status"], "ok")
         self.assertEqual(len(map_response["items"]), 2)
         self.assertEqual(len(media_response["items"]), 1)
+        self.assertEqual(media_response["items"][0]["mode"], "type_prompt")
+        self.assertEqual(
+            fixture["image_items"][0].progress.history[-1]["image_mode"],
+            "type_prompt"
+        )
 
         for item in map_response["items"] + media_response["items"]:
             self.assert_grouped_answer_item_shape(item)
@@ -1603,10 +1608,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             [item["question_id"] for item in image_groups[0]["context_items"]],
             [item_b.id]
         )
-        self.assertNotIn(
-            image_groups[0]["mode"],
-            {"multiple_choice_media", "multiple_choice_label"}
-        )
+        self.assertEqual(image_groups[0]["mode"], "type_prompt")
         self.assertEqual(item_b.progress.next_review, date.today())
 
     def test_answer_media_uses_submitted_chunk_size_for_mode_metadata(self):

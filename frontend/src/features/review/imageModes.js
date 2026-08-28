@@ -35,3 +35,30 @@ export function normalizeImageMode(mode) {
 
   return IMAGE_MODES.includes(mode) ? mode : defaultImageMode;
 }
+
+
+export function normalizeImageModeForItemCount(mode, itemCount) {
+  const normalizedMode = normalizeImageMode(mode);
+  const count = Number(itemCount);
+
+  if (
+    Number.isFinite(count) &&
+    count <= 1 &&
+    normalizedMode === IMAGE_MODE_TYPE_ALL
+  ) {
+    return IMAGE_MODE_TYPE_PROMPT;
+  }
+
+  return normalizedMode;
+}
+
+
+export function imageModesForItemCount(itemCount, modes = IMAGE_MODES) {
+  const count = Number(itemCount);
+
+  if (!Number.isFinite(count) || count > 1) {
+    return modes;
+  }
+
+  return modes.filter(mode => mode !== IMAGE_MODE_TYPE_ALL);
+}

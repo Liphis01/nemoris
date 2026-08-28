@@ -16,10 +16,10 @@ import {
 } from "../../review/mapModes";
 import {
   defaultImageMode,
-  IMAGE_MODES,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_MULTIPLE_CHOICE_MEDIA,
   IMAGE_MODE_TYPE_PROMPT,
+  imageModesForItemCount,
   imageModeDetails,
   imageModeLabels,
   normalizeImageMode
@@ -229,6 +229,17 @@ function groupIsAudioOnly(group) {
 }
 
 
+function groupQuestionCount(group) {
+  const count = Number(group?.question_count);
+
+  if (Number.isFinite(count)) return count;
+
+  const items = group?.questions || group?.items || [];
+
+  return Array.isArray(items) ? items.length : 0;
+}
+
+
 function modeConfigForGroup(group) {
   if (group?.type_group === "map") {
     return {
@@ -241,13 +252,16 @@ function modeConfigForGroup(group) {
 
   if (group?.type_group === "media") {
     const audioOnly = groupIsAudioOnly(group);
+    const availableImageModes = imageModesForItemCount(
+      groupQuestionCount(group)
+    );
     const modes = audioOnly
-      ? IMAGE_MODES.filter((mode) => (
+      ? availableImageModes.filter((mode) => (
         mode === IMAGE_MODE_TYPE_PROMPT ||
         mode === IMAGE_MODE_MULTIPLE_CHOICE_LABEL ||
         mode === IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
       ))
-      : IMAGE_MODES;
+      : availableImageModes;
 
     return {
       defaultMode: audioOnly ? IMAGE_MODE_TYPE_PROMPT : defaultImageMode,

@@ -43,7 +43,7 @@ from ..services.image_modes import (
     IMAGE_MULTIPLE_CHOICE_MODES,
     calibrate_image_quality,
     image_mode_difficulty,
-    normalize_image_mode
+    normalize_image_mode_for_item_count
 )
 from ..services.text_modes import (
     DEFAULT_TEXT_MODE,
@@ -750,7 +750,7 @@ def apply_answer_batch(
     submitted_context_count = normalize_context_count(context_count)
     normalized_map_mode = normalize_map_mode(map_mode) if map_mode else None
     normalized_image_mode = (
-        normalize_image_mode(image_mode)
+        normalize_image_mode_for_item_count(image_mode, len(question_ids))
         if image_mode
         else None
     )

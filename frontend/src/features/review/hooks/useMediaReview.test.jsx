@@ -133,7 +133,7 @@ describe("useMediaReview", () => {
     expect(result.current.resultMode).toBe(false);
   });
 
-  it("asks for inline quality after a correct typed image answer", async () => {
+  it("treats a single type_all image as type_prompt with inline quality", async () => {
     const submitAnswer = vi.fn().mockResolvedValue({});
     const onComplete = vi.fn();
     const items = [imageItem(1, "France")];
@@ -143,6 +143,8 @@ describe("useMediaReview", () => {
         mode: IMAGE_MODE_TYPE_ALL
       })
     );
+
+    expect(result.current.mode).toBe(IMAGE_MODE_TYPE_PROMPT);
 
     act(() => {
       result.current.setInput("France");
@@ -173,7 +175,7 @@ describe("useMediaReview", () => {
 
     expect(submitAnswer).toHaveBeenCalledWith(
       { 1: 1 },
-      IMAGE_MODE_TYPE_ALL,
+      IMAGE_MODE_TYPE_PROMPT,
       1,
       { 1: "France" },
       { 1: [1] }

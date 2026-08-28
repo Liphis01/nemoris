@@ -15,7 +15,8 @@ from .collections import (
 )
 from .image_modes import (
     DEFAULT_IMAGE_MODE,
-    normalize_image_mode
+    normalize_image_mode,
+    normalize_image_mode_for_item_count
 )
 from .map_modes import (
     DEFAULT_MAP_MODE,
@@ -385,12 +386,12 @@ def default_training_mode_for_group_type(group_type):
     return None
 
 
-def normalize_training_mode_for_group_type(group_type, mode):
+def normalize_training_mode_for_group_type(group_type, mode, item_count=None):
     if group_type == "map":
         return normalize_map_mode(mode)
 
     if group_type == "media":
-        return normalize_image_mode(mode)
+        return normalize_image_mode_for_item_count(mode, item_count)
 
     if group_type == "text":
         return normalize_text_mode(mode)
@@ -405,6 +406,20 @@ def normalize_training_mode_for_group_type(group_type, mode):
         return normalize_sequence_mode(mode)
 
     return None
+
+
+def _media_training_item_count(item):
+    if isinstance(item, dict) and isinstance(item.get("items"), list):
+        return len(item["items"])
+
+    return 1
+
+
+def _media_training_item_mode(mode, item):
+    return normalize_image_mode_for_item_count(
+        mode,
+        _media_training_item_count(item)
+    )
 
 
 def _serialize_record(record, content_fingerprint=None):
@@ -450,7 +465,12 @@ def serialize_previous_training_record(data, content_fingerprint=None):
     )
 
 
-def serialize_training_records(data, content_fingerprint=None, group_type="map"):
+def serialize_training_records(
+    data,
+    content_fingerprint=None,
+    group_type="map",
+    item_count=None
+):
     data = data or {}
     raw_records = data.get(TRAINING_RECORDS_KEY)
     records = {}
@@ -460,7 +480,8 @@ def serialize_training_records(data, content_fingerprint=None, group_type="map")
         for mode, record in raw_records.items():
             normalized_mode = normalize_training_mode_for_group_type(
                 group_type,
-                mode
+                mode,
+                item_count
             )
 
             serialized = _serialize_record(record, content_fingerprint)
@@ -481,7 +502,8 @@ def serialize_training_records(data, content_fingerprint=None, group_type="map")
 def serialize_previous_training_records(
     data,
     content_fingerprint=None,
-    group_type="map"
+    group_type="map",
+    item_count=None
 ):
     data = data or {}
     raw_records = data.get(TRAINING_RECORDS_KEY)
@@ -492,7 +514,8 @@ def serialize_previous_training_records(
         for mode, record in raw_records.items():
             normalized_mode = normalize_training_mode_for_group_type(
                 group_type,
-                mode
+                mode,
+                item_count
             )
 
             serialized = _serialize_previous_record(
@@ -508,7 +531,8 @@ def serialize_previous_training_records(
     current_records = serialize_training_records(
         data,
         content_fingerprint,
-        group_type
+        group_type,
+        item_count
     )
     legacy_record = serialize_previous_training_record(
         data,
@@ -671,7 +695,8 @@ def list_training_scopes(db):
                     serialize_training_records(
                         group.data,
                         fingerprints_by_group_id.get(group.id),
-                        group.type_group
+                        group.type_group,
+                        question_count
                     )
                     if group.type_group in MODE_GROUP_TYPES
                     else {}
@@ -688,7 +713,8 @@ def list_training_scopes(db):
                     serialize_previous_training_records(
                         group.data,
                         fingerprints_by_group_id.get(group.id),
-                        group.type_group
+                        group.type_group,
+                        question_count
                     )
                     if group.type_group in MODE_GROUP_TYPES
                     else {}
@@ -827,7 +853,8 @@ def record_training_attempt(db, group_id, payload):
     group_data = dict(group.data or {})
     mode = normalize_training_mode_for_group_type(
         group.type_group,
-        payload.mode
+        payload.mode,
+        current_question_count
     )
     default_mode = default_training_mode_for_group_type(group.type_group)
     existing_records = (
@@ -835,14 +862,35 @@ def record_training_attempt(db, group_id, payload):
         if isinstance(group_data.get(TRAINING_RECORDS_KEY), dict)
         else {}
     )
-    existing_record = (
-        _serialize_record(
+    if mode:
+        existing_record = _serialize_record(
             existing_records.get(mode),
             content_fingerprint
         )
-        if mode
-        else serialize_training_record(group_data, content_fingerprint)
-    )
+
+        if not existing_record:
+            for stored_mode, stored_record in existing_records.items():
+                stored_normalized_mode = normalize_training_mode_for_group_type(
+                    group.type_group,
+                    stored_mode,
+                    current_question_count
+                )
+
+                if stored_normalized_mode != mode:
+                    continue
+
+                existing_record = _serialize_record(
+                    stored_record,
+                    content_fingerprint
+                )
+
+                if existing_record:
+                    break
+    else:
+        existing_record = serialize_training_record(
+            group_data,
+            content_fingerprint
+        )
 
     if mode == default_mode and not existing_record:
         existing_record = serialize_training_record(
@@ -895,7 +943,8 @@ def record_training_attempt(db, group_id, payload):
         serialize_training_records(
             group.data,
             content_fingerprint,
-            group.type_group
+            group.type_group,
+            current_question_count
         )
         if group.type_group in MODE_GROUP_TYPES
         else {}
@@ -904,7 +953,8 @@ def record_training_attempt(db, group_id, payload):
         serialize_previous_training_records(
             group.data,
             content_fingerprint,
-            group.type_group
+            group.type_group,
+            current_question_count
         )
         if group.type_group in MODE_GROUP_TYPES
         else {}
@@ -1100,7 +1150,10 @@ def get_training_items(
                 if item.get("type_q") == "map":
                     item["mode"] = normalized_map_mode
                 elif item.get("type_q") == "media":
-                    item["mode"] = normalized_image_mode
+                    item["mode"] = _media_training_item_mode(
+                        normalized_image_mode,
+                        item
+                    )
                 elif item.get("type_q") == "text":
                     item["mode"] = normalized_text_mode
                 elif item.get("type_q") == "cloze":
@@ -1168,7 +1221,10 @@ def get_training_items(
             if item.get("type_q") == "map":
                 item["mode"] = normalized_map_mode
             elif item.get("type_q") == "media":
-                item["mode"] = normalized_image_mode
+                item["mode"] = _media_training_item_mode(
+                    normalized_image_mode,
+                    item
+                )
             elif item.get("type_q") == "text":
                 item["mode"] = normalized_text_mode
             elif item.get("type_q") == "cloze":
@@ -1226,7 +1282,10 @@ def get_training_items(
             if item.get("type_q") == "map":
                 item["mode"] = normalized_map_mode
             elif item.get("type_q") == "media":
-                item["mode"] = normalized_image_mode
+                item["mode"] = _media_training_item_mode(
+                    normalized_image_mode,
+                    item
+                )
             elif item.get("type_q") == "text":
                 item["mode"] = normalized_text_mode
             elif item.get("type_q") == "cloze":

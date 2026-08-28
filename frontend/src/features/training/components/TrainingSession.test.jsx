@@ -273,6 +273,40 @@ describe("TrainingSession", () => {
     expect(screen.getByText("Lis le nom, puis choisis le bon média.")).toBeInTheDocument();
   });
 
+  it("does not offer type_all for a one-item image group", async () => {
+    listTrainingScopes.mockResolvedValue({
+      groups: [
+        {
+          id: 7,
+          type_group: "media",
+          name: "Solo flag",
+          media: null,
+          tags: ["Geo"],
+          question_count: 1,
+          training_record: null,
+          training_records: {}
+        }
+      ],
+      collections: [],
+      tags: []
+    });
+
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Sélectionner Solo flag"
+    }));
+
+    expect(screen.getByRole("button", {
+      name: "Démarrer Nommer pour Solo flag"
+    })).toBeInTheDocument();
+    expect(screen.queryByRole("button", {
+      name: "Démarrer Tout taper pour Solo flag"
+    })).not.toBeInTheDocument();
+    expect(screen.queryByText("Tape tous les médias dans l'ordre que tu veux."))
+      .not.toBeInTheDocument();
+  });
+
   it("starts a selected group mode from the detail panel", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
