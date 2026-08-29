@@ -260,7 +260,7 @@ describe("useMapReview recap sorting", () => {
     expect(onComplete).toHaveBeenCalledWith([]);
   });
 
-  it("asks for inline quality immediately when typed map input matches", () => {
+  it("asks for inline quality after lowercase department input is submitted", () => {
     const reviewZones = [
       zone({ questionId: 267, code: "39", label: "Jura" }),
       zone({ questionId: 234, code: "23", label: "Creuse" })
@@ -273,7 +273,13 @@ describe("useMapReview recap sorting", () => {
     );
 
     act(() => {
-      result.current.handleInputChange("jura");
+      result.current.setInput("jura");
+    });
+
+    expect(result.current.typedRatingFeedback).toBeNull();
+
+    act(() => {
+      expect(result.current.handleSubmit()).toBe(true);
     });
 
     expect(result.current.input).toBe("");

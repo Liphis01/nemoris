@@ -282,7 +282,6 @@ export default function MapReview({
     foundQuestionIdSet,
     finishMap,
     handleChoiceSelect,
-    handleInputChange,
     handleSubmit,
     handleZoneSelect,
     input,
@@ -308,6 +307,7 @@ export default function MapReview({
     sendResult,
     setFocusedCode,
     setFoundZoneQualities,
+    setInput,
     setQuality,
     showRecap,
     showRecapSections,
@@ -1237,7 +1237,7 @@ export default function MapReview({
                 className={wrongInputShakeId ? "review-input-shake" : undefined}
                 ref={inputRef}
                 value={input}
-                onChange={(e) => handleInputChange(e.target.value)}
+                onChange={(e) => setInput(e.target.value)}
                 readOnly={showTypedRating}
                 onKeyDown={(e) => {
                   if (showTypedRating) {

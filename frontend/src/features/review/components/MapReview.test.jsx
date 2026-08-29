@@ -910,7 +910,7 @@ describe("MapReview recap map focus", () => {
     expect(input.selectionEnd).toBe("Alpha".length);
   });
 
-  it("asks inline quality as soon as today's department type_all answer matches", async () => {
+  it("asks inline quality after today's department type_all answer is submitted", async () => {
     const submitAnswer = vi.fn().mockResolvedValue({});
 
     renderMapReview(true, {
@@ -924,6 +924,10 @@ describe("MapReview recap map focus", () => {
     const input = screen.getByPlaceholderText("Tape une zone...");
 
     fireEvent.change(input, { target: { value: "jura" } });
+
+    expect(document.querySelector("[data-map-typed-rating]")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Enter" });
 
     const ratingPanel = document.querySelector("[data-map-typed-rating]");
     expect(ratingPanel).toBeInTheDocument();

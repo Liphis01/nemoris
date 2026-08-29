@@ -761,39 +761,6 @@ export function useMapReview(
     advanceAfterResolved(item);
   }
 
-  function typedInputMatchForValue(value) {
-    const nextInput = String(value || "");
-
-    if (!nextInput.trim()) return null;
-
-    if (mode === MAP_MODE_TYPE_PROMPT) {
-      return currentPromptItem && itemMatchesInput(currentPromptItem, nextInput)
-        ? currentPromptItem
-        : null;
-    }
-
-    if (mode !== MAP_MODE_TYPE_ALL) return null;
-
-    const matches = reviewZones.filter(item =>
-      !foundQuestionIdSet.has(item.question_id) &&
-      itemMatchesInput(item, nextInput)
-    );
-
-    return matches.length === 1 ? matches[0] : null;
-  }
-
-  function handleInputChange(value) {
-    setInput(value);
-
-    if (!inlineTypedRating || clickRatingFeedback || typedRatingFeedback) return;
-
-    const match = typedInputMatchForValue(value);
-
-    if (match) {
-      markFound(match, value);
-    }
-  }
-
   function handleSubmit() {
     if (clickRatingFeedback) return null;
     if (typedRatingFeedback) return null;
@@ -1147,7 +1114,6 @@ export function useMapReview(
     flashCodes: zoneFeedback?.flashCodes || [],
     finishMap,
     handleChoiceSelect,
-    handleInputChange,
     handleSubmit,
     handleZoneSelect,
     input,
