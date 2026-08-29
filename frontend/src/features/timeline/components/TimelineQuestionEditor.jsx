@@ -84,7 +84,6 @@ function EraToggle({ era, onToggle }) {
       type="button"
       onClick={onToggle}
       aria-label="Basculer l'ère (apr. / av. J.-C.)"
-      title="Basculer entre apr. J.-C. et av. J.-C."
       style={{
         alignItems: "center",
         background: isBc ? "rgba(240, 195, 106, 0.12)" : "#101010",

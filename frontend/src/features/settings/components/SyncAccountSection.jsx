@@ -90,7 +90,6 @@ function SyncAccountSectionView({ sync }) {
                 <button
                   type="button"
                   aria-label="Envoyer vers le cloud"
-                  title="Envoyer vers le cloud"
                   onClick={() => sync.doPush(false)}
                   disabled={sync.busy}
                   className="settings-save"

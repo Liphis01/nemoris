@@ -735,7 +735,6 @@ export default function MapEditor({
                         }}
                       >
                         <span
-                          title={labelForTag(tag)}
                           style={{
                             minWidth: 0,
                             overflow: "hidden",
@@ -833,7 +832,6 @@ export default function MapEditor({
             )}
             {/* INFOS */}
             <div
-              title={`${namedZoneCount} named zones out of ${totalCodeCount} unique SVG zones`}
               style={{
                 width: "54px",
                 height: "54px",
@@ -1073,7 +1071,6 @@ export default function MapEditor({
                       }}
                     >
                       <span
-                        title={alias}
                         style={{
                           minWidth: 0,
                           overflow: "hidden",
@@ -1147,7 +1144,6 @@ export default function MapEditor({
               type="button"
               disabled={!hasPendingMapChanges}
               onClick={cancelMapEdits}
-              title={hasPendingMapChanges ? undefined : "Aucune modification à annuler"}
               style={{
                 ...(hasPendingMapChanges
                   ? cancelButtonStyle
@@ -1163,7 +1159,6 @@ export default function MapEditor({
               type="button"
               disabled={!hasPendingMapChanges}
               onClick={saveMapEdits}
-              title={hasPendingMapChanges ? "Sauvegarder" : "Aucune modification à enregistrer"}
               style={{
                 ...(hasPendingMapChanges
                   ? pendingSaveButtonStyle

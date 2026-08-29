@@ -78,7 +78,6 @@ export default function AutoSyncBanner({
         style={syncingStyle}
         role="status"
         aria-label="Synchronisation en cours"
-        title="Synchronisation en cours"
       >
         <span style={syncDotStyle} aria-hidden="true" />
         <span>Synchro</span>

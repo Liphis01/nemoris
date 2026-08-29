@@ -715,7 +715,6 @@ export default function TextGroupReview({
                         type="button"
                         aria-pressed={active}
                         data-text-recap-quality={option.value}
-                        title={option.title}
                         onClick={() => {
                           setSelectedRecapIndex(index);
                           setItemQuality(item.question_id, option.value);
@@ -985,7 +984,6 @@ export default function TextGroupReview({
                             data-text-typed-quality={option.value}
                             onClick={() => ratePendingTypedQuality(option.value)}
                             style={textTypedRatingButtonStyle}
-                            title={option.title}
                           >
                             <span aria-hidden="true" style={keyCapStyle}>
                               {option.value}
@@ -1026,9 +1024,6 @@ export default function TextGroupReview({
           aria-label="Terminer le groupe"
           disabled={!canFinishAnswering}
           onClick={finishAnswering}
-          title={canFinishAnswering
-            ? "Voir le récapitulatif"
-            : "Réponds à au moins un élément avant de terminer"}
           style={{
             ...buttonStyle,
             background: "#1e3a5f",

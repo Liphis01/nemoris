@@ -23,6 +23,7 @@
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 - how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
 - le zoom d'image est un peu naze
+- problème: les qcm ne demandent parfois pas de réflexion (raisonner pas élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
 
 ## quick fixes
 

@@ -184,7 +184,6 @@ export default function ManageSidebar({
           <button
             type="button"
             onClick={onClear}
-            title={ariaLabel}
             aria-label={ariaLabel}
             style={clearInputButtonStyle}
           >
@@ -240,11 +239,6 @@ export default function ManageSidebar({
           <button
             type="button"
             onClick={() => onToggle?.()}
-            title={
-              order === "asc"
-                ? "Ordre croissant"
-                : "Ordre décroissant"
-            }
             style={{
               height: "40px",
               borderRadius: "10px",
@@ -574,7 +568,6 @@ export default function ManageSidebar({
             <button
               type="button"
               onClick={() => onOpenTagTree?.()}
-              title="Organiser les tags en réseau"
               style={{
                 width: "100%",
                 marginTop: "4px",

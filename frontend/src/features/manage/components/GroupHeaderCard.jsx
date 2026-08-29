@@ -184,7 +184,6 @@ export default function GroupHeaderCard({
           {tags.slice(0, 3).map(tag => (
             <span
               key={tag}
-              title={labelFor(tag)}
               style={{
                 background: "#242424",
                 borderRadius: "999px",

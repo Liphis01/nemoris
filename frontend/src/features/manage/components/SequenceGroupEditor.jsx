@@ -172,7 +172,6 @@ const SequenceItemRow = memo(function SequenceItemRow({
           fontSize: "13px",
           opacity: isDerived ? 0.3 : 1
         }}
-        title={isDerived ? "Ordre calculé" : "Glisser pour réordonner"}
       >
         {isDerived ? "∑" : "⠿"}
       </span>
@@ -754,7 +753,6 @@ export default function SequenceGroupEditor({
               type="button"
               onClick={cancelChanges}
               disabled={!hasUnsavedChanges}
-              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
               style={
                 hasUnsavedChanges
                   ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }

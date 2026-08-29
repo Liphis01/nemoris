@@ -492,7 +492,6 @@ function MenuPackCarousel({
               showPrevious();
             }}
             aria-label="Pack précédent"
-            title="Pack précédent"
           >
             ‹
           </button>
@@ -505,7 +504,6 @@ function MenuPackCarousel({
               showNext();
             }}
             aria-label="Pack suivant"
-            title="Pack suivant"
           >
             ›
           </button>
@@ -525,7 +523,6 @@ function MenuPackCarousel({
               }}
               aria-label={`Voir ${pack.name || `le pack ${index + 1}`}`}
               aria-pressed={index === activeIndex}
-              title={`Voir ${pack.name || `le pack ${index + 1}`}`}
             />
           ))}
         </div>
@@ -784,7 +781,6 @@ export default function Menu({
               className="menu-notice-close"
               onClick={onDismissStartupNotice}
               aria-label="Masquer"
-              title="Masquer"
             >
               ×
             </button>

@@ -21,7 +21,6 @@ export default function FavoriteToggleButton({
       type="button"
       aria-label={label}
       aria-pressed={Boolean(favorite)}
-      title={label}
       className={
         `favorite-toggle${favorite ? " favorite-toggle-on" : ""}` +
         `${pulsing ? " favorite-toggle-pulse" : ""}`

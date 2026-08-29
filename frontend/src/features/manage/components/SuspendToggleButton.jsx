@@ -4,30 +4,16 @@ import "./ManageCardActions.css";
 
 // Media-player convention: the icon shows what the click will *do*, not the
 // state it is in -- pause while the card is active, play once it is suspended.
-function titleFor(scope, suspended, mixed) {
+function labelFor(scope, suspended) {
   if (scope === "group") {
     return suspended
-      ? {
-        title: "Groupe en pause : aucune de ses questions n'est révisée. Cliquer pour tout reprendre.",
-        aria: "Reprendre toutes les questions du groupe"
-      }
-      : {
-        title: mixed
-          ? "Une partie du groupe est en pause. Cliquer pour suspendre tout le groupe."
-          : "Suspendre tout le groupe : ses questions ne seront plus proposées en révision.",
-        aria: "Suspendre toutes les questions du groupe"
-      };
+      ? "Reprendre toutes les questions du groupe"
+      : "Suspendre toutes les questions du groupe";
   }
 
   return suspended
-    ? {
-      title: "En pause : cette question n'est plus révisée. Cliquer pour la reprendre.",
-      aria: "Reprendre la question"
-    }
-    : {
-      title: "Suspendre : cette question ne sera plus proposée en révision.",
-      aria: "Suspendre la question"
-    };
+    ? "Reprendre la question"
+    : "Suspendre la question";
 }
 
 export default function SuspendToggleButton({
@@ -39,7 +25,7 @@ export default function SuspendToggleButton({
 }) {
   const [pulsing, setPulsing] = useState(false);
   const pulseTimeoutRef = useRef(null);
-  const { title, aria } = titleFor(scope, suspended, mixed);
+  const aria = labelFor(scope, suspended);
 
   useEffect(() => () => {
     if (pulseTimeoutRef.current) {
@@ -58,7 +44,6 @@ export default function SuspendToggleButton({
       type="button"
       aria-label={aria}
       aria-pressed={Boolean(suspended)}
-      title={title}
       disabled={disabled}
       className={
         `suspend-toggle${stateClass}${pulsing ? " suspend-toggle-pulse" : ""}`

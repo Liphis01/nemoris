@@ -183,7 +183,6 @@ export default function QuestionCard({
 
           {q.media && (
             <div
-              title="Image"
               style={{
                 border: "1px solid rgba(126, 226, 168, 0.35)",
                 borderRadius: "999px",
@@ -249,7 +248,6 @@ export default function QuestionCard({
             {(q.tags || []).slice(0, 3).map(tag => (
               <div
                 key={tag}
-                title={labelFor(tag)}
                 style={{
                   maxWidth: "80px",
                   padding: "1px 6px",
@@ -286,7 +284,6 @@ export default function QuestionCard({
             */}
             {playlistNames.length > 0 && (
               <div
-                title={`Playlists : ${playlistNames.join(", ")}`}
                 style={{
                   maxWidth: "130px",
                   padding: "1px 6px",

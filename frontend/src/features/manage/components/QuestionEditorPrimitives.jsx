@@ -493,7 +493,6 @@ export function ImageMediaField({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap"
               }}
-              title={mediaValue}
             >
               {mediaValue}
             </div>
@@ -913,7 +912,7 @@ export function MediaPoolField({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            title="Gérer les images"
+            aria-label="Gérer les images"
             style={{
               background: "#101010",
               border: "1px solid #2f2f2f",
@@ -933,7 +932,7 @@ export function MediaPoolField({
             type="button"
             onClick={() => setOpen(true)}
             disabled={!onUploadFile && !onImportMediaUrl}
-            title="Ajouter des images"
+            aria-label="Ajouter des images"
             style={{
               alignItems: "center",
               background: "#181818",
@@ -967,7 +966,7 @@ export function MediaPoolField({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            title="Gérer les images"
+            aria-label="Gérer les images"
             style={{
               background: "#101010",
               border: "1px solid #2f2f2f",
@@ -1182,7 +1181,7 @@ export function MediaPoolField({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!onUploadFile && !onImportMediaUrl}
-                title="Collez une image (Ctrl+V) ou cliquez pour en importer une"
+                aria-label="Importer une image"
                 style={{
                   alignItems: "center",
                   background: "#141414",
@@ -1426,7 +1425,6 @@ export function QuestionEditorActions({
         type="button"
         disabled={isSubmitDisabled}
         onClick={onSubmit}
-        title={isSubmitDisabled ? "Aucune modification à enregistrer" : undefined}
         style={submitStyle}
       >
         {showPendingDot && (
@@ -1440,7 +1438,6 @@ export function QuestionEditorActions({
           type="button"
           disabled={isCancelDisabled}
           onClick={onCancel}
-          title={isCancelDisabled ? "Aucune modification à annuler" : undefined}
           style={cancelStyle}
         >
           Annuler

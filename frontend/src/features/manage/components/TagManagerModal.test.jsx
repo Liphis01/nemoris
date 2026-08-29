@@ -97,7 +97,7 @@ describe("TagManagerModal", () => {
 
     expect(screen.getAllByText("#Bible")).toHaveLength(2);
     fireEvent.click(screen.getAllByText("#Bible")[0]);
-    expect(screen.getAllByTitle("Plusieurs parents")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Plusieurs parents")).toHaveLength(2);
     expect(screen.getAllByText(/Littérature$/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Religion$/).length).toBeGreaterThan(0);
   });

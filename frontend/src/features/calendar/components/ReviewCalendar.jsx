@@ -911,7 +911,6 @@ function GroupEventCard({
           {tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              title={labelFor(tag)}
               style={{
                 background: "#242424",
                 borderRadius: "999px",
@@ -1412,7 +1411,7 @@ export default function ReviewCalendar({
               <button
                 onClick={() => moveMonth(-1)}
                 style={navButtonStyle}
-                title="Mois précédent"
+                aria-label="Mois précédent"
               >
                 ←
               </button>
@@ -1439,7 +1438,7 @@ export default function ReviewCalendar({
                 <button
                   onClick={() => moveMonth(1)}
                   style={navButtonStyle}
-                  title="Mois suivant"
+                  aria-label="Mois suivant"
                 >
                   →
                 </button>
@@ -1556,10 +1555,6 @@ export default function ReviewCalendar({
                     : "",
                   cellBoxShadow === "none" ? "" : cellBoxShadow
                 ].filter(Boolean).join(", ") || "none";
-                const cellTitle = [
-                  selectedQuestionHint,
-                  fullSummaryLabel
-                ].filter(Boolean).join("\n");
                 const cellAriaDetails = [
                   fullSummaryLabel,
                   selectedQuestionHint
@@ -1569,7 +1564,6 @@ export default function ReviewCalendar({
                   <button
                     key={dateKey}
                     onClick={() => selectDate(dateKey)}
-                    title={cellTitle || undefined}
                     aria-label={`${date.getDate()} ${monthFormatter.format(date)}${cellAriaDetails ? `. ${cellAriaDetails}` : ""}`}
                     style={{
                       boxSizing: "border-box",
@@ -1615,11 +1609,6 @@ export default function ReviewCalendar({
 
                       {hasEvents && (
                         <span
-                          title={
-                            scheduledCount > 0
-                              ? `${scheduledCount} échéance${scheduledCount > 1 ? "s" : ""} ce jour${historyCount > 0 ? ` · ${historyCount} revue${historyCount > 1 ? "s" : ""} déjà faite${historyCount > 1 ? "s" : ""}` : ""}`
-                              : `${historyCount} revue${historyCount > 1 ? "s" : ""}${hasFailedHistory ? " (dont au moins un échec)" : ""}`
-                          }
                           style={{
                             minWidth: "22px",
                             height: "22px",
@@ -1893,7 +1882,6 @@ export default function ReviewCalendar({
                         {activeGroupTags.slice(0, 3).map((tag) => (
                           <span
                             key={tag}
-                            title={labelFor(tag)}
                             style={{
                               background: "#242424",
                               borderRadius: "999px",

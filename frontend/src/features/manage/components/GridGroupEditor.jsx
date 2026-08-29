@@ -279,7 +279,6 @@ export default function GridGroupEditor({
               style={dirty
                 ? { ...cancelButtonStyle, ...compactButtonStyle }
                 : { ...disabledCancelButtonStyle, ...compactButtonStyle }}
-              title={dirty ? undefined : "Aucune modification à annuler"}
               type="button"
             >
               Annuler

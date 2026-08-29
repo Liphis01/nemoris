@@ -498,7 +498,7 @@ function UpcomingLoad({ upcomingLoad }) {
           const height = Math.round((Number(day.total || 0) / max) * 100);
 
           return (
-            <div className="study-load-day" key={day.date} title={`${formatDate(day.date)} · ${day.total}`}>
+            <div className="study-load-day" key={day.date}>
               <span style={{ height: `${height}%` }} />
               <small>{new Date(`${day.date}T00:00:00`).getDate()}</small>
             </div>

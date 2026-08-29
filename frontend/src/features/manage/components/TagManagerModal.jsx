@@ -160,7 +160,11 @@ function ManagerTree({
             }}
           >
             <span>{nodes[id].kind === "core" ? "◆ " : "#"}{labels[id]}</span>
-            {nodes[id].parents?.length > 1 && <span title="Plusieurs parents" style={{ color: "#806fac" }}> ⑂</span>}
+            {nodes[id].parents?.length > 1 && (
+              <span aria-label="Plusieurs parents" style={{ color: "#806fac" }}>
+                {" "}⑂
+              </span>
+            )}
             <span style={{ float: "right", color: "#666", fontSize: "11px" }}>
               {nodes[id].direct_count || 0}/{nodes[id].total_count || 0}
             </span>

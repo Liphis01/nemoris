@@ -23,6 +23,7 @@ export default function ReviewCalendarAction({ compact = false, nextReview, onOp
     <button
       type="button"
       onClick={onOpen}
+      aria-label="Voir cette question dans le calendrier"
       style={{
         ...calendarButtonStyle,
         ...(compact
@@ -35,7 +36,6 @@ export default function ReviewCalendarAction({ compact = false, nextReview, onOp
           }
           : {})
       }}
-      title="Voir cette question dans le calendrier"
     >
       <span
         style={{

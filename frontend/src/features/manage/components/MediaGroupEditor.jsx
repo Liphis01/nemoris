@@ -341,7 +341,6 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
                   }}
                 >
                   <span
-                    title={alias}
                     style={{
                       minWidth: 0,
                       overflow: "hidden",
@@ -1109,7 +1108,6 @@ export default function MediaGroupEditor({
               type="button"
               onClick={cancelChanges}
               disabled={!hasUnsavedChanges}
-              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
               style={
                 hasUnsavedChanges
                   ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }
@@ -1189,12 +1187,11 @@ export default function MediaGroupEditor({
               }}
             />
             {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                aria-label="Effacer la recherche"
-                title="Effacer la recherche"
-                style={{
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Effacer la recherche"
+                  style={{
                   background: "transparent",
                   border: "none",
                   borderRadius: "50%",

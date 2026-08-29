@@ -662,30 +662,8 @@ function ImageAnswerLabel({ color, label, revealed }) {
 }
 
 function ImageRecapAnswerText({ label }) {
-  const textRef = useRef(null);
-  const [truncated, setTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const element = textRef.current;
-    const update = () => setTruncated(hasTextOverflow(element));
-
-    update();
-
-    const resizeObserver = element && "ResizeObserver" in window
-      ? new window.ResizeObserver(update)
-      : null;
-
-    resizeObserver?.observe(element);
-    window.addEventListener("resize", update);
-
-    return () => {
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", update);
-    };
-  }, [label]);
-
   return (
-    <span ref={textRef} style={imageRecapAnswerTextStyle} title={truncated ? label : undefined}>
+    <span style={imageRecapAnswerTextStyle}>
       {label}
     </span>
   );
@@ -2047,7 +2025,6 @@ export default function MediaReview({
                 top: "7px",
                 width: "30px"
               }}
-              title="Agrandir l'image"
             >
               +
             </button>
@@ -2351,7 +2328,6 @@ export default function MediaReview({
                 top: "8px",
                 width: "30px"
               }}
-              title="Agrandir l'image"
             >
               +
             </button>
@@ -2401,7 +2377,6 @@ export default function MediaReview({
           ...typePromptNavButtonStyle,
           ...(typePromptNavigationDisabled ? typePromptNavButtonDisabledStyle : null)
         }}
-        title={isPrevious ? "Image précédente" : "Image suivante"}
       >
         {isPrevious ? "<" : ">"}
       </button>
@@ -2487,7 +2462,6 @@ export default function MediaReview({
           cursor: selectable ? "pointer" : "default",
           opacity: isResolved && !isActive ? 0.78 : 1
         }}
-        title={revealed ? answerLabel(row.item) : undefined}
       >
         <span style={typePromptRailThumbStyle}>
           {renderTypePromptRailMedia(row, revealed)}
@@ -2542,7 +2516,6 @@ export default function MediaReview({
                 style={inlineTypePrompt
                   ? typePromptInlineRatingButtonStyle
                   : typedRatingButtonStyle}
-                title={option.title}
               >
                 <span aria-hidden="true" style={keyCapStyle}>
                   {option.value}
@@ -2652,7 +2625,6 @@ export default function MediaReview({
         <button
           key={option.value}
           type="button"
-          title={option.title}
           data-image-choice-quality={option.value}
           onClick={() => rateChoice(option.value)}
           style={{
@@ -2727,7 +2699,6 @@ export default function MediaReview({
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.65 : 1
         }}
-        title={title}
       >
         {option.icon}
       </button>
@@ -2822,7 +2793,6 @@ export default function MediaReview({
                           ? imageRecapSelectedPreviewFoundStyle
                           : imageRecapSelectedPreviewMissedStyle)
                       }}
-                      title={answerLabel(selectedRecapRow.item)}
                     >
                       {resolveMediaUrl(selectedRecapRow.item.media) ? (
                         getMediaKind(selectedRecapRow.item.media) === "audio" ? (
@@ -2931,9 +2901,6 @@ export default function MediaReview({
                         ...imageRecapHeaderButtonStyle,
                         ...(isActive ? imageRecapHeaderButtonActiveStyle : {})
                       }}
-                      title={`${label} : trier ${
-                        nextDirection === "asc" ? "croissant" : "décroissant"
-                      }`}
                     >
                       <span style={imageRecapHeaderLabelStyle}>{label}</span>
                       <span
@@ -3690,9 +3657,6 @@ export default function MediaReview({
                   cursor: canFinishReview ? "pointer" : "not-allowed",
                   opacity: canFinishReview ? 1 : 0.55
                 }}
-                title={canFinishReview
-                  ? "Voir le récapitulatif"
-                  : "Réponds à au moins un média avant de terminer"}
               >
                 Terminer
               </button>

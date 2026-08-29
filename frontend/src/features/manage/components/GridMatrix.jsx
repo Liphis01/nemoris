@@ -132,7 +132,6 @@ function AxisControls({ canRemove, count, index, kind, onInsert, onMove, onRemov
         onClick={() => onRemove(index)}
         style={disabledStyle({ ...axisButtonStyle, color: "#c98a8a" }, !canRemove)}
         tabIndex={-1}
-        title={canRemove ? undefined : `Une grille garde au moins une ${noun}.`}
         type="button"
       >
         ✕

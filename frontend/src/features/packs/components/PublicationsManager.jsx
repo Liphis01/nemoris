@@ -633,9 +633,6 @@ function PublishForm({
                 className="pack-export-group"
                 onClick={() => selectPlaylist(playlist)}
                 disabled={playlist.generated}
-                title={playlist.generated
-                  ? "Une playlist générée dépend de ton historique de révision."
-                  : undefined}
               >
                 <span>{playlist.name}</span>
                 <small>

@@ -233,7 +233,6 @@ const TextGroupItemRow = memo(function TextGroupItemRow({
                   }}
                 >
                   <span
-                    title={alias}
                     style={{
                       minWidth: 0,
                       overflow: "hidden",
@@ -707,7 +706,6 @@ export default function TextGroupEditor({
               type="button"
               onClick={cancelChanges}
               disabled={!hasUnsavedChanges}
-              title={hasUnsavedChanges ? undefined : "Aucune modification à annuler"}
               style={
                 hasUnsavedChanges
                   ? { ...cancelButtonStyle, ...compactHeaderButtonStyle }

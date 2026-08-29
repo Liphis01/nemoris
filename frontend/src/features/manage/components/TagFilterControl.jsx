@@ -280,7 +280,6 @@ export default function TagFilterControl({
         <button
           type="button"
           aria-label="Effacer le filtre tag"
-          title="Effacer le filtre tag"
           onClick={(event) => {
             event.stopPropagation();
             onChange?.("");

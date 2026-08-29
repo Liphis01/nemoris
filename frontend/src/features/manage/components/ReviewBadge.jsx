@@ -110,23 +110,8 @@ export default function ReviewBadge({ progress }) {
   const reviewState = getReviewState(progress);
   const tone = getToneStyle(reviewState.tone);
 
-  const interval = progress?.interval ?? 0;
-  const reps = progress?.reps ?? 0;
-  const lapses = progress?.lapses ?? 0;
-  const dateLabel = reviewState.date
-    ? reviewState.date.toLocaleDateString()
-    : "No review date";
-
-  const title = [
-    `Next review: ${dateLabel}`,
-    `Interval: ${interval} days`,
-    `Reps: ${reps}`,
-    `Lapses: ${lapses}`
-  ].join("\n");
-
   return (
     <div
-      title={title}
       style={{
         display: "inline-flex",
         alignItems: "center",

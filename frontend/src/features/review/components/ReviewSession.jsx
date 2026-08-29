@@ -30,7 +30,6 @@ function RelearningBadge({ compact = false }) {
   return (
     <div
       data-relearning-badge
-      title="Question ratée : elle revient jusqu'à ce qu'elle soit sue. Les essais suivants ne comptent pas comme de nouveaux oublis."
       style={{
         alignItems: "center",
         background: "#3a2413",
@@ -59,7 +58,6 @@ function RelearningCountChip({ count, compact = false }) {
   return (
     <div
       data-relearning-count
-      title="Questions ratées à revoir avant la fin de la session. Elles ne sont pas comptées dans le total."
       style={{
         alignItems: "center",
         background: "#241a10",
@@ -462,7 +460,6 @@ export default function ReviewSession({
                 <button
                   type="button"
                   onClick={skipToSessionEnd}
-                  title="Terminer la session sans refaire les questions en réapprentissage"
                   style={{
                     background: "#1f1f1f",
                     border: "1px solid #333",
@@ -831,7 +828,6 @@ export default function ReviewSession({
                   <button
                     type="button"
                     onClick={skipToSessionEnd}
-                    title="Terminer la session sans refaire les questions en réapprentissage"
                     style={{
                       background: "#1f1f1f",
                       border: "1px solid #333",

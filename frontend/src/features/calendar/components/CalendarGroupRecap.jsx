@@ -220,7 +220,7 @@ export default function CalendarGroupRecap({
             {groupTags.length > 0 && (
               <div style={chipRowStyle}>
                 {groupTags.slice(0, 3).map((tag) => (
-                  <span key={tag} title={labelFor(tag)} style={tagChipStyle}>
+                  <span key={tag} style={tagChipStyle}>
                     #{labelFor(tag)}
                   </span>
                 ))}
@@ -237,7 +237,6 @@ export default function CalendarGroupRecap({
               onClick={onClose}
               style={closeButtonStyle}
               aria-label="Fermer le récap"
-              title="Fermer"
             >
               ×
             </button>

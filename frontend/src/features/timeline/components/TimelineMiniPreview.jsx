@@ -136,7 +136,6 @@ export default function TimelineMiniPreview({ timeline }) {
         {bands.map((band) => (
           <div
             key={band.id}
-            title={band.label}
             style={{
               position: "absolute",
               left: `${band.left}%`,

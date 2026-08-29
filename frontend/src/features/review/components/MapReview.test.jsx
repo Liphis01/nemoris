@@ -1000,7 +1000,7 @@ describe("MapReview recap map focus", () => {
 
     // Only the binary relearning choice is offered, never the four-way
     // Faux/Dur/Bon/Facile scale — none of that nuance is ever re-sent as a grade.
-    expect(bulkButtons.map(button => button.title)).toEqual([
+    expect(bulkButtons.map(button => button.getAttribute("aria-label"))).toEqual([
       "Appliquer aux zones trouvées : Encore",
       "Appliquer aux zones trouvées : Acquis"
     ]);

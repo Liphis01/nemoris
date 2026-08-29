@@ -183,7 +183,7 @@ describe("Menu", () => {
     expect(await screen.findByText("Capitales du monde")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Voir Capitales du monde" })
-    ).toHaveAttribute("title", "Voir Capitales du monde");
+    ).not.toHaveAttribute("title");
 
     fireEvent.click(screen.getByRole("button", { name: "Étudier Europe" }));
 

@@ -1161,9 +1161,6 @@ export default function MapReview({
                   ...autoZoomToggleStyle,
                   ...(autoZoomEnabled ? autoZoomToggleOnStyle : autoZoomToggleOffStyle)
                 }}
-                title={autoZoomEnabled
-                  ? "Désactiver le zoom automatique"
-                  : "Activer le zoom automatique"}
               >
                 Zoom auto
               </button>
@@ -1189,7 +1186,6 @@ export default function MapReview({
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => rateClickAnswer(option.value)}
                           style={typedRatingButtonStyle}
-                          title={option.title}
                         >
                           <span aria-hidden="true" style={choiceKeyBadgeStyle}>
                             {option.value}
@@ -1310,7 +1306,6 @@ export default function MapReview({
                             inputRef.current?.focus({ preventScroll: true });
                           }}
                           style={typedInputRatingButtonStyle}
-                          title={option.title}
                         >
                           <span aria-hidden="true" style={choiceKeyBadgeStyle}>
                             {option.value}
@@ -1415,7 +1410,6 @@ export default function MapReview({
                       <button
                         key={option.value}
                         type="button"
-                        title={option.title}
                         data-map-choice-quality={option.value}
                         onClick={() => rateChoice(option.value)}
                         style={{
@@ -1523,9 +1517,6 @@ export default function MapReview({
                     cursor: canFinishReview ? "pointer" : "not-allowed",
                     opacity: canFinishReview ? 1 : 0.55
                   }}
-                  title={canFinishReview
-                    ? "Voir le récapitulatif"
-                    : "Réponds à au moins une zone avant de terminer"}
                 >
                   Terminer
                 </button>
@@ -1659,9 +1650,6 @@ export default function MapReview({
                       ? autoZoomToggleOnStyle
                       : autoZoomToggleOffStyle)
                   }}
-                  title={recapAutoZoomEnabled
-                    ? "Désactiver le zoom automatique"
-                    : "Activer le zoom automatique"}
                 >
                   Zoom auto
                 </button>
@@ -1694,9 +1682,6 @@ export default function MapReview({
                           ...recapHeaderButtonStyle,
                           ...(isActive ? recapHeaderButtonActiveStyle : {})
                         }}
-                        title={`${label} : trier ${
-                          nextDirection === "asc" ? "croissant" : "décroissant"
-                        }`}
                       >
                         <span style={recapHeaderLabelStyle}>{label}</span>
                         <span
@@ -1766,7 +1751,6 @@ export default function MapReview({
                                     : "#999",
                                 opacity: disabled ? 0.65 : 1
                               }}
-                              title={buttonTitle}
                             >
                               {icon}
                             </button>
@@ -1935,7 +1919,6 @@ export default function MapReview({
                                       ? activeStyle.color
                                       : "#999"
                                   }}
-                                  title={title}
                                 >
                                   {icon}
                                 </button>
