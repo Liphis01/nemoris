@@ -851,7 +851,7 @@ describe("MapReview recap map focus", () => {
     const input = screen.getByPlaceholderText("Tape une zone...");
 
     fireEvent.change(input, { target: { value: "Alpha" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
     rateTypedMapQuality(2);
     fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
 
@@ -880,7 +880,7 @@ describe("MapReview recap map focus", () => {
 
     input.focus();
     fireEvent.change(input, { target: { value: "wrong" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
 
     expect(input).toHaveValue("wrong");
     expect(document.activeElement).toBe(input);
@@ -927,7 +927,7 @@ describe("MapReview recap map focus", () => {
 
     expect(document.querySelector("[data-map-typed-rating]")).not.toBeInTheDocument();
 
-    fireEvent.keyDown(input, { key: "Enter" });
+    expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
 
     const ratingPanel = document.querySelector("[data-map-typed-rating]");
     expect(ratingPanel).toBeInTheDocument();

@@ -757,6 +757,8 @@ export default function MapReview({
     if (!showTypedRating) return undefined;
 
     function handleTypedRatingKeyDown(event) {
+      if (event.defaultPrevented) return;
+
       const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
       const quality = ["1", "2", "3"].includes(event.key)
         ? Number(event.key)
@@ -1257,6 +1259,8 @@ export default function MapReview({
                   }
 
                   if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
                     const matched = handleSubmit();
                     if (matched === false) {
                       setWrongInputShakeId(Date.now());

@@ -40,28 +40,58 @@ test("review session advances a text question", async ({ page }) => {
   ]);
 });
 
-test("map recap sends per-zone quality", async ({ page }) => {
+test("map type_all asks inline quality after Jura is submitted", async ({ page }) => {
+  const relaxedPolicy = {
+    preset: "relaxed",
+    case: "ignore",
+    diacritics: "ignore",
+    spacing: "relaxed",
+    punctuation: "relaxed",
+    fuzzy: "none"
+  };
+  const departmentItems = [
+    {
+      question_id: 267,
+      code: "39",
+      label: "Jura",
+      answer: "Jura",
+      aliases: [],
+      answer_policy: relaxedPolicy,
+      progress: { reps: 3, next_review: "2026-08-29" },
+      projected_intervals: {
+        0: 0,
+        1: 1,
+        2: 4,
+        3: 8
+      }
+    },
+    {
+      question_id: 234,
+      code: "23",
+      label: "Creuse",
+      answer: "Creuse",
+      aliases: [],
+      answer_policy: relaxedPolicy,
+      progress: { reps: 3, next_review: "2026-08-29" },
+      projected_intervals: {
+        0: 0,
+        1: 1,
+        2: 4,
+        3: 8
+      }
+    }
+  ];
   const state = await mockApi(page, {
     review: [
       {
+        presentation_kind: "map_group",
+        group_id: 2,
         type_q: "map",
-        name: "Carte monde",
-        media: "world.svg",
-        items: [
-          {
-            question_id: 10,
-            code: "FR",
-            label: "France",
-            aliases: ["france"],
-            progress: { reps: 0 },
-            projected_intervals: {
-              0: 0,
-              1: 1,
-              2: 4,
-              3: 8
-            }
-          }
-        ]
+        name: "Départements français",
+        media: "departements.svg",
+        mode: "type_all",
+        context_items: departmentItems,
+        items: departmentItems
       }
     ]
   });
@@ -69,27 +99,42 @@ test("map recap sends per-zone quality", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Révision du jour").click();
 
-  await page.getByPlaceholder("Tape une zone...").fill("France");
+  const input = page.getByPlaceholder("Tape une zone...");
+
+  await input.fill("jura");
+  await expect(page.locator("[data-map-typed-rating]")).toHaveCount(0);
+
   await page.keyboard.press("Enter");
 
+  const qualityPanel = page.locator("[data-map-typed-rating]");
+  await expect(qualityPanel).toBeVisible();
+  await expect(qualityPanel).toContainText("Jura");
+  await expect(page.locator("[data-map-typed-quality]")).toHaveCount(3);
+  expect(state.mapAnswerRequests).toEqual([]);
+
+  await page.keyboard.press("Enter");
+  await expect(qualityPanel).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Terminer la carte" }).click();
   await expect(page.getByText("MAP RESULT")).toBeVisible();
   await expect(page.getByText("réussite", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Valider" }).click();
 
-  // The queue is empty, so the session ends on its completion panel; returning
-  // to the menu is an explicit click from there.
-  await expect(
-    page.getByRole("heading", { name: "Session terminée" })
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Retour au menu" }).click();
-
-  await expect(page.getByText("Session terminée")).toBeVisible();
+  await expect.poll(() => state.mapAnswerRequests.length).toBe(1);
   expect(state.mapAnswerRequests).toEqual([
     expect.objectContaining({
       mode: "type_all",
       items: {
-        10: 2
+        267: 2,
+        234: 0
+      },
+      answers: {
+        267: "jura"
+      },
+      candidates: {
+        267: [267, 234],
+        234: [267, 234]
       },
       review_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
     })
