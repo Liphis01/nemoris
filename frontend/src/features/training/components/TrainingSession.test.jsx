@@ -263,7 +263,7 @@ describe("TrainingSession", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
 
-    expect(screen.getByText("Modes d'entrainement")).toBeInTheDocument();
+    expect(screen.getByText("Modes d'entraînement")).toBeInTheDocument();
     expect(screen.getByText("Tape toutes les zones dans l'ordre que tu veux.")).toBeInTheDocument();
     expect(screen.getByText("Regarde la zone surlignée, puis choisis le nom.")).toBeInTheDocument();
 
@@ -330,6 +330,7 @@ describe("TrainingSession", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
     expect(screen.queryByRole("button", { name: "Étudier ce groupe" }))
       .not.toBeInTheDocument();
+    expect(screen.queryByText(/Étudier/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du groupe Europe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
@@ -340,6 +341,7 @@ describe("TrainingSession", () => {
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "Tags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sélectionner le tag Geo" }));
     fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du tag Geo" }));
 
     expect(onOpenStudy).toHaveBeenLastCalledWith({
@@ -574,11 +576,21 @@ describe("TrainingSession", () => {
     expect(secondary).not.toHaveTextContent("31s");
   });
 
-  it("starts tag training directly from a compact tile", async () => {
+  it("selects a tag before starting training from the detail panel", async () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
-    fireEvent.click(screen.getByRole("button", { name: "Démarrer le tag Geo" }));
+    const tagTile = screen.getByRole("button", { name: "Sélectionner le tag Geo" });
+
+    fireEvent.click(tagTile);
+
+    expect(tagTile).toHaveAttribute("aria-pressed", "true");
+    expect(getTrainingItems).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "#Geo" })).toBeInTheDocument();
+
+    const detail = screen.getByRole("heading", { name: "#Geo" }).closest("aside");
+
+    fireEvent.click(within(detail).getByRole("button", { name: "Démarrer le tag Geo" }));
 
     await waitFor(() => {
       expect(getTrainingItems).toHaveBeenCalledWith({
@@ -651,6 +663,7 @@ describe("TrainingSession", () => {
     render(<TrainingSession setMode={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sélectionner le tag Geo" }));
     fireEvent.click(screen.getByRole("button", { name: "Démarrer le tag Geo" }));
 
     await screen.findByLabelText("Réponse");

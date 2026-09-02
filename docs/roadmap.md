@@ -28,6 +28,7 @@
 - bug dans l'import des packs avec la question du tag merging
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
 - mettre un bouton supprimer le pack si on l'a importé par erreur
+- menu study à améliorer
 
 ## quick fixes
 

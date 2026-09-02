@@ -363,6 +363,40 @@ function questionCountLabel(count) {
 }
 
 
+function questionCountWord(count) {
+  return Number(count) > 1 ? "questions" : "question";
+}
+
+
+function tagIdentity(tag) {
+  return tag?.id || tag?.key || tag?.label || tag?.name || "";
+}
+
+
+function tagLabel(tag) {
+  return tag?.label || tag?.name || tag?.key || tag?.id || "";
+}
+
+
+function tagQuestionCount(tag) {
+  const value = Number(tag?.count ?? tag?.question_count);
+
+  return Number.isFinite(value) ? value : 0;
+}
+
+
+function tagScope(tag) {
+  const label = tagLabel(tag);
+
+  return {
+    type: "tag",
+    id: tagIdentity(tag),
+    label,
+    name: label
+  };
+}
+
+
 function recordTimeLabel(record) {
   return record?.best_time_ms ? formatDuration(record.best_time_ms) : "—";
 }
@@ -477,45 +511,30 @@ function GroupTile({ group, onSelect, selected }) {
 }
 
 
-function TagTile({ onOpenStudy, startScope, tag }) {
-  const label = tag.label || tag.name;
-  const scope = {
-    type: "tag",
-    id: tag.id || tag.key,
-    label,
-    name: label
-  };
+function TagTile({ onSelect, selected, tag }) {
+  const label = tagLabel(tag);
+  const count = tagQuestionCount(tag);
 
   return (
-    <div className="training-tag-tile-frame">
-      <button
-        type="button"
-        aria-label={`Démarrer le tag ${label}`}
-        className="training-scope-tile training-tag-tile"
-        onClick={() => startScope(scope)}
-      >
-        <span className="training-scope-tile-main">
-          <strong>#{label}</strong>
-          <span>{questionCountLabel(tag.count)}</span>
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`Sélectionner le tag ${label}`}
+      className={`training-scope-tile training-tag-tile${selected ? " is-selected" : ""}`}
+      onClick={onSelect}
+    >
+      <span className="training-scope-tile-main">
+        <span className="training-scope-badge training-scope-badge-tag">
+          tag
         </span>
+        <strong>#{label}</strong>
+      </span>
 
-        <span className="training-scope-score">
-          <strong>→</strong>
-          <span>démarrer</span>
-        </span>
-      </button>
-
-      {onOpenStudy && (
-        <button
-          type="button"
-          className="training-study-link"
-          onClick={() => onOpenStudy(scope)}
-          aria-label={`Voir le bilan du tag ${label}`}
-        >
-          Bilan
-        </button>
-      )}
-    </div>
+      <span className="training-scope-score">
+        <strong>{count}</strong>
+        <span>{questionCountWord(count)}</span>
+      </span>
+    </button>
   );
 }
 
@@ -588,7 +607,7 @@ function CollectionDetailPanel({
         />
       </div>
 
-      <div className="training-collection-actions">
+      <div className="training-detail-actions">
         <button
           type="button"
           className="training-start-button"
@@ -611,6 +630,71 @@ function CollectionDetailPanel({
               type: "collection"
             })}
             aria-label={`Voir le bilan de la playlist ${collection.name}`}
+          >
+            Voir le bilan
+          </button>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+
+function TagDetailPanel({
+  onOpenStudy,
+  startScope,
+  tag
+}) {
+  if (!tag) {
+    return (
+      <aside className="training-detail-panel training-detail-empty" aria-label="Détails du tag">
+        Sélectionne un tag.
+      </aside>
+    );
+  }
+
+  const count = tagQuestionCount(tag);
+  const label = tagLabel(tag);
+  const scope = tagScope(tag);
+
+  return (
+    <aside
+      className="training-detail-panel training-detail-panel-tag"
+      aria-label="Détails du tag"
+    >
+      <div className="training-detail-head">
+        <span className="training-scope-badge training-scope-badge-tag">
+          tag
+        </span>
+        <h2>#{label}</h2>
+        <p>{questionCountLabel(count)}</p>
+      </div>
+
+      <div
+        className="training-detail-metrics training-detail-metrics-single"
+        aria-label="Contenu du tag"
+      >
+        <RecordMetric label="Questions" value={String(count)} />
+      </div>
+
+      <div className="training-detail-actions">
+        <button
+          type="button"
+          className="training-start-button"
+          disabled={count <= 0}
+          onClick={() => startScope(scope)}
+          aria-label={`Démarrer le tag ${label}`}
+        >
+          <strong>Démarrer</strong>
+          <span>{questionCountLabel(count)}</span>
+        </button>
+
+        {onOpenStudy && (
+          <button
+            type="button"
+            className="training-study-link"
+            onClick={() => onOpenStudy(scope)}
+            aria-label={`Voir le bilan du tag ${label}`}
           >
             Voir le bilan
           </button>
@@ -696,24 +780,10 @@ function GroupDetailPanel({ group, onOpenStudy, startScope }) {
         <RecordMetric label="Score total" value={formatTotalPercent(totalPercent)} />
       </div>
 
-      {onOpenStudy && (
-        <button
-          type="button"
-          className="training-study-link training-study-link-full"
-          onClick={() => onOpenStudy({
-            ...group,
-            type: "group"
-          })}
-          aria-label={`Voir le bilan du groupe ${group.name}`}
-        >
-          Voir le bilan du groupe
-        </button>
-      )}
-
       {config ? (
         <>
           <div className="training-detail-section-title">
-            Modes d'entrainement
+            Modes d'entraînement
           </div>
           <div className="training-mode-list">
             {config.modes.map(mode => (
@@ -728,17 +798,35 @@ function GroupDetailPanel({ group, onOpenStudy, startScope }) {
           </div>
         </>
       ) : (
-        <button
-          type="button"
-          className="training-start-button"
-          onClick={() => startScope({
-            ...group,
-            type: "group"
-          })}
-        >
-          <strong>Démarrer ce groupe</strong>
-          <span>{questionCountLabel(group.question_count)}</span>
-        </button>
+        <div className="training-detail-actions">
+          <button
+            type="button"
+            className="training-start-button"
+            onClick={() => startScope({
+              ...group,
+              type: "group"
+            })}
+          >
+            <strong>Démarrer ce groupe</strong>
+            <span>{questionCountLabel(group.question_count)}</span>
+          </button>
+        </div>
+      )}
+
+      {onOpenStudy && (
+        <div className="training-detail-secondary-actions">
+          <button
+            type="button"
+            className="training-study-link training-study-link-full"
+            onClick={() => onOpenStudy({
+              ...group,
+              type: "group"
+            })}
+            aria-label={`Voir le bilan du groupe ${group.name}`}
+          >
+            Voir le bilan
+          </button>
+        </div>
       )}
     </aside>
   );
@@ -754,9 +842,11 @@ function ScopeSelector({
   onOpenStudy,
   selectedCollectionId,
   selectedGroupId,
+  selectedTagId,
   setMode,
   setSelectedCollectionId,
-  setSelectedGroupId
+  setSelectedGroupId,
+  setSelectedTagId
 }) {
   const [scopeType, setScopeType] = useState("group");
   const [search, setSearch] = useState("");
@@ -792,6 +882,10 @@ function ScopeSelector({
     () => collections.find(collection => collection.id === selectedCollectionId) || null,
     [collections, selectedCollectionId]
   );
+  const selectedTag = useMemo(
+    () => tags.find(tag => sameId(tagIdentity(tag), selectedTagId)) || null,
+    [selectedTagId, tags]
+  );
 
   useEffect(() => {
     if (scopeType !== "group") {
@@ -824,6 +918,22 @@ function ScopeSelector({
       return collections[0].id;
     });
   }, [collections, scopeType, setSelectedCollectionId]);
+
+  useEffect(() => {
+    if (scopeType !== "tag") {
+      return;
+    }
+
+    setSelectedTagId(currentId => {
+      if (tags.length === 0) return null;
+
+      if (tags.some(tag => sameId(tagIdentity(tag), currentId))) {
+        return currentId;
+      }
+
+      return tagIdentity(tags[0]);
+    });
+  }, [scopeType, setSelectedTagId, tags]);
 
 
 
@@ -864,7 +974,7 @@ function ScopeSelector({
       {!scopesLoading && !scopesError && (
         <>
           <div className="training-selector-controls">
-            <div className="training-segmented" aria-label="Type de scope">
+            <div className="training-segmented" aria-label="Type de sélection">
               <button
                 type="button"
                 aria-pressed={scopeType === "group"}
@@ -912,7 +1022,7 @@ function ScopeSelector({
               {scopeType === "group" ? (
                 <>
                   <section className="training-list-column app-scrollbar" aria-label="Liste des groupes">
-                    <div className="training-scope-grid" aria-label="Groupes d'entrainement">
+                    <div className="training-scope-grid" aria-label="Groupes d'entraînement">
                       {groups.map(group => (
                         <GroupTile
                           group={group}
@@ -935,7 +1045,7 @@ function ScopeSelector({
               ) : scopeType === "collection" ? (
                 <>
                   <section className="training-list-column app-scrollbar" aria-label="Liste des playlists">
-                    <div className="training-scope-grid" aria-label="Playlists d'entrainement">
+                    <div className="training-scope-grid" aria-label="Playlists d'entraînement">
                       {collections.map(collection => (
                         <CollectionTile
                           collection={collection}
@@ -956,18 +1066,32 @@ function ScopeSelector({
                   </div>
                 </>
               ) : (
-                <div className="training-list-column training-list-column-full app-scrollbar">
-                  <div className="training-scope-grid" aria-label="Tags d'entrainement">
-                    {tags.map(tag => (
-                      <TagTile
-                        key={tag.id || tag.key || tag.name}
-                        onOpenStudy={onOpenStudy}
-                        startScope={startScope}
-                        tag={tag}
-                      />
-                    ))}
+                <>
+                  <section className="training-list-column app-scrollbar" aria-label="Liste des tags">
+                    <div className="training-scope-grid" aria-label="Tags d'entraînement">
+                      {tags.map(tag => {
+                        const id = tagIdentity(tag);
+
+                        return (
+                          <TagTile
+                            key={id}
+                            onSelect={() => setSelectedTagId(id)}
+                            selected={sameId(selectedTagId, id)}
+                            tag={tag}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <div className="training-detail-column app-scrollbar">
+                    <TagDetailPanel
+                      onOpenStudy={onOpenStudy}
+                      startScope={startScope}
+                      tag={selectedTag}
+                    />
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
@@ -1057,6 +1181,7 @@ export default function TrainingSession({
   const initialScopeHandledRef = useRef("");
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [selectedTagId, setSelectedTagId] = useState(null);
   const [showCollectionNameField, setShowCollectionNameField] = useState(false);
   const [collectionNameDraft, setCollectionNameDraft] = useState("");
   const currentQuestion = session.questions[session.currentIndex];
@@ -1095,6 +1220,10 @@ export default function TrainingSession({
       setSelectedGroupId(nextScope.id);
     } else if (nextScope.type === "collection") {
       setSelectedCollectionId(nextScope.id);
+    } else if (nextScope.type === "tag") {
+      setSelectedTagId(
+        nextScope.id || nextScope.key || nextScope.label || nextScope.name
+      );
     }
 
     startTrainingScope(nextScope, initialMode);
@@ -1394,9 +1523,11 @@ export default function TrainingSession({
             onOpenStudy={onOpenStudy}
             selectedCollectionId={selectedCollectionId}
             selectedGroupId={selectedGroupId}
+            selectedTagId={selectedTagId}
             setMode={setMode}
             setSelectedCollectionId={setSelectedCollectionId}
             setSelectedGroupId={setSelectedGroupId}
+            setSelectedTagId={setSelectedTagId}
           />
         )}
 
