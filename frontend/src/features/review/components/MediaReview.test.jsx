@@ -646,6 +646,9 @@ describe("MediaReview answer label preview", () => {
     const stage = container.querySelector("[data-image-type-prompt-stage]");
     const rail = container.querySelector("[data-image-type-prompt-rail]");
     const promptBoard = container.querySelector("[data-image-prompt-board]");
+    const promptTile = promptBoard.querySelector("[data-image-prompt-tile]");
+    const promptImage = promptTile.querySelector("[data-image-prompt-img]");
+    const imageViewport = promptImage.parentElement;
 
     expect(container.querySelector("[data-image-active-grid]"))
       .not.toBeInTheDocument();
@@ -654,6 +657,26 @@ describe("MediaReview answer label preview", () => {
       .toHaveLength(1);
     expect(promptBoard.querySelector("[data-image-question-id='2']"))
       .toBeInTheDocument();
+    expect(promptBoard).toHaveStyle({ height: "100%" });
+    expect(promptTile).toHaveStyle({
+      height: "100%",
+      width: "100%"
+    });
+    expect(promptTile.style.gridTemplateRows)
+      .toBe("minmax(0, 1fr) minmax(22px, auto)");
+    expect(imageViewport).toHaveStyle({
+      alignItems: "center",
+      height: "100%",
+      justifyContent: "center",
+      width: "100%"
+    });
+    expect(promptImage).toHaveStyle({
+      height: "100%",
+      maxHeight: "100%",
+      objectFit: "contain",
+      objectPosition: "center",
+      width: "100%"
+    });
     expect(rail.querySelectorAll("[data-image-type-prompt-rail-item]"))
       .toHaveLength(3);
     expect(screen.queryByText("Image surlignée")).not.toBeInTheDocument();

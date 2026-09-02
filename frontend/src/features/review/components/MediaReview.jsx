@@ -249,12 +249,14 @@ const typePromptViewerStyle = {
   display: "grid",
   gap: "12px",
   gridTemplateColumns: "42px minmax(0, 1fr) 42px",
+  height: "100%",
   minHeight: 0
 };
 
 const typePromptBoardStyle = {
   alignItems: "center",
   display: "flex",
+  height: "100%",
   justifyContent: "center",
   margin: "0 auto",
   maxHeight: "100%",
@@ -2082,7 +2084,10 @@ export default function MediaReview({
     );
   }
 
-  function renderImageChoiceTile(row, { prompt = false, selectable = true, keyIndex = null } = {}) {
+  function renderImageChoiceTile(
+    row,
+    { prompt = false, selectable = true, keyIndex = null, fillViewport = false } = {}
+  ) {
     const mediaSrc = resolveMediaUrl(row.item.media);
     const mediaKind = getMediaKind(row.item.media);
     const revealed = isImageAnswerRevealed(row, resultMode);
@@ -2116,6 +2121,8 @@ export default function MediaReview({
     const imageMarkerProps = prompt
       ? { "data-image-prompt-img": true }
       : { "data-image-choice-img": true };
+    const shouldFillMedia = fillViewport || !prompt;
+    const shouldFitPromptMedia = prompt && !fillViewport;
 
     return (
       <div
@@ -2166,8 +2173,12 @@ export default function MediaReview({
           cursor: selectable ? "pointer" : "default",
           display: "grid",
           gap: "10px",
-          gridTemplateRows: prompt ? "auto auto" : "minmax(0, 1fr) minmax(22px, auto)",
-          height: prompt ? "auto" : "100%",
+          gridTemplateRows: fillViewport
+            ? "minmax(0, 1fr) minmax(22px, auto)"
+            : prompt
+              ? "auto auto"
+              : "minmax(0, 1fr) minmax(22px, auto)",
+          height: shouldFillMedia ? "100%" : "auto",
           minHeight: "0",
           minWidth: 0,
           overflow: "hidden",
@@ -2175,7 +2186,7 @@ export default function MediaReview({
           position: "relative",
           textAlign: "left",
           transition: "border 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
-          width: prompt ? "auto" : "100%"
+          width: shouldFillMedia ? "100%" : "auto"
         }}
       >
         {!prompt && keyIndex != null && keyIndex < 9 && !interactionFeedback && (
@@ -2214,12 +2225,12 @@ export default function MediaReview({
                 ? "pointer"
                 : "default",
             display: "flex",
-            height: "100%",
+            height: shouldFillMedia ? "100%" : "auto",
             justifyContent: "center",
             minHeight: 0,
             overflow: "hidden",
             position: "relative",
-            width: prompt ? "auto" : "100%"
+            width: shouldFillMedia ? "100%" : "auto"
           }}
         >
           {mediaSrc ? (
@@ -2237,38 +2248,38 @@ export default function MediaReview({
                 controls
                 playsInline
                 onClick={(event) => event.stopPropagation()}
-                onLoadedMetadata={prompt ? (event) => fitPromptMedia(event.currentTarget) : undefined}
+                onLoadedMetadata={shouldFitPromptMedia ? (event) => fitPromptMedia(event.currentTarget) : undefined}
                 {...imageMarkerProps}
                 style={{
                   background: letterboxPatternBg,
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   boxSizing: "border-box",
                   display: "block",
-                  height: prompt ? "auto" : "100%",
-                  maxHeight: prompt ? "min(56vh, 560px)" : "100%",
+                  height: shouldFillMedia ? "100%" : "auto",
+                  maxHeight: shouldFillMedia ? "100%" : "min(56vh, 560px)",
                   maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
-                  width: prompt ? "auto" : "100%"
+                  width: shouldFillMedia ? "100%" : "auto"
                 }}
               />
             ) : (
               <img
                 src={mediaSrc}
                 alt={revealed ? answerLabel(row.item) : "image"}
-                onLoad={prompt ? (event) => fitPromptMedia(event.currentTarget) : undefined}
+                onLoad={shouldFitPromptMedia ? (event) => fitPromptMedia(event.currentTarget) : undefined}
                 {...imageMarkerProps}
                 style={{
                   background: letterboxPatternBg,
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   boxSizing: "border-box",
                   display: "block",
-                  height: prompt ? "auto" : "100%",
-                  maxHeight: prompt ? "min(56vh, 560px)" : "100%",
+                  height: shouldFillMedia ? "100%" : "auto",
+                  maxHeight: shouldFillMedia ? "100%" : "min(56vh, 560px)",
                   maxWidth: "100%",
                   objectFit: "contain",
                   objectPosition: "center",
-                  width: prompt ? "auto" : "100%"
+                  width: shouldFillMedia ? "100%" : "auto"
                 }}
               />
             )
@@ -2545,6 +2556,7 @@ export default function MediaReview({
           <div data-image-prompt-board style={typePromptBoardStyle}>
             {typePromptStageRow
               ? renderImageChoiceTile(typePromptStageRow, {
+                fillViewport: true,
                 prompt: true,
                 selectable: false
               })
