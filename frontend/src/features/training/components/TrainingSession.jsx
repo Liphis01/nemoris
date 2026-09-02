@@ -27,7 +27,6 @@ import {
 import {
   defaultTextMode,
   TEXT_MODES,
-  TEXT_MODE_TYPE_REVERSE,
   textModeDetails,
   textModeLabels
 } from "../../review/textModes";
@@ -276,9 +275,7 @@ function modeConfigForGroup(group) {
       defaultMode: defaultTextMode,
       details: textModeDetails,
       labels: textModeLabels,
-      modes: group?.reverse_mode_enabled
-        ? TEXT_MODES
-        : TEXT_MODES.filter(mode => mode !== TEXT_MODE_TYPE_REVERSE)
+      modes: TEXT_MODES
     };
   }
 

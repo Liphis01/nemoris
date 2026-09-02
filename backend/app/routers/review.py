@@ -47,7 +47,6 @@ from ..services.image_modes import (
 )
 from ..services.text_modes import (
     DEFAULT_TEXT_MODE,
-    TEXT_MODE_TYPE_REVERSE,
     calibrate_text_quality,
     text_mode_difficulty,
     normalize_text_mode
@@ -84,10 +83,8 @@ from ..services.answer_events import (
 from ..services.answer_policy import (
     candidate_ids_for,
     effective_answer_policy,
-    grade_answer_submission,
-    normalize_answer_text
+    grade_answer_submission
 )
-from ..services.text_groups import text_group_reverse_mode_enabled
 from ..services.cloze import bury_cloze_siblings, grade_cloze_answer
 from ..services.cloze_modes import (
     DEFAULT_CLOZE_MODE,
@@ -759,43 +756,6 @@ def apply_answer_batch(
         if text_mode
         else None
     )
-    if normalized_text_mode == TEXT_MODE_TYPE_REVERSE:
-        grouped_questions = {}
-
-        for question in questions:
-            if question.type_q != "text" or not question.group_id or not question.group:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Le mode inversé est réservé aux groupes texte éligibles."
-                )
-
-            grouped_questions.setdefault(question.group_id, []).append(question)
-
-        all_group_questions = (
-            db.query(Question)
-            .filter(
-                Question.group_id.in_(grouped_questions),
-                Question.type_q == "text"
-            )
-            .all()
-        )
-        all_questions_by_group_id = {}
-
-        for question in all_group_questions:
-            all_questions_by_group_id.setdefault(question.group_id, []).append(question)
-
-        for group_id, group_questions in grouped_questions.items():
-            group = group_questions[0].group
-
-            if not text_group_reverse_mode_enabled(
-                group,
-                all_questions_by_group_id.get(group_id, [])
-            ):
-                raise HTTPException(
-                    status_code=422,
-                    detail="Le mode inversé n'est pas activé ou le groupe est ambigu."
-                )
-
     if normalized_map_mode:
         group_ids = set()
 
@@ -890,20 +850,11 @@ def apply_answer_batch(
         backend_grade = None
 
         if question is not None and answer_provided:
-            if normalized_text_mode == TEXT_MODE_TYPE_REVERSE:
-                expected = normalize_answer_text(question.question, policy)
-                actual = normalize_answer_text(submitted_answer, policy)
-                matched = bool(expected) and actual == expected
-                backend_grade = {
-                    "matched": matched,
-                    "resolved_response_id": question.id if matched else None
-                }
-            else:
-                backend_grade = grade_answer_submission(
-                    question,
-                    submitted_answer,
-                    policy=policy
-                )
+            backend_grade = grade_answer_submission(
+                question,
+                submitted_answer,
+                policy=policy
+            )
             resolved_id = backend_grade.get("resolved_response_id")
 
             if (
@@ -1109,11 +1060,7 @@ def apply_answer_batch(
                     if backend_grade is not None
                     else submitted_answer
                 ),
-                expected_value=(
-                    question.question
-                    if normalized_text_mode == TEXT_MODE_TYPE_REVERSE and question
-                    else question.answer if question else None
-                ),
+                expected_value=question.answer if question else None,
                 type_q="text",
                 presentation_kind=presentation_for_grouped_answer("text"),
                 mode=normalized_text_mode,

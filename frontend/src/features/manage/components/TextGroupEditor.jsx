@@ -20,7 +20,6 @@ import {
 } from "./QuestionEditorPrimitives";
 import AnswerPolicyControl from "./AnswerPolicyControl";
 import { answerPolicyFromGroup } from "./answerPolicyControlUtils";
-import { normalizeAnswerText } from "../../review/answerPolicy";
 
 let tempItemCounter = 0;
 
@@ -64,8 +63,7 @@ function buildSignature(group, tags, items, deletedItemIds) {
     group: {
       name: group?.name || "",
       tags: tags || [],
-      answerPolicy: answerPolicyFromGroup(group),
-      reverseModeEnabled: Boolean(group?.data?.reverse_mode_enabled)
+      answerPolicy: answerPolicyFromGroup(group)
     },
     items: items.map(item => ({
       id: item.id || item.tempId,
@@ -76,31 +74,6 @@ function buildSignature(group, tags, items, deletedItemIds) {
     })),
     deletedItemIds: [...deletedItemIds].sort((a, b) => a - b)
   });
-}
-
-function reverseModeDiagnostic(group, items) {
-  const policy = answerPolicyFromGroup(group);
-  const cues = new Set();
-
-  for (const item of items || []) {
-    if (!String(item.question || "").trim() || !String(item.answer || "").trim()) {
-      return "Chaque paire doit avoir un indice et une réponse.";
-    }
-
-    const cue = normalizeAnswerText(item.answer, policy);
-
-    if (!cue) {
-      return "Chaque réponse doit contenir un indice inversé exploitable.";
-    }
-
-    if (cues.has(cue)) {
-      return "Deux réponses deviennent le même indice avec la politique actuelle.";
-    }
-
-    cues.add(cue);
-  }
-
-  return null;
 }
 
 const compactHeaderInputStyle = {
@@ -332,10 +305,6 @@ export default function TextGroupEditor({
     buildSignature(editableGroup, sharedTags, items, deletedItemIds)
   ), [deletedItemIds, editableGroup, items, sharedTags]);
   const hasUnsavedChanges = currentSignature !== initialSignature;
-  const reverseDiagnostic = useMemo(() => (
-    reverseModeDiagnostic(editableGroup, items)
-  ), [editableGroup, items]);
-  const reverseModeEnabled = Boolean(editableGroup?.data?.reverse_mode_enabled);
 
   useEffect(() => {
     currentGroupRef.current = group;
@@ -420,20 +389,6 @@ export default function TextGroupEditor({
         answer_policy: policy
       }
     }));
-  }, []);
-
-  const updateReverseModeEnabled = useCallback((enabled) => {
-    setEditableGroup(prev => {
-      const data = { ...((prev || {}).data || {}) };
-
-      if (enabled) {
-        data.reverse_mode_enabled = true;
-      } else {
-        delete data.reverse_mode_enabled;
-      }
-
-      return { ...(prev || {}), data };
-    });
   }, []);
 
   const updateItem = useCallback((tempId, patch) => {
@@ -606,8 +561,7 @@ export default function TextGroupEditor({
         group: {
           name: nameForSave,
           tags: sharedTags || [],
-          answer_policy: answerPolicyFromGroup(editableGroup),
-          reverse_mode_enabled: reverseModeEnabled
+          answer_policy: answerPolicyFromGroup(editableGroup)
         },
         items: items.map(serializeItem),
         deleted_item_ids: deletedItemIds
@@ -755,34 +709,6 @@ export default function TextGroupEditor({
           policy={answerPolicyFromGroup(editableGroup)}
           onChange={updateAnswerPolicy}
         />
-
-        <label
-          style={{
-            alignItems: "flex-start",
-            color: reverseDiagnostic && !reverseModeEnabled ? "#777" : "#d4d4d4",
-            display: "flex",
-            fontSize: "13px",
-            gap: "8px"
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={reverseModeEnabled}
-            disabled={Boolean(reverseDiagnostic) && !reverseModeEnabled}
-            onChange={(event) => updateReverseModeEnabled(event.target.checked)}
-          />
-          <span>
-            Autoriser le sens inverse
-            <span style={{ color: "#888", display: "block", fontSize: "12px", marginTop: "2px" }}>
-              La réponse devient l’indice et demande de taper le libellé d’origine.
-            </span>
-            {reverseDiagnostic && (
-              <span style={{ color: "#f3d36a", display: "block", fontSize: "12px", marginTop: "3px" }}>
-                {reverseDiagnostic}
-              </span>
-            )}
-          </span>
-        </label>
 
         <div style={{ alignItems: "center", display: "flex", gap: "8px" }}>
           <button

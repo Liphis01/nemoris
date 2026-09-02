@@ -63,8 +63,7 @@ function normalizeStudyScope(scope) {
       groupId: id,
       name: scope.name || null,
       type_group: scope.type_group || null,
-      audio_only: scope.audio_only,
-      reverse_mode_enabled: scope.reverse_mode_enabled
+      audio_only: scope.audio_only
     };
   }
 
@@ -160,8 +159,7 @@ function scopeToTrainingTarget(scope) {
       id: normalized.id,
       name: normalized.name,
       type_group: normalized.type_group,
-      audio_only: normalized.audio_only,
-      reverse_mode_enabled: normalized.reverse_mode_enabled
+      audio_only: normalized.audio_only
     };
   }
 

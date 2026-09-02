@@ -158,8 +158,7 @@ function scopeToTrainingScope(scope) {
       id: scope.id || scope.groupId || scope.group_id,
       name: scope.name,
       type_group: scope.type_group,
-      audio_only: scope.audio_only,
-      reverse_mode_enabled: scope.reverse_mode_enabled
+      audio_only: scope.audio_only
     };
   }
 
@@ -248,8 +247,7 @@ function groupToTrainingScope(group) {
     id: group.id,
     name: group.name,
     type_group: group.type_group,
-    audio_only: group.audio_only,
-    reverse_mode_enabled: group.reverse_mode_enabled
+    audio_only: group.audio_only
   };
 }
 
@@ -261,10 +259,6 @@ function modesForGroup(group, backendModes = null) {
 
   if (group?.type_group === "media" && group.audio_only) {
     modes = modes.filter(mode => AUDIO_MEDIA_MODES.has(mode));
-  }
-
-  if (group?.type_group === "text" && !group.reverse_mode_enabled) {
-    modes = modes.filter(mode => mode !== "type_reverse");
   }
 
   return modes;

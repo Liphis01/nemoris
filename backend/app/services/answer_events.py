@@ -92,7 +92,6 @@ def direction_for_grouped_answer(type_q, mode):
     if type_q == "text":
         return {
             "match": "prompt_to_answer_match",
-            "type_reverse": "answer_to_prompt",
             "type_all": "prompt_to_answer"
         }.get(mode, "prompt_to_answer")
 

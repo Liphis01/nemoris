@@ -45,8 +45,7 @@ ImageMode = Literal[
 
 TextMode = Literal[
     "type_all",
-    "match",
-    "type_reverse"
+    "match"
 ]
 
 ClozeMode = Literal["fill_blank"]
@@ -78,7 +77,6 @@ TrainingGroupMode = Literal[
     "multiple_choice_media",
     "multiple_choice_image",
     "match",
-    "type_reverse",
     "type_position",
     "gap_fill",
     "reorder",
@@ -761,8 +759,6 @@ class TextGroupItemsGroupUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
     answer_policy: Optional[dict[str, Any]] = None
-
-    reverse_mode_enabled: Optional[bool] = None
 
 
 class TextGroupItemsBulkUpdate(BaseModel):

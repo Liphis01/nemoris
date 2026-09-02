@@ -23,7 +23,6 @@ from .tag_hierarchy import (
     parent_map,
     resolve_tag_id
 )
-from .text_groups import text_group_reverse_mode_enabled
 from .training import (
     MODE_GROUP_TYPES,
     collection_training_fingerprint,
@@ -208,10 +207,6 @@ def _group_scope(db, group_id):
     audio_only = group.type_group == "media" and _media_group_audio_only(
         questions
     )
-    reverse_mode_enabled = (
-        group.type_group == "text" and
-        text_group_reverse_mode_enabled(group, questions)
-    )
 
     return {
         "scope": {
@@ -223,8 +218,7 @@ def _group_scope(db, group_id):
             "media": group.media,
             "pack_guid": group.pack_guid,
             "question_count": len(questions),
-            "audio_only": audio_only,
-            "reverse_mode_enabled": reverse_mode_enabled
+            "audio_only": audio_only
         },
         "source": group,
         "questions": questions
@@ -1072,10 +1066,6 @@ def _group_training_entries(db, questions):
             "audio_only": (
                 group.type_group == "media" and
                 _media_group_audio_only(group_questions)
-            ),
-            "reverse_mode_enabled": (
-                group.type_group == "text" and
-                text_group_reverse_mode_enabled(group, group_questions)
             ),
             "training_record": serialize_training_record(
                 group.data,

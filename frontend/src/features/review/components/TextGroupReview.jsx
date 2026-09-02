@@ -2,8 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import RichText from "../../../shared/RichText";
 import {
   normalizeTextMode,
-  TEXT_MODE_MATCH,
-  TEXT_MODE_TYPE_REVERSE
+  TEXT_MODE_MATCH
 } from "../textModes";
 import {
   GOT_IT_QUALITY,
@@ -11,7 +10,7 @@ import {
   partitionRelearningQualities,
   relearningQualityOptions
 } from "../relearningGrades";
-import { matchesAnswerValue, normalizeAnswerText } from "../answerPolicy";
+import { matchesAnswerValue } from "../answerPolicy";
 
 const qualityOptions = [
   { value: 0, icon: "❌", title: "Faux" },
@@ -130,14 +129,7 @@ const textTypedRatingButtonStyle = {
   padding: "6px 8px"
 };
 
-function itemAccepts(item, guess, reverse = false) {
-  if (reverse) {
-    const policy = item?.answer_policy;
-    const expected = normalizeAnswerText(item?.question, policy);
-
-    return Boolean(expected) && normalizeAnswerText(guess, policy) === expected;
-  }
-
+function itemAccepts(item, guess) {
   return matchesAnswerValue(item, guess);
 }
 
@@ -166,10 +158,12 @@ export default function TextGroupReview({
 }) {
   const mode = normalizeTextMode(requestedMode);
   const isMatch = mode === TEXT_MODE_MATCH;
-  const isReverse = mode === TEXT_MODE_TYPE_REVERSE;
+  const isSelfGradedTypeAll = showQualityControls && !isMatch;
   const items = useMemo(() => reviewItems || [], [reviewItems]);
 
   const [phase, setPhase] = useState("answer");
+  const [selfGradeIndex, setSelfGradeIndex] = useState(0);
+  const [selfGradeAnswerVisible, setSelfGradeAnswerVisible] = useState(false);
   // type_all
   const [inputs, setInputs] = useState({});
   const [foundIds, setFoundIds] = useState(() => new Set());
@@ -208,19 +202,26 @@ export default function TextGroupReview({
     return colors;
   }, [items]);
 
+  const selfGradeAllResolved = items.length > 0 && items.every(
+    item => qualities[item.question_id] !== undefined
+  );
   const allResolved = isMatch
     ? matchedIds.size >= items.length
+    : isSelfGradedTypeAll
+      ? selfGradeAllResolved
     : foundIds.size >= items.length;
   // Same M0 trust rule as the map and media groups: a generic completion
   // button must not be able to fail every item at once before the learner has
   // touched anything. Any recorded attempt counts, right or wrong --
   // answersByQuestionId is written both on a typed guess and on a first match
   // pick, so a wrong-but-real attempt still unlocks Terminer.
-  const canFinishAnswering = items.length > 0 && (
-    Object.keys(answersByQuestionId).length > 0 ||
-    foundIds.size > 0 ||
-    matchedIds.size > 0
-  ) && !(showQualityControls && pendingQualityQuestionId !== null);
+  const canFinishAnswering = isSelfGradedTypeAll
+    ? selfGradeAllResolved
+    : items.length > 0 && (
+      Object.keys(answersByQuestionId).length > 0 ||
+      foundIds.size > 0 ||
+      matchedIds.size > 0
+    ) && !(showQualityControls && pendingQualityQuestionId !== null);
 
   const defaultPassQuality = useCallback((item) => {
     return isRelearningGroupItem(group, item)
@@ -229,7 +230,7 @@ export default function TextGroupReview({
   }, [group]);
 
   function finishAnswering() {
-    if (showQualityControls && !isMatch) {
+    if (showQualityControls && !isMatch && !isSelfGradedTypeAll) {
       const unratedFound = items.find(item =>
         foundIds.has(item.question_id) &&
         qualities[item.question_id] === undefined
@@ -246,10 +247,14 @@ export default function TextGroupReview({
     items.forEach(item => {
       const resolvedOk = isMatch
         ? matchedIds.has(item.question_id) && !failedIds.has(item.question_id)
+        : isSelfGradedTypeAll
+          ? qualities[item.question_id] !== undefined
         : foundIds.has(item.question_id);
       const passQuality = qualities[item.question_id] ?? defaultPassQuality(item);
 
-      nextQualities[item.question_id] = resolvedOk ? passQuality : 0;
+      nextQualities[item.question_id] = isSelfGradedTypeAll
+        ? Number(qualities[item.question_id] ?? 0)
+        : resolvedOk ? passQuality : 0;
     });
 
     setQualities(nextQualities);
@@ -281,16 +286,21 @@ export default function TextGroupReview({
       group,
       finalQualities
     );
-    const answers = Object.fromEntries(
-      Object.entries(answersByQuestionId).filter(([questionId]) => questionId in graded)
-    );
+    const shouldSendAnswerEvidence = !isSelfGradedTypeAll;
+    const answers = shouldSendAnswerEvidence
+      ? Object.fromEntries(
+        Object.entries(answersByQuestionId).filter(([questionId]) => questionId in graded)
+      )
+      : undefined;
     const candidateSource = isMatch ? answerOrder : contextItems;
     const candidateIds = candidateSource
       .map(item => item.question_id)
       .filter(id => id != null);
-    const candidates = Object.fromEntries(
-      Object.keys(graded).map(questionId => [questionId, candidateIds])
-    );
+    const candidates = shouldSendAnswerEvidence
+      ? Object.fromEntries(
+        Object.keys(graded).map(questionId => [questionId, candidateIds])
+      )
+      : undefined;
 
     try {
       await Promise.all([
@@ -326,7 +336,7 @@ export default function TextGroupReview({
       setAnswersByQuestionId(prev => ({ ...prev, [item.question_id]: typed }));
     }
 
-    if (itemAccepts(item, typed, isReverse)) {
+    if (itemAccepts(item, typed)) {
       setFoundIds(prev => new Set(prev).add(item.question_id));
       if (showQualityControls) {
         setPendingQualityQuestionId(item.question_id);
@@ -354,7 +364,7 @@ export default function TextGroupReview({
     const duplicate = typed && items.some(candidate =>
       candidate.question_id !== item.question_id &&
       foundIds.has(candidate.question_id) &&
-      itemAccepts(candidate, typed, isReverse)
+      itemAccepts(candidate, typed)
     );
 
     if (duplicate) {
@@ -379,7 +389,7 @@ export default function TextGroupReview({
     }
 
     return false;
-  }, [defaultPassQuality, foundIds, inputs, isReverse, items, showQualityControls]);
+  }, [defaultPassQuality, foundIds, inputs, items, showQualityControls]);
 
   const handleInputKeyDown = useCallback((event, item, index) => {
     if (event.key !== "Enter") return;
@@ -510,6 +520,92 @@ export default function TextGroupReview({
     setQualities(prev => ({ ...prev, [questionId]: quality }));
   }, []);
 
+  const revealSelfGradeAnswer = useCallback(() => {
+    setSelfGradeAnswerVisible(true);
+  }, []);
+
+  const activeSelfGradeItem = items[Math.min(
+    selfGradeIndex,
+    Math.max(0, items.length - 1)
+  )] || null;
+
+  const rateSelfGradeQuality = useCallback((quality = 2) => {
+    if (!activeSelfGradeItem) return;
+
+    const nextQuality = Number(quality);
+    const allowedQualities = isRelearningGroupItem(group, activeSelfGradeItem)
+      ? [0, GOT_IT_QUALITY]
+      : [0, 1, 2, 3];
+
+    if (!allowedQualities.includes(nextQuality)) return;
+
+    setQualities(prev => ({
+      ...prev,
+      [activeSelfGradeItem.question_id]: nextQuality
+    }));
+
+    if (selfGradeIndex >= items.length - 1) return;
+
+    const nextIndex = selfGradeIndex + 1;
+    const nextItem = items[nextIndex];
+
+    setSelfGradeIndex(nextIndex);
+    setSelfGradeAnswerVisible(false);
+
+    if (nextItem) {
+      window.requestAnimationFrame(() => {
+        inputRefs.current[nextItem.question_id]?.focus();
+      });
+    }
+  }, [activeSelfGradeItem, group, items, selfGradeIndex]);
+
+  useEffect(() => {
+    if (phase !== "answer" || !isSelfGradedTypeAll) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (!selfGradeAnswerVisible) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          revealSelfGradeAnswer();
+        }
+        return;
+      }
+
+      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
+      const quality = ["0", "1", "2", "3"].includes(event.key)
+        ? Number(event.key)
+        : digitMatch
+          ? Number(digitMatch[1])
+          : null;
+
+      if (quality !== null) {
+        event.preventDefault();
+        rateSelfGradeQuality(quality);
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        rateSelfGradeQuality(
+          activeSelfGradeItem ? defaultPassQuality(activeSelfGradeItem) : 2
+        );
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    activeSelfGradeItem,
+    defaultPassQuality,
+    isSelfGradedTypeAll,
+    phase,
+    rateSelfGradeQuality,
+    revealSelfGradeAnswer,
+    selfGradeAnswerVisible
+  ]);
+
   const ratePendingTypedQuality = useCallback((quality = 2) => {
     if (pendingQualityQuestionId === null) return;
 
@@ -638,9 +734,7 @@ export default function TextGroupReview({
 
   const headerLabel = isMatch
     ? "TEXTE · Associer"
-    : isReverse
-      ? "TEXTE · Inverser"
-      : "TEXTE · Tout taper";
+    : "TEXTE · Tout taper";
 
   if (phase === "recap") {
     return (
@@ -924,7 +1018,111 @@ export default function TextGroupReview({
     );
   }
 
-  // type_all
+  if (isSelfGradedTypeAll) {
+    const item = activeSelfGradeItem;
+    const relearning = item ? isRelearningGroupItem(group, item) : false;
+    const selfGradeOptions = relearning ? relearningQualityOptions : qualityOptions;
+    const selfGradeButtonColors = relearning
+      ? relearningButtonColors
+      : qualityButtonColors;
+    const progressLabel = items.length > 0
+      ? `${Math.min(selfGradeIndex + 1, items.length)} / ${items.length}`
+      : "0 / 0";
+
+    return (
+      <div data-text-self-grade style={containerStyle}>
+        <div style={{ alignItems: "center", color: "#8fc7ff", display: "flex", fontSize: "12px", fontWeight: 800, gap: "10px", justifyContent: "space-between", letterSpacing: 1 }}>
+          <span>TEXTE · Rappel</span>
+          <span style={{ color: "#777", fontSize: "11px", letterSpacing: 0 }}>{progressLabel}</span>
+        </div>
+        {item && (
+          <div
+            data-text-self-grade-card
+            style={{
+              background: "#161616",
+              border: "1px solid #2a2a2a",
+              borderRadius: "10px",
+              display: "grid",
+              gap: "18px",
+              padding: "18px"
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={textTypedRatingLabelStyle}>Question</div>
+              <div style={{ color: "#f3f3f3", fontSize: "24px", fontWeight: 800, lineHeight: 1.35 }}>
+                <RichText>{item.question}</RichText>
+              </div>
+            </div>
+
+            {!selfGradeAnswerVisible ? (
+              <div style={{ display: "grid", gap: "10px" }}>
+                <input
+                  ref={(element) => { inputRefs.current[item.question_id] = element; }}
+                  aria-label="Réponse facultative"
+                  value={inputs[item.question_id] || ""}
+                  onChange={(event) => handleInputChange(item.question_id, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    revealSelfGradeAnswer();
+                  }}
+                  placeholder="Réponse facultative…"
+                  style={inputStyle}
+                />
+                <button
+                  type="button"
+                  onClick={revealSelfGradeAnswer}
+                  style={{ ...buttonStyle, justifySelf: "start" }}
+                >
+                  Voir la réponse
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ borderTop: "1px solid #2a2a2a", display: "grid", gap: "8px", paddingTop: "16px" }}>
+                  <div style={textTypedRatingLabelStyle}>Réponse</div>
+                  <div style={{ color: "#7ee2a8", fontSize: "20px", fontWeight: 800, lineHeight: 1.4 }}>
+                    <RichText>{item.answer}</RichText>
+                  </div>
+                </div>
+                <div data-text-self-grade-rating style={textTypedRatingStyle}>
+                  <span style={textTypedRatingLabelStyle}>Qualité</span>
+                  <div style={textTypedRatingControlsStyle}>
+                    {selfGradeOptions.map(option => {
+                      const colors = selfGradeButtonColors[option.value];
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={qualities[item.question_id] === option.value}
+                          data-text-self-grade-quality={option.value}
+                          onClick={() => rateSelfGradeQuality(option.value)}
+                          style={{
+                            ...textTypedRatingButtonStyle,
+                            background: colors.background,
+                            border: colors.border,
+                            color: colors.color
+                          }}
+                        >
+                          <span aria-hidden="true" style={keyCapStyle}>
+                            {option.value}
+                          </span>
+                          <span>{option.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Training type_all keeps checked typing; scheduled type_all uses self-grading.
   return (
     <div style={containerStyle}>
       <div style={{ color: "#8fc7ff", fontSize: "12px", fontWeight: 800, letterSpacing: 1 }}>
@@ -966,12 +1164,12 @@ export default function TextGroupReview({
                   whiteSpace: "nowrap"
                 }}
               >
-                <RichText>{isReverse ? item.answer : item.question}</RichText>
+                <RichText>{item.question}</RichText>
               </div>
               {found ? (
                 <div style={{ display: "grid", gap: "8px", minWidth: 0 }}>
                   <div style={{ color: "#7ee2a8", fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <RichText>{isReverse ? item.question : item.answer}</RichText>
+                    <RichText>{item.answer}</RichText>
                   </div>
                   {pendingQuality && (
                     <div data-text-typed-rating style={textTypedRatingStyle}>
@@ -1004,7 +1202,7 @@ export default function TextGroupReview({
                     onChange={(event) => handleInputChange(item.question_id, event.target.value)}
                     onKeyDown={(event) => handleInputKeyDown(event, item, index)}
                     onBlur={() => checkTypedAnswer(item)}
-                    placeholder={isReverse ? "Indice d’origine…" : "Réponse…"}
+                    placeholder="Réponse…"
                     style={inputStyle}
                   />
                   {duplicateNoticeByQuestionId[item.question_id] && (

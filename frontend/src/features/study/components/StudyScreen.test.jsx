@@ -21,8 +21,7 @@ const summary = {
     name: "Départements français",
     type_group: "map",
     question_count: 4,
-    audio_only: false,
-    reverse_mode_enabled: false
+    audio_only: false
   },
   counts: {
     total_atomic_questions: 4,
@@ -386,8 +385,7 @@ describe("StudyScreen", () => {
           id: 10,
           name: "Départements français",
           type_group: "map",
-          audio_only: false,
-          reverse_mode_enabled: false
+          audio_only: false
         },
         "multiple_choice"
       );
@@ -582,8 +580,7 @@ describe("StudyScreen", () => {
       id: 10,
       name: "Départements français",
       type_group: "map",
-      audio_only: false,
-      reverse_mode_enabled: false
+      audio_only: false
     });
   });
 

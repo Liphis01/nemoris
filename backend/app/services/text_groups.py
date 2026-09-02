@@ -6,61 +6,16 @@ from ..serializers import serialize_manage_question, serialize_progress
 from .map_zones import merge_tags
 from .tag_hierarchy import ensure_tag_ids
 from .questions import delete_question_dependents
-from .answer_policy import (
-    effective_answer_policy,
-    merge_answer_policy,
-    normalize_answer_text
-)
+from .answer_policy import merge_answer_policy
 
 
-REVERSE_MODE_ENABLED_KEY = "reverse_mode_enabled"
+LEGACY_REVERSE_MODE_ENABLED_KEY = "reverse_mode_enabled"
 
 
-def reverse_mode_diagnostic(group, questions):
-    """Return the structural reason a text group cannot safely be reversed."""
-    policy = effective_answer_policy(group=group, type_q="text")
-    cues = {}
-
-    for question in questions or []:
-        prompt = str(question.question or "").strip()
-        cue = str(question.answer or "").strip()
-
-        if not prompt or not cue:
-            return "Chaque paire doit avoir un indice et une réponse."
-
-        normalized_cue = normalize_answer_text(cue, policy)
-
-        if not normalized_cue:
-            return "Chaque réponse doit contenir un indice inversé exploitable."
-
-        previous = cues.get(normalized_cue)
-
-        if previous is not None and previous != question.id:
-            return (
-                "Deux réponses deviennent le même indice avec la politique de "
-                "réponse actuelle."
-            )
-
-        cues[normalized_cue] = question.id
-
-    return None
-
-
-def text_group_reverse_mode_enabled(group, questions=None):
-    if not bool((group.data or {}).get(REVERSE_MODE_ENABLED_KEY)):
-        return False
-
-    source_questions = (
-        questions
-        if questions is not None
-        else [
-            question
-            for question in (group.questions or [])
-            if question.type_q == "text"
-        ]
-    )
-
-    return reverse_mode_diagnostic(group, source_questions) is None
+def strip_legacy_text_group_data(data):
+    cleaned = dict(data or {})
+    cleaned.pop(LEGACY_REVERSE_MODE_ENABLED_KEY, None)
+    return cleaned
 
 
 def derive_text_group_tags(questions):
@@ -147,6 +102,7 @@ def text_item_payload_changed(item, desired_question, desired_answer, desired_da
 
 def save_text_group_items(db, group_id: int, payload):
     group = get_text_group_or_404(db, group_id)
+    group.data = strip_legacy_text_group_data(group.data)
     group_updates = {}
     shared_tags_provided = False
     shared_tags = None
@@ -167,16 +123,6 @@ def save_text_group_items(db, group_id: int, payload):
                 group_updates.get("answer_policy"),
                 type_q="text"
             )
-
-        if REVERSE_MODE_ENABLED_KEY in group_updates:
-            group_data = dict(group.data or {})
-
-            if group_updates[REVERSE_MODE_ENABLED_KEY]:
-                group_data[REVERSE_MODE_ENABLED_KEY] = True
-            else:
-                group_data.pop(REVERSE_MODE_ENABLED_KEY, None)
-
-            group.data = group_data
 
     existing_items = (
         db.query(Question)
@@ -294,15 +240,6 @@ def save_text_group_items(db, group_id: int, payload):
             )
             .all()
         )
-
-        if bool((group.data or {}).get(REVERSE_MODE_ENABLED_KEY)):
-            diagnostic = reverse_mode_diagnostic(group, saved_text_items)
-
-            if diagnostic:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Mode inversé indisponible : {diagnostic}"
-                )
 
         db.commit()
     except Exception:

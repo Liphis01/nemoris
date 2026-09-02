@@ -37,6 +37,11 @@
 - pour les groupes de texte, ne pas nécessairement demander d'écrire mais juste laisser choisir la qualité
 - shuffle toutes les questions dans la review
 - arrêter de cut les groups dans la review puisqu'on a le inline
+- eventuellement ajouter des zones en plus pour cibler une difficulté en qcm
+- enlever les questions isolées et remplacer par des groupes de 1 question
+- je ne veux pas de mode compliqué pour les questions dures
+- le bouton terminer est confusing dans la review
+- quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 
 ## quick fixes
 

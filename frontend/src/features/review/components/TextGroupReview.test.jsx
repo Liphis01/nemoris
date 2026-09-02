@@ -2,116 +2,116 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TextGroupReview from "./TextGroupReview";
 
-
-describe("TextGroupReview reverse mode", () => {
+describe("TextGroupReview self-graded type_all", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
-  it("uses the stored answer as the cue and submits the original prompt", async () => {
-    const submitAnswer = vi.fn().mockResolvedValue(undefined);
-    const onComplete = vi.fn();
+  const textItems = [
+    {
+      question_id: 1,
+      question: "chat",
+      answer: "cat",
+      answer_policy: { preset: "relaxed" },
+      progress: {}
+    },
+    {
+      question_id: 2,
+      question: "chien",
+      answer: "dog",
+      answer_policy: { preset: "relaxed" },
+      progress: {}
+    }
+  ];
 
-    render(
+  function renderSelfGradedGroup({
+    graduateAnswer = vi.fn().mockResolvedValue(undefined),
+    onAnsweringComplete = vi.fn(),
+    onComplete = vi.fn(),
+    reviewItems = textItems,
+    submitAnswer = vi.fn().mockResolvedValue(undefined)
+  } = {}) {
+    const view = render(
       <TextGroupReview
-        group={{ type_group: "text" }}
-        reviewItems={[{
-          question_id: 1,
-          question: "pupil",
-          answer: "élève",
-          answer_policy: { preset: "relaxed" },
-          progress: {}
-        }]}
-        mode="type_reverse"
-        showQualityControls={false}
-        submitAnswer={submitAnswer}
-        onComplete={onComplete}
-      />
-    );
-
-    expect(screen.getByText("élève")).toBeInTheDocument();
-    expect(screen.queryByText("pupil")).not.toBeInTheDocument();
-
-    const input = screen.getByPlaceholderText("Indice d’origine…");
-    fireEvent.change(input, { target: { value: "PUPIL" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-
-    await waitFor(() => {
-      expect(submitAnswer).toHaveBeenCalledWith(
-        { 1: 2 },
-        "type_reverse",
-        1,
-        { 1: "PUPIL" },
-        { 1: [1] }
-      );
-    });
-    expect(onComplete).toHaveBeenCalledWith([]);
-  });
-});
-
-describe("TextGroupReview inline typed quality", () => {
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
-  function renderTypedGroup(submitAnswer) {
-    return render(
-      <TextGroupReview
-        group={{ type_group: "text" }}
-        reviewItems={[{
-          question_id: 1,
-          question: "chat",
-          answer: "cat",
-          answer_policy: { preset: "relaxed" },
-          progress: {}
-        }]}
+        group={{ type_group: "text", items: reviewItems }}
+        reviewItems={reviewItems}
         mode="type_all"
+        graduateAnswer={graduateAnswer}
+        onAnsweringComplete={onAnsweringComplete}
+        onComplete={onComplete}
         submitAnswer={submitAnswer}
-        onComplete={vi.fn()}
       />
     );
+
+    return {
+      ...view,
+      graduateAnswer,
+      onAnsweringComplete,
+      onComplete,
+      submitAnswer
+    };
   }
 
-  it("asks inline quality after a correct typed answer and keeps recap editable", async () => {
+  it("shows one pair at a time and submits only the chosen qualities", async () => {
     const submitAnswer = vi.fn().mockResolvedValue(undefined);
-    const { container } = renderTypedGroup(submitAnswer);
+    const onAnsweringComplete = vi.fn();
+    const onComplete = vi.fn();
+    const { container } = renderSelfGradedGroup({
+      onAnsweringComplete,
+      onComplete,
+      submitAnswer
+    });
 
-    const input = screen.getByPlaceholderText("Réponse…");
-    fireEvent.change(input, { target: { value: "cat" } });
+    expect(screen.getByText("chat")).toBeInTheDocument();
+    expect(screen.queryByText("chien")).not.toBeInTheDocument();
+
+    const input = screen.getByLabelText("Réponse facultative");
+    fireEvent.change(input, { target: { value: "wrong scratch" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(container.querySelector("[data-text-typed-rating]")).toBeInTheDocument();
-    expect(container.querySelectorAll("[data-text-typed-quality]")).toHaveLength(3);
+    expect(screen.getByText("cat")).toBeInTheDocument();
+    expect(screen.queryByText("Déjà répondu.")).not.toBeInTheDocument();
     expect(submitAnswer).not.toHaveBeenCalled();
 
-    fireEvent.click(container.querySelector("[data-text-typed-quality='3']"));
+    fireEvent.click(container.querySelector("[data-text-self-grade-quality='3']"));
+
+    expect(screen.getByText("chien")).toBeInTheDocument();
+    expect(screen.queryByText("chat")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Voir la réponse" }));
+    fireEvent.click(container.querySelector("[data-text-self-grade-quality='0']"));
 
     expect(await screen.findByRole("button", { name: "Valider" }))
       .toBeInTheDocument();
+    expect(onAnsweringComplete).toHaveBeenCalledWith([2]);
 
-    fireEvent.click(container.querySelector("[data-text-recap-quality='1']"));
+    const firstRecapRow = container.querySelectorAll("[data-text-recap-row]")[0];
+    fireEvent.click(firstRecapRow.querySelector("[data-text-recap-quality='1']"));
     fireEvent.click(screen.getByRole("button", { name: "Valider" }));
 
     await waitFor(() => {
       expect(submitAnswer).toHaveBeenCalledWith(
-        { 1: 1 },
+        { 1: 1, 2: 0 },
         "type_all",
-        1,
-        { 1: "cat" },
-        { 1: [1] }
+        2,
+        undefined,
+        undefined
       );
     });
+    expect(onComplete).toHaveBeenCalledWith([2]);
   });
 
-  it("uses Enter as the inline Bon default", async () => {
+  it("uses Enter to reveal, then Enter again as the Bon default", async () => {
     const submitAnswer = vi.fn().mockResolvedValue(undefined);
-    renderTypedGroup(submitAnswer);
+    renderSelfGradedGroup({
+      reviewItems: [textItems[0]],
+      submitAnswer
+    });
 
-    const input = screen.getByPlaceholderText("Réponse…");
-    fireEvent.change(input, { target: { value: "cat" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByText("cat")).toBeInTheDocument();
+
     fireEvent.keyDown(window, { key: "Enter" });
 
     fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
@@ -121,10 +121,38 @@ describe("TextGroupReview inline typed quality", () => {
         { 1: 2 },
         "type_all",
         1,
-        { 1: "cat" },
-        { 1: [1] }
+        undefined,
+        undefined
       );
     });
+  });
+
+  it("uses Encore and Acquis for relearning self-graded items", async () => {
+    const graduateAnswer = vi.fn().mockResolvedValue(undefined);
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    renderSelfGradedGroup({
+      graduateAnswer,
+      reviewItems: [{
+        ...textItems[0],
+        progress: { relearning: true }
+      }],
+      submitAnswer
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Voir la réponse" }));
+
+    expect(screen.getByText("Encore")).toBeInTheDocument();
+    expect(screen.getByText("Acquis")).toBeInTheDocument();
+    expect(screen.queryByText("Bon")).not.toBeInTheDocument();
+    expect(screen.queryByText("Facile")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Acquis"));
+    fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
+
+    await waitFor(() => {
+      expect(graduateAnswer).toHaveBeenCalledWith([1]);
+    });
+    expect(submitAnswer).not.toHaveBeenCalled();
   });
 });
 

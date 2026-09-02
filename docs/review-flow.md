@@ -128,11 +128,10 @@ prompt and the learner selects one of four media options, including audio
 players. `multiple_choice_image` is accepted only as a legacy request value and
 is normalized before scheduling metadata is written.
 
-An opted-in text group may receive `type_reverse`. It displays each stored
-answer as the cue and grades the typed original `question`; its answer event
-therefore records `direction: "answer_to_prompt"` and that original question as
-the expected value. The group must have complete pairs and unique normalized
-answer cues.
+Text groups use `type_all` for prompt-to-answer recall and `match` for
+recognition practice. Reverse text-group recall was removed from the scheduled
+and training mode surface; old internal `type_reverse` strings normalize back to
+`type_all`.
 
 Timeline review posts one guess per atomic timeline question:
 

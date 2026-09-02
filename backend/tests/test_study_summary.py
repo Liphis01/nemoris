@@ -250,7 +250,6 @@ class StudySummaryTests(unittest.TestCase):
         self.assertEqual(summary["scope"]["name"], "Départements français")
         self.assertEqual(summary["scope"]["question_count"], 7)
         self.assertEqual(summary["scope"]["audio_only"], False)
-        self.assertEqual(summary["scope"]["reverse_mode_enabled"], False)
         self.assertEqual(summary["counts"]["total_atomic_questions"], 7)
         self.assertEqual(summary["counts"]["active_questions"], 5)
         self.assertEqual(summary["counts"]["suspended"], 1)

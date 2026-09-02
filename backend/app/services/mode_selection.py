@@ -38,7 +38,7 @@ ANSWER_EVENT_MODE_KEYS = {
 UNSUPPORTED_RECALL_MODES = {
     "map_mode": {"type_all", "type_prompt"},
     "image_mode": {"type_all", "type_prompt"},
-    "text_mode": {"type_all", "type_reverse"},
+    "text_mode": {"type_all"},
     "sequence_mode": {"type_position", "recite"}
 }
 SUPPORTED_MODES = {
