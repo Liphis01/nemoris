@@ -542,6 +542,7 @@ function AppContent() {
             onOpenSettingsSection={openSettingsSection}
             onOpenPack={openPackInCatalog}
             onOpenStudy={openStudyScope}
+            onStartTraining={openTrainingScope}
             onStartReview={openGlobalReview}
           />
         )}

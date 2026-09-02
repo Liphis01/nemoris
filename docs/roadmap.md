@@ -7,6 +7,7 @@
 - dans les relearning, mettre la même image qui a posé problème
 - on peut pas commenter si on était pas connecté au moment de l'import du pack
 - problème de split de groupes : j'ai eu 25/1/2 pour formes de pays
+- j'ai eu 25qcm/1type_all/nqcm/2type_all ??
 - résultat de map qcm pas au bon endroit
 
 
@@ -24,6 +25,9 @@
 - how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
 - le zoom d'image est un peu naze
 - problème: les qcm ne demandent parfois pas de réflexion (raisonner pas élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
+- bug dans l'import des packs avec la question du tag merging
+- demander si on veut ajouter le pack à la review au moment de l'importer ?
+- mettre un bouton supprimer le pack si on l'a importé par erreur
 
 ## quick fixes
 

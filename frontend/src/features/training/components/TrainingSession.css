@@ -56,6 +56,7 @@
 .training-composer-result-row,
 .training-composer-section-toggle,
 .training-scope-tile,
+.training-study-link,
 .training-mode-action,
 .training-start-button {
   -webkit-tap-highlight-color: transparent;
@@ -411,15 +412,14 @@
   min-width: 0;
 }
 
-.training-tag-study-button,
-.training-study-button {
+.training-study-link {
   -webkit-tap-highlight-color: transparent;
   appearance: none;
-  background: #1d1d1d;
-  border: 1px solid #303030;
+  background: transparent;
+  border: 1px solid #2d2d2d;
   border-radius: 8px;
   box-sizing: border-box;
-  color: #d8ecff;
+  color: #a7c9e8;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -427,16 +427,16 @@
   line-height: 1.1;
   min-height: 34px;
   padding: 8px 11px;
+  text-align: center;
 }
 
-.training-tag-study-button:hover,
-.training-study-button:hover {
-  background: #14283d;
-  border-color: #355c7b;
+.training-study-link:hover {
+  background: rgba(143, 199, 255, 0.08);
+  border-color: rgba(143, 199, 255, 0.34);
   color: #edf7ff;
 }
 
-.training-study-button-full {
+.training-study-link-full {
   margin-bottom: 14px;
   width: 100%;
 }
@@ -1153,6 +1153,7 @@
 .training-composer-result-row:focus-within,
 .training-composer-section-toggle:focus-visible,
 .training-scope-tile:focus-visible,
+.training-study-link:focus-visible,
 .training-mode-action:focus-visible,
 .training-start-button:focus-visible {
   outline: 2px solid #ffcc7a;

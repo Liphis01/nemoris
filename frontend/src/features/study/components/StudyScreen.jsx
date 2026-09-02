@@ -118,12 +118,22 @@ function scopeTypeLabel(scope) {
   if (scope?.type === "tag") return "tag";
   if (scope?.type === "pack") return "pack";
 
-  return "scope";
+  return "contenu";
+}
+
+
+function reviewScopeActionLabel(scope) {
+  if (scope?.type === "collection") return "Réviser cette playlist";
+  if (scope?.type === "tag") return "Réviser ce tag";
+  if (scope?.type === "pack") return "Réviser ce pack";
+  if (scope?.type === "group") return "Réviser ce groupe";
+
+  return "Réviser cette sélection";
 }
 
 
 function scopeTitle(scope) {
-  if (!scope) return "Étudier";
+  if (!scope) return "Bilan d'apprentissage";
 
   if (scope.type === "tag") {
     return `#${scope.label || scope.name || scope.id || scope.tag || ""}`;
@@ -411,17 +421,17 @@ function EmptyStudy({ setMode }) {
       <div className="study-shell">
         <header className="study-header">
           <div>
-            <div className="study-overline">Étudier</div>
-            <h1>Étudier</h1>
+            <div className="study-overline">Bilan</div>
+            <h1>Bilan d'apprentissage</h1>
           </div>
           <ReturnToMenuButton onClick={() => setMode("menu")} className="study-back" />
         </header>
 
         <section className="study-empty-panel">
-          <h2>Aucun scope sélectionné</h2>
+          <h2>Aucun contenu sélectionné</h2>
           <div className="study-empty-actions">
             <button type="button" onClick={() => setMode("training")}>
-              Entraînement
+              Entraînement libre
             </button>
             <button type="button" onClick={() => setMode("packs")}>
               Packs
@@ -614,7 +624,7 @@ function TodayTab({
           </ActionButton>
           {canReviewScope && (
             <ActionButton onClick={() => onStartReview(summary.scope)}>
-              Réviser ce scope
+              {reviewScopeActionLabel(summary.scope)}
             </ActionButton>
           )}
           {canTrainScope && (
@@ -778,7 +788,7 @@ function TrainTab({ onStartTraining, summary }) {
     <div className="study-two-column">
       <section className="study-panel">
         <div className="study-panel-head">
-          <h2>Scope actif</h2>
+          <h2>Contenu actif</h2>
           <span>{recordLabel(summary.training?.training_record || summary.training?.previous_training_record)}</span>
         </div>
 
@@ -827,7 +837,7 @@ function TrainTab({ onStartTraining, summary }) {
             ))}
           </div>
         ) : (
-          <div className="study-muted">Aucun groupe entraînable dans ce scope.</div>
+          <div className="study-muted">Aucun groupe entraînable ici.</div>
         )}
       </section>
     </div>
@@ -1134,7 +1144,7 @@ function LearnTab({ onStartTraining, summary }) {
 
           <div className="study-large-number">{numberLabel(buckets.unseen || 0)}</div>
           <div className="study-muted">
-            {questionCountLabel(counts.active_questions)} actives dans ce scope.
+            {questionCountLabel(counts.active_questions)} actives ici.
           </div>
 
           <div className="study-action-row">
@@ -1143,7 +1153,7 @@ function LearnTab({ onStartTraining, summary }) {
                 primary
                 onClick={() => onStartTraining(trainingScope)}
               >
-                Entraîner le scope
+                S'entraîner
               </ActionButton>
             )}
           </div>
@@ -1558,7 +1568,7 @@ export default function StudyScreen({
       <div className="study-shell">
         <header className="study-header">
           <div className="study-title-block">
-            <div className="study-overline">Étudier · {scopeTypeLabel(displayScope)}</div>
+            <div className="study-overline">Bilan · {scopeTypeLabel(displayScope)}</div>
             <h1>{scopeTitle(displayScope)}</h1>
             <p>
               {summary
@@ -1571,7 +1581,7 @@ export default function StudyScreen({
         </header>
 
         {loading && (
-          <div className="study-state-panel">Chargement du scope...</div>
+          <div className="study-state-panel">Chargement du bilan...</div>
         )}
 
         {!loading && error && (
@@ -1585,7 +1595,7 @@ export default function StudyScreen({
 
         {!loading && !error && summary && (
           <>
-            <nav className="study-tabs" role="tablist" aria-label="Étudier">
+            <nav className="study-tabs" role="tablist" aria-label="Bilan d'apprentissage">
               {tabs.map(tab => (
                 <button
                   type="button"

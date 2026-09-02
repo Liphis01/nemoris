@@ -72,7 +72,7 @@ describe("Menu", () => {
       .filter((button) => button.classList.contains("menu-destination"));
     expect(workspaceButtons.map((button) => button.textContent)).toEqual([
       expect.stringContaining("Gestionnaire"),
-      expect.stringContaining("Entrainement"),
+      expect.stringContaining("Entraînement libre"),
       expect.stringContaining("Calendrier"),
       expect.stringContaining("Profil"),
       expect.stringContaining("Packs"),
@@ -150,6 +150,7 @@ describe("Menu", () => {
 
   it("opens the study-first recommendation while keeping pack discovery visible", async () => {
     const onOpenStudy = vi.fn();
+    const onStartTraining = vi.fn();
 
     getStats.mockResolvedValueOnce({
       counts: {
@@ -172,6 +173,7 @@ describe("Menu", () => {
     render(
       <Menu
         onOpenStudy={onOpenStudy}
+        onStartTraining={onStartTraining}
         setMode={vi.fn()}
         startupNotice={null}
         onDismissStartupNotice={vi.fn()}
@@ -180,14 +182,24 @@ describe("Menu", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Europe" })).toBeInTheDocument();
+    expect(screen.getByText("À travailler maintenant")).toBeInTheDocument();
     expect(await screen.findByText("Capitales du monde")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Voir Capitales du monde" })
     ).not.toHaveAttribute("title");
 
-    fireEvent.click(screen.getByRole("button", { name: "Étudier Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan pour Europe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith({
+      type: "group",
+      id: 42,
+      name: "Europe",
+      type_group: "map"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "S'entraîner sur Europe" }));
+
+    expect(onStartTraining).toHaveBeenCalledWith({
       type: "group",
       id: 42,
       name: "Europe",

@@ -372,7 +372,7 @@ describe("StudyScreen", () => {
     expect(screen.queryByRole("tab", { name: "Faibles" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Historique" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Réviser ce scope" }));
+    fireEvent.click(screen.getByRole("button", { name: "Réviser ce groupe" }));
     expect(onStartReview).toHaveBeenCalledWith(summary.scope);
     expect(setMode).not.toHaveBeenCalledWith("quiz");
 

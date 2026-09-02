@@ -160,7 +160,7 @@
 .menu-review,
 .menu-context-action,
 .menu-pack-card-clickable,
-.menu-study-card-clickable,
+.menu-study-button,
 .menu-pack-arrow,
 .menu-pack-dot,
 .menu-account-chip,
@@ -219,7 +219,7 @@
 .menu-review,
 .menu-context-action,
 .menu-pack-card-clickable,
-.menu-study-card-clickable,
+.menu-study-button,
 .menu-pack-arrow,
 .menu-pack-dot,
 .menu-destination {
@@ -234,7 +234,6 @@
 
 .menu-review:hover,
 .menu-pack-card-clickable:hover,
-.menu-study-card-clickable:hover,
 .menu-context-action:hover,
 .menu-destination:hover {
   border-color: #444444;
@@ -244,8 +243,8 @@
 
 .menu-review:focus-visible,
 .menu-pack-card-clickable:focus-visible,
-.menu-study-card-clickable:focus-visible,
 .menu-context-action:focus-visible,
+.menu-study-button:focus-visible,
 .menu-pack-arrow:focus-visible,
 .menu-pack-dot:focus-visible,
 .menu-account-chip:focus-visible,
@@ -601,15 +600,11 @@
     linear-gradient(120deg, rgba(143, 199, 255, 0.11), transparent 55%),
     #171717;
   border-color: #263240;
-  flex-direction: row;
-  gap: 13px;
+  display: grid;
+  gap: 9px 13px;
+  grid-template-columns: 40px minmax(0, 1fr);
   justify-content: flex-start;
   padding: 13px 15px;
-}
-
-.menu-study-card-clickable {
-  text-align: left;
-  width: 100%;
 }
 
 .menu-study-card-error {
@@ -640,6 +635,7 @@
 
 .menu-study-copy {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
@@ -664,26 +660,59 @@
   white-space: nowrap;
 }
 
-.menu-study-arrow {
+.menu-study-actions {
   align-items: center;
-  background: rgba(143, 199, 255, 0.1);
-  border: 1px solid rgba(143, 199, 255, 0.24);
-  border-radius: 8px;
-  color: #8fc7ff;
-  display: inline-flex;
+  display: flex;
   flex: 0 0 auto;
-  font-size: 15px;
-  height: 32px;
-  justify-content: center;
-  line-height: 1;
-  margin-left: auto;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  width: 32px;
+  gap: 7px;
+  grid-column: 2;
+  justify-content: flex-start;
+  margin-left: 0;
+  min-width: 0;
 }
 
-.menu-study-card-clickable:hover .menu-study-arrow {
-  background: rgba(143, 199, 255, 0.17);
+.menu-study-button {
+  align-items: center;
+  border-radius: 8px;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 850;
+  justify-content: center;
+  line-height: 1.1;
+  min-height: 34px;
+  padding: 8px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.menu-study-button-primary {
+  background: #193322;
+  border: 1px solid #31543c;
+  color: #d7f5df;
+}
+
+.menu-study-button-primary:hover {
+  background: #203d2a;
+  border-color: #47755a;
+}
+
+.menu-study-button-secondary {
+  background: transparent;
+  border: 1px solid #334153;
+  color: #cfe6ff;
+}
+
+.menu-study-button-secondary:hover {
+  background: rgba(143, 199, 255, 0.08);
   border-color: rgba(143, 199, 255, 0.42);
+}
+
+.menu-study-button:disabled {
+  color: #777777;
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .menu-pack-card {

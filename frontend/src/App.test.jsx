@@ -40,7 +40,7 @@ vi.mock("./features/sync/AutoSyncBanner", () => ({
 }));
 
 vi.mock("./features/menu/Menu", () => ({
-  default: ({ onOpenStudy, onStartReview, setMode }) => (
+  default: ({ onOpenStudy, onStartReview, onStartTraining, setMode }) => (
     <main>
       <h1>Menu</h1>
       <button type="button" onClick={() => onStartReview()}>Démarrer review</button>
@@ -53,11 +53,22 @@ vi.mock("./features/menu/Menu", () => ({
           type_group: "map"
         })}
       >
-        Étudier Italie
+        Voir le bilan Italie
+      </button>
+      <button
+        type="button"
+        onClick={() => onStartTraining({
+          type: "group",
+          id: 6,
+          name: "Italie",
+          type_group: "map"
+        }, "multiple_choice")}
+      >
+        S'entraîner Italie
       </button>
       <button type="button" onClick={() => setMode("manage")}>Gestionnaire</button>
       <button type="button" onClick={() => setMode("calendar")}>Calendrier</button>
-      <button type="button" onClick={() => setMode("training")}>Entrainement</button>
+      <button type="button" onClick={() => setMode("training")}>Entraînement libre</button>
     </main>
   )
 }));
@@ -87,7 +98,7 @@ vi.mock("./features/review/components/ReviewSession", () => ({
 vi.mock("./features/training/components/TrainingSession", () => ({
   default: ({ initialMode, initialScope, onOpenStudy }) => (
     <main>
-      <h1>Entrainement</h1>
+      <h1>Entraînement libre</h1>
       <div data-testid="training-target">
         {initialScope ? `${initialScope.type}:${initialScope.id}:${initialMode || ""}` : "none"}
       </div>
@@ -100,7 +111,7 @@ vi.mock("./features/training/components/TrainingSession", () => ({
           type_group: "map"
         })}
       >
-        Étudier Europe
+        Voir le bilan du groupe Europe
       </button>
     </main>
   )
@@ -109,12 +120,12 @@ vi.mock("./features/training/components/TrainingSession", () => ({
 vi.mock("./features/study/components/StudyScreen", () => ({
   default: ({ onStartReview, onStartTraining, scope }) => (
     <main>
-      <h1>Étudier {scope?.name}</h1>
+      <h1>Bilan {scope?.name}</h1>
       <button
         type="button"
         onClick={() => onStartReview(scope)}
       >
-        Réviser ce scope
+        Réviser ce groupe
       </button>
       <button
         type="button"
@@ -217,16 +228,27 @@ describe("App mouse navigation", () => {
   it("opens Study from a feature and can launch scoped training", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Entrainement" }));
-    fireEvent.click(screen.getByRole("button", { name: "Étudier Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Entraînement libre" }));
+    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du groupe Europe" }));
 
-    expect(screen.getByRole("heading", { name: "Étudier Europe" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bilan Europe" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Start scoped training" }));
 
-    expect(screen.getByRole("heading", { name: "Entrainement" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Entraînement libre" })).toBeInTheDocument();
     expect(screen.getByTestId("training-target")).toHaveTextContent(
       "group:5:multiple_choice"
+    );
+  });
+
+  it("opens scoped training directly from the menu recommendation", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "S'entraîner Italie" }));
+
+    expect(screen.getByRole("heading", { name: "Entraînement libre" })).toBeInTheDocument();
+    expect(screen.getByTestId("training-target")).toHaveTextContent(
+      "group:6:multiple_choice"
     );
   });
 
@@ -238,8 +260,8 @@ describe("App mouse navigation", () => {
     expect(useReviewSession).toHaveBeenLastCalledWith(true, null, 0);
 
     fireEvent.mouseDown(window, { button: 3 });
-    fireEvent.click(screen.getByRole("button", { name: "Étudier Italie" }));
-    fireEvent.click(screen.getByRole("button", { name: "Réviser ce scope" }));
+    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan Italie" }));
+    fireEvent.click(screen.getByRole("button", { name: "Réviser ce groupe" }));
 
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(useReviewSession).toHaveBeenLastCalledWith(

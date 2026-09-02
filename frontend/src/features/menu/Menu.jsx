@@ -20,8 +20,8 @@ const destinations = [
   {
     mode: "training",
     eyebrow: "Libre",
-    title: "Entrainement",
-    description: "Pratiquer un groupe, une playlist ou un tag sans modifier le planning.",
+    title: "Entraînement libre",
+    description: "Pratiquer un groupe, une playlist ou un tag sans toucher au planning.",
     detail: "Records",
     accent: "amber",
     icon: "◎"
@@ -287,29 +287,11 @@ function MenuStudyCard({
   error,
   loading,
   onOpenStudy,
+  onStartTraining,
   setMode,
   stats
 }) {
   const target = pickStudyTarget(stats?.guidance);
-
-  function openTarget() {
-    if (error) {
-      setMode("profile");
-      return;
-    }
-
-    if (target?.group && onOpenStudy) {
-      onOpenStudy({
-        type: "group",
-        id: target.group.id,
-        name: target.group.name,
-        type_group: target.group.type_group
-      });
-      return;
-    }
-
-    setMode("training");
-  }
 
   if (loading) {
     return (
@@ -317,7 +299,7 @@ function MenuStudyCard({
         <span className="menu-study-icon" aria-hidden="true">◎</span>
 
         <span className="menu-study-copy">
-          <span className="menu-eyebrow">À étudier</span>
+          <span className="menu-eyebrow">À travailler maintenant</span>
           <h2>Analyse en cours</h2>
           <p>Lecture de tes priorités.</p>
         </span>
@@ -325,37 +307,45 @@ function MenuStudyCard({
     );
   }
 
-  const eyebrow = error ? "À étudier" : (target?.label || "À étudier");
+  const targetScope = target?.group
+    ? {
+        type: "group",
+        id: target.group.id,
+        name: target.group.name,
+        type_group: target.group.type_group
+      }
+    : null;
+  const eyebrow = error
+    ? "Apprendre"
+    : target
+      ? "À travailler maintenant"
+      : "Apprendre";
   const title = error
     ? "Guidage indisponible"
     : (target?.title || "Rien d'urgent");
   const detail = error
     ? error
-    : (target?.detail || "Aucun groupe prioritaire pour le moment.");
-  const label = error
-    ? "Ouvrir le profil"
     : target
-      ? `Étudier ${target.title}`
-      : "Ouvrir l'entraînement";
+      ? `${target.label} · ${target.detail}`
+      : "Choisis un groupe quand tu veux pratiquer hors planning.";
+
+  function openStudyTarget() {
+    if (targetScope && onOpenStudy) {
+      onOpenStudy(targetScope);
+    }
+  }
+
+  function openTrainingTarget() {
+    if (targetScope && onStartTraining) {
+      onStartTraining(targetScope);
+      return;
+    }
+
+    setMode("training");
+  }
 
   return (
-    <section
-      role="button"
-      tabIndex={0}
-      className={`menu-context-card menu-study-card menu-study-card-clickable${error ? " menu-study-card-error" : ""}`}
-      onClick={openTarget}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) {
-          return;
-        }
-
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openTarget();
-        }
-      }}
-      aria-label={label}
-    >
+    <section className={`menu-context-card menu-study-card${error ? " menu-study-card-error" : ""}`}>
       <span className="menu-study-icon" aria-hidden="true">◎</span>
 
       <span className="menu-study-copy">
@@ -364,7 +354,45 @@ function MenuStudyCard({
         <p>{detail}</p>
       </span>
 
-      <span className="menu-study-arrow" aria-hidden="true">→</span>
+      <span className="menu-study-actions">
+        {error ? (
+          <button
+            type="button"
+            className="menu-study-button menu-study-button-secondary"
+            onClick={() => setMode("profile")}
+          >
+            Ouvrir le profil
+          </button>
+        ) : targetScope ? (
+          <>
+            <button
+              type="button"
+              className="menu-study-button menu-study-button-secondary"
+              onClick={openStudyTarget}
+              disabled={!onOpenStudy}
+              aria-label={`Voir le bilan pour ${target.title}`}
+            >
+              Voir le bilan
+            </button>
+            <button
+              type="button"
+              className="menu-study-button menu-study-button-primary"
+              onClick={openTrainingTarget}
+              aria-label={`S'entraîner sur ${target.title}`}
+            >
+              S'entraîner
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="menu-study-button menu-study-button-primary"
+            onClick={() => setMode("training")}
+          >
+            Entraînement libre
+          </button>
+        )}
+      </span>
     </section>
   );
 }
@@ -541,6 +569,7 @@ export default function Menu({
   onOpenSettingsSection = null,
   onOpenPack = null,
   onOpenStudy = null,
+  onStartTraining = null,
   onStartReview = null
 }) {
   const [menuStats, setMenuStats] = useState(null);
@@ -572,10 +601,10 @@ export default function Menu({
   const reviewNewCount = reviewSummary?.new_count ?? 0;
   const reviewSessionCount = reviewSummary?.session_count
     ?? (reviewDueCount + reviewNewCount);
-  const reviewActionLabel = "Démarrer";
   const reviewIsClear = (
     !reviewSummaryLoading && !reviewSummaryError && reviewSessionCount <= 0
   );
+  const reviewActionLabel = reviewIsClear ? "Ouvrir" : "Réviser";
   const reviewTitle = reviewIsClear
     ? "Session terminée"
     : "Révision du jour";
@@ -796,7 +825,7 @@ export default function Menu({
               onClick={startGlobalReview}
             >
               <span className="menu-review-content">
-                <span className="menu-pill menu-pill-amber">Review</span>
+                <span className="menu-pill menu-pill-amber">Réviser</span>
 
                 <span>
                   <span className="menu-review-title">{reviewTitle}</span>
@@ -857,6 +886,7 @@ export default function Menu({
                 error={statsError}
                 loading={statsLoading}
                 onOpenStudy={onOpenStudy}
+                onStartTraining={onStartTraining}
                 setMode={setMode}
                 stats={menuStats}
               />

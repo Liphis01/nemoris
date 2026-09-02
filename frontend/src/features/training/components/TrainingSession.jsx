@@ -508,10 +508,11 @@ function TagTile({ onOpenStudy, startScope, tag }) {
       {onOpenStudy && (
         <button
           type="button"
-          className="training-tag-study-button"
+          className="training-study-link"
           onClick={() => onOpenStudy(scope)}
+          aria-label={`Voir le bilan du tag ${label}`}
         >
-          Étudier
+          Bilan
         </button>
       )}
     </div>
@@ -604,13 +605,14 @@ function CollectionDetailPanel({
         {onOpenStudy && (
           <button
             type="button"
-            className="training-study-button"
+            className="training-study-link"
             onClick={() => onOpenStudy({
               ...collection,
               type: "collection"
             })}
+            aria-label={`Voir le bilan de la playlist ${collection.name}`}
           >
-            Étudier cette playlist
+            Voir le bilan
           </button>
         )}
       </div>
@@ -697,13 +699,14 @@ function GroupDetailPanel({ group, onOpenStudy, startScope }) {
       {onOpenStudy && (
         <button
           type="button"
-          className="training-study-button training-study-button-full"
+          className="training-study-link training-study-link-full"
           onClick={() => onOpenStudy({
             ...group,
             type: "group"
           })}
+          aria-label={`Voir le bilan du groupe ${group.name}`}
         >
-          Étudier ce groupe
+          Voir le bilan du groupe
         </button>
       )}
 
@@ -831,9 +834,9 @@ function ScopeSelector({
     <div className="training-selector-panel">
       <div className="training-selector-header">
         <div className="training-selector-title">
-          <div className="training-selector-overline">Training</div>
+          <div className="training-selector-overline">Pratique libre</div>
           <h1>
-            Entrainement
+            Entraînement libre
           </h1>
         </div>
 
@@ -892,7 +895,7 @@ function ScopeSelector({
               </button>
             </div>
             <input
-              aria-label="Rechercher un entrainement"
+              aria-label="Rechercher un entraînement libre"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Recherche..."
@@ -1418,7 +1421,7 @@ export default function TrainingSession({
                     textTransform: "uppercase"
                   }}
                 >
-                  Training session
+                  Entraînement libre
                 </div>
                 <h1
                   style={{
@@ -1430,7 +1433,7 @@ export default function TrainingSession({
                   {session.labelForActiveScope}
                 </h1>
                 <div style={{ color: "#777", fontSize: "14px" }}>
-                  {session.allQuestionIds.length} items dans ce scope
+                  {session.allQuestionIds.length} items dans cette sélection
                   {activeGroupMode && activeModeConfig
                     ? ` · ${activeModeConfig.labels[activeGroupMode]}`
                     : ""}
@@ -1447,7 +1450,7 @@ export default function TrainingSession({
 
             {session.trainingLoading && (
               <div style={{ ...panelStyle, color: "#777", padding: "60px", textAlign: "center" }}>
-                Preparation de l'entrainement...
+                Préparation de l'entraînement...
               </div>
             )}
 
@@ -1461,7 +1464,7 @@ export default function TrainingSession({
               !session.trainingError &&
               session.questions.length === 0 && (
               <div style={{ ...panelStyle, color: "#777", padding: "60px", textAlign: "center" }}>
-                Aucun item dans ce scope.
+                Aucun item dans cette sélection.
               </div>
             )}
 

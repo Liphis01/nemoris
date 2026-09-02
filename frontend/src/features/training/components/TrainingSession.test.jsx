@@ -322,13 +322,15 @@ describe("TrainingSession", () => {
     });
   });
 
-  it("opens Study for the selected training scope", async () => {
+  it("opens the selected scope bilan from the training selector", async () => {
     const onOpenStudy = vi.fn();
 
     render(<TrainingSession setMode={vi.fn()} onOpenStudy={onOpenStudy} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
-    fireEvent.click(screen.getByRole("button", { name: "Étudier ce groupe" }));
+    expect(screen.queryByRole("button", { name: "Étudier ce groupe" }))
+      .not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du groupe Europe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
       id: 5,
@@ -338,7 +340,7 @@ describe("TrainingSession", () => {
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "Tags" }));
-    fireEvent.click(screen.getByRole("button", { name: "Étudier" }));
+    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du tag Geo" }));
 
     expect(onOpenStudy).toHaveBeenLastCalledWith({
       type: "tag",
