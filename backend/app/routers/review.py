@@ -31,7 +31,6 @@ from ..services.progress import (
     apply_scheduling_batch,
     create_initial_progress,
     graduate_relearning,
-    rebalance_progress_calendar,
     replace_latest_scheduling
 )
 from ..services.map_modes import (
@@ -69,6 +68,7 @@ from ..services.review import (
     get_review_summary,
     get_scoped_review_items
 )
+from ..services.review_maintenance import run_review_calendar_maintenance
 from ..services.settings import (
     clear_pace_pressure_notice,
     get_pace_pressure_notice,
@@ -116,6 +116,15 @@ from ..services.timeline import (
 
 
 router = APIRouter()
+
+
+def ensure_review_calendar_current(db):
+    maintenance = run_review_calendar_maintenance(db)
+
+    if maintenance["changed"]:
+        db.commit()
+
+    return maintenance
 
 
 def answer_progress_payload(progress, today=None):
@@ -219,7 +228,8 @@ def update_settings(
 
 @router.post("/review/rebalance")
 def rebalance_review(db: Session = Depends(get_db)):
-    result = rebalance_progress_calendar(db)
+    maintenance = run_review_calendar_maintenance(db, force=True)
+    result = maintenance["rebalance"]
     db.commit()
 
     return {
@@ -255,6 +265,8 @@ def get_review(
     pack_guid: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    ensure_review_calendar_current(db)
+
     if scope_type:
         return get_scoped_review_items(
             db,
@@ -265,10 +277,8 @@ def get_review(
             pack_guid=pack_guid
         )
 
-    # Lazy once-per-day intake tuning. This is the only write on this route: one
-    # AppSetting row, and a no-op on every call after the first of the day. It
-    # is committed before the session is assembled so get_review_items still
-    # runs against a clean session and stays a pure read.
+    # Lazy once-per-day intake tuning. It is committed before the session is
+    # assembled so get_review_items runs against a clean session.
     tuned = tune_intake_rate(db)
 
     if tuned["changed"]:
@@ -286,7 +296,8 @@ def get_review(
 
 @router.get("/review/intake")
 def get_intake(db: Session = Depends(get_db)):
-    # Read-only view of today's quota and the reasoning behind it.
+    ensure_review_calendar_current(db)
+
     return compute_intake_quota(db)
 
 
@@ -321,6 +332,8 @@ def update_intake_queue_suspension(
 
 @router.get("/review/summary")
 def get_summary(db: Session = Depends(get_db)):
+    ensure_review_calendar_current(db)
+
     return get_review_summary(db)
 
 

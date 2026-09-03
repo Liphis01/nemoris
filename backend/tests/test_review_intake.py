@@ -47,6 +47,7 @@ from app.services.review import (
 )
 from app.services.settings import (
     INTAKE_SETTINGS_KEY,
+    REVIEW_MAINTENANCE_KEY,
     load_intake_settings,
     resolve_pace_tier,
     sync_settings_payload
@@ -1247,6 +1248,10 @@ class IntakeSettingsTests(IntakeTestCase):
     def test_the_tuned_rate_never_syncs(self):
         update_settings(ReviewSettings(pace_tier="regulier"), db=self.db)
         tune_intake_rate(self.db, today=date.today())
+        self.db.add(AppSetting(
+            key=REVIEW_MAINTENANCE_KEY,
+            value={"rebalanced_on": date.today().isoformat()}
+        ))
         self.db.commit()
 
         self.assertIsNotNone(
@@ -1255,6 +1260,7 @@ class IntakeSettingsTests(IntakeTestCase):
             .first()
         )
         self.assertNotIn(INTAKE_SETTINGS_KEY, sync_settings_payload(self.db))
+        self.assertNotIn(REVIEW_MAINTENANCE_KEY, sync_settings_payload(self.db))
 
 
 class SuspendedQuestionTests(IntakeTestCase):

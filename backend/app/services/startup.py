@@ -8,7 +8,7 @@ from .fsrs_migration import (
     has_fsrs_v6_migration_run,
     migrate_progress_to_fsrs_v6
 )
-from .progress import rebalance_progress_calendar
+from .review_maintenance import run_review_calendar_maintenance
 from .settings import save_startup_rebalance_notice
 from .tag_hierarchy import apply_tag_seed
 
@@ -22,7 +22,8 @@ def run_startup_rebalance(db):
     # installs without a schema bump. No-op once the stored seed version is
     # current, and it never overwrites a category the user edited or deleted.
     apply_tag_seed(db)
-    result = rebalance_progress_calendar(db)
+    maintenance = run_review_calendar_maintenance(db, force=True)
+    result = maintenance["rebalance"]
     notice = save_startup_rebalance_notice(db, result)
 
     return {

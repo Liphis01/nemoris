@@ -12,10 +12,11 @@
 - pour les groupes de texte, ne pas nécessairement demander d'écrire mais juste laisser choisir la qualité
 - bug dans l'import des packs avec la question du tag merging
 - shortcut &/é/" pour répondre aux qualités
+- les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
+- pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
 
 
 ## Urgent
-- il reste un dossier qui s'appelle blueprint
 - bouton synchroniser depuis le menu (push pull)
 - quand on a modifié localement un groupe, proposer de reupdate le pack associé
 - système social (amis, packs privés, ...)
@@ -29,11 +30,7 @@
 - le zoom d'image est un peu naze
 - problème: les qcm ne demandent parfois pas de réflexion (raisonner pas élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
-- mettre un bouton supprimer le pack si on l'a importé par erreur
 - menu study à améliorer
-- pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
-- les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
-- enlever les zooms de map avec la qualité
 - shuffle toutes les questions dans la review
 - arrêter de cut les groups dans la review puisqu'on a le inline
 - eventuellement ajouter des zones en plus pour cibler une difficulté en qcm
@@ -42,6 +39,7 @@
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 - mieux afficher les relearning
 - l'email supabase
+- mettre un bouton supprimer le pack si on l'a importé par erreur
 
 ## quick fixes
 

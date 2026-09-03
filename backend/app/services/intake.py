@@ -6,9 +6,8 @@ many enter per day is decided here rather than by the user.
 
 Two responsibilities, deliberately split:
 
-- ``compute_intake_quota`` is a **pure read**. It runs inside ``GET /review``,
-  which must stay free of side effects (see
-  ``test_review_route_does_not_rebalance_calendar``).
+- ``compute_intake_quota`` is a **pure read**. Route-level daily maintenance may
+  resmooth the calendar first, but the quota calculation itself never writes.
 - ``tune_intake_rate`` is the **only writer** in this module, guarded to run at
   most once per day and touching exactly one ``AppSetting`` row.
 

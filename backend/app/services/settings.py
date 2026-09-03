@@ -26,6 +26,7 @@ STARTUP_REBALANCE_NOTICE_KEY = "startup_rebalance_notice"
 PACE_PRESSURE_NOTICE_KEY = "pace_pressure_notice"
 PACK_CATALOG_SETTINGS_KEY = "pack_catalog"
 INTAKE_SETTINGS_KEY = "review_intake"
+REVIEW_MAINTENANCE_KEY = "review_maintenance"
 
 # The pace the user picks, as questions per day. The tier is the single volume
 # knob: it *is* catchup_daily_target, so the calendar smoothing and the
@@ -87,7 +88,9 @@ DEVICE_SETTING_KEYS = {
     # "today", churns daily, and is rebuildable anywhere from review_log (which
     # does sync). Syncing it would only manufacture daily write conflicts. The
     # user's intent (pace_tier) lives in REVIEW_SETTINGS_KEY and does sync.
-    INTAKE_SETTINGS_KEY
+    INTAKE_SETTINGS_KEY,
+    # Device-local guard for the once-a-day review calendar maintenance pass.
+    REVIEW_MAINTENANCE_KEY
 }
 
 

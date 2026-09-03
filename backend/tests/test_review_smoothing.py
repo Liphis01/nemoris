@@ -28,6 +28,7 @@ from app.services.intake import PRESSURE_DOWN_MIN, schedule_pressure
 from app.services.questions import update_question as update_question_service
 from app.services.review import _new_question_ids
 from app.services.startup import run_startup_rebalance
+from app.services.settings import REVIEW_MAINTENANCE_KEY
 from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
 from app.scheduler import (
     FSRS_VERSION,
@@ -2174,7 +2175,12 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             [1, 2, 3]
         )
 
-    def test_review_route_returns_all_due_questions_without_cap(self):
+    def test_review_route_returns_current_due_questions_without_cap(self):
+        self.db.add(AppSetting(
+            key=REVIEW_MAINTENANCE_KEY,
+            value={"rebalanced_on": date.today().isoformat()}
+        ))
+
         for question_id in range(1, 206):
             self.add_question(question_id)
             self.add_progress(question_id, date.today(), reps=1)
@@ -2292,9 +2298,51 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(progress.ideal_next_review, due)
         self.assertEqual(progress.ideal_interval, 12)
 
-    def test_review_route_does_not_rebalance_calendar(self):
+    def test_review_route_rebalances_once_after_date_rollover(self):
         today = date.today()
         update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 6):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
+
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        overdue_count = (
+            self.db.query(Progress)
+            .filter(Progress.next_review == today - timedelta(days=1))
+            .count()
+        )
+        today_count = (
+            self.db.query(Progress)
+            .filter(Progress.next_review == today)
+            .count()
+        )
+        tomorrow_count = (
+            self.db.query(Progress)
+            .filter(Progress.next_review == today + timedelta(days=1))
+            .count()
+        )
+        marker = (
+            self.db.query(AppSetting)
+            .filter(AppSetting.key == REVIEW_MAINTENANCE_KEY)
+            .first()
+        )
+
+        self.assertEqual(len(response), 3)
+        self.assertEqual(overdue_count, 0)
+        self.assertEqual(today_count, 3)
+        self.assertEqual(tomorrow_count, 2)
+        self.assertEqual(marker.value["rebalanced_on"], today.isoformat())
+
+    def test_review_route_does_not_rebalance_twice_on_the_same_day(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+        self.db.add(AppSetting(
+            key=REVIEW_MAINTENANCE_KEY,
+            value={"rebalanced_on": today.isoformat()}
+        ))
 
         for question_id in range(1, 4):
             self.add_question(question_id)
@@ -2311,6 +2359,21 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
 
         self.assertEqual(len(response), 3)
         self.assertEqual(overdue_count, 3)
+
+    def test_review_summary_rebalances_before_counting_due_cards(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=2), db=self.db)
+
+        for question_id in range(1, 6):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=1), reps=1)
+
+        self.db.commit()
+
+        response = get_summary(db=self.db)
+
+        self.assertEqual(response["due_count"], 3)
+        self.assertEqual(response["session_count"], 3)
 
     def test_a_saturated_rebalance_is_visible_as_intake_pressure(self):
         # The intake tuner reads saturation off the calendar the smoother
