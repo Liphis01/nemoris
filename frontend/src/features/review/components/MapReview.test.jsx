@@ -593,6 +593,31 @@ describe("MapReview recap map focus", () => {
     });
   });
 
+  it("does not refocus the active map when click quality appears", async () => {
+    const clickedZone = reviewZones[1];
+
+    renderMapReview(true, {
+      mode: "click_prompt",
+      reviewZones: [clickedZone]
+    });
+
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", "");
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-version", "0");
+
+    fireEvent.click(screen.getByTestId("active-map"));
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-map-click-rating]"))
+        .toBeInTheDocument();
+    });
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", "");
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-version", "0");
+  });
+
   it("advances type_prompt without a wrong segment when skipping", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"

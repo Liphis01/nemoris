@@ -427,9 +427,15 @@ export default function MapReview({
     mode === MAP_MODE_TYPE_PROMPT ||
     mode === MAP_MODE_MULTIPLE_CHOICE
   );
-  const activeMapFocusCode = showAutoZoomToggle && !autoZoomEnabled
+  // The click-prompt quality overlay is feedback, not a navigation request. Keep
+  // the zone highlighted through selected/due props without asking SvgMap to fit
+  // it again when the quality buttons appear.
+  const activeMapFocusSourceCode = showClickRating
     ? manualFocusCode
     : remainingFocusCode;
+  const activeMapFocusCode = showAutoZoomToggle && !autoZoomEnabled
+    ? manualFocusCode
+    : activeMapFocusSourceCode;
   const activeMapClickableCodes = mode === MAP_MODE_CLICK_PROMPT && !showRecap
     ? dueCodes
     : undefined;

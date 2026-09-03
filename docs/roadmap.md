@@ -42,6 +42,7 @@
 - je ne veux pas de mode compliqué pour les questions dures
 - le bouton terminer est confusing dans la review
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
+- mieux afficher les relearning
 
 ## quick fixes
 
