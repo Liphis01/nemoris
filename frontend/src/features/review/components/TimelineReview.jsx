@@ -24,6 +24,7 @@ import TimelineCascade from "./TimelineCascade";
 import TimelineGlobalTrack from "./TimelineGlobalTrack";
 import useTimelineReview from "../hooks/useTimelineReview";
 import { GOT_IT_QUALITY, STILL_LEARNING_QUALITY } from "../relearningGrades";
+import { eventDigit } from "../keyboardShortcuts";
 
 const emptyAnchors = [];
 
@@ -365,12 +366,7 @@ export default function TimelineReview({
         // top-row digits need the physical-key fallback.
         if (!canAdjustQuality) return;
 
-        const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
-        const quality = ["1", "2", "3"].includes(event.key)
-          ? Number(event.key)
-          : digitMatch
-            ? Number(digitMatch[1])
-            : null;
+        const quality = eventDigit(event, { min: 1, max: 3 });
 
         if (quality !== null) {
           event.preventDefault();

@@ -24,6 +24,7 @@ import {
   buildSessionDebrief,
   createReviewResultRecords
 } from "../sessionDebrief";
+import { eventDigit } from "../keyboardShortcuts";
 
 
 function isEditableTarget(target) {
@@ -744,20 +745,21 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
         // A relearning retry is binary: only Encore (0) and Acquis (1) act, so
         // the 2/3 grades can't slip a same-day retry back into FSRS.
         const relearning = isRelearningQuestion(current);
+        const quality = eventDigit(event, { min: 0, max: 3 });
 
-        if (event.key === "0") {
+        if (quality === STILL_LEARNING_QUALITY) {
           event.preventDefault();
           handleTextAnswer(STILL_LEARNING_QUALITY);
         }
-        if (event.key === "1") {
+        if (quality === 1) {
           event.preventDefault();
           handleTextAnswer(relearning ? GOT_IT_QUALITY : 1);
         }
-        if (!relearning && event.key === "2") {
+        if (!relearning && quality === 2) {
           event.preventDefault();
           handleTextAnswer(2);
         }
-        if (!relearning && event.key === "3") {
+        if (!relearning && quality === 3) {
           event.preventDefault();
           handleTextAnswer(3);
         }

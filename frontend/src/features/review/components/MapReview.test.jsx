@@ -762,7 +762,7 @@ describe("MapReview recap map focus", () => {
       "correct"
     ]);
 
-    fireEvent.keyDown(window, { key: "3" });
+    fireEvent.keyDown(window, { key: "\"", code: "Digit3" });
 
     // Grading dismisses the reveal and moves the session on.
     await waitFor(() => {
@@ -813,7 +813,11 @@ describe("MapReview recap map focus", () => {
 
     expect(targetIndex).toBeGreaterThanOrEqual(0);
 
-    fireEvent.keyDown(window, { key: String(targetIndex + 1) });
+    const azertyKeys = ["&", "é", "\"", "'"];
+    fireEvent.keyDown(window, {
+      key: azertyKeys[targetIndex],
+      code: `Digit${targetIndex + 1}`
+    });
 
     await waitFor(() => {
       expect(screen.getByText("Correct").closest("button"))

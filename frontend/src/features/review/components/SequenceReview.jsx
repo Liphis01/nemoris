@@ -11,6 +11,7 @@ import SequenceRail from "./SequenceRail";
 import { isAnswerable, qualityColors } from "../sequenceRail";
 import { matchesAnswerValue } from "../answerPolicy";
 import { buildChoiceOptions } from "../distractorSelection";
+import { eventDigit } from "../keyboardShortcuts";
 
 const CHOICE_COUNT = 4;
 
@@ -517,7 +518,8 @@ export default function SequenceReview({
     if (!isChoice || revealed || !activeChoiceItem) return undefined;
 
     function onKeyDown(event) {
-      const index = Number(event.key) - 1;
+      const digit = eventDigit(event, { min: 1, max: 9 });
+      const index = digit === null ? -1 : digit - 1;
       const choices = choicesByItem[activeChoiceItem.question_id] || [];
 
       if (index >= 0 && index < choices.length) {

@@ -11,6 +11,7 @@ import {
   relearningQualityOptions
 } from "../relearningGrades";
 import { matchesAnswerValue } from "../answerPolicy";
+import { eventDigit } from "../keyboardShortcuts";
 
 const qualityOptions = [
   { value: 0, icon: "❌", title: "Faux" },
@@ -580,12 +581,7 @@ export default function TextGroupReview({
         return;
       }
 
-      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
-      const quality = ["0", "1", "2", "3"].includes(event.key)
-        ? Number(event.key)
-        : digitMatch
-          ? Number(digitMatch[1])
-          : null;
+      const quality = eventDigit(event, { min: 0, max: 3 });
 
       if (quality !== null) {
         event.preventDefault();
@@ -658,12 +654,7 @@ export default function TextGroupReview({
     );
 
     function handleKeyDown(event) {
-      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
-      const quality = ["1", "2", "3"].includes(event.key)
-        ? Number(event.key)
-        : digitMatch
-          ? Number(digitMatch[1])
-          : null;
+      const quality = eventDigit(event, { min: 1, max: 3 });
 
       if (quality !== null) {
         event.preventDefault();
@@ -703,12 +694,7 @@ export default function TextGroupReview({
 
       // Accept the character (0-3) or the physical key, so the shortcut works
       // on AZERTY layouts where the top-row digits need Shift.
-      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
-      const quality = ["0", "1", "2", "3"].includes(event.key)
-        ? Number(event.key)
-        : digitMatch
-          ? Number(digitMatch[1])
-          : null;
+      const quality = eventDigit(event, { min: 0, max: 3 });
 
       if (quality !== null) {
         const item = items[selectedRecapIndex];

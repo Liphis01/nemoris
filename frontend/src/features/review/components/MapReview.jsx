@@ -8,6 +8,7 @@ import {
   MAP_RECAP_UNANSWERED,
   useMapReview
 } from "../hooks/useMapReview";
+import { eventDigit } from "../keyboardShortcuts";
 import TrainingTimerPanel from "./TrainingTimerPanel";
 import {
   GOT_IT_QUALITY,
@@ -740,9 +741,11 @@ export default function MapReview({
 
       // A correct pick is graded 1/2/3 (never "Faux"); Enter takes the Bon default.
       if (correctPick) {
-        if (["1", "2", "3"].includes(event.key)) {
+        const quality = eventDigit(event, { min: 1, max: 3 });
+
+        if (quality !== null) {
           event.preventDefault();
-          rateChoice(Number(event.key));
+          rateChoice(quality);
         } else if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           rateChoice(2);
@@ -772,12 +775,7 @@ export default function MapReview({
     function handleTypedRatingKeyDown(event) {
       if (event.defaultPrevented) return;
 
-      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
-      const quality = ["1", "2", "3"].includes(event.key)
-        ? Number(event.key)
-        : digitMatch
-          ? Number(digitMatch[1])
-          : null;
+      const quality = eventDigit(event, { min: 1, max: 3 });
 
       if (quality !== null) {
         event.preventDefault();
@@ -806,12 +804,7 @@ export default function MapReview({
     if (!showClickRating) return undefined;
 
     function handleClickRatingKeyDown(event) {
-      const digitMatch = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
-      const quality = ["1", "2", "3"].includes(event.key)
-        ? Number(event.key)
-        : digitMatch
-          ? Number(digitMatch[1])
-          : null;
+      const quality = eventDigit(event, { min: 1, max: 3 });
 
       if (quality !== null) {
         event.preventDefault();
@@ -842,7 +835,8 @@ export default function MapReview({
     function handleChoiceKeyDown(event) {
       if (isEditableTarget(event.target)) return;
 
-      const index = Number(event.key) - 1;
+      const digit = eventDigit(event, { min: 1, max: 9 });
+      const index = digit === null ? -1 : digit - 1;
 
       if (!Number.isInteger(index) || index < 0 || index >= choiceOptions.length) {
         return;
@@ -924,12 +918,7 @@ export default function MapReview({
 
       // Accept the character (0-3) or the physical key, so the shortcut works
       // on AZERTY layouts where the top-row digits need Shift.
-      const digitMatch = /^(?:Digit|Numpad)([0-3])$/.exec(event.code);
-      const quality = ["0", "1", "2", "3"].includes(event.key)
-        ? Number(event.key)
-        : digitMatch
-          ? Number(digitMatch[1])
-          : null;
+      const quality = eventDigit(event, { min: 0, max: 3 });
 
       if (quality === null) return;
 
