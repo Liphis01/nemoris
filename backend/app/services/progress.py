@@ -17,6 +17,7 @@ from ..scheduler import (
     set_fsrs_card_due_date,
     update_progress
 )
+from .map_eligibility import reviewable_question_filter
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
 
@@ -709,6 +710,7 @@ def rebalance_progress_calendar(db, today=None):
         for progress, type_q in (
             db.query(Progress, Question.type_q)
             .join(Question, Question.id == Progress.question_id)
+            .filter(reviewable_question_filter())
             .all()
         )
         if progress_has_started(progress)

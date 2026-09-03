@@ -15,6 +15,7 @@ from .media import (
     removed_media_refs
 )
 from .media_pool import read_media_pool
+from .progress import rebalance_progress_calendar
 from .sequence import validate_question_sequence
 from .tag_hierarchy import ensure_tag_ids
 from .tombstones import record_question_tombstones, record_tombstone
@@ -189,6 +190,11 @@ def update_question(db, question_id: int, payload):
     if "tags" in updates:
         updates["tags"] = ensure_tag_ids(db, updates["tags"])
 
+    suspension_changed = (
+        "suspended" in updates and
+        bool(updates["suspended"]) != bool(question.suspended)
+    )
+
     numeric_expected_changed = (
         question.type_q == "numeric" and
         future_type == "numeric" and
@@ -247,6 +253,10 @@ def update_question(db, question_id: int, payload):
 
     if "collection_ids" in updates:
         question.collections = get_collections_by_ids(db, updates["collection_ids"])
+
+    if suspension_changed:
+        db.flush()
+        rebalance_progress_calendar(db)
 
     db.commit()
     db.refresh(question)

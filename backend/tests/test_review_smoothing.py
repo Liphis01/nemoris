@@ -23,7 +23,9 @@ from app.routers.review import (
     revise_answer_question,
     update_settings
 )
+from app.routers.groups import suspend_group
 from app.services.intake import PRESSURE_DOWN_MIN, schedule_pressure
+from app.services.questions import update_question as update_question_service
 from app.services.review import _new_question_ids
 from app.services.startup import run_startup_rebalance
 from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
@@ -53,6 +55,8 @@ from app.schemas import (
     AnswerRequest,
     MediaAnswerRequest,
     MapAnswerRequest,
+    GroupSuspend,
+    QuestionUpdate,
     ReviewSettings,
     TimelineAnswerItem,
     TimelineAnswerRequest,
@@ -1013,14 +1017,22 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def add_question(self, question_id, type_q="text"):
+    def add_question(
+        self,
+        question_id,
+        type_q="text",
+        group=None,
+        suspended=False
+    ):
         question = Question(
             id=question_id,
             type_q=type_q,
             question=f"Question {question_id}",
             answer=f"Answer {question_id}",
             tags=[],
-            data={}
+            data={},
+            group=group,
+            suspended=suspended
         )
         self.db.add(question)
         return question
@@ -1799,6 +1811,111 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         self.assertEqual(response["total"], 2)
         self.assertEqual(response["moved"], 2)
         self.assertEqual(new_progress.next_review, today - timedelta(days=2))
+
+    def test_rebalance_route_ignores_suspended_progress_rows(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+
+        self.add_question(1, suspended=True)
+        suspended_progress = self.add_progress(
+            1,
+            today - timedelta(days=3),
+            reps=1
+        )
+
+        for question_id in range(2, 4):
+            self.add_question(question_id)
+            self.add_progress(question_id, today - timedelta(days=3), reps=1)
+
+        self.db.commit()
+
+        response = rebalance_review(db=self.db)
+        scheduled = {
+            progress.question_id: progress.next_review
+            for progress in self.db.query(Progress).all()
+        }
+
+        self.assertEqual(response["total"], 2)
+        self.assertEqual(scheduled[1], today - timedelta(days=3))
+        self.assertEqual(scheduled[2], today)
+        self.assertEqual(scheduled[3], today + timedelta(days=1))
+        self.assertEqual(
+            suspended_progress.next_review,
+            today - timedelta(days=3)
+        )
+
+    def test_question_suspension_rebalances_calendar_after_flag_change(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+        self.add_question(1)
+        self.add_progress(
+            1,
+            today,
+            reps=1,
+            ideal_interval=0,
+            ideal_next_review=today
+        )
+        self.add_question(2)
+        delayed = self.add_progress(
+            2,
+            today + timedelta(days=1),
+            reps=1,
+            ideal_interval=0,
+            ideal_next_review=today
+        )
+        self.db.commit()
+
+        update_question_service(
+            self.db,
+            1,
+            QuestionUpdate(suspended=True)
+        )
+
+        self.assertEqual(delayed.next_review, today)
+        self.assertTrue(
+            self.db.query(Question)
+            .filter(Question.id == 1)
+            .one()
+            .suspended
+        )
+
+    def test_group_suspension_rebalances_calendar_after_bulk_update(self):
+        today = date.today()
+        update_settings(ReviewSettings(catchup_daily_target=1), db=self.db)
+        group = self.add_group(20)
+        self.add_question(1, group=group)
+        self.add_progress(
+            1,
+            today,
+            reps=1,
+            ideal_interval=0,
+            ideal_next_review=today
+        )
+        self.add_question(2)
+        delayed = self.add_progress(
+            2,
+            today + timedelta(days=1),
+            reps=1,
+            ideal_interval=0,
+            ideal_next_review=today
+        )
+        self.db.commit()
+
+        response = suspend_group(
+            group.id,
+            GroupSuspend(suspended=True),
+            db=self.db
+        )
+
+        self.assertEqual(response["updated_count"], 1)
+        self.assertEqual(response["rebalance"]["total"], 1)
+        self.assertEqual(delayed.next_review, today)
+        self.assertTrue(
+            self.db.query(Question)
+            .filter(Question.id == 1)
+            .one()
+            .suspended
+        )
 
     def test_rebalance_route_moves_progress_and_soft_limits_daily_load(self):
         today = date.today()

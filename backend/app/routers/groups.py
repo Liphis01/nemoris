@@ -7,6 +7,7 @@ from ..models import Question, QuestionGroup
 from ..schemas import GroupCreate, GroupOut, GroupUpdate, GroupSuspend
 from ..services.map_zones import merge_tags
 from ..services.media import delete_unreferenced_media_file, media_points_to_same_static_file
+from ..services.progress import rebalance_progress_calendar
 from ..services.questions import delete_question_dependents
 from ..services.tombstones import record_tombstone
 
@@ -182,12 +183,14 @@ def suspend_group(
             synchronize_session=False
         )
     )
+    rebalance = rebalance_progress_calendar(db)
     db.commit()
 
     return {
         "group_id": group_id,
         "suspended": payload.suspended,
-        "updated_count": updated
+        "updated_count": updated,
+        "rebalance": rebalance
     }
 
 
