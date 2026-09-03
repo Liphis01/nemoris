@@ -500,7 +500,7 @@ describe("MediaReview answer label preview", () => {
     renderMediaReview();
 
     expect(screen.queryByText("Image suivante")).not.toBeInTheDocument();
-    expect(screen.getByText("Terminer")).toBeInTheDocument();
+    expect(screen.getByText("Abandonner")).toBeInTheDocument();
   });
 
   it("disables finish before the hook reports a real interaction", () => {
@@ -518,7 +518,7 @@ describe("MediaReview answer label preview", () => {
     });
     renderMediaReview();
 
-    const button = screen.getByRole("button", { name: "Terminer la série" });
+    const button = screen.getByRole("button", { name: "Abandonner la série" });
 
     expect(button).toBeDisabled();
 
@@ -545,7 +545,7 @@ describe("MediaReview answer label preview", () => {
     });
     renderMediaReview();
 
-    const button = screen.getByRole("button", { name: "Terminer la série" });
+    const button = screen.getByRole("button", { name: "Abandonner la série" });
 
     expect(button).toBeEnabled();
 
@@ -583,7 +583,7 @@ describe("MediaReview answer label preview", () => {
       .toBeInTheDocument();
     expect(scrollPane.querySelector("input")).not.toBeInTheDocument();
     expect(controlBand).toContainElement(screen.getByPlaceholderText("Tape une image..."));
-    expect(controlBand).toContainElement(screen.getByText("Terminer"));
+    expect(controlBand).toContainElement(screen.getByText("Abandonner"));
   });
 
   it("fills a compact visual parent while keeping the image pane scrollable", () => {

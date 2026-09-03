@@ -128,7 +128,7 @@ describe("MapReview recap map focus", () => {
     async (showQualityControls) => {
       renderMapReview(showQualityControls, { allowPartialSubmit: true });
 
-      fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+      fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
 
       expect(await screen.findByTestId("recap-map")).toHaveAttribute("data-focus-code", "");
 
@@ -155,7 +155,7 @@ describe("MapReview recap map focus", () => {
     // untouched zone must not give its name away.
     expect(JSON.parse(screen.getByTestId("active-map").dataset.zoneLabels)).toEqual({});
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
 
     // By the recap every zone is revealed, so all of them are hoverable by name.
     const recapMap = await screen.findByTestId("recap-map");
@@ -178,7 +178,7 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByText("Meilleur")).toBeInTheDocument();
     expect(screen.getByText("1:30")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
 
     expect(await screen.findByRole("button", { name: "Continuer" })).toBeInTheDocument();
     expect(screen.queryByText("Temps")).not.toBeInTheDocument();
@@ -187,7 +187,7 @@ describe("MapReview recap map focus", () => {
   it("disables finish before any zone has been attempted", () => {
     renderMapReview(true, { mode: "type_all" });
 
-    const button = screen.getByRole("button", { name: "Terminer la carte" });
+    const button = screen.getByRole("button", { name: "Abandonner la carte" });
 
     expect(button).toBeDisabled();
 
@@ -200,7 +200,7 @@ describe("MapReview recap map focus", () => {
   it("enables finish immediately in type_prompt so the learner can give up", async () => {
     renderMapReview(true, { mode: "type_prompt" });
 
-    const button = screen.getByRole("button", { name: "Terminer la carte" });
+    const button = screen.getByRole("button", { name: "Abandonner la carte" });
 
     expect(button).toBeEnabled();
 
@@ -354,7 +354,7 @@ describe("MapReview recap map focus", () => {
       mode: "type_prompt"
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
     await screen.findByTestId("recap-map");
 
     fireEvent.keyDown(window, { key: "+" });
@@ -572,7 +572,7 @@ describe("MapReview recap map focus", () => {
     expect(screen.getByTestId("active-map").parentElement).toContainElement(ratingPanel);
     expect(ratingPanel.parentElement).toHaveStyle({ position: "absolute" });
     expect(document.querySelectorAll("[data-map-click-quality]")).toHaveLength(3);
-    expect(screen.getByRole("button", { name: "Terminer la carte" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Abandonner la carte" })).toBeDisabled();
 
     fireEvent.keyDown(window, { key: "Enter" });
 
@@ -878,7 +878,7 @@ describe("MapReview recap map focus", () => {
     fireEvent.change(input, { target: { value: "Alpha" } });
     expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
     rateTypedMapQuality(2);
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
 
     await screen.findByRole("button", { name: "Valider" });
 
@@ -968,7 +968,7 @@ describe("MapReview recap map focus", () => {
       expect(document.querySelector("[data-map-typed-rating]")).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
     fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
 
     await waitFor(() => {
@@ -995,7 +995,7 @@ describe("MapReview recap map focus", () => {
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
     rateTypedMapQuality(2);
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
     fireEvent.click(await screen.findByRole("button", { name: "Valider" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Serveur indisponible");
@@ -1016,7 +1016,7 @@ describe("MapReview recap map focus", () => {
     fireEvent.change(input, { target: { value: "Alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
     rateTypedMapQuality(1);
-    fireEvent.click(screen.getByRole("button", { name: "Terminer la carte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
 
     await screen.findByRole("button", { name: "Valider" });
 

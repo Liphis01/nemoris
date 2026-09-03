@@ -611,7 +611,7 @@ describe("useTrainingSession", () => {
 
     performanceNowSpy.mockReturnValue(4000);
 
-    // "Terminer" pressed with one zone still missing.
+    // "Abandonner" pressed with one zone still missing.
     act(() => {
       result.current.markAnsweringComplete([11]);
     });

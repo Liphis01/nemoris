@@ -137,6 +137,13 @@ const buttonStyle = {
   padding: "10px 14px"
 };
 
+const abandonButtonStyle = {
+  ...buttonStyle,
+  background: "#3a2424",
+  border: "1px solid #7f3535",
+  color: "#fecaca"
+};
+
 // Quality / continue buttons sit in the slots the decoys left behind, and only
 // appear once the answer has finished sliding. They keep the regular choice-button
 // shape — only the centred label and the muted text set them apart, since the
@@ -3661,16 +3668,16 @@ export default function MediaReview({
 
               <button
                 type="button"
-                aria-label="Terminer la série"
+                aria-label="Abandonner la série"
                 disabled={!canFinishReview}
                 onClick={finishReview}
                 style={{
-                  ...buttonStyle,
+                  ...abandonButtonStyle,
                   cursor: canFinishReview ? "pointer" : "not-allowed",
                   opacity: canFinishReview ? 1 : 0.55
                 }}
               >
-                Terminer
+                Abandonner
               </button>
             </div>
           ) : null}

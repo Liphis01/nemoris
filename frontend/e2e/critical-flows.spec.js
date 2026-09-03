@@ -115,7 +115,7 @@ test("map type_all asks inline quality after Jura is submitted", async ({ page }
   await page.keyboard.press("Enter");
   await expect(qualityPanel).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Terminer la carte" }).click();
+  await page.getByRole("button", { name: "Abandonner la carte" }).click();
   await expect(page.getByText("MAP RESULT")).toBeVisible();
   await expect(page.getByText("réussite", { exact: true })).toBeVisible();
 

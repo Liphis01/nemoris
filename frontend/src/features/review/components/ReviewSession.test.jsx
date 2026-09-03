@@ -523,7 +523,7 @@ describe("ReviewSession", () => {
       skipToSessionEnd
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminer →" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la session" }));
 
     expect(skipToSessionEnd).toHaveBeenCalled();
   });
@@ -549,7 +549,7 @@ describe("ReviewSession", () => {
     });
 
     expect(
-      screen.queryByRole("button", { name: "Terminer →" })
+      screen.queryByRole("button", { name: "Abandonner la session" })
     ).not.toBeInTheDocument();
   });
 });

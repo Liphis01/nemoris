@@ -78,6 +78,17 @@ function RelearningCountChip({ count, compact = false }) {
   );
 }
 
+const abandonSessionButtonStyle = {
+  background: "#3a2424",
+  border: "1px solid #7f3535",
+  borderRadius: "9px",
+  color: "#fecaca",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 700,
+  padding: "7px 10px"
+};
+
 function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count} ${count > 1 ? pluralForm : singular}`;
 }
@@ -459,19 +470,11 @@ export default function ReviewSession({
               {showSkipToSessionEnd && (
                 <button
                   type="button"
+                  aria-label="Abandonner la session"
                   onClick={skipToSessionEnd}
-                  style={{
-                    background: "#1f1f1f",
-                    border: "1px solid #333",
-                    borderRadius: "9px",
-                    color: "#ccc",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    padding: "7px 10px"
-                  }}
+                  style={abandonSessionButtonStyle}
                 >
-                  Terminer →
+                  Abandonner
                 </button>
               )}
 
@@ -827,19 +830,11 @@ export default function ReviewSession({
                 {showSkipToSessionEnd && (
                   <button
                     type="button"
+                    aria-label="Abandonner la session"
                     onClick={skipToSessionEnd}
-                    style={{
-                      background: "#1f1f1f",
-                      border: "1px solid #333",
-                      color: "#ccc",
-                      padding: "7px 10px",
-                      borderRadius: "10px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: "650"
-                    }}
+                    style={abandonSessionButtonStyle}
                   >
-                    Terminer →
+                    Abandonner
                   </button>
                 )}
 

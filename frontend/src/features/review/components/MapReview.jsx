@@ -59,6 +59,13 @@ const buttonStyle = {
   fontWeight: "600"
 };
 
+const abandonButtonStyle = {
+  ...buttonStyle,
+  background: "#3a2424",
+  border: "1px solid #7f3535",
+  color: "#fecaca"
+};
+
 const successButton = {
   ...buttonStyle,
   background: "#1d3a29",
@@ -1515,16 +1522,16 @@ export default function MapReview({
 
                 <button
                   type="button"
-                  aria-label="Terminer la carte"
+                  aria-label="Abandonner la carte"
                   disabled={!canFinishReview}
                   onClick={finishMap}
                   style={{
-                    ...buttonStyle,
+                    ...abandonButtonStyle,
                     cursor: canFinishReview ? "pointer" : "not-allowed",
                     opacity: canFinishReview ? 1 : 0.55
                   }}
                 >
-                  Terminer
+                  Abandonner
                 </button>
               </div>
             </div>

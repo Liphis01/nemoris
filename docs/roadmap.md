@@ -29,7 +29,6 @@
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
 - mettre un bouton supprimer le pack si on l'a importé par erreur
 - menu study à améliorer
-- mettre des pseudos
 - savoir où on est dans l'introduction des nouvelles questions
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
 - les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier

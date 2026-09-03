@@ -74,6 +74,13 @@ const buttonStyle = {
   padding: "10px 16px"
 };
 
+const abandonButtonStyle = {
+  ...buttonStyle,
+  background: "#3a2424",
+  border: "1px solid #7f3535",
+  color: "#fecaca"
+};
+
 const keyCapStyle = {
   alignItems: "center",
   background: "#0d0d0d",
@@ -214,7 +221,7 @@ export default function TextGroupReview({
   // button must not be able to fail every item at once before the learner has
   // touched anything. Any recorded attempt counts, right or wrong --
   // answersByQuestionId is written both on a typed guess and on a first match
-  // pick, so a wrong-but-real attempt still unlocks Terminer.
+  // pick, so a wrong-but-real attempt still unlocks Abandonner.
   const canFinishAnswering = isSelfGradedTypeAll
     ? selfGradeAllResolved
     : items.length > 0 && (
@@ -1219,19 +1226,16 @@ export default function TextGroupReview({
       <div>
         <button
           type="button"
-          aria-label="Terminer le groupe"
+          aria-label="Abandonner le groupe"
           disabled={!canFinishAnswering}
           onClick={finishAnswering}
           style={{
-            ...buttonStyle,
-            background: "#1e3a5f",
-            border: "1px solid #345b7a",
-            color: "#dbeafe",
+            ...abandonButtonStyle,
             cursor: canFinishAnswering ? "pointer" : "not-allowed",
             opacity: canFinishAnswering ? 1 : 0.55
           }}
         >
-          Terminer
+          Abandonner
         </button>
       </div>
     </div>

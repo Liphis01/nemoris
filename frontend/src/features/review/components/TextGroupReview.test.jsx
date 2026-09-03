@@ -193,11 +193,11 @@ describe("TextGroupReview completion guard", () => {
 
   // M0 trust breaker: pressing a generic completion button before touching
   // anything used to grade every item in the group as a failure at once.
-  it("blocks Terminer until the learner has attempted something", () => {
+  it("blocks Abandonner until the learner has attempted something", () => {
     const submitAnswer = vi.fn().mockResolvedValue(undefined);
     renderGroup(submitAnswer);
 
-    const finish = screen.getByRole("button", { name: "Terminer le groupe" });
+    const finish = screen.getByRole("button", { name: "Abandonner le groupe" });
 
     expect(finish).toBeDisabled();
 
@@ -206,7 +206,7 @@ describe("TextGroupReview completion guard", () => {
     expect(submitAnswer).not.toHaveBeenCalled();
   });
 
-  it("enables Terminer after a wrong attempt, not only a correct one", async () => {
+  it("enables Abandonner after a wrong attempt, not only a correct one", async () => {
     const submitAnswer = vi.fn().mockResolvedValue(undefined);
     renderGroup(submitAnswer);
 
@@ -214,7 +214,7 @@ describe("TextGroupReview completion guard", () => {
     fireEvent.change(input, { target: { value: "totalement faux" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    const finish = screen.getByRole("button", { name: "Terminer le groupe" });
+    const finish = screen.getByRole("button", { name: "Abandonner le groupe" });
 
     await waitFor(() => expect(finish).toBeEnabled());
 
