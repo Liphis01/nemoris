@@ -40,6 +40,16 @@
 - mieux afficher les relearning
 - l'email supabase
 - mettre un bouton supprimer le pack si on l'a importé par erreur
+- petite animation pour les inline quality de map
+- bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
+- bouton pour shuffle un groupe dans le queue manager
+- inline pour type_prompt d'images
+- afficher le pseudo plutot que l'email
+- ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
+- ctrl+s pour sauvegarder les changements dans manage
+- ajouter search input dans le groupe de texte
+- enlever le bouton pause du menu manage normal (garder que dans queue manager)
+- mettre un input optionnel pour les questions de type texte
 
 ## quick fixes
 
@@ -85,6 +95,7 @@
 - quels sont les principes à respecter pour un rendu graphique idéal ? vérifie que c'est appliqué partout
 - permettre d'avoir un "type" map où il faut cliquer sur toutes les zones qui respectent un critère (ex: les pays où on parle français) (pas forcément binaire)
 - faire des qcm pas que de 4 réponses (peut aider à adapter la difficulté)
+- bouton pour réinitialiser une question (ou juste sa progression)
 
 ## refactors
 

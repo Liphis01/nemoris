@@ -276,6 +276,38 @@ class SchedulerSmoothingTests(unittest.TestCase):
             "type_prompt"
         )
 
+    def test_map_recall_proof_removes_easy_modes_even_for_fragile_cards(self):
+        due = []
+
+        for index in range(5):
+            question = Question(type_q="map", answer=f"Proven {index}")
+            question.progress = Progress(
+                reps=1,
+                difficulty=8.0,
+                history=[{"map_mode": "type_prompt", "quality": 2}]
+            )
+            due.append(question)
+
+        modes = {
+            choose_map_review_mode(due, due, rng=FixedRandom(value))
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertLessEqual(modes, {"type_all", "type_prompt"})
+
+    def test_brand_new_map_uses_supported_modes_when_available(self):
+        due = [
+            Question(type_q="map", answer=f"New {index}")
+            for index in range(5)
+        ]
+
+        modes = {
+            choose_map_review_mode(due, due, rng=FixedRandom(value))
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertLessEqual(modes, {"multiple_choice", "click_prompt"})
+
     def test_map_click_prompt_requires_minimum_review_context(self):
         context = [
             Question(id=index, type_q="map", answer=f"Zone {index}")
@@ -415,6 +447,41 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(
             choose_image_review_mode(due, due, rng=FixedRandom(0)),
             "type_prompt"
+        )
+
+    def test_image_recall_proof_removes_easy_modes_even_for_fragile_cards(self):
+        due = []
+
+        for index in range(5):
+            question = Question(type_q="media", answer=f"Proven {index}")
+            question.progress = Progress(
+                reps=1,
+                difficulty=8.0,
+                history=[{"image_mode": "type_prompt", "quality": 2}]
+            )
+            due.append(question)
+
+        modes = {
+            choose_image_review_mode(due, due, rng=FixedRandom(value))
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertLessEqual(modes, {"type_all", "type_prompt"})
+
+    def test_brand_new_images_use_supported_modes_when_available(self):
+        due = [
+            Question(type_q="media", answer=f"New {index}")
+            for index in range(5)
+        ]
+
+        modes = {
+            choose_image_review_mode(due, due, rng=FixedRandom(value))
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertLessEqual(
+            modes,
+            {"multiple_choice_label", "multiple_choice_media"}
         )
 
     def test_single_image_review_mode_does_not_pick_type_all(self):

@@ -400,6 +400,61 @@ class SequenceModeTests(SequenceTestCase):
 
         self.assertEqual(mode, SEQUENCE_MODE_RECITE)
 
+    def test_sequence_recall_proof_removes_supported_modes_even_for_fragile_cards(self):
+        group = self.add_group()
+        due = [
+            self.add_item(
+                group,
+                f"Item {index}",
+                index,
+                reps=1,
+                difficulty=8.0,
+                history=[{
+                    "sequence_mode": SEQUENCE_MODE_RECITE,
+                    "quality": 2
+                }]
+            )
+            for index in range(1, 7)
+        ]
+
+        modes = {
+            choose_sequence_review_mode(
+                due,
+                due,
+                multiple_choice_context_count=len(due),
+                rng=FixedRandom(value)
+            )
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertLessEqual(
+            modes,
+            {SEQUENCE_MODE_TYPE_POSITION, SEQUENCE_MODE_RECITE}
+        )
+
+    def test_brand_new_recitation_sequence_uses_supported_modes_when_available(self):
+        group = self.add_group()
+        due = [
+            self.add_item(group, f"Item {index}", index)
+            for index in range(1, 7)
+        ]
+
+        modes = {
+            choose_sequence_review_mode(
+                due,
+                due,
+                multiple_choice_context_count=len(due),
+                review_goal=SEQUENCE_GOAL_RECITATION,
+                rng=FixedRandom(value)
+            )
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertLessEqual(
+            modes,
+            {SEQUENCE_MODE_GAP_FILL, SEQUENCE_MODE_REORDER}
+        )
+
     def test_recency_penalty_stays_proportionate_on_a_large_due_set(self):
         # Every one of 30 support-affinity items shares a history spread
         # evenly across three modes. Unnormalized, the accumulated counts

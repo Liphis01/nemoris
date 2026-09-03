@@ -7,6 +7,7 @@ import {
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_TYPE_ALL,
   IMAGE_MODE_TYPE_PROMPT,
+  normalizeImageMode,
   normalizeImageModeForItemCount
 } from "../imageModes";
 import {
@@ -377,7 +378,16 @@ export function useMediaReview(
   const reviewItemCount = Array.isArray(reviewItemsInput)
     ? reviewItemsInput.length
     : 0;
-  const mode = normalizeImageModeForItemCount(options.mode, reviewItemCount);
+  const relearningGroup = options.group;
+  const servedRetryMode = (
+    relearningGroup?._reviewRetryOfIndex !== undefined ||
+    (reviewItemsInput || []).some(item =>
+      isRelearningGroupItem(relearningGroup, item)
+    )
+  );
+  const mode = servedRetryMode
+    ? normalizeImageMode(options.mode)
+    : normalizeImageModeForItemCount(options.mode, reviewItemCount);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
   // Review grades each choice inline (reveal + quality), then auto-submits the
@@ -390,7 +400,6 @@ export function useMediaReview(
   const contextItemsInput = options.contextItems?.length
     ? options.contextItems
     : reviewItemsInput;
-  const relearningGroup = options.group;
   const graduateAnswer = options.graduateAnswer;
   const reviewKey = useMemo(
     () => `${mode}:${idsFor(reviewItemsInput).join("|")}`,

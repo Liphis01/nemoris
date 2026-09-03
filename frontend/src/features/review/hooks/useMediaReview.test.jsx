@@ -183,6 +183,23 @@ describe("useMediaReview", () => {
     expect(onComplete).toHaveBeenCalledWith([]);
   });
 
+  it("preserves single-image type_all for relearning retries", () => {
+    const items = [{
+      ...imageItem(1, "France"),
+      progress: { relearning: true }
+    }];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), undefined, {
+        group: { name: "Flags", items },
+        inlineTypedRating: true,
+        mode: IMAGE_MODE_TYPE_ALL
+      })
+    );
+
+    expect(result.current.mode).toBe(IMAGE_MODE_TYPE_ALL);
+    expect(result.current.activeItem).toBeNull();
+  });
+
   it("type_all ignores image selection and keeps the shared input", () => {
     const items = [
       imageItem(1, "France"),

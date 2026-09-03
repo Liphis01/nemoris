@@ -905,6 +905,36 @@ begin
 end;
 $$;
 
+create or replace function public.pack_user_display_label(
+  p_user_id uuid,
+  p_fallback text default null::text
+)
+returns text
+language plpgsql
+stable
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_username text;
+begin
+  -- Profiles are optional on older catalog deployments, so keep this lookup
+  -- dynamic instead of taking a hard dependency at function creation time.
+  if p_user_id is not null and to_regclass('public.profiles') is not null then
+    execute
+      'select nullif(trim(username), '''') from public.profiles where user_id = $1 limit 1'
+    into v_username
+    using p_user_id;
+  end if;
+
+  return coalesce(
+    v_username,
+    nullif(trim(coalesce(p_fallback, '')), ''),
+    'Utilisateur'
+  );
+end;
+$$;
+
 create or replace function public.add_pack_comment(p_pack_guid text, p_body text)
 returns public.pack_comments
 language sql
@@ -913,7 +943,7 @@ as $$
   values (
     p_pack_guid,
     auth.uid(),
-    coalesce(auth.jwt() ->> 'email', 'Utilisateur'),
+    public.pack_user_display_label(auth.uid(), auth.jwt() ->> 'email'),
     p_body
   )
   returning *;
@@ -938,11 +968,17 @@ declare
   v_uid uuid := auth.uid();
   v_pack public.pack_catalog;
   v_note text := trim(coalesce(p_note, ''));
+  v_author_label text;
   v_row public.pack_suggested_edits;
 begin
   if v_uid is null then
     raise exception 'Connexion Supabase requise.';
   end if;
+
+  v_author_label := public.pack_user_display_label(
+    v_uid,
+    auth.jwt() ->> 'email'
+  );
 
   if char_length(v_note) < 1 or char_length(v_note) > 2000 then
     raise exception 'Ajoute une note pour expliquer la correction.';
@@ -987,7 +1023,7 @@ begin
   values (
     p_pack_guid,
     v_uid,
-    coalesce(auth.jwt() ->> 'email', 'Utilisateur'),
+    v_author_label,
     nullif(trim(coalesce(p_target_question_guid, '')), ''),
     nullif(trim(coalesce(p_target_group_guid, '')), ''),
     left(trim(coalesce(p_target_label, '')), 160),
@@ -1059,7 +1095,13 @@ rows as (
 select jsonb_build_object(
   'suggestions',
   coalesce((
-    select jsonb_agg(to_jsonb(rows) order by
+    select jsonb_agg(
+      to_jsonb(rows)
+      || jsonb_build_object(
+        'author_label',
+        public.pack_user_display_label(rows.user_id, rows.author_label)
+      )
+      order by
       case when rows.status = 'pending' then 0 else 1 end,
       rows.created_at desc
     )
@@ -1100,6 +1142,7 @@ begin
 
   update public.pack_suggested_edits pse
   set status = v_status,
+      author_label = public.pack_user_display_label(pse.user_id, pse.author_label),
       owner_note = left(trim(coalesce(p_owner_note, '')), 1000),
       resolved_at = timezone('utc', now()),
       updated_at = timezone('utc', now())
@@ -1139,6 +1182,7 @@ begin
 
   update public.pack_suggested_edits pse
   set applied_at = coalesce(pse.applied_at, timezone('utc', now())),
+      author_label = public.pack_user_display_label(pse.user_id, pse.author_label),
       updated_at = timezone('utc', now())
   where pse.id = p_edit_id
     and pse.status = 'accepted'
@@ -1270,7 +1314,19 @@ events as (
     base.name as pack_name,
     pae.related_pack_guid,
     related.name as related_pack_name,
-    pae.payload,
+    case
+      when pae.event_type = 'suggested_edit_created' then
+        jsonb_set(
+          pae.payload,
+          '{author_label}',
+          to_jsonb(public.pack_user_display_label(
+            pae.actor_id,
+            pae.payload ->> 'author_label'
+          )),
+          true
+        )
+      else pae.payload
+    end as payload,
     pae.read_at,
     pae.created_at
   from public.pack_activity_events pae
@@ -1350,6 +1406,7 @@ grant execute on function public.record_pack_install(text, integer) to authentic
 grant execute on function public.record_pack_installs_bulk(jsonb) to authenticated;
 grant execute on function public.get_my_pack_status(text) to authenticated;
 grant execute on function public.rate_pack(text, smallint) to authenticated;
+grant execute on function public.pack_user_display_label(uuid, text) to authenticated;
 grant execute on function public.add_pack_comment(text, text) to authenticated;
 grant execute on function public.submit_pack_suggested_edit(
   text, text, text, text, jsonb, text, text, text

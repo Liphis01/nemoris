@@ -288,9 +288,16 @@ function activityTitle(event) {
 }
 
 
+function activityAuthorLabel(event) {
+  return String(event.payload?.author_label || "").trim() || "Utilisateur";
+}
+
+
 function activityDetail(event) {
   if (event.event_type === "suggested_edit_created") {
-    return `Correction proposée pour ${event.pack_name || event.pack_guid || "ton pack"}`;
+    return `${activityAuthorLabel(event)} propose une correction pour ${
+      event.pack_name || event.pack_guid || "ton pack"
+    }`;
   }
 
   return `Variante de ${event.pack_name || event.pack_guid || "ton pack"}`;

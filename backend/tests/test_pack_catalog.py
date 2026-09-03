@@ -188,6 +188,12 @@ class PackCatalogSchemaSqlTests(unittest.TestCase):
         self.assertIn("create or replace function public.resolve_pack_suggested_edit", sql)
         self.assertIn("applied_at timestamptz", sql)
         self.assertIn("create or replace function public.mark_pack_suggested_edit_applied", sql)
+        self.assertIn("create or replace function public.pack_user_display_label", sql)
+        self.assertIn("v_author_label := public.pack_user_display_label", sql)
+        self.assertIn("auth.jwt() ->> 'email'", sql)
+        self.assertIn("public.pack_user_display_label(rows.user_id, rows.author_label)", sql)
+        self.assertIn("public.pack_user_display_label(", sql)
+        self.assertIn("pae.actor_id", sql)
         self.assertIn("'suggested_edit_created'", sql)
 
 

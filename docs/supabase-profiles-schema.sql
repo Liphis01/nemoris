@@ -1,5 +1,5 @@
 -- Supabase setup for user profiles (Profil screen): public username + emoji
--- avatar, and wiring pack_comments.author_label to prefer it over e-mail.
+-- avatar, and wiring pack author labels to prefer pseudos over e-mail.
 --
 -- Run this once in the Supabase SQL editor for the SAME project configured
 -- under Settings -> Synchronisation in the app (Profil reuses the sync
@@ -69,12 +69,12 @@ create trigger profiles_set_updated_at
 
 -- =========================================================
 -- 3. Row level security -- owner-only, direct grant (mirrors
---    pack_installs/pack_ratings: no cross-user read is needed today, since
---    pack_comments still freezes author_label at insert time instead of
---    live-joining profiles -- see add_pack_comment below). If a future
---    feature needs to show OTHER users' profiles, relax
---    profiles_select_own to `to anon, authenticated using (true)`, exactly
---    like pack_comments_select_all does.
+--    pack_installs/pack_ratings: pack comments, suggested edits, and pack
+--    activity resolve display labels through SECURITY DEFINER RPCs instead of
+--    broad profile reads. If a future feature needs to show OTHER users'
+--    profiles directly, relax profiles_select_own to
+--    `to anon, authenticated using (true)`, exactly like
+--    pack_comments_select_all does.
 -- =========================================================
 
 alter table public.profiles enable row level security;
@@ -141,12 +141,43 @@ $$;
 grant execute on function public.upsert_my_profile(text, text, text) to authenticated;
 
 -- =========================================================
--- 5. Replaces the EXISTING add_pack_comment RPC so new comments carry the
---    poster's chosen username when set, falling back to their e-mail, then
---    'Utilisateur' -- exactly like before. Same signature/return type/
---    language as the live function (docs/supabase-pack-catalog-schema.sql
---    section 4), so `create or replace` applies cleanly without a drop.
+-- 5. Replaces the shared pack-user display helper and the EXISTING
+--    add_pack_comment RPC so new comments carry the poster's chosen username
+--    when set, falling back to their e-mail, then 'Utilisateur' -- exactly
+--    like before. Same add_pack_comment signature/return type/language as the
+--    live function (docs/supabase-pack-catalog-schema.sql section 4), so
+--    `create or replace` applies cleanly without a drop.
 -- =========================================================
+
+create or replace function public.pack_user_display_label(
+  p_user_id uuid,
+  p_fallback text default null::text
+)
+returns text
+language plpgsql
+stable
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_username text;
+begin
+  -- Profiles are optional on older catalog deployments, so keep this lookup
+  -- dynamic instead of taking a hard dependency at function creation time.
+  if p_user_id is not null and to_regclass('public.profiles') is not null then
+    execute
+      'select nullif(trim(username), '''') from public.profiles where user_id = $1 limit 1'
+    into v_username
+    using p_user_id;
+  end if;
+
+  return coalesce(
+    v_username,
+    nullif(trim(coalesce(p_fallback, '')), ''),
+    'Utilisateur'
+  );
+end;
+$$;
 
 create or replace function public.add_pack_comment(p_pack_guid text, p_body text)
 returns public.pack_comments
@@ -156,16 +187,13 @@ as $$
   values (
     p_pack_guid,
     auth.uid(),
-    coalesce(
-      (select username from public.profiles where user_id = auth.uid()),
-      auth.jwt() ->> 'email',
-      'Utilisateur'
-    ),
+    public.pack_user_display_label(auth.uid(), auth.jwt() ->> 'email'),
     p_body
   )
   returning *;
 $$;
 
+grant execute on function public.pack_user_display_label(uuid, text) to authenticated;
 grant execute on function public.add_pack_comment(text, text) to authenticated;
 
 select pg_notify('pgrst', 'reload schema');

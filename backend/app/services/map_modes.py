@@ -6,6 +6,9 @@ from .mode_selection import (
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
     question_mode_affinity_counts,
+    questions_are_unstarted,
+    questions_have_recall_proof,
+    restrict_modes_or_fallback,
     weighted_mode_choice
 )
 
@@ -20,6 +23,14 @@ MAP_MODES = (
     MAP_MODE_CLICK_PROMPT,
     MAP_MODE_TYPE_PROMPT,
     MAP_MODE_MULTIPLE_CHOICE
+)
+MAP_RECALL_MODES = (
+    MAP_MODE_TYPE_ALL,
+    MAP_MODE_TYPE_PROMPT
+)
+MAP_SUPPORTED_MODES = (
+    MAP_MODE_MULTIPLE_CHOICE,
+    MAP_MODE_CLICK_PROMPT
 )
 DEFAULT_MAP_MODE = MAP_MODE_TYPE_ALL
 MAP_TYPE_ALL_DIFFICULTY = 1.0
@@ -90,6 +101,8 @@ def choose_map_review_mode(
     due_questions,
     context_questions,
     multiple_choice_context_count=None,
+    recall_only=False,
+    support_only=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -103,6 +116,13 @@ def choose_map_review_mode(
 
     if not due_questions:
         return DEFAULT_MAP_MODE
+
+    recall_only = recall_only or questions_have_recall_proof(due_questions)
+    support_only = (
+        support_only or (
+            not recall_only and questions_are_unstarted(due_questions)
+        )
+    )
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
@@ -168,6 +188,17 @@ def choose_map_review_mode(
             for mode in eligible_modes
             if mode != MAP_MODE_CLICK_PROMPT
         ]
+
+    if recall_only:
+        eligible_modes = restrict_modes_or_fallback(
+            eligible_modes,
+            MAP_RECALL_MODES
+        )
+    elif support_only:
+        eligible_modes = restrict_modes_or_fallback(
+            eligible_modes,
+            MAP_SUPPORTED_MODES
+        )
 
     return weighted_mode_choice(
         eligible_modes,

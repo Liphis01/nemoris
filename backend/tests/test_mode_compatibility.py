@@ -17,6 +17,7 @@ from app.services.mode_selection import recent_mode_counts
 from app.services.text_groups import save_text_group_items
 from app.services.text_modes import (
     DEFAULT_TEXT_MODE,
+    TEXT_MODE_MATCH,
     TEXT_MODES,
     choose_text_review_mode,
     normalize_text_mode
@@ -80,6 +81,36 @@ class ModeCompatibilityTests(unittest.TestCase):
             ),
             DEFAULT_TEXT_MODE
         )
+
+    def test_text_recall_proof_removes_match_even_for_fragile_cards(self):
+        question = SimpleNamespace(progress=SimpleNamespace(
+            reps=1,
+            difficulty=8.0,
+            lapses=0,
+            last_review=None,
+            history=[{"text_mode": "type_all", "quality": 2}]
+        ))
+
+        modes = {
+            choose_text_review_mode(
+                [question],
+                [question] * 5,
+                rng=FixedRandom(value)
+            )
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertEqual(modes, {DEFAULT_TEXT_MODE})
+
+    def test_brand_new_text_uses_match_when_available(self):
+        due = [SimpleNamespace(progress=None) for _ in range(5)]
+
+        modes = {
+            choose_text_review_mode(due, due, rng=FixedRandom(value))
+            for value in (0, 0.25, 0.5, 0.75, 0.999)
+        }
+
+        self.assertEqual(modes, {TEXT_MODE_MATCH})
 
     def test_text_group_save_strips_legacy_reverse_flag(self):
         group = QuestionGroup(

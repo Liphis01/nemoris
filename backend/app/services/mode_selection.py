@@ -1,6 +1,8 @@
 import math
 import random
 
+from ..scheduler import progress_in_relearning
+
 
 MODE_AFFINITY_SUPPORT = "support"
 MODE_AFFINITY_RECALL_PROBE = "recall_probe"
@@ -129,6 +131,48 @@ def has_recall_proof_since_latest_miss(progress):
             return True
 
     return False
+
+
+def questions_have_recall_proof(questions):
+    questions = list(questions or [])
+
+    return bool(questions) and all(
+        has_recall_proof_since_latest_miss(getattr(question, "progress", None))
+        for question in questions
+    )
+
+
+def questions_are_unstarted(questions):
+    questions = list(questions or [])
+
+    return bool(questions) and all(
+        not _progress_started(getattr(question, "progress", None))
+        for question in questions
+    )
+
+
+def restrict_modes_or_fallback(eligible_modes, preferred_modes):
+    eligible_modes = list(eligible_modes or [])
+    preferred = [
+        mode
+        for mode in eligible_modes
+        if mode in set(preferred_modes or [])
+    ]
+
+    return preferred or eligible_modes
+
+
+def latest_relearning_history_mode(progress, today=None):
+    if not progress_in_relearning(progress, today):
+        return None, None
+
+    history = list(progress.history or []) if progress else []
+    latest = history[-1] if history else None
+
+    if not isinstance(latest, dict):
+        return None, None
+
+    return _history_mode(latest)
 
 
 def question_mode_affinity(question):

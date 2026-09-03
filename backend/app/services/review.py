@@ -26,17 +26,21 @@ from .timeline import (
     validate_timeline_data
 )
 from .image_modes import (
+    IMAGE_MODES,
     IMAGE_MULTIPLE_CHOICE_MODES,
+    canonical_image_mode,
     choose_image_review_mode,
     image_mode_difficulty
 )
 from .map_modes import (
     MAP_MODE_MULTIPLE_CHOICE,
+    MAP_MODES,
     choose_map_review_mode,
     map_mode_difficulty
 )
 from .text_modes import (
     TEXT_MODE_MATCH,
+    TEXT_MODES,
     choose_text_review_mode,
     text_mode_difficulty
 )
@@ -55,6 +59,7 @@ from .sequence_rail import (
 )
 from .sequence_modes import (
     SEQUENCE_MODE_MULTIPLE_CHOICE,
+    SEQUENCE_MODES,
     SEQUENCE_MODE_RECITE,
     SEQUENCE_MODE_REORDER,
     choose_sequence_review_mode,
@@ -64,6 +69,8 @@ from .sequence_modes import (
 )
 from .mode_selection import (
     MODE_AFFINITIES,
+    has_recall_proof_since_latest_miss,
+    latest_relearning_history_mode,
     question_mode_affinity
 )
 from .media import media_kind_from_name
@@ -130,10 +137,10 @@ def _shuffled_context_questions(context_questions, active_questions):
     return _shuffled(context_questions)
 
 
-def _affinity_chunks(items, max_size):
+def _affinity_chunks(items, max_size, force=False):
     items = list(items or [])
 
-    if len(items) <= max_size:
+    if len(items) <= max_size and not force:
         return [items]
 
     buckets = {affinity: [] for affinity in MODE_AFFINITIES}
@@ -152,16 +159,127 @@ def _affinity_chunks(items, max_size):
     return chunks
 
 
-def _group_review_chunks(items, scheduled_review):
+def _review_chunk(
+    questions,
+    *,
+    forced_mode=None,
+    recall_only=False,
+    support_only=False
+):
+    return {
+        "questions": _shuffled(questions),
+        "forced_mode": forced_mode,
+        "recall_only": recall_only,
+        "support_only": support_only
+    }
+
+
+def _review_chunks_for_bucket(
+    questions,
+    *,
+    forced_mode=None,
+    recall_only=False,
+    support_only=False
+):
+    return [
+        _review_chunk(
+            chunk,
+            forced_mode=forced_mode,
+            recall_only=recall_only,
+            support_only=support_only
+        )
+        for chunk in _balanced_chunks(questions, REVIEW_GROUP_MAX_CHUNK_SIZE)
+        if chunk
+    ]
+
+
+def _relearning_failed_mode(
+    question,
+    history_key,
+    valid_modes,
+    today,
+    mode_normalizer=None
+):
+    if not history_key or not valid_modes:
+        return None
+
+    key, mode = latest_relearning_history_mode(
+        getattr(question, "progress", None),
+        today=today
+    )
+
+    if key != history_key or not mode:
+        return None
+
+    if mode_normalizer:
+        normalized = mode_normalizer(mode)
+    else:
+        value = str(mode or "").strip()
+        normalized = value if value in valid_modes else None
+
+    return normalized if normalized in valid_modes else None
+
+
+def _group_review_chunks(
+    items,
+    scheduled_review,
+    *,
+    today=None,
+    history_key=None,
+    valid_modes=None,
+    mode_normalizer=None
+):
     items = list(items or [])
 
     if not scheduled_review:
-        return [_shuffled(items)]
+        return [_review_chunk(items)]
 
-    return [
-        _shuffled(chunk)
-        for chunk in _affinity_chunks(items, REVIEW_GROUP_MAX_CHUNK_SIZE)
-    ]
+    today = today or date.today()
+    relearning_buckets = {}
+    new_items = []
+    recall_proven_items = []
+    adaptive_items = []
+
+    for item in items:
+        failed_mode = _relearning_failed_mode(
+            item,
+            history_key,
+            valid_modes,
+            today,
+            mode_normalizer,
+        )
+
+        if failed_mode:
+            relearning_buckets.setdefault(failed_mode, []).append(item)
+        elif progress_is_new(getattr(item, "progress", None)):
+            new_items.append(item)
+        elif has_recall_proof_since_latest_miss(
+            getattr(item, "progress", None)
+        ):
+            recall_proven_items.append(item)
+        else:
+            adaptive_items.append(item)
+
+    chunks = []
+
+    for mode, bucket in relearning_buckets.items():
+        chunks.extend(_review_chunks_for_bucket(bucket, forced_mode=mode))
+
+    chunks.extend(_review_chunks_for_bucket(new_items, support_only=True))
+
+    force_affinity_split = len(items) > REVIEW_GROUP_MAX_CHUNK_SIZE
+
+    for chunk in _affinity_chunks(
+        adaptive_items,
+        REVIEW_GROUP_MAX_CHUNK_SIZE,
+        force=force_affinity_split
+    ):
+        if chunk:
+            chunks.append(_review_chunk(chunk))
+
+    chunks.extend(_review_chunks_for_bucket(recall_proven_items, recall_only=True))
+
+    return chunks
 
 
 def _unique_sorted_questions(*question_groups):
@@ -370,7 +488,8 @@ def _serialize_review_items(
     scheduler_tuning=None,
     scheduled_review=False,
     timeline_anchors=None,
-    forced_sequence_mode=None
+    forced_sequence_mode=None,
+    today=None
 ):
     review_items = []
     map_grouped_items = {}
@@ -480,9 +599,16 @@ def _serialize_review_items(
             ],
             key=lambda item: item.id
         )
-        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+        question_chunks = _group_review_chunks(
+            due_questions,
+            scheduled_review,
+            today=today,
+            history_key="map_mode",
+            valid_modes=MAP_MODES
+        )
 
-        for chunk_questions in question_chunks:
+        for chunk in question_chunks:
+            chunk_questions = chunk["questions"]
             active_context_questions, choice_context_questions = (
                 _visual_review_contexts(
                     chunk_questions,
@@ -490,10 +616,14 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
-            mode = choose_map_review_mode(
-                chunk_questions,
-                active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions)
+            mode = (
+                chunk["forced_mode"] or choose_map_review_mode(
+                    chunk_questions,
+                    active_context_questions,
+                    multiple_choice_context_count=len(choice_context_questions),
+                    recall_only=chunk["recall_only"],
+                    support_only=chunk["support_only"]
+                )
             )
             context_questions = (
                 choice_context_questions
@@ -553,10 +683,18 @@ def _serialize_review_items(
             if item.media
         }
         audio_only = bool(media_kinds) and media_kinds == {"audio"}
-        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+        question_chunks = _group_review_chunks(
+            due_questions,
+            scheduled_review,
+            today=today,
+            history_key="image_mode",
+            valid_modes=IMAGE_MODES,
+            mode_normalizer=canonical_image_mode
+        )
         previous_mode = None
 
-        for chunk_questions in question_chunks:
+        for chunk in question_chunks:
+            chunk_questions = chunk["questions"]
             active_context_questions, choice_context_questions = (
                 _visual_review_contexts(
                     chunk_questions,
@@ -564,16 +702,20 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
-            mode = choose_image_review_mode(
-                chunk_questions,
-                active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions),
-                discouraged_modes=(
-                    [previous_mode]
-                    if scheduled_review and previous_mode
-                    else None
-                ),
-                audio_only=audio_only
+            mode = (
+                chunk["forced_mode"] or choose_image_review_mode(
+                    chunk_questions,
+                    active_context_questions,
+                    multiple_choice_context_count=len(choice_context_questions),
+                    discouraged_modes=(
+                        [previous_mode]
+                        if scheduled_review and previous_mode
+                        else None
+                    ),
+                    audio_only=audio_only,
+                    recall_only=chunk["recall_only"],
+                    support_only=chunk["support_only"]
+                )
             )
             context_questions = (
                 choice_context_questions
@@ -626,9 +768,16 @@ def _serialize_review_items(
             ],
             key=lambda item: item.id
         )
-        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+        question_chunks = _group_review_chunks(
+            due_questions,
+            scheduled_review,
+            today=today,
+            history_key="text_mode",
+            valid_modes=TEXT_MODES
+        )
 
-        for chunk_questions in question_chunks:
+        for chunk in question_chunks:
+            chunk_questions = chunk["questions"]
             active_context_questions, choice_context_questions = (
                 _visual_review_contexts(
                     chunk_questions,
@@ -636,10 +785,14 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
-            mode = choose_text_review_mode(
-                chunk_questions,
-                active_context_questions,
-                multiple_choice_context_count=len(choice_context_questions)
+            mode = (
+                chunk["forced_mode"] or choose_text_review_mode(
+                    chunk_questions,
+                    active_context_questions,
+                    multiple_choice_context_count=len(choice_context_questions),
+                    recall_only=chunk["recall_only"],
+                    support_only=chunk["support_only"]
+                )
             )
             context_questions = (
                 choice_context_questions
@@ -700,9 +853,16 @@ def _serialize_review_items(
         due_ids = {item.id for item in due_questions}
         window = rail_window_for(len(all_group_questions))
 
-        question_chunks = _group_review_chunks(due_questions, scheduled_review)
+        question_chunks = _group_review_chunks(
+            due_questions,
+            scheduled_review,
+            today=today,
+            history_key="sequence_mode",
+            valid_modes=SEQUENCE_MODES
+        )
 
-        for chunk_questions in question_chunks:
+        for chunk in question_chunks:
+            chunk_questions = chunk["questions"]
             active_context_questions, choice_context_questions = (
                 _visual_review_contexts(
                     chunk_questions,
@@ -713,11 +873,13 @@ def _serialize_review_items(
             mode = (
                 normalize_sequence_mode(forced_sequence_mode)
                 if forced_sequence_mode is not None
-                else choose_sequence_review_mode(
+                else chunk["forced_mode"] or choose_sequence_review_mode(
                     chunk_questions,
                     active_context_questions,
                     multiple_choice_context_count=len(choice_context_questions),
-                    review_goal=review_goal
+                    review_goal=review_goal,
+                    recall_only=chunk["recall_only"],
+                    support_only=chunk["support_only"]
                 )
             )
 
@@ -886,14 +1048,16 @@ def serialize_review_items(
     scheduler_tuning=None,
     scheduled_review=False,
     timeline_anchors=None,
-    forced_sequence_mode=None
+    forced_sequence_mode=None,
+    today=None
 ):
     return _serialize_review_items(
         questions,
         scheduler_tuning=scheduler_tuning,
         scheduled_review=scheduled_review,
         timeline_anchors=timeline_anchors,
-        forced_sequence_mode=forced_sequence_mode
+        forced_sequence_mode=forced_sequence_mode,
+        today=today
     )
 
 
@@ -1018,7 +1182,8 @@ def get_review_items(db, today=None, intake_quota=None):
         questions,
         scheduler_tuning=scheduler_tuning,
         scheduled_review=True,
-        timeline_anchors=_timeline_anchors_for(db, questions)
+        timeline_anchors=_timeline_anchors_for(db, questions),
+        today=today
     )
 
     return defer_relearning_items(spread_new_items(
@@ -1061,7 +1226,8 @@ def get_scoped_review_items(
         questions,
         scheduler_tuning=scheduler_tuning,
         scheduled_review=True,
-        timeline_anchors=_timeline_anchors_for(db, questions)
+        timeline_anchors=_timeline_anchors_for(db, questions),
+        today=today
     )
 
     return defer_relearning_items(items)

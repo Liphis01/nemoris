@@ -599,6 +599,36 @@ describe("BrowsePacks", () => {
     });
   });
 
+  it("shows the suggested-edit actor label in pack activity", async () => {
+    listPackActivity.mockResolvedValue({
+      unread_count: 1,
+      events: [{
+        id: 43,
+        event_type: "suggested_edit_created",
+        pack_guid: "world-map",
+        pack_name: "Territoires du monde",
+        related_pack_guid: "world-map",
+        related_pack_name: "Territoires du monde",
+        payload: {
+          author_label: "Lectrice",
+          target_label: "Capitale de la France ?"
+        },
+        read_at: null
+      }]
+    });
+    defaultHook();
+
+    render(<BrowsePacks setMode={vi.fn()} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Activité/ }));
+    const dialog = screen.getByRole("dialog", { name: "Activité des packs" });
+
+    expect(dialog).toHaveTextContent("Capitale de la France ?");
+    expect(dialog).toHaveTextContent(
+      "Lectrice propose une correction pour Territoires du monde"
+    );
+  });
+
   it("shows mine and local-copy checks without install actions", () => {
     const onOpenGroup = vi.fn();
     const localEntry = {

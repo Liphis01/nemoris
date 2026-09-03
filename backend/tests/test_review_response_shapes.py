@@ -1199,6 +1199,130 @@ class ReviewResponseShapeTests(unittest.TestCase):
                 self.assertIn("question", item)
                 self.assertEqual(item["label"], item["answer"])
 
+    def test_compact_media_review_splits_recall_proven_from_unproven(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=71,
+            type_group="media",
+            name="Mixed recall flags",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        unproven_items = [
+            self.add_question(
+                310 + index,
+                type_q="media",
+                answer=f"Unproven {index}",
+                media=f"/static/unproven-{index}.png",
+                group=image_group,
+                next_review=today
+            )
+            for index in range(2)
+        ]
+        proven_items = [
+            self.add_question(
+                320 + index,
+                type_q="media",
+                answer=f"Proven {index}",
+                media=f"/static/proven-{index}.png",
+                group=image_group,
+                next_review=today
+            )
+            for index in range(2)
+        ]
+
+        for item in unproven_items:
+            item.progress.reps = 4
+            item.progress.difficulty = 3.0
+            item.progress.history = [{
+                "image_mode": "multiple_choice_media",
+                "quality": 2
+            }]
+
+        for item in proven_items:
+            item.progress.reps = 1
+            item.progress.difficulty = 8.0
+            item.progress.history = [{
+                "image_mode": "type_prompt",
+                "quality": 2
+            }]
+
+        self.db.commit()
+
+        with patch("app.services.mode_selection.random.random", return_value=0):
+            response = get_review(db=self.db)
+
+        image_groups = [
+            item for item in response if item.get("group_id") == image_group.id
+        ]
+        chunks = [
+            {item["question_id"] for item in group["items"]}
+            for group in image_groups
+        ]
+        proven_ids = {item.id for item in proven_items}
+        unproven_ids = {item.id for item in unproven_items}
+        proven_group = next(
+            group for group in image_groups
+            if {item["question_id"] for item in group["items"]} == proven_ids
+        )
+
+        self.assertEqual(len(image_groups), 2)
+        self.assertIn(proven_ids, chunks)
+        self.assertIn(unproven_ids, chunks)
+        self.assertIn(proven_group["mode"], {"type_all", "type_prompt"})
+
+    def test_relearning_media_items_split_by_failed_mode_after_refresh(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=72,
+            type_group="media",
+            name="Refresh retries",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        type_prompt_item = self.add_question(
+            330,
+            type_q="media",
+            answer="Prompt retry",
+            media="/static/prompt.png",
+            group=image_group,
+            next_review=today
+        )
+        choice_item = self.add_question(
+            331,
+            type_q="media",
+            answer="Choice retry",
+            media="/static/choice.png",
+            group=image_group,
+            next_review=today
+        )
+        type_prompt_item.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "image_mode": "type_prompt"
+        }]
+        choice_item.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "image_mode": "multiple_choice_media"
+        }]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        image_groups = [
+            item for item in response if item.get("group_id") == image_group.id
+        ]
+        mode_to_ids = {
+            group["mode"]: {item["question_id"] for item in group["items"]}
+            for group in image_groups
+        }
+
+        self.assertEqual(len(image_groups), 2)
+        self.assertEqual(mode_to_ids["type_prompt"], {type_prompt_item.id})
+        self.assertEqual(mode_to_ids["multiple_choice_media"], {choice_item.id})
+
     def test_review_endpoint_splits_large_image_groups_into_balanced_chunks(self):
         today = date.today()
         image_group = QuestionGroup(
@@ -1580,7 +1704,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertIn("mode_reward_factor", item_a_history)
 
-    def test_review_endpoint_returns_missed_image_items_below_choice_minimum(self):
+    def test_review_endpoint_preserves_missed_image_mode_below_choice_minimum(self):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]
 
@@ -1606,9 +1730,9 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertEqual(
             [item["question_id"] for item in image_groups[0]["context_items"]],
-            [item_b.id]
+            [item_a.id, item_b.id]
         )
-        self.assertEqual(image_groups[0]["mode"], "type_prompt")
+        self.assertEqual(image_groups[0]["mode"], "multiple_choice_media")
         self.assertEqual(item_b.progress.next_review, date.today())
 
     def test_answer_media_uses_submitted_chunk_size_for_mode_metadata(self):

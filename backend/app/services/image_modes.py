@@ -5,6 +5,9 @@ from .mode_selection import (
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
     question_mode_affinity_counts,
+    questions_are_unstarted,
+    questions_have_recall_proof,
+    restrict_modes_or_fallback,
     weighted_mode_choice
 )
 
@@ -21,6 +24,14 @@ IMAGE_MODE_MULTIPLE_CHOICE_IMAGE = IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 IMAGE_MODES = (
     IMAGE_MODE_TYPE_ALL,
     IMAGE_MODE_TYPE_PROMPT,
+    IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+    IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
+)
+IMAGE_RECALL_MODES = (
+    IMAGE_MODE_TYPE_ALL,
+    IMAGE_MODE_TYPE_PROMPT
+)
+IMAGE_SUPPORTED_MODES = (
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
     IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 )
@@ -117,6 +128,8 @@ def choose_image_review_mode(
     multiple_choice_context_count=None,
     discouraged_modes=None,
     audio_only=False,
+    recall_only=False,
+    support_only=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -130,6 +143,13 @@ def choose_image_review_mode(
 
     if not due_questions:
         return DEFAULT_IMAGE_MODE
+
+    recall_only = recall_only or questions_have_recall_proof(due_questions)
+    support_only = (
+        support_only or (
+            not recall_only and questions_are_unstarted(due_questions)
+        )
+    )
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
@@ -213,6 +233,17 @@ def choose_image_review_mode(
             for mode in eligible_modes
             if mode in IMAGE_AUDIO_MODES
         ] or [IMAGE_MODE_TYPE_PROMPT]
+
+    if recall_only:
+        eligible_modes = restrict_modes_or_fallback(
+            eligible_modes,
+            IMAGE_RECALL_MODES
+        )
+    elif support_only:
+        eligible_modes = restrict_modes_or_fallback(
+            eligible_modes,
+            IMAGE_SUPPORTED_MODES
+        )
 
     return weighted_mode_choice(
         eligible_modes,

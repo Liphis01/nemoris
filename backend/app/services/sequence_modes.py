@@ -6,6 +6,9 @@ from .mode_selection import (
     MODE_AFFINITY_SUPPORT,
     apply_recent_mode_penalty,
     question_mode_affinity_counts,
+    questions_are_unstarted,
+    questions_have_recall_proof,
+    restrict_modes_or_fallback,
     weighted_mode_choice
 )
 
@@ -29,6 +32,15 @@ SEQUENCE_MODES = (
     SEQUENCE_MODE_MULTIPLE_CHOICE,
     SEQUENCE_MODE_REORDER,
     SEQUENCE_MODE_RECITE
+)
+SEQUENCE_RECALL_MODES = (
+    SEQUENCE_MODE_TYPE_POSITION,
+    SEQUENCE_MODE_RECITE
+)
+SEQUENCE_SUPPORTED_MODES = (
+    SEQUENCE_MODE_MULTIPLE_CHOICE,
+    SEQUENCE_MODE_GAP_FILL,
+    SEQUENCE_MODE_REORDER
 )
 DEFAULT_SEQUENCE_MODE = SEQUENCE_MODE_TYPE_POSITION
 
@@ -240,6 +252,8 @@ def choose_sequence_review_mode(
     context_questions,
     multiple_choice_context_count=None,
     review_goal=None,
+    recall_only=False,
+    support_only=False,
     rng=None
 ):
     due_questions = list(due_questions or [])
@@ -253,6 +267,13 @@ def choose_sequence_review_mode(
 
     if not due_questions:
         return DEFAULT_SEQUENCE_MODE
+
+    recall_only = recall_only or questions_have_recall_proof(due_questions)
+    support_only = (
+        support_only or (
+            not recall_only and questions_are_unstarted(due_questions)
+        )
+    )
 
     affinity_counts = question_mode_affinity_counts(due_questions)
     support_count = affinity_counts[MODE_AFFINITY_SUPPORT]
@@ -338,6 +359,17 @@ def choose_sequence_review_mode(
             for mode in eligible_modes
             if mode != SEQUENCE_MODE_REORDER
         ]
+
+    if recall_only:
+        eligible_modes = restrict_modes_or_fallback(
+            eligible_modes,
+            SEQUENCE_RECALL_MODES
+        )
+    elif support_only:
+        eligible_modes = restrict_modes_or_fallback(
+            eligible_modes,
+            SEQUENCE_SUPPORTED_MODES
+        )
 
     # No adjacency guard any more. next_in_sequence needed one because it
     # PRINTED the predecessor's label as a prompt, so two adjacent due items
