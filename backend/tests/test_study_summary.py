@@ -178,7 +178,7 @@ class StudySummaryTests(unittest.TestCase):
             data={"code": "07"},
             group=group
         )
-        self.add_question(
+        suspended = self.add_question(
             6,
             type_q="map",
             answer="Ariège",
@@ -331,7 +331,11 @@ class StudySummaryTests(unittest.TestCase):
         self.assertEqual(summary["learn"]["supported"], True)
         self.assertEqual(summary["learn"]["family"], "map")
         self.assertEqual(summary["learn"]["group"]["media"], "france.svg")
-        self.assertEqual(summary["learn"]["item_count"], 5)
+        self.assertEqual(summary["learn"]["item_count"], 6)
+        self.assertIn(
+            suspended.id,
+            {item["id"] for item in summary["learn"]["items"]}
+        )
         self.assertEqual(summary["learn"]["items"][0]["id"], unseen.id)
         self.assertEqual(summary["learn"]["items"][0]["code"], "01")
         self.assertEqual(summary["learn"]["items"][0]["answer"], "Ain")
@@ -362,6 +366,15 @@ class StudySummaryTests(unittest.TestCase):
             },
             group=group
         )
+        suspended_item = self.add_question(
+            2,
+            type_q="media",
+            question="Drapeaux - Allemagne",
+            answer="Allemagne",
+            media="flag-de.png",
+            group=group,
+            suspended=True
+        )
         self.db.commit()
         progress_count = self.db.query(Progress).count()
 
@@ -375,7 +388,11 @@ class StudySummaryTests(unittest.TestCase):
         self.assertEqual(self.db.query(Progress).count(), progress_count)
         self.assertEqual(summary["learn"]["supported"], True)
         self.assertEqual(summary["learn"]["family"], "media")
-        self.assertEqual(summary["learn"]["item_count"], 1)
+        self.assertEqual(summary["learn"]["item_count"], 2)
+        self.assertEqual(
+            {learn_item["id"] for learn_item in summary["learn"]["items"]},
+            {item.id, suspended_item.id}
+        )
         self.assertEqual(summary["learn"]["items"][0]["id"], item.id)
         self.assertEqual(
             summary["learn"]["items"][0]["media_pool"],
@@ -386,6 +403,12 @@ class StudySummaryTests(unittest.TestCase):
             summary["learn"]["items"][0]["aliases"],
             ["République française"]
         )
+        suspended_learn_item = next(
+            learn_item for learn_item in summary["learn"]["items"]
+            if learn_item["id"] == suspended_item.id
+        )
+        self.assertEqual(suspended_learn_item["signals"]["bucket"], "suspended")
+        self.assertEqual(suspended_learn_item["signals"]["due"], False)
 
     def test_group_summary_surfaces_current_and_stale_training_records(self):
         today = date(2026, 8, 14)

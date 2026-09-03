@@ -67,7 +67,11 @@ from .mode_selection import (
     question_mode_affinity
 )
 from .media import media_kind_from_name
-from .map_eligibility import question_is_reviewable, reviewable_question_filter
+from .map_eligibility import (
+    question_has_training_content,
+    question_is_reviewable,
+    reviewable_question_filter
+)
 from .intake import compute_intake_quota
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
@@ -472,7 +476,7 @@ def _serialize_review_items(
                 item
                 for item in (group.questions or [])
                 if item.type_q == "map"
-                and question_is_reviewable(item)
+                and question_has_training_content(item)
             ],
             key=lambda item: item.id
         )

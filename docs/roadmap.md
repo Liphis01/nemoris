@@ -11,6 +11,7 @@
 - résultat de map qcm pas au bon endroit
 - pour les groupes de texte, ne pas nécessairement demander d'écrire mais juste laisser choisir la qualité
 - bug dans l'import des packs avec la question du tag merging
+- shortcut &/é/" pour répondre aux qualités
 
 
 ## Urgent
@@ -30,7 +31,6 @@
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
 - mettre un bouton supprimer le pack si on l'a importé par erreur
 - menu study à améliorer
-- savoir où on est dans l'introduction des nouvelles questions
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
 - les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
 - enlever les zooms de map avec la qualité
@@ -42,7 +42,6 @@
 - le bouton terminer est confusing dans la review
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 - mieux afficher les relearning
-- shortcut &/é/" pour répondre aux qualités
 - l'email supabase
 
 ## quick fixes

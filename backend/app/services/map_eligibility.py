@@ -25,6 +25,19 @@ def question_is_reviewable(question):
     )
 
 
+def question_has_training_content(question):
+    """Non-scheduling eligibility for Training/Learn surfaces.
+
+    Suspension is intentionally ignored here: it only controls scheduled review
+    intake/due work. Map zones still need an answer because otherwise there is
+    nothing useful to practice or reveal.
+    """
+    if question is None:
+        return True
+
+    return map_question_is_ready(question)
+
+
 def reviewable_question_filter():
     """SQL equivalent of question_is_reviewable for selection/count queries.
 
@@ -40,5 +53,16 @@ def reviewable_question_filter():
                 Question.type_q != "map",
                 func.trim(func.coalesce(Question.answer, "")) != "",
             )
+        )
+    )
+
+
+def training_content_question_filter():
+    """SQL equivalent of question_has_training_content for non-scheduled use."""
+    return or_(
+        Question.id == None,
+        or_(
+            Question.type_q != "map",
+            func.trim(func.coalesce(Question.answer, "")) != "",
         )
     )

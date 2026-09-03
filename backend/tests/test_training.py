@@ -63,7 +63,8 @@ class TrainingTests(unittest.TestCase):
         group=None,
         next_review=None,
         reps=None,
-        history=None
+        history=None,
+        suspended=False
     ):
         item = Question(
             id=question_id,
@@ -73,7 +74,8 @@ class TrainingTests(unittest.TestCase):
             media=media,
             tags=tags or [],
             data=data or {},
-            group=group
+            group=group,
+            suspended=suspended
         )
         self.db.add(item)
 
@@ -171,9 +173,65 @@ class TrainingTests(unittest.TestCase):
             group_training_fingerprint(self.db, group)
         )
 
-    def test_group_training_randomizes_group_item_order(self):
+    def test_suspended_group_remains_available_for_training(self):
         group = QuestionGroup(
             id=12,
+            type_group="map",
+            name="Europe",
+            media="europe.svg",
+            data={}
+        )
+        self.db.add(group)
+        first = self.add_question(
+            1,
+            type_q="map",
+            answer="France",
+            data={"code": "fr"},
+            group=group,
+            suspended=True
+        )
+        self.add_question(
+            2,
+            type_q="map",
+            answer="Germany",
+            data={"code": "de"},
+            group=group,
+            suspended=True
+        )
+        self.db.commit()
+        fingerprint = group_training_fingerprint(self.db, group)
+
+        scopes = list_training_scopes(self.db)
+        served_group = next(
+            item for item in scopes["groups"] if item["id"] == group.id
+        )
+        response = get_training_items(
+            self.db,
+            scope_type="group",
+            group_id=group.id
+        )
+
+        self.assertEqual(served_group["question_count"], 2)
+        self.assertEqual(served_group["training_record"], None)
+        self.assertEqual(len(response), 1)
+        self.assertEqual(
+            {item["question_id"] for item in response[0]["items"]},
+            {1, 2}
+        )
+        self.assertEqual(
+            {item["question_id"] for item in response[0]["context_items"]},
+            {1, 2}
+        )
+        self.assertEqual(response[0]["training_fingerprint"], fingerprint)
+
+        first.suspended = False
+        self.db.commit()
+
+        self.assertEqual(group_training_fingerprint(self.db, group), fingerprint)
+
+    def test_group_training_randomizes_group_item_order(self):
+        group = QuestionGroup(
+            id=13,
             type_group="map",
             name="Europe",
             media="europe.svg",
@@ -214,7 +272,7 @@ class TrainingTests(unittest.TestCase):
     def test_question_training_scope_uses_explicit_ids_without_progress_mutation(self):
         today = date.today()
         group = QuestionGroup(
-            id=13,
+            id=14,
             type_group="map",
             name="Europe",
             media="europe.svg",

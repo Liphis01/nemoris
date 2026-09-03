@@ -11,7 +11,7 @@ from ..models import (
 )
 from ..scheduler import parse_history_date
 from .collections import resolve_collection_questions
-from .map_eligibility import question_is_reviewable
+from .map_eligibility import question_has_training_content, question_is_reviewable
 from .media import media_kind_from_name
 from .media_pool import read_media_pool
 from .progress import progress_has_started, progress_is_new
@@ -463,7 +463,7 @@ def _learn_for_scope(scope_type, source, questions, today):
         for question in questions
         if (
             question.type_q == family and
-            question_is_reviewable(question)
+            question_has_training_content(question)
         )
     ]
     items = [

@@ -38,7 +38,7 @@ from .sequence_modes import (
     normalize_sequence_mode
 )
 from .map_zones import merge_tags
-from .map_eligibility import reviewable_question_filter
+from .map_eligibility import training_content_question_filter
 from .review import serialize_review_items
 from .tag_hierarchy import (
     descendants,
@@ -103,7 +103,7 @@ def _training_question_query(db):
             .selectinload(QuestionGroup.questions)
             .selectinload(Question.progress)
         )
-        .filter(reviewable_question_filter())
+        .filter(training_content_question_filter())
         .order_by(Question.id)
     )
 
@@ -235,7 +235,7 @@ def training_fingerprints_for_groups(db, groups):
             .filter(
                 Question.group_id.in_(group_ids),
                 Question.type_q.in_(["map", "media", "text", "cloze", "grid", "set", "sequence"]),
-                reviewable_question_filter(),
+                training_content_question_filter(),
             )
             .order_by(Question.id)
             .all()
@@ -558,7 +558,7 @@ def list_training_scopes(db):
             func.count(Question.id).label("question_count")
         )
         .outerjoin(Question)
-        .filter(reviewable_question_filter())
+        .filter(training_content_question_filter())
         .group_by(QuestionGroup.id)
         .order_by(QuestionGroup.id)
         .all()
