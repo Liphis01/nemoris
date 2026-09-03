@@ -132,6 +132,8 @@ COLLECTION_MUTATION_RULES = [
     ("PATCH", re.compile(r"^/text-groups/\d+/items/?$")),
     ("PATCH", re.compile(r"^/sequence-groups/\d+/items/?$")),
     ("PUT", re.compile(r"^/review/settings/?$")),
+    ("PATCH", re.compile(r"^/review/intake/queue/order/?$")),
+    ("PATCH", re.compile(r"^/review/intake/queue/suspension/?$")),
     ("POST", re.compile(r"^/answer/?$")),
     ("POST", re.compile(r"^/answer/revise/?$")),
     ("POST", re.compile(r"^/answer/relearning_graduate/?$")),

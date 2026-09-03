@@ -2,7 +2,7 @@ from datetime import date
 import random
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import joinedload
 
 from ..models import Progress, Question, QuestionGroup
@@ -254,8 +254,8 @@ def _progress_row_has_started(row):
 
 
 def _new_question_ids(db, limit=None):
-    # One global pool, ordered by id: new questions are introduced in creation
-    # order, across every group, and the scan stops as soon as `limit` is met.
+    # One global pool: manual intake ordering comes first, then the historical
+    # creation-order fallback for questions that have never been arranged.
     ids = []
     rows = (
         db.query(
@@ -268,7 +268,11 @@ def _new_question_ids(db, limit=None):
         )
         .outerjoin(Progress, Question.id == Progress.question_id)
         .filter(reviewable_question_filter())
-        .order_by(Question.id)
+        .order_by(
+            case((Question.intake_order == None, 1), else_=0),
+            Question.intake_order,
+            Question.id
+        )
         .all()
     )
 

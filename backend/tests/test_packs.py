@@ -33,6 +33,7 @@ from app.routers.packs import (
     update_pack_zip
 )
 from app.services.packs import (
+    QUESTION_HASH_FIELDS,
     clone_installed_pack_as_variant_source,
     content_hash,
     export_pack,
@@ -110,6 +111,9 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
     def test_export_manifest_and_content_fields(self):
         db, static_dir, group, first, second = self.build_source()
         pack_dir = self.make_static_dir()
+        first.intake_order = 2
+        second.intake_order = 1
+        db.commit()
 
         zip_path = export_pack(
             db,
@@ -167,6 +171,8 @@ class ExportPackTests(PackFixtureMixin, unittest.TestCase):
 
         first_entry = questions_by_guid[first.guid]
         self.assertEqual(first_entry["question"], "Q1")
+        self.assertNotIn("intake_order", first_entry)
+        self.assertNotIn("intake_order", QUESTION_HASH_FIELDS)
         self.assertEqual(len(first_entry["tags"]), 1)
         tag_id = first_entry["tags"][0]
         self.assertEqual(str(uuid.UUID(tag_id)), tag_id)

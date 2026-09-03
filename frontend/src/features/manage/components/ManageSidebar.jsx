@@ -4,6 +4,7 @@ import {
   groupTypeFilterOptions,
   questionTypeFilterOptions
 } from "../../../shared/questionTypes";
+import IntakeQueuePanel from "./IntakeQueuePanel";
 import TagFilterControl from "./TagFilterControl";
 
 const sortOptions = [
@@ -58,7 +59,11 @@ export default function ManageSidebar({
   viewMode,
   setViewMode,
   requestManageTransition,
+  allQuestions = [],
+  tagParents = {},
+  tagLabels = {},
   availableTags = [],
+  patchQuestionsInCache,
   onOpenTagTree
 }) {
   const inputStyle = {
@@ -588,6 +593,19 @@ export default function ManageSidebar({
               <span aria-hidden="true">🏷️</span>
               <span>Gérer les tags</span>
             </button>
+
+            <IntakeQueuePanel
+              allQuestions={allQuestions}
+              search={search}
+              tagFilter={tagFilter}
+              tagParents={tagParents}
+              tagLabels={tagLabels}
+              questionTypeFilter={questionTypeFilter}
+              dueOnly={dueOnly}
+              favoritesOnly={favoritesOnly}
+              patchQuestionsInCache={patchQuestionsInCache}
+              setSelectedItem={setSelectedItem}
+            />
 
           </>
         )}

@@ -194,13 +194,39 @@ export function filterAndSortQuestions({
   // Filtering stays pure and deterministic so Manage can recompute visible rows
   // from local state after edits without refetching.
   return questions
-    .filter(question =>
-      matchesSearch(question, search) &&
-      matchesTag(question, tagMatcher) &&
-      matchesType(question, questionTypeFilter) &&
-      matchesDue(question, dueOnly) &&
-      matchesFavorite(question, favoritesOnly)
-    )
+    .filter(question => matchesQuestionFilters(question, {
+      search,
+      tagMatcher,
+      questionTypeFilter,
+      dueOnly,
+      favoritesOnly
+    }))
     .slice()
     .sort((a, b) => compareQuestions(a, b, sortField, sortOrder));
+}
+
+
+export function matchesQuestionFilters(question, {
+  search,
+  tagFilter,
+  tagParents,
+  tagLabels,
+  tagMatcher,
+  questionTypeFilter,
+  dueOnly,
+  favoritesOnly
+} = {}) {
+  const resolvedTagMatcher = tagMatcher || buildTagMatcher(
+    tagFilter,
+    tagParents,
+    tagLabels
+  );
+
+  return (
+    matchesSearch(question, search) &&
+    matchesTag(question, resolvedTagMatcher) &&
+    matchesType(question, questionTypeFilter) &&
+    matchesDue(question, dueOnly) &&
+    matchesFavorite(question, favoritesOnly)
+  );
 }

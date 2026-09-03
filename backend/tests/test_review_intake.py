@@ -31,6 +31,11 @@ from app.services.intake import (
     tune_intake_rate,
     wip_cap_for
 )
+from app.services.intake_queue import (
+    get_intake_queue,
+    set_intake_order,
+    set_intake_suspension
+)
 from app.services.progress import (
     in_flight_progress_filter,
     progress_in_flight
@@ -58,7 +63,13 @@ class IntakeTestCase(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def add_question(self, question_id, group=None, suspended=False):
+    def add_question(
+        self,
+        question_id,
+        group=None,
+        suspended=False,
+        intake_order=None
+    ):
         question = Question(
             id=question_id,
             type_q="text",
@@ -67,7 +78,8 @@ class IntakeTestCase(unittest.TestCase):
             tags=[],
             data={},
             group=group,
-            suspended=suspended
+            suspended=suspended,
+            intake_order=intake_order
         )
         self.db.add(question)
         return question
@@ -1318,6 +1330,110 @@ class SuspendedQuestionTests(IntakeTestCase):
         # The allowance still exists; there is simply nothing eligible to fill it.
         self.assertEqual(quota["quota"], 10)
         self.assertEqual(_new_question_ids(self.db), [])
+
+
+class IntakeQueueControlTests(IntakeTestCase):
+    def test_queue_splits_active_suspended_and_today_slice(self):
+        self.add_question(1, intake_order=2)
+        self.add_question(2, intake_order=1)
+        self.add_question(3, suspended=True)
+        self.add_question(4)
+        self.add_progress(4, next_review=date.today(), reps=1)
+        map_question = self.add_question(5)
+        map_question.type_q = "map"
+        map_question.answer = ""
+        self.db.commit()
+
+        queue = get_intake_queue(self.db)
+
+        self.assertEqual(queue["active_ids"], [2, 1])
+        self.assertEqual(queue["suspended_ids"], [3])
+        self.assertEqual(queue["today_ids"], [2, 1])
+        self.assertEqual(queue["counts"]["active"], 2)
+        self.assertEqual(queue["counts"]["suspended"], 1)
+
+    def test_reordering_writes_dense_order_and_drives_new_selection(self):
+        for question_id in range(1, 5):
+            self.add_question(question_id)
+
+        self.db.commit()
+
+        queue = set_intake_order(self.db, [4, 2, 1, 3])
+        self.db.commit()
+
+        stored = {
+            question.id: question.intake_order
+            for question in self.db.query(Question).all()
+        }
+
+        self.assertEqual(queue["active_ids"], [4, 2, 1, 3])
+        self.assertEqual(stored, {1: 3, 2: 2, 3: 4, 4: 1})
+        self.assertEqual(_new_question_ids(self.db), [4, 2, 1, 3])
+
+    def test_manual_order_falls_back_to_id_after_ordered_questions(self):
+        self.add_question(1)
+        self.add_question(2, intake_order=20)
+        self.add_question(3, intake_order=10)
+        self.add_question(4)
+        self.db.commit()
+
+        self.assertEqual(_new_question_ids(self.db), [3, 2, 1, 4])
+
+    def test_reorder_rejects_partial_stale_and_duplicate_payloads(self):
+        for question_id in range(1, 4):
+            self.add_question(question_id)
+
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as partial:
+            set_intake_order(self.db, [2, 1])
+
+        with self.assertRaises(HTTPException) as duplicate:
+            set_intake_order(self.db, [2, 2, 1])
+
+        stored_orders = [
+            question.intake_order
+            for question in self.db.query(Question).order_by(Question.id)
+        ]
+
+        self.assertEqual(partial.exception.status_code, 409)
+        self.assertEqual(duplicate.exception.status_code, 400)
+        self.assertEqual(stored_orders, [None, None, None])
+
+    def test_suspension_endpoint_changes_only_unseen_questions(self):
+        question = self.add_question(1, intake_order=5)
+        self.add_question(2)
+        self.add_progress(2, next_review=date.today(), reps=2, stability=6.0)
+        self.add_question(3, suspended=True, intake_order=7)
+        self.db.commit()
+        progress_count = self.db.query(Progress).count()
+
+        with self.assertRaises(HTTPException) as started:
+            set_intake_suspension(self.db, [1, 2], True)
+
+        self.assertEqual(started.exception.status_code, 400)
+        self.assertFalse(question.suspended)
+
+        queue = set_intake_suspension(self.db, [1], True)
+        self.db.commit()
+
+        self.assertEqual(queue["active_ids"], [])
+        self.assertEqual(queue["suspended_ids"], [1, 3])
+        self.assertEqual(self.db.query(Progress).count(), progress_count)
+        self.assertTrue(question.suspended)
+        self.assertEqual(question.intake_order, 5)
+
+        set_intake_suspension(self.db, [1], False)
+        self.db.commit()
+
+        progress = self.db.query(Progress).filter(
+            Progress.question_id == 2
+        ).one()
+
+        self.assertFalse(question.suspended)
+        self.assertEqual(question.intake_order, 5)
+        self.assertEqual(progress.reps, 2)
+        self.assertEqual(progress.stability, 6.0)
 
 
 class GroupSuspensionTests(IntakeTestCase):

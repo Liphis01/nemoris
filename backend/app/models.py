@@ -126,6 +126,11 @@ class Question(Base):
         server_default="0"
     )
 
+    # Personal ordering for unseen-question intake. NULL preserves the legacy
+    # creation-order fallback and keeps pack content independent from review
+    # queue preferences.
+    intake_order = Column(Integer, nullable=True, index=True)
+
     # Pack provenance (sync-roadmap M1); see QuestionGroup.pack_guid.
     pack_guid = Column(String, nullable=True, index=True)
     pack_version = Column(Integer, nullable=True)

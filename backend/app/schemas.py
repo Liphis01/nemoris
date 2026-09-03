@@ -236,6 +236,8 @@ class QuestionOut(BaseModel):
 
     suspended: bool = False
 
+    intake_order: Optional[int] = None
+
     class Config:
         from_attributes = True
 
@@ -414,6 +416,15 @@ class ReviewSettings(BaseModel):
             )
 
         return self
+
+
+class ReviewIntakeOrderRequest(BaseModel):
+    question_ids: List[int] = Field(default_factory=list)
+
+
+class ReviewIntakeSuspensionRequest(BaseModel):
+    question_ids: List[int] = Field(default_factory=list)
+    suspended: bool
 
 
 class SyncPreferences(BaseModel):

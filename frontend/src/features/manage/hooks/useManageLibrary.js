@@ -485,6 +485,28 @@ export function useManageLibrary(mode) {
     );
   }
 
+  function patchQuestionsInCache(updates) {
+    const updatesById = new Map(
+      (updates || []).map(update => [Number(update.id), update])
+    );
+
+    if (updatesById.size === 0) return;
+
+    setAllQuestions(prev =>
+      prev.map(question => {
+        const update = updatesById.get(Number(question.id));
+        return update ? { ...question, ...update } : question;
+      })
+    );
+
+    setSelectedItem(prev => {
+      if (!prev || prev.type_group) return prev;
+
+      const update = updatesById.get(Number(prev.id));
+      return update ? { ...prev, ...update } : prev;
+    });
+  }
+
   async function removeQuestionMedia(id) {
     await removeQuestionMediaRequest(id);
     const currentQuestion = allQuestions.find(question => question.id === id);
@@ -575,7 +597,9 @@ export function useManageLibrary(mode) {
     groupSortField,
     groupSortOrder,
     groupTypeFilter,
+    tagLabels,
     tagFilter,
+    tagParents,
     handleSort,
     importQuestionMediaUrl,
     importMediaGroupMediaUrl,
@@ -625,6 +649,7 @@ export function useManageLibrary(mode) {
     updateQuestion,
     setGroupSuspended,
     patchQuestionInCache,
+    patchQuestionsInCache,
     viewMode
   };
 }

@@ -43,7 +43,7 @@ class SyncStatusPayloadTests(unittest.TestCase):
         client = FakeStatusClient(
             meta={
                 "version": 9,
-                "schema_version": "0031",
+                "schema_version": "0032",
                 "updated_at": "now",
                 "last_device_id": "device",
                 "media_hashes": ["hash-a", "hash-b"],
@@ -61,7 +61,7 @@ class SyncStatusPayloadTests(unittest.TestCase):
             payload["server_meta"],
             {
                 "version": 9,
-                "schema_version": "0031",
+                "schema_version": "0032",
                 "updated_at": "now",
                 "last_device_id": "device",
             },

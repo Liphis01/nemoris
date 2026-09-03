@@ -8,6 +8,18 @@ vi.mock("../../../api/tags", () => ({
   getTags: vi.fn(() => Promise.resolve({ hierarchy: {}, usage: {} }))
 }));
 
+vi.mock("../../../api/review", () => ({
+  getReviewIntakeQueue: vi.fn(() => Promise.resolve({
+    quota: 0,
+    today_ids: [],
+    active_ids: [],
+    suspended_ids: [],
+    counts: { today: 0, active: 0, suspended: 0, total: 0 }
+  })),
+  updateReviewIntakeOrder: vi.fn(),
+  updateReviewIntakeSuspension: vi.fn()
+}));
+
 
 function tagNode(id, label, parents = [], extra = {}) {
   return {
@@ -62,6 +74,10 @@ function renderSidebar(props = {}) {
     viewMode: "questions",
     setViewMode: vi.fn(),
     requestManageTransition: vi.fn((action) => action()),
+    allQuestions: [],
+    tagParents: {},
+    tagLabels: {},
+    patchQuestionsInCache: vi.fn(),
     availableTags: ["linux"]
   };
   const mergedProps = {
@@ -111,6 +127,15 @@ describe("ManageSidebar", () => {
 
     expect(screen.getByRole("button", { name: "Filtrer par tag" })).toHaveTextContent("Filtrer par tag…");
     expect(screen.queryByLabelText(/Retirer le tag/i)).not.toBeInTheDocument();
+  });
+
+  it("places the new-question queue directly under tag management", () => {
+    renderSidebar();
+
+    const tagButton = screen.getByRole("button", { name: /Gérer les tags/ });
+    const queueButton = screen.getByRole("button", { name: /File des nouvelles/ });
+
+    expect(tagButton.nextElementSibling).toContainElement(queueButton);
   });
 
   it("updates and clears the selected tag filter", () => {

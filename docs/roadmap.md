@@ -42,6 +42,8 @@
 - le bouton terminer est confusing dans la review
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 - mieux afficher les relearning
+- shortcut &/é/" pour répondre aux qualités
+- l'email supabase
 
 ## quick fixes
 

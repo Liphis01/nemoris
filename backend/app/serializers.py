@@ -119,6 +119,7 @@ def serialize_manage_question(question):
         "answer_policy": effective_answer_policy(question=question),
 
         "suspended": bool(question.suspended),
+        "intake_order": question.intake_order,
         "progress": serialize_progress(question.progress),
         "group":
             {

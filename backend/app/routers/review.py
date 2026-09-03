@@ -16,6 +16,8 @@ from ..schemas import (
     MapAnswerRequest,
     MediaAnswerRequest,
     RelearningGraduateRequest,
+    ReviewIntakeOrderRequest,
+    ReviewIntakeSuspensionRequest,
     ReviewSettings,
     SequenceAnswerRequest,
     TextAnswerRequest,
@@ -56,6 +58,11 @@ from ..services.intake import (
     intake_runway_days,
     tune_intake_rate,
     unstarted_question_count
+)
+from ..services.intake_queue import (
+    get_intake_queue,
+    set_intake_order,
+    set_intake_suspension
 )
 from ..services.review import (
     get_review_items,
@@ -281,6 +288,35 @@ def get_review(
 def get_intake(db: Session = Depends(get_db)):
     # Read-only view of today's quota and the reasoning behind it.
     return compute_intake_quota(db)
+
+
+@router.get("/review/intake/queue")
+def get_intake_queue_route(db: Session = Depends(get_db)):
+    return get_intake_queue(db)
+
+
+@router.patch("/review/intake/queue/order")
+def update_intake_queue_order(
+    payload: ReviewIntakeOrderRequest,
+    db: Session = Depends(get_db)
+):
+    result = set_intake_order(db, payload.question_ids)
+    db.commit()
+    return result
+
+
+@router.patch("/review/intake/queue/suspension")
+def update_intake_queue_suspension(
+    payload: ReviewIntakeSuspensionRequest,
+    db: Session = Depends(get_db)
+):
+    result = set_intake_suspension(
+        db,
+        payload.question_ids,
+        payload.suspended
+    )
+    db.commit()
+    return result
 
 
 @router.get("/review/summary")

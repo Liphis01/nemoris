@@ -219,6 +219,7 @@ def update_question(db, question_id: int, payload):
             data=future_data,
             group_id=future_group_id,
             suspended=updates.get("suspended", question.suspended),
+            intake_order=question.intake_order,
         )
         replacement.collections = list(question.collections or [])
         delete_question_dependents(db, [question.id])

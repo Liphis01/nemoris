@@ -21,11 +21,12 @@ export default function SuspendToggleButton({
   mixed = false,
   scope = "question",
   disabled = false,
+  ariaLabel = null,
   onToggle
 }) {
   const [pulsing, setPulsing] = useState(false);
   const pulseTimeoutRef = useRef(null);
-  const aria = labelFor(scope, suspended);
+  const aria = ariaLabel || labelFor(scope, suspended);
 
   useEffect(() => () => {
     if (pulseTimeoutRef.current) {

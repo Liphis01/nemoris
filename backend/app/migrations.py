@@ -922,6 +922,29 @@ def _migration_question_suspended_column(connection):
     )
 
 
+def _ensure_question_intake_order_column(connection):
+    # Personal queue ordering is opt-in. NULL preserves the historical
+    # creation-order intake path until the user explicitly reorders.
+    if not _table_exists(connection, "questions"):
+        return
+
+    if "intake_order" not in _column_names(connection, "questions"):
+        connection.exec_driver_sql(
+            "ALTER TABLE questions ADD COLUMN intake_order INTEGER"
+        )
+
+    connection.exec_driver_sql(
+        """
+        CREATE INDEX IF NOT EXISTS ix_questions_intake_order
+        ON questions (intake_order)
+        """
+    )
+
+
+def _migration_question_intake_order_column(connection):
+    _ensure_question_intake_order_column(connection)
+
+
 def _migration_tag_slugs(connection, static_dir):
     """Give every tag a stable slug and adopt the shipped hierarchy.
 
@@ -950,6 +973,8 @@ def _migration_tag_slugs(connection, static_dir):
 
     if "tags" not in question_columns:
         return
+
+    _ensure_question_intake_order_column(connection)
 
     row = connection.exec_driver_sql(
         "SELECT value FROM app_settings WHERE key = ?",
@@ -1248,6 +1273,8 @@ def _migration_multilingual_tag_ids(connection, static_dir):
         return
     if not _table_exists(connection, "app_settings"):
         return
+
+    _ensure_question_intake_order_column(connection)
 
     from sqlalchemy.orm import Session
 
@@ -1642,6 +1669,11 @@ MIGRATIONS = [
         version="0031",
         name="enumeration_capability",
         run=_migration_enumeration_capability
+    ),
+    Migration(
+        version="0032",
+        name="question_intake_order_column",
+        run=_migration_question_intake_order_column
     )
 ]
 

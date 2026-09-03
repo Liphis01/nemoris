@@ -88,6 +88,36 @@ export function getReviewIntake() {
 }
 
 
+export function getReviewIntakeQueue() {
+  return requestJson("/review/intake/queue");
+}
+
+
+export function updateReviewIntakeOrder(questionIds) {
+  return requestJson("/review/intake/queue/order", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ question_ids: questionIds })
+  });
+}
+
+
+export function updateReviewIntakeSuspension(questionIds, suspended) {
+  return requestJson("/review/intake/queue/suspension", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      question_ids: questionIds,
+      suspended
+    })
+  });
+}
+
+
 export function sendAnswer(questionId, quality, reviewDate = undefined) {
   return requestJson("/answer", {
     method: "POST",
