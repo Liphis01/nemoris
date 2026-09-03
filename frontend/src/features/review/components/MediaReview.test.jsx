@@ -1009,6 +1009,7 @@ describe("MediaReview answer label preview", () => {
     const controlBand = container.querySelector("[data-image-control-band]");
     const promptTiles = promptBoard.querySelectorAll("[data-image-prompt-tile]");
     const promptImage = promptTiles[0].querySelector("[data-image-prompt-img]");
+    const imageViewport = promptImage.parentElement;
 
     setTileLayout(container, {
       1: { left: 0, top: 0 }
@@ -1021,14 +1022,30 @@ describe("MediaReview answer label preview", () => {
     expect(promptBoard).toBeInTheDocument();
     expect(promptBoard).toHaveStyle({
       display: "flex",
+      height: "100%",
       maxHeight: "100%",
       maxWidth: "min(100%, 900px)"
     });
     expect(promptTiles).toHaveLength(1);
     expect(promptTiles[0]).toHaveAttribute("data-image-question-id", "1");
+    expect(promptTiles[0]).toHaveStyle({
+      height: "100%",
+      width: "100%"
+    });
+    expect(promptTiles[0].style.gridTemplateRows)
+      .toBe("minmax(0, 1fr) minmax(22px, auto)");
+    expect(imageViewport).toHaveStyle({
+      alignItems: "center",
+      height: "100%",
+      justifyContent: "center",
+      width: "100%"
+    });
     expect(promptImage).toHaveStyle({
+      height: "100%",
+      maxHeight: "100%",
       objectFit: "contain",
-      objectPosition: "center"
+      objectPosition: "center",
+      width: "100%"
     });
     expect(controlBand).toContainElement(
       screen.getByRole("button", { name: "Choix 2 : Image 2" })

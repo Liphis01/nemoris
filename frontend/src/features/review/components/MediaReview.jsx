@@ -3354,6 +3354,7 @@ export default function MediaReview({
             style={{
               alignItems: "center",
               display: "flex",
+              height: "100%",
               justifyContent: "center",
               margin: "0 auto",
               maxHeight: "100%",
@@ -3364,6 +3365,7 @@ export default function MediaReview({
           >
             {promptImageRow
               ? renderImageChoiceTile(promptImageRow, {
+                fillViewport: true,
                 prompt: true,
                 selectable: false
               })
