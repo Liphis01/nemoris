@@ -9,6 +9,8 @@
 - problème de split de groupes : j'ai eu 25/1/2 pour formes de pays
 - j'ai eu 25qcm/1type_all/nqcm/2type_all ??
 - résultat de map qcm pas au bon endroit
+- pour les groupes de texte, ne pas nécessairement demander d'écrire mais juste laisser choisir la qualité
+- bug dans l'import des packs avec la question du tag merging
 
 
 ## Urgent
@@ -25,7 +27,6 @@
 - how is the mode for relearning chosen ? shouldn't we keep the same mode or one with similar difficulty ?
 - le zoom d'image est un peu naze
 - problème: les qcm ne demandent parfois pas de réflexion (raisonner pas élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
-- bug dans l'import des packs avec la question du tag merging
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
 - mettre un bouton supprimer le pack si on l'a importé par erreur
 - menu study à améliorer
@@ -33,7 +34,6 @@
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
 - les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
 - enlever les zooms de map avec la qualité
-- pour les groupes de texte, ne pas nécessairement demander d'écrire mais juste laisser choisir la qualité
 - shuffle toutes les questions dans la review
 - arrêter de cut les groups dans la review puisqu'on a le inline
 - eventuellement ajouter des zones en plus pour cibler une difficulté en qcm

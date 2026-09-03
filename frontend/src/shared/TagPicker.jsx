@@ -115,7 +115,8 @@ export default function TagPicker({
   chipStyle,
   compact = false,
   allowCreate = true,
-  showChips = true
+  showChips = true,
+  portalZIndex = 30
 }) {
   const { parents, labels, usage, revision, nodes, suggestions } = useTagHierarchy();
   const listboxId = useId();
@@ -422,7 +423,7 @@ export default function TagPicker({
             id={listboxId}
             role="listbox"
             className="app-scrollbar"
-            style={{ ...panelStyle, ...panelPlacement }}
+            style={{ ...panelStyle, ...panelPlacement, zIndex: portalZIndex }}
           >
             {rows.length === 0 && (
               <div style={{ color: "#777", fontSize: "13px", padding: "10px" }}>

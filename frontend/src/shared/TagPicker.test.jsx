@@ -392,4 +392,11 @@ describe("TagPicker", () => {
 
     expect(screen.queryByText(/Créer/)).not.toBeInTheDocument();
   });
+
+  it("lets modal callers raise the portaled dropdown above their overlay", () => {
+    setup({ portalZIndex: 80 });
+    openPicker();
+
+    expect(screen.getByRole("listbox")).toHaveStyle({ zIndex: "80" });
+  });
 });
