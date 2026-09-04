@@ -13,7 +13,6 @@ import {
   sortableOrderValue
 } from "../sequenceOrder";
 import FavoriteToggleButton from "./FavoriteToggleButton";
-import SuspendToggleButton from "./SuspendToggleButton";
 import {
   cancelButtonStyle,
   dangerButtonStyle,
@@ -135,7 +134,6 @@ const SequenceItemRow = memo(function SequenceItemRow({
   onMove,
   onRemoveItem,
   onToggleFavorite,
-  onToggleSuspended,
   onUpdateItem,
   order,
   selected
@@ -252,12 +250,6 @@ const SequenceItemRow = memo(function SequenceItemRow({
           onToggle={() => onToggleFavorite(item)}
         />
 
-        <SuspendToggleButton
-          suspended={Boolean(item.suspended)}
-          disabled={!item.id}
-          onToggle={() => onToggleSuspended(item)}
-        />
-
         <button
           onClick={() => onRemoveItem(item)}
           style={{ ...dangerButtonStyle, padding: "6px 9px" }}
@@ -277,8 +269,7 @@ export default function SequenceGroupEditor({
   onSave,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction,
-  updateQuestion
+  headerAction
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -567,22 +558,6 @@ export default function SequenceGroupEditor({
 
     updateItem(item.tempId, { data });
   }, [updateItem]);
-
-  const toggleSuspended = useCallback(async (item) => {
-    if (!item.id) return;
-
-    const nextSuspended = !item.suspended;
-
-    try {
-      await updateQuestion?.(item.id, { suspended: nextSuspended });
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "Impossible de suspendre la question.");
-      return;
-    }
-
-    updateItem(item.tempId, { suspended: nextSuspended });
-  }, [updateItem, updateQuestion]);
 
   const addTag = useCallback((selectedTag) => {
     const value = String(selectedTag ?? tagInput).trim();
@@ -975,7 +950,6 @@ export default function SequenceGroupEditor({
             onMove={moveItem}
             onRemoveItem={removeItem}
             onToggleFavorite={toggleFavorite}
-            onToggleSuspended={toggleSuspended}
             onUpdateItem={updateItem}
             selected={Boolean(item.id) && item.id === selectedItemId}
           />

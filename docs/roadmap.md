@@ -14,6 +14,7 @@
 - shortcut &/é/" pour répondre aux qualités
 - les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
+- enlever le bouton pause du menu manage normal (garder que dans queue manager)
 
 
 ## Urgent
@@ -48,7 +49,6 @@
 - ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
 - ctrl+s pour sauvegarder les changements dans manage
 - ajouter search input dans le groupe de texte
-- enlever le bouton pause du menu manage normal (garder que dans queue manager)
 - mettre un input optionnel pour les questions de type texte
 
 ## quick fixes

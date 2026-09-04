@@ -11,8 +11,7 @@ import {
 import {
   createGroup as createGroupRequest,
   deleteGroup as deleteGroupRequest,
-  listGroups,
-  suspendGroup as suspendGroupRequest
+  listGroups
 } from "../../../api/groups";
 import {
   importMediaGroupMediaUrl as importMediaGroupMediaUrlRequest,
@@ -22,7 +21,6 @@ import {
   deleteCollection,
   listCollections
 } from "../../../api/collections";
-import { getQuestionGroupId } from "../utils/manageRows";
 import { invalidateTags, useTagHierarchy } from "../../../shared/tagLabels";
 import { filterAndSortGroups } from "../utils/groupFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
@@ -210,44 +208,6 @@ export function useManageLibrary(mode) {
     });
 
     return saved;
-  }
-
-  async function setGroupSuspended(groupId, suspended) {
-    try {
-      await suspendGroupRequest(groupId, suspended);
-    } catch (error) {
-      // A bulk action that silently does nothing reads as a broken button, so
-      // say so rather than leaving the card unchanged with only a console log.
-      console.error(error);
-      alert(
-        error.message ||
-        "Impossible de mettre le groupe en pause."
-      );
-      return;
-    }
-
-    // The server applied one bulk update; mirror it locally so the whole group
-    // repaints at once instead of question by question.
-    //
-    // Matched through getQuestionGroupId, not a raw `group_id ===`: row ids are
-    // normalised to strings, and a question may carry only nested group.id --
-    // comparing the raw field misses both cases and the repaint never happens.
-    const targetGroupId = String(groupId);
-    const belongsToGroup = (question) => (
-      getQuestionGroupId(question) === targetGroupId
-    );
-
-    setAllQuestions(prev => prev.map(question =>
-      belongsToGroup(question)
-        ? { ...question, suspended }
-        : question
-    ));
-
-    setSelectedItem(prev =>
-      prev && !prev.type_group && belongsToGroup(prev)
-        ? { ...prev, suspended }
-        : prev
-    );
   }
 
   async function deleteQuestion(id) {
@@ -647,7 +607,6 @@ export function useManageLibrary(mode) {
     toggleGroupSortOrder,
     toggleSortOrder,
     updateQuestion,
-    setGroupSuspended,
     patchQuestionInCache,
     patchQuestionsInCache,
     viewMode

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import QuestionCard from "./QuestionCard";
 
@@ -25,7 +25,6 @@ function renderQuestionCard(props = {}) {
       closeDelete={vi.fn()}
       deleteQuestion={vi.fn()}
       onToggleFavorite={vi.fn()}
-      onToggleSuspended={vi.fn()}
       {...props}
     />
   );
@@ -44,25 +43,14 @@ describe("QuestionCard", () => {
     expect(container.querySelector(".katex-display")).not.toBeInTheDocument();
   });
 
-  it("offers a suspend control that reports the intended new state", () => {
-    const onToggleSuspended = vi.fn();
-    renderQuestionCard({ onToggleSuspended });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Suspendre la question" })
-    );
-
-    expect(onToggleSuspended).toHaveBeenCalledTimes(1);
-  });
-
-  it("marks a suspended question as inactive and offers to resume it", () => {
+  it("marks a suspended question as inactive without offering card-level suspension", () => {
     const { container } = renderQuestionCard({
       q: { ...baseQuestion, suspended: true }
     });
 
     expect(
-      screen.getByRole("button", { name: "Reprendre la question" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /reprendre|suspendre/i })
+    ).not.toBeInTheDocument();
     expect(container.firstChild).toHaveStyle({ opacity: "0.55" });
   });
 });

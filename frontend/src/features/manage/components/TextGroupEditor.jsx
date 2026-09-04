@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTextGroupItems, patchTextGroupItems } from "../../../api/textGroups";
 import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
-import SuspendToggleButton from "./SuspendToggleButton";
 import {
   cancelButtonStyle,
   dangerButtonStyle,
@@ -103,7 +102,6 @@ const TextGroupItemRow = memo(function TextGroupItemRow({
   onRemoveAlias,
   onRemoveItem,
   onToggleFavorite,
-  onToggleSuspended,
   onUpdateAliasInput,
   onUpdateItem,
   selected
@@ -257,11 +255,6 @@ const TextGroupItemRow = memo(function TextGroupItemRow({
           favorite={Boolean(item.data?.favorite)}
           onToggle={() => onToggleFavorite(item)}
         />
-        <SuspendToggleButton
-          suspended={Boolean(item.suspended)}
-          disabled={!item.id}
-          onToggle={() => onToggleSuspended(item)}
-        />
         <button
           type="button"
           onClick={() => onRemoveItem(item)}
@@ -281,8 +274,7 @@ export default function TextGroupEditor({
   onSave,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction,
-  updateQuestion
+  headerAction
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -482,22 +474,6 @@ export default function TextGroupEditor({
 
     updateItem(item.tempId, { data });
   }, [updateItem]);
-
-  const toggleSuspended = useCallback(async (item) => {
-    if (!item.id) return;
-
-    const nextSuspended = !item.suspended;
-
-    try {
-      await updateQuestion?.(item.id, { suspended: nextSuspended });
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "Impossible de suspendre la question.");
-      return;
-    }
-
-    updateItem(item.tempId, { suspended: nextSuspended });
-  }, [updateItem, updateQuestion]);
 
   const addTag = useCallback((selectedTag) => {
     const value = String(selectedTag ?? tagInput).trim();
@@ -768,7 +744,6 @@ export default function TextGroupEditor({
             onRemoveAlias={removeAlias}
             onRemoveItem={removeItem}
             onToggleFavorite={toggleFavorite}
-            onToggleSuspended={toggleSuspended}
             onUpdateAliasInput={updateAliasInput}
             onUpdateItem={updateItem}
             selected={Boolean(selectedItemId && selectedItemId === item.id)}

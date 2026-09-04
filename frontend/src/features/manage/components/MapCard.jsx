@@ -2,7 +2,6 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { questionTypeChipStyles } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
-import SuspendToggleButton from "./SuspendToggleButton";
 import RichText from "../../../shared/RichText";
 
 export default function MapCard({
@@ -15,8 +14,7 @@ export default function MapCard({
   onDeleteOpen,
   closeDelete,
   deleteQuestion,
-  onToggleFavorite,
-  onToggleSuspended
+  onToggleFavorite
 }) {
   const mapTypeStyle = questionTypeChipStyles.map;
   const isDisabled = !String(q.answer || "").trim();
@@ -190,11 +188,6 @@ export default function MapCard({
           <FavoriteToggleButton
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
-          />
-
-          <SuspendToggleButton
-            suspended={Boolean(q.suspended)}
-            onToggle={onToggleSuspended}
           />
         </div>
 

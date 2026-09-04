@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { useManageTextPreview } from "./ManageTextPreview";
-import SuspendToggleButton from "./SuspendToggleButton";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { useTagLabels } from "../../../shared/tagLabels";
 
@@ -11,15 +10,11 @@ export default function GroupHeaderCard({
   selectedInside,
   highlightedInside,
   setRowRef,
-  onToggle,
-  onToggleSuspended
+  onToggle
 }) {
   const { groupInfo } = row;
   const tags = groupInfo.tags || [];
   const labelFor = useTagLabels();
-  // There is no group-level flag: the header reflects its questions, so a
-  // partially suspended group reads as "mixed" rather than silently picking a
-  // side.
   const groupQuestions = groupInfo.questions || [];
   const suspendedCount = groupQuestions.filter(
     question => question.suspended
@@ -27,7 +22,6 @@ export default function GroupHeaderCard({
   const allSuspended = (
     groupQuestions.length > 0 && suspendedCount === groupQuestions.length
   );
-  const someSuspended = suspendedCount > 0 && !allSuspended;
   const typeCounts = Object.entries(groupInfo.typeCounts || {})
     .filter(([, count]) => count > 0)
     .sort(([left], [right]) => left.localeCompare(right));
@@ -69,8 +63,6 @@ export default function GroupHeaderCard({
 
   return (
     <>
-      {/* role="button" rather than a real <button>: the suspend control lives
-          inside this card, and nesting a button inside a button is invalid. */}
       <div
         ref={setRefs}
         className="manage-card"
@@ -78,10 +70,6 @@ export default function GroupHeaderCard({
         tabIndex={0}
         onClick={onToggle}
         onKeyDown={(event) => {
-          // Only when the card itself has focus: Enter/Space on the nested
-          // suspend button must not also expand the group.
-          if (event.target !== event.currentTarget) return;
-
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             onToggle?.();
@@ -263,13 +251,6 @@ export default function GroupHeaderCard({
             {groupInfo.questions.length}
           </span>
 
-          <SuspendToggleButton
-            scope="group"
-            suspended={allSuspended}
-            mixed={someSuspended}
-            disabled={groupQuestions.length === 0}
-            onToggle={() => onToggleSuspended?.(!allSuspended)}
-          />
         </span>
       </div>
       {preview}

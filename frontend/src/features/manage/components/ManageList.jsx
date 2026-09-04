@@ -31,7 +31,6 @@ export default function ManageList({
   questionScrollRequest = null,
   requestManageTransition,
   updateQuestion,
-  setGroupSuspended,
   search = "",
   tagFilter = "",
   questionTypeFilter = "",
@@ -380,20 +379,6 @@ export default function ManageList({
     }
   }
 
-  async function toggleSuspended(q, savedQuestion) {
-    const sourceQuestion = savedQuestion?.id === q.id ? savedQuestion : q;
-    const nextSuspended = !sourceQuestion.suspended;
-
-    await updateQuestion?.(q.id, { suspended: nextSuspended });
-
-    if (selectedItem?.id === q.id) {
-      setSelectedItem({
-        ...sourceQuestion,
-        suspended: nextSuspended
-      });
-    }
-  }
-
   function toggleGroup(groupId) {
     setOpenDeleteId(null);
 
@@ -485,11 +470,6 @@ export default function ManageList({
               toggleFavorite(q, saveResult?.question)
             )
           }
-          onToggleSuspended={() =>
-            runManageTransition((saveResult) =>
-              toggleSuspended(q, saveResult?.question)
-            )
-          }
         />
       )
       : (
@@ -508,11 +488,6 @@ export default function ManageList({
           onToggleFavorite={() =>
             runManageTransition((saveResult) =>
               toggleFavorite(q, saveResult?.question)
-            )
-          }
-          onToggleSuspended={() =>
-            runManageTransition((saveResult) =>
-              toggleSuspended(q, saveResult?.question)
             )
           }
         />
@@ -581,9 +556,6 @@ export default function ManageList({
         highlightedInside={highlightedInside}
         setRowRef={setRowRef(row.key)}
         onToggle={() => runManageTransition(() => selectGroupHeader(row))}
-        onToggleSuspended={(suspended) =>
-          runManageTransition(() => setGroupSuspended?.(groupId, suspended))
-        }
       />
     );
   }

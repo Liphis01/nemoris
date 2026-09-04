@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMediaGroupItems, patchMediaGroupItems } from "../../../api/mediaGroups";
 import { invalidateTags } from "../../../shared/tagLabels";
 import FavoriteToggleButton from "./FavoriteToggleButton";
-import SuspendToggleButton from "./SuspendToggleButton";
 import {
   buttonStyle,
   cancelButtonStyle,
@@ -213,7 +212,6 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
   onRemoveAlias,
   onRemoveItem,
   onToggleFavorite,
-  onToggleSuspended,
   onUpdateAliasInput,
   onUpdateItem,
   onUploadFile,
@@ -411,11 +409,6 @@ const MediaGroupItemRow = memo(function MediaGroupItemRow({
           favorite={Boolean(item.data?.favorite)}
           onToggle={() => onToggleFavorite(item)}
         />
-        <SuspendToggleButton
-          suspended={Boolean(item.suspended)}
-          disabled={!item.id}
-          onToggle={() => onToggleSuspended(item)}
-        />
         <button
           type="button"
           onClick={() => onRemoveItem(item)}
@@ -440,8 +433,7 @@ export default function MediaGroupEditor({
   onImportMediaUrl,
   registerPendingSaveHandler,
   selectedItem,
-  headerAction,
-  updateQuestion
+  headerAction
 }) {
   const [editableGroup, setEditableGroup] = useState(group);
   const [items, setItems] = useState([]);
@@ -794,22 +786,6 @@ export default function MediaGroupEditor({
 
     updateItem(item.tempId, { data });
   }, [updateItem]);
-
-  const toggleSuspended = useCallback(async (item) => {
-    if (!item.id) return;
-
-    const nextSuspended = !item.suspended;
-
-    try {
-      await updateQuestion?.(item.id, { suspended: nextSuspended });
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "Impossible de suspendre la question.");
-      return;
-    }
-
-    updateItem(item.tempId, { suspended: nextSuspended });
-  }, [updateItem, updateQuestion]);
 
   const cancelChanges = useCallback(() => {
     const snapshot = savedStateRef.current;
@@ -1295,7 +1271,6 @@ export default function MediaGroupEditor({
                     onRemoveAlias={removeAlias}
                     onRemoveItem={removeItem}
                     onToggleFavorite={toggleFavorite}
-                    onToggleSuspended={toggleSuspended}
                     onUpdateAliasInput={updateAliasInput}
                     onUpdateItem={updateItem}
                     onUploadFile={onUploadFile}

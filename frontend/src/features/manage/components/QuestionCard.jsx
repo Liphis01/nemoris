@@ -2,7 +2,6 @@ import ReviewBadge from "./ReviewBadge";
 import { useManageTextPreview } from "./ManageTextPreview";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import FavoriteToggleButton from "./FavoriteToggleButton";
-import SuspendToggleButton from "./SuspendToggleButton";
 import RichText from "../../../shared/RichText";
 import { useTagLabels } from "../../../shared/tagLabels";
 
@@ -17,7 +16,6 @@ export default function QuestionCard({
   closeDelete,
   deleteQuestion,
   onToggleFavorite,
-  onToggleSuspended,
   playlistNames = []
 }) {
   const labelFor = useTagLabels();
@@ -201,11 +199,6 @@ export default function QuestionCard({
           <FavoriteToggleButton
             favorite={Boolean(q.data?.favorite)}
             onToggle={onToggleFavorite}
-          />
-
-          <SuspendToggleButton
-            suspended={Boolean(q.suspended)}
-            onToggle={onToggleSuspended}
           />
         </div>
 
