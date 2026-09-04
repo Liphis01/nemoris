@@ -134,6 +134,29 @@ describe("TagManagerModal", () => {
     }]));
   });
 
+  it("saves local tag edits with Ctrl+S", async () => {
+    open();
+    selectLinux();
+    const saveEvent = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: "s"
+    });
+
+    fireEvent.change(screen.getByLabelText("Nom fr"), { target: { value: "GNU/Linux" } });
+    fireEvent(window, saveEvent);
+
+    await waitFor(() => expect(applyTagActions).toHaveBeenCalled());
+    expect(saveEvent.defaultPrevented).toBe(true);
+    expect(applyTagActions).toHaveBeenCalledWith(7, expect.arrayContaining([{
+      type: "set_label",
+      tag_id: LINUX_ID,
+      locale: "fr",
+      label: "GNU/Linux"
+    }]));
+  });
+
   it("unfiles a tag without deleting its assignments", async () => {
     open();
     selectLinux();

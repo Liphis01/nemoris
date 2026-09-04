@@ -1,4 +1,5 @@
 import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
+import { useEffect } from "react";
 import {
   AVATAR_COLOR_PRESETS,
   AVATAR_EMOJI_PRESETS,
@@ -309,6 +310,29 @@ function ProfileGuidancePanel({ error, guidance, loading, onOpenStudy }) {
 
 function ProfileEditCard({ profile }) {
   const canSave = profile.usernameDraft.trim().length >= 3 && !profile.saving;
+
+  useEffect(() => {
+    function handleSaveShortcut(event) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        String(event.key || "").toLowerCase() !== "s"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (canSave) {
+        profile.save?.();
+      }
+    }
+
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [canSave, profile.save]);
 
   return (
     <section className="profile-card profile-edit">

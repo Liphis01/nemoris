@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import Manage from "./Manage";
 
@@ -20,11 +20,17 @@ vi.mock("./ManageList", () => ({
 }));
 
 vi.mock("./ManageInspector", () => ({
-  default: ({ selectedItem }) => (
-    <aside data-testid="manage-inspector">
-      {selectedItem?.name || "empty"}
-    </aside>
-  )
+  default: ({ registerPendingSaveHandler, selectedItem }) => {
+    useEffect(() => (
+      registerPendingSaveHandler?.(selectedItem?.saveHandler)
+    ), [registerPendingSaveHandler, selectedItem?.saveHandler]);
+
+    return (
+      <aside data-testid="manage-inspector">
+        {selectedItem?.name || "empty"}
+      </aside>
+    );
+  }
 }));
 
 vi.mock("./TagManagerModal", () => ({
@@ -72,5 +78,40 @@ describe("Manage external navigation", () => {
     expect(screen.getByTestId("manage-list-view")).toHaveTextContent("groups");
     expect(screen.getByTestId("manage-list-highlight")).toHaveTextContent("10");
     expect(clearOpenGroupId).toHaveBeenCalled();
+  });
+});
+
+describe("Manage save shortcut", () => {
+  it("saves pending editor changes with Ctrl+S", async () => {
+    const saveHandler = vi.fn(async () => ({ saved: true }));
+    const saveEvent = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: "s"
+    });
+
+    render(
+      <Manage
+        allGroups={[]}
+        allQuestions={[]}
+        clearOpenGroupId={vi.fn()}
+        clearOpenQuestionId={vi.fn()}
+        openGroupId={null}
+        openQuestionId={null}
+        selectedItem={{ id: 1, name: "Capitale", saveHandler }}
+        setSelectedItem={vi.fn()}
+        setViewMode={vi.fn()}
+        viewMode="questions"
+      />
+    );
+
+    fireEvent(window, saveEvent);
+
+    await waitFor(() => {
+      expect(saveHandler).toHaveBeenCalledTimes(1);
+    });
+    expect(saveEvent.defaultPrevented).toBe(true);
+    expect(screen.getByText("Enregistré")).toBeInTheDocument();
   });
 });

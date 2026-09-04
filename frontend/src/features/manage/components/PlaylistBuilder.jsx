@@ -188,7 +188,8 @@ export default function PlaylistBuilder({
   availableTags = [],
   onSaved,
   onCancel,
-  onDelete
+  onDelete,
+  registerPendingSaveHandler
 }) {
   const editing = Boolean(playlist?.id);
 
@@ -276,7 +277,7 @@ export default function PlaylistBuilder({
     ));
   }
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     const cleanName = name.trim();
 
     if (!cleanName) {
@@ -308,7 +309,17 @@ export default function PlaylistBuilder({
     } finally {
       setSaving(false);
     }
-  }
+  }, [editing, excludedIds, name, onSaved, pinnedIds, playlist?.id, rules]);
+
+  useEffect(() => {
+    if (!registerPendingSaveHandler) {
+      return undefined;
+    }
+
+    return registerPendingSaveHandler(() => (
+      saving ? null : handleSave()
+    ));
+  }, [handleSave, registerPendingSaveHandler, saving]);
 
   const total = preview?.total ?? 0;
   const clauseCounts = preview?.clause_counts || [];

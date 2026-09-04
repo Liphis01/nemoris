@@ -9,6 +9,7 @@
 - les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
 - laisser les boutons de tag manager et queue manager across type dans manage
+- ctrl+s pour sauvegarder les changements
 
 
 ## Urgent
@@ -41,9 +42,9 @@
 - inline pour type_prompt d'images
 - afficher le pseudo plutot que l'email
 - ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
-- ctrl+s pour sauvegarder les changements dans manage
 - ajouter search input dans le groupe de texte
 - mettre un input optionnel pour les questions de type texte
+- gros temps de chargement quand je rentre dans la review
 
 ## quick fixes
 

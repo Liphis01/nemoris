@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { applyTagActions, resolveTagConflict, resolveTagInbox } from "../../../api/tags";
 import TagPicker from "../../../shared/TagPicker";
@@ -271,8 +271,6 @@ export default function TagManagerModal({ open, onClose }) {
     return matching;
   }, [nodes, labels, search, filter, duplicateIds]);
 
-  if (!open) return null;
-
   function record(mutator) {
     const next = mutator({
       ...state,
@@ -378,7 +376,7 @@ export default function TagManagerModal({ open, onClose }) {
     setSelected(null);
   }
 
-  async function save() {
+  const save = useCallback(async () => {
     const actions = buildActions(snapshot.nodes, state);
     if (!actions.length) {
       onClose?.();
@@ -402,7 +400,38 @@ export default function TagManagerModal({ open, onClose }) {
     } finally {
       setSaving(false);
     }
-  }
+  }, [onClose, snapshot.nodes, snapshot.revision, state]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function handleSaveShortcut(event) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        String(event.key || "").toLowerCase() !== "s"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!dirty || saving) {
+        return;
+      }
+
+      save();
+    }
+
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [dirty, open, saving, save]);
+
+  if (!open) return null;
 
   async function resolveInbox(entry, action, extra = {}) {
     if (dirty) {

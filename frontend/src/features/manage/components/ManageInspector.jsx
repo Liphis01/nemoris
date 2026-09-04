@@ -416,6 +416,7 @@ export default function ManageInspector({
           await deletePlaylist?.(target.id);
           setSelectedItem?.(null);
         }}
+        registerPendingSaveHandler={registerPendingSaveHandler}
       />
     );
   }

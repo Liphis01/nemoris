@@ -139,6 +139,31 @@ export default function Manage(props) {
   }, [showAutosaveStatus]);
 
   useEffect(() => {
+    function handleSaveShortcut(event) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        String(event.key || "").toLowerCase() !== "s"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (tagTreeOpen || mapImportWorkspace) {
+        return;
+      }
+
+      requestManageTransition();
+    }
+
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [mapImportWorkspace, requestManageTransition, tagTreeOpen]);
+
+  useEffect(() => {
     return () => {
       if (autosaveTimeoutRef.current) {
         window.clearTimeout(autosaveTimeoutRef.current);

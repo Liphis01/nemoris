@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Profile from "./Profile";
@@ -116,6 +116,40 @@ describe("Profile", () => {
       });
     });
     expect(await screen.findByText("Profil enregistré.")).toBeInTheDocument();
+  });
+
+  it("saves profile edits with Ctrl+S", async () => {
+    getProfile.mockResolvedValue({
+      signed_in: true,
+      account_email: "louis@example.com",
+      profile: { username: "Louis", avatar_emoji: "🦉", avatar_color: "teal" }
+    });
+    updateProfile.mockResolvedValue({
+      signed_in: true,
+      account_email: "louis@example.com",
+      profile: { username: "Louis", avatar_emoji: "🦊", avatar_color: "teal" }
+    });
+    const saveEvent = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: "s"
+    });
+
+    render(<Profile setMode={vi.fn()} />);
+
+    await screen.findByText("Louis");
+    await userEvent.click(screen.getByRole("button", { name: "Avatar 🦊" }));
+    fireEvent(window, saveEvent);
+
+    await waitFor(() => {
+      expect(updateProfile).toHaveBeenCalledWith({
+        username: "Louis",
+        avatar_emoji: "🦊",
+        avatar_color: "teal"
+      });
+    });
+    expect(saveEvent.defaultPrevented).toBe(true);
   });
 
   it("shows a rejected save (taken username) as an inline alert", async () => {

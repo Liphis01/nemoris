@@ -156,6 +156,36 @@ describe("PlaylistBuilder", () => {
     expect(createCollection).not.toHaveBeenCalled();
   });
 
+  it("registers playlist saves for the Manage Ctrl+S shortcut", async () => {
+    const onSaved = vi.fn();
+    let pendingSaveHandler = null;
+
+    render(
+      <PlaylistBuilder
+        groups={groups}
+        onSaved={onSaved}
+        onCancel={vi.fn()}
+        registerPendingSaveHandler={(handler) => {
+          pendingSaveHandler = handler;
+          return vi.fn();
+        }}
+      />
+    );
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Nom de la playlist" }),
+      "Drapeaux mix"
+    );
+    await pendingSaveHandler();
+
+    await waitFor(() => {
+      expect(createCollection).toHaveBeenCalledWith(expect.objectContaining({
+        name: "Drapeaux mix"
+      }));
+    });
+    expect(onSaved).toHaveBeenCalled();
+  });
+
   it("loads an existing playlist's rules for editing", async () => {
     render(
       <PlaylistBuilder
