@@ -194,6 +194,44 @@ def _review_chunks_for_bucket(
     ]
 
 
+def _chunk_with_mode(chunk, mode):
+    planned = dict(chunk)
+    planned["questions"] = list(chunk.get("questions") or [])
+    planned["mode"] = mode
+    return planned
+
+
+def _merge_same_mode_chunks(chunks, max_size=REVIEW_GROUP_MAX_CHUNK_SIZE):
+    merged = []
+
+    for chunk in chunks or []:
+        questions = list(chunk.get("questions") or [])
+
+        if not questions:
+            continue
+
+        planned = dict(chunk)
+        planned["questions"] = questions
+        previous = merged[-1] if merged else None
+
+        if (
+            previous
+            and not previous.get("forced_mode")
+            and not planned.get("forced_mode")
+            and planned.get("mode") is not None
+            and previous.get("mode") == planned.get("mode")
+            and len(previous.get("questions") or []) + len(questions) <= max_size
+        ):
+            previous["questions"] = previous["questions"] + questions
+            previous["recall_only"] = False
+            previous["support_only"] = False
+            continue
+
+        merged.append(planned)
+
+    return merged
+
+
 def _relearning_failed_mode(
     question,
     history_key,
@@ -635,6 +673,7 @@ def _serialize_review_items(
             history_key="map_mode",
             valid_modes=MAP_MODES
         )
+        planned_chunks = []
 
         for chunk in question_chunks:
             chunk_questions = chunk["questions"]
@@ -658,6 +697,18 @@ def _serialize_review_items(
                     multiple_choice_context_count=len(choice_context_questions),
                     recall_only=chunk["recall_only"],
                     support_only=chunk["support_only"]
+                )
+            )
+            planned_chunks.append(_chunk_with_mode(chunk, mode))
+
+        for chunk in _merge_same_mode_chunks(planned_chunks):
+            chunk_questions = chunk["questions"]
+            mode = chunk["mode"]
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
                 )
             )
             context_questions = (
@@ -727,6 +778,7 @@ def _serialize_review_items(
             mode_normalizer=canonical_image_mode
         )
         previous_mode = None
+        planned_chunks = []
 
         for chunk in question_chunks:
             chunk_questions = chunk["questions"]
@@ -756,6 +808,19 @@ def _serialize_review_items(
                     audio_only=audio_only,
                     recall_only=chunk["recall_only"],
                     support_only=chunk["support_only"]
+                )
+            )
+            planned_chunks.append(_chunk_with_mode(chunk, mode))
+            previous_mode = mode
+
+        for chunk in _merge_same_mode_chunks(planned_chunks):
+            chunk_questions = chunk["questions"]
+            mode = chunk["mode"]
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
                 )
             )
             context_questions = (
@@ -794,7 +859,6 @@ def _serialize_review_items(
                 for item in chunk_questions
             ]
             media_review_groups.append(media_group)
-            previous_mode = mode
 
     text_review_groups = []
 
@@ -816,6 +880,7 @@ def _serialize_review_items(
             history_key="text_mode",
             valid_modes=TEXT_MODES
         )
+        planned_chunks = []
 
         for chunk in question_chunks:
             chunk_questions = chunk["questions"]
@@ -839,6 +904,18 @@ def _serialize_review_items(
                     multiple_choice_context_count=len(choice_context_questions),
                     recall_only=chunk["recall_only"],
                     support_only=chunk["support_only"]
+                )
+            )
+            planned_chunks.append(_chunk_with_mode(chunk, mode))
+
+        for chunk in _merge_same_mode_chunks(planned_chunks):
+            chunk_questions = chunk["questions"]
+            mode = chunk["mode"]
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
                 )
             )
             context_questions = (
@@ -907,6 +984,7 @@ def _serialize_review_items(
             history_key="sequence_mode",
             valid_modes=SEQUENCE_MODES
         )
+        planned_chunks = []
 
         for chunk in question_chunks:
             chunk_questions = chunk["questions"]
@@ -938,6 +1016,41 @@ def _serialize_review_items(
                     review_goal=review_goal,
                     recall_only=chunk["recall_only"],
                     support_only=chunk["support_only"]
+                )
+            )
+
+            rail = build_rail(
+                all_group_questions,
+                positions,
+                due_ids,
+                chunk_due_ids={item.id for item in chunk_questions},
+                # Planning only needs the real blank ids for fallback; the final
+                # payload rail below owns decoy placement and its randomness.
+                decoy_count=0,
+                window=window
+            )
+            if scheduled_review and forced_sequence_mode is None:
+                mode = review_mode_fallback(
+                    "sequence",
+                    mode,
+                    item_count=len(chunk_questions),
+                    active_context_count=len(active_context_questions),
+                    choice_context_count=len(choice_context_questions),
+                    rail=rail,
+                    item_ids={item.id for item in chunk_questions},
+                    review_goal=review_goal
+                )
+
+            planned_chunks.append(_chunk_with_mode(chunk, mode))
+
+        for chunk in _merge_same_mode_chunks(planned_chunks):
+            chunk_questions = chunk["questions"]
+            mode = chunk["mode"]
+            active_context_questions, choice_context_questions = (
+                _visual_review_contexts(
+                    chunk_questions,
+                    all_group_questions,
+                    scheduled_review
                 )
             )
 
