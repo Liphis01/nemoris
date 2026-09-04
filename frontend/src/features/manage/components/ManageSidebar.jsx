@@ -37,6 +37,8 @@ export default function ManageSidebar({
   setDueOnly,
   favoritesOnly,
   setFavoritesOnly,
+  suspendedOnly,
+  setSuspendedOnly,
   sortField,
   sortOrder,
   selectSortField,
@@ -562,6 +564,30 @@ export default function ManageSidebar({
 
             </label>
 
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                color: "#999",
+                fontSize: "14px",
+                cursor: "pointer"
+              }}
+            >
+
+              <input
+                type="checkbox"
+                checked={suspendedOnly}
+                onChange={(e) => setSuspendedOnly(e.target.checked)}
+                style={{
+                  accentColor: "#e0a05c"
+                }}
+              />
+
+              Suspendues uniquement
+
+            </label>
+
             {renderSortControls({
               options: sortOptions,
               value: sortField,
@@ -603,6 +629,7 @@ export default function ManageSidebar({
               questionTypeFilter={questionTypeFilter}
               dueOnly={dueOnly}
               favoritesOnly={favoritesOnly}
+              suspendedOnly={suspendedOnly}
               patchQuestionsInCache={patchQuestionsInCache}
               setSelectedItem={setSelectedItem}
             />

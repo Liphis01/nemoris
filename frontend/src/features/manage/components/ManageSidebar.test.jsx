@@ -52,6 +52,10 @@ function renderSidebar(props = {}) {
     setQuestionTypeFilter: vi.fn(),
     dueOnly: true,
     setDueOnly: vi.fn(),
+    favoritesOnly: false,
+    setFavoritesOnly: vi.fn(),
+    suspendedOnly: false,
+    setSuspendedOnly: vi.fn(),
     sortField: "title",
     sortOrder: "desc",
     selectSortField: vi.fn(),
@@ -127,6 +131,14 @@ describe("ManageSidebar", () => {
 
     expect(screen.getByRole("button", { name: "Filtrer par tag" })).toHaveTextContent("Filtrer par tag…");
     expect(screen.queryByLabelText(/Retirer le tag/i)).not.toBeInTheDocument();
+  });
+
+  it("toggles the suspended question filter", () => {
+    const props = renderSidebar();
+
+    fireEvent.click(screen.getByLabelText("Suspendues uniquement"));
+
+    expect(props.setSuspendedOnly).toHaveBeenCalledWith(true);
   });
 
   it("places the new-question queue directly under tag management", () => {

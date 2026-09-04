@@ -34,14 +34,23 @@ export default function ManageList({
   search = "",
   tagFilter = "",
   questionTypeFilter = "",
-  dueOnly = false
+  dueOnly = false,
+  favoritesOnly = false,
+  suspendedOnly = false
 }) {
   // This list renders either flat groups or grouped question rows, while also
   // owning local UI state for delete popovers, expansion, and scroll targets.
   const [openDeleteId, setOpenDeleteId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [expandedGroupIds, setExpandedGroupIds] = useState(() => new Set());
-  const hasActiveFilter = Boolean(search || tagFilter || questionTypeFilter || dueOnly);
+  const hasActiveFilter = Boolean(
+    search ||
+    tagFilter ||
+    questionTypeFilter ||
+    dueOnly ||
+    favoritesOnly ||
+    suspendedOnly
+  );
   const prevHasActiveFilterRef = useRef(false);
   const listRef = useRef(null);
   const rowRefs = useRef(new Map());

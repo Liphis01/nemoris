@@ -36,6 +36,7 @@ describe("questionFilters", () => {
       answer: "Cote-d Ivoire",
       tags: ["flags"],
       aliases: ["Orange white green"],
+      suspended: true,
       progress: { next_review: "2000-01-01", reps: 2 }
     }
   ];
@@ -77,6 +78,20 @@ describe("questionFilters", () => {
       sortField: "id",
       sortOrder: "asc"
     }).map(question => question.id)).toEqual([1]);
+  });
+
+  it("keeps only suspended questions when suspendedOnly is set", () => {
+    expect(filterAndSortQuestions({
+      questions,
+      search: "",
+      tagFilter: "",
+      questionTypeFilter: "",
+      dueOnly: false,
+      favoritesOnly: false,
+      suspendedOnly: true,
+      sortField: "id",
+      sortOrder: "asc"
+    }).map(question => question.id)).toEqual([4]);
   });
 
   it("sorts by review count and next review for review-focused browsing", () => {

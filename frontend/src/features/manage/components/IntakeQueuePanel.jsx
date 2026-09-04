@@ -190,6 +190,7 @@ export default function IntakeQueuePanel({
   questionTypeFilter = "",
   dueOnly = false,
   favoritesOnly = false,
+  suspendedOnly = false,
   patchQuestionsInCache,
   setSelectedItem
 }) {
@@ -208,7 +209,8 @@ export default function IntakeQueuePanel({
     tagFilter ||
     questionTypeFilter ||
     dueOnly ||
-    favoritesOnly
+    favoritesOnly ||
+    suspendedOnly
   );
 
   const questionsById = useMemo(() => {
@@ -225,10 +227,12 @@ export default function IntakeQueuePanel({
     tagLabels,
     questionTypeFilter,
     dueOnly,
-    favoritesOnly
+    favoritesOnly,
+    suspendedOnly
   }), [
     dueOnly,
     favoritesOnly,
+    suspendedOnly,
     questionTypeFilter,
     search,
     tagFilter,

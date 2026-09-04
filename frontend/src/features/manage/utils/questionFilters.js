@@ -164,6 +164,13 @@ function matchesFavorite(question, favoritesOnly) {
 }
 
 
+function matchesSuspended(question, suspendedOnly) {
+  if (!suspendedOnly) return true;
+
+  return Boolean(question?.suspended);
+}
+
+
 function matchesDue(question, dueOnly) {
   if (!dueOnly) return true;
 
@@ -186,6 +193,7 @@ export function filterAndSortQuestions({
   questionTypeFilter,
   dueOnly,
   favoritesOnly,
+  suspendedOnly,
   sortField,
   sortOrder
 }) {
@@ -199,7 +207,8 @@ export function filterAndSortQuestions({
       tagMatcher,
       questionTypeFilter,
       dueOnly,
-      favoritesOnly
+      favoritesOnly,
+      suspendedOnly
     }))
     .slice()
     .sort((a, b) => compareQuestions(a, b, sortField, sortOrder));
@@ -214,7 +223,8 @@ export function matchesQuestionFilters(question, {
   tagMatcher,
   questionTypeFilter,
   dueOnly,
-  favoritesOnly
+  favoritesOnly,
+  suspendedOnly
 } = {}) {
   const resolvedTagMatcher = tagMatcher || buildTagMatcher(
     tagFilter,
@@ -227,6 +237,7 @@ export function matchesQuestionFilters(question, {
     matchesTag(question, resolvedTagMatcher) &&
     matchesType(question, questionTypeFilter) &&
     matchesDue(question, dueOnly) &&
-    matchesFavorite(question, favoritesOnly)
+    matchesFavorite(question, favoritesOnly) &&
+    matchesSuspended(question, suspendedOnly)
   );
 }
