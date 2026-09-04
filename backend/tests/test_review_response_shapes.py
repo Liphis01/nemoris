@@ -1199,6 +1199,217 @@ class ReviewResponseShapeTests(unittest.TestCase):
                 self.assertIn("question", item)
                 self.assertEqual(item["label"], item["answer"])
 
+    def test_relearning_text_match_falls_back_when_single_item_after_refresh(self):
+        today = date.today()
+        text_group = QuestionGroup(
+            id=73,
+            type_group="text",
+            name="Single text retry",
+            media=None,
+            data={}
+        )
+        self.db.add(text_group)
+        item = self.add_question(
+            340,
+            type_q="text",
+            question="France",
+            answer="Paris",
+            group=text_group,
+            next_review=today
+        )
+        item.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "text_mode": "match"
+        }]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        text_payload = next(
+            group for group in response if group.get("group_id") == text_group.id
+        )
+
+        self.assertEqual(text_payload["mode"], "type_all")
+        self.assertEqual(
+            [item["question_id"] for item in text_payload["items"]],
+            [item.id]
+        )
+
+    def test_relearning_map_click_prompt_falls_back_when_single_item_after_refresh(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=74,
+            type_group="map",
+            name="Single map retry",
+            media="/static/single.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        due_zone = self.add_question(
+            341,
+            type_q="map",
+            answer="Due",
+            data={"code": "due"},
+            group=map_group,
+            next_review=today
+        )
+        due_zone.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "map_mode": "click_prompt"
+        }]
+        for index in range(4):
+            self.add_question(
+                342 + index,
+                type_q="map",
+                answer=f"Future {index}",
+                data={"code": f"f{index}"},
+                group=map_group,
+                next_review=today + timedelta(days=1)
+            )
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        map_payload = next(
+            group for group in response if group.get("group_id") == map_group.id
+        )
+
+        self.assertEqual(map_payload["mode"], "type_prompt")
+        self.assertEqual(
+            [item["question_id"] for item in map_payload["items"]],
+            [due_zone.id]
+        )
+
+    def test_relearning_map_multiple_choice_keeps_borrowed_context_after_refresh(self):
+        today = date.today()
+        map_group = QuestionGroup(
+            id=75,
+            type_group="map",
+            name="Single map choice retry",
+            media="/static/choice.svg",
+            data={}
+        )
+        self.db.add(map_group)
+        due_zone = self.add_question(
+            346,
+            type_q="map",
+            answer="Due",
+            data={"code": "due"},
+            group=map_group,
+            next_review=today
+        )
+        due_zone.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "map_mode": "multiple_choice"
+        }]
+        future_zones = [
+            self.add_question(
+                347 + index,
+                type_q="map",
+                answer=f"Future {index}",
+                data={"code": f"f{index}"},
+                group=map_group,
+                next_review=today + timedelta(days=1)
+            )
+            for index in range(4)
+        ]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        map_payload = next(
+            group for group in response if group.get("group_id") == map_group.id
+        )
+
+        self.assertEqual(map_payload["mode"], "multiple_choice")
+        self.assertEqual(
+            {item["question_id"] for item in map_payload["context_items"]},
+            {due_zone.id, *[zone.id for zone in future_zones]}
+        )
+
+    def test_relearning_media_type_all_falls_back_when_single_item_after_refresh(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=76,
+            type_group="media",
+            name="Single image retry",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        item = self.add_question(
+            351,
+            type_q="media",
+            answer="Flag",
+            media="/static/flag.png",
+            group=image_group,
+            next_review=today
+        )
+        item.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "image_mode": "type_all"
+        }]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        image_payload = next(
+            group for group in response if group.get("group_id") == image_group.id
+        )
+
+        self.assertEqual(image_payload["mode"], "type_prompt")
+        self.assertEqual(
+            [item["question_id"] for item in image_payload["items"]],
+            [item.id]
+        )
+
+    def test_relearning_media_choice_keeps_borrowed_context_after_refresh(self):
+        today = date.today()
+        image_group = QuestionGroup(
+            id=77,
+            type_group="media",
+            name="Single image choice retry",
+            media=None,
+            data={}
+        )
+        self.db.add(image_group)
+        item = self.add_question(
+            352,
+            type_q="media",
+            answer="Flag",
+            media="/static/flag.png",
+            group=image_group,
+            next_review=today
+        )
+        item.progress.history = [{
+            "quality": 0,
+            "reviewed_on": today.isoformat(),
+            "image_mode": "multiple_choice_media"
+        }]
+        future_items = [
+            self.add_question(
+                353 + index,
+                type_q="media",
+                answer=f"Future {index}",
+                media=f"/static/future-{index}.png",
+                group=image_group,
+                next_review=today + timedelta(days=1)
+            )
+            for index in range(4)
+        ]
+        self.db.commit()
+
+        response = get_review(db=self.db)
+        image_payload = next(
+            group for group in response if group.get("group_id") == image_group.id
+        )
+
+        self.assertEqual(image_payload["mode"], "multiple_choice_media")
+        self.assertEqual(
+            {item["question_id"] for item in image_payload["context_items"]},
+            {item.id, *[entry.id for entry in future_items]}
+        )
+
     def test_compact_media_review_splits_recall_proven_from_unproven(self):
         today = date.today()
         image_group = QuestionGroup(
@@ -1308,6 +1519,15 @@ class ReviewResponseShapeTests(unittest.TestCase):
             "reviewed_on": today.isoformat(),
             "image_mode": "multiple_choice_media"
         }]
+        for index in range(4):
+            self.add_question(
+                332 + index,
+                type_q="media",
+                answer=f"Future {index}",
+                media=f"/static/future-{index}.png",
+                group=image_group,
+                next_review=today + timedelta(days=1)
+            )
         self.db.commit()
 
         response = get_review(db=self.db)
@@ -1704,7 +1924,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertIn("mode_reward_factor", item_a_history)
 
-    def test_review_endpoint_preserves_missed_image_mode_below_choice_minimum(self):
+    def test_review_endpoint_drops_missed_image_choice_below_choice_minimum(self):
         fixture = self.seed_review_contract_fixture()
         item_a, item_b = fixture["image_items"]
 
@@ -1730,9 +1950,9 @@ class ReviewResponseShapeTests(unittest.TestCase):
         )
         self.assertEqual(
             [item["question_id"] for item in image_groups[0]["context_items"]],
-            [item_a.id, item_b.id]
+            [item_b.id]
         )
-        self.assertEqual(image_groups[0]["mode"], "multiple_choice_media")
+        self.assertEqual(image_groups[0]["mode"], "type_prompt")
         self.assertEqual(item_b.progress.next_review, date.today())
 
     def test_answer_media_uses_submitted_chunk_size_for_mode_metadata(self):

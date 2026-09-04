@@ -183,7 +183,7 @@ describe("useMediaReview", () => {
     expect(onComplete).toHaveBeenCalledWith([]);
   });
 
-  it("preserves single-image type_all for relearning retries", () => {
+  it("falls back single-image type_all relearning retries to type_prompt", () => {
     const items = [{
       ...imageItem(1, "France"),
       progress: { relearning: true }
@@ -196,8 +196,8 @@ describe("useMediaReview", () => {
       })
     );
 
-    expect(result.current.mode).toBe(IMAGE_MODE_TYPE_ALL);
-    expect(result.current.activeItem).toBeNull();
+    expect(result.current.mode).toBe(IMAGE_MODE_TYPE_PROMPT);
+    expect(result.current.activeItem?.question_id).toBe(1);
   });
 
   it("type_all ignores image selection and keeps the shared input", () => {

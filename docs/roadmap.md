@@ -13,6 +13,7 @@
 - petite animation pour les inline quality de map
 - la map se floute pendant une demi seconde quand les boutons qualité apparaissent
 - ajouter search input dans le groupe de texte
+- ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
 
 
 ## Urgent
@@ -45,7 +46,9 @@
 - mettre un input optionnel pour les questions de type texte
 - gros temps de chargement quand je rentre dans la review
 - les modes d'associations (qcm, text truc, ...) ne doivent pas apparaître s'il y a moins de x éléments
-- ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
+- type_all media n'a pas de inline quality et type_prompt non plus
+- l'animation des inline quality n'a pas le temps d'être vue car le bouton disparaît trop vite (quand même zoomer sur la zone suivante mais laisser le temps de voir l'animation)
+- splitting groups based on their difficulty is great but if you give the same mode to both groups, why split them in the first place ?
 
 ## quick fixes
 

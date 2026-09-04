@@ -20,6 +20,7 @@ import {
   STILL_LEARNING_QUALITY,
   isRelearningQuestion
 } from "../relearningGrades";
+import { normalizeReviewRetryMode } from "../reviewModeCompatibility";
 import {
   buildSessionDebrief,
   createReviewResultRecords
@@ -495,6 +496,7 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
           items: failedItems,
           _reviewRetryOfIndex: answerIndex
         };
+        retry.mode = normalizeReviewRetryMode(retry);
 
         setQuestions(prev => appendOrMergeGroupRetry(prev, retry, answerIndex));
       }

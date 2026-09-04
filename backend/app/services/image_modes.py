@@ -1,5 +1,4 @@
 from .mode_selection import (
-    CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
@@ -8,6 +7,7 @@ from .mode_selection import (
     questions_are_unstarted,
     questions_have_recall_proof,
     restrict_modes_or_fallback,
+    review_mode_is_meaningful,
     weighted_mode_choice
 )
 
@@ -213,19 +213,17 @@ def choose_image_review_mode(
     }
     eligible_modes = list(IMAGE_MODES)
 
-    if len(due_questions) <= 1:
-        eligible_modes = [
-            mode
-            for mode in eligible_modes
-            if mode != IMAGE_MODE_TYPE_ALL
-        ]
-
-    if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
-        eligible_modes = [
-            mode
-            for mode in eligible_modes
-            if mode not in IMAGE_MULTIPLE_CHOICE_MODES
-        ]
+    eligible_modes = [
+        mode
+        for mode in eligible_modes
+        if review_mode_is_meaningful(
+            "media",
+            mode,
+            item_count=len(due_questions),
+            active_context_count=context_count,
+            choice_context_count=choice_context_count
+        )
+    ]
 
     if audio_only:
         eligible_modes = [

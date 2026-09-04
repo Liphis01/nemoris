@@ -71,7 +71,8 @@ from .mode_selection import (
     MODE_AFFINITIES,
     has_recall_proof_since_latest_miss,
     latest_relearning_history_mode,
-    question_mode_affinity
+    question_mode_affinity,
+    review_mode_fallback
 )
 from .media import media_kind_from_name
 from .map_eligibility import (
@@ -280,6 +281,34 @@ def _group_review_chunks(
     chunks.extend(_review_chunks_for_bucket(recall_proven_items, recall_only=True))
 
     return chunks
+
+
+def _replay_mode_or_fallback(
+    type_q,
+    chunk,
+    active_context_questions,
+    choice_context_questions,
+    *,
+    rail=None,
+    review_goal=None
+):
+    mode = chunk.get("forced_mode")
+
+    if not mode:
+        return None
+
+    chunk_questions = list(chunk.get("questions") or [])
+
+    return review_mode_fallback(
+        type_q,
+        mode,
+        item_count=len(chunk_questions),
+        active_context_count=len(active_context_questions),
+        choice_context_count=len(choice_context_questions),
+        rail=rail,
+        item_ids={question.id for question in chunk_questions},
+        review_goal=review_goal
+    )
 
 
 def _unique_sorted_questions(*question_groups):
@@ -616,8 +645,14 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
+            replay_mode = _replay_mode_or_fallback(
+                "map",
+                chunk,
+                active_context_questions,
+                choice_context_questions
+            )
             mode = (
-                chunk["forced_mode"] or choose_map_review_mode(
+                replay_mode or choose_map_review_mode(
                     chunk_questions,
                     active_context_questions,
                     multiple_choice_context_count=len(choice_context_questions),
@@ -702,8 +737,14 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
+            replay_mode = _replay_mode_or_fallback(
+                "media",
+                chunk,
+                active_context_questions,
+                choice_context_questions
+            )
             mode = (
-                chunk["forced_mode"] or choose_image_review_mode(
+                replay_mode or choose_image_review_mode(
                     chunk_questions,
                     active_context_questions,
                     multiple_choice_context_count=len(choice_context_questions),
@@ -785,8 +826,14 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
+            replay_mode = _replay_mode_or_fallback(
+                "text",
+                chunk,
+                active_context_questions,
+                choice_context_questions
+            )
             mode = (
-                chunk["forced_mode"] or choose_text_review_mode(
+                replay_mode or choose_text_review_mode(
                     chunk_questions,
                     active_context_questions,
                     multiple_choice_context_count=len(choice_context_questions),
@@ -870,10 +917,21 @@ def _serialize_review_items(
                     scheduled_review
                 )
             )
+            replay_mode = (
+                _replay_mode_or_fallback(
+                    "sequence",
+                    chunk,
+                    active_context_questions,
+                    choice_context_questions,
+                    review_goal=review_goal
+                )
+                if forced_sequence_mode is None
+                else None
+            )
             mode = (
                 normalize_sequence_mode(forced_sequence_mode)
                 if forced_sequence_mode is not None
-                else chunk["forced_mode"] or choose_sequence_review_mode(
+                else replay_mode or choose_sequence_review_mode(
                     chunk_questions,
                     active_context_questions,
                     multiple_choice_context_count=len(choice_context_questions),
@@ -902,6 +960,36 @@ def _serialize_review_items(
                 decoy_count=sequence_decoy_count(mode, chunk_questions),
                 window=window
             )
+            if scheduled_review and forced_sequence_mode is None:
+                fallback_mode = review_mode_fallback(
+                    "sequence",
+                    mode,
+                    item_count=len(chunk_questions),
+                    active_context_count=len(active_context_questions),
+                    choice_context_count=len(choice_context_questions),
+                    rail=rail,
+                    item_ids={item.id for item in chunk_questions},
+                    review_goal=review_goal
+                )
+
+                if fallback_mode != mode:
+                    mode = fallback_mode
+
+                    if mode == SEQUENCE_MODE_MULTIPLE_CHOICE:
+                        context_questions = choice_context_questions
+                    elif mode == SEQUENCE_MODE_REORDER:
+                        context_questions = chunk_questions
+                    else:
+                        context_questions = active_context_questions
+
+                    rail = build_rail(
+                        all_group_questions,
+                        positions,
+                        due_ids,
+                        chunk_due_ids={item.id for item in chunk_questions},
+                        decoy_count=sequence_decoy_count(mode, chunk_questions),
+                        window=window
+                    )
 
             if mode == SEQUENCE_MODE_RECITE:
                 questions_by_id = {

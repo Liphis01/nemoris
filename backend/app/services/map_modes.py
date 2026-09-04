@@ -1,6 +1,5 @@
 from .mode_difficulty import click_prompt_base_difficulty
 from .mode_selection import (
-    CHOICE_MODE_MIN_CONTEXT,
     MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
     MODE_AFFINITY_SUPPORT,
@@ -9,6 +8,7 @@ from .mode_selection import (
     questions_are_unstarted,
     questions_have_recall_proof,
     restrict_modes_or_fallback,
+    review_mode_is_meaningful,
     weighted_mode_choice
 )
 
@@ -175,19 +175,17 @@ def choose_map_review_mode(
     }
     eligible_modes = list(MAP_MODES)
 
-    if choice_context_count < CHOICE_MODE_MIN_CONTEXT:
-        eligible_modes = [
-            mode
-            for mode in eligible_modes
-            if mode != MAP_MODE_MULTIPLE_CHOICE
-        ]
-
-    if context_count < CHOICE_MODE_MIN_CONTEXT:
-        eligible_modes = [
-            mode
-            for mode in eligible_modes
-            if mode != MAP_MODE_CLICK_PROMPT
-        ]
+    eligible_modes = [
+        mode
+        for mode in eligible_modes
+        if review_mode_is_meaningful(
+            "map",
+            mode,
+            item_count=len(due_questions),
+            active_context_count=context_count,
+            choice_context_count=choice_context_count
+        )
+    ]
 
     if recall_only:
         eligible_modes = restrict_modes_or_fallback(

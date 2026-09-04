@@ -296,7 +296,7 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions[1]).toMatchObject({
-      mode: "multiple_choice_image",
+      mode: "multiple_choice_media",
       items: items.slice(0, 9)
     });
   });
@@ -328,8 +328,239 @@ describe("useReviewSession", () => {
     });
 
     expect(result.current.questions[1]).toMatchObject({
-      mode: "multiple_choice_image",
+      mode: "multiple_choice_media",
       items
+    });
+  });
+
+  it("falls back one-item text association retries to typing", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      question_id: 300 + index,
+      question: `Country ${index}`,
+      answer: `Capital ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 6,
+        presentation_kind: "text_group",
+        type_q: "text",
+        name: "Capitals",
+        mode: "match",
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "type_all",
+      items: [items[0]]
+    });
+  });
+
+  it("falls back one-item media type_all retries to the focused prompt", async () => {
+    const items = [
+      { question_id: 410, answer: "France" },
+      { question_id: 411, answer: "Germany" }
+    ];
+    getReview.mockResolvedValue([
+      {
+        group_id: 7,
+        presentation_kind: "media_group",
+        type_q: "media",
+        name: "Flags",
+        mode: "type_all",
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "type_prompt",
+      items: [items[0]]
+    });
+  });
+
+  it("falls back media choice retries without enough context", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      question_id: 500 + index,
+      answer: `Image ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 8,
+        presentation_kind: "media_group",
+        type_q: "media",
+        name: "Flags",
+        mode: "multiple_choice_media",
+        context_items: items.slice(0, 4),
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "type_prompt",
+      items: [items[0]]
+    });
+  });
+
+  it("keeps media choice retries when borrowed context is large enough", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      question_id: 600 + index,
+      answer: `Image ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 9,
+        presentation_kind: "media_group",
+        type_q: "media",
+        name: "Flags",
+        mode: "multiple_choice_media",
+        context_items: items,
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "multiple_choice_media",
+      items: [items[0]]
+    });
+  });
+
+  it("falls back one-item map click retries to typed prompts", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      question_id: 700 + index,
+      code: `z${index}`,
+      label: `Zone ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 10,
+        presentation_kind: "map_group",
+        type_q: "map",
+        name: "Map",
+        mode: "click_prompt",
+        context_items: items,
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleMapComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "type_prompt",
+      items: [items[0]]
+    });
+  });
+
+  it("keeps one-item map choice retries when borrowed context is large enough", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      question_id: 800 + index,
+      code: `z${index}`,
+      label: `Zone ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 11,
+        presentation_kind: "map_group",
+        type_q: "map",
+        name: "Map",
+        mode: "multiple_choice",
+        context_items: items,
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleMapComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "multiple_choice",
+      items: [items[0]]
+    });
+  });
+
+  it("falls back one-item sequence reorder retries when the old rail no longer fits", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      question_id: 900 + index,
+      position: index + 1,
+      answer: `Item ${index}`
+    }));
+    getReview.mockResolvedValue([
+      {
+        group_id: 12,
+        presentation_kind: "sequence_group",
+        type_q: "sequence",
+        review_goal: "recitation",
+        name: "Sequence",
+        mode: "reorder",
+        rail: items.map(item => ({
+          question_id: item.question_id,
+          position: item.position,
+          kind: "blank"
+        })),
+        items
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleSequenceComplete([items[0].question_id]);
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      mode: "type_position",
+      items: [items[0]]
     });
   });
 

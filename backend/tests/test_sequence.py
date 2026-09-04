@@ -730,6 +730,117 @@ class SequenceReviewSerializationTests(SequenceTestCase):
             [None, "Known 2", None]
         )
 
+    def test_relearning_reorder_single_retry_falls_back_to_gap_fill(self):
+        today = date.today()
+        group = self.add_group()
+        due = self.add_item(
+            group,
+            "Due 1",
+            1,
+            question_id=9101,
+            reps=2,
+            next_review=today,
+            history=[{
+                "quality": 0,
+                "reviewed_on": today.isoformat(),
+                "sequence_mode": SEQUENCE_MODE_REORDER
+            }]
+        )
+        for index in range(2, 7):
+            self.add_item(
+                group,
+                f"Known {index}",
+                index,
+                reps=4,
+                next_review=today + timedelta(days=30)
+            )
+        self.db.commit()
+
+        items = serialize_review_items([due], scheduled_review=True, today=today)
+        sequence_group = next(
+            item for item in items if item["type_q"] == "sequence"
+        )
+
+        self.assertEqual(sequence_group["mode"], SEQUENCE_MODE_GAP_FILL)
+        self.assertEqual(
+            [item["question_id"] for item in sequence_group["items"]],
+            [due.id]
+        )
+        self.assertEqual(
+            [
+                slot["question_id"]
+                for slot in sequence_group["rail"]
+                if slot.get("kind") == "blank"
+            ],
+            [due.id]
+        )
+
+    def test_relearning_sequence_choice_falls_back_without_enough_context(self):
+        today = date.today()
+        group = self.add_group()
+        group.data = {"review_goal": SEQUENCE_GOAL_RANDOM_ACCESS}
+        due = self.add_item(
+            group,
+            "Due 1",
+            1,
+            question_id=9201,
+            reps=2,
+            next_review=today,
+            history=[{
+                "quality": 0,
+                "reviewed_on": today.isoformat(),
+                "sequence_mode": SEQUENCE_MODE_MULTIPLE_CHOICE
+            }]
+        )
+        self.db.commit()
+
+        items = serialize_review_items([due], scheduled_review=True, today=today)
+        sequence_group = next(
+            item for item in items if item["type_q"] == "sequence"
+        )
+
+        self.assertEqual(sequence_group["mode"], SEQUENCE_MODE_TYPE_POSITION)
+
+    def test_relearning_sequence_choice_keeps_borrowed_context(self):
+        today = date.today()
+        group = self.add_group()
+        group.data = {"review_goal": SEQUENCE_GOAL_RANDOM_ACCESS}
+        due = self.add_item(
+            group,
+            "Due 1",
+            1,
+            question_id=9301,
+            reps=2,
+            next_review=today,
+            history=[{
+                "quality": 0,
+                "reviewed_on": today.isoformat(),
+                "sequence_mode": SEQUENCE_MODE_MULTIPLE_CHOICE
+            }]
+        )
+        future_items = [
+            self.add_item(
+                group,
+                f"Known {index}",
+                index,
+                reps=4,
+                next_review=today + timedelta(days=30)
+            )
+            for index in range(2, 6)
+        ]
+        self.db.commit()
+
+        items = serialize_review_items([due], scheduled_review=True, today=today)
+        sequence_group = next(
+            item for item in items if item["type_q"] == "sequence"
+        )
+
+        self.assertEqual(sequence_group["mode"], SEQUENCE_MODE_MULTIPLE_CHOICE)
+        self.assertEqual(
+            {item["question_id"] for item in sequence_group["context_items"]},
+            {due.id, *[item.id for item in future_items]}
+        )
+
     def test_chunked_lists_do_not_leak_the_other_chunks_due_items(self):
         # _visual_review_contexts hands back every started peer, which for a
         # chunked list includes the other chunk's still-due items. On a reorder

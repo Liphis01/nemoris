@@ -112,6 +112,25 @@ class ModeCompatibilityTests(unittest.TestCase):
 
         self.assertEqual(modes, {TEXT_MODE_MATCH})
 
+    def test_text_match_uses_due_item_count_not_borrowed_context(self):
+        due = [SimpleNamespace(progress=SimpleNamespace(
+            reps=1,
+            difficulty=8.0,
+            lapses=0,
+            last_review=None,
+            history=[]
+        ))]
+        context = due + [SimpleNamespace(progress=None) for _ in range(4)]
+
+        mode = choose_text_review_mode(
+            due,
+            context,
+            multiple_choice_context_count=len(context),
+            rng=FixedRandom(0)
+        )
+
+        self.assertEqual(mode, DEFAULT_TEXT_MODE)
+
     def test_text_group_save_strips_legacy_reverse_flag(self):
         group = QuestionGroup(
             type_group="text",

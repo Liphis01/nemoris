@@ -15,6 +15,7 @@ import {
   normalizeAnswerText
 } from "../answerPolicy";
 import { buildChoiceOptions } from "../distractorSelection";
+import { reviewModeFallback } from "../reviewModeCompatibility";
 
 export const IMAGE_RECAP_UNANSWERED = "unanswered";
 
@@ -385,8 +386,17 @@ export function useMediaReview(
       isRelearningGroupItem(relearningGroup, item)
     )
   );
+  const contextItemsInput = options.contextItems?.length
+    ? options.contextItems
+    : reviewItemsInput;
   const mode = servedRetryMode
-    ? normalizeImageMode(options.mode)
+    ? reviewModeFallback("media", normalizeImageMode(options.mode), {
+      items: reviewItemsInput || [],
+      itemCount: reviewItemCount,
+      activeContextCount: reviewItemCount,
+      choiceContextCount: contextItemsInput?.length || 0,
+      contextItems: contextItemsInput || []
+    })
     : normalizeImageModeForItemCount(options.mode, reviewItemCount);
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
@@ -397,9 +407,6 @@ export function useMediaReview(
     mode === IMAGE_MODE_TYPE_ALL ||
     mode === IMAGE_MODE_TYPE_PROMPT
   );
-  const contextItemsInput = options.contextItems?.length
-    ? options.contextItems
-    : reviewItemsInput;
   const graduateAnswer = options.graduateAnswer;
   const reviewKey = useMemo(
     () => `${mode}:${idsFor(reviewItemsInput).join("|")}`,

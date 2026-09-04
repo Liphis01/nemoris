@@ -25,6 +25,26 @@ CHOICE_MODE_MIN_CONTEXT = 5
 RECENT_MODE_LOOKBACK = 6
 RECENT_MODE_WEIGHT = 0.55
 
+TYPE_MAP = "map"
+TYPE_MEDIA = "media"
+TYPE_TEXT = "text"
+TYPE_SEQUENCE = "sequence"
+
+MODE_TYPE_ALL = "type_all"
+MODE_TYPE_PROMPT = "type_prompt"
+MODE_CLICK_PROMPT = "click_prompt"
+MODE_MULTIPLE_CHOICE = "multiple_choice"
+MODE_MULTIPLE_CHOICE_LABEL = "multiple_choice_label"
+MODE_MULTIPLE_CHOICE_MEDIA = "multiple_choice_media"
+MODE_MULTIPLE_CHOICE_IMAGE = "multiple_choice_image"
+MODE_MATCH = "match"
+MODE_TYPE_POSITION = "type_position"
+MODE_GAP_FILL = "gap_fill"
+MODE_REORDER = "reorder"
+MODE_RECITE = "recite"
+
+SEQUENCE_GOAL_RECITATION = "recitation"
+
 HISTORY_MODE_KEYS = (
     "map_mode",
     "image_mode",
@@ -153,13 +173,159 @@ def questions_are_unstarted(questions):
 
 def restrict_modes_or_fallback(eligible_modes, preferred_modes):
     eligible_modes = list(eligible_modes or [])
+    preferred_modes = set(preferred_modes or [])
     preferred = [
         mode
         for mode in eligible_modes
-        if mode in set(preferred_modes or [])
+        if mode in preferred_modes
     ]
 
     return preferred or eligible_modes
+
+
+def _safe_count(value):
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _rail_blank_question_ids(rail):
+    blank_ids = set()
+
+    for slot in rail or []:
+        if not isinstance(slot, dict):
+            continue
+
+        if slot.get("kind") != "blank":
+            continue
+
+        question_id = slot.get("question_id")
+
+        if question_id is not None:
+            blank_ids.add(question_id)
+
+    return blank_ids
+
+
+def review_mode_is_meaningful(
+    type_q,
+    mode,
+    *,
+    item_count=0,
+    active_context_count=0,
+    choice_context_count=None,
+    rail=None,
+    item_ids=None
+):
+    """True when a Review presentation has enough information for this mode."""
+    type_q = str(type_q or "").strip()
+    mode = str(mode or "").strip()
+    item_count = _safe_count(item_count)
+    active_context_count = _safe_count(active_context_count)
+    choice_context_count = (
+        active_context_count
+        if choice_context_count is None
+        else _safe_count(choice_context_count)
+    )
+
+    if item_count <= 0:
+        return False
+
+    if type_q == TYPE_MAP:
+        if mode == MODE_MULTIPLE_CHOICE:
+            return choice_context_count >= CHOICE_MODE_MIN_CONTEXT
+        if mode == MODE_CLICK_PROMPT:
+            return active_context_count >= CHOICE_MODE_MIN_CONTEXT
+        return mode in {MODE_TYPE_ALL, MODE_TYPE_PROMPT}
+
+    if type_q == TYPE_MEDIA:
+        if mode == MODE_TYPE_ALL:
+            return item_count > 1
+        if mode in {
+            MODE_MULTIPLE_CHOICE_LABEL,
+            MODE_MULTIPLE_CHOICE_MEDIA,
+            MODE_MULTIPLE_CHOICE_IMAGE
+        }:
+            return choice_context_count >= CHOICE_MODE_MIN_CONTEXT
+        return mode == MODE_TYPE_PROMPT
+
+    if type_q == TYPE_TEXT:
+        if mode == MODE_MATCH:
+            return item_count >= CHOICE_MODE_MIN_CONTEXT
+        return mode == MODE_TYPE_ALL
+
+    if type_q == TYPE_SEQUENCE:
+        if mode == MODE_MULTIPLE_CHOICE:
+            return choice_context_count >= CHOICE_MODE_MIN_CONTEXT
+        if mode == MODE_REORDER:
+            return item_count >= CHOICE_MODE_MIN_CONTEXT
+        if mode == MODE_GAP_FILL:
+            if rail is None:
+                return item_count > 0
+
+            blank_ids = _rail_blank_question_ids(rail)
+
+            if not blank_ids:
+                return False
+
+            if item_ids is None:
+                return True
+
+            return blank_ids == set(item_ids or [])
+        return mode in {MODE_TYPE_POSITION, MODE_RECITE}
+
+    return True
+
+
+def review_mode_fallback(
+    type_q,
+    mode,
+    *,
+    item_count=0,
+    active_context_count=0,
+    choice_context_count=None,
+    rail=None,
+    item_ids=None,
+    review_goal=None
+):
+    if review_mode_is_meaningful(
+        type_q,
+        mode,
+        item_count=item_count,
+        active_context_count=active_context_count,
+        choice_context_count=choice_context_count,
+        rail=rail,
+        item_ids=item_ids
+    ):
+        return str(mode or "").strip()
+
+    type_q = str(type_q or "").strip()
+
+    if type_q == TYPE_MAP:
+        return MODE_TYPE_PROMPT
+
+    if type_q == TYPE_MEDIA:
+        return MODE_TYPE_PROMPT
+
+    if type_q == TYPE_TEXT:
+        return MODE_TYPE_ALL
+
+    if type_q == TYPE_SEQUENCE:
+        if review_goal == SEQUENCE_GOAL_RECITATION and review_mode_is_meaningful(
+            TYPE_SEQUENCE,
+            MODE_GAP_FILL,
+            item_count=item_count,
+            active_context_count=active_context_count,
+            choice_context_count=choice_context_count,
+            rail=rail,
+            item_ids=item_ids
+        ):
+            return MODE_GAP_FILL
+
+        return MODE_TYPE_POSITION
+
+    return str(mode or "").strip()
 
 
 def latest_relearning_history_mode(progress, today=None):
