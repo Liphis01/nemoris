@@ -2137,6 +2137,7 @@ const inlineRatingOverlayStyle = {
 
 const mapInlineRatingPanelStyle = {
   ...typedRatingPanelStyle,
+  animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
   background: "rgba(18, 18, 18, 0.94)",
   boxShadow: "0 14px 32px rgba(0, 0, 0, 0.38)",
   marginTop: 0,
@@ -2145,6 +2146,7 @@ const mapInlineRatingPanelStyle = {
 
 const mapTypedInputRatingPanelStyle = {
   ...typedRatingPanelStyle,
+  animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
   background: "rgba(18, 18, 18, 0.98)",
   boxShadow: "0 10px 24px rgba(0, 0, 0, 0.32)",
   boxSizing: "border-box",

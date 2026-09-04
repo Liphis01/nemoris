@@ -618,6 +618,34 @@ describe("MapReview recap map focus", () => {
       .toHaveAttribute("data-focus-version", "0");
   });
 
+  it("keeps unresolved map context visible while click quality appears", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.25);
+
+    try {
+      renderMapReview(true, {
+        mode: "click_prompt",
+        reviewZones
+      });
+
+      expect(screen.getByText("Beta")).toBeInTheDocument();
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-due-items", "alpha|beta");
+
+      fireEvent.click(screen.getByTestId("active-map"));
+
+      await waitFor(() => {
+        expect(document.querySelector("[data-map-click-rating]"))
+          .toBeInTheDocument();
+      });
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-due-items", "alpha");
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-selected", "beta");
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it("advances type_prompt without a wrong segment when skipping", async () => {
     const { container } = renderMapReview(false, {
       mode: "type_prompt"
@@ -965,6 +993,8 @@ describe("MapReview recap map focus", () => {
     expect(ratingPanel.parentElement).toHaveStyle({ position: "absolute" });
     expect(document.querySelectorAll("[data-map-typed-quality]")).toHaveLength(3);
     expect(screen.getByText("Jura")).toBeInTheDocument();
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-due-items", "23");
 
     expect(fireEvent.keyDown(input, { key: "é", code: "Digit2" })).toBe(false);
 

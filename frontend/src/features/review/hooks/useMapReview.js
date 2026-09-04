@@ -1075,9 +1075,7 @@ export function useMapReview(
     : choiceOptions;
   const visibleDueCodes = activeChoiceFeedback?.correctCode
     ? [activeChoiceFeedback.correctCode]
-    : clickRatingFeedback?.item?.code
-      ? [clickRatingFeedback.item.code]
-    : typedRatingFeedback?.item?.code
+    : typedRatingFeedback?.item?.code && mode === MAP_MODE_TYPE_PROMPT
       ? [typedRatingFeedback.item.code]
     : dueCodes;
   const targetHighlightCode = (

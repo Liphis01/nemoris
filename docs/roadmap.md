@@ -10,6 +10,8 @@
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
 - laisser les boutons de tag manager et queue manager across type dans manage
 - ctrl+s pour sauvegarder les changements
+- petite animation pour les inline quality de map
+- la map se floute pendant une demi seconde quand les boutons qualité apparaissent
 
 
 ## Urgent
@@ -35,7 +37,6 @@
 - mieux afficher les relearning
 - l'email supabase
 - mettre un bouton supprimer le pack si on l'a importé par erreur
-- petite animation pour les inline quality de map
 - bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
 - bouton pour shuffle un groupe dans le queue manager
 - inline pour type_prompt d'images
@@ -44,6 +45,7 @@
 - ajouter search input dans le groupe de texte
 - mettre un input optionnel pour les questions de type texte
 - gros temps de chargement quand je rentre dans la review
+- les modes d'associations (qcm, text truc, ...) ne doivent pas apparaître s'il y a moins de x éléments
 
 ## quick fixes
 
@@ -61,7 +63,6 @@
 
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - si j'ai un groupe split en deux dans la review, je crois que le relearning les garde séparés en deux groupes au lieu de les regrouper
-- la map se floute pendant une demi seconde quand les boutons qualité apparaissent
 
 ## to do when i have more time
 

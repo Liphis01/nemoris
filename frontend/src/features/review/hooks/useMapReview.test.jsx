@@ -306,7 +306,8 @@ describe("useMapReview recap sorting", () => {
 
     expect(result.current.clickRatingFeedback?.questionId).toBe(1);
     expect(result.current.promptLabel).toBe("Alpha");
-    expect(result.current.dueCodes).toEqual(["a"]);
+    expect(result.current.dueCodes).toEqual([]);
+    expect(result.current.selectedCode).toBe("a");
     expect(result.current.showRecap).toBe(false);
     expect(result.current.canFinishReview).toBe(false);
     expect(result.current.qualityByQuestionId[1]).toBeUndefined();
