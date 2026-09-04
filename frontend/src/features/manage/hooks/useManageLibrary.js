@@ -23,6 +23,7 @@ import {
 } from "../../../api/collections";
 import { invalidateTags, useTagHierarchy } from "../../../shared/tagLabels";
 import { filterAndSortGroups } from "../utils/groupFilters";
+import { filterAndSortPlaylists } from "../utils/playlistFilters";
 import { filterAndSortQuestions } from "../utils/questionFilters";
 
 
@@ -79,7 +80,9 @@ const defaultSortOrders = {
   name: "asc",
   type: "asc",
   question_count: "asc",
-  media: "asc"
+  media: "asc",
+  rules: "asc",
+  generated: "asc"
 };
 
 
@@ -109,6 +112,8 @@ export function useManageLibrary(mode) {
   const [groupHasMediaOnly, setGroupHasMediaOnly] = useState(false);
   const [groupSortField, setGroupSortField] = useState("id");
   const [groupSortOrder, setGroupSortOrder] = useState("asc");
+  const [playlistSortField, setPlaylistSortField] = useState("id");
+  const [playlistSortOrder, setPlaylistSortOrder] = useState("asc");
   const [allPlaylists, setAllPlaylists] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
@@ -435,6 +440,15 @@ export function useManageLibrary(mode) {
     setGroupSortOrder(current => current === "asc" ? "desc" : "asc");
   }
 
+  function selectPlaylistSortField(field) {
+    setPlaylistSortField(field);
+    setPlaylistSortOrder(defaultSortOrders[field] || "asc");
+  }
+
+  function togglePlaylistSortOrder() {
+    setPlaylistSortOrder(current => current === "asc" ? "desc" : "asc");
+  }
+
   function patchQuestionInCache(updated) {
     // Small cache patches avoid a full list reload after simple edits and map
     // zone saves.
@@ -537,6 +551,20 @@ export function useManageLibrary(mode) {
     ]
   );
 
+  const filteredPlaylists = useMemo(
+    () =>
+      filterAndSortPlaylists({
+        playlists: allPlaylists,
+        playlistSortField,
+        playlistSortOrder
+      }),
+    [
+      allPlaylists,
+      playlistSortField,
+      playlistSortOrder
+    ]
+  );
+
   return {
     allGroups,
     allPlaylists,
@@ -556,6 +584,7 @@ export function useManageLibrary(mode) {
     favoritesOnly,
     suspendedOnly,
     filteredGroups,
+    filteredPlaylists,
     filteredQuestions,
     groupHasMediaOnly,
     groupSearch,
@@ -615,6 +644,10 @@ export function useManageLibrary(mode) {
     updateQuestion,
     patchQuestionInCache,
     patchQuestionsInCache,
+    playlistSortField,
+    playlistSortOrder,
+    selectPlaylistSortField,
+    togglePlaylistSortOrder,
     viewMode
   };
 }

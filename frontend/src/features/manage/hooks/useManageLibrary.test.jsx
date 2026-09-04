@@ -83,6 +83,12 @@ describe("useManageLibrary", () => {
     isPlaylist: true,
     question_count: 3
   };
+  const smallPlaylist = {
+    id: 5,
+    name: "À cibler",
+    isPlaylist: true,
+    question_count: 1
+  };
 
   beforeEach(() => {
     listQuestions.mockResolvedValue([
@@ -105,7 +111,7 @@ describe("useManageLibrary", () => {
     createQuestion.mockResolvedValue({});
     createGroup.mockResolvedValue({});
     deleteCollection.mockResolvedValue({});
-    listCollections.mockResolvedValue([playlist]);
+    listCollections.mockResolvedValue([playlist, smallPlaylist]);
     importMediaUrl.mockResolvedValue({});
     importMediaGroupMediaUrl.mockResolvedValue({});
     removeQuestionMedia.mockResolvedValue({});
@@ -125,7 +131,7 @@ describe("useManageLibrary", () => {
     await waitFor(() => {
       expect(hook.result.current.allQuestions).toHaveLength(3);
       expect(hook.result.current.allGroups).toHaveLength(2);
-      expect(hook.result.current.allPlaylists).toHaveLength(1);
+      expect(hook.result.current.allPlaylists).toHaveLength(2);
     });
 
     return hook;
@@ -141,6 +147,24 @@ describe("useManageLibrary", () => {
 
     expect(listQuestions).toHaveBeenCalledTimes(1);
     expect(listGroups).toHaveBeenCalledTimes(1);
+  });
+
+  it("sorts playlists with their own sort state", async () => {
+    const { result } = await renderManageLibrary();
+
+    expect(result.current.filteredPlaylists.map(item => item.id)).toEqual([4, 5]);
+
+    act(() => {
+      result.current.selectPlaylistSortField("question_count");
+    });
+
+    expect(result.current.filteredPlaylists.map(item => item.id)).toEqual([5, 4]);
+
+    act(() => {
+      result.current.togglePlaylistSortOrder();
+    });
+
+    expect(result.current.filteredPlaylists.map(item => item.id)).toEqual([4, 5]);
   });
 
   it("removes a deleted group, its questions, and the selected grouped item from cache", async () => {

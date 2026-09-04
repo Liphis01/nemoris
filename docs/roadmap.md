@@ -2,19 +2,13 @@
 
 
 ## vérifier
-- il faut split en deux dans la review les groupes (pas 30 + 1 questions mais 16 + 15)
 - dans les relearning il y a un problème de regroupement des mêmes groupes
 - dans les relearning, mettre la même image qui a posé problème
-- on peut pas commenter si on était pas connecté au moment de l'import du pack
-- problème de split de groupes : j'ai eu 25/1/2 pour formes de pays
-- j'ai eu 25qcm/1type_all/nqcm/2type_all ??
-- résultat de map qcm pas au bon endroit
 - pour les groupes de texte, ne pas nécessairement demander d'écrire mais juste laisser choisir la qualité
 - bug dans l'import des packs avec la question du tag merging
-- shortcut &/é/" pour répondre aux qualités
 - les pauses de questions disparaissent dans entrainement mais prennent toujours une place dans le calendrier
 - pourquoi j'ai 153 à faire aujourd'hui (obligé de changer le rythme et revenir dessus pour update le nombre)
-- enlever le bouton pause du menu manage normal (garder que dans queue manager)
+- laisser les boutons de tag manager et queue manager across type dans manage
 
 
 ## Urgent
@@ -66,8 +60,8 @@
 ## bugs
 
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
-- type_all d'images : faire tab ça doit cycler et pas bloquer sur le dernier + bug quand je sélectionne une image il alterne entre les images au lieu des rangées
 - si j'ai un groupe split en deux dans la review, je crois que le relearning les garde séparés en deux groupes au lieu de les regrouper
+- la map se floute pendant une demi seconde quand les boutons qualité apparaissent
 
 ## to do when i have more time
 

@@ -24,6 +24,14 @@ const groupSortOptions = [
   { value: "media", label: "Media" }
 ];
 
+const playlistSortOptions = [
+  { value: "id", label: "Ajout" },
+  { value: "name", label: "Nom" },
+  { value: "question_count", label: "Questions" },
+  { value: "rules", label: "Règles" },
+  { value: "generated", label: "Auto" }
+];
+
 
 export default function ManageSidebar({
   setMode,
@@ -53,6 +61,10 @@ export default function ManageSidebar({
   groupSortOrder,
   selectGroupSortField,
   toggleGroupSortOrder,
+  playlistSortField,
+  playlistSortOrder,
+  selectPlaylistSortField,
+  togglePlaylistSortOrder,
   resetManageFilters,
   setSelectedItem,
   startCreateQuestion,
@@ -595,45 +607,6 @@ export default function ManageSidebar({
               onSelect: selectSortField,
               onToggle: toggleSortOrder
             })}
-
-            <button
-              type="button"
-              onClick={() => onOpenTagTree?.()}
-              style={{
-                width: "100%",
-                marginTop: "4px",
-                padding: "10px 12px",
-                borderRadius: "10px",
-                border: "1px solid #2d2d2d",
-                background: "#181818",
-                color: "#9a9a9a",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "13px",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px"
-              }}
-            >
-              <span aria-hidden="true">🏷️</span>
-              <span>Gérer les tags</span>
-            </button>
-
-            <IntakeQueuePanel
-              allQuestions={allQuestions}
-              search={search}
-              tagFilter={tagFilter}
-              tagParents={tagParents}
-              tagLabels={tagLabels}
-              questionTypeFilter={questionTypeFilter}
-              dueOnly={dueOnly}
-              favoritesOnly={favoritesOnly}
-              suspendedOnly={suspendedOnly}
-              patchQuestionsInCache={patchQuestionsInCache}
-              setSelectedItem={setSelectedItem}
-            />
-
           </>
         )}
 
@@ -697,6 +670,59 @@ export default function ManageSidebar({
 
           </>
         )}
+
+        {viewMode === "playlists" && (
+          <>
+
+            {renderSortControls({
+              options: playlistSortOptions,
+              value: playlistSortField,
+              order: playlistSortOrder,
+              onSelect: selectPlaylistSortField,
+              onToggle: togglePlaylistSortOrder,
+              accent: "#1f5348"
+            })}
+
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onOpenTagTree?.()}
+          style={{
+            width: "100%",
+            marginTop: "4px",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #2d2d2d",
+            background: "#181818",
+            color: "#9a9a9a",
+            cursor: "pointer",
+            fontWeight: "600",
+            fontSize: "13px",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px"
+          }}
+        >
+          <span aria-hidden="true">🏷️</span>
+          <span>Gérer les tags</span>
+        </button>
+
+        <IntakeQueuePanel
+          allQuestions={allQuestions}
+          search={viewMode === "questions" ? search : ""}
+          tagFilter={viewMode === "questions" ? tagFilter : ""}
+          tagParents={tagParents}
+          tagLabels={tagLabels}
+          questionTypeFilter={viewMode === "questions" ? questionTypeFilter : ""}
+          dueOnly={viewMode === "questions" ? dueOnly : false}
+          favoritesOnly={viewMode === "questions" ? favoritesOnly : false}
+          suspendedOnly={viewMode === "questions" ? suspendedOnly : false}
+          patchQuestionsInCache={patchQuestionsInCache}
+          setSelectedItem={setSelectedItem}
+        />
 
       </div>
     </div>

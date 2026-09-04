@@ -7,10 +7,13 @@ import { centerListItem } from "../../../shared/scroll";
 import { getQuestionTypeChipStyle } from "../../../shared/questionTypes";
 import { buildVisibleRows, getQuestionGroupId } from "../utils/manageRows";
 
+const EMPTY_PLAYLISTS = [];
+
 export default function ManageList({
   filteredQuestions,
   filteredGroups,
   allGroups,
+  filteredPlaylists,
   selectedItem,
   setSelectedItem,
   viewMode,
@@ -26,7 +29,7 @@ export default function ManageList({
   isCreatingGroup,
   resetGroupDraft,
   setIsCreatingGroup,
-  allPlaylists = [],
+  allPlaylists = EMPTY_PLAYLISTS,
   setIsCreatingPlaylist,
   questionScrollRequest = null,
   requestManageTransition,
@@ -127,11 +130,14 @@ export default function ManageList({
     };
   }, [openDeleteId]);
 
+  const playlistItems = Array.isArray(filteredPlaylists)
+    ? filteredPlaylists
+    : allPlaylists;
   const items =
     viewMode === "questions"
       ? filteredQuestions
       : viewMode === "playlists"
-        ? allPlaylists
+        ? playlistItems
         : filteredGroups;
 
   // Derived client-side: every playlist already ships its resolved
@@ -139,7 +145,7 @@ export default function ManageList({
   const playlistNamesByQuestionId = useMemo(() => {
     const index = new Map();
 
-    (allPlaylists || []).forEach((playlist) => {
+    allPlaylists.forEach((playlist) => {
       (playlist.question_ids || []).forEach((questionId) => {
         const names = index.get(questionId);
 
@@ -691,7 +697,7 @@ export default function ManageList({
 
         {viewMode === "questions" && renderQuestionRows()}
 
-        {viewMode === "playlists" && (allPlaylists || []).map((playlist) => (
+        {viewMode === "playlists" && playlistItems.map((playlist) => (
           <div
             key={playlist.id}
             onClick={() => {

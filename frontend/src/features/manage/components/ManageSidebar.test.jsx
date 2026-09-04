@@ -70,6 +70,10 @@ function renderSidebar(props = {}) {
     groupSortOrder: "desc",
     selectGroupSortField: vi.fn(),
     toggleGroupSortOrder: vi.fn(),
+    playlistSortField: "name",
+    playlistSortOrder: "asc",
+    selectPlaylistSortField: vi.fn(),
+    togglePlaylistSortOrder: vi.fn(),
     resetManageFilters: vi.fn(),
     setSelectedItem: vi.fn(),
     startCreateQuestion: vi.fn(),
@@ -148,6 +152,28 @@ describe("ManageSidebar", () => {
     const queueButton = screen.getByRole("button", { name: /File des nouvelles/ });
 
     expect(tagButton.nextElementSibling).toContainElement(queueButton);
+  });
+
+  it("keeps tag management and the new-question queue visible in group mode", () => {
+    renderSidebar({ viewMode: "groups" });
+
+    expect(screen.getByRole("button", { name: /Gérer les tags/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /File des nouvelles/ })).toBeInTheDocument();
+  });
+
+  it("keeps tag management, the new-question queue, and sorting visible in playlist mode", () => {
+    const props = renderSidebar({ viewMode: "playlists" });
+
+    expect(screen.getByRole("button", { name: /Gérer les tags/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /File des nouvelles/ })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Critère de tri"), {
+      target: { value: "question_count" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tri croissant" }));
+
+    expect(props.selectPlaylistSortField).toHaveBeenCalledWith("question_count");
+    expect(props.togglePlaylistSortOrder).toHaveBeenCalledTimes(1);
   });
 
   it("updates and clears the selected tag filter", () => {
