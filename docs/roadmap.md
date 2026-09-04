@@ -29,9 +29,8 @@
 - menu study à améliorer
 - shuffle toutes les questions dans la review
 - arrêter de cut les groups dans la review puisqu'on a le inline
-- eventuellement ajouter des zones en plus pour cibler une difficulté en qcm
+- eventuellement ajouter des zones en plus pour cibler une difficulté de mode en qcm
 - enlever les questions isolées et remplacer par des groupes de 1 question
-- je ne veux pas de mode compliqué pour les questions dures
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 - mieux afficher les relearning
 - l'email supabase

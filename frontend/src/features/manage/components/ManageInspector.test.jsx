@@ -148,3 +148,70 @@ describe("ManageInspector pack publishing", () => {
     }));
   });
 });
+
+describe("ManageInspector new question autosave", () => {
+  it("registers a pending save handler for a written new question draft", async () => {
+    let pendingSaveHandler = null;
+    const registerPendingSaveHandler = vi.fn((handler) => {
+      pendingSaveHandler = handler;
+      return vi.fn();
+    });
+    const createQuestion = vi.fn(async (draft) => ({
+      id: 42,
+      ...draft
+    }));
+    const setIsCreatingQuestion = vi.fn();
+    const questionDraft = {
+      question: "Capitale de la France ?",
+      answer: "Paris",
+      tags: [],
+      type_q: "text",
+      media: null,
+      data: {}
+    };
+
+    renderInspector({
+      selectedItem: null,
+      isCreatingQuestion: true,
+      questionDraft,
+      createQuestion,
+      registerPendingSaveHandler,
+      setIsCreatingQuestion
+    });
+
+    await waitFor(() => {
+      expect(registerPendingSaveHandler).toHaveBeenCalledTimes(1);
+      expect(pendingSaveHandler).toEqual(expect.any(Function));
+    });
+
+    await expect(pendingSaveHandler()).resolves.toEqual({
+      saved: true,
+      question: {
+        id: 42,
+        ...questionDraft
+      }
+    });
+    expect(createQuestion).toHaveBeenCalledWith(questionDraft);
+    expect(setIsCreatingQuestion).toHaveBeenCalledWith(false);
+  });
+
+  it("does not register a pending save handler for an empty new question draft", () => {
+    const registerPendingSaveHandler = vi.fn();
+
+    renderInspector({
+      selectedItem: null,
+      isCreatingQuestion: true,
+      questionDraft: {
+        question: "  ",
+        answer: "",
+        tags: [],
+        type_q: "text",
+        media: null,
+        data: {}
+      },
+      registerPendingSaveHandler
+    });
+
+    expect(registerPendingSaveHandler).not.toHaveBeenCalled();
+  });
+});

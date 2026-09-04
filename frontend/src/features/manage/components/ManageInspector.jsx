@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import MapEditor from "../../map/components/MapEditor";
 import CreationIntentChooser from "./CreationIntentChooser";
 import CreateMapGroupEditor from "./CreateMapGroupEditor";
@@ -32,6 +32,10 @@ const PENDING_GROUP_EDITORS = {
   media: MediaGroupEditor,
   sequence: SequenceGroupEditor
 };
+
+function hasSavableQuestionDraft(draft) {
+  return Boolean(String(draft?.question || "").trim());
+}
 
 const publishButtonStyle = {
   background: "#1f2a22",
@@ -302,6 +306,54 @@ export default function ManageInspector({
     setSelectedItem,
     updateQuestion
   });
+
+  const saveNewQuestionIfWritten = useCallback(async () => {
+    if (
+      !isCreatingQuestion ||
+      !canRenderQuestionEditor ||
+      !hasSavableQuestionDraft(questionDraft)
+    ) {
+      return { saved: false };
+    }
+
+    const created = await createQuestion?.(questionDraft);
+
+    if (!created?.id) {
+      return { saved: false };
+    }
+
+    setIsCreatingQuestion(false);
+
+    return {
+      saved: true,
+      question: created
+    };
+  }, [
+    canRenderQuestionEditor,
+    createQuestion,
+    isCreatingQuestion,
+    questionDraft,
+    setIsCreatingQuestion
+  ]);
+
+  useEffect(() => {
+    if (
+      !registerPendingSaveHandler ||
+      !isCreatingQuestion ||
+      !canRenderQuestionEditor ||
+      !hasSavableQuestionDraft(questionDraft)
+    ) {
+      return undefined;
+    }
+
+    return registerPendingSaveHandler(saveNewQuestionIfWritten);
+  }, [
+    canRenderQuestionEditor,
+    isCreatingQuestion,
+    questionDraft,
+    registerPendingSaveHandler,
+    saveNewQuestionIfWritten
+  ]);
 
   const {
     openSelectedInCalendar,
