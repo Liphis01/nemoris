@@ -3498,7 +3498,13 @@ export default function MediaReview({
               readOnly={showTypedRating}
 	              onKeyDown={(event) => {
                 if (showTypedRating) {
-                  if (event.key === "Enter" || event.key === " ") {
+                  const quality = eventDigit(event, { min: 1, max: 3 });
+
+                  if (quality !== null) {
+                    event.preventDefault();
+                    rateTypedAnswer(quality);
+                    focusAnswerInput();
+                  } else if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     rateTypedAnswer(typedRatingDefaultQuality);
                     focusAnswerInput();

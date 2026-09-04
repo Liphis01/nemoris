@@ -1123,7 +1123,7 @@ describe("MediaReview answer label preview", () => {
     expect(screen.getByRole("button", { name: "Choix 1 : Image 1" }))
       .toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.keyDown(window, { key: "3" });
+    fireEvent.keyDown(window, { key: "\"", code: "Digit3" });
 
     expect(handleChoiceSelect).toHaveBeenCalledWith(3);
   });
@@ -1145,7 +1145,7 @@ describe("MediaReview answer label preview", () => {
     expect(screen.getByRole("button", { name: "Choix 2 : média" }))
       .toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "é", code: "Digit2" });
 
     expect(handleImageSelect).toHaveBeenCalledWith(2);
   });
@@ -1209,10 +1209,10 @@ describe("MediaReview answer label preview", () => {
       "correct"
     ]);
 
-    fireEvent.keyDown(window, { key: "3" });
+    fireEvent.keyDown(window, { key: "\"", code: "Digit3" });
     expect(rateChoice).toHaveBeenCalledWith(3);
 
-    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "é", code: "Digit2" });
     expect(rateChoice).toHaveBeenCalledWith(2);
   });
 

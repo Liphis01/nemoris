@@ -1241,7 +1241,13 @@ export default function MapReview({
                 readOnly={showTypedRating}
                 onKeyDown={(e) => {
                   if (showTypedRating) {
-                    if (e.key === "Enter" || e.key === " ") {
+                    const quality = eventDigit(e, { min: 1, max: 3 });
+
+                    if (quality !== null) {
+                      e.preventDefault();
+                      rateTypedAnswer(quality);
+                      inputRef.current?.focus({ preventScroll: true });
+                    } else if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       rateTypedAnswer(typedRatingDefaultQuality);
                       inputRef.current?.focus({ preventScroll: true });

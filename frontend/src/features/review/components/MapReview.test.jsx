@@ -966,7 +966,7 @@ describe("MapReview recap map focus", () => {
     expect(document.querySelectorAll("[data-map-typed-quality]")).toHaveLength(3);
     expect(screen.getByText("Jura")).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Enter" });
+    expect(fireEvent.keyDown(input, { key: "é", code: "Digit2" })).toBe(false);
 
     await waitFor(() => {
       expect(document.querySelector("[data-map-typed-rating]")).not.toBeInTheDocument();
