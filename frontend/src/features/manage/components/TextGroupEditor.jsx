@@ -95,6 +95,23 @@ const textGroupHeaderTagChipStyle = {
   fontWeight: 700
 };
 
+const addLineSlotStyle = {
+  alignItems: "center",
+  background: "#171717",
+  border: "1px dashed #3a3a3a",
+  borderRadius: "10px",
+  boxSizing: "border-box",
+  color: "#999",
+  cursor: "pointer",
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+  justifyContent: "center",
+  minHeight: "112px",
+  padding: "20px",
+  textAlign: "center"
+};
+
 const TextGroupItemRow = memo(function TextGroupItemRow({
   aliasInputValue,
   item,
@@ -819,6 +836,18 @@ export default function TextGroupEditor({
             selected={Boolean(selectedItemId && selectedItemId === item.id)}
           />
         ))}
+
+        {!loading && (
+          <button
+            data-text-group-add-cell
+            onClick={addEmptyItem}
+            style={addLineSlotStyle}
+            type="button"
+          >
+            <span aria-hidden="true" style={{ fontSize: "26px" }}>＋</span>
+            <span style={{ fontSize: "13px" }}>Nouvelle ligne</span>
+          </button>
+        )}
       </div>
     </div>
   );

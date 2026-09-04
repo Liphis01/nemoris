@@ -128,4 +128,16 @@ describe("TextGroupEditor search", () => {
       expect(document.querySelector("[data-text-group-item-id^='new-text-']")).toBeInTheDocument();
     });
   });
+
+  it("adds a row from the dotted new-line slot", async () => {
+    renderEditor();
+
+    await screen.findByDisplayValue("Paris");
+
+    fireEvent.click(document.querySelector("[data-text-group-add-cell]"));
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-text-group-item-id^='new-text-']")).toBeInTheDocument();
+    });
+  });
 });

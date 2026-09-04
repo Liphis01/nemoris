@@ -124,6 +124,23 @@ const moveButtonStyle = {
   padding: "4px 7px"
 };
 
+const addLineSlotStyle = {
+  alignItems: "center",
+  background: "#171717",
+  border: "1px dashed #3a3a3a",
+  borderRadius: "10px",
+  boxSizing: "border-box",
+  color: "#999",
+  cursor: "pointer",
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+  justifyContent: "center",
+  minHeight: "88px",
+  padding: "18px",
+  textAlign: "center"
+};
+
 const SequenceItemRow = memo(function SequenceItemRow({
   canReorder = true,
   index,
@@ -1030,6 +1047,18 @@ export default function SequenceGroupEditor({
             selected={Boolean(item.id) && item.id === selectedItemId}
           />
         ))}
+
+        {!loading && (
+          <button
+            data-sequence-group-add-cell
+            onClick={addEmptyItem}
+            style={addLineSlotStyle}
+            type="button"
+          >
+            <span aria-hidden="true" style={{ fontSize: "26px" }}>＋</span>
+            <span style={{ fontSize: "13px" }}>Nouvelle ligne</span>
+          </button>
+        )}
       </div>
     </div>
   );

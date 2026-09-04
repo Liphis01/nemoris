@@ -250,6 +250,20 @@ describe("SequenceGroupEditor search", () => {
     expect(screen.queryByRole("button", { name: /Monter l'élément/ })).toBeNull();
     expect(document.querySelector("[data-sequence-item-row]").draggable).toBe(false);
   });
+
+  it("adds a row from the dotted new-line slot", async () => {
+    renderPersisted([
+      { id: 1, answer: "Alpha", label: "Alpha", aliases: [], tags: [], data: {} }
+    ]);
+
+    await screen.findByDisplayValue("Alpha");
+
+    fireEvent.click(document.querySelector("[data-sequence-group-add-cell]"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Élément 2" })).toBeInTheDocument();
+    });
+  });
 });
 
 describe("SequenceGroupEditor — derived order", () => {
