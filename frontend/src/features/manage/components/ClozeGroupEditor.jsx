@@ -29,6 +29,10 @@ function visibleSource(source) {
   return String(source || "").replace(marker, (_all, _key, answer) => answer);
 }
 
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, " ");
+}
+
 function rawOffsetForVisible(source, target) {
   let rawCursor = 0;
   let visibleCursor = 0;
@@ -71,6 +75,7 @@ export default function ClozeGroupEditor({
   const [editPolicy, setEditPolicy] = useState("replace_progress");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const selectionRef = useRef(null);
   const savedSignatureRef = useRef("");
 
@@ -79,6 +84,7 @@ export default function ClozeGroupEditor({
     setEditableGroup(group);
     setEditPolicy("replace_progress");
     setError("");
+    setSearchQuery("");
     savedSignatureRef.current = editorSignature(group, "");
     if (!group?.id) {
       setSource("");
@@ -109,6 +115,13 @@ export default function ClozeGroupEditor({
     }
     return found;
   }, [source]);
+  const filteredHoles = useMemo(() => {
+    const needle = normalizeSearchText(searchQuery);
+
+    if (!needle) return holes;
+
+    return holes.filter(hole => normalizeSearchText(hole.answer).includes(needle));
+  }, [holes, searchQuery]);
 
   const signature = useMemo(() => editorSignature(editableGroup, source), [editableGroup, source]);
   const dirty = signature !== savedSignatureRef.current;
@@ -264,7 +277,9 @@ export default function ClozeGroupEditor({
           <textarea value={visibleSource(source)} onChange={(event) => editVisibleSource(event.target.value)} onSelect={captureSelection} rows={8} style={{ ...inputStyle, fontFamily: "inherit", lineHeight: 1.55, resize: "vertical" }} />
           <div style={{ color: "#888", fontSize: "12px" }}>Sélectionne un passage, puis crée un trou. Le contexte reste éditable ; les réponses des trous se corrigent dans la liste ci-dessous.</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}><button type="button" onClick={() => addHole()} style={buttonStyle}>Créer un trou</button>{holes.length > 0 && <><select value={selectedLinkKey} onChange={(event) => setSelectedLinkKey(event.target.value)} style={inputStyle}><option value="">Lier à un trou…</option>{holes.map((hole, index) => <option key={hole.key} value={hole.key}>Trou {index + 1} : {hole.answer}</option>)}</select><button type="button" onClick={() => selectedLinkKey && addHole(selectedLinkKey)} disabled={!selectedLinkKey} style={buttonStyle}>Ajouter une occurrence liée</button></>}</div>
-          {holes.length > 0 && <div style={{ display: "grid", gap: "6px" }}>{holes.map((hole, index) => <div key={hole.key} style={{ alignItems: "center", background: "#211526", borderRadius: "8px", color: "#f5c6ff", display: "grid", gap: "8px", gridTemplateColumns: "auto minmax(0, 1fr) auto", padding: "8px 10px" }}><span>Trou {index + 1}</span><input aria-label={`Réponse du trou ${index + 1}`} value={hole.answer} onChange={(event) => setHoleAnswer(hole.key, event.target.value)} style={inputStyle} /><button type="button" onClick={() => removeHole(hole.key)} style={{ ...buttonStyle, background: "#4a2028" }}>Retirer</button></div>)}</div>}
+          {holes.length > 0 && <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "8px" }}><div style={{ flex: "1 1 160px", maxWidth: "240px", position: "relative" }}><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Recherche..." aria-label="Rechercher dans le groupe" style={{ ...inputStyle, ...(searchQuery ? { paddingRight: "28px" } : null), width: "100%" }} />{searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Effacer la recherche" style={{ background: "transparent", border: "none", borderRadius: "50%", color: "#777", cursor: "pointer", fontSize: "16px", height: "20px", lineHeight: 1, position: "absolute", right: "6px", top: "50%", transform: "translateY(-50%)", width: "20px" }}>×</button>}</div>{searchQuery.trim() && <span style={{ color: "#888", fontSize: "12px" }}>{filteredHoles.length} / {holes.length}</span>}</div>}
+          {holes.length > 0 && searchQuery.trim() && filteredHoles.length === 0 && <div style={{ alignItems: "center", border: "1px dashed #333", borderRadius: "10px", color: "#777", display: "flex", justifyContent: "center", minHeight: "80px", padding: "18px", textAlign: "center" }}>Aucun résultat pour « {searchQuery.trim()} »</div>}
+          {holes.length > 0 && <div style={{ display: "grid", gap: "6px" }}>{filteredHoles.map((hole) => { const index = holes.findIndex(item => item.key === hole.key); return <div key={hole.key} style={{ alignItems: "center", background: "#211526", borderRadius: "8px", color: "#f5c6ff", display: "grid", gap: "8px", gridTemplateColumns: "auto minmax(0, 1fr) auto", padding: "8px 10px" }}><span>Trou {index + 1}</span><input aria-label={`Réponse du trou ${index + 1}`} value={hole.answer} onChange={(event) => setHoleAnswer(hole.key, event.target.value)} style={inputStyle} /><button type="button" onClick={() => removeHole(hole.key)} style={{ ...buttonStyle, background: "#4a2028" }}>Retirer</button></div>; })}</div>}
         </EditorSection>
         {(status || error) && <div style={{ color: error ? "#ff9494" : "#8ee9ac" }}>{error || status}</div>}
       </div>

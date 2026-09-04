@@ -12,6 +12,7 @@
 - ctrl+s pour sauvegarder les changements
 - petite animation pour les inline quality de map
 - la map se floute pendant une demi seconde quand les boutons qualité apparaissent
+- ajouter search input dans le groupe de texte
 
 
 ## Urgent
@@ -41,11 +42,10 @@
 - bouton pour shuffle un groupe dans le queue manager
 - inline pour type_prompt d'images
 - afficher le pseudo plutot que l'email
-- ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
-- ajouter search input dans le groupe de texte
 - mettre un input optionnel pour les questions de type texte
 - gros temps de chargement quand je rentre dans la review
 - les modes d'associations (qcm, text truc, ...) ne doivent pas apparaître s'il y a moins de x éléments
+- ajouter avec un bouton en dessous de la dernière ligne comme dans les medias
 
 ## quick fixes
 

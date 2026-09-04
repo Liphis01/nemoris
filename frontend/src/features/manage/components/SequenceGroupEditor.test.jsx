@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SequenceGroupEditor from "./SequenceGroupEditor";
 import {
@@ -177,6 +177,78 @@ describe("SequenceGroupEditor — group not yet persisted", () => {
       "Alpha",
       "Bêta"
     ]);
+  });
+});
+
+describe("SequenceGroupEditor search", () => {
+  function renderPersisted(items = []) {
+    getSequenceGroupItems.mockResolvedValue(items);
+
+    render(
+      <SequenceGroupEditor
+        group={{
+          id: 17,
+          type_group: "sequence",
+          name: "Alphabet",
+          media: null,
+          tags: [],
+          data: {}
+        }}
+        availableTags={[]}
+        ensurePersistedGroup={vi.fn()}
+        onSave={vi.fn()}
+        selectedItem={null}
+      />
+    );
+  }
+
+  it("filters rows by answer and aliases", async () => {
+    renderPersisted([
+      { id: 1, answer: "Alpha", label: "Alpha", aliases: ["première"], tags: [], data: {} },
+      { id: 2, answer: "Bêta", label: "Bêta", aliases: [], tags: [], data: {} },
+      { id: 3, answer: "Gamma", label: "Gamma", aliases: ["troisième"], tags: [], data: {} }
+    ]);
+
+    await screen.findByDisplayValue("Alpha");
+
+    const searchInput = screen.getByPlaceholderText("Recherche...");
+    fireEvent.change(searchInput, { target: { value: "Gamma" } });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-sequence-item-row]")).toHaveLength(1);
+    });
+    expect(
+      within(document.querySelector("[data-sequence-item-row]")).getByDisplayValue("Gamma")
+    ).toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: "première" } });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-sequence-item-row]")).toHaveLength(1);
+    });
+    expect(
+      within(document.querySelector("[data-sequence-item-row]")).getByDisplayValue("Alpha")
+    ).toBeInTheDocument();
+  });
+
+  it("disables manual reordering while the list is filtered", async () => {
+    renderPersisted([
+      { id: 1, answer: "Alpha", label: "Alpha", aliases: [], tags: [], data: {} },
+      { id: 2, answer: "Bêta", label: "Bêta", aliases: [], tags: [], data: {} },
+      { id: 3, answer: "Gamma", label: "Gamma", aliases: [], tags: [], data: {} }
+    ]);
+
+    await screen.findByDisplayValue("Alpha");
+
+    fireEvent.change(screen.getByPlaceholderText("Recherche..."), {
+      target: { value: "Gamma" }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-sequence-item-row]")).toHaveLength(1);
+    });
+    expect(screen.queryByRole("button", { name: /Monter l'élément/ })).toBeNull();
+    expect(document.querySelector("[data-sequence-item-row]").draggable).toBe(false);
   });
 });
 

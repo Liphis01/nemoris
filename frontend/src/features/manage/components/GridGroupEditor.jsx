@@ -50,6 +50,26 @@ function signature(group, grid) {
   });
 }
 
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, " ");
+}
+
+function countGridSearchMatches(grid, searchQuery) {
+  const needle = normalizeSearchText(searchQuery);
+
+  if (!needle) return 0;
+
+  const rows = grid?.rows || [];
+  const columns = grid?.columns || [];
+  const cells = grid?.cells || [];
+
+  return [
+    ...rows.map(row => row.label),
+    ...columns.map(column => column.label),
+    ...cells.map(cell => cell.value)
+  ].filter(value => normalizeSearchText(value).includes(needle)).length;
+}
+
 export default function GridGroupEditor({
   group,
   availableTags = [],
@@ -70,6 +90,7 @@ export default function GridGroupEditor({
   const [firstRowIsHeader, setFirstRowIsHeader] = useState(true);
   const [firstColumnIsHeader, setFirstColumnIsHeader] = useState(true);
   const [editPolicy, setEditPolicy] = useState("replace_progress");
+  const [searchQuery, setSearchQuery] = useState("");
   const savedStateRef = useRef(null);
 
   useEffect(() => {
@@ -82,6 +103,7 @@ export default function GridGroupEditor({
     setPasteOpen(false);
     setPasteText("");
     setEditPolicy("replace_progress");
+    setSearchQuery("");
 
     if (!group?.id) {
       const next = blankGrid();
@@ -123,6 +145,10 @@ export default function GridGroupEditor({
     [editableGroup, grid, saved]
   );
   const count = cardCount(grid);
+  const searchMatchCount = useMemo(
+    () => countGridSearchMatches(grid, searchQuery),
+    [grid, searchQuery]
+  );
 
   const addTag = (value) => {
     const next = String(value ?? tagInput).trim();
@@ -353,6 +379,50 @@ export default function GridGroupEditor({
             Coller un tableau
           </button>
 
+          <div style={{ flex: "1 1 160px", maxWidth: "240px", position: "relative" }}>
+            <input
+              aria-label="Rechercher dans le groupe"
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder="Recherche..."
+              style={{
+                ...compactInputStyle,
+                ...(searchQuery ? { paddingRight: "28px" } : null),
+                width: "100%"
+              }}
+              value={searchQuery}
+            />
+            {searchQuery && (
+              <button
+                aria-label="Effacer la recherche"
+                onClick={() => setSearchQuery("")}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "50%",
+                  color: "#777",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  height: "20px",
+                  lineHeight: 1,
+                  position: "absolute",
+                  right: "6px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px"
+                }}
+                type="button"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim() && (
+            <span style={{ color: searchMatchCount ? "#888" : "#c98a8a", fontSize: "12px" }}>
+              {searchMatchCount} résultat{searchMatchCount > 1 ? "s" : ""}
+            </span>
+          )}
+
           <span style={{ color: count ? "#5eead4" : "#888", fontSize: "13px" }}>
             {count
               ? `${count} carte${count > 1 ? "s seront générées" : " sera générée"}`
@@ -430,7 +500,14 @@ export default function GridGroupEditor({
       >
         {loading
           ? <div style={{ color: "#888", padding: "18px" }}>Chargement...</div>
-          : <GridMatrix grid={grid} onChange={setGrid} onPasteTable={handlePasteTable} />}
+          : (
+            <GridMatrix
+              grid={grid}
+              onChange={setGrid}
+              onPasteTable={handlePasteTable}
+              searchQuery={searchQuery}
+            />
+          )}
       </div>
     </div>
   );

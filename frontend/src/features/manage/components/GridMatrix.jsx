@@ -86,6 +86,10 @@ function disabledStyle(style, disabled) {
     : style;
 }
 
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, " ");
+}
+
 function AxisControls({ canRemove, count, index, kind, onInsert, onMove, onRemove }) {
   const noun = axisNoun(kind).toLowerCase();
   const isFirst = index === 0;
@@ -140,13 +144,36 @@ function AxisControls({ canRemove, count, index, kind, onInsert, onMove, onRemov
   );
 }
 
-export default function GridMatrix({ grid, onChange, onPasteTable }) {
+export default function GridMatrix({ grid, onChange, onPasteTable, searchQuery = "" }) {
   const containerRef = useRef(null);
   const [pendingFocus, setPendingFocus] = useState(null);
   const rows = grid?.rows || [];
   const columns = grid?.columns || [];
   const cells = cellIndex(grid);
   const count = cardCount(grid);
+  const normalizedSearch = normalizeSearchText(searchQuery);
+  const hasSearch = Boolean(normalizedSearch);
+  const matchCellKeys = new Set();
+  const matchRowKeys = new Set();
+  const matchColumnKeys = new Set();
+
+  if (hasSearch) {
+    rows.forEach(row => {
+      if (normalizeSearchText(row.label).includes(normalizedSearch)) {
+        matchRowKeys.add(row.key);
+      }
+    });
+    columns.forEach(column => {
+      if (normalizeSearchText(column.label).includes(normalizedSearch)) {
+        matchColumnKeys.add(column.key);
+      }
+    });
+    cells.forEach((cell, key) => {
+      if (normalizeSearchText(cell?.value).includes(normalizedSearch)) {
+        matchCellKeys.add(key);
+      }
+    });
+  }
 
   const focusCell = useCallback((rowIndex, columnIndex) => {
     const element = containerRef.current?.querySelector(
@@ -245,7 +272,15 @@ export default function GridMatrix({ grid, onChange, onPasteTable }) {
             </th>
 
             {columns.map((column, columnIndex) => (
-              <th key={column.key} style={headerCellStyle}>
+              <th
+                key={column.key}
+                style={{
+                  ...headerCellStyle,
+                  ...(matchColumnKeys.has(column.key)
+                    ? { background: "#1f2418", borderColor: "#6b8f3a" }
+                    : null)
+                }}
+              >
                 <input
                   aria-label={`Libellé de la colonne ${columnIndex + 1}`}
                   onChange={event => onChange(renameAxis(grid, "columns", column.key, event.target.value))}
@@ -281,7 +316,14 @@ export default function GridMatrix({ grid, onChange, onPasteTable }) {
         <tbody>
           {rows.map((row, rowIndex) => (
             <tr key={row.key}>
-              <th style={rowHeaderStyle}>
+              <th
+                style={{
+                  ...rowHeaderStyle,
+                  ...(matchRowKeys.has(row.key)
+                    ? { background: "#1f2418", borderColor: "#6b8f3a" }
+                    : null)
+                }}
+              >
                 <input
                   aria-label={`Libellé de la ligne ${rowIndex + 1}`}
                   onChange={event => onChange(renameAxis(grid, "rows", row.key, event.target.value))}
@@ -304,6 +346,7 @@ export default function GridMatrix({ grid, onChange, onPasteTable }) {
                 <GridCell
                   columnIndex={columnIndex}
                   columnLabel={column.label}
+                  highlighted={matchCellKeys.has(`${row.key}:${column.key}`)}
                   key={column.key}
                   onChange={value => onChange(setCellValue(grid, row.key, column.key, value))}
                   onClear={() => onChange(clearCell(grid, row.key, column.key))}

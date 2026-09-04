@@ -57,6 +57,7 @@ const clearButtonStyle = {
 export default function GridCell({
   columnIndex,
   columnLabel,
+  highlighted = false,
   onChange,
   onClear,
   onPasteTable,
@@ -105,7 +106,14 @@ export default function GridCell({
   }
 
   return (
-    <td style={cellShellStyle}>
+    <td
+      style={{
+        ...cellShellStyle,
+        ...(highlighted
+          ? { background: "#1f2418", borderColor: "#6b8f3a" }
+          : null)
+      }}
+    >
       <textarea
         aria-label={`${rowLabel} × ${columnLabel}`}
         data-grid-cell={`${rowIndex}:${columnIndex}`}

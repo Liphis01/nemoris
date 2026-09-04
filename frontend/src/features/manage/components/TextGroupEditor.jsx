@@ -19,6 +19,7 @@ import {
 } from "./QuestionEditorPrimitives";
 import AnswerPolicyControl from "./AnswerPolicyControl";
 import { answerPolicyFromGroup } from "./answerPolicyControlUtils";
+import { matchesSearch } from "../utils/questionFilters";
 
 let tempItemCounter = 0;
 
@@ -285,6 +286,7 @@ export default function TextGroupEditor({
   const [saveStatus, setSaveStatus] = useState("");
   const [initialSignature, setInitialSignature] = useState("");
   const [aliasInputByTempId, setAliasInputByTempId] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
   const itemsScrollRef = useRef(null);
   const aliasInputRefs = useRef({});
   const currentGroupRef = useRef(group);
@@ -297,6 +299,11 @@ export default function TextGroupEditor({
     buildSignature(editableGroup, sharedTags, items, deletedItemIds)
   ), [deletedItemIds, editableGroup, items, sharedTags]);
   const hasUnsavedChanges = currentSignature !== initialSignature;
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+
+    return items.filter(item => matchesSearch(item, searchQuery));
+  }, [items, searchQuery]);
 
   useEffect(() => {
     currentGroupRef.current = group;
@@ -311,6 +318,7 @@ export default function TextGroupEditor({
       setInitialSignature(
         buildSignature(currentGroupRef.current, [], [], [])
       );
+      setSearchQuery("");
       savedStateRef.current = {
         group: currentGroupRef.current,
         tags: [],
@@ -329,6 +337,7 @@ export default function TextGroupEditor({
     setDeletedItemIds([]);
     setAliasInputByTempId({});
     aliasInputRefs.current = {};
+    setSearchQuery("");
     setLoading(true);
     setSaveStatus("");
 
@@ -438,6 +447,7 @@ export default function TextGroupEditor({
     });
 
     setItems(prev => [...prev, nextItem]);
+    setSearchQuery("");
 
     window.requestAnimationFrame(() => {
       const scrollElement = itemsScrollRef.current;
@@ -694,6 +704,48 @@ export default function TextGroupEditor({
           >
             Ajouter une ligne
           </button>
+          <div style={{ flex: "1 1 160px", maxWidth: "240px", position: "relative" }}>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Recherche..."
+              aria-label="Rechercher dans le groupe"
+              style={{
+                ...compactHeaderInputStyle,
+                ...(searchQuery ? { paddingRight: "28px" } : null),
+                width: "100%"
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Effacer la recherche"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "50%",
+                  color: "#777",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  height: "20px",
+                  lineHeight: 1,
+                  position: "absolute",
+                  right: "6px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px"
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {searchQuery.trim() && (
+            <span style={{ color: "#888", fontSize: "12px" }}>
+              {filteredItems.length} / {items.length}
+            </span>
+          )}
           {saveStatus && (
             <span style={{ color: "#888", fontSize: "13px" }}>{saveStatus}</span>
           )}
@@ -734,7 +786,25 @@ export default function TextGroupEditor({
           </div>
         )}
 
-        {!loading && items.map((item) => (
+        {!loading && searchQuery.trim() && filteredItems.length === 0 && (
+          <div
+            style={{
+              alignItems: "center",
+              border: "1px dashed #333",
+              borderRadius: "10px",
+              color: "#777",
+              display: "flex",
+              justifyContent: "center",
+              minHeight: "80px",
+              padding: "18px",
+              textAlign: "center"
+            }}
+          >
+            Aucun résultat pour « {searchQuery.trim()} »
+          </div>
+        )}
+
+        {!loading && filteredItems.map((item) => (
           <TextGroupItemRow
             key={item.tempId}
             aliasInputValue={aliasInputByTempId[item.tempId] || ""}

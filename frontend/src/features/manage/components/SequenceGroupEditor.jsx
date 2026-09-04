@@ -29,6 +29,7 @@ import {
 } from "./QuestionEditorPrimitives";
 import AnswerPolicyControl from "./AnswerPolicyControl";
 import { answerPolicyFromGroup } from "./answerPolicyControlUtils";
+import { matchesSearch } from "../utils/questionFilters";
 
 let tempItemCounter = 0;
 
@@ -124,6 +125,7 @@ const moveButtonStyle = {
 };
 
 const SequenceItemRow = memo(function SequenceItemRow({
+  canReorder = true,
   index,
   isFirst,
   isLast,
@@ -141,14 +143,15 @@ const SequenceItemRow = memo(function SequenceItemRow({
   // A derived list is ranked by its attribute, so manual reordering is not just
   // pointless here -- leaving it live would imply an edit the next save discards.
   const isDerived = order?.mode === "derived";
+  const allowManualReorder = canReorder && !isDerived;
 
   return (
     <div
       data-sequence-item-row={index + 1}
-      draggable={!isDerived}
-      onDragOver={isDerived ? undefined : onDragOver}
-      onDragStart={isDerived ? undefined : event => onDragStart(event, item)}
-      onDrop={isDerived ? undefined : event => onDrop(event, index)}
+      draggable={allowManualReorder}
+      onDragOver={allowManualReorder ? onDragOver : undefined}
+      onDragStart={allowManualReorder ? event => onDragStart(event, item) : undefined}
+      onDrop={allowManualReorder ? event => onDrop(event, index) : undefined}
       style={{
         alignItems: "center",
         background: selected ? "#232b23" : "#181818",
@@ -166,9 +169,9 @@ const SequenceItemRow = memo(function SequenceItemRow({
         aria-hidden="true"
         style={{
           color: "#555",
-          cursor: isDerived ? "default" : "grab",
+          cursor: allowManualReorder ? "grab" : "default",
           fontSize: "13px",
-          opacity: isDerived ? 0.3 : 1
+          opacity: allowManualReorder ? 1 : 0.3
         }}
       >
         {isDerived ? "∑" : "⠿"}
@@ -222,7 +225,7 @@ const SequenceItemRow = memo(function SequenceItemRow({
       )}
 
       <div style={{ alignItems: "center", display: "flex", gap: "5px" }}>
-        {!isDerived && (
+        {allowManualReorder && (
           <>
             <button
               aria-label={`Monter l'élément ${index + 1}`}
@@ -282,6 +285,7 @@ export default function SequenceGroupEditor({
   const [bulkText, setBulkText] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const itemsScrollRef = useRef(null);
   const currentGroupRef = useRef(group);
   const saveItemsRef = useRef(null);
@@ -358,6 +362,11 @@ export default function SequenceGroupEditor({
       })
       .map(entry => entry.item);
   }, [isDerived, items, order.kind]);
+  const filteredDisplayItems = useMemo(() => {
+    if (!searchQuery.trim()) return displayItems;
+
+    return displayItems.filter(item => matchesSearch(item, searchQuery));
+  }, [displayItems, searchQuery]);
   const invalidDerivedOrderRows = useMemo(() => (
     isDerived
       ? displayItems
@@ -384,6 +393,7 @@ export default function SequenceGroupEditor({
       setInitialSignature(
         buildSignature(currentGroupRef.current, [], [], [])
       );
+      setSearchQuery("");
       savedStateRef.current = {
         group: currentGroupRef.current,
         tags: [],
@@ -402,6 +412,7 @@ export default function SequenceGroupEditor({
     setDeletedItemIds([]);
     setBulkText("");
     setBulkOpen(false);
+    setSearchQuery("");
     setLoading(true);
     setSaveStatus("");
 
@@ -503,6 +514,7 @@ export default function SequenceGroupEditor({
     });
 
     setItems(prev => [...prev, nextItem]);
+    setSearchQuery("");
 
     window.requestAnimationFrame(() => {
       const scrollElement = itemsScrollRef.current;
@@ -533,6 +545,7 @@ export default function SequenceGroupEditor({
         })
       )
     ]);
+    setSearchQuery("");
     setBulkText("");
     setBulkOpen(false);
   }, [bulkText, editableGroup]);
@@ -787,6 +800,50 @@ export default function SequenceGroupEditor({
             Ajouter une ligne
           </button>
 
+          <div style={{ flex: "1 1 160px", maxWidth: "240px", position: "relative" }}>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Recherche..."
+              aria-label="Rechercher dans le groupe"
+              style={{
+                ...compactHeaderInputStyle,
+                ...(searchQuery ? { paddingRight: "28px" } : null),
+                width: "100%"
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Effacer la recherche"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "50%",
+                  color: "#777",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  height: "20px",
+                  lineHeight: 1,
+                  position: "absolute",
+                  right: "6px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px"
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim() && (
+            <span style={{ color: "#888", fontSize: "12px" }}>
+              {filteredDisplayItems.length} / {displayItems.length}
+            </span>
+          )}
+
           <button
             type="button"
             onClick={() => setBulkOpen(prev => !prev)}
@@ -936,12 +993,31 @@ export default function SequenceGroupEditor({
           </div>
         )}
 
-        {!loading && displayItems.map((item, index) => (
+        {!loading && searchQuery.trim() && filteredDisplayItems.length === 0 && (
+          <div
+            style={{
+              alignItems: "center",
+              border: "1px dashed #333",
+              borderRadius: "10px",
+              color: "#777",
+              display: "flex",
+              justifyContent: "center",
+              minHeight: "80px",
+              padding: "18px",
+              textAlign: "center"
+            }}
+          >
+            Aucun résultat pour « {searchQuery.trim()} »
+          </div>
+        )}
+
+        {!loading && filteredDisplayItems.map((item, index) => (
           <SequenceItemRow
+            canReorder={!searchQuery.trim()}
             key={item.tempId}
             index={index}
             isFirst={index === 0}
-            isLast={index === displayItems.length - 1}
+            isLast={index === filteredDisplayItems.length - 1}
             item={item}
             order={order}
             onDragOver={handleDragOver}
