@@ -1091,15 +1091,38 @@ export default function TextGroupReview({
     const selfGradeButtonColors = relearning
       ? relearningButtonColors
       : qualityButtonColors;
-    const progressLabel = items.length > 0
-      ? `${Math.min(selfGradeIndex + 1, items.length)} / ${items.length}`
-      : "0 / 0";
+    const clampedSelfGradeIndex = Math.min(selfGradeIndex, Math.max(items.length - 1, 0));
 
     return (
       <div data-text-self-grade style={containerStyle}>
         <div style={{ alignItems: "center", color: "#8fc7ff", display: "flex", fontSize: "12px", fontWeight: 800, gap: "10px", justifyContent: "space-between", letterSpacing: 1 }}>
           <span>TEXTE · Rappel</span>
-          <span style={{ color: "#777", fontSize: "11px", letterSpacing: 0 }}>{progressLabel}</span>
+          {items.length > 0 && (
+            <span
+              aria-label={`Phrase ${clampedSelfGradeIndex + 1} sur ${items.length}`}
+              data-text-self-grade-progress
+              style={{ display: "flex", gap: "6px" }}
+            >
+              {items.map((_, index) => (
+                <span
+                  key={index}
+                  style={{
+                    background: index < clampedSelfGradeIndex
+                      ? "#5fc088"
+                      : index === clampedSelfGradeIndex
+                        ? "#f0c36a"
+                        : "#333",
+                    borderRadius: "50%",
+                    boxShadow: index === clampedSelfGradeIndex
+                      ? "0 0 0 3px rgba(240, 195, 106, 0.18)"
+                      : "none",
+                    height: "7px",
+                    width: "7px"
+                  }}
+                />
+              ))}
+            </span>
+          )}
         </div>
         {item && (
           <div

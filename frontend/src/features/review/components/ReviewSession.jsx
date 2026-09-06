@@ -52,29 +52,17 @@ function RelearningBadge({ compact = false }) {
   );
 }
 
-// Shows how many failed questions are still waiting to be relearned, kept apart
-// from the "Question X / Y" total so re-queued retries never inflate Y.
-function RelearningCountChip({ count, compact = false }) {
+// Plain text instead of a second pill: a badge next to "Question X / Y" reads
+// as an unrelated stat, while "puis N à revoir" reads as one sentence about
+// what's queued behind the current total.
+function RelearningFollowUp({ count }) {
   return (
-    <div
-      data-relearning-count
-      style={{
-        alignItems: "center",
-        background: "#241a10",
-        border: "1px solid #4a3418",
-        borderRadius: "999px",
-        color: "#e0a05c",
-        display: "inline-flex",
-        fontSize: compact ? "11px" : "12px",
-        fontWeight: 800,
-        gap: "5px",
-        padding: compact ? "3px 9px" : "4px 10px",
-        whiteSpace: "nowrap"
-      }}
-    >
-      <span aria-hidden="true">↻</span>
-      {compact ? count : `${count} à revoir`}
-    </div>
+    <span style={{ alignItems: "center", display: "inline-flex", gap: "6px", whiteSpace: "nowrap" }}>
+      <span aria-hidden="true" style={{ color: "#555" }}>·</span>
+      <span data-relearning-count style={{ color: "#e0a05c", fontSize: "12px", fontWeight: 700 }}>
+        puis {count} à revoir
+      </span>
+    </span>
   );
 }
 
@@ -560,7 +548,7 @@ export default function ReviewSession({
                   Question {questionNumber} / {baseQuestionTotal}
                 </div>
                 {showRelearningCount && (
-                  <RelearningCountChip count={relearningRemaining} compact />
+                  <RelearningFollowUp count={relearningRemaining} />
                 )}
               </div>
               {currentQuestion.name && (
@@ -612,9 +600,14 @@ export default function ReviewSession({
           <div
             data-visual-renderer
             style={{
+              borderRadius: "20px",
+              boxShadow: relearning
+                ? "0 0 0 2px #6b4a21, 0 0 32px rgba(240, 168, 104, 0.16)"
+                : "none",
               flex: 1,
               minHeight: 0,
-              overflow: "hidden"
+              overflow: "hidden",
+              transition: "box-shadow 0.2s ease"
             }}
           >
             <ReviewQuestionRenderer
@@ -822,7 +815,7 @@ export default function ReviewSession({
                 </div>
 
                 {showRelearningCount && (
-                  <RelearningCountChip count={relearningRemaining} />
+                  <RelearningFollowUp count={relearningRemaining} />
                 )}
 
                 {relearning && <RelearningBadge />}
@@ -860,34 +853,44 @@ export default function ReviewSession({
 
             </div>
 
-            <ReviewQuestionRenderer
-              q={currentQuestion}
-              currentIndex={currentIndex}
-              showAnswer={showAnswer}
-              setShowAnswer={setShowAnswer}
-              handleTextAnswer={handleTextAnswer}
-              currentTextQuality={currentTextQuality}
-              selectedTextQuality={selectedTextQuality}
-              handleMapComplete={handleMapComplete}
-              handleImageComplete={handleImageComplete}
-              handleTimelineComplete={handleTimelineComplete}
-              handleSequenceComplete={handleSequenceComplete}
-              handleClozeComplete={handleClozeComplete}
-              handleNumericComplete={handleNumericComplete}
-              handleGridComplete={handleGridComplete}
-              submitMapAnswer={submitMapAnswer}
-              submitMediaAnswer={submitMediaAnswer}
-              submitTextAnswer={submitTextAnswer}
-              submitTimelineAnswer={submitTimelineAnswer}
-              submitSequenceAnswer={submitSequenceAnswer}
-              submitClozeAnswer={submitClozeAnswer}
-              submitNumericAnswer={submitNumericAnswer}
-              submitGridAnswer={submitGridAnswer}
-              submitSetAnswer={submitSetAnswer}
-              submitEnumerationAnswer={submitEnumerationAnswer}
-              graduateGroupedAnswer={graduateGroupedAnswer}
-              allowPartialSubmit={false}
-            />
+            <div
+              style={{
+                borderRadius: "20px",
+                boxShadow: relearning
+                  ? "0 0 0 2px #6b4a21, 0 0 32px rgba(240, 168, 104, 0.16)"
+                  : "none",
+                transition: "box-shadow 0.2s ease"
+              }}
+            >
+              <ReviewQuestionRenderer
+                q={currentQuestion}
+                currentIndex={currentIndex}
+                showAnswer={showAnswer}
+                setShowAnswer={setShowAnswer}
+                handleTextAnswer={handleTextAnswer}
+                currentTextQuality={currentTextQuality}
+                selectedTextQuality={selectedTextQuality}
+                handleMapComplete={handleMapComplete}
+                handleImageComplete={handleImageComplete}
+                handleTimelineComplete={handleTimelineComplete}
+                handleSequenceComplete={handleSequenceComplete}
+                handleClozeComplete={handleClozeComplete}
+                handleNumericComplete={handleNumericComplete}
+                handleGridComplete={handleGridComplete}
+                submitMapAnswer={submitMapAnswer}
+                submitMediaAnswer={submitMediaAnswer}
+                submitTextAnswer={submitTextAnswer}
+                submitTimelineAnswer={submitTimelineAnswer}
+                submitSequenceAnswer={submitSequenceAnswer}
+                submitClozeAnswer={submitClozeAnswer}
+                submitNumericAnswer={submitNumericAnswer}
+                submitGridAnswer={submitGridAnswer}
+                submitSetAnswer={submitSetAnswer}
+                submitEnumerationAnswer={submitEnumerationAnswer}
+                graduateGroupedAnswer={graduateGroupedAnswer}
+                allowPartialSubmit={false}
+              />
+            </div>
 
           </>
         )}

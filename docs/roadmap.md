@@ -19,6 +19,7 @@
 -> pas sûr qu'il y ait une animation dans tous les modes en fait
 - afficher le pseudo plutot que l'email
 - mettre un bouton supprimer le pack si on l'a importé par erreur
+- quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 
 
 ## Urgent
@@ -39,7 +40,6 @@
 - arrêter de cut les groups dans la review puisqu'on a le inline
 - eventuellement ajouter des zones en plus pour cibler une difficulté de mode en qcm
 - enlever les questions isolées et remplacer par des groupes de 1 question
-- quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 - mieux afficher les relearning
 - l'email supabase
 - bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
