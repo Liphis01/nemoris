@@ -299,6 +299,11 @@ export default function TextGroupReview({
       : 2;
   }, [group]);
 
+  // Snapshot of which items actually resolved correctly, as of entering the
+  // recap. submitResult reads this to tell an untouched grade (still backed
+  // by real answer evidence) from a recap override (which must win over it).
+  const resolvedOkByQuestionIdRef = useRef({});
+
   function finishAnswering() {
     if (showQualityControls && !isMatch && !isSelfGradedTypeAll) {
       const unratedFound = items.find(item =>
@@ -322,6 +327,7 @@ export default function TextGroupReview({
         : foundIds.has(item.question_id);
       const passQuality = qualities[item.question_id] ?? defaultPassQuality(item);
 
+      resolvedOkByQuestionIdRef.current[item.question_id] = resolvedOk;
       nextQualities[item.question_id] = isSelfGradedTypeAll
         ? Number(qualities[item.question_id] ?? 0)
         : resolvedOk ? passQuality : 0;
@@ -357,9 +363,19 @@ export default function TextGroupReview({
       finalQualities
     );
     const shouldSendAnswerEvidence = !isSelfGradedTypeAll;
+    // The recap lets the learner override any grade, including flipping a
+    // miss to a pass or a pass to a miss. The backend re-derives quality from
+    // the raw answer text when it's given, which would silently discard that
+    // override, so only forward evidence that still agrees with the grade it
+    // would produce.
     const answers = shouldSendAnswerEvidence
       ? Object.fromEntries(
-        Object.entries(answersByQuestionId).filter(([questionId]) => questionId in graded)
+        Object.entries(answersByQuestionId).filter(([questionId]) => {
+          if (!(questionId in graded)) return false;
+
+          const resolvedOk = resolvedOkByQuestionIdRef.current[Number(questionId)];
+          return resolvedOk ? graded[questionId] > 0 : graded[questionId] === 0;
+        })
       )
       : undefined;
     const candidateSource = isMatch ? answerOrder : contextItems;

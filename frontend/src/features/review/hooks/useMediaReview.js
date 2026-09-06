@@ -816,8 +816,18 @@ export function useMediaReview(
         relearningGroup,
         qualities
       );
+      // The recap lets the learner override any grade, including flipping a
+      // miss to a pass or a pass to a miss. The backend re-derives quality
+      // from the raw answer text when it's given, which would silently
+      // discard that override, so only forward evidence that still agrees
+      // with the grade it would produce.
       const answers = Object.fromEntries(
-        Object.entries(answerByQuestionId).filter(([questionId]) => questionId in graded)
+        Object.entries(answerByQuestionId).filter(([questionId]) => {
+          if (!(questionId in graded)) return false;
+
+          const isFound = foundQuestionIdSet.has(Number(questionId));
+          return isFound ? graded[questionId] > 0 : graded[questionId] === 0;
+        })
       );
       const fallbackCandidateIds = contextItems
         .map(item => item.question_id)

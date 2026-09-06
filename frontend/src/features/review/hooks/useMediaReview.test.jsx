@@ -431,6 +431,52 @@ describe("useMediaReview", () => {
       .toEqual([1, 2]);
   });
 
+  it("withholds a missed item's wrong guess once its recap grade is corrected to good", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const items = [
+      imageItem(1, "France"),
+      imageItem(2, "Germany")
+    ];
+    const { result } = renderHook(() =>
+      useMediaReview(items, vi.fn(), submitAnswer, {
+        mode: IMAGE_MODE_TYPE_PROMPT
+      })
+    );
+
+    act(() => {
+      result.current.setInput("wrong");
+    });
+    act(() => {
+      result.current.handleSubmit();
+    });
+    act(() => {
+      result.current.finishReview();
+    });
+
+    expect(result.current.qualityByQuestionId).toEqual({ 1: 0, 2: 0 });
+
+    // Correct item 1's grade in the recap from wrong to good, even though its
+    // wrong typed guess is still on file.
+    act(() => {
+      result.current.setQuality(1, 2);
+    });
+
+    await act(async () => {
+      await result.current.sendResult();
+    });
+
+    // The backend re-derives quality from answer evidence when it's given,
+    // which would silently discard the recap correction, so the wrong guess
+    // text must not be forwarded for item 1 any more.
+    expect(submitAnswer).toHaveBeenCalledWith(
+      { 1: 2, 2: 0 },
+      IMAGE_MODE_TYPE_PROMPT,
+      2,
+      {},
+      { 1: [1, 2], 2: [1, 2] }
+    );
+  });
+
   it("allows giving up on type_prompt without typing an answer", () => {
     const onAnsweringComplete = vi.fn();
     const items = [

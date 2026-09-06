@@ -51,7 +51,10 @@
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
 - flèches de gauche et droite pour changer la qualité dans recap
 - enlever le type_all mais ajouter un mode one shot sans erreur autorisée
-
+- dans type timeline, drag le curseur ça sélectionne tout le texte de la page (insupportable)
+- si je me rate à un qcm, remettre mon erreur parmi les propositions
+- mettre le inline quality au niveau du champ d'input comme pour type_all de map pour 
+- en training, quand j'ai bon, skip plus vite et quand j'ai faux, bloquer et attendre un input
 
 ## quick fixes
 

@@ -163,6 +163,86 @@ describe("TextGroupReview self-graded type_all", () => {
   });
 });
 
+describe("TextGroupReview match recap overrides", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  const matchItems = [
+    {
+      question_id: 1,
+      question: "chat",
+      answer: "cat",
+      answer_policy: { preset: "relaxed" },
+      progress: {}
+    },
+    {
+      question_id: 2,
+      question: "chien",
+      answer: "dog",
+      answer_policy: { preset: "relaxed" },
+      progress: {}
+    }
+  ];
+
+  it("withholds a pair's wrong first pick once its clean-pass recap grade is corrected to good", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue(undefined);
+    const onComplete = vi.fn();
+
+    render(
+      <TextGroupReview
+        group={{ type_group: "text", items: matchItems }}
+        reviewItems={matchItems}
+        mode="match"
+        graduateAnswer={vi.fn().mockResolvedValue(undefined)}
+        onAnsweringComplete={vi.fn()}
+        onComplete={onComplete}
+        submitAnswer={submitAnswer}
+      />
+    );
+
+    // Miss "chat" once (picks "dog" first, the wrong pair) ...
+    fireEvent.click(screen.getByText("chat"));
+    fireEvent.click(screen.getByText("dog"));
+    // ... then match it correctly on the retry (the wrong pick leaves "chat"
+    // selected, so the next click is the retry). It's now matched, but not a
+    // clean pass, so the recap defaults its grade to 0 (missed).
+    fireEvent.click(screen.getByText("cat"));
+
+    fireEvent.click(screen.getByText("chien"));
+    fireEvent.click(screen.getByText("dog"));
+
+    const validateButton = await screen.findByRole(
+      "button",
+      { name: "Valider" },
+      { timeout: 5000 }
+    );
+    const firstRecapRow = document.querySelectorAll("[data-text-recap-row]")[0];
+
+    fireEvent.click(firstRecapRow.querySelector("[data-text-recap-quality='2']"));
+    fireEvent.click(validateButton);
+
+    // The backend re-derives quality from the recorded first pick (the wrong
+    // "dog" answer for "chat") when it's given, which would silently discard
+    // this recap correction, so that stale evidence must not be forwarded.
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalled();
+    }, { timeout: 5000 });
+
+    const [grades, mode, contextCount, answers, candidates] = submitAnswer.mock.calls[0];
+    expect(grades).toEqual({ 1: 2, 2: 2 });
+    expect(mode).toBe("match");
+    expect(contextCount).toBe(2);
+    expect(answers).toEqual({ 2: 2 });
+    // candidates lists both ids for each item, but their order comes from
+    // the shuffled answer column, so compare it order-independently.
+    expect(Object.keys(candidates).sort()).toEqual(["1", "2"]);
+    expect([...candidates[1]].sort()).toEqual([1, 2]);
+    expect([...candidates[2]].sort()).toEqual([1, 2]);
+    expect(onComplete).toHaveBeenCalledWith([]);
+  }, 15000);
+});
 
 describe("TextGroupReview completion guard", () => {
   afterEach(() => {

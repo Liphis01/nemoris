@@ -1022,6 +1022,97 @@ describe("MapReview recap map focus", () => {
     });
   });
 
+  it("withholds a missed zone's wrong guess once its recap grade is corrected to good", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+
+    renderMapReview(true, { mode: "type_prompt", submitAnswer });
+
+    const input = screen.getByPlaceholderText("Nom de la zone...");
+    // type_prompt shuffles which zone is prompted first, so read it instead
+    // of assuming an order.
+    const firstCode = screen.getByTestId("active-map").getAttribute("data-selected");
+    const zoneByCode = Object.fromEntries(reviewZones.map(zone => [zone.code, zone]));
+    const firstZone = zoneByCode[firstCode];
+    const secondZone = reviewZones.find(zone => zone !== firstZone);
+
+    fireEvent.change(input, { target: { value: firstZone.label } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(2);
+
+    // The other zone is now prompted; answer it wrong so its guess text is
+    // recorded, then give up so it lands in the recap as missed.
+    fireEvent.change(input, { target: { value: "definitely wrong" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Abandonner la carte" }));
+
+    const validateButton = await screen.findByRole(
+      "button",
+      { name: "Valider" },
+      { timeout: 5000 }
+    );
+    const secondRow = screen.getByText(secondZone.label).closest(".map-recap-row");
+
+    fireEvent.click(secondRow.querySelector(`[aria-label="${secondZone.label} : Bon"]`));
+    fireEvent.click(validateButton);
+
+    // The wrong guess text must not be forwarded for the second zone: the
+    // backend re-derives quality from answer evidence and would otherwise
+    // clobber this recap correction back to a miss.
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { [firstZone.question_id]: 2, [secondZone.question_id]: 2 },
+        "type_prompt",
+        2,
+        { [firstZone.question_id]: firstZone.label },
+        {
+          [firstZone.question_id]: [1, 2],
+          [secondZone.question_id]: [1, 2]
+        }
+      );
+    }, { timeout: 5000 });
+  }, 15000);
+
+  it("withholds a found zone's correct guess once its recap grade is corrected to wrong", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue({});
+    const onComplete = vi.fn();
+
+    renderMapReview(true, { mode: "type_all", submitAnswer, onComplete });
+
+    const input = screen.getByPlaceholderText("Tape une zone...");
+
+    fireEvent.change(input, { target: { value: "Alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(2);
+
+    fireEvent.change(input, { target: { value: "Beta" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    rateTypedMapQuality(2);
+
+    const validateButton = await screen.findByRole(
+      "button",
+      { name: "Valider" },
+      { timeout: 5000 }
+    );
+    const betaRow = screen.getByText("Beta").closest(".map-recap-row");
+
+    fireEvent.click(betaRow.querySelector('[aria-label="Beta : Faux"]'));
+    fireEvent.click(validateButton);
+
+    // The correct guess text must not be forwarded for Beta: the backend
+    // would otherwise clamp its quality back up above 0 despite the recap
+    // downgrade to "Faux".
+    await waitFor(() => {
+      expect(submitAnswer).toHaveBeenCalledWith(
+        { 1: 2, 2: 0 },
+        "type_all",
+        2,
+        { 1: "Alpha" },
+        { 1: [1, 2], 2: [1, 2] }
+      );
+    }, { timeout: 5000 });
+    expect(onComplete).toHaveBeenCalledWith([2]);
+  }, 15000);
+
   it("keeps the recap open with an error when validation cannot be saved", async () => {
     const submitAnswer = vi.fn().mockRejectedValue(new Error("Serveur indisponible"));
 
