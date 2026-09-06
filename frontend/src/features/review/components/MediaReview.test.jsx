@@ -1327,14 +1327,16 @@ describe("MediaReview answer label preview", () => {
     expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(150px, 250px))");
   });
 
-  it("centers both answers after a wrong pick in training", () => {
+  it("blocks on a wrong pick in training until dismissed", () => {
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const dismissTrainingFeedback = vi.fn();
     const { container } = renderMediaReviewWithState(imageClickHookState({
       rows,
       mode: IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
       activeQuestionId: 1,
       hookOverrides: {
         choiceOptions: rows.map(row => row.item),
+        dismissTrainingFeedback,
         interactionFeedback: {
           correctQuestionId: 1,
           isCorrect: false,
@@ -1343,9 +1345,15 @@ describe("MediaReview answer label preview", () => {
       }
     }), { showQualityControls: false });
 
-    // Both the correct answer and the wrong pick stay, centered, no Continuer.
+    // Both the correct answer and the wrong pick stay, centered, with a
+    // "Continuer" the learner must click (or Enter/Space) to move on.
     expect(container.querySelectorAll("[data-image-choice-feedback]")).toHaveLength(2);
-    expect(container.querySelector("[data-image-choice-continue]")).toBeNull();
+
+    const continueButton = container.querySelector("[data-image-choice-continue]");
+    expect(continueButton).not.toBeNull();
+
+    fireEvent.click(continueButton);
+    expect(dismissTrainingFeedback).toHaveBeenCalledTimes(1);
 
     const grid = container.querySelector("[data-image-choice-grid]");
     expect(grid.style.justifyContent).toBe("center");

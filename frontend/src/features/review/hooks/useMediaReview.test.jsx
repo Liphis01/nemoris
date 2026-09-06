@@ -1105,8 +1105,10 @@ describe("useMediaReview", () => {
       act(() => {
         result.current.handleImageSelect(wrong.question_id);
       });
+      // A wrong pick in training blocks until dismissed, so the timer alone
+      // no longer clears the reveal.
       act(() => {
-        vi.advanceTimersByTime(1300);
+        result.current.dismissTrainingFeedback();
       });
 
       const nextIds = optionIds(result.current.gridItems.map(row => row.item));

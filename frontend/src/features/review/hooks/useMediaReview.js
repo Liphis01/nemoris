@@ -621,14 +621,18 @@ export function useMediaReview(
 
   useEffect(() => {
     // In inline-rating mode the reveal stays until the user rates/continues, so
-    // it must not auto-clear. Training keeps the timed flash.
-    if (!interactionFeedback || inlineChoiceRating) return undefined;
+    // it must not auto-clear. Training auto-advances fast on a correct pick, but
+    // a wrong pick holds until the learner dismisses it (see
+    // dismissTrainingFeedback), giving them time to understand the mistake.
+    if (!interactionFeedback || inlineChoiceRating || !interactionFeedback.isCorrect) {
+      return undefined;
+    }
 
     const timeout = window.setTimeout(() => {
       setInteractionFeedback(current =>
         current?.id === interactionFeedback.id ? null : current
       );
-    }, 1300);
+    }, 400);
 
     return () => {
       window.clearTimeout(timeout);
@@ -1091,6 +1095,15 @@ export function useMediaReview(
     }, qualityPickHoldMs(quality ?? 0));
   }
 
+  // Training has no quality grading, so a wrong choice pick just waits here
+  // until the learner explicitly dismisses it (button click or Enter/Space),
+  // instead of the timed auto-clear used for a correct pick.
+  function dismissTrainingFeedback() {
+    if (!interactionFeedback || inlineChoiceRating) return;
+
+    setInteractionFeedback(current => (current ? null : current));
+  }
+
   function rateTypedAnswer(quality = defaultImageSuccessQuality()) {
     if (!typedRatingFeedback || !inlineTypedRating) return;
 
@@ -1303,6 +1316,7 @@ export function useMediaReview(
     canFinishReview,
     choiceOptions: visibleChoiceOptions,
     currentPromptItem,
+    dismissTrainingFeedback,
     feedbackTone,
     finishReview,
     foundQuestionIds,

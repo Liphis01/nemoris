@@ -1066,6 +1066,7 @@ export default function MediaReview({
     canFinishReview = false,
     choiceOptions,
     currentPromptItem,
+    dismissTrainingFeedback = () => {},
     feedbackTone,
     finishReview,
     foundBulkQuality,
@@ -1307,6 +1308,15 @@ export default function MediaReview({
   const showChoiceRating = (
     Boolean(interactionFeedback) &&
     showQualityControls &&
+    (showLabelChoices || showImageChoiceBoard)
+  );
+  // Training has no quality grading: a correct pick clears on its own (fast
+  // timed flash, see useMediaReview), but a wrong pick blocks here until the
+  // learner dismisses it, so they have time to understand the mistake.
+  const trainingChoiceBlocked = (
+    Boolean(interactionFeedback) &&
+    !showQualityControls &&
+    !interactionFeedback.isCorrect &&
     (showLabelChoices || showImageChoiceBoard)
   );
   const showTypedRating = (
@@ -1776,6 +1786,24 @@ export default function MediaReview({
 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showChoiceRating, interactionFeedback, previewRow, rateChoice]);
+
+  // Training's blocked wrong pick: Enter/Space dismisses it and moves on.
+  useEffect(() => {
+    if (!trainingChoiceBlocked || previewRow) return undefined;
+
+    function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) return;
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        dismissTrainingFeedback();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [trainingChoiceBlocked, previewRow, dismissTrainingFeedback]);
 
   // Keyboard grading for typed recall mirrors QCM: 1/2/3 grade explicitly, and
   // Enter keeps the fast default on "Bon".
@@ -2641,6 +2669,23 @@ export default function MediaReview({
   // so the content scales up and gains the interval each grade would schedule —
   // otherwise a tile-sized button holding a one-line label just looks empty.
   function renderChoiceRatingSlots() {
+    if (trainingChoiceBlocked) {
+      return (
+        <button
+          type="button"
+          data-image-choice-continue
+          onClick={dismissTrainingFeedback}
+          style={{
+            ...choiceContinueButtonStyle,
+            ...(showImageChoiceBoard ? choiceContinueTileStyle : null)
+          }}
+        >
+          <span aria-hidden="true" style={keyCapStyle}>Entrée</span>
+          Continuer →
+        </button>
+      );
+    }
+
     if (!showChoiceRating) return null;
 
     const onTiles = showImageChoiceBoard;

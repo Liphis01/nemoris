@@ -20,6 +20,7 @@
 - afficher le pseudo plutot que l'email
 - mettre un bouton supprimer le pack si on l'a importé par erreur
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
+- bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
 
 
 ## Urgent
@@ -41,7 +42,6 @@
 - eventuellement ajouter des zones en plus pour cibler une difficulté de mode en qcm
 - enlever les questions isolées et remplacer par des groupes de 1 question
 - l'email supabase
-- bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
 - bouton pour shuffle un groupe dans le queue manager
 - inline pour type_prompt d'images
 - mettre un input optionnel pour les questions de type texte
@@ -55,6 +55,8 @@
 - si je me rate à un qcm, remettre mon erreur parmi les propositions
 - mettre le inline quality au niveau du champ d'input comme pour type_all de map pour 
 - en training, quand j'ai bon, skip plus vite et quand j'ai faux, bloquer et attendre un input
+- The study menu is terrible at the moment. I wanted it to help users learn a specific group. Right now it's just very confusing, ugly, and has too much information.
+
 
 ## quick fixes
 
