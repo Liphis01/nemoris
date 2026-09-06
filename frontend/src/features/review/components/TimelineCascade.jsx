@@ -24,7 +24,10 @@ const railStyle = {
   border: "1px solid #262626",
   borderRadius: "12px",
   boxSizing: "border-box",
-  position: "relative"
+  position: "relative",
+  // Without this, dragging across a rail to scrub the value selects the tick
+  // labels it passes over (and beyond, once the drag leaves the rail).
+  userSelect: "none"
 };
 
 const railLabelStyle = {
