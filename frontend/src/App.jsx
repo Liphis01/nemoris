@@ -188,6 +188,11 @@ function AppContent() {
   const modeRef = useRef("menu");
   const backStackRef = useRef([]);
   const forwardStackRef = useRef([]);
+  // Lets a feature intercept back/Escape navigation for its own in-mode
+  // sub-screens (e.g. training's scope selector) instead of always popping
+  // App's top-level mode stack. Set via a ref (not state) so registering it
+  // is idempotent under StrictMode double-invocation.
+  const backHandlerRef = useRef(null);
   const [manageOpenQuestionId, setManageOpenQuestionId] = useState(null);
   const [manageOpenGroupId, setManageOpenGroupId] = useState(null);
   const [calendarOpenQuestionId, setCalendarOpenQuestionId] = useState(null);
@@ -269,7 +274,16 @@ function AppContent() {
     applyMode(nextMode);
   }, [applyMode]);
 
+  const registerBackHandler = useCallback((handler) => {
+    backHandlerRef.current = handler || null;
+  }, []);
+
   const goBack = useCallback(() => {
+    if (backHandlerRef.current) {
+      backHandlerRef.current();
+      return;
+    }
+
     const currentMode = modeRef.current;
     let previousMode = backStackRef.current.pop();
     while (previousMode === currentMode) {
@@ -560,6 +574,7 @@ function AppContent() {
             initialScopeNonce={trainingOpenTarget?.nonce || 0}
             onInitialScopeHandled={clearTrainingOpenTarget}
             onOpenStudy={openStudyScope}
+            onRegisterBackHandler={registerBackHandler}
           />
         )}
 

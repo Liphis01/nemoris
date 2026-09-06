@@ -1171,6 +1171,7 @@ export default function TrainingSession({
   initialScopeNonce = 0,
   onInitialScopeHandled = null,
   onOpenStudy = null,
+  onRegisterBackHandler = null,
   setMode
 }) {
   const session = useTrainingSession(true);
@@ -1196,6 +1197,21 @@ export default function TrainingSession({
     session.attemptFoundCount,
     session.allQuestionIds.length
   );
+
+  // While a scope is active (running a group's training, including its recap),
+  // the browser/mouse back button and Escape should return to the scope
+  // selector ("menu d'entrainement") instead of popping App out of training
+  // mode entirely.
+  const returnToScopeSelector = session.returnToScopeSelector;
+  useEffect(() => {
+    if (!onRegisterBackHandler) return undefined;
+
+    onRegisterBackHandler(session.activeScope ? returnToScopeSelector : null);
+
+    return () => {
+      onRegisterBackHandler(null);
+    };
+  }, [onRegisterBackHandler, session.activeScope, returnToScopeSelector]);
 
   useEffect(() => {
     if (!initialScope || session.scopesLoading) return;

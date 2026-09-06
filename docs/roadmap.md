@@ -40,7 +40,6 @@
 - arrêter de cut les groups dans la review puisqu'on a le inline
 - eventuellement ajouter des zones en plus pour cibler une difficulté de mode en qcm
 - enlever les questions isolées et remplacer par des groupes de 1 question
-- mieux afficher les relearning
 - l'email supabase
 - bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
 - bouton pour shuffle un groupe dans le queue manager
@@ -51,7 +50,6 @@
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
 - flèches de gauche et droite pour changer la qualité dans recap
-- le retour arrière ne fonctionne pas comme il faut partout
 - enlever le type_all mais ajouter un mode one shot sans erreur autorisée
 
 
