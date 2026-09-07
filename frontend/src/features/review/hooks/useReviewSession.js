@@ -482,13 +482,22 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
   // Every grouped type finishes the same way: one screen answers many atomic
   // questions, and only the failed ones are re-queued, wrapped back into the
   // same runtime group shape so they get another pass this session.
-  function handleGroupComplete(failedQuestionIds = []) {
+  function handleGroupComplete(failedQuestionIds = [], wrongChoiceByQuestionId = {}) {
     const answerIndex = currentIndex;
 
     if (current && failedQuestionIds.length > 0) {
-      const failedItems = (current.items || []).filter(item =>
-        failedQuestionIds.includes(item.question_id)
-      );
+      const failedItems = (current.items || [])
+        .filter(item => failedQuestionIds.includes(item.question_id))
+        // Name the option picked wrong this round so the retry's choice list
+        // puts it back among the proposals instead of leaving its return to
+        // chance (see buildChoiceOptions' forcedDistractorId).
+        .map(item => {
+          const forcedDistractorId = wrongChoiceByQuestionId[item.question_id];
+
+          return forcedDistractorId != null
+            ? { ...item, _forcedDistractorId: forcedDistractorId }
+            : item;
+        });
 
       if (failedItems.length > 0) {
         const retry = {

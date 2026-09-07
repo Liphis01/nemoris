@@ -81,13 +81,24 @@ function buildChoices(item, contextItems) {
       Math.abs(right.position - item.position)
   );
   const near = byDistance.slice(0, Math.max(0, (CHOICE_COUNT - 1) * 2));
+  // A relearning retry names the position the learner picked wrong last time
+  // (see `_forcedDistractorId` below); make sure that option's peer is in the
+  // pool buildChoiceOptions samples from, even if it fell outside the nearest
+  // ranks above.
+  const forcedId = item._forcedDistractorId;
+  const forcedPeer = forcedId != null
+    ? peers.find(candidate => candidate.question_id === forcedId)
+    : null;
+  const distractorPool = forcedPeer && !near.includes(forcedPeer)
+    ? [...near, forcedPeer]
+    : near;
 
   return buildChoiceOptions(
     item,
-    [item, ...near],
+    [item, ...distractorPool],
     new Map(),
     null,
-    { sequence: true }
+    { sequence: true, forcedDistractorId: forcedId }
   );
 }
 
@@ -138,6 +149,7 @@ export default function SequenceReview({
   const isRecite = mode === SEQUENCE_MODE_RECITE;
 
   const failedRef = useRef([]);
+  const wrongChoiceRef = useRef({});
   const attemptRef = useRef(null);
 
   const choicesByItem = useMemo(() => {
@@ -424,6 +436,21 @@ export default function SequenceReview({
             )
           ))
           .map(result => result.question_id);
+        // A choice-mode miss picked another item's position; name that item so
+        // a relearning retry can put it back among the choices.
+        wrongChoiceRef.current = isChoice
+          ? Object.fromEntries(
+            failedRef.current
+              .map(questionId => {
+                const guessedItem = pool.find(
+                  candidate => candidate.position === currentInputs[questionId]
+                );
+
+                return [questionId, guessedItem?.question_id];
+              })
+              .filter(([questionId, guessId]) => guessId != null && guessId !== questionId)
+          )
+          : {};
 
         setResults(graded);
         setPhase("review");
@@ -438,8 +465,10 @@ export default function SequenceReview({
     [
       buildPayload,
       inputs,
+      isChoice,
       mode,
       onAnsweringComplete,
+      pool,
       rail.length,
       reciteRun,
       revealed,
@@ -460,7 +489,7 @@ export default function SequenceReview({
       if (!payload) throw new Error("Missing graded sequence attempt");
 
       await submitAnswer?.(payload, mode, rail.length);
-      onComplete?.(failedRef.current);
+      onComplete?.(failedRef.current, wrongChoiceRef.current);
     } catch (caught) {
       // Stay on the recap rather than reporting a clean sweep: the previous
       // behaviour swallowed the error and marked the whole chunk complete with

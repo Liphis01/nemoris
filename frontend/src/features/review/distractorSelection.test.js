@@ -104,4 +104,33 @@ describe("distractor selection", () => {
     expect(options.map(option => option.question_id)).not.toContain(2);
     expect(new Set(options.map(option => option.question_id)).size).toBe(4);
   });
+
+  it("guarantees a forced distractor is included even against low sampling odds", () => {
+    const target = item(1, "France");
+    const forced = item(6, "Belgique");
+    const options = buildChoiceOptions(target, [
+      target,
+      item(2, "Italie"),
+      item(3, "Espagne"),
+      item(4, "Portugal"),
+      item(5, "Andorre"),
+      forced
+    ], new Map(), null, { random: () => 0.999, forcedDistractorId: 6 });
+
+    expect(options.map(option => option.question_id)).toContain(6);
+    expect(options).toHaveLength(4);
+  });
+
+  it("ignores a forced distractor id that is not an eligible candidate", () => {
+    const target = item(1, "France");
+    const options = buildChoiceOptions(target, [
+      target,
+      item(2, "Italie"),
+      item(3, "Espagne"),
+      item(4, "Portugal")
+    ], new Map(), null, { random: () => 0, forcedDistractorId: 999 });
+
+    expect(options).toHaveLength(4);
+    expect(options.map(option => option.question_id)).not.toContain(999);
+  });
 });

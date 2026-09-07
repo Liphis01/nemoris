@@ -289,13 +289,25 @@ export function buildChoiceOptions(
   const preferred = excludeQuestionIds
     ? candidates.filter(item => !excludeQuestionIds.has(item.question_id))
     : candidates;
-  let distractors = weightedSampleDistractors(
-    target,
-    preferred,
-    3,
-    usageCounts,
-    options
-  );
+  // A relearning retry names the option the learner picked wrong last time
+  // (see `_forcedDistractorId` on the retried item): put it back among the
+  // choices unconditionally instead of leaving its return to the weighted
+  // sampler, so the confusion it caused gets directly retested.
+  const forced = options.forcedDistractorId != null
+    ? candidates.find(item => item.question_id === options.forcedDistractorId) || null
+    : null;
+  let distractors = forced ? [forced] : [];
+  const remaining = 3 - distractors.length;
+
+  if (remaining > 0) {
+    distractors = distractors.concat(weightedSampleDistractors(
+      target,
+      preferred.filter(item => item.question_id !== forced?.question_id),
+      remaining,
+      usageCounts,
+      options
+    ));
+  }
 
   if (distractors.length < 3) {
     const chosen = new Set(distractors.map(item => item.question_id));

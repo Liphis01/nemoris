@@ -490,7 +490,7 @@ export function useMapReview(
       contextItems,
       distractorUsage.counts,
       resolvedQuestionIdSet,
-      { geometry: mapGeometry }
+      { geometry: mapGeometry, forcedDistractorId: currentPromptItem?._forcedDistractorId }
     ),
     // Cooldown counts and the answered-question exclusion set live in mutable
     // per-review state; they should affect the next prompt sample, not resample
@@ -622,6 +622,16 @@ export function useMapReview(
       const failedQuestionIds = Object.entries(qualities)
         .filter(([, quality]) => quality === 0)
         .map(([questionId]) => Number(questionId));
+      // Only a multiple-choice miss records a picked option (see
+      // handleChoiceSelect); a click-prompt miss names a map zone, not an
+      // option to force back into a choice list, so it is left out here.
+      const wrongChoiceByQuestionId = mode === MAP_MODE_MULTIPLE_CHOICE
+        ? Object.fromEntries(
+          failedQuestionIds
+            .map(questionId => [questionId, answerByQuestionId[questionId]])
+            .filter(([questionId, guess]) => guess != null && guess !== questionId)
+        )
+        : {};
 
       setShowRecap(false);
       setFoundQuestionIds([]);
@@ -637,7 +647,7 @@ export function useMapReview(
       setClickRatingFeedback(null);
       setTypedRatingFeedback(null);
 
-      onComplete(failedQuestionIds);
+      onComplete(failedQuestionIds, wrongChoiceByQuestionId);
       return true;
     } catch (error) {
       console.error(error);

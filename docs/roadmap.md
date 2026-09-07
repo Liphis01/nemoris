@@ -22,6 +22,8 @@
 - quand je réponds à la moitié d'un groupe dans la review, enregistrer localement les réponses et ne pas attendre la fin du groupe pour enregistrer
 - bug: si je me trompe à une question et que je change dans le recap, ça me l'envoie quand même dans le relearning
 - en training, quand j'ai bon, skip plus vite et quand j'ai faux, bloquer et attendre un input
+- dans type timeline, drag le curseur ça sélectionne tout le texte de la page (insupportable)
+- flèches de gauche et droite pour changer la qualité dans recap
 
 
 ## Urgent
@@ -37,7 +39,6 @@
 - le zoom d'image est un peu naze
 - problème: les qcm ne demandent parfois pas de réflexion (raisonner pas élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
-- menu study à améliorer
 - shuffle toutes les questions dans la review
 - arrêter de cut les groups dans la review puisqu'on a le inline
 - eventuellement ajouter des zones en plus pour cibler une difficulté de mode en qcm
@@ -50,12 +51,11 @@
 - les modes d'associations (qcm, text truc, ...) ne doivent pas apparaître s'il y a moins de x éléments
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
-- flèches de gauche et droite pour changer la qualité dans recap
 - enlever le type_all mais ajouter un mode one shot sans erreur autorisée
-- dans type timeline, drag le curseur ça sélectionne tout le texte de la page (insupportable)
 - si je me rate à un qcm, remettre mon erreur parmi les propositions
-- mettre le inline quality au niveau du champ d'input comme pour type_all de map pour 
+- mettre le inline quality au niveau du champ d'input comme pour type_all de map pour les qcm
 - The study menu is terrible at the moment. I wanted it to help users learn a specific group. Right now it's just very confusing, ugly, and has too much information.
+- menu study à améliorer
 
 
 ## quick fixes

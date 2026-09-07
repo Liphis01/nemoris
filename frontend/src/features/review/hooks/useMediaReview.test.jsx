@@ -186,7 +186,7 @@ describe("useMediaReview", () => {
       { 1: "France" },
       { 1: [1] }
     );
-    expect(onComplete).toHaveBeenCalledWith([]);
+    expect(onComplete).toHaveBeenCalledWith([], {});
   });
 
   it("falls back single-image type_all relearning retries to type_prompt", () => {
@@ -296,7 +296,7 @@ describe("useMediaReview", () => {
         [missedIds[1]]: [1, 2, 3]
       }
     );
-    expect(onComplete).toHaveBeenCalledWith([missedIds[1]]);
+    expect(onComplete).toHaveBeenCalledWith([missedIds[1]], {});
   });
 
   it("refuses to finish before any image has been attempted", () => {
@@ -581,7 +581,7 @@ describe("useMediaReview", () => {
       }
     );
     expect(sendMediaAnswer).not.toHaveBeenCalled();
-    expect(onComplete).toHaveBeenCalledWith([missed.question_id]);
+    expect(onComplete).toHaveBeenCalledWith([missed.question_id], {});
   });
 
   it("type_all accepts remaining image answers in any order", () => {
@@ -852,7 +852,7 @@ describe("useMediaReview", () => {
         { [prompt.question_id]: prompt.question_id },
         expect.any(Object)
       );
-      expect(onComplete).toHaveBeenCalledWith([]);
+      expect(onComplete).toHaveBeenCalledWith([], {});
     } finally {
       randomSpy.mockRestore();
     }
@@ -920,7 +920,7 @@ describe("useMediaReview", () => {
         { [prompt.question_id]: prompt.question_id },
         expect.any(Object)
       );
-      expect(onComplete).toHaveBeenCalledWith([]);
+      expect(onComplete).toHaveBeenCalledWith([], {});
     } finally {
       vi.useRealTimers();
     }
@@ -979,7 +979,12 @@ describe("useMediaReview", () => {
       { [prompt.question_id]: wrong.question_id },
       expect.any(Object)
     );
-    expect(onComplete).toHaveBeenCalledWith([prompt.question_id]);
+    // The wrong pick is also handed to the caller so a relearning retry can
+    // put it back among that question's choice options.
+    expect(onComplete).toHaveBeenCalledWith(
+      [prompt.question_id],
+      { [prompt.question_id]: wrong.question_id }
+    );
   });
 
   it("multiple_choice_label can sample easier distractors from a larger pool", () => {

@@ -566,7 +566,8 @@ export function useMediaReview(
       currentPromptItem,
       contextItems,
       distractorUsage.counts,
-      resolvedQuestionIdSet
+      resolvedQuestionIdSet,
+      { forcedDistractorId: currentPromptItem?._forcedDistractorId }
     ),
     // Cooldown counts and the answered-question exclusion set live in mutable
     // per-review state; they should affect the next prompt sample, not resample
@@ -853,6 +854,16 @@ export function useMediaReview(
       const failedQuestionIds = Object.entries(qualities)
         .filter(([, quality]) => quality === 0)
         .map(([questionId]) => Number(questionId));
+      // A choice-mode miss records which option was picked (see
+      // handleChoiceSelect/handleImageSelect); surface it so the retry can put
+      // that exact distractor back among the choices.
+      const wrongChoiceByQuestionId = isChoiceMode(mode)
+        ? Object.fromEntries(
+          failedQuestionIds
+            .map(questionId => [questionId, answerByQuestionId[questionId]])
+            .filter(([questionId, guess]) => guess != null && guess !== questionId)
+        )
+        : {};
 
       setInput("");
       setFoundQuestionIds([]);
@@ -869,7 +880,7 @@ export function useMediaReview(
       setActivePromptQuestionId(null);
       setRecapSort(initialRecapSort);
 
-      onComplete(failedQuestionIds);
+      onComplete(failedQuestionIds, wrongChoiceByQuestionId);
     } finally {
       submittingRef.current = false;
     }

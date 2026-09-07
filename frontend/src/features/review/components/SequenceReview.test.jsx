@@ -321,6 +321,34 @@ describe("SequenceReview", () => {
     });
   });
 
+  it("names the wrong option picked in multiple_choice so a retry can force it back", async () => {
+    const submitAnswer = vi.fn().mockResolvedValue(gradedResponse([
+      { question_id: 1, quality: 0, expected_position: 1, distance: 1, label: "Alpha" },
+      { question_id: 2, quality: 2, expected_position: 2, distance: 0, label: "Bêta" },
+      { question_id: 3, quality: 2, expected_position: 3, distance: 0, label: "Gamma" }
+    ]));
+    const { onComplete } = renderSequence({ mode: "multiple_choice", submitAnswer });
+
+    const wrongButton = Array.from(
+      document.querySelectorAll("[data-sequence-choice]")
+    ).find(button => button.getAttribute("data-sequence-choice") !== "1");
+    const wrongQuestionId = wrongButton.getAttribute("data-sequence-choice") === "2" ? 2 : 3;
+
+    fireEvent.click(wrongButton);
+    fireEvent.click(
+      document.querySelector('[data-sequence-choice="2"]')
+    );
+    fireEvent.click(
+      document.querySelector('[data-sequence-choice="3"]')
+    );
+
+    await screen.findByRole("button", { name: /Continuer/ });
+    fireEvent.click(screen.getByRole("button", { name: /Continuer/ }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalled());
+    expect(onComplete).toHaveBeenCalledWith([1], { 1: wrongQuestionId });
+  });
+
   describe("recite", () => {
     const reciteRail = [
       slot(1, "anchor", 9, "Delta"),

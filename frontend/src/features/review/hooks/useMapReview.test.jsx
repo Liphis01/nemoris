@@ -209,7 +209,7 @@ describe("useMapReview recap sorting", () => {
       2: 0
     }, "type_all", 2, { 1: "Alpha" }, { 1: [1, 2], 2: [1, 2] });
     expect(sendMapAnswer).not.toHaveBeenCalled();
-    expect(onComplete).toHaveBeenCalledWith([2]);
+    expect(onComplete).toHaveBeenCalledWith([2], {});
   });
 
   it("asks for inline quality after a correct typed map answer", async () => {
@@ -263,7 +263,7 @@ describe("useMapReview recap sorting", () => {
       { 1: "Alpha" },
       { 1: [1] }
     );
-    expect(onComplete).toHaveBeenCalledWith([]);
+    expect(onComplete).toHaveBeenCalledWith([], {});
   });
 
   it("asks for inline quality after lowercase department input is submitted", () => {
@@ -346,7 +346,7 @@ describe("useMapReview recap sorting", () => {
       { 1: 1 },
       { 1: [1] }
     );
-    expect(onComplete).toHaveBeenCalledWith([]);
+    expect(onComplete).toHaveBeenCalledWith([], {});
   });
 
   it("refuses to finish before any zone has been attempted", () => {
@@ -875,7 +875,7 @@ describe("useMapReview recap sorting", () => {
         { [target.question_id]: target.question_id },
         expect.any(Object)
       );
-      expect(onComplete).toHaveBeenCalledWith([]);
+      expect(onComplete).toHaveBeenCalledWith([], {});
     } finally {
       vi.useRealTimers();
     }
@@ -934,7 +934,12 @@ describe("useMapReview recap sorting", () => {
       { [target.question_id]: wrong.question_id },
       expect.any(Object)
     );
-    expect(onComplete).toHaveBeenCalledWith([target.question_id]);
+    // The wrong pick is also handed to the caller so a relearning retry can
+    // put it back among that question's choice options.
+    expect(onComplete).toHaveBeenCalledWith(
+      [target.question_id],
+      { [target.question_id]: wrong.question_id }
+    );
   });
 
   it("multiple_choice uses borrowed context and submits only active zones", async () => {
@@ -981,7 +986,7 @@ describe("useMapReview recap sorting", () => {
       expect(submitAnswer).toHaveBeenCalledWith({
         [target.question_id]: 2
       }, "multiple_choice", 5, { [target.question_id]: target.question_id }, expect.any(Object));
-      expect(onComplete).toHaveBeenCalledWith([]);
+      expect(onComplete).toHaveBeenCalledWith([], {});
     } finally {
       randomSpy.mockRestore();
     }

@@ -1110,7 +1110,7 @@ describe("MapReview recap map focus", () => {
         { 1: [1, 2], 2: [1, 2] }
       );
     }, { timeout: 5000 });
-    expect(onComplete).toHaveBeenCalledWith([2]);
+    expect(onComplete).toHaveBeenCalledWith([2], {});
   }, 15000);
 
   it("keeps the recap open with an error when validation cannot be saved", async () => {

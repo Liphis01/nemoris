@@ -269,6 +269,37 @@ describe("useReviewSession", () => {
     });
   });
 
+  it("names the wrong pick on a requeued group item so the retry can force it back among the choices", async () => {
+    getReview.mockResolvedValue([
+      {
+        group_id: 5,
+        type_q: "media",
+        name: "Flags",
+        items: [
+          { question_id: 10, answer: "France" },
+          { question_id: 11, answer: "Germany" }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useReviewSession(true));
+
+    await waitFor(() => {
+      expect(result.current.questions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.handleImageComplete([11], { 11: 10 });
+    });
+
+    expect(result.current.questions[1]).toMatchObject({
+      type_q: "media",
+      _reviewRetryOfIndex: 0,
+      items: [
+        { question_id: 11, answer: "Germany", _forcedDistractorId: 10 }
+      ]
+    });
+  });
+
   it("keeps small image retries in the served mode", async () => {
     const items = Array.from({ length: 10 }, (_, index) => ({
       question_id: 100 + index,

@@ -154,7 +154,7 @@ describe("ReviewSession", () => {
         { 667: 667 },
         { 667: [667] }
       );
-      expect(handleMapComplete).toHaveBeenCalledWith([]);
+      expect(handleMapComplete).toHaveBeenCalledWith([], {});
     });
   });
 
