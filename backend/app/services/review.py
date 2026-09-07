@@ -3,7 +3,7 @@ import random
 
 from fastapi import HTTPException
 from sqlalchemy import case, func, or_
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..models import Progress, Question, QuestionGroup
 from ..serializers import (
@@ -391,8 +391,13 @@ def _question_query(db):
         db.query(Question)
         .options(
             joinedload(Question.progress),
+            # selectinload, not joinedload, for the group's questions: a
+            # joined eager load multiplies rows by group size, so 48 due
+            # cards spread over big groups fetched 8k+ rows and re-decoded
+            # every sibling's data/history JSON once per due card. selectin
+            # loads each group's questions exactly once, in a second query.
             joinedload(Question.group)
-            .joinedload(QuestionGroup.questions)
+            .selectinload(QuestionGroup.questions)
             .joinedload(Question.progress)
         )
         .filter(reviewable_question_filter())
