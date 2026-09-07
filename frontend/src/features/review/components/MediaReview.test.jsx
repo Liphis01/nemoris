@@ -1302,6 +1302,35 @@ describe("MediaReview answer label preview", () => {
     expect(rateChoice).toHaveBeenCalledWith(1);
   });
 
+  it("centers the tile board's Acquis-only reveal for a relearning card", () => {
+    const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
+    const { container } = renderMediaReviewWithState(
+      imageClickHookState({
+        rows,
+        mode: IMAGE_MODE_MULTIPLE_CHOICE_IMAGE,
+        activeQuestionId: 1,
+        hookOverrides: {
+          choiceOptions: rows.map(row => row.item),
+          interactionFeedback: {
+            correctQuestionId: 1,
+            isCorrect: true,
+            selectedQuestionId: 1
+          }
+        }
+      }),
+      { group: { name: "Flags", _reviewRetryOfIndex: 0 } }
+    );
+
+    // A relearning card never re-grades, so the four-slot 2x2 only ends up
+    // holding two survivors: the answer tile and the single "Acquis" button.
+    expect(container.querySelectorAll("[data-image-choice-quality]")).toHaveLength(1);
+
+    const board = container.querySelector("[data-image-choice-board]");
+    expect(board.style.placeContent).toBe("center");
+    expect(board.style.gridTemplateColumns).toContain("repeat(2,");
+    expect(board.style.gridTemplateColumns).toContain("calc(50%");
+  });
+
   it("centers the correct answer with no quality buttons in training", () => {
     const rows = [imageGridRow(1), imageGridRow(2), imageGridRow(3), imageGridRow(4)];
     const { container } = renderMediaReviewWithState(imageClickHookState({

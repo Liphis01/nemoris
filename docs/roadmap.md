@@ -24,6 +24,8 @@
 - en training, quand j'ai bon, skip plus vite et quand j'ai faux, bloquer et attendre un input
 - dans type timeline, drag le curseur ça sélectionne tout le texte de la page (insupportable)
 - flèches de gauche et droite pour changer la qualité dans recap
+- si je me rate à un qcm, remettre mon erreur parmi les propositions
+- les modes d'associations (qcm, text truc, ...) ne doivent pas apparaître s'il y a moins de x éléments
 
 
 ## Urgent
@@ -48,11 +50,9 @@
 - inline pour type_prompt d'images
 - mettre un input optionnel pour les questions de type texte
 - gros temps de chargement quand je rentre dans la review
-- les modes d'associations (qcm, text truc, ...) ne doivent pas apparaître s'il y a moins de x éléments
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
 - enlever le type_all mais ajouter un mode one shot sans erreur autorisée
-- si je me rate à un qcm, remettre mon erreur parmi les propositions
 - mettre le inline quality au niveau du champ d'input comme pour type_all de map pour les qcm
 - The study menu is terrible at the moment. I wanted it to help users learn a specific group. Right now it's just very confusing, ugly, and has too much information.
 - menu study à améliorer

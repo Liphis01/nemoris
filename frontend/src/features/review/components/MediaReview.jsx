@@ -1343,6 +1343,20 @@ export default function MediaReview({
   // the row.
   const centerReveal = Boolean(interactionFeedback) && !showQualityControls;
   const correctChoiceId = interactionFeedback?.correctQuestionId;
+  const correctChoiceItem = choiceOptions.find(
+    option => option.question_id === correctChoiceId
+  );
+  // A correct relearning pick never re-grades FSRS, so the three "how easy"
+  // grades collapse into the single "Acquis" (see acquisOnlyOptions above) —
+  // used both to pick the rating options in renderChoiceRatingSlots and, on the
+  // media tile board, to center the resulting two-slot reveal instead of
+  // leaving a dead row (see isCenteredChoiceReveal below).
+  const choiceRevealIsAcquisOnly = Boolean(
+    showQualityControls &&
+    interactionFeedback?.isCorrect &&
+    correctChoiceItem &&
+    isRelearningGroupItem(group, correctChoiceItem)
+  );
   // Once answered, only the answers worth looking at stay on the board: the correct
   // one, plus your pick when it was wrong. The decoys leave, freeing their slots.
   function keepRevealed(items, getQuestionId) {
@@ -1361,6 +1375,15 @@ export default function MediaReview({
 
   const revealedChoiceOptions = keepRevealed(choiceOptions, option => option.question_id);
   const revealedGridItems = keepRevealed(activeGridItems, row => row.item.question_id);
+  // The media tile board below is normally a fixed four-slot 2x2, but an
+  // Acquis-only reveal (see choiceRevealIsAcquisOnly above) only ever fills two
+  // of those slots — the answer tile and the single grading button. Center that
+  // pair instead of pinning it to the top half with an empty row beneath, the
+  // same technique centerReveal already uses for training's lone survivor.
+  const isCenteredChoiceReveal = centerReveal || choiceRevealIsAcquisOnly;
+  const centeredChoiceRevealColumnCount = choiceRevealIsAcquisOnly
+    ? 2
+    : revealedGridItems.length;
   const choiceGridRef = useRef(null);
   // Scope the flip keys to the item being *answered*, not to currentPromptItem —
   // that one advances to the next item the moment you pick, which would change
@@ -2708,26 +2731,20 @@ export default function MediaReview({
       );
     }
 
-    const correctItem = choiceOptions.find(
-      option => option.question_id === correctChoiceId
-    );
     // A correct pick on a relearning card just graduates it, so the three "how
     // easy" grades collapse to a single "Acquis" (a wrong pick already takes the
     // "Continuer" branch above, which is the "Encore" half of the binary).
-    const correctItemRelearning = Boolean(
-      correctItem && isRelearningGroupItem(group, correctItem)
-    );
-    const ratingOptions = correctItemRelearning
+    const ratingOptions = choiceRevealIsAcquisOnly
       ? acquisOnlyOptions
       : choiceQualityOptions;
 
     return ratingOptions.map(option => {
       // A relearning retry never re-grades FSRS: whichever grade is picked, the
       // card lands on the same already-frozen interval.
-      const interval = correctItemRelearning
-        ? correctItem?.relearning_interval
-        : correctItem
-          ? projectedIntervalForImage(correctItem, option.value)
+      const interval = choiceRevealIsAcquisOnly
+        ? correctChoiceItem?.relearning_interval
+        : correctChoiceItem
+          ? projectedIntervalForImage(correctChoiceItem, option.value)
           : null;
 
       return (
@@ -3404,20 +3421,21 @@ export default function MediaReview({
             style={{
               display: "grid",
               gap: fillAvailableHeight ? "12px" : "14px",
-              // Centered reveal keeps each cell ~half the board (as in the 2x2),
-              // so the surviving tile is the same size it was and FLIP slides it
-              // to the middle instead of snapping its size.
-              gridTemplateColumns: centerReveal
-                ? `repeat(${revealedGridItems.length}, minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"})))`
+              // Centered reveal keeps each cell ~half the board (as in the 2x2), so
+              // survivors stay the same size and FLIP slides them to the middle
+              // instead of snapping — used both for training's lone tile and for
+              // an Acquis-only correct pick's tile+button pair.
+              gridTemplateColumns: isCenteredChoiceReveal
+                ? `repeat(${centeredChoiceRevealColumnCount}, minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"})))`
                 : "repeat(2, minmax(0, 1fr))",
-              gridTemplateRows: centerReveal
+              gridTemplateRows: isCenteredChoiceReveal
                 ? `minmax(0, calc(50% - ${fillAvailableHeight ? "6px" : "7px"}))`
                 : "repeat(2, minmax(0, 1fr))",
               height: "100%",
               margin: "0 auto",
               maxWidth: "720px",
               minHeight: 0,
-              placeContent: centerReveal ? "center" : undefined,
+              placeContent: isCenteredChoiceReveal ? "center" : undefined,
               width: "min(100%, 720px)"
             }}
           >
