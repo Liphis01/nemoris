@@ -77,7 +77,6 @@ from .mode_selection import (
 from .media import media_kind_from_name
 from .map_eligibility import (
     question_has_training_content,
-    question_is_reviewable,
     reviewable_question_filter
 )
 from .intake import compute_intake_quota
@@ -422,20 +421,6 @@ def _due_questions(db, today):
         .all()
         if progress_has_started(question.progress) and not cloze_is_buried(question, today)
     ]
-
-
-def _question_is_due(question, today):
-    progress = question.progress
-
-    return (
-        question_is_reviewable(question) and
-        progress_has_started(progress) and
-        not cloze_is_buried(question, today) and
-        (
-            progress.next_review is None or
-            progress.next_review <= today
-        )
-    )
 
 
 def _progress_row_has_started(row):
@@ -1396,44 +1381,3 @@ def get_review_items(db, today=None, intake_quota=None):
         items,
         {question.id for question in new_questions}
     ))
-
-
-def get_scoped_review_items(
-    db,
-    scope_type,
-    *,
-    group_id=None,
-    collection_id=None,
-    tag=None,
-    pack_guid=None,
-    today=None
-):
-    today = today or date.today()
-    scheduler_tuning = load_scheduler_tuning_settings(db)
-    # Local import avoids a module cycle: study_summary imports training, and
-    # training imports serialize_review_items from this module.
-    from .study_summary import resolve_study_scope
-
-    resolved = resolve_study_scope(
-        db,
-        scope_type,
-        group_id=group_id,
-        collection_id=collection_id,
-        tag=tag,
-        pack_guid=pack_guid
-    )
-    due_question_ids = [
-        question.id
-        for question in resolved["questions"]
-        if _question_is_due(question, today)
-    ]
-    questions = _questions_by_ids(db, due_question_ids)
-    items = serialize_review_items(
-        questions,
-        scheduler_tuning=scheduler_tuning,
-        scheduled_review=True,
-        timeline_anchors=_timeline_anchors_for(db, questions),
-        today=today
-    )
-
-    return defer_relearning_items(items)

@@ -322,16 +322,13 @@ describe("TrainingSession", () => {
     });
   });
 
-  it("opens the selected scope bilan from the training selector", async () => {
+  it("opens the Learn screen for a selected group, and only for a group", async () => {
     const onOpenStudy = vi.fn();
 
     render(<TrainingSession setMode={vi.fn()} onOpenStudy={onOpenStudy} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
-    expect(screen.queryByRole("button", { name: "Étudier ce groupe" }))
-      .not.toBeInTheDocument();
-    expect(screen.queryByText(/Étudier/i)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du groupe Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apprendre le groupe Europe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith(expect.objectContaining({
       id: 5,
@@ -340,16 +337,12 @@ describe("TrainingSession", () => {
       type_group: "map"
     }));
 
+    // A tag is not a group, so it no longer offers a Learn entry.
     fireEvent.click(screen.getByRole("button", { name: "Tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Sélectionner le tag Geo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du tag Geo" }));
 
-    expect(onOpenStudy).toHaveBeenLastCalledWith({
-      type: "tag",
-      id: "tag-geo",
-      label: "Geo",
-      name: "Geo"
-    });
+    expect(screen.queryByRole("button", { name: /Apprendre/ }))
+      .not.toBeInTheDocument();
   });
 
   it("starts an initial scope passed from Study", async () => {

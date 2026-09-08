@@ -49,7 +49,6 @@
 - bouton pour shuffle un groupe dans le queue manager
 - inline pour type_prompt d'images
 - mettre un input optionnel pour les questions de type texte
-- gros temps de chargement quand je rentre dans la review
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
 - enlever le type_all mais ajouter un mode one shot sans erreur autorisée

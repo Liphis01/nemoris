@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
+from ..services.learn import attach_learn_confusions
 from ..models import Question
 from ..schemas import (
     ClozeAnswerRequest,
@@ -51,7 +52,7 @@ def get_training(
     sequence_mode: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    return get_training_items(
+    return attach_learn_confusions(db, get_training_items(
         db,
         scope_type=scope_type,
         group_id=group_id,
@@ -62,7 +63,7 @@ def get_training(
         image_mode=image_mode,
         text_mode=text_mode,
         sequence_mode=sequence_mode
-    )
+    ))
 
 
 @router.post("/training/grade_timeline")

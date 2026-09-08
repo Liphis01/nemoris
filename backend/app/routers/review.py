@@ -1,6 +1,4 @@
 from datetime import date
-from typing import Literal, Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
@@ -26,6 +24,7 @@ from ..schemas import (
 from ..scheduler import progress_in_relearning
 from ..serializers import serialize_progress
 from ..services.collections import sync_generated_hard_collection
+from ..services.learn import attach_learn_confusions
 from ..services.progress import (
     apply_scheduling,
     apply_scheduling_batch,
@@ -65,8 +64,7 @@ from ..services.intake_queue import (
 )
 from ..services.review import (
     get_review_items,
-    get_review_summary,
-    get_scoped_review_items
+    get_review_summary
 )
 from ..services.review_maintenance import run_review_calendar_maintenance
 from ..services.settings import (
@@ -257,25 +255,8 @@ def dismiss_pace_notice(db: Session = Depends(get_db)):
 
 
 @router.get("/review")
-def get_review(
-    scope_type: Optional[Literal["group", "tag", "collection", "pack"]] = None,
-    group_id: Optional[int] = None,
-    collection_id: Optional[int] = None,
-    tag: Optional[str] = None,
-    pack_guid: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
+def get_review(db: Session = Depends(get_db)):
     ensure_review_calendar_current(db)
-
-    if scope_type:
-        return get_scoped_review_items(
-            db,
-            scope_type,
-            group_id=group_id,
-            collection_id=collection_id,
-            tag=tag,
-            pack_guid=pack_guid
-        )
 
     # Lazy once-per-day intake tuning. It is committed before the session is
     # assembled so get_review_items runs against a clean session.
@@ -291,7 +272,10 @@ def get_review(
     )
 
     # The service handles due filtering and runtime map grouping.
-    return get_review_items(db, intake_quota=quota)
+    return attach_learn_confusions(
+        db,
+        get_review_items(db, intake_quota=quota)
+    )
 
 
 @router.get("/review/intake")

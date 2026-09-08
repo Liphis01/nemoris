@@ -211,7 +211,7 @@ function ProfileGuidancePanel({ error, guidance, loading, onOpenStudy }) {
                 name: recommendation.scope.name
               })}
             >
-              Étudier ce groupe →
+              Apprendre ce groupe →
             </button>
           )}
         </div>

@@ -13,6 +13,7 @@ from .routers import (
     grid_groups,
     set_groups,
     groups,
+    learn,
     map_imports,
     maps,
     media_groups,
@@ -81,6 +82,7 @@ def create_app():
     app.include_router(groups.router)
     app.include_router(collections.router)
     app.include_router(review.router)
+    app.include_router(learn.router)
     app.include_router(stats.router)
     app.include_router(study.router)
     app.include_router(tags.router)

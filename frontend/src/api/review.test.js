@@ -18,27 +18,12 @@ describe("getReview", () => {
     expect(requestJson).toHaveBeenCalledWith("/review");
   });
 
-  it("serializes scoped review params", () => {
-    getReview({ type: "group", id: 10 });
-    getReview({ type: "collection", collectionId: 20 });
-    getReview({ type: "tag", key: "core:geography" });
-    getReview({ type: "pack", packGuid: "pack-guid" });
+  it("asks for the whole review session, with no scope", () => {
+    getReview();
 
-    expect(requestJson).toHaveBeenNthCalledWith(
-      1,
-      "/review?scope_type=group&group_id=10"
-    );
-    expect(requestJson).toHaveBeenNthCalledWith(
-      2,
-      "/review?scope_type=collection&collection_id=20"
-    );
-    expect(requestJson).toHaveBeenNthCalledWith(
-      3,
-      "/review?scope_type=tag&tag=core%3Ageography"
-    );
-    expect(requestJson).toHaveBeenNthCalledWith(
-      4,
-      "/review?scope_type=pack&pack_guid=pack-guid"
-    );
+    // Scoped review is gone: the Learn screen replaced the per-scope Study
+    // dashboard that was its only entry point.
+    expect(requestJson).toHaveBeenCalledWith("/review");
   });
+
 });

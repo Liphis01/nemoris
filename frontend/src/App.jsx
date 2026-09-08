@@ -49,88 +49,27 @@ function hasBlockingEscapeSurface() {
 
 
 function normalizeStudyScope(scope) {
+  // The Learn screen teaches one group. Playlists, tags and packs used to open
+  // it too, back when it was a per-scope analytics dashboard; they now stay on
+  // their own surfaces rather than open a screen that cannot teach them.
   if (!scope) return null;
 
   const type = scope.scopeType || scope.type;
 
-  if (type === "group") {
-    const id = firstDefined(scope.groupId, scope.group_id, scope.id);
-    if (id === undefined) return null;
+  if (type !== "group") return null;
 
-    return {
-      type: "group",
-      id,
-      groupId: id,
-      name: scope.name || null,
-      type_group: scope.type_group || null,
-      audio_only: scope.audio_only
-    };
-  }
+  const id = firstDefined(scope.groupId, scope.group_id, scope.id);
 
-  if (type === "collection") {
-    const id = firstDefined(scope.collectionId, scope.collection_id, scope.id);
-    if (id === undefined) return null;
+  if (id === undefined) return null;
 
-    return {
-      type: "collection",
-      id,
-      collectionId: id,
-      name: scope.name || null
-    };
-  }
-
-  if (type === "tag") {
-    const id = firstDefined(scope.tag, scope.key, scope.id, scope.label);
-    if (!id) return null;
-
-    return {
-      type: "tag",
-      id,
-      key: id,
-      tag: id,
-      label: scope.label || scope.name || id,
-      name: scope.name || scope.label || id
-    };
-  }
-
-  if (type === "pack") {
-    const packGuid = firstDefined(scope.packGuid, scope.pack_guid, scope.id);
-    if (!packGuid) return null;
-
-    return {
-      type: "pack",
-      id: packGuid,
-      packGuid,
-      name: scope.name || null
-    };
-  }
-
-  if (type === "questions") {
-    const questionIds = (
-      scope.questionIds ||
-      scope.question_ids ||
-      scope.ids ||
-      []
-    )
-      .map((value) => Number(value))
-      .filter((value) => Number.isFinite(value));
-
-    if (questionIds.length === 0) return null;
-
-    return {
-      type: "questions",
-      id: scope.id || questionIds.join(","),
-      questionIds,
-      name: scope.name || scope.label || "Pratique ciblée",
-      label: scope.label || scope.name || "Pratique ciblée",
-      mapMode: scope.mapMode || scope.map_mode || null,
-      imageMode: scope.imageMode || scope.image_mode || null,
-      textMode: scope.textMode || scope.text_mode || null,
-      sequenceMode: scope.sequenceMode || scope.sequence_mode || null
-    };
-  }
-
-  return null;
+  return {
+    type: "group",
+    id,
+    groupId: id,
+    name: scope.name || null,
+    type_group: scope.type_group || null,
+    audio_only: scope.audio_only
+  };
 }
 
 
@@ -203,14 +142,9 @@ function AppContent() {
   const [settingsScrollTarget, setSettingsScrollTarget] = useState(null);
   const [packOpenTarget, setPackOpenTarget] = useState(null);
   const [studyScope, setStudyScope] = useState(null);
-  const [reviewOpenTarget, setReviewOpenTarget] = useState(null);
   const [trainingOpenTarget, setTrainingOpenTarget] = useState(null);
   const manageLibrary = useManageLibrary(mode);
-  const reviewSession = useReviewSession(
-    mode === "quiz",
-    reviewOpenTarget?.scope || null,
-    reviewOpenTarget?.nonce || 0
-  );
+  const reviewSession = useReviewSession(mode === "quiz");
   const autoSync = useAutoSync();
 
   const appStyle = {
@@ -503,19 +437,6 @@ function AppContent() {
   }, [navigateMode]);
 
   const openGlobalReview = useCallback(() => {
-    setReviewOpenTarget(null);
-    navigateMode("quiz");
-  }, [navigateMode]);
-
-  const openScopedReview = useCallback((scope) => {
-    const nextScope = normalizeStudyScope(scope);
-
-    if (!nextScope || nextScope.type === "questions") return;
-
-    setReviewOpenTarget({
-      nonce: Date.now(),
-      scope: nextScope
-    });
     navigateMode("quiz");
   }, [navigateMode]);
 
@@ -582,8 +503,6 @@ function AppContent() {
           <StudyScreen
             setMode={navigateMode}
             scope={studyScope}
-            onStartReview={openScopedReview}
-            onStartTraining={openTrainingScope}
           />
         )}
 
@@ -632,7 +551,6 @@ function AppContent() {
           <BrowsePacks
             setMode={navigateMode}
             onOpenGroup={openGroupIdInManage}
-            onOpenStudy={openStudyScope}
             initialPackGuid={packOpenTarget?.guid || null}
             onInitialPackHandled={clearPackOpenTarget}
           />

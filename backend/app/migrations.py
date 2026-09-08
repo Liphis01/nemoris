@@ -1487,6 +1487,15 @@ def _migration_multilingual_tag_ids(connection, static_dir):
     session.flush()
 
 
+def _migration_learn_confusions_table(connection):
+    from .models import LearnConfusion
+
+    Base.metadata.create_all(
+        bind=connection,
+        tables=[LearnConfusion.__table__]
+    )
+
+
 MIGRATIONS = [
     Migration(
         version="0001",
@@ -1674,6 +1683,11 @@ MIGRATIONS = [
         version="0032",
         name="question_intake_order_column",
         run=_migration_question_intake_order_column
+    ),
+    Migration(
+        version="0033",
+        name="learn_confusions_table",
+        run=_migration_learn_confusions_table
     )
 ]
 

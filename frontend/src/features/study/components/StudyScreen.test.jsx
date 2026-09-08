@@ -1,344 +1,69 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getStudySummary } from "../../../api/study";
+import { getTrainingItems } from "../../../api/training";
+import { saveLearnConfusions } from "../../../api/learn";
 import StudyScreen from "./StudyScreen";
 
-vi.mock("../../../api/study", () => ({
-  getStudySummary: vi.fn()
+vi.mock("../../../api/training", () => ({
+  getTrainingItems: vi.fn()
+}));
+
+vi.mock("../../../api/learn", () => ({
+  saveLearnConfusions: vi.fn(() => Promise.resolve(null))
 }));
 
 vi.mock("../../map/components/SvgMap", () => ({
-  default: ({ selected }) => (
-    <div data-selected={selected} data-testid="study-learn-map" />
+  default: ({ focusCode, zoneLabels }) => (
+    <div
+      data-testid="learn-map"
+      data-focus={focusCode || ""}
+      data-labels={Object.values(zoneLabels || {}).join(",")}
+    />
   )
 }));
 
-const summary = {
-  generated_on: "2026-08-14",
-  scope: {
-    type: "group",
-    id: 10,
-    name: "Départements français",
-    type_group: "map",
-    question_count: 4,
-    audio_only: false
-  },
-  counts: {
-    total_atomic_questions: 4,
-    active_questions: 4,
-    suspended: 0,
-    unavailable: 0,
-    due_now: 1,
-    upcoming_load: 2
-  },
-  buckets: {
-    unseen: 1,
-    learning: 1,
-    fragile: 1,
-    stable: 1,
-    mastered: 0
-  },
-  recent_misses: {
-    item_count: 1,
-    event_count: 1,
-    items: [
-      {
-        id: 2,
-        type_q: "map",
-        question: "03",
-        answer: "Allier",
-        group: {
-          id: 10,
-          name: "Départements français",
-          type_group: "map"
-        },
-        signals: {
-          bucket: "fragile",
-          due: true,
-          recent_misses: 1,
-          lapses: 1,
-          next_review: "2026-08-14"
-        }
-      }
-    ]
-  },
-  lapses: {
-    item_count: 1,
-    total: 1
-  },
-  confusions: {
-    event_count: 1,
-    items: [
-      {
-        expected_id: 2,
-        selected_id: 3,
-        count: 1,
-        expected: { id: 2, answer: "Allier" },
-        selected: { id: 3, answer: "Alpes" }
-      }
-    ]
-  },
-  practice: {
-    item_limit: 120,
-    selectors: {
-      recent_misses: {
-        id: "recent_misses",
-        label: "Travailler les erreurs récentes",
-        question_ids: [2],
-        count: 1,
-        enabled: true
-      },
-      commonly_confused_pairs: {
-        id: "commonly_confused_pairs",
-        label: "Travailler les confusions",
-        question_ids: [2, 3],
-        count: 2,
-        enabled: true
-      },
-      new_only: {
-        id: "new_only",
-        label: "Nouveaux uniquement",
-        question_ids: [1],
-        count: 1,
-        enabled: true
-      },
-      almost_mastered: {
-        id: "almost_mastered",
-        label: "Presque maîtrisés",
-        question_ids: [3],
-        count: 1,
-        enabled: true
-      },
-      before_tomorrow: {
-        id: "before_tomorrow",
-        label: "À revoir avant demain",
-        question_ids: [2],
-        count: 1,
-        enabled: true
-      }
-    },
-    entry_points: [
-      {
-        id: "recent_misses",
-        label: "Travailler les erreurs récentes",
-        question_ids: [2],
-        count: 1,
-        enabled: true
-      },
-      {
-        id: "commonly_confused_pairs",
-        label: "Travailler les confusions",
-        question_ids: [2, 3],
-        count: 2,
-        enabled: true
-      },
-      {
-        id: "new_only",
-        label: "Nouveaux uniquement",
-        question_ids: [1],
-        count: 1,
-        enabled: true
-      },
-      {
-        id: "almost_mastered",
-        label: "Presque maîtrisés",
-        question_ids: [3],
-        count: 1,
-        enabled: true
-      },
-      {
-        id: "before_tomorrow",
-        label: "À revoir avant demain",
-        question_ids: [2],
-        count: 1,
-        enabled: true
-      }
-    ]
-  },
-  upcoming_load: {
-    total: 2,
-    by_day: [
-      { date: "2026-08-15", total: 1 },
-      { date: "2026-08-16", total: 1 }
-    ]
-  },
-  weak_items: [
-    {
-      id: 2,
-      type_q: "map",
-      question: "03",
-      answer: "Allier",
-      group: {
-        id: 10,
-        name: "Départements français",
-        type_group: "map"
-      },
-      signals: {
-        bucket: "fragile",
-        due: true,
-        recent_misses: 1,
-        lapses: 1,
-        next_review: "2026-08-14"
-      }
-    }
-  ],
-  available_modes: [
-    {
-      scope: "group",
-      type_group: "map",
-      type_q: "map",
-      training_modes: ["type_all", "multiple_choice"],
-      review_modes: ["type_all", "multiple_choice"],
-      training_support: "supported"
-    }
-  ],
-  learn: {
-    supported: true,
-    family: "map",
-    group: {
-      id: 10,
-      name: "Départements français",
-      type_group: "map",
-      media: "france.svg"
-    },
-    item_count: 4,
-    truncated: false,
-    hints: [
-      "first_letter",
-      "category",
-      "narrow_choices",
-      "related_items",
-      "reveal_answer"
-    ],
-    items: [
-      {
-        id: 1,
-        type_q: "map",
-        question: "Départements français - 01",
-        answer: "Ain",
-        code: "01",
-        tags: ["Géographie"],
-        aliases: [],
-        signals: { bucket: "unseen", due: false }
-      },
-      {
-        id: 2,
-        type_q: "map",
-        question: "Départements français - 03",
-        answer: "Allier",
-        code: "03",
-        tags: ["Géographie"],
-        aliases: [],
-        signals: { bucket: "fragile", due: true }
-      },
-      {
-        id: 3,
-        type_q: "map",
-        question: "Départements français - 04",
-        answer: "Alpes",
-        code: "04",
-        tags: ["Géographie"],
-        aliases: [],
-        signals: { bucket: "stable", due: false }
-      },
-      {
-        id: 4,
-        type_q: "map",
-        question: "Départements français - 07",
-        answer: "Ardèche",
-        code: "07",
-        tags: ["Géographie"],
-        aliases: [],
-        signals: { bucket: "learning", due: false }
-      }
-    ]
-  },
-  training: {
-    training_record: null,
-    previous_training_record: null,
-    training_records: {},
-    previous_training_records: {},
-    groups: []
-  }
-};
 
-const mediaSummary = {
-  ...summary,
-  scope: {
-    ...summary.scope,
-    id: 20,
-    name: "Drapeaux",
-    type_group: "media",
-    question_count: 2
-  },
-  counts: {
-    ...summary.counts,
-    total_atomic_questions: 2,
-    active_questions: 2,
-    due_now: 0,
-    upcoming_load: 0
-  },
-  buckets: {
-    unseen: 1,
-    learning: 1,
-    fragile: 0,
-    stable: 0,
-    mastered: 0
-  },
-  available_modes: [
-    {
-      scope: "group",
-      type_group: "media",
-      type_q: "media",
-      training_modes: ["type_prompt", "multiple_choice_media"],
-      review_modes: ["type_prompt", "multiple_choice_media"],
-      training_support: "supported"
-    }
-  ],
-  learn: {
-    supported: true,
-    family: "media",
-    group: {
-      id: 20,
-      name: "Drapeaux",
-      type_group: "media",
-      media: null
-    },
-    item_count: 2,
-    truncated: false,
-    hints: summary.learn.hints,
-    items: [
-      {
-        id: 11,
-        type_q: "media",
-        question: "Drapeau français",
-        answer: "France",
-        media: "france.png",
-        media_pool: ["france.png"],
-        media_kind: "image",
-        tags: ["Géographie"],
-        aliases: ["République française"],
-        signals: { bucket: "unseen", due: false }
-      },
-      {
-        id: 12,
-        type_q: "media",
-        question: "Drapeau allemand",
-        answer: "Allemagne",
-        media: "germany.png",
-        media_pool: ["germany.png"],
-        media_kind: "image",
-        tags: ["Géographie"],
-        aliases: [],
-        signals: { bucket: "learning", due: false }
-      }
-    ]
-  }
-};
+function card(id, question, answer, extra = {}) {
+  return {
+    question_id: id,
+    question,
+    answer,
+    label: answer,
+    aliases: [],
+    answer_policy: { preset: "relaxed" },
+    progress: { reps: 0, history: [] },
+    ...extra
+  };
+}
 
-describe("StudyScreen", () => {
+
+function textPayload(cards) {
+  return [{
+    group_id: 7,
+    type_q: "text",
+    presentation_kind: "text_group",
+    name: "Signes du zodiaque",
+    answer_policy: { preset: "relaxed" },
+    items: cards,
+    context_items: cards
+  }];
+}
+
+
+const textCards = [
+  card(1, "21 janvier - 19 février", "Verseau"),
+  card(2, "20 février - 20 mars", "Poissons"),
+  card(3, "21 mars - 19 avril", "Bélier", { progress: { reps: 4, history: [] } })
+];
+
+const scope = { type: "group", id: 7, name: "Signes du zodiaque" };
+
+
+describe("StudyScreen (Learn)", () => {
   beforeEach(() => {
-    getStudySummary.mockResolvedValue(summary);
+    getTrainingItems.mockReset();
+    saveLearnConfusions.mockReset();
+    saveLearnConfusions.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -346,287 +71,245 @@ describe("StudyScreen", () => {
     vi.clearAllMocks();
   });
 
-  it("loads a study summary without mutating review state and routes actions", async () => {
-    const onStartReview = vi.fn();
-    const onStartTraining = vi.fn();
-    const setMode = vi.fn();
+  it("loads the whole group from the training endpoint", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
 
-    render(
-      <StudyScreen
-        onStartReview={onStartReview}
-        onStartTraining={onStartTraining}
-        scope={{ type: "group", id: 10 }}
-        setMode={setMode}
-      />
-    );
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
 
-    expect(await screen.findByRole("heading", {
-      name: "Départements français"
-    })).toBeInTheDocument();
-    expect(getStudySummary).toHaveBeenCalledWith({ type: "group", id: 10 });
-    expect(screen.getByText("Faire la review due")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Aujourd'hui" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Apprendre" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Entraîner" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Faibles" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Historique" })).not.toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Signes du zodiaque" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Réviser ce groupe" }));
-    expect(onStartReview).toHaveBeenCalledWith(summary.scope);
-    expect(setMode).not.toHaveBeenCalledWith("quiz");
+    // Reuses /training rather than a Learn-only endpoint: it already returns
+    // every card in the group, with policies and aliases, and writes nothing.
+    expect(getTrainingItems).toHaveBeenCalledWith({
+      scopeType: "group",
+      groupId: 7
+    });
+    expect(screen.getByText(/3 items/)).toBeInTheDocument();
+    expect(screen.getByText(/2 jamais vus/)).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Entraîner" }));
-    fireEvent.click(screen.getByRole("button", { name: "QCM" }));
+  it("masks answers until a row is clicked", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+    expect(screen.queryByText("Verseau")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("21 janvier - 19 février"));
+
+    expect(screen.getByText("Verseau")).toBeInTheDocument();
+    expect(screen.queryByText("Poissons")).not.toBeInTheDocument();
+  });
+
+  it("only drills the cards the learner selected", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+    expect(screen.getByRole("button", { name: "Se tester" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Verseau/ }));
+
+    expect(screen.getByText("1 sélectionné")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Se tester" }));
+
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.getByText("21 janvier - 19 février")).toBeInTheDocument();
+  });
+
+  it("accepts a typed answer and finishes the drill", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Verseau/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Se tester" }));
+
+    fireEvent.change(screen.getByPlaceholderText("Ta réponse"), {
+      target: { value: "verseau" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+
+    expect(await screen.findByText("Série terminée")).toBeInTheDocument();
+  });
+
+  it("buys a first-letter hint on a miss, then falls back to a choice", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Verseau/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Poissons/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Se tester" }));
+
+    const input = screen.getByPlaceholderText("Ta réponse");
+
+    fireEvent.change(input, { target: { value: "faux" } });
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+
+    // Recall first: a miss reveals letters rather than jumping to recognition.
+    expect(screen.getByText("V······")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Ta réponse"), {
+      target: { value: "encore faux" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+
+    expect(screen.queryByPlaceholderText("Ta réponse")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verseau" })).toBeInTheDocument();
+  });
+
+  it("saves the pairs mixed up in the choice step, once, at the end", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Verseau/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Poissons/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Se tester" }));
+
+    // Two misses to reach the choice step.
+    for (const value of ["faux", "encore faux"]) {
+      fireEvent.change(screen.getByPlaceholderText("Ta réponse"), {
+        target: { value }
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Verseau" }));
+
+    // Second card, answered straight away.
+    fireEvent.change(screen.getByPlaceholderText("Ta réponse"), {
+      target: { value: "Poissons" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+
+    await screen.findByText("Série terminée");
+    fireEvent.click(screen.getByRole("button", { name: "Retour à la liste" }));
 
     await waitFor(() => {
-      expect(onStartTraining).toHaveBeenCalledWith(
-        {
-          type: "group",
-          id: 10,
-          name: "Départements français",
-          type_group: "map",
-          audio_only: false
-        },
-        "multiple_choice"
-      );
+      expect(saveLearnConfusions).toHaveBeenCalledTimes(1);
     });
 
-    expect(getStudySummary).toHaveBeenCalledTimes(1);
+    const entries = saveLearnConfusions.mock.calls[0][0];
+
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every(entry => entry.expected_id === 1)).toBe(true);
+    expect(entries.every(entry => entry.picked_id !== 1)).toBe(true);
   });
 
-  it("starts targeted unscheduled practice from M4 weak selectors", async () => {
-    const onStartTraining = vi.fn();
-    const setMode = vi.fn();
+  it("keeps the confusions gathered before the learner quits", async () => {
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Verseau/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Poissons/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Se tester" }));
+
+    for (const value of ["faux", "encore faux"]) {
+      fireEvent.change(screen.getByPlaceholderText("Ta réponse"), {
+        target: { value }
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Verseau" }));
+
+    // Walk out mid-drill: quitting is the common case, and the evidence
+    // gathered so far must not be thrown away.
+    fireEvent.click(screen.getByRole("button", { name: "Quitter" }));
+
+    await waitFor(() => {
+      expect(saveLearnConfusions).toHaveBeenCalledTimes(1);
+    });
+    expect(saveLearnConfusions.mock.calls[0][0].length).toBeGreaterThan(0);
+  });
+
+  it("draws choice decoys from the whole group, not just the selection", async () => {
+    const many = [
+      ...textCards,
+      card(4, "20 avril - 20 mai", "Taureau"),
+      card(5, "21 mai - 20 juin", "Gémeaux"),
+      card(6, "21 juin - 22 juillet", "Cancer")
+    ];
+
+    getTrainingItems.mockResolvedValue(textPayload(many));
+
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
+
+    await screen.findByText("21 janvier - 19 février");
+
+    // Drill a single card: its decoys must still come from the other five.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Verseau/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Se tester" }));
+
+    for (const value of ["faux", "encore faux"]) {
+      fireEvent.change(screen.getByPlaceholderText("Ta réponse"), {
+        target: { value }
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Valider" }));
+    }
+
+    const choices = document.querySelectorAll(".learn-choice");
+
+    expect(choices).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "Verseau" })).toBeInTheDocument();
+  });
+
+  it("renders a map group on the map, revealing zones as they are opened", async () => {
+    getTrainingItems.mockResolvedValue([{
+      group_id: 3,
+      type_q: "map",
+      presentation_kind: "map_group",
+      name: "Territoires",
+      media: "monde.svg",
+      map: null,
+      items: [
+        card(11, null, "Mexique", { code: "MX" }),
+        card(12, null, "Brésil", { code: "BR" })
+      ],
+      context_items: []
+    }]);
 
     render(
       <StudyScreen
-        scope={{ type: "group", id: 10 }}
-        setMode={setMode}
-        onStartTraining={onStartTraining}
-      />
-    );
-
-    await screen.findByRole("heading", {
-      name: "Départements français"
-    });
-
-    fireEvent.click(screen.getByRole("button", {
-      name: /Travailler les erreurs récentes/
-    }));
-
-    expect(onStartTraining).toHaveBeenCalledWith(expect.objectContaining({
-      type: "questions",
-      name: "Travailler les erreurs récentes",
-      questionIds: [2]
-    }));
-
-    fireEvent.click(screen.getByRole("button", {
-      name: /Travailler les confusions/
-    }));
-
-    expect(onStartTraining).toHaveBeenCalledWith(expect.objectContaining({
-      type: "questions",
-      name: "Travailler les confusions",
-      questionIds: [2, 3],
-      mapMode: "multiple_choice",
-      imageMode: "multiple_choice_media",
-      textMode: "match",
-      sequenceMode: "multiple_choice"
-    }));
-  });
-
-  it("renders map Learn as a guided path without raw zone labels", async () => {
-    const onStartTraining = vi.fn();
-    const setMode = vi.fn();
-
-    render(
-      <StudyScreen
-        scope={{ type: "group", id: 10 }}
-        setMode={setMode}
-        onStartTraining={onStartTraining}
-      />
-    );
-
-    await screen.findByRole("heading", {
-      name: "Départements français"
-    });
-
-    fireEvent.click(screen.getByRole("tab", { name: "Apprendre" }));
-
-    expect(screen.getByTestId("study-learn-map")).toHaveAttribute(
-      "data-selected",
-      "01"
-    );
-    expect(screen.getByRole("heading", {
-      name: "Observe, puis retrouve la réponse"
-    })).toBeInTheDocument();
-    expect(screen.getByRole("heading", {
-      name: "Parcours d'apprentissage"
-    })).toBeInTheDocument();
-    expect(screen.getByRole("button", {
-      name: "Étape 1 · Non vu"
-    })).toBeInTheDocument();
-    expect(screen.getByRole("button", {
-      name: "Étape 2 · Fragile · Due"
-    })).toBeInTheDocument();
-    expect(screen.queryByText("Zone 01")).not.toBeInTheDocument();
-    expect(screen.queryByText("Zone 03")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Première lettre" }));
-    expect(screen.getAllByText("Première lettre").length).toBeGreaterThan(0);
-    expect(screen.getByText("A")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Choix" }));
-    expect(screen.getByText("Allier")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
-    expect(screen.getByRole("heading", { name: "Ain" })).toBeInTheDocument();
-    expect(screen.getByRole("button", {
-      name: "Ain · Vu"
-    })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Masquer" })).not.toBeInTheDocument();
-    expect(onStartTraining).not.toHaveBeenCalled();
-
-    expect(getStudySummary).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders media Learn without generic media labels", async () => {
-    getStudySummary.mockResolvedValueOnce(mediaSummary);
-
-    render(
-      <StudyScreen
-        scope={{ type: "group", id: 20 }}
+        scope={{ type: "group", id: 3, name: "Territoires", type_group: "map" }}
         setMode={vi.fn()}
-        onStartTraining={vi.fn()}
       />
     );
 
-    await screen.findByRole("heading", { name: "Drapeaux" });
-    fireEvent.click(screen.getByRole("tab", { name: "Apprendre" }));
+    const map = await screen.findByTestId("learn-map");
 
-    expect(screen.getByAltText("Média à apprendre")).toBeInTheDocument();
-    expect(screen.getByRole("button", {
-      name: "Étape 1 · Non vu"
-    })).toBeInTheDocument();
-    expect(screen.queryByText("Média 1")).not.toBeInTheDocument();
-    expect(screen.queryByText("Média 2")).not.toBeInTheDocument();
+    // Zone names are unlabelled on the map until opened, but the index keeps
+    // them readable so the learner can also go name -> location.
+    expect(map).toHaveAttribute("data-labels", "");
+    expect(screen.getByText("Mexique")).toBeInTheDocument();
+    expect(screen.getByText("Brésil")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mexique" }));
 
-    expect(screen.getByRole("heading", { name: "France" })).toBeInTheDocument();
-    expect(screen.getByText("République française")).toBeInTheDocument();
-    expect(screen.getByRole("button", {
-      name: "France · Vu"
-    })).toBeInTheDocument();
+    expect(screen.getByTestId("learn-map")).toHaveAttribute("data-labels", "Mexique");
+    expect(screen.getByTestId("learn-map")).toHaveAttribute("data-focus", "MX");
   });
 
-  it("tracks local Learn outcomes and restarts only items marked for review", async () => {
-    const onStartTraining = vi.fn();
+  it("surfaces a load failure with a retry", async () => {
+    getTrainingItems.mockRejectedValueOnce(new Error("Réseau indisponible"));
 
-    render(
-      <StudyScreen
-        scope={{ type: "group", id: 10 }}
-        setMode={vi.fn()}
-        onStartTraining={onStartTraining}
-      />
-    );
+    render(<StudyScreen scope={scope} setMode={vi.fn()} />);
 
-    await screen.findByRole("heading", {
-      name: "Départements français"
-    });
-    fireEvent.click(screen.getByRole("tab", { name: "Apprendre" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Réseau indisponible");
 
-    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Je savais" }));
-    expect(onStartTraining).not.toHaveBeenCalled();
-    expect(screen.getByTestId("study-learn-map")).toHaveAttribute(
-      "data-selected",
-      "03"
-    );
-    expect(screen.getByRole("button", {
-      name: "Ain · Je savais"
-    })).toBeInTheDocument();
+    getTrainingItems.mockResolvedValue(textPayload(textCards));
+    fireEvent.click(screen.getByRole("button", { name: "Réessayer" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
-    fireEvent.click(screen.getByRole("button", { name: "À revoir" }));
-    expect(screen.getByRole("button", {
-      name: "Allier · À revoir"
-    })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Passer" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "Révéler la réponse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Je savais" }));
-
-    expect(screen.getByRole("heading", { name: "Parcours terminé" })).toBeInTheDocument();
-    expect(screen.getByText("Vus")).toBeInTheDocument();
-    expect(screen.getAllByText("Je savais").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("À revoir").length).toBeGreaterThan(0);
-    expect(onStartTraining).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Reprendre les à revoir" }));
-    expect(screen.getByTestId("study-learn-map")).toHaveAttribute(
-      "data-selected",
-      "03"
-    );
-    expect(screen.getByRole("heading", {
-      name: "Observe, puis retrouve la réponse"
-    })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Entraîner" }));
-    expect(onStartTraining).toHaveBeenCalledWith({
-      type: "group",
-      id: 10,
-      name: "Départements français",
-      type_group: "map",
-      audio_only: false
-    });
-  });
-
-  it("hides Learn for unsupported scopes and keeps only enabled practice entries", async () => {
-    const unsupportedSummary = {
-      ...summary,
-      scope: {
-        ...summary.scope,
-        type_group: "sequence"
-      },
-      learn: {
-        ...summary.learn,
-        supported: false,
-        item_count: 0,
-        items: []
-      },
-      practice: {
-        ...summary.practice,
-        entry_points: [
-          ...summary.practice.entry_points,
-          {
-            id: "disabled",
-            label: "Mode indisponible",
-            question_ids: [],
-            count: 0,
-            enabled: false
-          }
-        ]
-      }
-    };
-    getStudySummary.mockResolvedValueOnce(unsupportedSummary);
-
-    render(
-      <StudyScreen
-        scope={{ type: "group", id: 10 }}
-        setMode={vi.fn()}
-        onStartTraining={vi.fn()}
-      />
-    );
-
-    await screen.findByRole("heading", {
-      name: "Départements français"
-    });
-
-    expect(screen.queryByRole("tab", { name: "Apprendre" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Modes disponibles")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Mode indisponible/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("21 janvier - 19 février")).toBeInTheDocument();
   });
 });

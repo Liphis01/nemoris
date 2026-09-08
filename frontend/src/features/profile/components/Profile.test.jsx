@@ -248,7 +248,7 @@ describe("Profile", () => {
     expect(screen.getByText("82%")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Étudier ce groupe →" })
+      screen.getByRole("button", { name: "Apprendre ce groupe →" })
     );
 
     expect(onOpenStudy).toHaveBeenCalledWith({

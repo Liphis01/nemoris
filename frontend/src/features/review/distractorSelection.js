@@ -163,6 +163,17 @@ export function feedbackConfusability(target, candidate) {
     }
   }
 
+  // Learn sessions never write review history -- they are a scratchpad -- so
+  // the pairs a learner mixed up while binge-learning arrive on their own
+  // field. They count exactly like a review mis-pick: a decoy that fooled the
+  // learner on the Learn screen is a good decoy in the next real review.
+  for (const entry of target?.learn_confusions || []) {
+    if (numericId(entry?.candidate_id) !== candidateId) continue;
+
+    exposures += Number(entry.exposures) || 0;
+    mispicks += Number(entry.mispicks) || 0;
+  }
+
   const rate = (mispicks + 1) / (exposures + EXPOSURE_PRIOR);
   const confidence = Math.min(1, exposures / FULL_FEEDBACK_EXPOSURES);
 

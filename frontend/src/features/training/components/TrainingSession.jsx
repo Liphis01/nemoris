@@ -566,7 +566,6 @@ function CollectionTile({ collection, onSelect, selected }) {
 // next to groups. Training just chooses one to practise.
 function CollectionDetailPanel({
   collection,
-  onOpenStudy,
   startScope
 }) {
   if (!collection) {
@@ -618,19 +617,6 @@ function CollectionDetailPanel({
           <span>{questionCountLabel(collection.question_count)}</span>
         </button>
 
-        {onOpenStudy && (
-          <button
-            type="button"
-            className="training-study-link"
-            onClick={() => onOpenStudy({
-              ...collection,
-              type: "collection"
-            })}
-            aria-label={`Voir le bilan de la playlist ${collection.name}`}
-          >
-            Voir le bilan
-          </button>
-        )}
       </div>
     </aside>
   );
@@ -638,7 +624,6 @@ function CollectionDetailPanel({
 
 
 function TagDetailPanel({
-  onOpenStudy,
   startScope,
   tag
 }) {
@@ -686,16 +671,6 @@ function TagDetailPanel({
           <span>{questionCountLabel(count)}</span>
         </button>
 
-        {onOpenStudy && (
-          <button
-            type="button"
-            className="training-study-link"
-            onClick={() => onOpenStudy(scope)}
-            aria-label={`Voir le bilan du tag ${label}`}
-          >
-            Voir le bilan
-          </button>
-        )}
       </div>
     </aside>
   );
@@ -819,9 +794,9 @@ function GroupDetailPanel({ group, onOpenStudy, startScope }) {
               ...group,
               type: "group"
             })}
-            aria-label={`Voir le bilan du groupe ${group.name}`}
+            aria-label={`Apprendre le groupe ${group.name}`}
           >
-            Voir le bilan
+            Apprendre
           </button>
         </div>
       )}
@@ -1057,7 +1032,6 @@ function ScopeSelector({
                   <div className="training-detail-column app-scrollbar">
                     <CollectionDetailPanel
                       collection={selectedCollection}
-                      onOpenStudy={onOpenStudy}
                       startScope={startScope}
                     />
                   </div>
@@ -1083,7 +1057,6 @@ function ScopeSelector({
 
                   <div className="training-detail-column app-scrollbar">
                     <TagDetailPanel
-                      onOpenStudy={onOpenStudy}
                       startScope={startScope}
                       tag={selectedTag}
                     />

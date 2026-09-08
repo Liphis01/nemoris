@@ -370,9 +370,9 @@ function MenuStudyCard({
               className="menu-study-button menu-study-button-secondary"
               onClick={openStudyTarget}
               disabled={!onOpenStudy}
-              aria-label={`Voir le bilan pour ${target.title}`}
+              aria-label={`Apprendre ${target.title}`}
             >
-              Voir le bilan
+              Apprendre
             </button>
             <button
               type="button"

@@ -11,9 +11,8 @@ from ..models import (
 )
 from ..scheduler import parse_history_date
 from .collections import resolve_collection_questions
-from .map_eligibility import question_has_training_content, question_is_reviewable
+from .map_eligibility import question_is_reviewable
 from .media import media_kind_from_name
-from .media_pool import read_media_pool
 from .progress import progress_has_started, progress_is_new
 from .tag_hierarchy import (
     descendants,
@@ -23,34 +22,15 @@ from .tag_hierarchy import (
     parent_map,
     resolve_tag_id
 )
-from .training import (
-    MODE_GROUP_TYPES,
-    collection_training_fingerprint,
-    group_training_fingerprint,
-    question_in_tag_subtree,
-    serialize_previous_training_record,
-    serialize_previous_training_records,
-    serialize_training_record,
-    serialize_training_records,
-    training_fingerprints_for_groups
-)
-from .type_contracts import (
-    group_type_contract,
-    question_type_contract
-)
+from .training import question_in_tag_subtree
 
 
-LOAD_WINDOW_DAYS = 30
 RECENT_MISS_WINDOW_DAYS = 14
 FRAGILE_MAX_STABILITY_DAYS = 7
 STABLE_MIN_STABILITY_DAYS = 21
 STABLE_MIN_REPS = 2
 MASTERED_MIN_STABILITY_DAYS = 60
 MASTERED_MIN_REPS = 3
-WEAK_ITEM_LIMIT = 20
-CONFUSION_LIMIT = 20
-LEARN_ITEM_LIMIT = 500
-PRACTICE_ITEM_LIMIT = 120
 DUE_SOON_DAYS = 7
 LOW_SUCCESS_MIN_ATTEMPTS = 2
 LOW_SUCCESS_MAX_RATE = 0.65
@@ -181,6 +161,16 @@ def _questions_by_ids(db, question_ids):
         for question_id in question_ids
         if question_id in by_id
     ]
+
+
+def _media_group_audio_only(questions):
+    kinds = {
+        media_kind_from_name(question.media)
+        for question in questions
+        if question.type_q == "media" and question.media
+    }
+
+    return bool(kinds) and kinds == {"audio"}
 
 
 def _group_scope(db, group_id):
@@ -357,13 +347,6 @@ def resolve_study_scope(
     raise HTTPException(status_code=400, detail="Invalid study scope")
 
 
-def _next_review(progress):
-    if not progress_has_started(progress):
-        return None
-
-    return progress.next_review if progress else None
-
-
 def _is_due(progress, today):
     if not progress_has_started(progress):
         return False
@@ -371,49 +354,6 @@ def _is_due(progress, today):
     next_review = progress.next_review if progress else None
 
     return next_review is None or next_review <= today
-
-
-def _question_identity(question):
-    group = question.group
-
-    return {
-        "id": question.id,
-        "guid": question.guid,
-        "type_q": question.type_q,
-        "question": question.question,
-        "answer": question.answer,
-        "media": question.media,
-        "tags": question.tags or [],
-        "group_id": question.group_id,
-        "group": (
-            {
-                "id": group.id,
-                "guid": group.guid,
-                "name": group.name,
-                "type_group": group.type_group
-            }
-            if group else None
-        )
-    }
-
-
-def _question_learn_identity(question, today):
-    data = question.data or {}
-    item = {
-        **_question_identity(question),
-        "aliases": data.get("aliases", []),
-        "signals": _question_signals(question, today)
-    }
-
-    if question.type_q == "map":
-        item["code"] = data.get("code")
-
-    if question.type_q == "media":
-        media_pool = read_media_pool(question.media, data)
-        item["media_pool"] = media_pool
-        item["media_kind"] = media_kind_from_name(media_pool[0]) if media_pool else ""
-
-    return item
 
 
 def _question_signals(question, today):
@@ -444,76 +384,6 @@ def _question_signals(question, today):
             else None
         )
     }
-
-
-def _learn_for_scope(scope_type, source, questions, today):
-    if scope_type != "group" or source.type_group not in {"map", "media"}:
-        return {
-            "supported": False,
-            "family": None,
-            "items": [],
-            "item_count": 0,
-            "truncated": False,
-            "reason": "Learn is available for map and media groups first."
-        }
-
-    family = source.type_group
-    learnable_questions = [
-        question
-        for question in questions
-        if (
-            question.type_q == family and
-            question_has_training_content(question)
-        )
-    ]
-    items = [
-        _question_learn_identity(question, today)
-        for question in learnable_questions[:LEARN_ITEM_LIMIT]
-    ]
-
-    return {
-        "supported": True,
-        "family": family,
-        "group": {
-            "id": source.id,
-            "guid": source.guid,
-            "name": source.name,
-            "type_group": source.type_group,
-            "media": source.media
-        },
-        "item_count": len(learnable_questions),
-        "truncated": len(learnable_questions) > LEARN_ITEM_LIMIT,
-        "items": items,
-        "hints": [
-            "first_letter",
-            "category",
-            "narrow_choices",
-            "related_items",
-            "reveal_answer"
-        ]
-    }
-
-
-def _weak_sort_key(item):
-    signals = item["signals"]
-    next_review = signals["next_review"] or "9999-12-31"
-
-    return (
-        0 if signals["recent_misses"] else 1,
-        -signals["recent_misses"],
-        -signals["lapses"],
-        signals["stability"],
-        next_review,
-        item["id"]
-    )
-
-
-def _practice_sort_key(question, today):
-    signals = _question_signals(question, today)
-    return _weak_sort_key({
-        **_question_identity(question),
-        "signals": signals
-    })
 
 
 def _coerce_question_id(value):
@@ -562,15 +432,16 @@ def _event_selected_question_id(event, candidate_ids):
     return None
 
 
-def _safe_policy(policy):
-    return dict(policy) if isinstance(policy, dict) else None
+def _confusion_counts_for_questions(questions, today):
+    """Count recent mis-picks inside a scope.
 
-
-def _confusions_for_questions(db, questions, today):
+    Only the totals survive: the pair details used to feed the Study screen's
+    "Confusions" panel went away with that panel, and the distractor picker
+    reads mis-picks straight off each question's own history instead.
+    """
     start = today - timedelta(days=RECENT_MISS_WINDOW_DAYS - 1)
-    questions_by_id = {question.id: question for question in questions}
-    pairs = {}
-    selected_ids = set()
+    pairs = set()
+    event_count = 0
 
     for question in questions:
         progress = question.progress
@@ -602,309 +473,14 @@ def _confusions_for_questions(db, questions, today):
             if selected_id is None or selected_id == expected_id:
                 continue
 
-            selected_ids.add(selected_id)
-            key = (expected_id, selected_id)
-            pair = pairs.setdefault(key, {
-                "expected_id": expected_id,
-                "selected_id": selected_id,
-                "count": 0,
-                "last_reviewed_on": None,
-                "raw_response": None,
-                "type_q": event.get("type_q") or question.type_q,
-                "presentation_kind": event.get("presentation_kind"),
-                "mode": event.get("mode"),
-                "direction": event.get("direction"),
-                "candidate_ids": set(),
-                "answer_policy": _safe_policy(event.get("answer_policy"))
-            })
-            pair["count"] += 1
-            pair["raw_response"] = event.get("raw_response")
-            pair["candidate_ids"].update(candidate_ids)
-
-            if pair["answer_policy"] is None:
-                pair["answer_policy"] = _safe_policy(
-                    event.get("answer_policy")
-                )
-
-            if (
-                pair["last_reviewed_on"] is None or
-                reviewed_on.isoformat() > pair["last_reviewed_on"]
-            ):
-                pair["last_reviewed_on"] = reviewed_on.isoformat()
-
-    missing_selected_ids = selected_ids - set(questions_by_id)
-
-    if missing_selected_ids:
-        questions_by_id.update({
-            question.id: question
-            for question in (
-                _question_query(db)
-                .filter(Question.id.in_(missing_selected_ids))
-                .all()
-            )
-        })
-
-    items = []
-
-    for pair in pairs.values():
-        expected = questions_by_id.get(pair["expected_id"])
-        selected = questions_by_id.get(pair["selected_id"])
-        items.append({
-            **{
-                **pair,
-                "candidate_ids": sorted(pair["candidate_ids"])
-            },
-            "expected": (
-                _question_identity(expected)
-                if expected else {"id": pair["expected_id"]}
-            ),
-            "selected": (
-                _question_identity(selected)
-                if selected else {"id": pair["selected_id"]}
-            )
-        })
-
-    items = sorted(
-        items,
-        key=lambda item: (
-            -item["count"],
-            -(
-                parse_history_date(item["last_reviewed_on"]).toordinal()
-                if item["last_reviewed_on"]
-                else 0
-            ),
-            item["expected_id"],
-            item["selected_id"]
-        )
-    )
+            pairs.add((expected_id, selected_id))
+            event_count += 1
 
     return {
         "window_days": RECENT_MISS_WINDOW_DAYS,
-        "pair_count": len(items),
-        "event_count": sum(item["count"] for item in items),
-        "items": items[:CONFUSION_LIMIT]
+        "pair_count": len(pairs),
+        "event_count": event_count
     }
-
-
-def _progress_success_stats(progress):
-    attempts = []
-
-    if progress:
-        for entry in progress.history or []:
-            quality = _history_quality(entry)
-
-            if quality is not None:
-                attempts.append(quality)
-
-    if not attempts and progress and (progress.reps or 0) > 0:
-        reps = int(progress.reps or 0)
-        lapses = int(progress.lapses or 0)
-        successes = max(0, reps - lapses)
-        attempts = [2] * successes + [0] * min(lapses, reps)
-
-    total = len(attempts)
-    successes = sum(1 for quality in attempts if quality > 0)
-
-    return {
-        "attempts": total,
-        "successes": successes,
-        "success_rate": (successes / total) if total else None
-    }
-
-
-def _date_on_or_before(value, limit_day):
-    parsed = parse_history_date(value)
-
-    return parsed is not None and parsed <= limit_day
-
-
-def _unique_limited_ids(question_ids, limit=PRACTICE_ITEM_LIMIT):
-    ids = []
-    seen = set()
-
-    for value in question_ids or []:
-        question_id = _coerce_question_id(value)
-
-        if question_id is None or question_id in seen:
-            continue
-
-        seen.add(question_id)
-        ids.append(question_id)
-
-    return ids[:limit], len(ids) > limit
-
-
-def _practice_entry(entry_id, label, description, question_ids):
-    ids, truncated = _unique_limited_ids(question_ids)
-
-    return {
-        "id": entry_id,
-        "label": label,
-        "description": description,
-        "question_ids": ids,
-        "count": len(ids),
-        "enabled": len(ids) > 0,
-        "truncated": truncated
-    }
-
-
-def _practice_for_questions(questions, recent_miss_items, confusions, today):
-    sorted_questions = sorted(
-        questions,
-        key=lambda question: _practice_sort_key(question, today)
-    )
-    new_ids = []
-    high_lapse_ids = []
-    low_success_ids = []
-    due_soon_fragile_ids = []
-    almost_mastered_ids = []
-    before_tomorrow_ids = []
-
-    for question in sorted_questions:
-        if bool(question.suspended) or not question_is_reviewable(question):
-            continue
-
-        bucket = classify_mastery_bucket(question, today)
-        signals = _question_signals(question, today)
-        progress = question.progress
-        next_review = signals["next_review"]
-
-        if bucket == "unseen":
-            new_ids.append(question.id)
-
-        if signals["lapses"] >= 2:
-            high_lapse_ids.append(question.id)
-
-        stats = _progress_success_stats(progress)
-
-        if (
-            stats["attempts"] >= LOW_SUCCESS_MIN_ATTEMPTS and
-            stats["success_rate"] is not None and
-            stats["success_rate"] <= LOW_SUCCESS_MAX_RATE
-        ):
-            low_success_ids.append(question.id)
-
-        if (
-            bucket == "fragile" and
-            (
-                signals["due"] or
-                _date_on_or_before(
-                    next_review,
-                    today + timedelta(days=DUE_SOON_DAYS)
-                )
-            )
-        ):
-            due_soon_fragile_ids.append(question.id)
-
-        if (
-            bucket == "stable" and
-            (
-                signals["reps"] >= MASTERED_MIN_REPS - 1 or
-                signals["stability"] >= STABLE_MIN_STABILITY_DAYS
-            )
-        ):
-            almost_mastered_ids.append(question.id)
-
-        if signals["due"] or _date_on_or_before(
-            next_review,
-            today + timedelta(days=1)
-        ):
-            before_tomorrow_ids.append(question.id)
-
-    recent_miss_ids = [item["id"] for item in recent_miss_items]
-    confusion_ids = []
-
-    for item in confusions.get("items", []):
-        confusion_ids.extend([item.get("expected_id"), item.get("selected_id")])
-
-    selectors = {
-        "recent_misses": _practice_entry(
-            "recent_misses",
-            "Travailler les erreurs récentes",
-            "Items ratés dans la fenêtre récente.",
-            recent_miss_ids
-        ),
-        "high_lapses": _practice_entry(
-            "high_lapses",
-            "Lapses élevés",
-            "Items avec plusieurs oublis cumulés.",
-            high_lapse_ids
-        ),
-        "low_success": _practice_entry(
-            "low_success",
-            "Réussite basse",
-            "Items avec un taux de réussite faible dans ce scope.",
-            low_success_ids
-        ),
-        "due_soon_fragile": _practice_entry(
-            "due_soon_fragile",
-            "Fragiles bientôt dus",
-            "Items fragiles à stabiliser avant la prochaine charge.",
-            due_soon_fragile_ids
-        ),
-        "commonly_confused_pairs": _practice_entry(
-            "commonly_confused_pairs",
-            "Travailler les confusions",
-            "Items attendus et items choisis dans les confusions récentes.",
-            confusion_ids
-        ),
-        "new_only": _practice_entry(
-            "new_only",
-            "Nouveaux uniquement",
-            "Items encore jamais travaillés en review.",
-            new_ids
-        ),
-        "almost_mastered": _practice_entry(
-            "almost_mastered",
-            "Presque maîtrisés",
-            "Items stables qui ne sont pas encore maîtrisés.",
-            almost_mastered_ids
-        ),
-        "before_tomorrow": _practice_entry(
-            "before_tomorrow",
-            "À revoir avant demain",
-            "Items dus maintenant ou demain dans ce scope.",
-            before_tomorrow_ids
-        )
-    }
-    entry_ids = [
-        "recent_misses",
-        "commonly_confused_pairs",
-        "new_only",
-        "almost_mastered",
-        "before_tomorrow"
-    ]
-
-    return {
-        "item_limit": PRACTICE_ITEM_LIMIT,
-        "selectors": selectors,
-        "entry_points": [selectors[entry_id] for entry_id in entry_ids]
-    }
-
-
-def _load_by_day(questions, today):
-    dates = [
-        today + timedelta(days=offset)
-        for offset in range(1, LOAD_WINDOW_DAYS + 1)
-    ]
-    counts = {day: 0 for day in dates}
-
-    for question in questions:
-        if bool(question.suspended) or not question_is_reviewable(question):
-            continue
-
-        next_review = _next_review(question.progress)
-
-        if next_review and dates[0] <= next_review <= dates[-1]:
-            counts[next_review] += 1
-
-    return [
-        {
-            "date": day.isoformat(),
-            "total": counts[day]
-        }
-        for day in dates
-    ]
 
 
 def _counts_for_questions(questions, today):
@@ -926,9 +502,6 @@ def _counts_for_questions(questions, today):
         "lapsed_items": 0,
         "lapse_total": 0
     }
-    weak_items = []
-    recent_miss_items = []
-
     for question in questions:
         bucket = classify_mastery_bucket(question, today)
         signals = _question_signals(question, today)
@@ -950,188 +523,12 @@ def _counts_for_questions(questions, today):
         if signals["recent_misses"]:
             counts["recent_miss_items"] += 1
             counts["recent_miss_events"] += signals["recent_misses"]
-            recent_miss_items.append({
-                **_question_identity(question),
-                "signals": signals
-            })
 
         if signals["lapses"]:
             counts["lapsed_items"] += 1
             counts["lapse_total"] += signals["lapses"]
 
-        if (
-            bucket == "fragile" or
-            signals["recent_misses"] or
-            signals["lapses"]
-        ):
-            weak_items.append({
-                **_question_identity(question),
-                "signals": signals
-            })
-
-    return counts, buckets, weak_items, recent_miss_items
-
-
-def _available_modes_for_group(group):
-    contract = group_type_contract(group.type_group)
-
-    if not contract:
-        return []
-
-    return [{
-        "scope": "group",
-        "type_group": group.type_group,
-        "type_q": contract.question_type,
-        "presentation_kind": contract.runtime_presentation,
-        "review_modes": list(contract.modes),
-        "training_modes": list(contract.modes),
-        "training_support": contract.training_support
-    }]
-
-
-def _available_modes_for_questions(questions):
-    by_type = {}
-
-    for question in questions:
-        contract = question_type_contract(question.type_q)
-
-        if not contract:
-            continue
-
-        by_type.setdefault(question.type_q, contract)
-
-    return [
-        {
-            "scope": "question_type",
-            "type_q": type_q,
-            "presentation_kinds": list(contract.runtime_presentations),
-            "review_modes": list(contract.modes),
-            "training_modes": (
-                list(contract.modes)
-                if contract.training_support != "none"
-                else []
-            ),
-            "training_support": contract.training_support
-        }
-        for type_q, contract in sorted(by_type.items())
-    ]
-
-
-def _available_modes(scope_type, source, questions):
-    if scope_type == "group":
-        return _available_modes_for_group(source)
-
-    return _available_modes_for_questions(questions)
-
-
-def _media_group_audio_only(questions):
-    kinds = {
-        media_kind_from_name(question.media)
-        for question in questions
-        if question.type_q == "media" and question.media
-    }
-
-    return bool(kinds) and kinds == {"audio"}
-
-
-def _group_training_entries(db, questions):
-    groups = []
-    seen = set()
-    questions_by_group_id = {}
-
-    for question in questions:
-        group = question.group
-
-        if not group or group.id in seen or group.type_group not in MODE_GROUP_TYPES:
-            if group and group.type_group in MODE_GROUP_TYPES:
-                questions_by_group_id.setdefault(group.id, []).append(question)
-            continue
-
-        seen.add(group.id)
-        groups.append(group)
-        questions_by_group_id.setdefault(group.id, []).append(question)
-
-    fingerprints = training_fingerprints_for_groups(db, groups)
-    result = []
-
-    for group in sorted(groups, key=lambda item: item.id):
-        fingerprint = fingerprints.get(group.id)
-        group_questions = questions_by_group_id.get(group.id, [])
-        result.append({
-            "id": group.id,
-            "guid": group.guid,
-            "name": group.name,
-            "type_group": group.type_group,
-            "question_count": len(group_questions),
-            "audio_only": (
-                group.type_group == "media" and
-                _media_group_audio_only(group_questions)
-            ),
-            "training_record": serialize_training_record(
-                group.data,
-                fingerprint
-            ),
-            "training_records": serialize_training_records(
-                group.data,
-                fingerprint,
-                group.type_group,
-                len(group_questions)
-            ),
-            "previous_training_record": serialize_previous_training_record(
-                group.data,
-                fingerprint
-            ),
-            "previous_training_records": serialize_previous_training_records(
-                group.data,
-                fingerprint,
-                group.type_group,
-                len(group_questions)
-            )
-        })
-
-    return result
-
-
-def _scope_training_records(db, scope_type, source, questions):
-    scope_record = None
-    scope_records = {}
-    previous_scope_record = None
-    previous_scope_records = {}
-
-    if scope_type == "group" and source.type_group in MODE_GROUP_TYPES:
-        fingerprint = group_training_fingerprint(db, source)
-        scope_record = serialize_training_record(source.data, fingerprint)
-        scope_records = serialize_training_records(
-            source.data,
-            fingerprint,
-            source.type_group,
-            len(questions)
-        )
-        previous_scope_record = serialize_previous_training_record(
-            source.data,
-            fingerprint
-        )
-        previous_scope_records = serialize_previous_training_records(
-            source.data,
-            fingerprint,
-            source.type_group,
-            len(questions)
-        )
-    elif scope_type == "collection":
-        fingerprint = collection_training_fingerprint(db, source)
-        scope_record = serialize_training_record(source.data, fingerprint)
-        previous_scope_record = serialize_previous_training_record(
-            source.data,
-            fingerprint
-        )
-
-    return {
-        "training_record": scope_record,
-        "training_records": scope_records,
-        "previous_training_record": previous_scope_record,
-        "previous_training_records": previous_scope_records,
-        "groups": _group_training_entries(db, questions)
-    }
+    return counts, buckets
 
 
 def build_study_scope_summary(
@@ -1144,6 +541,13 @@ def build_study_scope_summary(
     pack_guid=None,
     today=None
 ):
+    """Progress rollup for one study scope.
+
+    Its only consumer is the installed-pack progress panel
+    (frontend/src/features/packs/components/BrowsePacks.jsx), so the payload is
+    just what that panel and studyRecommendation.js read: totals, mastery
+    buckets, and two recent-difficulty counts.
+    """
     today = today or date.today()
     resolved = resolve_study_scope(
         db,
@@ -1154,36 +558,18 @@ def build_study_scope_summary(
         pack_guid=pack_guid
     )
     scope = resolved["scope"]
-    source = resolved["source"]
     questions = list(resolved["questions"])
-    counts, buckets, weak_items, recent_miss_items = _counts_for_questions(
-        questions,
-        today
-    )
-    load_by_day = _load_by_day(questions, today)
-    confusions = _confusions_for_questions(db, questions, today)
-    practice = _practice_for_questions(
-        questions,
-        recent_miss_items,
-        confusions,
-        today
-    )
+    counts, buckets = _counts_for_questions(questions, today)
+    confusions = _confusion_counts_for_questions(questions, today)
 
     return {
         "generated_on": today.isoformat(),
         "scope": scope,
         "thresholds": BUCKET_THRESHOLDS,
-        "counts": {
-            **counts,
-            "upcoming_load": sum(item["total"] for item in load_by_day)
-        },
+        "counts": counts,
         "buckets": buckets,
         "recent_misses": {
             "window_days": RECENT_MISS_WINDOW_DAYS,
-            "items": sorted(
-                recent_miss_items,
-                key=lambda item: _weak_sort_key(item)
-            )[:WEAK_ITEM_LIMIT],
             "item_count": counts["recent_miss_items"],
             "event_count": counts["recent_miss_events"]
         },
@@ -1191,29 +577,5 @@ def build_study_scope_summary(
             "item_count": counts["lapsed_items"],
             "total": counts["lapse_total"]
         },
-        "confusions": confusions,
-        "practice": practice,
-        "upcoming_load": {
-            "window_days": LOAD_WINDOW_DAYS,
-            "total": sum(item["total"] for item in load_by_day),
-            "by_day": load_by_day
-        },
-        "weak_items": sorted(weak_items, key=_weak_sort_key)[:WEAK_ITEM_LIMIT],
-        "learn": _learn_for_scope(
-            scope["type"],
-            source,
-            questions,
-            today
-        ),
-        "available_modes": _available_modes(
-            scope["type"],
-            source,
-            questions
-        ),
-        "training": _scope_training_records(
-            db,
-            scope["type"],
-            source,
-            questions
-        )
+        "confusions": confusions
     }

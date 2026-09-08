@@ -974,3 +974,17 @@ class TagConflictResolution(BaseModel):
     pack_guid: str
     conflict_id: str
     choice: Literal["local", "pack"]
+
+
+class LearnConfusionEntry(BaseModel):
+    """One choice made during a Learn session drill."""
+
+    expected_id: int
+    picked_id: int
+    correct: bool = False
+
+
+class LearnConfusionBatch(BaseModel):
+    """A whole drill's choices, flushed once when the drill ends."""
+
+    entries: list[LearnConfusionEntry] = []

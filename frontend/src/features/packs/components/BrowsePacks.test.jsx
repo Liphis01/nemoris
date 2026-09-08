@@ -671,9 +671,7 @@ describe("BrowsePacks", () => {
     expect(onOpenGroup).toHaveBeenCalledWith(10);
   });
 
-  it("opens Study from an installed pack detail", () => {
-    const onOpenStudy = vi.fn();
-
+  it("no longer offers a pack-level Learn entry", () => {
     defaultHook({
       items: [
         item(textEntry, "up_to_date", 1, {}, {
@@ -684,21 +682,12 @@ describe("BrowsePacks", () => {
       hasMore: false
     });
 
-    render(
-      <BrowsePacks
-        setMode={vi.fn()}
-        onOpenGroup={vi.fn()}
-        onOpenStudy={onOpenStudy}
-      />
-    );
+    render(<BrowsePacks setMode={vi.fn()} onOpenGroup={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Étudier ce pack" }));
-
-    expect(onOpenStudy).toHaveBeenCalledWith({
-      type: "pack",
-      packGuid: "biology-text",
-      name: "Biologie cellulaire"
-    });
+    // The Learn screen teaches one group; a pack is not a group. The pack's
+    // progress panel stays -- it has its own test below.
+    expect(screen.queryByRole("button", { name: /Étudier ce pack/ }))
+      .not.toBeInTheDocument();
   });
 
   it("deletes an installed pack's content after confirmation", () => {

@@ -224,7 +224,7 @@ function StudyHeaderAction({ group, onOpenStudy, requestManageTransition }) {
       onClick={openStudy}
       style={studyButtonStyle}
     >
-      Étudier ce groupe
+      Apprendre ce groupe
     </button>
   );
 }

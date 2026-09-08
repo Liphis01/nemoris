@@ -89,6 +89,54 @@ describe("distractor selection", () => {
     expect(confusabilityScore(target, candidate)).toBeGreaterThan(0);
   });
 
+  it("counts Learn-screen mix-ups alongside review mis-picks", () => {
+    const candidate = item(2, "B");
+    const target = item(1, "A", {
+      learn_confusions: [
+        { candidate_id: 2, exposures: 4, mispicks: 3 },
+        { candidate_id: 3, exposures: 9, mispicks: 9 }
+      ]
+    });
+
+    expect(feedbackConfusability(target, candidate)).toMatchObject({
+      exposures: 4,
+      mispicks: 3
+    });
+    expect(confusabilityScore(target, candidate)).toBeGreaterThan(0);
+  });
+
+  it("adds Learn mix-ups to the review history for the same pair", () => {
+    const candidate = item(2, "B");
+    const history = {
+      progress: {
+        difficulty: 5,
+        history: [
+          {
+            answer_event: {
+              expected_card_id: 1,
+              candidate_ids: [1, 2],
+              raw_response: 2
+            }
+          }
+        ]
+      }
+    };
+    const reviewOnly = item(1, "A", history);
+    const both = item(1, "A", {
+      ...history,
+      learn_confusions: [{ candidate_id: 2, exposures: 3, mispicks: 2 }]
+    });
+
+    expect(feedbackConfusability(reviewOnly, candidate)).toMatchObject({
+      exposures: 1,
+      mispicks: 1
+    });
+    expect(feedbackConfusability(both, candidate)).toMatchObject({
+      exposures: 4,
+      mispicks: 3
+    });
+  });
+
   it("keeps sampled options bounded and excludes invalid distractors", () => {
     const target = item(1, "France");
     const options = buildChoiceOptions(target, [

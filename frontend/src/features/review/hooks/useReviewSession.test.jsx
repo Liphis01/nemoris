@@ -78,16 +78,16 @@ describe("useReviewSession", () => {
     expect(result.current.reviewLoading).toBe(false);
   });
 
-  it("loads review questions for an active scoped target", async () => {
-    const scope = { type: "group", id: 5, name: "Europe" };
-
-    const { result } = renderHook(() => useReviewSession(true, scope, 1));
+  it("loads the whole review session when it becomes active", async () => {
+    const { result } = renderHook(() => useReviewSession(true));
 
     await waitFor(() => {
       expect(result.current.questions).toHaveLength(1);
     });
 
-    expect(getReview).toHaveBeenCalledWith(scope);
+    // Reviews are global again: the per-scope Study dashboard that started
+    // scoped sessions is now the Learn screen and starts none.
+    expect(getReview).toHaveBeenCalledWith();
   });
 
   it("requeues failed text questions and sends one quality per answer", async () => {

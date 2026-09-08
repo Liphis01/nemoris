@@ -188,7 +188,7 @@ describe("Menu", () => {
       screen.getByRole("button", { name: "Voir Capitales du monde" })
     ).not.toHaveAttribute("title");
 
-    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan pour Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apprendre Europe" }));
 
     expect(onOpenStudy).toHaveBeenCalledWith({
       type: "group",

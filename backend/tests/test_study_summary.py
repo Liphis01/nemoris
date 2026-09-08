@@ -264,213 +264,22 @@ class StudySummaryTests(unittest.TestCase):
             "stable": 1,
             "mastered": 1
         })
-        self.assertEqual(summary["upcoming_load"]["total"], 3)
-        self.assertEqual(
-            summary["available_modes"][0]["review_modes"],
-            ["type_all", "click_prompt", "type_prompt", "multiple_choice"]
-        )
-        self.assertEqual(
-            summary["recent_misses"]["items"][0]["id"],
-            fragile.id
-        )
+        self.assertEqual(summary["recent_misses"]["item_count"], 1)
         self.assertEqual(summary["confusions"]["event_count"], 1)
-        self.assertEqual(
-            summary["confusions"]["items"][0]["expected"]["id"],
-            fragile.id
-        )
-        self.assertEqual(
-            summary["confusions"]["items"][0]["selected"]["id"],
-            stable.id
-        )
-        self.assertEqual(
-            summary["confusions"]["items"][0]["candidate_ids"],
-            [fragile.id, stable.id]
-        )
-        self.assertEqual(
-            summary["confusions"]["items"][0]["presentation_kind"],
-            "map_group"
-        )
-        self.assertEqual(
-            summary["confusions"]["items"][0]["answer_policy"],
-            {"preset": "relaxed"}
-        )
-        self.assertEqual(summary["weak_items"][0]["id"], fragile.id)
-        self.assertEqual(
-            summary["practice"]["selectors"]["recent_misses"]["question_ids"],
-            [fragile.id]
-        )
-        self.assertEqual(
-            summary["practice"]["selectors"]["commonly_confused_pairs"]["question_ids"],
-            [fragile.id, stable.id]
-        )
-        self.assertEqual(
-            summary["practice"]["selectors"]["new_only"]["question_ids"],
-            [unseen.id]
-        )
-        self.assertEqual(
-            summary["practice"]["selectors"]["almost_mastered"]["question_ids"],
-            [stable.id]
-        )
-        self.assertEqual(
-            summary["practice"]["selectors"]["before_tomorrow"]["question_ids"],
-            [due_learning.id]
-        )
-        self.assertEqual(
-            [
-                entry["label"]
-                for entry in summary["practice"]["entry_points"]
-            ],
-            [
-                "Travailler les erreurs récentes",
-                "Travailler les confusions",
-                "Nouveaux uniquement",
-                "Presque maîtrisés",
-                "À revoir avant demain"
-            ]
-        )
-        self.assertEqual(summary["learn"]["supported"], True)
-        self.assertEqual(summary["learn"]["family"], "map")
-        self.assertEqual(summary["learn"]["group"]["media"], "france.svg")
-        self.assertEqual(summary["learn"]["item_count"], 6)
-        self.assertIn(
-            suspended.id,
-            {item["id"] for item in summary["learn"]["items"]}
-        )
-        self.assertEqual(summary["learn"]["items"][0]["id"], unseen.id)
-        self.assertEqual(summary["learn"]["items"][0]["code"], "01")
-        self.assertEqual(summary["learn"]["items"][0]["answer"], "Ain")
-        self.assertEqual(
-            summary["learn"]["items"][0]["signals"]["bucket"],
-            "unseen"
-        )
+        self.assertEqual(summary["confusions"]["pair_count"], 1)
+        self.assertEqual(summary["lapses"]["total"], 1)
 
-    def test_media_group_summary_surfaces_read_only_learn_items(self):
-        today = date(2026, 8, 14)
-        group = QuestionGroup(
-            id=15,
-            type_group="media",
-            name="Drapeaux",
-            media="cover.png",
-            data={}
-        )
-        self.db.add(group)
-        item = self.add_question(
-            1,
-            type_q="media",
-            question="Drapeaux - France",
-            answer="France",
-            media="flag-fr.png",
-            data={
-                "media_pool": ["flag-fr.png", "flag-fr-alt.png"],
-                "aliases": ["République française"]
-            },
-            group=group
-        )
-        suspended_item = self.add_question(
-            2,
-            type_q="media",
-            question="Drapeaux - Allemagne",
-            answer="Allemagne",
-            media="flag-de.png",
-            group=group,
-            suspended=True
-        )
-        self.db.commit()
-        progress_count = self.db.query(Progress).count()
-
-        summary = build_study_scope_summary(
-            self.db,
-            "group",
-            group_id=group.id,
-            today=today
-        )
-
-        self.assertEqual(self.db.query(Progress).count(), progress_count)
-        self.assertEqual(summary["learn"]["supported"], True)
-        self.assertEqual(summary["learn"]["family"], "media")
-        self.assertEqual(summary["learn"]["item_count"], 2)
-        self.assertEqual(
-            {learn_item["id"] for learn_item in summary["learn"]["items"]},
-            {item.id, suspended_item.id}
-        )
-        self.assertEqual(summary["learn"]["items"][0]["id"], item.id)
-        self.assertEqual(
-            summary["learn"]["items"][0]["media_pool"],
-            ["flag-fr.png", "flag-fr-alt.png"]
-        )
-        self.assertEqual(summary["learn"]["items"][0]["media_kind"], "image")
-        self.assertEqual(
-            summary["learn"]["items"][0]["aliases"],
-            ["République française"]
-        )
-        suspended_learn_item = next(
-            learn_item for learn_item in summary["learn"]["items"]
-            if learn_item["id"] == suspended_item.id
-        )
-        self.assertEqual(suspended_learn_item["signals"]["bucket"], "suspended")
-        self.assertEqual(suspended_learn_item["signals"]["due"], False)
-
-    def test_group_summary_surfaces_current_and_stale_training_records(self):
-        today = date(2026, 8, 14)
-        group = QuestionGroup(
-            id=20,
-            type_group="sequence",
-            name="Rois de France",
-            data={}
-        )
-        self.db.add(group)
-        first = self.add_question(1, type_q="sequence", group=group)
-        second = self.add_question(2, type_q="sequence", group=group)
-        self.db.commit()
-        current_fingerprint = group_training_fingerprint(self.db, group)
-        record = {
-            "best_found_percent": 100,
-            "best_found_count": 2,
-            "best_found_elapsed_ms": 9000,
-            "best_found_at": "2026-08-10T12:00:00+00:00",
-            "best_time_ms": 9000,
-            "best_time_at": "2026-08-10T12:00:00+00:00",
-            "question_count": 2,
-            "content_fingerprint": current_fingerprint
-        }
-        group.data = {
-            "training_record": record,
-            "training_records": {"type_position": record}
-        }
-        self.db.commit()
-
-        current = build_study_scope_summary(
-            self.db,
-            "group",
-            group_id=group.id,
-            today=today
-        )
-
-        self.assertEqual(
-            current["training"]["training_record"]["best_time_ms"],
-            9000
-        )
-        self.assertEqual(current["training"]["previous_training_record"], None)
-
-        second.data = {"position": 1}
-        first.data = {"position": 2}
-        self.db.commit()
-        stale = build_study_scope_summary(
-            self.db,
-            "group",
-            group_id=group.id,
-            today=today
-        )
-
-        self.assertIsNone(stale["training"]["training_record"])
-        self.assertEqual(
-            stale["training"]["previous_training_record"]["best_time_ms"],
-            9000
-        )
-        self.assertIn(
-            "type_position",
-            stale["training"]["previous_training_records"]
-        )
+        # The learn screen reads /training, not this payload: the summary keeps
+        # only what the installed-pack progress panel renders.
+        for dropped in (
+            "weak_items",
+            "practice",
+            "upcoming_load",
+            "learn",
+            "available_modes",
+            "training"
+        ):
+            self.assertNotIn(dropped, summary)
 
     def test_tag_collection_and_pack_scopes_aggregate_existing_questions(self):
         today = date(2026, 8, 14)

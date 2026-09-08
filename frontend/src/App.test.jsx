@@ -53,7 +53,7 @@ vi.mock("./features/menu/Menu", () => ({
           type_group: "map"
         })}
       >
-        Voir le bilan Italie
+        Apprendre Italie
       </button>
       <button
         type="button"
@@ -111,28 +111,16 @@ vi.mock("./features/training/components/TrainingSession", () => ({
           type_group: "map"
         })}
       >
-        Voir le bilan du groupe Europe
+        Apprendre le groupe Europe
       </button>
     </main>
   )
 }));
 
 vi.mock("./features/study/components/StudyScreen", () => ({
-  default: ({ onStartReview, onStartTraining, scope }) => (
+  default: ({ scope }) => (
     <main>
-      <h1>Bilan {scope?.name}</h1>
-      <button
-        type="button"
-        onClick={() => onStartReview(scope)}
-      >
-        Réviser ce groupe
-      </button>
-      <button
-        type="button"
-        onClick={() => onStartTraining(scope, "multiple_choice")}
-      >
-        Start scoped training
-      </button>
+      <h1>Apprendre {scope?.name}</h1>
     </main>
   )
 }));
@@ -225,20 +213,13 @@ describe("App mouse navigation", () => {
     expect(screen.getByRole("heading", { name: "Gestionnaire" })).toBeInTheDocument();
   });
 
-  it("opens Study from a feature and can launch scoped training", () => {
+  it("opens the Learn screen for a group from another feature", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Entraînement libre" }));
-    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan du groupe Europe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apprendre le groupe Europe" }));
 
-    expect(screen.getByRole("heading", { name: "Bilan Europe" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Start scoped training" }));
-
-    expect(screen.getByRole("heading", { name: "Entraînement libre" })).toBeInTheDocument();
-    expect(screen.getByTestId("training-target")).toHaveTextContent(
-      "group:5:multiple_choice"
-    );
+    expect(screen.getByRole("heading", { name: "Apprendre Europe" })).toBeInTheDocument();
   });
 
   it("opens scoped training directly from the menu recommendation", () => {
@@ -252,26 +233,19 @@ describe("App mouse navigation", () => {
     );
   });
 
-  it("opens scoped review from Study while keeping menu review global", () => {
+  it("keeps review global now that scoped review is gone", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Démarrer review" }));
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
-    expect(useReviewSession).toHaveBeenLastCalledWith(true, null, 0);
+    expect(useReviewSession).toHaveBeenLastCalledWith(true);
 
     fireEvent.mouseDown(window, { button: 3 });
-    fireEvent.click(screen.getByRole("button", { name: "Voir le bilan Italie" }));
-    fireEvent.click(screen.getByRole("button", { name: "Réviser ce groupe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apprendre Italie" }));
 
-    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
-    expect(useReviewSession).toHaveBeenLastCalledWith(
-      true,
-      expect.objectContaining({
-        type: "group",
-        id: 6,
-        name: "Italie"
-      }),
-      expect.any(Number)
-    );
+    // The Learn screen offers no way back into a review: reviews are started
+    // from the menu, and they cover everything due.
+    expect(screen.getByRole("heading", { name: "Apprendre Italie" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Réviser/ })).not.toBeInTheDocument();
   });
 });

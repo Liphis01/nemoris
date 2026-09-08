@@ -941,7 +941,6 @@ function PackDetailPanel({
   onCreateVariant,
   onInstall,
   onOpenGroup,
-  onOpenStudy,
   onSelectFamilyEntry,
   onUnsubscribe,
   onUpdate,
@@ -970,7 +969,7 @@ function PackDetailPanel({
     status === "up_to_date" || status === "update_available"
   );
   const canOpenGroup = Boolean(localGroupId && onOpenGroup);
-  const canOpenStudy = Boolean(canUnsubscribe && entry.pack_guid && onOpenStudy);
+  const showProgress = Boolean(canUnsubscribe && entry.pack_guid);
   const canCreateVariant = Boolean(
     canUnsubscribe &&
     !isMine &&
@@ -1074,20 +1073,6 @@ function PackDetailPanel({
           </button>
         )}
 
-        {canOpenStudy && (
-          <button
-            type="button"
-            className="pack-secondary-button pack-study-button"
-            disabled={action.busy}
-            onClick={() => onOpenStudy({
-              type: "pack",
-              packGuid: entry.pack_guid,
-              name: entry.name
-            })}
-          >
-            Étudier ce pack
-          </button>
-        )}
 
         {canCreateVariant && (
           <button
@@ -1157,7 +1142,7 @@ function PackDetailPanel({
         key={`suggest-${entry.pack_guid}`}
       />
 
-      {canOpenStudy && (
+      {showProgress && (
         <PackProgressPanel entry={entry} key={`progress-${entry.pack_guid}`} />
       )}
 
@@ -1180,7 +1165,6 @@ function ImporterScreen({
   initialSearch,
   onInitialPackHandled,
   onOpenGroup,
-  onOpenStudy,
   onVariantSourceCreated,
   setMode
 }) {
@@ -1375,7 +1359,6 @@ function ImporterScreen({
         onCreateVariant={handleCreateVariant}
         onInstall={install}
         onOpenGroup={onOpenGroup}
-        onOpenStudy={onOpenStudy}
         onSelectFamilyEntry={(entry) => {
           setFamilySelectedEntry(entry);
           setActiveGuid(entry.pack_guid);
@@ -1393,7 +1376,6 @@ function ImporterScreen({
 export default function BrowsePacks({
   setMode,
   onOpenGroup,
-  onOpenStudy,
   initialPackGuid = null,
   initialSearch = "",
   onInitialPackHandled = null
@@ -1462,8 +1444,7 @@ export default function BrowsePacks({
             initialSearch={initialSearch}
             onInitialPackHandled={onInitialPackHandled}
             onOpenGroup={onOpenGroup}
-            onOpenStudy={onOpenStudy}
-            onVariantSourceCreated={(source) => {
+                onVariantSourceCreated={(source) => {
               setInitialVariantSource(source);
               setActiveTab("manage");
             }}

@@ -83,20 +83,6 @@ function localReviewDateString(now = new Date()) {
 }
 
 
-function stableReviewScopeKey(scope) {
-  if (!scope) return "";
-
-  return [
-    scope.scopeType || scope.type || "",
-    scope.groupId || scope.group_id || "",
-    scope.collectionId || scope.collection_id || "",
-    scope.packGuid || scope.pack_guid || "",
-    scope.tag || scope.key || scope.id || "",
-    scope.id || ""
-  ].join(":");
-}
-
-
 function atomicQuestionCount(question) {
   return Array.isArray(question?.items) ? question.items.length : 1;
 }
@@ -110,7 +96,7 @@ function pendingRelearningCount(questions, currentIndex) {
 }
 
 
-export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 0) {
+export function useReviewSession(active) {
   // Owns one review run: fetching due items, moving through the queue, and
   // re-queueing failures for another pass.
   const [questions, setQuestions] = useState([]);
@@ -129,7 +115,6 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
   const textAnswerPendingRef = useRef(false);
   const textAnswerRequestsRef = useRef({});
   const reviewDateRef = useRef(null);
-  const reviewScopeKey = stableReviewScopeKey(reviewScope);
 
   const current = questions[currentIndex];
   const lastQuestionIndex = currentIndex - 1;
@@ -651,7 +636,7 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
       setReviewDate(nextReviewDate);
 
       try {
-        const data = await getReview(reviewScope);
+        const data = await getReview();
 
         if (cancelledRef.current) return;
 
@@ -680,14 +665,7 @@ export function useReviewSession(active, reviewScope = null, reviewScopeNonce = 
     return () => {
       cancelledRef.current = true;
     };
-  }, [
-    active,
-    clearTextAnswerTimeout,
-    completeSession,
-    reviewScope,
-    reviewScopeKey,
-    reviewScopeNonce
-  ]);
+  }, [active, clearTextAnswerTimeout, completeSession]);
 
   useEffect(() => {
     return () => {

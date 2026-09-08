@@ -1,7 +1,11 @@
-// Shared between the Study screen (frontend/src/features/study/components/
-// StudyScreen.jsx) and the pack detail panel (frontend/src/features/packs/
-// components/BrowsePacks.jsx), so an installed pack's "what to do next" line
-// always matches what Study itself would recommend for that same scope.
+// Used by the installed-pack progress panel
+// (frontend/src/features/packs/components/BrowsePacks.jsx) to put a "what to do
+// next" line under a pack's mastery bars.
+//
+// It used to carry an action for the Study screen to run (review this scope,
+// open that practice selector, jump to that tab). The Study screen is now the
+// Learn screen and does none of those, so this returns text only -- whoever
+// renders it decides what, if anything, to offer next to it.
 
 export function numberLabel(value) {
   return Number(value || 0).toLocaleString("fr-FR");
@@ -22,38 +26,37 @@ export function recommendationFor(summary) {
   if ((counts.due_now || 0) > 0) {
     return {
       title: "Faire la review due",
-      detail: questionCountLabel(counts.due_now),
-      action: "review"
+      detail: questionCountLabel(counts.due_now)
     };
   }
 
   if ((summary?.recent_misses?.item_count || 0) > 0) {
+    const count = summary.recent_misses.item_count;
+
     return {
       title: "Reprendre les erreurs récentes",
-      detail: `${numberLabel(summary.recent_misses.item_count)} item${summary.recent_misses.item_count > 1 ? "s" : ""} à stabiliser`,
-      practiceId: "recent_misses"
+      detail: `${numberLabel(count)} item${count > 1 ? "s" : ""} à stabiliser`
     };
   }
 
   if ((summary?.confusions?.event_count || 0) > 0) {
+    const count = summary.confusions.event_count;
+
     return {
       title: "Clarifier les confusions",
-      detail: `${numberLabel(summary.confusions.event_count)} confusion${summary.confusions.event_count > 1 ? "s" : ""} récente${summary.confusions.event_count > 1 ? "s" : ""}`,
-      practiceId: "commonly_confused_pairs"
+      detail: `${numberLabel(count)} confusion${count > 1 ? "s" : ""} récente${count > 1 ? "s" : ""}`
     };
   }
 
   if ((buckets.unseen || 0) > 0) {
     return {
       title: "Apprendre les nouveaux items",
-      detail: questionCountLabel(buckets.unseen),
-      targetTab: "learn"
+      detail: questionCountLabel(buckets.unseen)
     };
   }
 
   return {
     title: "Entretenir ce scope",
-    detail: questionCountLabel(counts.active_questions || 0),
-    targetTab: "train"
+    detail: questionCountLabel(counts.active_questions || 0)
   };
 }

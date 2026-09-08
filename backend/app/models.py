@@ -409,3 +409,53 @@ class Collection(Base):
         secondary=question_collection,
         back_populates="collections"
     )
+
+
+# =========================================================
+# LEARN CONFUSIONS
+# =========================================================
+
+class LearnConfusion(Base):
+    """Pairs a learner mixed up while binge-learning a group.
+
+    The Learn screen is a scratchpad: it never grades a card, so it must not
+    touch Progress -- writing history there would create rows for never-seen
+    questions and make progress_is_new()/the intake quota believe they had
+    started. These counters live apart instead, and only feed the multiple
+    choice distractor picker (frontend/src/features/review/distractorSelection.js),
+    which merges them with the mis-picks it already reads from review history.
+
+    Device-local telemetry: deliberately outside sync.
+    """
+
+    __tablename__ = "learn_confusions"
+    __table_args__ = (
+        UniqueConstraint(
+            "expected_question_id",
+            "picked_question_id",
+            name="uq_learn_confusion_pair"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    # The card that was asked.
+    expected_question_id = Column(
+        Integer,
+        ForeignKey("questions.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False
+    )
+
+    # The card picked instead.
+    picked_question_id = Column(
+        Integer,
+        ForeignKey("questions.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    # Times both cards were on screen together, and times the wrong one won.
+    exposures = Column(Integer, nullable=False, default=0, server_default="0")
+    mispicks = Column(Integer, nullable=False, default=0, server_default="0")
+
+    last_seen_on = Column(Date, nullable=True)
