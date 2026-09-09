@@ -137,6 +137,11 @@ describe("answerHint", () => {
     expect(answerHint("Costa Rica", 1)).toBe("C···· R···");
   });
 
+  it("treats hyphens as word breaks and keeps them visible", () => {
+    expect(answerHint("Haute-Loire", 1)).toBe("H····-L····");
+    expect(answerHint("Villeneuve-sur-Lot", 1)).toBe("V·········-s··-L··");
+  });
+
   it("widens with the level", () => {
     expect(answerHint("Verseau", 3)).toBe("Ver····");
   });

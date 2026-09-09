@@ -237,7 +237,8 @@ export function canOfferLearnChoice(target, candidates) {
 
 
 // Reveal enough to unstick recall without giving the answer: the first letter
-// of each word, then a second pass adds one more letter per word.
+// of each word, then a second pass adds one more letter per word. Hyphens split
+// words the way hintProfile() does, so "Haute-Loire" reveals "H····-L····".
 export function answerHint(answer, level = 1) {
   const text = String(answer || "");
 
@@ -246,9 +247,9 @@ export function answerHint(answer, level = 1) {
   const keep = Math.max(1, level);
 
   return text
-    .split(/(\s+)/)
+    .split(/([\s-]+)/)
     .map((chunk) => {
-      if (/^\s+$/.test(chunk)) return chunk;
+      if (/^[\s-]+$/.test(chunk)) return chunk;
 
       const shown = chunk.slice(0, keep);
       const hidden = Math.max(0, chunk.length - keep);

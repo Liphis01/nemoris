@@ -39,7 +39,7 @@
 - pour type prompt valider automatiquement au lieu de entrer
 - une question maitrisée est uniquement en type all ? -> un doute entre deux réponses = pas puni
 - le zoom d'image est un peu naze
-- problème: les qcm ne demandent parfois pas de réflexion (raisonner pas élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
+- problème: les qcm ne demandent parfois pas de réflexion (raisonner par élimination) et reportent à plus tard même lorsqu'on met dur -> réduire le threshold du choix du mode en fonction du progress de la question ?
 - demander si on veut ajouter le pack à la review au moment de l'importer ?
 - shuffle toutes les questions dans la review
 - arrêter de cut les groups dans la review puisqu'on a le inline
@@ -47,7 +47,6 @@
 - enlever les questions isolées et remplacer par des groupes de 1 question
 - l'email supabase
 - bouton pour shuffle un groupe dans le queue manager
-- inline pour type_prompt d'images
 - mettre un input optionnel pour les questions de type texte
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
