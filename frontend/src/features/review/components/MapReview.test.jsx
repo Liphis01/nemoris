@@ -624,6 +624,48 @@ describe("MapReview recap map focus", () => {
       .toHaveAttribute("data-focus-version", "0");
   });
 
+  it("does not refocus the active map when typed quality appears", async () => {
+    renderMapReview(true, { mode: "type_prompt" });
+
+    const zoneByCode = Object.fromEntries(
+      reviewZones.map(zone => [zone.code, zone])
+    );
+    // type_prompt shuffles which zone is prompted first, so read it instead
+    // of assuming an order.
+    const firstCode = screen.getByTestId("active-map").getAttribute("data-focus-code");
+
+    expect(zoneByCode[firstCode]).toBeDefined();
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-version", "0");
+
+    const input = screen.getByPlaceholderText("Nom de la zone...");
+
+    fireEvent.change(input, { target: { value: zoneByCode[firstCode].label } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-map-typed-rating]")).toBeInTheDocument();
+    });
+
+    // The answered zone is still the one framed while the quality panel is up.
+    // Bumping focusVersion here would make SvgMap re-fit the view it already
+    // holds, and the map blurs for as long as that no-op transition runs.
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-code", firstCode);
+    expect(screen.getByTestId("active-map"))
+      .toHaveAttribute("data-focus-version", "0");
+
+    rateTypedMapQuality(2);
+
+    // Grading releases the prompt, so auto-zoom follows it to the next zone.
+    await waitFor(() => {
+      expect(screen.getByTestId("active-map"))
+        .toHaveAttribute("data-focus-version", "1");
+    });
+    expect(screen.getByTestId("active-map"))
+      .not.toHaveAttribute("data-focus-code", firstCode);
+  });
+
   it("keeps unresolved map context visible while click quality appears", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.25);
 

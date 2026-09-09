@@ -617,16 +617,39 @@ export default function SvgMap({
             : fitScale;
         const newScale = Math.min(Math.max(softenedScale, 1), maxZoom);
 
+        const newOffset = {
+            x: (wrapperRect.width / 2) - (box.x + box.width / 2) * newScale,
+            y: (wrapperRect.height / 2) - (box.y + box.height / 2) * newScale
+        };
+
+        // Re-fitting the zone that is already framed lands on the same view, but
+        // the back-projection above runs the current transform through
+        // getBoundingClientRect, so the result differs by float noise rather than
+        // being bit-identical. React still writes the new transform, the browser
+        // still starts a 0.15s transition, and Chromium rasterises the scaled SVG
+        // once for the duration of that animation instead of re-rastering per
+        // frame — the map visibly blurs for the whole transition without ever
+        // moving. Compare against the transform the map is already heading to
+        // (not the live matrix, which may be mid-transition toward it) and skip
+        // any fit whose effect on screen stays under half a pixel.
+        const targetScale = transformRef.current.scale || 1;
+        const targetOffset = transformRef.current.offset || { x: 0, y: 0 };
+        const scaleDrift = Math.abs(newScale - targetScale)
+            * Math.max(wrapperRect.width, wrapperRect.height);
+        const offsetDrift = Math.max(
+            Math.abs(newOffset.x - targetOffset.x),
+            Math.abs(newOffset.y - targetOffset.y)
+        );
+
+        if (scaleDrift + offsetDrift < 0.5) return;
+
         // A re-fit forced by the wrapper changing size must land instantly: the
         // zone was already framed, so animating it would read as a spurious
         // zoom (and the transform transition visibly blurs while it runs).
         if (instant) setInstantTransform(true);
 
         setScale(newScale);
-        setOffset({
-            x: (wrapperRect.width / 2) - (box.x + box.width / 2) * newScale,
-            y: (wrapperRect.height / 2) - (box.y + box.height / 2) * newScale
-        });
+        setOffset(newOffset);
     }, [focusCode]);
 
     useEffect(() => {

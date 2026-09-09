@@ -73,7 +73,6 @@
 
 - il faudrait charger la question suivante pendant qu'on répond à celle d'avant et pas avant
 - si j'ai un groupe split en deux dans la review, je crois que le relearning les garde séparés en deux groupes au lieu de les regrouper
-- bug du flou avec la qualité pas corrigé
 
 ## to do when i have more time
 

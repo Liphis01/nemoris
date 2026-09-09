@@ -879,12 +879,14 @@ export default function MapReview({
   useEffect(() => {
     if (![MAP_MODE_TYPE_PROMPT, MAP_MODE_MULTIPLE_CHOICE].includes(mode)) return;
 
-    // While a choice reveal is up, the answered zone is still the one on screen
-    // but promptCode has already advanced to the next zone. Re-focusing now would
-    // only bump focusVersion and make SvgMap re-fit the zone it is already framed
-    // on. Leave previousPromptCodeRef untouched so the zoom still follows the
-    // prompt once the reveal is dismissed.
-    if (choiceFeedback) return;
+    // While an answer reveal is up (the choice grid, or the typed quality panel),
+    // the answered zone is still the one on screen but promptCode has already
+    // advanced to the next zone. Re-focusing now would only bump focusVersion and
+    // make SvgMap re-fit the zone it is already framed on — a no-op fit that still
+    // animates, and the map blurs for as long as that transition runs. Leave
+    // previousPromptCodeRef untouched so the zoom still follows the prompt once
+    // the reveal is dismissed.
+    if (choiceFeedback || typedRatingFeedback) return;
 
     if (
       autoZoomEnabled &&
@@ -898,7 +900,15 @@ export default function MapReview({
     }
 
     previousPromptCodeRef.current = promptCode;
-  }, [autoZoomEnabled, choiceFeedback, focusNextRemainingZone, mode, promptCode, showRecap]);
+  }, [
+    autoZoomEnabled,
+    choiceFeedback,
+    focusNextRemainingZone,
+    mode,
+    promptCode,
+    showRecap,
+    typedRatingFeedback
+  ]);
 
   useLayoutEffect(() => {
     if (!showRecap || !focusedCode) return;
