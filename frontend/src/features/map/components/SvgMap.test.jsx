@@ -11,6 +11,7 @@ const svgMarkup = `
     <path data-code="found" d="M30 0h10v10H30z" />
     <path data-code="unsaved" d="M40 0h10v10H40z" />
     <path data-code="selected" d="M50 0h10v10H50z" />
+    <path data-code="practice" d="M60 0h10v10H60z" />
   </svg>
 `;
 
@@ -62,6 +63,7 @@ function renderTestMap(props = {}) {
         missed={["missed"]}
         dueItems={["due"]}
         unsaved={["unsaved"]}
+        practiceCodes={["practice"]}
         selected="selected"
         {...props}
       />
@@ -91,7 +93,8 @@ describe("SvgMap zone hover colors", () => {
       missed: "#e93723",
       found: "#21eb75",
       unsaved: "#facc15",
-      selected: "#f39c12"
+      selected: "#f39c12",
+      practice: "#2563eb"
     };
 
     const expectedHoverColors = {
@@ -100,7 +103,8 @@ describe("SvgMap zone hover colors", () => {
       missed: "#fb7185",
       found: "#34d399",
       unsaved: "#fde047",
-      selected: "#fbbf24"
+      selected: "#fbbf24",
+      practice: "#60a5fa"
     };
 
     await waitFor(() => {

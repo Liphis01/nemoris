@@ -48,7 +48,7 @@
 .learn-overline {
   color: #8fc7ff;
   font-size: 11px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -97,6 +97,7 @@
   color: #eeeeee;
   cursor: pointer;
   font-size: 13px;
+  min-height: 40px;
   padding: 8px 14px;
 }
 
@@ -115,6 +116,11 @@
 
 .learn-ghost:hover:not(:disabled) {
   border-color: #8fc7ff;
+}
+
+.learn-toolbar-secondary {
+  border-style: dashed;
+  color: #c7c7c7;
 }
 
 /* ---------- body ---------- */
@@ -167,6 +173,7 @@
   border-radius: 6px;
   display: flex;
   gap: 8px;
+  min-height: 52px;
 }
 
 /* The highlighter: a picked row keeps its mark while the learner scrolls on. */
@@ -214,14 +221,16 @@
 
 .learn-row-answer.is-masked {
   color: #4a4a4a;
-  letter-spacing: 2px;
+  letter-spacing: 0;
 }
 
 .learn-row-pick {
   align-items: center;
   cursor: pointer;
   display: flex;
-  padding: 0 12px;
+  justify-content: center;
+  min-width: 52px;
+  padding: 0 14px;
 }
 
 .learn-row-pick input {
@@ -235,8 +244,8 @@
   border: 1px solid #3a3a3a;
   border-radius: 4px;
   display: block;
-  height: 18px;
-  width: 18px;
+  height: 20px;
+  width: 20px;
 }
 
 .learn-row-pick input:checked + .learn-row-pick-box {
@@ -254,7 +263,7 @@
 .learn-tiles {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   list-style: none;
   margin: 0;
   padding: 0;
@@ -274,7 +283,7 @@
 }
 
 .learn-tile-face {
-  background: none;
+  background: #151515;
   border: 0;
   color: inherit;
   cursor: pointer;
@@ -282,13 +291,17 @@
   flex-direction: column;
   font: inherit;
   gap: 8px;
+  min-height: 156px;
   padding: 10px;
   width: 100%;
 }
 
 .learn-tile-image,
 .learn-tile-video {
-  height: 90px;
+  background: #0d0f12;
+  border: 1px solid #2e3742;
+  border-radius: 4px;
+  height: 112px;
   object-fit: contain;
   width: 100%;
 }
@@ -298,9 +311,15 @@
 }
 
 .learn-tile-placeholder {
-  color: #4a4a4a;
+  align-items: center;
+  background: #0d0f12;
+  border: 1px solid #2e3742;
+  border-radius: 4px;
+  color: #8a8a8a;
+  display: flex;
   font-size: 28px;
-  padding: 24px 0;
+  height: 112px;
+  justify-content: center;
 }
 
 .learn-tile-name {
@@ -314,10 +333,15 @@
 }
 
 .learn-tile-pick {
+  align-items: center;
   cursor: pointer;
+  display: flex;
+  height: 46px;
+  justify-content: center;
   position: absolute;
-  right: 8px;
-  top: 8px;
+  right: 0;
+  top: 0;
+  width: 46px;
 }
 
 .learn-tile-pick input {
@@ -445,7 +469,7 @@
 .learn-drill-hint {
   color: #f0c36a;
   font-size: 18px;
-  letter-spacing: 3px;
+  letter-spacing: 0;
   margin: 0;
   text-align: center;
 }
@@ -466,6 +490,7 @@
 }
 
 .learn-drill-actions {
+  flex-wrap: wrap;
   display: flex;
   gap: 8px;
   justify-content: center;
@@ -475,6 +500,59 @@
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+.learn-drill-results {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(92px, 1fr));
+  margin: 4px 0 8px;
+  max-width: 560px;
+  width: 100%;
+}
+
+.learn-drill-results div {
+  background: #111111;
+  border: 1px solid #2d2d2d;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.learn-drill-results dt {
+  color: #a8a8a8;
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+
+.learn-drill-results dd {
+  color: #eeeeee;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.learn-drill-reveal {
+  align-items: center;
+  background: #111111;
+  border: 1px solid #3a2f1c;
+  border-radius: 8px;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.learn-drill-reveal span {
+  color: #f0c36a;
+  font-size: 12px;
+}
+
+.learn-drill-reveal strong {
+  color: #eeeeee;
+  font-size: 20px;
+  overflow-wrap: anywhere;
 }
 
 .learn-choices {
@@ -503,6 +581,70 @@
   height: 60px;
   object-fit: contain;
   width: 100%;
+}
+
+@media (max-width: 640px) {
+  .learn-shell {
+    gap: 10px;
+  }
+
+  .learn-header {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .learn-toolbar {
+    gap: 6px;
+  }
+
+  .learn-primary,
+  .learn-ghost {
+    padding: 8px 12px;
+  }
+
+  .learn-row {
+    gap: 0;
+  }
+
+  .learn-row-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .learn-row-prompt,
+  .learn-row-answer {
+    flex: 0 1 auto;
+    width: 100%;
+  }
+
+  .learn-row-pick {
+    min-width: 56px;
+    padding: 0 12px;
+  }
+
+  .learn-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+  }
+
+  .learn-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .learn-footer .learn-primary {
+    width: 100%;
+  }
+
+  .learn-choices,
+  .learn-drill-results {
+    grid-template-columns: 1fr;
+  }
+
+  .learn-drill-prompt-text {
+    font-size: 20px;
+  }
 }
 
 .sr-only {

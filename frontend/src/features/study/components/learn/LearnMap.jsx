@@ -61,7 +61,8 @@ export default function LearnMap({
           svgPath={mapSrc}
           mapManifest={group?.map || null}
           found={revealedCodes}
-          missed={selectedCodes}
+          missed={[]}
+          practiceCodes={selectedCodes}
           dueItems={[]}
           selected={focusItem?.code || null}
           focusCode={focusItem?.code || null}
@@ -113,7 +114,9 @@ export default function LearnMap({
                   onChange={() => onSelect(item.questionId)}
                 />
                 <span className="learn-row-pick-box" aria-hidden="true" />
-                <span className="sr-only">Ajouter « {item.answer} » au test</span>
+                <span className="sr-only">
+                  {isSelected ? "Retirer" : "Ajouter"} « {item.answer} » {isSelected ? "du test" : "au test"}
+                </span>
               </label>
             </li>
           );

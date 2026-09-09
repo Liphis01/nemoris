@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   DRILL_STEPS,
+  LEARN_SUPPORT,
   LEARN_STATES,
   answerHint,
+  canOfferLearnChoice,
+  continueAfterReveal,
   createDrill,
+  drillResultStats,
   drillCurrentId,
+  helpedQuestionIds,
   isDrillDone,
+  learnChoiceDecoys,
   learnItemsFromTraining,
   matchesLearnAnswer,
   skipCurrent,
@@ -174,6 +180,20 @@ describe("the drill ladder", () => {
     expect(drillCurrentId(state)).toBe(1);
   });
 
+  it("shows the answer instead of a fake choice when decoys are not meaningful", () => {
+    let state = createDrill([item]);
+
+    ({ state } = submitTypedAnswer(state, item, "faux"));
+    ({ state } = submitTypedAnswer(state, item, "encore faux", { canOfferChoice: false }));
+
+    expect(state.step).toBe(DRILL_STEPS.REVEAL);
+    expect(state.outcomes["1"].support).toBe(LEARN_SUPPORT.ANSWER);
+
+    state = continueAfterReveal(state);
+    expect(state.queue).toEqual([1]);
+    expect(state.step).toBe(DRILL_STEPS.TYPE);
+  });
+
   it("records every offered pair when a choice is made", () => {
     const state = { ...createDrill(items), step: DRILL_STEPS.CHOICE };
     const { state: next, outcome } = submitChoice(state, item, 2, [1, 2, 3]);
@@ -194,12 +214,13 @@ describe("the drill ladder", () => {
     expect(next.solved).toEqual([]);
   });
 
-  it("retires the card and keeps the evidence on a correct choice", () => {
+  it("requeues a correct choice because recognition is not recall", () => {
     const state = { ...createDrill(items), step: DRILL_STEPS.CHOICE };
     const { state: next, outcome } = submitChoice(state, item, 1, [1, 2]);
 
-    expect(outcome).toBe("correct");
-    expect(next.solved).toEqual([1]);
+    expect(outcome).toBe("recognized");
+    expect(next.queue).toEqual([2, 1]);
+    expect(next.solved).toEqual([]);
     expect(next.confusions).toEqual([
       { expected_id: 1, picked_id: 2, correct: true }
     ]);
@@ -217,5 +238,84 @@ describe("the drill ladder", () => {
     expect(isDrillDone(state)).toBe(false);
     ({ state } = submitTypedAnswer(state, item, "Verseau"));
     expect(isDrillDone(state)).toBe(true);
+  });
+
+  it("classifies final recalls by the strongest support used", () => {
+    const [first, second, third, fourth] = [
+      item,
+      { ...item, questionId: 2, answer: "Vierge" },
+      { ...item, questionId: 3, answer: "Volcan" },
+      { ...item, questionId: 4, answer: "Vison" }
+    ];
+    let state = createDrill([first, second, third, fourth]);
+
+    ({ state } = submitTypedAnswer(state, first, "Verseau"));
+
+    ({ state } = submitTypedAnswer(state, second, "faux"));
+    ({ state } = submitTypedAnswer(state, second, "Vierge"));
+
+    ({ state } = submitTypedAnswer(state, third, "faux"));
+    ({ state } = submitTypedAnswer(state, third, "encore faux", { canOfferChoice: true }));
+    ({ state } = submitChoice(state, third, 3, [3, 4, 1, 2]));
+
+    ({ state } = submitTypedAnswer(state, fourth, "faux"));
+    ({ state } = submitTypedAnswer(state, fourth, "encore faux", { canOfferChoice: false }));
+    state = continueAfterReveal(state);
+
+    ({ state } = submitTypedAnswer(state, third, "Volcan"));
+    ({ state } = submitTypedAnswer(state, fourth, "Vison"));
+
+    const stats = drillResultStats(state);
+
+    expect(stats.memory.ids).toEqual([1]);
+    expect(stats.hint.ids).toEqual([2]);
+    expect(stats.choice.ids).toEqual([3]);
+    expect(stats.review.ids).toEqual([4]);
+    expect(helpedQuestionIds(state)).toEqual([2, 3, 4]);
+  });
+
+  it("puts a wrong QCM recall in the retravailler bucket", () => {
+    let state = { ...createDrill([item]), step: DRILL_STEPS.CHOICE };
+
+    ({ state } = submitChoice(state, item, 2, [1, 2, 3, 4]));
+    ({ state } = submitTypedAnswer(state, item, "Verseau"));
+
+    const stats = drillResultStats(state);
+
+    expect(stats.choice.count).toBe(0);
+    expect(stats.review.ids).toEqual([1]);
+  });
+});
+
+
+describe("Learn choice decoys", () => {
+  it("requires enough decoys compatible with the visible hint", () => {
+    const target = card(10, "p", "Biais de confirmation");
+    const candidates = [
+      card(11, "p", "Biais de cadrage"),
+      card(12, "p", "Biais de croyance"),
+      card(13, "p", "Biais de conservatisme"),
+      card(14, "p", "Effet de halo")
+    ];
+
+    expect(learnChoiceDecoys(target, candidates).map(item => item.answer)).toEqual([
+      "Biais de cadrage",
+      "Biais de conservatisme",
+      "Biais de croyance"
+    ]);
+    expect(canOfferLearnChoice(target, candidates)).toBe(true);
+  });
+
+  it("rejects choices the first-letter hint would give away", () => {
+    const target = card(20, "p", "Costa Rica");
+    const candidates = [
+      card(21, "p", "Chili"),
+      card(22, "p", "Colombie"),
+      card(23, "p", "Canada"),
+      card(24, "p", "Côte d'Ivoire")
+    ];
+
+    expect(learnChoiceDecoys(target, candidates)).toEqual([]);
+    expect(canOfferLearnChoice(target, candidates)).toBe(false);
   });
 });

@@ -3,12 +3,19 @@ import { buildChoiceOptions } from "../../../review/distractorSelection";
 import { getMediaKind, resolveMediaUrl } from "../../../../shared/media";
 import SvgMap from "../../../map/components/SvgMap";
 import {
+  CHOICE_OPTION_COUNT,
   DRILL_STEPS,
   answerHint,
+  canOfferLearnChoice,
+  continueAfterReveal,
   createDrill,
+  drillResultStats,
   drillCurrentId,
+  helpedQuestionIds,
   isBlankAnswer,
   isDrillDone,
+  learnChoiceDecoys,
+  reviveDrillState,
   skipCurrent,
   submitChoice,
   submitTypedAnswer
@@ -75,7 +82,7 @@ function ChoiceFace({ family, option }) {
     const url = resolveMediaUrl(option.media);
 
     if (url && getMediaKind(option.media) === "image") {
-      return <img className="learn-choice-image" src={url} alt={option.label || ""} />;
+      return <img className="learn-choice-image" src={url} alt="" />;
     }
   }
 
@@ -92,17 +99,19 @@ export default function LearnDrill({
   // produce confusion pairs between cards the learner happened to pick.
   pool,
   onExit,
-  onFinish
+  onFinish,
+  initialState = null,
+  onStateChange,
+  onComplete
 }) {
-  const [state, setState] = useState(() => createDrill(items));
+  const [state, setState] = useState(() => (
+    reviveDrillState(initialState, items) || createDrill(items)
+  ));
   const [value, setValue] = useState("");
   const [flash, setFlash] = useState(null);
   const [geometry, setGeometry] = useState(null);
+  const [decoyUsage, setDecoyUsage] = useState(() => new Map());
   const inputRef = useRef(null);
-  // How often each sibling has already served as a decoy this drill; the
-  // sampler decays a candidate's weight by it so the same four options do
-  // not come back every time.
-  const decoyUsageRef = useRef(new Map());
   const byId = useMemo(
     () => new Map(items.map(item => [item.questionId, item])),
     [items]
@@ -110,6 +119,16 @@ export default function LearnDrill({
   const currentId = drillCurrentId(state);
   const current = currentId != null ? byId.get(currentId) : null;
   const done = isDrillDone(state);
+  const choiceContext = useMemo(() => {
+    if (!current) return [];
+
+    return learnChoiceDecoys(
+      current.source,
+      (pool || items)
+        .filter(item => item.questionId !== current.questionId)
+        .map(item => item.source)
+    );
+  }, [current, items, pool]);
 
   // The choices come from the same weighted sampler the real reviews use, so
   // the decoys are the siblings this learner is most likely to mix up -- and a
@@ -118,15 +137,13 @@ export default function LearnDrill({
     if (!current || state.step !== DRILL_STEPS.CHOICE) return [];
 
     const target = current.source;
-    const context = (pool || items)
-      .filter(item => item.questionId !== current.questionId)
-      .map(item => item.source);
-
-    return buildChoiceOptions(target, context, decoyUsageRef.current, null, {
+    const built = buildChoiceOptions(target, choiceContext, decoyUsage, null, {
       geometry: family === "map" ? geometry : null,
       sequence: family === "sequence"
     });
-  }, [current, family, geometry, items, pool, state.step]);
+
+    return built.length === CHOICE_OPTION_COUNT ? built : [];
+  }, [choiceContext, current, decoyUsage, family, geometry, state.step]);
 
   useEffect(() => {
     if (!done && state.step !== DRILL_STEPS.CHOICE) inputRef.current?.focus();
@@ -139,7 +156,17 @@ export default function LearnDrill({
   const confusionsRef = useRef([]);
   const sentRef = useRef(0);
 
-  confusionsRef.current = state.confusions;
+  useEffect(() => {
+    confusionsRef.current = state.confusions;
+  }, [state.confusions]);
+
+  useEffect(() => {
+    onStateChange?.(state);
+  }, [onStateChange, state]);
+
+  useEffect(() => {
+    if (done) onComplete?.();
+  }, [done, onComplete]);
 
   useEffect(() => {
     return () => {
@@ -156,7 +183,10 @@ export default function LearnDrill({
 
     if (!current || isBlankAnswer(value)) return;
 
-    const { state: next, outcome } = submitTypedAnswer(state, current, value);
+    const { state: next, outcome } = submitTypedAnswer(state, current, value, {
+      canOfferChoice: state.step !== DRILL_STEPS.HINT
+        || canOfferLearnChoice(current.source, choiceContext)
+    });
 
     setState(next);
     setValue("");
@@ -166,14 +196,20 @@ export default function LearnDrill({
   function handleChoice(option) {
     if (!current) return;
 
-    for (const choice of choices) {
-      if (choice.question_id === current.questionId) continue;
+    setDecoyUsage((usage) => {
+      const nextUsage = new Map(usage);
 
-      decoyUsageRef.current.set(
-        choice.question_id,
-        (decoyUsageRef.current.get(choice.question_id) || 0) + 1
-      );
-    }
+      for (const choice of choices) {
+        if (choice.question_id === current.questionId) continue;
+
+        nextUsage.set(
+          choice.question_id,
+          (nextUsage.get(choice.question_id) || 0) + 1
+        );
+      }
+
+      return nextUsage;
+    });
 
     const { state: next, outcome } = submitChoice(
       state,
@@ -184,17 +220,65 @@ export default function LearnDrill({
 
     setState(next);
     setValue("");
-    setFlash(outcome === "correct" ? "correct" : "wrong");
+    setFlash(outcome === "recognized" ? "correct" : "wrong");
+  }
+
+  function handleRevealContinue() {
+    setState(continueAfterReveal(state));
+    setValue("");
+    setFlash(null);
   }
 
   if (done) {
+    const stats = drillResultStats(state);
+    const retryIds = helpedQuestionIds(state);
+    const retryItems = items.filter(item => retryIds.includes(item.questionId));
+
     return (
       <div className="learn-drill learn-drill-done">
         <h2>Série terminée</h2>
-        <p>{state.total} item{state.total > 1 ? "s" : ""} retrouvé{state.total > 1 ? "s" : ""} de mémoire.</p>
+        <p>{state.total} item{state.total > 1 ? "s" : ""} travaillé{state.total > 1 ? "s" : ""}.</p>
+
+        <dl className="learn-drill-results">
+          <div>
+            <dt>Sans aide</dt>
+            <dd>{stats.memory.count}</dd>
+          </div>
+          <div>
+            <dt>Après indice</dt>
+            <dd>{stats.hint.count}</dd>
+          </div>
+          <div>
+            <dt>Après QCM</dt>
+            <dd>{stats.choice.count}</dd>
+          </div>
+          <div>
+            <dt>À retravailler</dt>
+            <dd>{stats.review.count}</dd>
+          </div>
+        </dl>
 
         <div className="learn-drill-actions">
-          <button type="button" className="learn-primary" onClick={() => setState(createDrill(items))}>
+          {retryItems.length > 0 && (
+            <button
+              type="button"
+              className="learn-primary"
+              onClick={() => {
+                setDecoyUsage(new Map());
+                setState(createDrill(retryItems));
+              }}
+            >
+              Revoir les aidés
+            </button>
+          )}
+          <button
+            type="button"
+            className="learn-primary"
+            onClick={() => {
+              setDecoyUsage(new Map());
+              setState(createDrill(items));
+            }}
+          >
             Recommencer
           </button>
           <button type="button" className="learn-ghost" onClick={onExit}>
@@ -223,13 +307,22 @@ export default function LearnDrill({
         />
       </div>
 
-      {state.step === DRILL_STEPS.CHOICE ? (
+      {state.step === DRILL_STEPS.REVEAL ? (
+        <div className="learn-drill-reveal">
+          <span>Réponse</span>
+          <strong>{current.answer}</strong>
+          <button type="button" className="learn-primary" onClick={handleRevealContinue}>
+            Revoir plus tard
+          </button>
+        </div>
+      ) : state.step === DRILL_STEPS.CHOICE ? (
         <div className="learn-choices">
           {choices.map(option => (
             <button
               type="button"
               key={option.question_id}
               className="learn-choice"
+              aria-label={`Choix : ${option.label || option.answer}`}
               onClick={() => handleChoice(option)}
             >
               <ChoiceFace family={family} option={option} />

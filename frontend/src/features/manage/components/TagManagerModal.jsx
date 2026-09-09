@@ -231,9 +231,11 @@ export default function TagManagerModal({ open, onClose }) {
     setError("");
   }, [open, snapshot.loaded, snapshot.nodes, snapshot.revision]);
 
-  const state = history[historyIndex] || {
-    nodes: cloneNodes(snapshot.nodes), hidden: [], originalHidden: [], commands: []
-  };
+  const state = useMemo(() => (
+    history[historyIndex] || {
+      nodes: cloneNodes(snapshot.nodes), hidden: [], originalHidden: [], commands: []
+    }
+  ), [history, historyIndex, snapshot.nodes]);
   const nodes = state.nodes;
   const labels = Object.fromEntries(Object.entries(nodes).map(([id, node]) => [id, localLabel(node)]));
   const selectedNode = nodes[selected];

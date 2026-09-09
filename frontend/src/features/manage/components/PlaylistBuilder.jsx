@@ -277,6 +277,8 @@ export default function PlaylistBuilder({
     ));
   }
 
+  const playlistId = playlist?.id;
+
   const handleSave = useCallback(async () => {
     const cleanName = name.trim();
 
@@ -297,7 +299,7 @@ export default function PlaylistBuilder({
 
     try {
       const saved = editing
-        ? await updateCollection(playlist.id, payload)
+        ? await updateCollection(playlistId, payload)
         : await createCollection(payload);
 
       if (onSaved) {
@@ -309,7 +311,7 @@ export default function PlaylistBuilder({
     } finally {
       setSaving(false);
     }
-  }, [editing, excludedIds, name, onSaved, pinnedIds, playlist?.id, rules]);
+  }, [editing, excludedIds, name, onSaved, pinnedIds, playlistId, rules]);
 
   useEffect(() => {
     if (!registerPendingSaveHandler) {

@@ -11,9 +11,12 @@ export default function LearnRowList({
 }) {
   return (
     <ul className="learn-rows">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const isRevealed = revealed.has(item.questionId);
         const isSelected = selected.has(item.questionId);
+        const itemName = isRevealed ? `« ${item.answer} »` : `l'item ${index + 1}`;
+        const selectionAction = isSelected ? "Retirer" : "Ajouter";
+        const selectionDirection = isSelected ? "du test" : "au test";
 
         return (
           <li
@@ -44,7 +47,9 @@ export default function LearnRowList({
                 onChange={() => onSelect(item.questionId)}
               />
               <span className="learn-row-pick-box" aria-hidden="true" />
-              <span className="sr-only">Ajouter « {item.answer} » au test</span>
+              <span className="sr-only">
+                {selectionAction} {itemName} {selectionDirection}
+              </span>
             </label>
           </li>
         );

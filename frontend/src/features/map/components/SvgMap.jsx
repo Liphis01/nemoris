@@ -91,6 +91,7 @@ export default function SvgMap({
     missed = [],
     dueItems = [],
     unsaved = [],
+    practiceCodes = [],
     selected,
     focusCode,
     focusVersion = 0,
@@ -411,12 +412,14 @@ export default function SvgMap({
         const dueSet = new Set(dueItems);
         const flashSet = new Set(flashCodes);
         const unsavedSet = new Set(unsaved);
+        const practiceSet = new Set(practiceCodes);
 
         const getColor = (code, isHitArea = false) => {
             if (flashSet.has(code)) return "#fb7185";
             if (selected === code) return "#f39c12";
             if (unsavedSet.has(code)) return "#facc15";
             if (foundSet.has(code)) return "#21eb75";
+            if (practiceSet.has(code)) return "#2563eb";
             if (missedSet.has(code)) return "#e93723";
             if (isHitArea && dueSet.has(code)) return hitAreaDueColor;
             if (dueSet.has(code)) return "#0e3e5adc";
@@ -428,6 +431,7 @@ export default function SvgMap({
             if (selected === code) return "#fbbf24";
             if (unsavedSet.has(code)) return "#fde047";
             if (foundSet.has(code)) return "#34d399";
+            if (practiceSet.has(code)) return "#60a5fa";
             if (missedSet.has(code)) return "#fb7185";
             if (isHitArea && dueSet.has(code)) return hitAreaDueHoverColor;
             if (dueSet.has(code)) return "#38bdf8";
@@ -440,6 +444,7 @@ export default function SvgMap({
             && selected !== code
             && !unsavedSet.has(code)
             && !foundSet.has(code)
+            && !practiceSet.has(code)
             && !missedSet.has(code)
                 ? hitAreaDueOpacity
                 : hitAreaRevealOpacity
@@ -537,6 +542,7 @@ export default function SvgMap({
         selected,
         dueItems,
         unsaved,
+        practiceCodes,
         clickableCodeSet,
         hoveredCode,
         zoneLabels,

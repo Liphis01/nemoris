@@ -20,7 +20,7 @@ vi.mock("./ManageList", () => ({
 }));
 
 vi.mock("./ManageInspector", () => ({
-  default: ({ registerPendingSaveHandler, selectedItem }) => {
+  default: function MockManageInspector({ registerPendingSaveHandler, selectedItem }) {
     useEffect(() => (
       registerPendingSaveHandler?.(selectedItem?.saveHandler)
     ), [registerPendingSaveHandler, selectedItem?.saveHandler]);
@@ -112,6 +112,6 @@ describe("Manage save shortcut", () => {
       expect(saveHandler).toHaveBeenCalledTimes(1);
     });
     expect(saveEvent.defaultPrevented).toBe(true);
-    expect(screen.getByText("Enregistré")).toBeInTheDocument();
+    expect(await screen.findByText("Enregistré")).toBeInTheDocument();
   });
 });

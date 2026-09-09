@@ -310,6 +310,7 @@ function ProfileGuidancePanel({ error, guidance, loading, onOpenStudy }) {
 
 function ProfileEditCard({ profile }) {
   const canSave = profile.usernameDraft.trim().length >= 3 && !profile.saving;
+  const saveProfile = profile.save;
 
   useEffect(() => {
     function handleSaveShortcut(event) {
@@ -326,13 +327,13 @@ function ProfileEditCard({ profile }) {
       event.preventDefault();
 
       if (canSave) {
-        profile.save?.();
+        saveProfile?.();
       }
     }
 
     window.addEventListener("keydown", handleSaveShortcut);
     return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, [canSave, profile.save]);
+  }, [canSave, saveProfile]);
 
   return (
     <section className="profile-card profile-edit">
