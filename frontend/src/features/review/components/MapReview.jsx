@@ -1223,15 +1223,17 @@ export default function MapReview({
                 pointerEvents: showClickRating ? "auto" : "none"
               }}>
                 <div data-map-click-rating style={mapInlineRatingPanelStyle}>
-                  <div style={typedRatingCopyStyle}>
+                  <div style={typedInputRatingCopyStyle}>
                     <span style={typedRatingKickerStyle}>Qualité</span>
                     <span style={typedRatingAnswerStyle}>{clickRatingItem.label || "Zone"}</span>
                   </div>
-                  <div style={typedRatingControlsStyle}>
+                  <div style={typedInputRatingControlsStyle}>
                     {clickRatingOptions.map(option => {
-                      const interval = clickRatingItemRelearning
-                        ? clickRatingItem.relearning_interval
-                        : clickRatingItem.projected_intervals?.[option.value];
+                      const interval = ratingIntervalFor(
+                        clickRatingItem,
+                        clickRatingItemRelearning,
+                        option.value
+                      );
 
                       return (
                         <button
@@ -1242,7 +1244,7 @@ export default function MapReview({
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => rateClickAnswer(option.value)}
                           style={{
-                            ...typedRatingButtonStyle,
+                            ...typedInputRatingButtonStyle,
                             animation: clickRatingEcho?.ratedQuality === option.value
                               ? qualityPickAnimation(option.value)
                               : undefined
@@ -1365,30 +1367,41 @@ export default function MapReview({
                       <span style={typedRatingAnswerStyle}>{typedRatingItem.label || "Zone"}</span>
                     </div>
                     <div style={typedInputRatingControlsStyle}>
-                      {typedRatingOptions.map(option => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          data-map-typed-quality={option.value}
-                          disabled={!showTypedRating}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            rateTypedAnswer(option.value);
-                            inputRef.current?.focus({ preventScroll: true });
-                          }}
-                          style={{
-                            ...typedInputRatingButtonStyle,
-                            animation: typedRatingEcho?.ratedQuality === option.value
-                              ? qualityPickAnimation(option.value)
-                              : undefined
-                          }}
-                        >
-                          <span aria-hidden="true" style={choiceKeyBadgeStyle}>
-                            {option.value}
-                          </span>
-                          <span>{option.title}</span>
-                        </button>
-                      ))}
+                      {typedRatingOptions.map(option => {
+                        const interval = ratingIntervalFor(
+                          typedRatingItem,
+                          typedRatingItemRelearning,
+                          option.value
+                        );
+
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            data-map-typed-quality={option.value}
+                            disabled={!showTypedRating}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              rateTypedAnswer(option.value);
+                              inputRef.current?.focus({ preventScroll: true });
+                            }}
+                            style={{
+                              ...typedInputRatingButtonStyle,
+                              animation: typedRatingEcho?.ratedQuality === option.value
+                                ? qualityPickAnimation(option.value)
+                                : undefined
+                            }}
+                          >
+                            <span aria-hidden="true" style={choiceKeyBadgeStyle}>
+                              {option.value}
+                            </span>
+                            <span>{option.title}</span>
+                            {Number(interval) > 0 && (
+                              <span style={typedRatingIntervalStyle}>≈ {interval} j</span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1476,11 +1489,11 @@ export default function MapReview({
                     : choiceQualityOptions;
 
                   return ratingOptions.map(option => {
-                    // A relearning retry never re-grades FSRS: whichever grade is
-                    // picked, the zone lands on the same already-frozen interval.
-                    const interval = correctChoiceRelearning
-                      ? correctChoice?.relearning_interval
-                      : correctChoice?.projected_intervals?.[option.value];
+                    const interval = ratingIntervalFor(
+                      correctChoice,
+                      correctChoiceRelearning,
+                      option.value
+                    );
 
                     return (
                       <button
@@ -2214,26 +2227,29 @@ const inlineRatingOverlayStyle = {
   zIndex: 8
 };
 
-const mapInlineRatingPanelStyle = {
-  ...typedRatingPanelStyle,
-  animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
-  background: "rgba(18, 18, 18, 0.94)",
-  boxShadow: "0 14px 32px rgba(0, 0, 0, 0.38)",
-  marginTop: 0,
-  pointerEvents: "auto"
-};
+// A relearning retry never re-grades FSRS: whichever grade is picked, the zone
+// lands on the same already-frozen interval.
+const ratingIntervalFor = (item, relearning, quality) => (
+  relearning ? item?.relearning_interval : item?.projected_intervals?.[quality]
+);
 
-const mapTypedInputRatingPanelStyle = {
+// click_prompt, type_prompt and type_all all share this panel so the inline
+// quality step looks identical whatever the map mode is.
+const mapInlineRatingPanelStyle = {
   ...typedRatingPanelStyle,
   animation: `fadeIn 0.26s ease ${choiceRevealDelay} both`,
   background: "rgba(18, 18, 18, 0.98)",
   boxShadow: "0 10px 24px rgba(0, 0, 0, 0.32)",
   boxSizing: "border-box",
   gap: "8px 10px",
-  height: "100%",
   marginTop: 0,
   padding: "7px 9px",
   pointerEvents: "auto"
+};
+
+const mapTypedInputRatingPanelStyle = {
+  ...mapInlineRatingPanelStyle,
+  height: "100%"
 };
 
 const typedRatingCopyStyle = {
