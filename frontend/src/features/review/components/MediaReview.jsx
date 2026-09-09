@@ -323,11 +323,17 @@ const typePromptRailStyle = {
   width: "100%"
 };
 
+const typedRatingBandSlotStyle = {
+  marginBottom: "12px"
+};
+
 const typePromptRatingSlotStyle = {
   alignItems: "center",
   display: "flex",
   justifyContent: "center",
-  minHeight: "54px"
+  margin: "0 auto",
+  minHeight: "54px",
+  width: "min(100%, 760px)"
 };
 
 const typePromptRailItemStyle = {
@@ -405,17 +411,21 @@ const inputStyle = {
   fontSize: "14px"
 };
 
+// type_all and type_prompt share this panel: the placement differs (control
+// band vs the slot under the type_prompt board) but the visual must not.
 const typedRatingPanelStyle = {
   alignItems: "center",
-  background: "#121212",
+  background: "rgba(18, 18, 18, 0.98)",
   border: "1px solid #2a2a2a",
   borderRadius: "10px",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.32)",
+  boxSizing: "border-box",
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px 14px",
+  gap: "8px 10px",
   justifyContent: "space-between",
-  marginBottom: "12px",
-  padding: "10px 12px"
+  padding: "9px 10px",
+  width: "100%"
 };
 
 const typedRatingCopyStyle = {
@@ -458,36 +468,14 @@ const typedRatingButtonStyle = {
   background: "#181818",
   display: "inline-flex",
   gap: "8px",
-  minHeight: "36px",
-  padding: "8px 11px"
+  minHeight: "38px",
+  padding: "8px 12px"
 };
 
 const typedRatingIntervalStyle = {
   color: "#8a8a8a",
   fontSize: "12px",
   fontWeight: 700
-};
-
-const typePromptInlineRatingStyle = {
-  ...typedRatingPanelStyle,
-  background: "linear-gradient(180deg, rgba(20, 20, 20, 0.96), rgba(16, 16, 16, 0.96))",
-  border: "1px solid rgba(96, 165, 250, 0.28)",
-  boxShadow: "0 14px 34px rgba(0, 0, 0, 0.34)",
-  margin: "0 auto",
-  maxWidth: "760px",
-  padding: "9px 10px",
-  width: "min(100%, 760px)"
-};
-
-const typePromptInlineRatingControlsStyle = {
-  ...typedRatingControlsStyle,
-  justifyContent: "center"
-};
-
-const typePromptInlineRatingButtonStyle = {
-  ...typedRatingButtonStyle,
-  minHeight: "38px",
-  padding: "8px 12px"
 };
 
 const answerTooltipGap = 8;
@@ -2591,7 +2579,7 @@ export default function MediaReview({
         data-image-typed-rating
         data-image-type-prompt-rating={inlineTypePrompt ? "true" : undefined}
         style={{
-          ...(inlineTypePrompt ? typePromptInlineRatingStyle : typedRatingPanelStyle),
+          ...typedRatingPanelStyle,
           pointerEvents: showTypedRating ? "auto" : "none"
         }}
       >
@@ -2601,10 +2589,7 @@ export default function MediaReview({
             {answerLabel(typedRatingItem)}
           </span>
         </div>
-        <div style={inlineTypePrompt
-          ? typePromptInlineRatingControlsStyle
-          : typedRatingControlsStyle}
-        >
+        <div style={typedRatingControlsStyle}>
           {typedRatingOptions.map(option => {
             const interval = typedRatingItemRelearning
               ? typedRatingItem.relearning_interval
@@ -2622,9 +2607,7 @@ export default function MediaReview({
                   focusAnswerInput();
                 }}
                 style={{
-                  ...(inlineTypePrompt
-                    ? typePromptInlineRatingButtonStyle
-                    : typedRatingButtonStyle),
+                  ...typedRatingButtonStyle,
                   animation: typedRatingEcho?.ratedQuality === option.value
                     ? qualityPickAnimation(option.value)
                     : undefined
@@ -3673,7 +3656,11 @@ export default function MediaReview({
           </div>
         )}
 
-        {showControlBandTypedRating && renderTypedRatingPanel()}
+        {showControlBandTypedRating && (
+          <div style={typedRatingBandSlotStyle}>
+            {renderTypedRatingPanel()}
+          </div>
+        )}
 
         {showLabelChoices && (
           // Same four slots throughout: the decoy names drop out, the freed

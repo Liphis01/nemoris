@@ -52,8 +52,6 @@
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
 - enlever le type_all mais ajouter un mode one shot sans erreur autorisée
-- mettre le inline quality au niveau du champ d'input comme pour type_all de map pour les qcm
-- The study menu is terrible at the moment. I wanted it to help users learn a specific group. Right now it's just very confusing, ugly, and has too much information.
 - menu study à améliorer
 
 
