@@ -98,14 +98,16 @@ class TrainingTests(unittest.TestCase):
         elapsed_ms,
         question_count,
         found_count,
-        mode=None
+        mode=None,
+        max_errors_per_question=None
     ):
         return TrainingAttemptRecordRequest(
             elapsed_ms=elapsed_ms,
             question_count=question_count,
             found_count=found_count,
             content_fingerprint=group_training_fingerprint(self.db, group),
-            mode=mode
+            mode=mode,
+            max_errors_per_question=max_errors_per_question
         )
 
     def seed_training_record(self, group, record):
@@ -776,6 +778,90 @@ class TrainingTests(unittest.TestCase):
             group.data["training_record"]["best_found_percent"],
             50
         )
+
+    def test_prompt_error_budget_training_records_are_saved_separately(self):
+        for group_id, group_type, media in (
+            (403, "map", "europe.svg"),
+            (404, "media", None)
+        ):
+            with self.subTest(group_type=group_type):
+                group = QuestionGroup(
+                    id=group_id,
+                    type_group=group_type,
+                    name="Europe",
+                    media=media,
+                    data={}
+                )
+                self.db.add(group)
+                self.add_question(
+                    group_id * 10 + 1,
+                    type_q=group_type,
+                    group=group
+                )
+                self.add_question(
+                    group_id * 10 + 2,
+                    type_q=group_type,
+                    group=group
+                )
+                self.db.commit()
+
+                unlimited = record_training_attempt(
+                    self.db,
+                    group.id,
+                    self.record_request(
+                        group,
+                        7000,
+                        2,
+                        1,
+                        mode="type_prompt"
+                    )
+                )
+                strict = record_training_attempt(
+                    self.db,
+                    group.id,
+                    self.record_request(
+                        group,
+                        9000,
+                        2,
+                        2,
+                        mode="type_prompt",
+                        max_errors_per_question=0
+                    )
+                )
+
+                self.assertIn("type_prompt", strict["training_records"])
+                self.assertIn(
+                    "type_prompt_zero_errors",
+                    strict["training_records"]
+                )
+                self.assertEqual(
+                    unlimited["training_records"]["type_prompt"][
+                        "best_found_percent"
+                    ],
+                    50
+                )
+                self.assertEqual(
+                    strict["training_records"]["type_prompt_zero_errors"][
+                        "best_time_ms"
+                    ],
+                    9000
+                )
+                self.assertEqual(
+                    group.data["training_records"]["type_prompt"][
+                        "best_found_percent"
+                    ],
+                    50
+                )
+                self.assertEqual(
+                    group.data["training_records"]["type_prompt_zero_errors"][
+                        "best_found_percent"
+                    ],
+                    100
+                )
+                self.assertEqual(
+                    group.data["training_record"]["best_found_percent"],
+                    50
+                )
 
     def test_image_training_records_are_saved_per_mode(self):
         group = QuestionGroup(

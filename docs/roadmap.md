@@ -50,7 +50,6 @@
 - mettre un input optionnel pour les questions de type texte
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
-- enlever le type_all mais ajouter un mode one shot sans erreur autorisée
 - menu study à améliorer
 
 

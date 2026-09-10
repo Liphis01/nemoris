@@ -176,6 +176,82 @@ describe("useTrainingSession", () => {
     expect(result.current.labelForActiveScope).toBe("Europe");
   });
 
+  it.each([
+    ["map", "mapMode"],
+    ["media", "imageMode"]
+  ])("starts zero-mistake %s prompted training with canonical type_prompt", async (
+    typeGroup,
+    requestModeKey
+  ) => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        group_id: 5,
+        type_q: typeGroup,
+        mode: "type_prompt",
+        training_fingerprint: TRAINING_FINGERPRINT,
+        items: [
+          {
+            question_id: 11,
+            answer: "France",
+            label: "France"
+          }
+        ]
+      }
+    ]);
+    const { result } = renderHook(() => useTrainingSession(true));
+
+    await waitFor(() => {
+      expect(result.current.scopes.groups).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.startScope({
+        type: "group",
+        id: 5,
+        name: "Europe",
+        type_group: typeGroup
+      }, {
+        key: "type_prompt_zero_errors",
+        mode: "type_prompt",
+        maxErrorsPerQuestion: 0
+      });
+    });
+
+    expect(getTrainingItems).toHaveBeenCalledWith({
+      scopeType: "group",
+      groupId: 5,
+      [requestModeKey]: "type_prompt"
+    });
+    expect(result.current.activeScope).toMatchObject({
+      groupMode: "type_prompt",
+      groupModeKey: "type_prompt_zero_errors",
+      maxErrorsPerQuestion: 0,
+      [requestModeKey]: "type_prompt"
+    });
+    expect(result.current.questions[0].max_errors_per_question).toBe(0);
+
+    performanceNowSpy.mockReturnValue(6500);
+
+    act(() => {
+      if (typeGroup === "map") {
+        result.current.handleMapComplete([]);
+      } else {
+        result.current.handleImageComplete([]);
+      }
+    });
+
+    await waitFor(() => {
+      expect(recordGroupTrainingAttempt).toHaveBeenCalledWith(5, {
+        elapsed_ms: 5500,
+        question_count: 1,
+        found_count: 1,
+        content_fingerprint: TRAINING_FINGERPRINT,
+        mode: "type_prompt",
+        max_errors_per_question: 0
+      });
+    });
+  });
+
   it("starts a collection training session", async () => {
     const { result } = renderHook(() => useTrainingSession(true));
 

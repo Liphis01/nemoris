@@ -39,6 +39,7 @@ from .sequence_modes import (
 )
 from .map_zones import merge_tags
 from .map_eligibility import training_content_question_filter
+from .mode_difficulty import normalize_prompt_error_budget
 from .review import serialize_review_items
 from .tag_hierarchy import (
     descendants,
@@ -65,6 +66,9 @@ TRAINING_RECORD_FIELDS = {
     "content_fingerprint"
 }
 MODE_GROUP_TYPES = {"map", "media", "text", "cloze", "grid", "set", "sequence"}
+PROMPT_BUDGET_TRAINING_GROUP_TYPES = {"map", "media"}
+PROMPT_BUDGET_TRAINING_KEY_PREFIX = "type_prompt_max_errors_"
+PROMPT_ZERO_ERROR_TRAINING_RECORD_MODE = "type_prompt_zero_errors"
 
 
 def normalize_scope_tag(value):
@@ -406,6 +410,72 @@ def normalize_training_mode_for_group_type(group_type, mode, item_count=None):
     return None
 
 
+def _prompt_budget_training_record_key(max_errors_per_question):
+    budget = normalize_prompt_error_budget(max_errors_per_question)
+
+    if budget is None:
+        return None
+
+    if budget == 0:
+        return PROMPT_ZERO_ERROR_TRAINING_RECORD_MODE
+
+    return f"{PROMPT_BUDGET_TRAINING_KEY_PREFIX}{budget}"
+
+
+def _prompt_budget_from_training_record_key(mode):
+    if mode == PROMPT_ZERO_ERROR_TRAINING_RECORD_MODE:
+        return 0
+
+    if not isinstance(mode, str):
+        return None
+
+    if not mode.startswith(PROMPT_BUDGET_TRAINING_KEY_PREFIX):
+        return None
+
+    raw_budget = mode[len(PROMPT_BUDGET_TRAINING_KEY_PREFIX):]
+
+    try:
+        parsed_budget = int(raw_budget)
+    except (TypeError, ValueError):
+        return None
+
+    return normalize_prompt_error_budget(parsed_budget)
+
+
+def training_record_key_for_mode(
+    group_type,
+    mode,
+    item_count=None,
+    max_errors_per_question=None
+):
+    if group_type in PROMPT_BUDGET_TRAINING_GROUP_TYPES:
+        stored_budget = _prompt_budget_from_training_record_key(mode)
+
+        if stored_budget is not None:
+            return _prompt_budget_training_record_key(stored_budget)
+
+    normalized_mode = normalize_training_mode_for_group_type(
+        group_type,
+        mode,
+        item_count
+    )
+
+    if not normalized_mode:
+        return None
+
+    budget_key = None
+
+    if (
+        group_type in PROMPT_BUDGET_TRAINING_GROUP_TYPES and
+        normalized_mode == "type_prompt"
+    ):
+        budget_key = _prompt_budget_training_record_key(
+            max_errors_per_question
+        )
+
+    return budget_key or normalized_mode
+
+
 def _media_training_item_count(item):
     if isinstance(item, dict) and isinstance(item.get("items"), list):
         return len(item["items"])
@@ -476,7 +546,7 @@ def serialize_training_records(
 
     if isinstance(raw_records, dict):
         for mode, record in raw_records.items():
-            normalized_mode = normalize_training_mode_for_group_type(
+            record_key = training_record_key_for_mode(
                 group_type,
                 mode,
                 item_count
@@ -485,9 +555,9 @@ def serialize_training_records(
             serialized = _serialize_record(record, content_fingerprint)
 
             if serialized and (
-                normalized_mode not in records or normalized_mode == mode
+                record_key not in records or record_key == mode
             ):
-                records[normalized_mode] = serialized
+                records[record_key] = serialized
 
     legacy_record = serialize_training_record(data, content_fingerprint)
 
@@ -510,7 +580,7 @@ def serialize_previous_training_records(
 
     if isinstance(raw_records, dict):
         for mode, record in raw_records.items():
-            normalized_mode = normalize_training_mode_for_group_type(
+            record_key = training_record_key_for_mode(
                 group_type,
                 mode,
                 item_count
@@ -522,9 +592,9 @@ def serialize_previous_training_records(
             )
 
             if serialized and (
-                normalized_mode not in records or normalized_mode == mode
+                record_key not in records or record_key == mode
             ):
-                records[normalized_mode] = serialized
+                records[record_key] = serialized
 
     current_records = serialize_training_records(
         data,
@@ -836,6 +906,17 @@ def record_training_attempt(db, group_id, payload):
         current_question_count
     )
     default_mode = default_training_mode_for_group_type(group.type_group)
+    record_key = training_record_key_for_mode(
+        group.type_group,
+        mode,
+        current_question_count,
+        payload.max_errors_per_question
+    )
+    default_record_key = training_record_key_for_mode(
+        group.type_group,
+        default_mode,
+        current_question_count
+    )
     existing_records = (
         group_data.get(TRAINING_RECORDS_KEY)
         if isinstance(group_data.get(TRAINING_RECORDS_KEY), dict)
@@ -843,19 +924,19 @@ def record_training_attempt(db, group_id, payload):
     )
     if mode:
         existing_record = _serialize_record(
-            existing_records.get(mode),
+            existing_records.get(record_key),
             content_fingerprint
         )
 
         if not existing_record:
             for stored_mode, stored_record in existing_records.items():
-                stored_normalized_mode = normalize_training_mode_for_group_type(
+                stored_record_key = training_record_key_for_mode(
                     group.type_group,
                     stored_mode,
                     current_question_count
                 )
 
-                if stored_normalized_mode != mode:
+                if stored_record_key != record_key:
                     continue
 
                 existing_record = _serialize_record(
@@ -871,7 +952,7 @@ def record_training_attempt(db, group_id, payload):
             content_fingerprint
         )
 
-    if mode == default_mode and not existing_record:
+    if record_key == default_record_key and not existing_record:
         existing_record = serialize_training_record(
             group_data,
             content_fingerprint
@@ -907,10 +988,10 @@ def record_training_attempt(db, group_id, payload):
 
     if mode:
         records = dict(existing_records)
-        records[mode] = record
+        records[record_key] = record
         group_data[TRAINING_RECORDS_KEY] = records
 
-        if mode == default_mode:
+        if record_key == default_record_key:
             group_data[TRAINING_RECORD_KEY] = record
     else:
         group_data[TRAINING_RECORD_KEY] = record
@@ -941,7 +1022,7 @@ def record_training_attempt(db, group_id, payload):
 
     return {
         "training_record": (
-            training_records.get(mode or default_mode)
+            training_records.get(record_key or default_record_key)
             if group.type_group in MODE_GROUP_TYPES
             else serialize_training_record(group.data, content_fingerprint)
         ),

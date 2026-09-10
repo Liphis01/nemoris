@@ -13,6 +13,7 @@ import {
   recordGroupTrainingAttempt
 } from "../../../api/training";
 import { createCollection } from "../../../api/collections";
+import { normalizePromptErrorBudget } from "../../review/promptErrorBudget";
 
 
 function isEditableTarget(target) {
@@ -184,6 +185,67 @@ function scopeRequestOptions(scope) {
 }
 
 
+function normalizeGroupModeSelection(selection) {
+  if (!selection) return null;
+
+  if (typeof selection !== "object") {
+    return {
+      key: selection,
+      mode: selection
+    };
+  }
+
+  const mode = selection.mode;
+
+  if (!mode) return null;
+
+  const maxErrorsPerQuestion = normalizePromptErrorBudget(
+    selection.maxErrorsPerQuestion ?? selection.max_errors_per_question
+  );
+
+  return {
+    key: selection.key || selection.id || mode,
+    mode,
+    ...(maxErrorsPerQuestion !== null ? { maxErrorsPerQuestion } : {})
+  };
+}
+
+
+function recordModeForScope(scope) {
+  return (
+    scope?.mapMode ||
+    scope?.imageMode ||
+    scope?.textMode ||
+    scope?.sequenceMode ||
+    scope?.groupMode ||
+    null
+  );
+}
+
+
+function applyTrainingPromptBudget(items, scope) {
+  const maxErrorsPerQuestion = normalizePromptErrorBudget(
+    scope?.maxErrorsPerQuestion ?? scope?.max_errors_per_question
+  );
+
+  if (maxErrorsPerQuestion === null) return items;
+
+  return (items || []).map(item => {
+    if (
+      item?.mode !== "type_prompt" ||
+      (item?.type_q !== "map" && item?.type_q !== "media")
+    ) {
+      return item;
+    }
+
+    return {
+      ...item,
+      max_errors_per_question: maxErrorsPerQuestion
+    };
+  });
+}
+
+
 export function useTrainingSession(active = true) {
   const [scopes, setScopes] = useState({
     groups: [],
@@ -303,14 +365,27 @@ export function useTrainingSession(active = true) {
 
   const startScope = useCallback(async (scope, groupMode = null) => {
     const groupTypeForMode = scope.type_group || "map";
-    const nextScope = groupMode
+    const modeSelection = normalizeGroupModeSelection(groupMode);
+    const nextScope = modeSelection
       ? {
         ...scope,
-        groupMode,
-        ...(groupTypeForMode === "map" ? { mapMode: groupMode } : {}),
-        ...(groupTypeForMode === "media" ? { imageMode: groupMode } : {}),
-        ...(groupTypeForMode === "text" ? { textMode: groupMode } : {}),
-        ...(groupTypeForMode === "sequence" ? { sequenceMode: groupMode } : {})
+        groupMode: modeSelection.mode,
+        groupModeKey: modeSelection.key,
+        ...(modeSelection.maxErrorsPerQuestion !== undefined
+          ? { maxErrorsPerQuestion: modeSelection.maxErrorsPerQuestion }
+          : {}),
+        ...(groupTypeForMode === "map"
+          ? { mapMode: modeSelection.mode }
+          : {}),
+        ...(groupTypeForMode === "media"
+          ? { imageMode: modeSelection.mode }
+          : {}),
+        ...(groupTypeForMode === "text"
+          ? { textMode: modeSelection.mode }
+          : {}),
+        ...(groupTypeForMode === "sequence"
+          ? { sequenceMode: modeSelection.mode }
+          : {})
       }
       : scope;
 
@@ -326,7 +401,7 @@ export function useTrainingSession(active = true) {
 
     try {
       const data = await getTrainingItems(scopeRequestOptions(nextScope));
-      const trainingItems = data || [];
+      const trainingItems = applyTrainingPromptBudget(data || [], nextScope);
 
       setOriginalQuestions(trainingItems);
       setQuestions(shuffleTrainingItems(trainingItems));
@@ -566,22 +641,18 @@ export function useTrainingSession(active = true) {
 
     let cancelled = false;
     const scopeId = activeScope.id;
+    const activeGroupMode = recordModeForScope(activeScope);
     const payload = {
       elapsed_ms: Math.max(1, Math.round(completedElapsedMs)),
       question_count: allQuestionIds.length,
       found_count: attemptFoundCount,
       content_fingerprint: trainingFingerprint,
-      ...(activeScope.type === "group" && (
-        activeScope.groupMode ||
-        activeScope.mapMode ||
-        activeScope.imageMode
-      )
+      ...(activeScope.type === "group" && activeGroupMode
         ? {
-          mode: (
-            activeScope.groupMode ||
-            activeScope.mapMode ||
-            activeScope.imageMode
-          )
+          mode: activeGroupMode,
+          ...(activeScope.maxErrorsPerQuestion !== undefined
+            ? { max_errors_per_question: activeScope.maxErrorsPerQuestion }
+            : {})
         }
         : {})
     };

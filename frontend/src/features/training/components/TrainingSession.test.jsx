@@ -156,11 +156,11 @@ describe("TrainingSession", () => {
     expect(screen.getByText("Score total")).toBeInTheDocument();
     expect(screen.queryByText("Score par défaut")).not.toBeInTheDocument();
     expect(screen.queryByText("Temps parfait")).not.toBeInTheDocument();
-    expect(within(europeTile).getByText("63%")).toBeInTheDocument();
+    expect(within(europeTile).getByText("38%")).toBeInTheDocument();
     expect(within(flagsTile).getByText("50%")).toBeInTheDocument();
     expect(flagsTile.querySelector(".training-total-score-bar span"))
       .toHaveStyle({ width: "50%" });
-    expect(screen.getAllByText("1:30").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1:24").length).toBeGreaterThanOrEqual(1);
   });
 
   it("does not leak a non-default mode record into the default mode total", async () => {
@@ -264,12 +264,18 @@ describe("TrainingSession", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Europe" }));
 
     expect(screen.getByText("Modes d'entraînement")).toBeInTheDocument();
-    expect(screen.getByText("Tape toutes les zones dans l'ordre que tu veux.")).toBeInTheDocument();
+    expect(screen.queryByText("Tape toutes les zones dans l'ordre que tu veux."))
+      .not.toBeInTheDocument();
+    expect(screen.getByText("Comme Nommer, mais la première erreur marque l'item faux."))
+      .toBeInTheDocument();
     expect(screen.getByText("Regarde la zone surlignée, puis choisis le nom.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Sélectionner Flags" }));
 
-    expect(screen.getByText("Tape tous les médias dans l'ordre que tu veux.")).toBeInTheDocument();
+    expect(screen.queryByText("Tape tous les médias dans l'ordre que tu veux."))
+      .not.toBeInTheDocument();
+    expect(screen.getByText("Comme Nommer, mais la première erreur marque l'item faux."))
+      .toBeInTheDocument();
     expect(screen.getByText("Lis le nom, puis choisis le bon média.")).toBeInTheDocument();
   });
 
@@ -300,6 +306,9 @@ describe("TrainingSession", () => {
     expect(screen.getByRole("button", {
       name: "Démarrer Nommer pour Solo flag"
     })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Démarrer Sans faute pour Solo flag"
+    })).toBeInTheDocument();
     expect(screen.queryByRole("button", {
       name: "Démarrer Tout taper pour Solo flag"
     })).not.toBeInTheDocument();
@@ -320,6 +329,40 @@ describe("TrainingSession", () => {
         mapMode: "multiple_choice"
       });
     });
+  });
+
+  it("starts zero-mistake prompted media training as type_prompt with a strict budget", async () => {
+    getTrainingItems.mockResolvedValueOnce([
+      {
+        type_q: "media",
+        name: "Flags",
+        mode: "type_prompt",
+        training_fingerprint: "flags-fingerprint",
+        items: [
+          {
+            question_id: 11,
+            answer: "France",
+            label: "France",
+            media: "/static/france.png"
+          }
+        ]
+      }
+    ]);
+
+    render(<TrainingSession setMode={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sélectionner Flags" }));
+    fireEvent.click(screen.getByRole("button", { name: "Démarrer Sans faute pour Flags" }));
+
+    await waitFor(() => {
+      expect(getTrainingItems).toHaveBeenCalledWith({
+        scopeType: "group",
+        groupId: 6,
+        imageMode: "type_prompt"
+      });
+    });
+
+    expect(await screen.findByText("Erreurs 0 / 1")).toBeInTheDocument();
   });
 
   it("opens the Learn screen for a selected group, and only for a group", async () => {

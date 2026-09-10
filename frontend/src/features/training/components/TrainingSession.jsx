@@ -10,6 +10,7 @@ import {
 } from "../trainingRecordUtils";
 import {
   defaultMapMode,
+  MAP_MODE_TYPE_PROMPT,
   MAP_MODES,
   mapModeDetails,
   mapModeLabels
@@ -108,6 +109,8 @@ const recordBadgeStyle = {
   padding: "8px 12px"
 };
 
+const TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS = "type_prompt_zero_errors";
+
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -128,7 +131,19 @@ function initialScopeKey(scope, mode, nonce) {
     scope.key || "",
     (scope.questionIds || scope.question_ids || []).join(","),
     scope.name || "",
-    mode || ""
+    modeSelectionKey(mode)
+  ].join(":");
+}
+
+
+function modeSelectionKey(selection) {
+  if (!selection || typeof selection !== "object") {
+    return selection || "";
+  }
+
+  return [
+    selection.key || selection.id || selection.mode || "",
+    selection.maxErrorsPerQuestion ?? selection.max_errors_per_question ?? ""
   ].join(":");
 }
 
@@ -239,13 +254,58 @@ function groupQuestionCount(group) {
 }
 
 
+function withZeroErrorPromptMode(modes, promptMode) {
+  const index = modes.indexOf(promptMode);
+
+  if (index < 0) return modes;
+
+  return [
+    ...modes.slice(0, index + 1),
+    TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS,
+    ...modes.slice(index + 1)
+  ];
+}
+
+
+function modeOptionForConfig(config, mode) {
+  return config?.options?.[mode] || { key: mode, mode };
+}
+
+
+function labelForTrainingMode(config, mode) {
+  const option = modeOptionForConfig(config, mode);
+
+  return config?.labels?.[mode] || config?.labels?.[option.mode] || mode;
+}
+
+
+function isPromptBudgetTrainingMode(mode) {
+  return mode === TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS;
+}
+
+
 function modeConfigForGroup(group) {
   if (group?.type_group === "map") {
     return {
       defaultMode: defaultMapMode,
-      details: mapModeDetails,
-      labels: mapModeLabels,
-      modes: MAP_MODES
+      details: {
+        ...mapModeDetails,
+        [TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS]: (
+          "Comme Nommer, mais la première erreur marque l'item faux."
+        )
+      },
+      labels: {
+        ...mapModeLabels,
+        [TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS]: "Sans faute"
+      },
+      modes: withZeroErrorPromptMode(MAP_MODES, MAP_MODE_TYPE_PROMPT),
+      options: {
+        [TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS]: {
+          key: TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS,
+          mode: MAP_MODE_TYPE_PROMPT,
+          maxErrorsPerQuestion: 0
+        }
+      }
     };
   }
 
@@ -264,9 +324,24 @@ function modeConfigForGroup(group) {
 
     return {
       defaultMode: audioOnly ? IMAGE_MODE_TYPE_PROMPT : defaultImageMode,
-      details: imageModeDetails,
-      labels: imageModeLabels,
-      modes
+      details: {
+        ...imageModeDetails,
+        [TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS]: (
+          "Comme Nommer, mais la première erreur marque l'item faux."
+        )
+      },
+      labels: {
+        ...imageModeLabels,
+        [TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS]: "Sans faute"
+      },
+      modes: withZeroErrorPromptMode(modes, IMAGE_MODE_TYPE_PROMPT),
+      options: {
+        [TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS]: {
+          key: TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS,
+          mode: IMAGE_MODE_TYPE_PROMPT,
+          maxErrorsPerQuestion: 0
+        }
+      }
     };
   }
 
@@ -295,6 +370,7 @@ function modeConfigForGroup(group) {
 function recordForMode(group, mode) {
   const config = modeConfigForGroup(group);
   const records = group?.training_records;
+  const recordMode = mode;
 
   // When a per-mode map is present it is authoritative: a mode with no entry
   // has no record. The flat `training_record` is only a legacy fallback for the
@@ -302,8 +378,12 @@ function recordForMode(group, mode) {
   // non-default mode the hook overwrites it with that mode's score, which would
   // otherwise leak into the default mode until the next refresh.
   if (records && typeof records === "object") {
+    if (isPromptBudgetTrainingMode(recordMode)) {
+      return records[recordMode] || null;
+    }
+
     if (group?.type_group === "media") {
-      const canonicalMode = normalizeImageMode(mode);
+      const canonicalMode = normalizeImageMode(recordMode);
       const legacyRecord = Object.entries(records).find(([storedMode]) => (
         normalizeImageMode(storedMode) === canonicalMode
       ))?.[1];
@@ -311,22 +391,36 @@ function recordForMode(group, mode) {
       return records[canonicalMode] || legacyRecord || null;
     }
 
-    return records[mode] || null;
+    return records[recordMode] || null;
   }
 
-  return mode === config?.defaultMode ? group?.training_record : null;
+  return recordMode === config?.defaultMode ? group?.training_record : null;
 }
 
 
 function previousRecordForMode(group, mode) {
   const config = modeConfigForGroup(group);
   const records = group?.previous_training_records;
+  const recordMode = mode;
 
   if (records && typeof records === "object") {
-    return records[mode] || null;
+    if (isPromptBudgetTrainingMode(recordMode)) {
+      return records[recordMode] || null;
+    }
+
+    if (group?.type_group === "media") {
+      const canonicalMode = normalizeImageMode(recordMode);
+      const legacyRecord = Object.entries(records).find(([storedMode]) => (
+        normalizeImageMode(storedMode) === canonicalMode
+      ))?.[1];
+
+      return records[canonicalMode] || legacyRecord || null;
+    }
+
+    return records[recordMode] || null;
   }
 
-  return mode === config?.defaultMode
+  return recordMode === config?.defaultMode
     ? group?.previous_training_record || null
     : null;
 }
@@ -344,6 +438,7 @@ function isVisualQuestion(question) {
 function modeGlyph(mode) {
   if (mode === "type_all") return "Aa";
   if (mode === "click_prompt") return ">";
+  if (mode === TRAINING_MODE_TYPE_PROMPT_ZERO_ERRORS) return "0";
   if (mode === "type_prompt") return "T";
   if (mode === "multiple_choice") return "4";
   if (mode === "multiple_choice_label") return "A4";
@@ -687,6 +782,8 @@ function ModeAction({ config, group, mode, startScope }) {
   const displayRecord = record || previousRecord;
   const hasPreviousRecord = Boolean(previousRecord);
   const complete = record?.best_found_percent >= 100;
+  const label = labelForTrainingMode(config, mode);
+  const option = modeOptionForConfig(config, mode);
 
   return (
     <button
@@ -695,15 +792,15 @@ function ModeAction({ config, group, mode, startScope }) {
       onClick={() => startScope({
         ...group,
         type: "group"
-      }, mode)}
-      aria-label={`Démarrer ${config.labels[mode]} pour ${group.name}`}
+      }, option)}
+      aria-label={`Démarrer ${label} pour ${group.name}`}
     >
       <span className="training-mode-glyph" aria-hidden="true">
         {modeGlyph(mode)}
       </span>
 
       <span className="training-mode-copy">
-        <strong>{config.labels[mode]}</strong>
+        <strong>{label}</strong>
         <span>{config.details[mode]}</span>
       </span>
 
@@ -1157,6 +1254,7 @@ export default function TrainingSession({
   const [collectionNameDraft, setCollectionNameDraft] = useState("");
   const currentQuestion = session.questions[session.currentIndex];
   const activeGroupMode = (
+    session.activeScope?.groupModeKey ||
     session.activeScope?.groupMode ||
     session.activeScope?.mapMode ||
     session.activeScope?.imageMode
@@ -1552,7 +1650,7 @@ export default function TrainingSession({
                 <div style={{ color: "#777", fontSize: "14px" }}>
                   {session.allQuestionIds.length} items dans cette sélection
                   {activeGroupMode && activeModeConfig
-                    ? ` · ${activeModeConfig.labels[activeGroupMode]}`
+                    ? ` · ${labelForTrainingMode(activeModeConfig, activeGroupMode)}`
                     : ""}
                 </div>
               </div>

@@ -668,6 +668,7 @@ class TrainingAttemptRecordRequest(BaseModel):
     found_count: int = Field(ge=0)
     content_fingerprint: str = Field(min_length=1)
     mode: Optional[TrainingGroupMode] = None
+    max_errors_per_question: Optional[PromptErrorBudget] = None
 
 
 class MapZoneBulkItem(BaseModel):
