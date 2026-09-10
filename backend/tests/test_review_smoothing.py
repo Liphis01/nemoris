@@ -136,9 +136,33 @@ class SchedulerSmoothingTests(unittest.TestCase):
         self.assertEqual(favorite_interval(3), 2)
         self.assertEqual(favorite_interval(10), 7)
 
-    def test_map_mode_difficulty_uses_type_all_as_reference(self):
-        self.assertEqual(map_mode_difficulty("type_all", 2), 1.0)
+    def test_map_mode_difficulty_uses_prompt_error_budget(self):
+        self.assertEqual(map_mode_difficulty("type_all", 2), 1.05)
         self.assertEqual(map_mode_difficulty("type_prompt", 20), 1.05)
+        self.assertAlmostEqual(
+            map_mode_difficulty(
+                "type_prompt",
+                20,
+                max_errors_per_question=2
+            ),
+            1.05 + (0.25 / 3)
+        )
+        self.assertAlmostEqual(
+            map_mode_difficulty(
+                "type_prompt",
+                20,
+                max_errors_per_question=1
+            ),
+            1.05 + (0.25 / 2)
+        )
+        self.assertAlmostEqual(
+            map_mode_difficulty(
+                "type_prompt",
+                20,
+                max_errors_per_question=0
+            ),
+            1.30
+        )
         self.assertEqual(map_mode_difficulty("multiple_choice", 20), 0.55)
         self.assertAlmostEqual(map_mode_difficulty("click_prompt", 1), 0.4)
         self.assertAlmostEqual(map_mode_difficulty("click_prompt", 4), 0.505)
@@ -173,7 +197,7 @@ class SchedulerSmoothingTests(unittest.TestCase):
         )
         self.assertEqual(
             choose_map_review_mode([strong], context, rng=FixedRandom(0)),
-            "type_all"
+            "type_prompt"
         )
         self.assertNotEqual(
             choose_map_review_mode([hard], context[:4], rng=FixedRandom(0)),
@@ -222,8 +246,8 @@ class SchedulerSmoothingTests(unittest.TestCase):
             260
         )
         self.assertGreaterEqual(
-            strong_modes["type_prompt"] + strong_modes["type_all"],
-            240
+            strong_modes["type_prompt"],
+            300
         )
 
     def test_map_random_selector_keeps_mixed_chunks_varied(self):
@@ -337,9 +361,33 @@ class SchedulerSmoothingTests(unittest.TestCase):
             "click_prompt"
         )
 
-    def test_image_mode_difficulty_uses_type_all_as_reference(self):
-        self.assertEqual(image_mode_difficulty("type_all", 2), 1.0)
+    def test_image_mode_difficulty_uses_prompt_error_budget(self):
+        self.assertEqual(image_mode_difficulty("type_all", 2), 1.05)
         self.assertEqual(image_mode_difficulty("type_prompt", 20), 1.05)
+        self.assertAlmostEqual(
+            image_mode_difficulty(
+                "type_prompt",
+                20,
+                max_errors_per_question=2
+            ),
+            1.05 + (0.25 / 3)
+        )
+        self.assertAlmostEqual(
+            image_mode_difficulty(
+                "type_prompt",
+                20,
+                max_errors_per_question=1
+            ),
+            1.05 + (0.25 / 2)
+        )
+        self.assertAlmostEqual(
+            image_mode_difficulty(
+                "type_prompt",
+                20,
+                max_errors_per_question=0
+            ),
+            1.30
+        )
         self.assertEqual(
             image_mode_difficulty("multiple_choice_label", 20),
             0.55
@@ -428,8 +476,8 @@ class SchedulerSmoothingTests(unittest.TestCase):
             260
         )
         self.assertGreater(
-            strong_modes["type_prompt"] + strong_modes["type_all"],
-            240
+            strong_modes["type_prompt"],
+            299
         )
 
     def test_image_recall_probe_favours_unsupported_recall(self):
@@ -1253,8 +1301,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
             db=self.db
         )
 
-        self.assertEqual(high.next_review, today + timedelta(days=3))
-        self.assertEqual(low.next_review, today + timedelta(days=2))
+        self.assertEqual(high.next_review, today + timedelta(days=2))
+        self.assertEqual(low.next_review, today + timedelta(days=3))
 
     def test_text_answer_accepts_easy_quality_and_records_fsrs_metadata(self):
         today = date.today()

@@ -11,6 +11,10 @@ import {
 import { matchesAnswerValue } from "../answerPolicy";
 import { buildChoiceOptions as buildConfusableChoiceOptions } from "../distractorSelection";
 import { qualityPickHoldMs } from "../../../shared/answerFeedback";
+import {
+  normalizePromptErrorBudget,
+  promptErrorBudgetExceeded
+} from "../promptErrorBudget";
 
 export const MAP_RECAP_UNANSWERED = "unanswered";
 
@@ -294,6 +298,9 @@ export function useMapReview(
   // matching typed answers, prompt resolution, recap quality editing, and
   // per-zone grade submission.
   const mode = normalizeMapMode(options.mode);
+  const maxErrorsPerQuestion = mode === MAP_MODE_TYPE_PROMPT
+    ? normalizePromptErrorBudget(options.maxErrorsPerQuestion)
+    : null;
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
   // Review grades each QCM pick inline (reveal + quality) then auto-submits the
@@ -319,6 +326,7 @@ export function useMapReview(
   // What the learner actually typed/clicked/picked per zone, for M0 0.1
   // (storing the given answer). Keyed like qualityByQuestionId.
   const [answerByQuestionId, setAnswerByQuestionId] = useState({});
+  const [promptErrorCountByQuestionId, setPromptErrorCountByQuestionId] = useState({});
   const [hasAttemptedAnswer, setHasAttemptedAnswer] = useState(false);
   const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [focusedCode, setFocusedCode] = useState(null);
@@ -345,7 +353,7 @@ export function useMapReview(
   const choiceRateTimeoutRef = useRef(null);
   const clickEchoTimeoutRef = useRef(null);
   const typedEchoTimeoutRef = useRef(null);
-  const reviewKey = `${mode}:${itemKey(reviewZones)}`;
+  const reviewKey = `${mode}:${maxErrorsPerQuestion ?? "unlimited"}:${itemKey(reviewZones)}`;
   const distractorUsageRef = useRef({
     reviewKey: null,
     counts: new Map(),
@@ -367,6 +375,7 @@ export function useMapReview(
     setShowRecap(false);
     setQualityByQuestionId({});
     setAnswerByQuestionId({});
+    setPromptErrorCountByQuestionId({});
     setHasAttemptedAnswer(false);
     setCandidateIdsByQuestionId({});
     setFocusedCode(null);
@@ -612,14 +621,40 @@ export function useMapReview(
         ])
       );
 
-      await Promise.all([
-        Object.keys(graded).length > 0
-          ? submitAnswer(graded, mode, contextItems.length, answers, candidates)
-          : null,
-        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
-      ].filter(Boolean));
+      const promptErrorCounts = Object.fromEntries(
+        Object.entries(promptErrorCountByQuestionId)
+          .filter(([, count]) => Number(count) > 0)
+      );
+      const submitArgs = [
+        graded,
+        mode,
+        contextItems.length,
+        answers,
+        candidates
+      ];
 
-      const failedQuestionIds = Object.entries(qualities)
+      if (maxErrorsPerQuestion !== null) {
+        submitArgs.push(promptErrorCounts, maxErrorsPerQuestion);
+      }
+
+      const answerPromise = Object.keys(graded).length > 0
+        ? submitAnswer(...submitArgs)
+        : Promise.resolve(null);
+      const graduatePromise = graduateIds.length > 0
+        ? graduateAnswer?.(graduateIds) || Promise.resolve(null)
+        : Promise.resolve(null);
+      const [answerResponse] = await Promise.all([
+        answerPromise,
+        graduatePromise
+      ]);
+
+      const responseFailedQuestionIds = Array.isArray(answerResponse?.items)
+        ? answerResponse.items
+          .filter(item => Number(item?.effective_quality ?? item?.quality) === 0)
+          .map(item => Number(item.question_id))
+          .filter(id => Number.isFinite(id))
+        : null;
+      const failedQuestionIds = responseFailedQuestionIds ?? Object.entries(qualities)
         .filter(([, quality]) => quality === 0)
         .map(([questionId]) => Number(questionId));
       // Only a multiple-choice miss records a picked option (see
@@ -638,6 +673,7 @@ export function useMapReview(
       setResolvedQuestionIds([]);
       setQualityByQuestionId({});
       setAnswerByQuestionId({});
+      setPromptErrorCountByQuestionId({});
       setHasAttemptedAnswer(false);
       setCandidateIdsByQuestionId({});
       setFocusedCode(null);
@@ -757,6 +793,23 @@ export function useMapReview(
     setAnswerByQuestionId(prev => ({ ...prev, [item.question_id]: guess }));
   }
 
+  function promptErrorCountFor(item) {
+    return item ? Number(promptErrorCountByQuestionId[item.question_id] || 0) : 0;
+  }
+
+  function incrementPromptErrorCount(item) {
+    if (!item) return 0;
+
+    const nextCount = promptErrorCountFor(item) + 1;
+
+    setPromptErrorCountByQuestionId(prev => ({
+      ...prev,
+      [item.question_id]: nextCount
+    }));
+
+    return nextCount;
+  }
+
   function markFound(item, guess) {
     // Do not count a zone twice if the user types an alias after finding it.
     if (!item || foundQuestionIdSet.has(item.question_id)) return;
@@ -812,6 +865,13 @@ export function useMapReview(
         return true;
       } else if (input.trim()) {
         recordAnswer(currentPromptItem, input);
+        const nextErrorCount = incrementPromptErrorCount(currentPromptItem);
+
+        if (promptErrorBudgetExceeded(nextErrorCount, maxErrorsPerQuestion)) {
+          markMissed(currentPromptItem, input);
+          return false;
+        }
+
         setIncorrectFlashId(Date.now());
         setCorrectFlashId(0);
         return false;
@@ -1166,6 +1226,7 @@ export function useMapReview(
         : null
   );
   const promptDisplayItem = clickRatingFeedback?.item || currentPromptItem;
+  const promptErrorCount = promptErrorCountFor(currentPromptItem);
   const selectedCode = activeChoiceFeedback ? null : targetHighlightCode;
 
   return {
@@ -1195,7 +1256,9 @@ export function useMapReview(
     missedCodes,
     progressPercent,
     promptCode: promptDisplayItem?.code || null,
+    promptErrorCount,
     promptLabel: promptDisplayItem?.label || "",
+    maxErrorsPerQuestion,
     rateChoice,
     rateClickAnswer,
     rateTypedAnswer,
@@ -1210,6 +1273,7 @@ export function useMapReview(
     manualFocusCode: remainingFocusCode,
     remainingFocusCode: targetHighlightCode || remainingFocusCode,
     remainingZones,
+    resolvedQuestionIds,
     selectedCode,
     selectNextPrompt,
     sendResult,

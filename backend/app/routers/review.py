@@ -38,6 +38,7 @@ from ..services.map_modes import (
     map_mode_difficulty,
     normalize_map_mode
 )
+from ..services.mode_difficulty import normalize_prompt_error_budget
 from ..services.image_modes import (
     DEFAULT_IMAGE_MODE,
     IMAGE_MULTIPLE_CHOICE_MODES,
@@ -409,7 +410,9 @@ def answer_map(data: MapAnswerRequest, db: Session = Depends(get_db)):
         today=data.review_date,
         context_count=data.context_count,
         answers=data.answers,
-        candidates=data.candidates
+        candidates=data.candidates,
+        max_errors_per_question=data.max_errors_per_question,
+        prompt_error_counts=data.prompt_error_counts
     )
     return {"status": "ok"}
 
@@ -424,7 +427,9 @@ def answer_media(data: MediaAnswerRequest, db: Session = Depends(get_db)):
         today=data.review_date,
         context_count=data.context_count,
         answers=data.answers,
-        candidates=data.candidates
+        candidates=data.candidates,
+        max_errors_per_question=data.max_errors_per_question,
+        prompt_error_counts=data.prompt_error_counts
     )
     return {"status": "ok"}
 
@@ -731,10 +736,14 @@ def apply_answer_batch(
     today=None,
     context_count=None,
     answers=None,
-    candidates=None
+    candidates=None,
+    max_errors_per_question=None,
+    prompt_error_counts=None
 ):
     answers = answers or {}
     candidates = candidates or {}
+    prompt_error_counts = prompt_error_counts or {}
+    prompt_error_budget = normalize_prompt_error_budget(max_errors_per_question)
     question_ids = list(items.keys())
     questions = (
         db.query(Question)
@@ -852,9 +861,12 @@ def apply_answer_batch(
         raw_quality=None,
         mode=None,
         backend_grade=None,
-        user_marked_close=False
+        user_marked_close=False,
+        max_errors_per_question=None,
+        prompt_error_count=None,
+        prompt_error_budget_exhausted=False
     ):
-        response_items.append({
+        item = {
             "question_id": question_id,
             "quality": quality,
             "raw_quality": raw_quality if raw_quality is not None else quality,
@@ -867,7 +879,30 @@ def apply_answer_batch(
             "user_marked_close": bool(user_marked_close),
             "mode": mode,
             "progress": None
-        })
+        }
+
+        if max_errors_per_question is not None:
+            item["max_errors_per_question"] = max_errors_per_question
+
+        if prompt_error_count is not None:
+            item["prompt_error_count"] = prompt_error_count
+
+        if prompt_error_budget_exhausted:
+            item["prompt_error_budget_exhausted"] = True
+
+        response_items.append(item)
+
+    def prompt_error_count_for(question_id):
+        value = (
+            prompt_error_counts.get(question_id)
+            if question_id in prompt_error_counts
+            else prompt_error_counts.get(str(question_id))
+        )
+
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
 
     for question_id, quality in items.items():
         question = question_map.get(question_id)
@@ -903,7 +938,9 @@ def apply_answer_batch(
                     )
                 )
 
-        def authoritative_quality(raw_quality):
+        def authoritative_quality(raw_quality, *, force_miss=False):
+            if force_miss:
+                return 0
             if backend_grade is None:
                 return raw_quality
             if not backend_grade["matched"]:
@@ -923,7 +960,18 @@ def apply_answer_batch(
 
         if normalized_map_mode:
             raw_quality = calibrate_map_quality(quality)
-            scheduled_quality = authoritative_quality(raw_quality)
+            prompt_error_count = prompt_error_count_for(question_id)
+            budget_applies = (
+                normalized_map_mode == "type_prompt" and
+                prompt_error_budget is not None
+            )
+            prompt_budget_exhausted = (
+                budget_applies and prompt_error_count > prompt_error_budget
+            )
+            scheduled_quality = authoritative_quality(
+                raw_quality,
+                force_miss=prompt_budget_exhausted
+            )
 
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -941,7 +989,12 @@ def apply_answer_batch(
             difficulty = map_mode_difficulty(
                 normalized_map_mode,
                 context_count=active_context_count,
-                tuning=scheduler_tuning
+                tuning=scheduler_tuning,
+                max_errors_per_question=(
+                    prompt_error_budget
+                    if normalized_map_mode == "type_prompt"
+                    else None
+                )
             )
             metadata = {
                 "map_mode": normalized_map_mode,
@@ -951,6 +1004,13 @@ def apply_answer_batch(
                 "mode_adjusted": difficulty != 1.0,
                 "mode_difficulty": difficulty
             }
+
+            if normalized_map_mode == "type_prompt":
+                metadata["max_errors_per_question"] = prompt_error_budget
+                metadata["prompt_error_count"] = prompt_error_count
+                metadata["prompt_error_budget_exhausted"] = (
+                    prompt_budget_exhausted
+                )
 
             if answer_provided:
                 metadata["answer"] = submitted_answer
@@ -970,7 +1030,20 @@ def apply_answer_batch(
                 direction=direction_for_grouped_answer("map", normalized_map_mode),
                 candidate_ids=submitted_candidates,
                 answer_policy=policy,
-                context=answer_context({"context_count": active_context_count})
+                context=answer_context({
+                    "context_count": active_context_count,
+                    "max_errors_per_question": (
+                        prompt_error_budget
+                        if normalized_map_mode == "type_prompt"
+                        else None
+                    ),
+                    "prompt_error_count": (
+                        prompt_error_count
+                        if normalized_map_mode == "type_prompt"
+                        else None
+                    ),
+                    "prompt_error_budget_exhausted": prompt_budget_exhausted
+                })
             )
 
             progress_quality_pairs.append((progress, scheduled_quality, metadata))
@@ -979,11 +1052,39 @@ def apply_answer_batch(
                 scheduled_quality,
                 raw_quality=raw_quality,
                 mode=normalized_map_mode,
-                backend_grade=backend_grade
+                backend_grade=backend_grade,
+                max_errors_per_question=(
+                    prompt_error_budget
+                    if normalized_map_mode == "type_prompt"
+                    else None
+                ),
+                prompt_error_count=(
+                    prompt_error_count
+                    if (
+                        normalized_map_mode == "type_prompt" and
+                        (
+                            prompt_error_count > 0 or
+                            prompt_error_budget is not None
+                        )
+                    )
+                    else None
+                ),
+                prompt_error_budget_exhausted=prompt_budget_exhausted
             )
         elif normalized_image_mode:
             raw_quality = calibrate_image_quality(quality)
-            scheduled_quality = authoritative_quality(raw_quality)
+            prompt_error_count = prompt_error_count_for(question_id)
+            budget_applies = (
+                normalized_image_mode == "type_prompt" and
+                prompt_error_budget is not None
+            )
+            prompt_budget_exhausted = (
+                budget_applies and prompt_error_count > prompt_error_budget
+            )
+            scheduled_quality = authoritative_quality(
+                raw_quality,
+                force_miss=prompt_budget_exhausted
+            )
 
             if not progress:
                 progress = create_initial_progress(question_id, today=today)
@@ -1001,7 +1102,12 @@ def apply_answer_batch(
             difficulty = image_mode_difficulty(
                 normalized_image_mode,
                 context_count=active_context_count,
-                tuning=scheduler_tuning
+                tuning=scheduler_tuning,
+                max_errors_per_question=(
+                    prompt_error_budget
+                    if normalized_image_mode == "type_prompt"
+                    else None
+                )
             )
             metadata = {
                 "image_mode": normalized_image_mode,
@@ -1011,6 +1117,13 @@ def apply_answer_batch(
                 "mode_adjusted": difficulty != 1.0,
                 "mode_difficulty": difficulty
             }
+
+            if normalized_image_mode == "type_prompt":
+                metadata["max_errors_per_question"] = prompt_error_budget
+                metadata["prompt_error_count"] = prompt_error_count
+                metadata["prompt_error_budget_exhausted"] = (
+                    prompt_budget_exhausted
+                )
 
             if normalized_image_mode in IMAGE_MULTIPLE_CHOICE_MODES:
                 metadata["image_choice_count"] = min(4, active_context_count)
@@ -1036,7 +1149,20 @@ def apply_answer_batch(
                 ),
                 candidate_ids=submitted_candidates,
                 answer_policy=policy,
-                context=answer_context({"context_count": active_context_count})
+                context=answer_context({
+                    "context_count": active_context_count,
+                    "max_errors_per_question": (
+                        prompt_error_budget
+                        if normalized_image_mode == "type_prompt"
+                        else None
+                    ),
+                    "prompt_error_count": (
+                        prompt_error_count
+                        if normalized_image_mode == "type_prompt"
+                        else None
+                    ),
+                    "prompt_error_budget_exhausted": prompt_budget_exhausted
+                })
             )
 
             progress_quality_pairs.append((
@@ -1049,7 +1175,24 @@ def apply_answer_batch(
                 scheduled_quality,
                 raw_quality=raw_quality,
                 mode=normalized_image_mode,
-                backend_grade=backend_grade
+                backend_grade=backend_grade,
+                max_errors_per_question=(
+                    prompt_error_budget
+                    if normalized_image_mode == "type_prompt"
+                    else None
+                ),
+                prompt_error_count=(
+                    prompt_error_count
+                    if (
+                        normalized_image_mode == "type_prompt" and
+                        (
+                            prompt_error_count > 0 or
+                            prompt_error_budget is not None
+                        )
+                    )
+                    else None
+                ),
+                prompt_error_budget_exhausted=prompt_budget_exhausted
             )
         elif normalized_text_mode:
             raw_quality = calibrate_text_quality(quality)

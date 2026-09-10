@@ -28,6 +28,7 @@ from .timeline import (
 from .image_modes import (
     IMAGE_MODES,
     IMAGE_MULTIPLE_CHOICE_MODES,
+    IMAGE_MODE_TYPE_PROMPT,
     canonical_image_mode,
     choose_image_review_mode,
     image_mode_difficulty
@@ -35,6 +36,8 @@ from .image_modes import (
 from .map_modes import (
     MAP_MODE_MULTIPLE_CHOICE,
     MAP_MODES,
+    MAP_MODE_TYPE_PROMPT,
+    canonical_map_mode,
     choose_map_review_mode,
     map_mode_difficulty
 )
@@ -71,6 +74,7 @@ from .mode_selection import (
     MODE_AFFINITIES,
     has_recall_proof_since_latest_miss,
     latest_relearning_history_mode,
+    prompted_recall_budget_for_questions,
     question_mode_affinity,
     review_mode_fallback
 )
@@ -193,10 +197,11 @@ def _review_chunks_for_bucket(
     ]
 
 
-def _chunk_with_mode(chunk, mode):
+def _chunk_with_mode(chunk, mode, *, max_errors_per_question=None):
     planned = dict(chunk)
     planned["questions"] = list(chunk.get("questions") or [])
     planned["mode"] = mode
+    planned["max_errors_per_question"] = max_errors_per_question
     return planned
 
 
@@ -219,6 +224,9 @@ def _merge_same_mode_chunks(chunks, max_size=REVIEW_GROUP_MAX_CHUNK_SIZE):
             and not planned.get("forced_mode")
             and planned.get("mode") is not None
             and previous.get("mode") == planned.get("mode")
+            and previous.get("max_errors_per_question") == planned.get(
+                "max_errors_per_question"
+            )
             and len(previous.get("questions") or []) + len(questions) <= max_size
         ):
             previous["questions"] = previous["questions"] + questions
@@ -661,7 +669,8 @@ def _serialize_review_items(
             scheduled_review,
             today=today,
             history_key="map_mode",
-            valid_modes=MAP_MODES
+            valid_modes=MAP_MODES,
+            mode_normalizer=canonical_map_mode
         )
         planned_chunks = []
 
@@ -689,11 +698,27 @@ def _serialize_review_items(
                     support_only=chunk["support_only"]
                 )
             )
-            planned_chunks.append(_chunk_with_mode(chunk, mode))
+            max_errors_per_question = (
+                prompted_recall_budget_for_questions(
+                    chunk_questions,
+                    recall_only=chunk["recall_only"],
+                    support_only=chunk["support_only"]
+                )
+                if mode == MAP_MODE_TYPE_PROMPT and not replay_mode
+                else None
+            )
+            planned_chunks.append(
+                _chunk_with_mode(
+                    chunk,
+                    mode,
+                    max_errors_per_question=max_errors_per_question
+                )
+            )
 
         for chunk in _merge_same_mode_chunks(planned_chunks):
             chunk_questions = chunk["questions"]
             mode = chunk["mode"]
+            max_errors_per_question = chunk.get("max_errors_per_question")
             active_context_questions, choice_context_questions = (
                 _visual_review_contexts(
                     chunk_questions,
@@ -709,7 +734,8 @@ def _serialize_review_items(
             mode_difficulty = map_mode_difficulty(
                 mode,
                 context_count=len(context_questions),
-                tuning=scheduler_tuning
+                tuning=scheduler_tuning,
+                max_errors_per_question=max_errors_per_question
             )
             context_items = [
                 serialize_map_review_zone(
@@ -726,7 +752,8 @@ def _serialize_review_items(
                 group,
                 group_data["tags"],
                 mode=mode,
-                context_items=context_items
+                context_items=context_items,
+                max_errors_per_question=max_errors_per_question
             )
             map_group["items"] = [
                 serialize_map_review_zone(
@@ -800,12 +827,28 @@ def _serialize_review_items(
                     support_only=chunk["support_only"]
                 )
             )
-            planned_chunks.append(_chunk_with_mode(chunk, mode))
+            max_errors_per_question = (
+                prompted_recall_budget_for_questions(
+                    chunk_questions,
+                    recall_only=chunk["recall_only"],
+                    support_only=chunk["support_only"]
+                )
+                if mode == IMAGE_MODE_TYPE_PROMPT and not replay_mode
+                else None
+            )
+            planned_chunks.append(
+                _chunk_with_mode(
+                    chunk,
+                    mode,
+                    max_errors_per_question=max_errors_per_question
+                )
+            )
             previous_mode = mode
 
         for chunk in _merge_same_mode_chunks(planned_chunks):
             chunk_questions = chunk["questions"]
             mode = chunk["mode"]
+            max_errors_per_question = chunk.get("max_errors_per_question")
             active_context_questions, choice_context_questions = (
                 _visual_review_contexts(
                     chunk_questions,
@@ -821,7 +864,8 @@ def _serialize_review_items(
             mode_difficulty = image_mode_difficulty(
                 mode,
                 context_count=len(context_questions),
-                tuning=scheduler_tuning
+                tuning=scheduler_tuning,
+                max_errors_per_question=max_errors_per_question
             )
             context_items = [
                 serialize_media_review_item(
@@ -838,7 +882,8 @@ def _serialize_review_items(
                 group,
                 group_data["tags"],
                 mode=mode,
-                context_items=context_items
+                context_items=context_items,
+                max_errors_per_question=max_errors_per_question
             )
             media_group["items"] = [
                 serialize_media_review_item(

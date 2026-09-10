@@ -50,7 +50,9 @@ describe("useMapReview recap sorting", () => {
       zone({ questionId: 3, code: "g", label: "Gamma", difficulty: 8 }),
       zone({ questionId: 4, code: "d", label: "Delta", difficulty: 2 })
     ];
-    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), undefined, { mode: "type_all" })
+    );
 
     act(() => {
       result.current.setInput("Beta");
@@ -119,7 +121,9 @@ describe("useMapReview recap sorting", () => {
       }),
       zone({ questionId: 3, code: "g", label: "Gamma", difficulty: 4 })
     ];
-    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), undefined, { mode: "type_all" })
+    );
 
     act(() => {
       result.current.setInput("Alpha");
@@ -185,7 +189,7 @@ describe("useMapReview recap sorting", () => {
       zone({ questionId: 2, code: "b", label: "Beta" })
     ];
     const { result } = renderHook(() =>
-      useMapReview(reviewZones, onComplete, submitAnswer)
+      useMapReview(reviewZones, onComplete, submitAnswer, { mode: "type_all" })
     );
 
     act(() => {
@@ -356,7 +360,10 @@ describe("useMapReview recap sorting", () => {
       zone({ questionId: 2, code: "b", label: "Beta" })
     ];
     const { result } = renderHook(() =>
-      useMapReview(reviewZones, vi.fn(), vi.fn(), { onAnsweringComplete })
+      useMapReview(reviewZones, vi.fn(), vi.fn(), {
+        mode: "type_all",
+        onAnsweringComplete
+      })
     );
 
     expect(result.current.canFinishReview).toBe(false);
@@ -408,7 +415,7 @@ describe("useMapReview recap sorting", () => {
       zone({ questionId: 2, code: "b", label: "Beta" })
     ];
     const { result } = renderHook(() =>
-      useMapReview(reviewZones, vi.fn(), vi.fn())
+      useMapReview(reviewZones, vi.fn(), vi.fn(), { mode: "type_all" })
     );
 
     let firstSubmit;
@@ -496,6 +503,80 @@ describe("useMapReview recap sorting", () => {
     expect(onAnsweringComplete).toHaveBeenCalledWith([1, 2]);
   });
 
+  it.each([2, 1, 0])(
+    "misses only the active type_prompt zone after budget %s is exceeded",
+    async (maxErrorsPerQuestion) => {
+      const submitAnswer = vi.fn().mockResolvedValue({});
+      const reviewZones = [
+        zone({ questionId: 1, code: "a", label: "Alpha" }),
+        zone({ questionId: 2, code: "b", label: "Beta" })
+      ];
+      const { result } = renderHook(() =>
+        useMapReview(reviewZones, vi.fn(), submitAnswer, {
+          mode: "type_prompt",
+          maxErrorsPerQuestion
+        })
+      );
+
+      const firstPrompt = result.current.currentPromptItem;
+
+      for (let attempt = 1; attempt <= maxErrorsPerQuestion; attempt += 1) {
+        act(() => {
+          result.current.setInput(`wrong ${attempt}`);
+        });
+        act(() => {
+          result.current.handleSubmit();
+        });
+
+        expect(result.current.currentPromptItem.question_id).toBe(
+          firstPrompt.question_id
+        );
+        expect(result.current.promptErrorCount).toBe(attempt);
+        expect(result.current.resolvedQuestionIds).toEqual([]);
+      }
+
+      act(() => {
+        result.current.setInput("final wrong");
+      });
+      act(() => {
+        result.current.handleSubmit();
+      });
+
+      expect(result.current.resolvedQuestionIds).toContain(
+        firstPrompt.question_id
+      );
+      expect(result.current.foundQuestionIds).not.toContain(
+        firstPrompt.question_id
+      );
+      expect(result.current.currentPromptItem.question_id).not.toBe(
+        firstPrompt.question_id
+      );
+
+      const secondPrompt = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.setInput(secondPrompt.label);
+      });
+      act(() => {
+        result.current.handleSubmit();
+      });
+
+      await act(async () => {
+        await result.current.sendResult();
+      });
+
+      expect(submitAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({ [firstPrompt.question_id]: 0 }),
+        "type_prompt",
+        2,
+        expect.any(Object),
+        expect.any(Object),
+        { [firstPrompt.question_id]: maxErrorsPerQuestion + 1 },
+        maxErrorsPerQuestion
+      );
+    }
+  );
+
   it("allows partial finish when that mode explicitly permits non-answers", () => {
     const onAnsweringComplete = vi.fn();
     const reviewZones = [
@@ -530,7 +611,9 @@ describe("useMapReview recap sorting", () => {
       zone({ questionId: 3, code: "c", label: "Gamma" }),
       zone({ questionId: 4, code: "d", label: "Delta" })
     ];
-    const { result } = renderHook(() => useMapReview(reviewZones, vi.fn()));
+    const { result } = renderHook(() =>
+      useMapReview(reviewZones, vi.fn(), undefined, { mode: "type_all" })
+    );
 
     act(() => {
       result.current.focusNextRemainingZone();

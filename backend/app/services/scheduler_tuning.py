@@ -17,7 +17,10 @@ from ..scheduler import (
     review_datetime_for_date,
     update_progress
 )
-from .mode_difficulty import click_prompt_base_difficulty
+from .mode_difficulty import (
+    click_prompt_base_difficulty,
+    prompted_recall_strictness_bonus
+)
 from .sequence_modes import (
     SEQUENCE_GOAL_RECITATION,
     sequence_reorder_difficulty
@@ -93,6 +96,7 @@ class HistoryEvent:
     goal: str | None = None
     recorded_difficulty: float | None = None
     recorded_sequence_reorder_bias: float = 0.0
+    prompt_error_budget: int | None = None
 
 
 @dataclass
@@ -195,6 +199,30 @@ def history_mode_difficulty(entry):
         return None
 
 
+def history_prompt_error_budget(entry):
+    value = entry.get("max_errors_per_question")
+
+    if value is None:
+        answer_event = entry.get("answer_event")
+        context = (
+            answer_event.get("context")
+            if isinstance(answer_event, dict)
+            else None
+        )
+        if isinstance(context, dict):
+            value = context.get("max_errors_per_question")
+
+    if value is None:
+        return None
+
+    try:
+        budget = int(value)
+    except (TypeError, ValueError):
+        return None
+
+    return budget if budget in {0, 1, 2} else None
+
+
 def history_sequence_reorder_bias(entry):
     try:
         return float(entry.get("sequence_reorder_bias", 0.0))
@@ -236,7 +264,8 @@ def sorted_history_events(progress):
             context_count=history_context_count(entry),
             goal=entry.get("sequence_goal"),
             recorded_difficulty=history_mode_difficulty(entry),
-            recorded_sequence_reorder_bias=history_sequence_reorder_bias(entry)
+            recorded_sequence_reorder_bias=history_sequence_reorder_bias(entry),
+            prompt_error_budget=history_prompt_error_budget(entry)
         ))
 
     return sorted(events, key=lambda item: (item.reviewed_on, item.index))
@@ -247,7 +276,11 @@ def mode_difficulty_for_event(event, params):
         return 1.0
 
     if event.mode == "type_prompt":
-        return params.type_prompt_difficulty
+        return min(
+            1.35,
+            params.type_prompt_difficulty +
+            prompted_recall_strictness_bonus(event.prompt_error_budget)
+        )
 
     if event.mode == "multiple_choice":
         return params.multiple_choice_difficulty

@@ -1,3 +1,4 @@
+from .mode_difficulty import prompted_recall_difficulty
 from .mode_selection import (
     MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
@@ -27,9 +28,13 @@ IMAGE_MODES = (
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
     IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
 )
+IMAGE_REVIEW_MODES = (
+    IMAGE_MODE_TYPE_PROMPT,
+    IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
+    IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
+)
 IMAGE_RECALL_MODES = (
-    IMAGE_MODE_TYPE_ALL,
-    IMAGE_MODE_TYPE_PROMPT
+    IMAGE_MODE_TYPE_PROMPT,
 )
 IMAGE_SUPPORTED_MODES = (
     IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
@@ -59,6 +64,9 @@ def canonical_image_mode(mode):
 
     if value == LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE:
         return IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
+
+    if value == IMAGE_MODE_TYPE_ALL:
+        return IMAGE_MODE_TYPE_PROMPT
 
     return value if value in IMAGE_MODES else None
 
@@ -93,14 +101,22 @@ def _tuned_number(tuning, key, default):
         return default
 
 
-def image_mode_difficulty(mode=None, context_count=0, tuning=None):
+def image_mode_difficulty(
+    mode=None,
+    context_count=0,
+    tuning=None,
+    max_errors_per_question=None
+):
     mode = normalize_image_mode(mode)
 
     if mode == IMAGE_MODE_TYPE_PROMPT:
-        return _tuned_number(
-            tuning,
-            "type_prompt_difficulty",
-            IMAGE_TYPE_PROMPT_DIFFICULTY
+        return prompted_recall_difficulty(
+            _tuned_number(
+                tuning,
+                "type_prompt_difficulty",
+                IMAGE_TYPE_PROMPT_DIFFICULTY
+            ),
+            max_errors_per_question
         )
 
     if mode in IMAGE_MULTIPLE_CHOICE_MODES:
@@ -160,20 +176,17 @@ def choose_image_review_mode(
         base_scores = {
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 4.0,
             IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 3.8,
-            IMAGE_MODE_TYPE_PROMPT: 2.1,
-            IMAGE_MODE_TYPE_ALL: 0.8
+            IMAGE_MODE_TYPE_PROMPT: 2.1
         }
     elif recall_probe_count / len(due_questions) >= 0.55:
         base_scores = {
             IMAGE_MODE_TYPE_PROMPT: 4.2,
-            IMAGE_MODE_TYPE_ALL: 3.5,
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 0.8,
             IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 0.7
         }
     elif strong_count / len(due_questions) >= 0.55:
         base_scores = {
             IMAGE_MODE_TYPE_PROMPT: 3.6,
-            IMAGE_MODE_TYPE_ALL: 3.1,
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 1.1,
             IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 1.0
         }
@@ -181,8 +194,7 @@ def choose_image_review_mode(
         base_scores = {
             IMAGE_MODE_TYPE_PROMPT: 3.0,
             IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 2.2,
-            IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 2.1,
-            IMAGE_MODE_TYPE_ALL: 1.4
+            IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 2.1
         }
 
     scores = dict(base_scores)
@@ -197,21 +209,24 @@ def choose_image_review_mode(
         scores,
         due_questions,
         "image_mode",
-        IMAGE_MODES,
+        IMAGE_REVIEW_MODES,
         mode_normalizer=canonical_image_mode
     )
 
     for mode in discouraged_modes or []:
-        if mode in IMAGE_MODES:
-            scores[mode] = scores.get(mode, 0) - 0.75
+        normalized_discouraged_mode = canonical_image_mode(mode)
+
+        if normalized_discouraged_mode in IMAGE_REVIEW_MODES:
+            scores[normalized_discouraged_mode] = (
+                scores.get(normalized_discouraged_mode, 0) - 0.75
+            )
 
     tie_order = {
         IMAGE_MODE_MULTIPLE_CHOICE_LABEL: 0,
         IMAGE_MODE_MULTIPLE_CHOICE_MEDIA: 1,
-        IMAGE_MODE_TYPE_PROMPT: 2,
-        IMAGE_MODE_TYPE_ALL: 3
+        IMAGE_MODE_TYPE_PROMPT: 2
     }
-    eligible_modes = list(IMAGE_MODES)
+    eligible_modes = list(IMAGE_REVIEW_MODES)
 
     eligible_modes = [
         mode

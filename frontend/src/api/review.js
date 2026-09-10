@@ -152,25 +152,64 @@ function candidatesPayload(candidates) {
 }
 
 
+function promptErrorCountsPayload(promptErrorCounts) {
+  return (
+    promptErrorCounts && Object.keys(promptErrorCounts).length > 0
+      ? { prompt_error_counts: promptErrorCounts }
+      : {}
+  );
+}
+
+
+function promptErrorBudgetPayload(maxErrorsPerQuestion) {
+  return [0, 1, 2].includes(maxErrorsPerQuestion)
+    ? { max_errors_per_question: maxErrorsPerQuestion }
+    : {};
+}
+
+
 export function sendMapAnswer(
   items,
   mode = undefined,
   contextCount = undefined,
   answers = undefined,
   candidates = undefined,
+  promptErrorCounts = undefined,
+  maxErrorsPerQuestion = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
-  const resolvedCandidates = (
-    typeof candidates === "string" && reviewDate === undefined
-      ? undefined
-      : candidates
-  );
-  const resolvedReviewDate = (
-    typeof candidates === "string" && reviewDate === undefined
-      ? candidates
-      : resolved.reviewDate
-  );
+  let resolvedCandidates = candidates;
+  let resolvedPromptErrorCounts = promptErrorCounts;
+  let resolvedMaxErrorsPerQuestion = maxErrorsPerQuestion;
+  let resolvedReviewDate = resolved.reviewDate;
+
+  if (
+    typeof candidates === "string" &&
+    promptErrorCounts === undefined &&
+    maxErrorsPerQuestion === undefined &&
+    reviewDate === undefined
+  ) {
+    resolvedCandidates = undefined;
+    resolvedReviewDate = candidates;
+  }
+
+  if (
+    typeof promptErrorCounts === "string" &&
+    maxErrorsPerQuestion === undefined &&
+    reviewDate === undefined
+  ) {
+    resolvedPromptErrorCounts = undefined;
+    resolvedReviewDate = promptErrorCounts;
+  }
+
+  if (
+    typeof maxErrorsPerQuestion === "string" &&
+    reviewDate === undefined
+  ) {
+    resolvedMaxErrorsPerQuestion = undefined;
+    resolvedReviewDate = maxErrorsPerQuestion;
+  }
 
   // items is an object of question_id -> quality, one entry per atomic map zone.
   return requestJson("/answer_map", {
@@ -184,6 +223,8 @@ export function sendMapAnswer(
       ...answerContextPayload(resolved.contextCount),
       ...answersPayload(answers),
       ...candidatesPayload(resolvedCandidates),
+      ...promptErrorCountsPayload(resolvedPromptErrorCounts),
+      ...promptErrorBudgetPayload(resolvedMaxErrorsPerQuestion),
       ...(resolvedReviewDate ? { review_date: resolvedReviewDate } : {})
     })
   });
@@ -196,19 +237,42 @@ export function sendMediaAnswer(
   contextCount = undefined,
   answers = undefined,
   candidates = undefined,
+  promptErrorCounts = undefined,
+  maxErrorsPerQuestion = undefined,
   reviewDate = undefined
 ) {
   const resolved = resolveGroupedAnswerArgs(contextCount, reviewDate);
-  const resolvedCandidates = (
-    typeof candidates === "string" && reviewDate === undefined
-      ? undefined
-      : candidates
-  );
-  const resolvedReviewDate = (
-    typeof candidates === "string" && reviewDate === undefined
-      ? candidates
-      : resolved.reviewDate
-  );
+  let resolvedCandidates = candidates;
+  let resolvedPromptErrorCounts = promptErrorCounts;
+  let resolvedMaxErrorsPerQuestion = maxErrorsPerQuestion;
+  let resolvedReviewDate = resolved.reviewDate;
+
+  if (
+    typeof candidates === "string" &&
+    promptErrorCounts === undefined &&
+    maxErrorsPerQuestion === undefined &&
+    reviewDate === undefined
+  ) {
+    resolvedCandidates = undefined;
+    resolvedReviewDate = candidates;
+  }
+
+  if (
+    typeof promptErrorCounts === "string" &&
+    maxErrorsPerQuestion === undefined &&
+    reviewDate === undefined
+  ) {
+    resolvedPromptErrorCounts = undefined;
+    resolvedReviewDate = promptErrorCounts;
+  }
+
+  if (
+    typeof maxErrorsPerQuestion === "string" &&
+    reviewDate === undefined
+  ) {
+    resolvedMaxErrorsPerQuestion = undefined;
+    resolvedReviewDate = maxErrorsPerQuestion;
+  }
 
   // items is an object of question_id -> quality, one entry per atomic image.
   return requestJson("/answer_media", {
@@ -222,6 +286,8 @@ export function sendMediaAnswer(
       ...answerContextPayload(resolved.contextCount),
       ...answersPayload(answers),
       ...candidatesPayload(resolvedCandidates),
+      ...promptErrorCountsPayload(resolvedPromptErrorCounts),
+      ...promptErrorBudgetPayload(resolvedMaxErrorsPerQuestion),
       ...(resolvedReviewDate ? { review_date: resolvedReviewDate } : {})
     })
   });

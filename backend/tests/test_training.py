@@ -161,7 +161,7 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(len(response), 1)
         self.assertEqual(response[0]["type_q"], "map")
         self.assertEqual(response[0]["group_id"], group.id)
-        self.assertEqual(response[0]["mode"], "type_all")
+        self.assertEqual(response[0]["mode"], "type_prompt")
         hierarchy = load_tag_hierarchy(self.db)
         self.assertEqual(response[0]["tags"], [resolve_tag_id(hierarchy, "Geo")])
         self.assertEqual(
@@ -657,7 +657,7 @@ class TrainingTests(unittest.TestCase):
             100
         )
         self.assertEqual(
-            response["groups"][0]["training_records"]["type_all"]["best_found_percent"],
+            response["groups"][0]["training_records"]["type_prompt"]["best_found_percent"],
             100
         )
         self.assertEqual(
@@ -765,7 +765,7 @@ class TrainingTests(unittest.TestCase):
             9000
         )
         self.assertEqual(
-            type_all["training_records"]["type_all"]["best_found_percent"],
+            type_all["training_records"]["type_prompt"]["best_found_percent"],
             50
         )
         self.assertEqual(
@@ -1192,7 +1192,7 @@ class TrainingTests(unittest.TestCase):
             2
         )
         self.assertEqual(
-            served_group["previous_training_records"]["type_all"][
+            served_group["previous_training_records"]["type_prompt"][
                 "best_found_count"
             ],
             2
@@ -1234,7 +1234,7 @@ class TrainingTests(unittest.TestCase):
 
         self.assertEqual(response["training_record"]["question_count"], 1)
         self.assertEqual(
-            response["training_records"]["type_all"]["best_time_ms"],
+            response["training_records"]["type_prompt"]["best_time_ms"],
             3000
         )
         self.assertIsNone(response["previous_training_record"])
@@ -1270,7 +1270,7 @@ class TrainingTests(unittest.TestCase):
             group_training_fingerprint(self.db, group),
             group.type_group
         )
-        self.assertIn("type_all", stale_records)
+        self.assertIn("type_prompt", stale_records)
         self.assertIn("click_prompt", stale_records)
 
         response = record_training_attempt(
@@ -1285,7 +1285,7 @@ class TrainingTests(unittest.TestCase):
         )
         self.assertNotIn("click_prompt", response["previous_training_records"])
         self.assertEqual(
-            response["previous_training_records"]["type_all"]["question_count"],
+            response["previous_training_records"]["type_prompt"]["question_count"],
             2
         )
 

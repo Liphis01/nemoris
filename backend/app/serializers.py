@@ -7,6 +7,7 @@ from .services.image_modes import (
     DEFAULT_IMAGE_MODE,
     normalize_image_mode
 )
+from .services.mode_difficulty import normalize_prompt_error_budget
 from .services.media_pool import read_media_pool
 from .services.map_modes import (
     DEFAULT_MAP_MODE,
@@ -200,7 +201,13 @@ def serialize_review_question_item(question):
     return payload
 
 
-def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
+def serialize_map_review_group(
+    group,
+    tags=None,
+    mode=None,
+    context_items=None,
+    max_errors_per_question=None
+):
     # Runtime aggregation object: this is intentionally not a database question
     # type. It groups due map-zone questions for a single review screen.
     return {
@@ -221,6 +228,10 @@ def serialize_map_review_group(group, tags=None, mode=None, context_items=None):
         "tags": tags or [],
 
         "mode": normalize_map_mode(mode or DEFAULT_MAP_MODE),
+
+        "max_errors_per_question": normalize_prompt_error_budget(
+            max_errors_per_question
+        ),
 
         "context_items": context_items or [],
 
@@ -262,7 +273,13 @@ def serialize_map_review_zone(
     }
 
 
-def serialize_media_review_group(group, tags=None, mode=None, context_items=None):
+def serialize_media_review_group(
+    group,
+    tags=None,
+    mode=None,
+    context_items=None,
+    max_errors_per_question=None
+):
     # Runtime aggregation object: media rows stay independently scheduled, but
     # review can keep related due media items in one focused screen.
     return {
@@ -281,6 +298,10 @@ def serialize_media_review_group(group, tags=None, mode=None, context_items=None
         "answer_policy": effective_answer_policy(group=group, type_q="media"),
 
         "mode": normalize_image_mode(mode or DEFAULT_IMAGE_MODE),
+
+        "max_errors_per_question": normalize_prompt_error_budget(
+            max_errors_per_question
+        ),
 
         "context_items": context_items or [],
 

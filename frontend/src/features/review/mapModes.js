@@ -4,13 +4,17 @@ export const MAP_MODE_TYPE_PROMPT = "type_prompt";
 export const MAP_MODE_MULTIPLE_CHOICE = "multiple_choice";
 
 export const MAP_MODES = [
-  MAP_MODE_TYPE_ALL,
   MAP_MODE_TYPE_PROMPT,
   MAP_MODE_CLICK_PROMPT,
   MAP_MODE_MULTIPLE_CHOICE
 ];
 
-export const defaultMapMode = MAP_MODE_TYPE_ALL;
+export const MAP_LEGACY_MODES = [
+  MAP_MODE_TYPE_ALL,
+  ...MAP_MODES
+];
+
+export const defaultMapMode = MAP_MODE_TYPE_PROMPT;
 
 export const mapModeLabels = {
   [MAP_MODE_TYPE_ALL]: "Tout taper",
@@ -27,5 +31,5 @@ export const mapModeDetails = {
 };
 
 export function normalizeMapMode(mode) {
-  return MAP_MODES.includes(mode) ? mode : defaultMapMode;
+  return MAP_LEGACY_MODES.includes(mode) ? mode : defaultMapMode;
 }

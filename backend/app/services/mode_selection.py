@@ -237,11 +237,9 @@ def review_mode_is_meaningful(
             return choice_context_count >= CHOICE_MODE_MIN_CONTEXT
         if mode == MODE_CLICK_PROMPT:
             return active_context_count >= CHOICE_MODE_MIN_CONTEXT
-        return mode in {MODE_TYPE_ALL, MODE_TYPE_PROMPT}
+        return mode == MODE_TYPE_PROMPT
 
     if type_q == TYPE_MEDIA:
-        if mode == MODE_TYPE_ALL:
-            return item_count > 1
         if mode in {
             MODE_MULTIPLE_CHOICE_LABEL,
             MODE_MULTIPLE_CHOICE_MEDIA,
@@ -373,6 +371,32 @@ def question_mode_affinity_counts(questions):
         counts[question_mode_affinity(question)] += 1
 
     return counts
+
+
+def prompted_recall_budget_for_questions(
+    questions,
+    *,
+    recall_only=False,
+    support_only=False
+):
+    questions = list(questions or [])
+
+    if not questions or support_only:
+        return None
+
+    if recall_only or questions_have_recall_proof(questions):
+        return 0
+
+    affinity_counts = question_mode_affinity_counts(questions)
+    total = len(questions)
+
+    if affinity_counts[MODE_AFFINITY_SUPPORT] / total >= 0.55:
+        return None
+
+    if affinity_counts[MODE_AFFINITY_STRONG] / total >= 0.55:
+        return 1
+
+    return 2
 
 
 def recent_mode_counts(

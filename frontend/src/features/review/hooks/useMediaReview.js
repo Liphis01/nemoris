@@ -17,6 +17,10 @@ import {
 import { buildChoiceOptions } from "../distractorSelection";
 import { reviewModeFallback } from "../reviewModeCompatibility";
 import { qualityPickHoldMs } from "../../../shared/answerFeedback";
+import {
+  normalizePromptErrorBudget,
+  promptErrorBudgetExceeded
+} from "../promptErrorBudget";
 
 export const IMAGE_RECAP_UNANSWERED = "unanswered";
 
@@ -399,6 +403,9 @@ export function useMediaReview(
       contextItems: contextItemsInput || []
     })
     : normalizeImageModeForItemCount(options.mode, reviewItemCount);
+  const maxErrorsPerQuestion = mode === IMAGE_MODE_TYPE_PROMPT
+    ? normalizePromptErrorBudget(options.maxErrorsPerQuestion)
+    : null;
   const allowPartialSubmit = Boolean(options.allowPartialSubmit);
   const onAnsweringComplete = options.onAnsweringComplete;
   // Review grades each choice inline (reveal + quality), then auto-submits the
@@ -410,8 +417,8 @@ export function useMediaReview(
   );
   const graduateAnswer = options.graduateAnswer;
   const reviewKey = useMemo(
-    () => `${mode}:${idsFor(reviewItemsInput).join("|")}`,
-    [mode, reviewItemsInput]
+    () => `${mode}:${maxErrorsPerQuestion ?? "unlimited"}:${idsFor(reviewItemsInput).join("|")}`,
+    [maxErrorsPerQuestion, mode, reviewItemsInput]
   );
   // Resolve the picture each pooled item shows for this presentation once per
   // review, so the prompt, choice grid, recap, and preview stay in sync. Keyed
@@ -466,6 +473,7 @@ export function useMediaReview(
   // What the learner actually typed/picked per item, for M0 0.1 (storing the
   // given answer). Keyed like qualityByQuestionId.
   const [answerByQuestionId, setAnswerByQuestionId] = useState({});
+  const [promptErrorCountByQuestionId, setPromptErrorCountByQuestionId] = useState({});
   const [hasAttemptedAnswer, setHasAttemptedAnswer] = useState(false);
   const [candidateIdsByQuestionId, setCandidateIdsByQuestionId] = useState({});
   const [feedbackTone, setFeedbackTone] = useState(null);
@@ -492,6 +500,7 @@ export function useMediaReview(
     setRevealedQuestionIds([]);
     setQualityByQuestionId({});
     setAnswerByQuestionId({});
+    setPromptErrorCountByQuestionId({});
     setHasAttemptedAnswer(false);
     setCandidateIdsByQuestionId({});
     setFeedbackTone(null);
@@ -765,6 +774,23 @@ export function useMediaReview(
     setAnswerByQuestionId(prev => ({ ...prev, [item.question_id]: guess }));
   }
 
+  function promptErrorCountFor(item) {
+    return item ? Number(promptErrorCountByQuestionId[item.question_id] || 0) : 0;
+  }
+
+  function incrementPromptErrorCount(item) {
+    if (!item) return 0;
+
+    const nextCount = promptErrorCountFor(item) + 1;
+
+    setPromptErrorCountByQuestionId(prev => ({
+      ...prev,
+      [item.question_id]: nextCount
+    }));
+
+    return nextCount;
+  }
+
   function markFound(item, guess) {
     if (!item) return;
 
@@ -844,14 +870,40 @@ export function useMediaReview(
         ])
       );
 
-      await Promise.all([
-        Object.keys(graded).length > 0
-          ? submitAnswer(graded, mode, contextItems.length, answers, candidates)
-          : null,
-        graduateIds.length > 0 ? graduateAnswer?.(graduateIds) : null
-      ].filter(Boolean));
+      const promptErrorCounts = Object.fromEntries(
+        Object.entries(promptErrorCountByQuestionId)
+          .filter(([, count]) => Number(count) > 0)
+      );
+      const submitArgs = [
+        graded,
+        mode,
+        contextItems.length,
+        answers,
+        candidates
+      ];
 
-      const failedQuestionIds = Object.entries(qualities)
+      if (maxErrorsPerQuestion !== null) {
+        submitArgs.push(promptErrorCounts, maxErrorsPerQuestion);
+      }
+
+      const answerPromise = Object.keys(graded).length > 0
+        ? submitAnswer(...submitArgs)
+        : Promise.resolve(null);
+      const graduatePromise = graduateIds.length > 0
+        ? graduateAnswer?.(graduateIds) || Promise.resolve(null)
+        : Promise.resolve(null);
+      const [answerResponse] = await Promise.all([
+        answerPromise,
+        graduatePromise
+      ]);
+
+      const responseFailedQuestionIds = Array.isArray(answerResponse?.items)
+        ? answerResponse.items
+          .filter(item => Number(item?.effective_quality ?? item?.quality) === 0)
+          .map(item => Number(item.question_id))
+          .filter(id => Number.isFinite(id))
+        : null;
+      const failedQuestionIds = responseFailedQuestionIds ?? Object.entries(qualities)
         .filter(([, quality]) => quality === 0)
         .map(([questionId]) => Number(questionId));
       // A choice-mode miss records which option was picked (see
@@ -872,6 +924,7 @@ export function useMediaReview(
       setRevealedQuestionIds([]);
       setQualityByQuestionId({});
       setAnswerByQuestionId({});
+      setPromptErrorCountByQuestionId({});
       setHasAttemptedAnswer(false);
       setCandidateIdsByQuestionId({});
       setFeedbackTone(null);
@@ -924,6 +977,13 @@ export function useMediaReview(
         return true;
       } else if (input.trim()) {
         recordAnswer(currentPromptItem, input);
+        const nextErrorCount = incrementPromptErrorCount(currentPromptItem);
+
+        if (promptErrorBudgetExceeded(nextErrorCount, maxErrorsPerQuestion)) {
+          markMissed(currentPromptItem, input);
+          return false;
+        }
+
         setFeedbackTone("incorrect");
         return false;
       }
@@ -1242,6 +1302,7 @@ export function useMediaReview(
       ? firstQuality
       : null;
   }, [foundQuestionIds, qualityByQuestionId]);
+  const promptErrorCount = promptErrorCountFor(currentPromptItem);
   const recapSubmittedQualities = Object.values(qualityByQuestionId)
     .filter(quality => quality !== IMAGE_RECAP_UNANSWERED);
   const recapSuccessCount = recapSubmittedQualities
@@ -1341,7 +1402,9 @@ export function useMediaReview(
     lockedMissedQuestionIds,
     mode,
     progressPercent,
+    promptErrorCount,
     promptLabel: visualPromptItem?.label || visualPromptItem?.answer || "",
+    maxErrorsPerQuestion,
     qualityByQuestionId,
     rateChoice,
     rateTypedAnswer,

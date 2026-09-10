@@ -17,6 +17,7 @@ import {
   IMAGE_RECAP_UNANSWERED,
   useMediaReview
 } from "../hooks/useMediaReview";
+import { promptErrorCountLabel } from "../promptErrorBudget";
 import { eventDigit } from "../keyboardShortcuts";
 import {
   GOT_IT_QUALITY,
@@ -409,6 +410,14 @@ const inputStyle = {
   boxSizing: "border-box",
   outline: "none",
   fontSize: "14px"
+};
+
+const promptErrorCounterStyle = {
+  color: "#a3a3a3",
+  fontSize: "12px",
+  fontWeight: 700,
+  lineHeight: 1.2,
+  marginBottom: "6px"
 };
 
 // type_all and type_prompt share this panel: the placement differs (control
@@ -1036,6 +1045,7 @@ export default function MediaReview({
   showQualityControls = true,
   trainingElapsedMs = null,
   trainingBestTimeMs = null,
+  maxErrorsPerQuestion = null,
   fillAvailableHeight = false
 }) {
   const inputRef = useRef(null);
@@ -1067,6 +1077,8 @@ export default function MediaReview({
     interactionFeedback,
     mode,
     promptLabel,
+    promptErrorCount,
+    maxErrorsPerQuestion: promptMaxErrorsPerQuestion,
     qualityByQuestionId = {},
     rateChoice = () => {},
     rateTypedAnswer = () => {},
@@ -1099,7 +1111,8 @@ export default function MediaReview({
     mode: requestedMode,
     onAnsweringComplete,
     group,
-    graduateAnswer
+    graduateAnswer,
+    maxErrorsPerQuestion
   });
   const normalizedMode = normalizeImageMode(mode);
   const showTextInput = (
@@ -1317,6 +1330,12 @@ export default function MediaReview({
   // interactive; the echo keeps the panel showing that pick's animation for
   // a beat afterward, purely as a non-blocking trailing visual.
   const showTypedRatingPanel = showTypedRating || Boolean(typedRatingEcho);
+  const showPromptErrorCounter = (
+    normalizedMode === IMAGE_MODE_TYPE_PROMPT &&
+    promptMaxErrorsPerQuestion !== null &&
+    !resultMode &&
+    !showTypedRatingPanel
+  );
   const showControlBandTypedRating = showTypedRatingPanel && !showFocusedTypePromptBoard;
   const typedRatingItem = typedRatingFeedback?.item || typedRatingEcho?.item || null;
   const typedRatingItemRelearning = Boolean(
@@ -3589,6 +3608,14 @@ export default function MediaReview({
 
         {!resultMode && showTextInput && (
           <div style={{ marginBottom: "10px" }}>
+            {showPromptErrorCounter && (
+              <div style={promptErrorCounterStyle}>
+                {promptErrorCountLabel(
+                  promptErrorCount,
+                  promptMaxErrorsPerQuestion
+                )}
+              </div>
+            )}
 	            <input
 	              autoFocus
 	              className={wrongInputShakeId ? "review-input-shake" : undefined}

@@ -200,20 +200,38 @@ export function useReviewSession(active) {
     mode = undefined,
     contextCount = undefined,
     answers = undefined,
-    candidates = undefined
-  ) => sendMapAnswer(
-    items,
-    mode,
-    contextCount,
-    answers,
-    candidates,
-    reviewDateRef.current
-  ).then(response => recordAnswerResult(
-    current,
-    response,
-    items,
-    `group:${currentIndex}`
-  )),
+    candidates = undefined,
+    promptErrorCounts = undefined,
+    maxErrorsPerQuestion = undefined
+  ) => {
+    const args = [
+      items,
+      mode,
+      contextCount,
+      answers,
+      candidates
+    ];
+
+    if (
+      promptErrorCounts !== undefined ||
+      maxErrorsPerQuestion !== undefined
+    ) {
+      args.push(
+        promptErrorCounts,
+        maxErrorsPerQuestion,
+        reviewDateRef.current
+      );
+    } else {
+      args.push(reviewDateRef.current);
+    }
+
+    return sendMapAnswer(...args).then(response => recordAnswerResult(
+      current,
+      response,
+      items,
+      `group:${currentIndex}`
+    ));
+  },
   [current, currentIndex, recordAnswerResult]);
 
   const submitMediaAnswer = useCallback((
@@ -221,20 +239,38 @@ export function useReviewSession(active) {
     mode = undefined,
     contextCount = undefined,
     answers = undefined,
-    candidates = undefined
-  ) => sendMediaAnswer(
-    items,
-    mode,
-    contextCount,
-    answers,
-    candidates,
-    reviewDateRef.current
-  ).then(response => recordAnswerResult(
-    current,
-    response,
-    items,
-    `group:${currentIndex}`
-  )),
+    candidates = undefined,
+    promptErrorCounts = undefined,
+    maxErrorsPerQuestion = undefined
+  ) => {
+    const args = [
+      items,
+      mode,
+      contextCount,
+      answers,
+      candidates
+    ];
+
+    if (
+      promptErrorCounts !== undefined ||
+      maxErrorsPerQuestion !== undefined
+    ) {
+      args.push(
+        promptErrorCounts,
+        maxErrorsPerQuestion,
+        reviewDateRef.current
+      );
+    } else {
+      args.push(reviewDateRef.current);
+    }
+
+    return sendMediaAnswer(...args).then(response => recordAnswerResult(
+      current,
+      response,
+      items,
+      `group:${currentIndex}`
+    ));
+  },
   [current, currentIndex, recordAnswerResult]);
 
   const submitTextAnswer = useCallback((

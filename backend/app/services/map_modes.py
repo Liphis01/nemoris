@@ -1,4 +1,7 @@
-from .mode_difficulty import click_prompt_base_difficulty
+from .mode_difficulty import (
+    click_prompt_base_difficulty,
+    prompted_recall_difficulty
+)
 from .mode_selection import (
     MODE_AFFINITY_RECALL_PROBE,
     MODE_AFFINITY_STRONG,
@@ -24,24 +27,37 @@ MAP_MODES = (
     MAP_MODE_TYPE_PROMPT,
     MAP_MODE_MULTIPLE_CHOICE
 )
+MAP_REVIEW_MODES = (
+    MAP_MODE_CLICK_PROMPT,
+    MAP_MODE_TYPE_PROMPT,
+    MAP_MODE_MULTIPLE_CHOICE
+)
 MAP_RECALL_MODES = (
-    MAP_MODE_TYPE_ALL,
-    MAP_MODE_TYPE_PROMPT
+    MAP_MODE_TYPE_PROMPT,
 )
 MAP_SUPPORTED_MODES = (
     MAP_MODE_MULTIPLE_CHOICE,
     MAP_MODE_CLICK_PROMPT
 )
-DEFAULT_MAP_MODE = MAP_MODE_TYPE_ALL
+DEFAULT_MAP_MODE = MAP_MODE_TYPE_PROMPT
 MAP_TYPE_ALL_DIFFICULTY = 1.0
 MAP_TYPE_PROMPT_DIFFICULTY = 1.05
 MAP_MULTIPLE_CHOICE_DIFFICULTY = 0.55
 
 
-def normalize_map_mode(mode):
+def canonical_map_mode(mode):
     value = str(mode or "").strip()
 
-    return value if value in MAP_MODES else DEFAULT_MAP_MODE
+    if value == MAP_MODE_TYPE_ALL:
+        return MAP_MODE_TYPE_PROMPT
+
+    return value if value in MAP_MODES else None
+
+
+def normalize_map_mode(mode):
+    value = canonical_map_mode(mode)
+
+    return value if value is not None else DEFAULT_MAP_MODE
 
 
 def _tuned_number(tuning, key, default):
@@ -65,14 +81,22 @@ def map_click_prompt_difficulty(context_count=0, tuning=None):
     return max(0.35, min(0.98, difficulty))
 
 
-def map_mode_difficulty(mode=None, context_count=0, tuning=None):
+def map_mode_difficulty(
+    mode=None,
+    context_count=0,
+    tuning=None,
+    max_errors_per_question=None
+):
     mode = normalize_map_mode(mode)
 
     if mode == MAP_MODE_TYPE_PROMPT:
-        return _tuned_number(
-            tuning,
-            "type_prompt_difficulty",
-            MAP_TYPE_PROMPT_DIFFICULTY
+        return prompted_recall_difficulty(
+            _tuned_number(
+                tuning,
+                "type_prompt_difficulty",
+                MAP_TYPE_PROMPT_DIFFICULTY
+            ),
+            max_errors_per_question
         )
 
     if mode == MAP_MODE_MULTIPLE_CHOICE:
@@ -133,20 +157,17 @@ def choose_map_review_mode(
         base_scores = {
             MAP_MODE_MULTIPLE_CHOICE: 4.0,
             MAP_MODE_CLICK_PROMPT: 3.3,
-            MAP_MODE_TYPE_PROMPT: 2.0,
-            MAP_MODE_TYPE_ALL: 0.9
+            MAP_MODE_TYPE_PROMPT: 2.0
         }
     elif recall_probe_count / len(due_questions) >= 0.55:
         base_scores = {
             MAP_MODE_TYPE_PROMPT: 4.2,
-            MAP_MODE_TYPE_ALL: 3.6,
             MAP_MODE_CLICK_PROMPT: 0.8,
             MAP_MODE_MULTIPLE_CHOICE: 0.6
         }
     elif strong_count / len(due_questions) >= 0.55:
         base_scores = {
             MAP_MODE_TYPE_PROMPT: 3.5,
-            MAP_MODE_TYPE_ALL: 3.1,
             MAP_MODE_CLICK_PROMPT: 1.8,
             MAP_MODE_MULTIPLE_CHOICE: 0.9
         }
@@ -154,8 +175,7 @@ def choose_map_review_mode(
         base_scores = {
             MAP_MODE_CLICK_PROMPT: 3.2,
             MAP_MODE_TYPE_PROMPT: 3.0,
-            MAP_MODE_MULTIPLE_CHOICE: 2.0,
-            MAP_MODE_TYPE_ALL: 1.5
+            MAP_MODE_MULTIPLE_CHOICE: 2.0
         }
 
     scores = dict(base_scores)
@@ -165,15 +185,20 @@ def choose_map_review_mode(
     elif context_count >= 12:
         scores[MAP_MODE_CLICK_PROMPT] += 0.5
 
-    apply_recent_mode_penalty(scores, due_questions, "map_mode", MAP_MODES)
+    apply_recent_mode_penalty(
+        scores,
+        due_questions,
+        "map_mode",
+        MAP_REVIEW_MODES,
+        mode_normalizer=canonical_map_mode
+    )
 
     tie_order = {
         MAP_MODE_MULTIPLE_CHOICE: 0,
         MAP_MODE_CLICK_PROMPT: 1,
-        MAP_MODE_TYPE_PROMPT: 2,
-        MAP_MODE_TYPE_ALL: 3
+        MAP_MODE_TYPE_PROMPT: 2
     }
-    eligible_modes = list(MAP_MODES)
+    eligible_modes = list(MAP_REVIEW_MODES)
 
     eligible_modes = [
         mode

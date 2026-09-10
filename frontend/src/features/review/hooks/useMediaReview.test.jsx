@@ -503,6 +503,80 @@ describe("useMediaReview", () => {
       .toEqual([1, 2]);
   });
 
+  it.each([2, 1, 0])(
+    "misses only the active type_prompt image after budget %s is exceeded",
+    async (maxErrorsPerQuestion) => {
+      const submitAnswer = vi.fn().mockResolvedValue({});
+      const items = [
+        imageItem(1, "France"),
+        imageItem(2, "Germany")
+      ];
+      const { result } = renderHook(() =>
+        useMediaReview(items, vi.fn(), submitAnswer, {
+          mode: IMAGE_MODE_TYPE_PROMPT,
+          maxErrorsPerQuestion
+        })
+      );
+
+      const firstPrompt = result.current.currentPromptItem;
+
+      for (let attempt = 1; attempt <= maxErrorsPerQuestion; attempt += 1) {
+        act(() => {
+          result.current.setInput(`wrong ${attempt}`);
+        });
+        act(() => {
+          result.current.handleSubmit();
+        });
+
+        expect(result.current.currentPromptItem.question_id).toBe(
+          firstPrompt.question_id
+        );
+        expect(result.current.promptErrorCount).toBe(attempt);
+        expect(result.current.resolvedQuestionIds).toEqual([]);
+      }
+
+      act(() => {
+        result.current.setInput("final wrong");
+      });
+      act(() => {
+        result.current.handleSubmit();
+      });
+
+      expect(result.current.resolvedQuestionIds).toContain(
+        firstPrompt.question_id
+      );
+      expect(result.current.foundQuestionIds).not.toContain(
+        firstPrompt.question_id
+      );
+      expect(result.current.currentPromptItem.question_id).not.toBe(
+        firstPrompt.question_id
+      );
+
+      const secondPrompt = result.current.currentPromptItem;
+
+      act(() => {
+        result.current.setInput(secondPrompt.answer);
+      });
+      act(() => {
+        result.current.handleSubmit();
+      });
+
+      await act(async () => {
+        await result.current.sendResult();
+      });
+
+      expect(submitAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({ [firstPrompt.question_id]: 0 }),
+        IMAGE_MODE_TYPE_PROMPT,
+        2,
+        expect.any(Object),
+        expect.any(Object),
+        { [firstPrompt.question_id]: maxErrorsPerQuestion + 1 },
+        maxErrorsPerQuestion
+      );
+    }
+  );
+
   it("allows partial finish when that mode explicitly permits non-answers", () => {
     const onAnsweringComplete = vi.fn();
     const items = [

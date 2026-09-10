@@ -85,6 +85,7 @@ MAP_GROUP_KEYS = {
     "answer_policy",
     "tags",
     "mode",
+    "max_errors_per_question",
     "context_items",
     "items"
 }
@@ -107,6 +108,7 @@ IMAGE_GROUP_KEYS = {
     "tags",
     "answer_policy",
     "mode",
+    "max_errors_per_question",
     "context_items",
     "items"
 }
@@ -507,10 +509,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(map_group["tags"], ["geo", "map"])
         self.assertNotIn("question_id", map_group)
         self.assertEqual(len(map_group["items"]), 2)
-        self.assertIn(
-            map_group["mode"],
-            {"type_all", "click_prompt", "type_prompt", "multiple_choice"}
-        )
+        self.assertEqual(map_group["mode"], "type_prompt")
+        self.assertIsNone(map_group["max_errors_per_question"])
         self.assertEqual(len(map_group["context_items"]), 2)
 
         for zone in map_group["items"]:
@@ -527,7 +527,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
 
         mode_difficulty = map_mode_difficulty(
             map_group["mode"],
-            len(map_group["context_items"])
+            len(map_group["context_items"]),
+            max_errors_per_question=map_group["max_errors_per_question"]
         )
         first_map_zone = fixture["map_zones"][0]
         returned_first_map_zone = next(
@@ -576,16 +577,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(image_group["name"], "Flags")
         self.assertEqual(image_group["tags"], ["flags"])
         self.assertEqual(len(image_group["items"]), 2)
-        self.assertIn(
-            image_group["mode"],
-            {
-                "type_all",
-                "click_prompt",
-                "type_prompt",
-                "multiple_choice_label",
-                "multiple_choice_media"
-            }
-        )
+        self.assertEqual(image_group["mode"], "type_prompt")
+        self.assertIsNone(image_group["max_errors_per_question"])
         self.assertEqual(len(image_group["context_items"]), 2)
 
         for item in image_group["items"]:
@@ -602,7 +595,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
 
         mode_difficulty = image_mode_difficulty(
             image_group["mode"],
-            len(image_group["context_items"])
+            len(image_group["context_items"]),
+            max_errors_per_question=image_group["max_errors_per_question"]
         )
         first_image_item = fixture["image_items"][0]
         returned_first_image_item = next(
@@ -651,7 +645,12 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(media_response["status"], "ok")
         self.assertEqual(len(map_response["items"]), 2)
         self.assertEqual(len(media_response["items"]), 1)
+        self.assertEqual(map_response["items"][0]["mode"], "type_prompt")
         self.assertEqual(media_response["items"][0]["mode"], "type_prompt")
+        self.assertEqual(
+            fixture["map_zones"][0].progress.history[-1]["map_mode"],
+            "type_prompt"
+        )
         self.assertEqual(
             fixture["image_items"][0].progress.history[-1]["image_mode"],
             "type_prompt"
@@ -661,6 +660,63 @@ class ReviewResponseShapeTests(unittest.TestCase):
             self.assert_grouped_answer_item_shape(item)
             self.assertEqual(item["progress"]["last_review"], today)
             self.assertTrue(item["progress"]["history"])
+
+    def test_prompt_error_budget_exhaustion_overrides_recap_quality(self):
+        fixture = self.seed_review_contract_fixture()
+        today = date(2026, 8, 14)
+        map_zone = fixture["map_zones"][0]
+        image_item = fixture["image_items"][0]
+
+        map_response = answer_map(
+            MapAnswerRequest(
+                items={map_zone.id: 3},
+                mode="type_prompt",
+                max_errors_per_question=1,
+                prompt_error_counts={map_zone.id: 2},
+                answers={map_zone.id: map_zone.answer},
+                review_date=today
+            ),
+            self.db
+        )
+        image_response = answer_media(
+            MediaAnswerRequest(
+                items={image_item.id: 3},
+                mode="type_prompt",
+                max_errors_per_question=0,
+                prompt_error_counts={image_item.id: 1},
+                answers={image_item.id: image_item.answer},
+                review_date=today
+            ),
+            self.db
+        )
+
+        map_item = map_response["items"][0]
+        image_response_item = image_response["items"][0]
+
+        self.assertEqual(map_item["raw_quality"], 3)
+        self.assertEqual(map_item["effective_quality"], 0)
+        self.assertEqual(map_item["max_errors_per_question"], 1)
+        self.assertEqual(map_item["prompt_error_count"], 2)
+        self.assertTrue(map_item["prompt_error_budget_exhausted"])
+        self.assertEqual(image_response_item["raw_quality"], 3)
+        self.assertEqual(image_response_item["effective_quality"], 0)
+        self.assertEqual(image_response_item["max_errors_per_question"], 0)
+        self.assertEqual(image_response_item["prompt_error_count"], 1)
+        self.assertTrue(image_response_item["prompt_error_budget_exhausted"])
+
+        map_history = map_zone.progress.history[-1]
+        image_history = image_item.progress.history[-1]
+
+        self.assertEqual(map_history["effective_quality"], 0)
+        self.assertEqual(map_history["max_errors_per_question"], 1)
+        self.assertEqual(map_history["prompt_error_count"], 2)
+        self.assertTrue(map_history["prompt_error_budget_exhausted"])
+        self.assertAlmostEqual(map_history["mode_difficulty"], 1.175)
+        self.assertEqual(image_history["effective_quality"], 0)
+        self.assertEqual(image_history["max_errors_per_question"], 0)
+        self.assertEqual(image_history["prompt_error_count"], 1)
+        self.assertTrue(image_history["prompt_error_budget_exhausted"])
+        self.assertAlmostEqual(image_history["mode_difficulty"], 1.30)
 
     def test_review_randomizes_question_order_inside_runtime_groups(self):
         today = date.today()
@@ -839,6 +895,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         map_payload = next(item for item in response if item["type_q"] == "map")
 
         self.assertEqual(map_payload["mode"], "type_prompt")
+        self.assertEqual(map_payload["max_errors_per_question"], 2)
         self.assertEqual(set(map_payload), MAP_GROUP_KEYS)
         self.assertEqual(
             {item["question_id"] for item in map_payload["items"]},
@@ -1285,7 +1342,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
             {item.id, *[entry.id for entry in future_items]}
         )
 
-    def test_compact_media_review_merges_same_mode_policy_chunks(self):
+    def test_compact_media_review_splits_same_mode_by_prompt_budget(self):
         today = date.today()
         image_group = QuestionGroup(
             id=71,
@@ -1345,10 +1402,26 @@ class ReviewResponseShapeTests(unittest.TestCase):
         proven_ids = {item.id for item in proven_items}
         unproven_ids = {item.id for item in unproven_items}
 
-        self.assertEqual(len(image_groups), 1)
-        self.assertEqual(image_groups[0]["mode"], "type_prompt")
+        self.assertEqual(len(image_groups), 2)
         self.assertEqual(
-            {item["question_id"] for item in image_groups[0]["items"]},
+            {group["max_errors_per_question"] for group in image_groups},
+            {2, 0}
+        )
+        budget_to_ids = {
+            group["max_errors_per_question"]: {
+                item["question_id"]
+                for item in group["items"]
+            }
+            for group in image_groups
+        }
+        self.assertEqual(budget_to_ids[2], unproven_ids)
+        self.assertEqual(budget_to_ids[0], proven_ids)
+        self.assertEqual(
+            {
+                item["question_id"]
+                for group in image_groups
+                for item in group["items"]
+            },
             proven_ids | unproven_ids
         )
 
@@ -1664,15 +1737,19 @@ class ReviewResponseShapeTests(unittest.TestCase):
             for question_id in chunk
         ]
 
-        self.assertEqual(len(image_groups), 2)
-        self.assertEqual([len(chunk) for chunk in chunks], [12, 24])
+        self.assertEqual(len(image_groups), 3)
+        self.assertEqual([len(chunk) for chunk in chunks], [12, 12, 12])
         self.assertEqual(
             set(chunks[0]),
             {item.id for item in image_items[:12]}
         )
         self.assertEqual(
             set(chunks[1]),
-            {item.id for item in image_items[12:]}
+            {item.id for item in image_items[12:24]}
+        )
+        self.assertEqual(
+            set(chunks[2]),
+            {item.id for item in image_items[24:]}
         )
         self.assertEqual(set(returned_ids), {item.id for item in image_items})
         self.assertEqual(len(returned_ids), len(set(returned_ids)))
@@ -2015,7 +2092,8 @@ class ReviewResponseShapeTests(unittest.TestCase):
         map_group_payload = serialize_map_review_group(map_group, tags=["geo"])
         self.assertEqual(set(map_group_payload), MAP_GROUP_KEYS)
         self.assertEqual(map_group_payload["type_q"], "map")
-        self.assertEqual(map_group_payload["mode"], "type_all")
+        self.assertEqual(map_group_payload["mode"], "type_prompt")
+        self.assertIsNone(map_group_payload["max_errors_per_question"])
         self.assertEqual(map_group_payload["context_items"], [])
         self.assertEqual(map_group_payload["items"], [])
         self.assertNotIn("progress", map_group_payload)
@@ -2038,6 +2116,7 @@ class ReviewResponseShapeTests(unittest.TestCase):
         self.assertEqual(set(image_group_payload), IMAGE_GROUP_KEYS)
         self.assertEqual(image_group_payload["type_q"], "media")
         self.assertEqual(image_group_payload["mode"], "type_prompt")
+        self.assertIsNone(image_group_payload["max_errors_per_question"])
         self.assertEqual(image_group_payload["context_items"], [])
         self.assertEqual(image_group_payload["items"], [])
         self.assertNotIn("progress", image_group_payload)

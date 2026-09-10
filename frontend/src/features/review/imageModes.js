@@ -6,10 +6,14 @@ export const LEGACY_IMAGE_MODE_MULTIPLE_CHOICE_IMAGE = "multiple_choice_image";
 export const IMAGE_MODE_MULTIPLE_CHOICE_IMAGE = IMAGE_MODE_MULTIPLE_CHOICE_MEDIA;
 
 export const IMAGE_MODES = [
-  IMAGE_MODE_TYPE_ALL,
   IMAGE_MODE_TYPE_PROMPT,
   IMAGE_MODE_MULTIPLE_CHOICE_LABEL,
   IMAGE_MODE_MULTIPLE_CHOICE_MEDIA
+];
+
+export const IMAGE_LEGACY_MODES = [
+  IMAGE_MODE_TYPE_ALL,
+  ...IMAGE_MODES
 ];
 
 export const defaultImageMode = IMAGE_MODE_TYPE_PROMPT;
@@ -33,7 +37,7 @@ export function normalizeImageMode(mode) {
     return IMAGE_MODE_MULTIPLE_CHOICE_MEDIA;
   }
 
-  return IMAGE_MODES.includes(mode) ? mode : defaultImageMode;
+  return IMAGE_LEGACY_MODES.includes(mode) ? mode : defaultImageMode;
 }
 
 

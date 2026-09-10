@@ -684,6 +684,36 @@ describe("MediaReview answer label preview", () => {
     expect(screen.getByPlaceholderText("Nom de l'image...")).toBeInTheDocument();
   });
 
+  it("shows a compact prompt error counter only for finite budgets", () => {
+    const rows = [imageGridRow(1)];
+
+    renderMediaReviewWithState(
+      typePromptHookState({
+        rows,
+        hookOverrides: {
+          promptErrorCount: 1,
+          maxErrorsPerQuestion: 1
+        }
+      })
+    );
+
+    expect(screen.getByText("Erreurs 1 / 2")).toBeInTheDocument();
+
+    cleanup();
+
+    renderMediaReviewWithState(
+      typePromptHookState({
+        rows,
+        hookOverrides: {
+          promptErrorCount: 1,
+          maxErrorsPerQuestion: null
+        }
+      })
+    );
+
+    expect(screen.queryByText(/Erreurs/)).not.toBeInTheDocument();
+  });
+
   it("renders pending type_prompt quality inside the focused stage", async () => {
     const rateTypedAnswer = vi.fn();
     const answeredItem = {

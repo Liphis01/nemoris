@@ -666,6 +666,31 @@ describe("MapReview recap map focus", () => {
       .not.toHaveAttribute("data-focus-code", firstCode);
   });
 
+  it("shows a compact prompt error counter only for finite budgets", () => {
+    renderMapReview(false, {
+      mode: "type_prompt",
+      maxErrorsPerQuestion: 2
+    });
+
+    expect(screen.getByText("Erreurs 0 / 3")).toBeInTheDocument();
+
+    const input = screen.getByPlaceholderText("Nom de la zone...");
+
+    fireEvent.change(input, { target: { value: "wrong" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("Erreurs 1 / 3")).toBeInTheDocument();
+
+    cleanup();
+
+    renderMapReview(false, {
+      mode: "type_prompt",
+      maxErrorsPerQuestion: null
+    });
+
+    expect(screen.queryByText(/Erreurs/)).not.toBeInTheDocument();
+  });
+
   it("keeps unresolved map context visible while click quality appears", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.25);
 

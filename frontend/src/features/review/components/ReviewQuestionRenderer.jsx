@@ -11,9 +11,15 @@ import GridReview from "./GridReview";
 import SetReview from "./SetReview";
 import EnumerationReview from "./EnumerationReview";
 import {
+    IMAGE_MODE_TYPE_ALL,
     IMAGE_MODE_TYPE_PROMPT,
     normalizeImageMode
 } from "../imageModes";
+import {
+    MAP_MODE_TYPE_ALL,
+    MAP_MODE_TYPE_PROMPT,
+    normalizeMapMode
+} from "../mapModes";
 
 function reviewItemRenderKey(q, currentIndex) {
     const itemIds = Array.isArray(q.items)
@@ -26,7 +32,8 @@ function reviewItemRenderKey(q, currentIndex) {
         primaryId,
         itemIds,
         q._reviewRetryOfIndex ?? "",
-        q._reviewSkipId ?? ""
+        q._reviewSkipId ?? "",
+        q.max_errors_per_question ?? ""
     ].join(":");
 }
 
@@ -76,6 +83,22 @@ function isSetGroup(q) {
     return presentationKind(q) === "set_group" || (q?.type_q === "set" && Array.isArray(q?.items));
 }
 
+function renderMapMode(mode) {
+    const normalizedMode = normalizeMapMode(mode);
+
+    return normalizedMode === MAP_MODE_TYPE_ALL
+        ? MAP_MODE_TYPE_PROMPT
+        : normalizedMode;
+}
+
+function renderImageMode(mode) {
+    const normalizedMode = normalizeImageMode(mode);
+
+    return normalizedMode === IMAGE_MODE_TYPE_ALL
+        ? IMAGE_MODE_TYPE_PROMPT
+        : normalizedMode;
+}
+
 export default function ReviewQuestionRenderer({
     q,
     currentIndex,
@@ -119,13 +142,16 @@ export default function ReviewQuestionRenderer({
 
     // Grouped map review built from atomic map questions.
     if (isMapGroup(q)) {
+        const mapMode = renderMapMode(q.mode);
+
         return (
             <MapReview
                 key={renderKey}
                 group={q}
                 reviewZones={q.items}
                 contextItems={q.context_items || q.items || []}
-                mode={q.mode}
+                mode={mapMode}
+                maxErrorsPerQuestion={q.max_errors_per_question ?? null}
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleMapComplete}
                 submitAnswer={submitMapAnswer}
@@ -140,7 +166,7 @@ export default function ReviewQuestionRenderer({
     }
 
     if (isMediaGroup(q)) {
-        const imageMode = normalizeImageMode(q.mode);
+        const imageMode = renderImageMode(q.mode);
         const separatesResolvedItems = imageMode === IMAGE_MODE_TYPE_PROMPT;
 
         return (
@@ -149,7 +175,8 @@ export default function ReviewQuestionRenderer({
                 group={q}
                 reviewItems={q.items || []}
                 contextItems={q.context_items || q.items || []}
-                mode={q.mode}
+                mode={imageMode}
+                maxErrorsPerQuestion={q.max_errors_per_question ?? null}
                 onAnsweringComplete={onAnsweringComplete}
                 onComplete={handleImageComplete}
                 submitAnswer={submitMediaAnswer}

@@ -42,6 +42,7 @@ ImageMode = Literal[
     "multiple_choice_media",
     "multiple_choice_image"
 ]
+PromptErrorBudget = Literal[0, 1, 2]
 
 TextMode = Literal[
     "type_all",
@@ -434,6 +435,8 @@ class SyncPreferences(BaseModel):
 class MapAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[MapMode] = None
+    max_errors_per_question: Optional[PromptErrorBudget] = None
+    prompt_error_counts: Optional[Dict[int, int]] = None
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
     # What the learner actually typed/clicked, keyed like `items`. Optional
@@ -448,6 +451,8 @@ class MapAnswerRequest(BaseModel):
 class MediaAnswerRequest(BaseModel):
     items: Dict[int, AnswerQuality]
     mode: Optional[ImageMode] = None
+    max_errors_per_question: Optional[PromptErrorBudget] = None
+    prompt_error_counts: Optional[Dict[int, int]] = None
     context_count: Optional[int] = Field(default=None, ge=0)
     review_date: Optional[date] = None
     answers: Optional[Dict[int, Any]] = None

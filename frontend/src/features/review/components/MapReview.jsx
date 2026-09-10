@@ -25,6 +25,7 @@ import {
   mapModeLabels,
   normalizeMapMode
 } from "../mapModes";
+import { promptErrorCountLabel } from "../promptErrorBudget";
 
 const typeBadgeStyle = {
   display: "flex",
@@ -278,6 +279,7 @@ export default function MapReview({
   trainingElapsedMs = null,
   trainingBestTimeMs = null,
   mode: modeProp,
+  maxErrorsPerQuestion = null,
   contextItems = [],
   fillAvailableHeight = false
 }) {
@@ -312,7 +314,9 @@ export default function MapReview({
     qualityByQuestionId,
     missedCodes,
     promptCode,
+    promptErrorCount,
     promptLabel,
+    maxErrorsPerQuestion: promptMaxErrorsPerQuestion,
     rateChoice = () => {},
     rateClickAnswer = () => {},
     rateTypedAnswer = () => {},
@@ -349,7 +353,8 @@ export default function MapReview({
     onAnsweringComplete,
     group,
     graduateAnswer,
-    mapGeometry
+    mapGeometry,
+    maxErrorsPerQuestion
   });
   const showChoiceRating = (
     mode === MAP_MODE_MULTIPLE_CHOICE &&
@@ -422,6 +427,12 @@ export default function MapReview({
   // interactive; the echo keeps the panel showing that pick's animation for
   // a beat afterward, purely as a non-blocking trailing visual.
   const showTypedRatingPanel = showTypedRating || Boolean(typedRatingEcho);
+  const showPromptErrorCounter = (
+    mode === MAP_MODE_TYPE_PROMPT &&
+    promptMaxErrorsPerQuestion !== null &&
+    !showRecap &&
+    !showTypedRatingPanel
+  );
   const typedRatingItem = typedRatingFeedback?.item || typedRatingEcho?.item || null;
   const typedRatingItemRelearning = Boolean(
     typedRatingItem && isRelearningGroupItem(group, typedRatingItem)
@@ -1293,6 +1304,14 @@ export default function MapReview({
 
           {showTextInput && (
             <div data-map-typed-input-area style={typedInputAreaStyle}>
+              {showPromptErrorCounter && (
+                <div style={promptErrorCounterStyle}>
+                  {promptErrorCountLabel(
+                    promptErrorCount,
+                    promptMaxErrorsPerQuestion
+                  )}
+                </div>
+              )}
               <input
                 autoFocus
                 className={wrongInputShakeId ? "review-input-shake" : undefined}
@@ -2208,6 +2227,14 @@ const typedRatingPanelStyle = {
 const typedInputAreaStyle = {
   minHeight: "54px",
   position: "relative"
+};
+
+const promptErrorCounterStyle = {
+  color: "#a3a3a3",
+  fontSize: "12px",
+  fontWeight: "700",
+  lineHeight: 1.2,
+  marginBottom: "6px"
 };
 
 const typedInputRatingOverlayStyle = {
