@@ -53,6 +53,7 @@
 - menu study à améliorer
 - les type_prompt avec des valeurs différentes d'erreurs devraient être demandées en même temps dans la review
 - forcer vraiment pour mettre un mode facile dans le relearning s'il n'y a pas assez de questions pour refaire le même mode (ou prendre d'autres questions du même groupe)
+- toujours le bug de quand je change une erreur elle apparait quand même dans le relearning ?
 
 
 ## quick fixes
