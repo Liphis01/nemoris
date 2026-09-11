@@ -419,13 +419,32 @@ class ReviewSettings(BaseModel):
         return self
 
 
-class ReviewIntakeOrderRequest(BaseModel):
-    question_ids: List[int] = Field(default_factory=list)
+class IntakePlanAction(BaseModel):
+    # One manager action; services/intake_plan.py checks which fields each
+    # type requires.
+    type: Literal[
+        "move",
+        "set_paused",
+        "study_next",
+        "set_focus",
+        "set_new_decks",
+        "reorder_questions",
+        "shuffle",
+        "set_suspended"
+    ]
+    key: Optional[str] = None
+    keys: Optional[List[str]] = None
+    to_index: Optional[int] = Field(default=None, ge=0)
+    paused: Optional[bool] = None
+    focus: Optional[int] = None
+    policy: Optional[str] = None
+    question_ids: Optional[List[int]] = None
+    suspended: Optional[bool] = None
 
 
-class ReviewIntakeSuspensionRequest(BaseModel):
-    question_ids: List[int] = Field(default_factory=list)
-    suspended: bool
+class IntakePlanActionsRequest(BaseModel):
+    base_revision: int = Field(ge=0)
+    actions: List[IntakePlanAction] = Field(min_length=1)
 
 
 class SyncPreferences(BaseModel):

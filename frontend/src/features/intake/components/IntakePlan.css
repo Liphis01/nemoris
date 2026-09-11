@@ -1,0 +1,853 @@
+/* File des nouvelles: the Manage sidebar entry, and the plan dialog it shares
+   with the home screen. Everything here sets text-align explicitly: the dialog
+   can be mounted inside containers that center their text. */
+
+.intake-entry {
+  width: 100%;
+}
+
+.intake-entry-button {
+  align-items: center;
+  appearance: none;
+  background: #151515;
+  border: 1px solid #2d2d2d;
+  border-radius: 10px;
+  color: #dedede;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  justify-content: space-between;
+  line-height: 1.3;
+  min-height: 52px;
+  padding: 9px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.intake-entry-button:hover,
+.intake-entry-button:focus-visible {
+  border-color: rgba(94, 234, 212, 0.4);
+}
+
+.intake-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.intake-entry-title {
+  font-size: 14px;
+}
+
+/* Two lines rather than an ellipsis: the deck names are the useful part. */
+.intake-entry-summary {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #8a8a8a;
+  display: -webkit-box;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.intake-entry-count {
+  background: #20342f;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  border-radius: 999px;
+  color: #7dd3c7;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 22px;
+  padding: 2px 7px;
+  text-align: center;
+}
+
+.intake-backdrop {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex;
+  inset: var(--shell-top, 0px) 0 0;
+  justify-content: center;
+  padding: 20px 16px;
+  position: fixed;
+  z-index: 50;
+}
+
+.intake-dialog {
+  background: #151515;
+  border: 1px solid #292929;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  color: #e7e7e7;
+  display: flex;
+  flex-direction: column;
+  height: min(86vh, 820px);
+  /* Unitless, so small text does not inherit the app's absolute line box. */
+  line-height: 1.4;
+  overflow: hidden;
+  text-align: left;
+  width: min(780px, 100%);
+}
+
+.intake-dialog:focus {
+  outline: none;
+}
+
+.intake-dialog h2,
+.intake-dialog h3,
+.intake-dialog p {
+  margin: 0;
+}
+
+.intake-dialog-header {
+  align-items: center;
+  border-bottom: 1px solid #292929;
+  display: flex;
+  gap: 12px;
+  padding: 15px 18px;
+}
+
+.intake-dialog-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.intake-dialog-heading h2 {
+  color: #eee;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.intake-dialog-heading p {
+  margin-top: 3px;
+}
+
+.intake-close {
+  appearance: none;
+  background: #1d1d1d;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  color: #bbb;
+  cursor: pointer;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 16px;
+  height: 32px;
+  padding: 0;
+  width: 32px;
+}
+
+.intake-close:hover,
+.intake-close:focus-visible {
+  border-color: rgba(94, 234, 212, 0.5);
+  color: #eee;
+}
+
+.intake-dialog-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 18px;
+}
+
+.intake-muted {
+  color: #858585;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.intake-alert {
+  align-items: center;
+  background: #211818;
+  border: 1px solid rgba(248, 113, 113, 0.36);
+  border-radius: 10px;
+  color: #fecaca;
+  display: flex;
+  font-size: 12px;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 9px 12px;
+}
+
+.intake-alert-banner {
+  border-radius: 0;
+  border-width: 0 0 1px;
+  padding: 9px 18px;
+}
+
+.intake-notice {
+  background: #221e19;
+  border: 1px solid rgba(224, 160, 92, 0.32);
+  border-radius: 10px;
+  color: #e7c18f;
+  font-size: 12px;
+  padding: 9px 12px;
+}
+
+.intake-empty {
+  color: #8b8b8b;
+  font-size: 13px;
+  padding: 18px 4px;
+  text-align: center;
+}
+
+.intake-link {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: #7dd3c7;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 0;
+}
+
+.intake-link:hover,
+.intake-link:focus-visible {
+  color: #a7f3d0;
+  text-decoration: underline;
+}
+
+.intake-button {
+  appearance: none;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #d4d4d4;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 30px;
+  padding: 5px 10px;
+}
+
+.intake-button:hover:not(:disabled),
+.intake-button:focus-visible {
+  border-color: rgba(94, 234, 212, 0.5);
+  color: #a7f3d0;
+}
+
+.intake-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.intake-section-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.intake-section-head h3 {
+  color: #cfcfcf;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intake-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* --- Aujourd'hui ------------------------------------------------------ */
+
+.intake-today {
+  background: #111;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.intake-today-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.intake-today-deck {
+  align-items: baseline;
+  appearance: none;
+  background: #1b2b28;
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 999px;
+  color: #d9f7ef;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 11px;
+}
+
+.intake-today-deck:hover,
+.intake-today-deck:focus-visible {
+  border-color: rgba(94, 234, 212, 0.6);
+}
+
+.intake-today-name {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-today-count {
+  color: #7dd3c7;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.intake-why {
+  border-top: 1px solid #262626;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.intake-why ul {
+  color: #bdbdbd;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 5px;
+  line-height: 1.4;
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+/* --- Paquets en parallèle -------------------------------------------- */
+
+.intake-focus-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.intake-focus-row h3 {
+  color: #cfcfcf;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intake-segmented {
+  background: #101010;
+  border: 1px solid #2b2b2b;
+  border-radius: 9px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.intake-segmented button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #9d9d9d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 42px;
+  padding: 5px 10px;
+}
+
+.intake-segmented button:hover:not(:disabled),
+.intake-segmented button:focus-visible {
+  color: #dedede;
+}
+
+.intake-segmented .intake-segment-on {
+  background: #1b2b28;
+  border-color: rgba(94, 234, 212, 0.45);
+  color: #a7f3d0;
+}
+
+/* --- Deck list ------------------------------------------------------- */
+
+.intake-deck-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.intake-deck-list,
+.intake-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Flex, not grid: rows drop optional controls (badge, open button) and must
+   not leave empty tracks behind. */
+.intake-deck,
+.intake-question {
+  align-items: center;
+  background: #101010;
+  border: 1px solid #282828;
+  border-radius: 10px;
+  box-sizing: border-box;
+  display: flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 8px;
+  position: relative;
+}
+
+.intake-deck > *,
+.intake-question > * {
+  flex-shrink: 0;
+}
+
+.intake-deck > .intake-deck-main,
+.intake-question > .intake-question-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.intake-deck-focus {
+  border-color: rgba(94, 234, 212, 0.28);
+}
+
+.intake-deck-paused {
+  background: #0d0d0d;
+  opacity: 0.78;
+}
+
+.intake-deck[draggable="true"],
+.intake-question[draggable="true"] {
+  cursor: grab;
+}
+
+.intake-dragging {
+  opacity: 0.45;
+}
+
+/* Insertion line on the side the drop will land. */
+.intake-drop-before {
+  box-shadow: 0 -3px 0 0 #5eead4;
+}
+
+.intake-drop-after {
+  box-shadow: 0 3px 0 0 #5eead4;
+}
+
+.intake-handle {
+  color: #5c5c5c;
+  font-size: 12px;
+  letter-spacing: -2px;
+  padding: 0 2px;
+  user-select: none;
+}
+
+.intake-deck:hover .intake-handle,
+.intake-question:hover .intake-handle {
+  color: #9a9a9a;
+}
+
+.intake-handle-off {
+  visibility: hidden;
+}
+
+.intake-deck-position {
+  color: #777;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 18px;
+  text-align: right;
+}
+
+.intake-deck-main {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 4px;
+  text-align: left;
+}
+
+.intake-deck-main:focus-visible,
+.intake-question-text:focus-visible {
+  outline: 2px solid rgba(94, 234, 212, 0.55);
+  outline-offset: 1px;
+}
+
+.intake-deck-name {
+  color: #ededed;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-deck-meta {
+  color: #8a8a8a;
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-chip {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.intake-pause {
+  align-items: center;
+  appearance: none;
+  background: #181818;
+  border: 1px solid #303030;
+  border-radius: 999px;
+  color: #a3a3a3;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.intake-pause span {
+  font-size: 8px;
+  letter-spacing: -1px;
+}
+
+.intake-pause:hover:not(:disabled),
+.intake-pause:focus-visible {
+  border-color: rgba(224, 160, 92, 0.6);
+  color: #e0a05c;
+}
+
+.intake-pause-on {
+  background: #2b2118;
+  border-color: rgba(224, 160, 92, 0.5);
+  color: #e0a05c;
+}
+
+.intake-pause:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.intake-icon-button {
+  align-items: center;
+  appearance: none;
+  background: #181818;
+  border: 1px solid #303030;
+  border-radius: 7px;
+  color: #a7a7a7;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  height: 26px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 26px;
+}
+
+.intake-icon-button:hover:not(:disabled),
+.intake-icon-button:focus-visible {
+  border-color: rgba(94, 234, 212, 0.55);
+  color: #a7f3d0;
+}
+
+.intake-icon-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.intake-menu {
+  position: relative;
+}
+
+.intake-menu-list {
+  background: #1b1b1b;
+  border: 1px solid #333;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+}
+
+.intake-menu-list-up {
+  bottom: calc(100% + 4px);
+  top: auto;
+}
+
+.intake-menu-item {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: #dedede;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.intake-menu-item:hover:not(:disabled),
+.intake-menu-item:focus-visible {
+  background: #22302d;
+  color: #a7f3d0;
+  outline: none;
+}
+
+.intake-menu-item:disabled {
+  color: #5f5f5f;
+  cursor: default;
+}
+
+.intake-policy {
+  align-items: center;
+  border-top: 1px solid #242424;
+  color: #9a9a9a;
+  display: flex;
+  font-size: 12px;
+  gap: 10px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.intake-policy select {
+  background: #111;
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  color: #e5e5e5;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+/* --- Deck detail ----------------------------------------------------- */
+
+.intake-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.intake-detail-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.intake-back {
+  appearance: none;
+  background: transparent;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  color: #bdbdbd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+
+.intake-back:hover,
+.intake-back:focus-visible {
+  border-color: rgba(94, 234, 212, 0.5);
+  color: #eee;
+}
+
+.intake-detail-title {
+  flex: 1;
+  min-width: 160px;
+}
+
+.intake-detail-title h3 {
+  color: #eee;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.intake-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.intake-search-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.intake-search {
+  background: #111;
+  border: 1px solid #2f2f2f;
+  border-radius: 9px;
+  box-sizing: border-box;
+  color: #eee;
+  flex: 1 1 220px;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 11px;
+}
+
+.intake-search:focus {
+  border-color: rgba(94, 234, 212, 0.5);
+  outline: none;
+}
+
+.intake-question-suspended {
+  opacity: 0.8;
+}
+
+.intake-question-text {
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.intake-question-primary {
+  color: #e7e7e7;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-question-secondary {
+  color: #858585;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-badge {
+  background: #1b2b28;
+  border-radius: 999px;
+  color: #7dd3c7;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.intake-suspended {
+  border-top: 1px solid #242424;
+  padding-top: 12px;
+}
+
+.intake-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intake-skeleton span {
+  animation: intake-skeleton-pulse 1.2s ease-in-out infinite;
+  background: #1a1a1a;
+  border-radius: 10px;
+  display: block;
+  height: 44px;
+}
+
+@keyframes intake-skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.intake-sr-only {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (max-width: 560px) {
+  .intake-dialog-header,
+  .intake-dialog-body {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Drag needs a mouse anyway; the ⋯ menu and Alt+arrows remain. */
+  .intake-deck .intake-handle,
+  .intake-deck .intake-chip {
+    display: none;
+  }
+
+  .intake-pause {
+    padding: 3px 8px;
+  }
+
+  .intake-question .intake-handle,
+  .intake-question .intake-badge {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intake-skeleton span {
+    animation: none;
+  }
+}

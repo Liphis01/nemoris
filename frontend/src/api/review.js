@@ -44,31 +44,27 @@ export function getReviewIntake() {
 }
 
 
-export function getReviewIntakeQueue() {
-  return requestJson("/review/intake/queue");
+export function getIntakePlan() {
+  return requestJson("/review/intake/plan");
 }
 
 
-export function updateReviewIntakeOrder(questionIds) {
-  return requestJson("/review/intake/queue/order", {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ question_ids: questionIds })
-  });
+export function getIntakePlanDeck(deckKey) {
+  return requestJson(`/review/intake/plan/decks/${encodeURIComponent(deckKey)}`);
 }
 
 
-export function updateReviewIntakeSuspension(questionIds, suspended) {
-  return requestJson("/review/intake/queue/suspension", {
-    method: "PATCH",
+// Every write carries the revision it was built on; a stale one comes back as
+// a 409 whose error.snapshot holds the current plan.
+export function applyIntakePlanActions(actions, baseRevision) {
+  return requestJson("/review/intake/plan/actions", {
+    method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      question_ids: questionIds,
-      suspended
+      base_revision: baseRevision,
+      actions
     })
   });
 }

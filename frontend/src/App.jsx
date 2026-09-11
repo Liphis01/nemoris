@@ -356,6 +356,14 @@ function AppContent() {
     };
   }, [mode]);
 
+  // Silent on purpose: after the new-questions plan changes, the menu card
+  // updates in place instead of flashing its loading state.
+  const refreshReviewSummary = useCallback(() => {
+    getReviewSummary()
+      .then(setReviewSummary)
+      .catch(console.error);
+  }, []);
+
   function dismissStartupNotice() {
     if (startupNotice?.id) {
       try {
@@ -477,6 +485,7 @@ function AppContent() {
             onOpenStudy={openStudyScope}
             onStartTraining={openTrainingScope}
             onStartReview={openGlobalReview}
+            onRefreshReviewSummary={refreshReviewSummary}
           />
         )}
 

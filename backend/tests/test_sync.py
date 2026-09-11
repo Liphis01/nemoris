@@ -166,17 +166,14 @@ class SyncStateTests(unittest.TestCase):
         self.assertTrue(should_mark_collection_changed("POST", "/tags/inbox/resolve", 200))
         self.assertTrue(
             should_mark_collection_changed(
-                "PATCH",
-                "/review/intake/queue/order",
+                "POST",
+                "/review/intake/plan/actions",
                 200
             )
         )
-        self.assertTrue(
-            should_mark_collection_changed(
-                "PATCH",
-                "/review/intake/queue/suspension",
-                200
-            )
+        # Reading the plan changes nothing worth pushing.
+        self.assertFalse(
+            should_mark_collection_changed("GET", "/review/intake/plan", 200)
         )
         # A local reset must push the emptied collection, otherwise the next
         # pull restores everything the user just deleted.

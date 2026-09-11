@@ -16,6 +16,43 @@ async function requestJson(request) {
   return text ? JSON.parse(text) : {};
 }
 
+function defaultIntakePlan() {
+  return {
+    revision: 0,
+    settings: { focus: 2, new_decks: "end" },
+    counts: { waiting: 0, paused: 0, suspended: 0, decks: 0, paused_decks: 0 },
+    today: { quota: 0, count: 0, by_deck: [], breakdown: null },
+    decks: []
+  };
+}
+
+// Mirrors the backend's `move` action closely enough for UI flows: active
+// decks reorder, sections follow the focus window, paused decks stay last.
+function applyIntakeMove(plan, key, toIndex) {
+  const active = plan.decks.filter(deck => !deck.paused);
+  const paused = plan.decks.filter(deck => deck.paused);
+  const fromIndex = active.findIndex(deck => deck.key === key);
+
+  if (fromIndex < 0) return plan;
+
+  const [moved] = active.splice(fromIndex, 1);
+  active.splice(toIndex, 0, moved);
+
+  const focus = plan.settings.focus;
+
+  return {
+    ...plan,
+    decks: [
+      ...active.map((deck, index) => ({
+        ...deck,
+        position: index + 1,
+        section: !focus || index < focus ? "focus" : "next"
+      })),
+      ...paused
+    ]
+  };
+}
+
 async function fulfillJson(route, body, status = 200) {
   await route.fulfill({
     status,
@@ -204,7 +241,10 @@ export async function mockApi(page, options = {}) {
     questions: clone(options.questions || []),
     groups: clone(options.groups || []),
     nextQuestionId: options.nextQuestionId || 100,
-    timelineResults: clone(options.timelineResults || null)
+    timelineResults: clone(options.timelineResults || null),
+    intakePlan: clone(options.intakePlan || defaultIntakePlan()),
+    intakeDecks: clone(options.intakeDecks || {}),
+    intakePlanActions: []
   };
 
   await page.route(`${apiBaseUrl}/**`, async (route) => {
@@ -297,6 +337,51 @@ export async function mockApi(page, options = {}) {
         quota: state.reviewSummary.new_count || 0,
         due_count: state.reviewSummary.due_count || 0
       });
+      return;
+    }
+
+    if (method === "GET" && path === "/review/intake/plan") {
+      await fulfillJson(route, state.intakePlan);
+      return;
+    }
+
+    const intakeDeckMatch = path.match(/^\/review\/intake\/plan\/decks\/(.+)$/);
+
+    if (method === "GET" && intakeDeckMatch) {
+      const key = decodeURIComponent(intakeDeckMatch[1]);
+      const deck = state.intakePlan.decks.find(item => item.key === key);
+
+      await fulfillJson(route, state.intakeDecks[key] || {
+        revision: state.intakePlan.revision,
+        deck: deck || { key, name: key, paused: false },
+        questions: [],
+        suspended: []
+      });
+      return;
+    }
+
+    if (method === "POST" && path === "/review/intake/plan/actions") {
+      const payload = await requestJson(request);
+
+      state.intakePlanActions.push(payload);
+
+      if (payload.base_revision !== state.intakePlan.revision) {
+        await fulfillJson(route, {
+          detail: { message: "Le plan a changé ailleurs.", snapshot: state.intakePlan }
+        }, 409);
+        return;
+      }
+
+      let plan = state.intakePlan;
+
+      for (const action of payload.actions || []) {
+        if (action.type === "move") {
+          plan = applyIntakeMove(plan, action.key, action.to_index);
+        }
+      }
+
+      state.intakePlan = { ...plan, revision: plan.revision + 1 };
+      await fulfillJson(route, state.intakePlan);
       return;
     }
 

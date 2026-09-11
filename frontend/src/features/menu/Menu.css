@@ -283,6 +283,51 @@
   border-left-color: #ff9c9c;
 }
 
+/* Holds the review card plus its intake control: the card is one button, and
+   buttons cannot nest, so the control is a sibling laid over the card's empty
+   top-right corner, level with the "Réviser" pill (offsets = card padding +
+   its 1px border). */
+.menu-review-shell {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.menu-review-intake {
+  appearance: none;
+  background: rgba(255, 204, 122, 0.08);
+  border: 1px solid rgba(255, 204, 122, 0.28);
+  border-radius: 999px;
+  color: #ffcc7a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  /* Same box as .menu-pill (26px), the border taking one pixel of padding. */
+  line-height: 1;
+  max-width: calc(100% - 180px);
+  overflow: hidden;
+  padding: 6px 11px;
+  position: absolute;
+  right: 31px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  top: 31px;
+  white-space: nowrap;
+}
+
+.menu-review-intake:hover,
+.menu-review-intake:focus-visible {
+  background: rgba(255, 204, 122, 0.16);
+  border-color: rgba(255, 204, 122, 0.55);
+}
+
+.menu-review-intake:focus-visible {
+  outline: 2px solid rgba(255, 204, 122, 0.6);
+  outline-offset: 2px;
+}
+
 .menu-review-content {
   align-items: flex-start;
   display: flex;
@@ -1154,6 +1199,11 @@
     padding: 24px;
   }
 
+  .menu-review-intake {
+    right: 25px;
+    top: 25px;
+  }
+
   .menu-review-title {
     font-size: 44px;
   }
@@ -1259,6 +1309,12 @@
 @media (max-width: 480px) {
   .menu-review {
     padding: 20px;
+  }
+
+  .menu-review-intake {
+    max-width: calc(100% - 150px);
+    right: 21px;
+    top: 21px;
   }
 
   .menu-review-title {

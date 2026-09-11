@@ -16,6 +16,7 @@ import ReturnToMenuButton from "../../../shared/ReturnToMenuButton";
 import SyncAccountSection from "./SyncAccountSection";
 import UpdateSection from "./UpdateSection";
 import { useSyncAccount } from "./useSyncAccount";
+import { PACE_TIER_LABELS } from "../../../shared/paceTiers";
 
 // Bucketed on purpose: the runway carries roughly +/-25% model error and any
 // pack import invalidates it, so a precise day count would be false precision.
@@ -25,13 +26,6 @@ function runwayLabel(days) {
   if (days < 60) return ` — de quoi tenir environ ${Math.round(days / 7)} semaines à ce rythme`;
   return " — de quoi tenir plusieurs mois";
 }
-
-const PACE_TIER_LABELS = {
-  leger: "Léger",
-  regulier: "Régulier",
-  soutenu: "Soutenu",
-  intensif: "Intensif"
-};
 
 // Fallback only: the backend is the source of truth and ships the tiers with
 // their time estimates in the settings payload.

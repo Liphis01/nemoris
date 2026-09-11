@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import Menu from "./Menu";
 import { searchPackCatalog } from "../../api/packs";
 import { getProfile } from "../../api/profile";
+import { applyIntakePlanActions, getIntakePlan } from "../../api/review";
 import { getStats } from "../../api/stats";
 
 vi.mock("../../api/stats", () => ({
@@ -41,6 +42,29 @@ vi.mock("../../api/packs", () => ({
       }
     ]
   }))
+}));
+
+vi.mock("../../api/review", () => ({
+  getIntakePlan: vi.fn(() => Promise.resolve({
+    revision: 0,
+    settings: { focus: 2, new_decks: "end" },
+    counts: { waiting: 12, paused: 0, suspended: 0, decks: 1, paused_decks: 0 },
+    today: { quota: 3, count: 3, by_deck: [{ key: "loose", count: 3 }], breakdown: null },
+    decks: [{
+      key: "loose",
+      group_id: null,
+      name: "Questions isolées",
+      type_group: null,
+      paused: false,
+      section: "focus",
+      position: 1,
+      counts: { unseen: 12, suspended: 0 },
+      today_count: 3,
+      eta: { starts: "today", finishes: "week" }
+    }]
+  })),
+  getIntakePlanDeck: vi.fn(),
+  applyIntakePlanActions: vi.fn()
 }));
 
 describe("Menu", () => {
@@ -319,5 +343,68 @@ describe("Menu", () => {
 
     expect(screen.getByText("Calendrier rééquilibré")).toBeInTheDocument();
     expect(screen.getByText(/2 questions déplacées/)).toBeInTheDocument();
+  });
+
+  it("offers today's new questions beside the review card, not inside it", () => {
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 4, has_due: true, new_count: 3, new_waiting: 12, session_count: 7 }}
+      />
+    );
+
+    const intake = screen.getByRole("button", { name: "3 nouvelles · Gérer" });
+    const card = screen.getByRole("button", { name: /Révision du jour/ });
+
+    expect(card).not.toContainElement(intake);
+    expect(card.parentElement).toContainElement(intake);
+  });
+
+  it("hides the intake control when nothing new is left", () => {
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        reviewSummary={{ due_count: 4, has_due: true, new_count: 0, new_waiting: 0, new_paused: 0 }}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /nouvelle/ })).not.toBeInTheDocument();
+  });
+
+  it("refreshes the review summary after the plan changed", async () => {
+    const onRefreshReviewSummary = vi.fn();
+    applyIntakePlanActions.mockResolvedValue(await getIntakePlan());
+
+    render(
+      <Menu
+        setMode={vi.fn()}
+        startupNotice={null}
+        onDismissStartupNotice={vi.fn()}
+        onRefreshReviewSummary={onRefreshReviewSummary}
+        reviewSummary={{ due_count: 0, has_due: false, new_count: 3, new_waiting: 12, session_count: 3 }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "3 nouvelles · Gérer" }));
+    const dialog = await screen.findByRole("dialog", { name: "File des nouvelles" });
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onRefreshReviewSummary).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "3 nouvelles · Gérer" }));
+    await screen.findByText("Questions isolées", { selector: ".intake-deck-name" });
+    fireEvent.click(screen.getByRole("button", {
+      name: "Mettre en pause les nouvelles de Questions isolées"
+    }));
+    await waitFor(() => expect(applyIntakePlanActions).toHaveBeenCalled());
+    await act(async () => {});
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    expect(onRefreshReviewSummary).toHaveBeenCalledTimes(1);
   });
 });

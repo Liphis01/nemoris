@@ -26,6 +26,7 @@ STARTUP_REBALANCE_NOTICE_KEY = "startup_rebalance_notice"
 PACE_PRESSURE_NOTICE_KEY = "pace_pressure_notice"
 PACK_CATALOG_SETTINGS_KEY = "pack_catalog"
 INTAKE_SETTINGS_KEY = "review_intake"
+INTAKE_PLAN_KEY = "intake_plan"
 REVIEW_MAINTENANCE_KEY = "review_maintenance"
 
 # The pace the user picks, as questions per day. The tier is the single volume
@@ -74,6 +75,9 @@ INTAKE_SECONDS_PER_QUESTION = 15
 SYNC_SETTING_KEYS = {
     REVIEW_SETTINGS_KEY,
     SCHEDULER_TUNING_SETTINGS_KEY,
+    # Which decks feed new questions, in what order: user intent, like the
+    # pace tier, so it follows the collection to every device.
+    INTAKE_PLAN_KEY,
     "tag_hierarchy"
 }
 DEVICE_SETTING_KEYS = {
@@ -344,6 +348,95 @@ def rescale_intake_settings(db, seed):
         {**state, "tuned_on": None},
         seed
     )
+
+
+# The new-question intake plan (services/intake_plan.py). Normalized here for
+# the same reason as the intake row: settings owns every stored AppSetting shape
+# and the dependency only runs one way.
+INTAKE_PLAN_VERSION = 1
+# How many decks feed new questions at the same time. 0 means every active
+# deck at once ("Tous").
+INTAKE_PLAN_FOCUS_CHOICES = (0, 1, 2, 3)
+DEFAULT_INTAKE_PLAN_FOCUS = 2
+# Where a deck the plan has never seen (a new pack, a new group) lands.
+INTAKE_PLAN_NEW_DECK_POLICIES = ("end", "start", "paused")
+DEFAULT_INTAKE_PLAN_NEW_DECK_POLICY = "end"
+
+
+def normalize_intake_plan(value):
+    data = value if isinstance(value, dict) else {}
+    raw_decks = data.get("decks")
+    decks = []
+    seen = set()
+
+    for entry in raw_decks if isinstance(raw_decks, list) else []:
+        key = entry.get("key") if isinstance(entry, dict) else None
+
+        if not isinstance(key, str) or not key or key in seen:
+            continue
+
+        seen.add(key)
+        decks.append({"key": key, "paused": bool(entry.get("paused"))})
+
+    try:
+        revision = max(0, int(data.get("revision", 0)))
+    except (TypeError, ValueError):
+        revision = 0
+
+    focus = data.get("focus")
+    new_decks = data.get("new_decks")
+
+    return {
+        "version": INTAKE_PLAN_VERSION,
+        "revision": revision,
+        # False until the user first changes anything: the resolver then keeps
+        # the order the legacy global queue implied instead of a policy order.
+        "arranged": isinstance(raw_decks, list),
+        "decks": decks,
+        "focus": (
+            focus
+            if focus in INTAKE_PLAN_FOCUS_CHOICES and not isinstance(focus, bool)
+            else DEFAULT_INTAKE_PLAN_FOCUS
+        ),
+        "new_decks": (
+            new_decks
+            if new_decks in INTAKE_PLAN_NEW_DECK_POLICIES
+            else DEFAULT_INTAKE_PLAN_NEW_DECK_POLICY
+        )
+    }
+
+
+def load_intake_plan(db):
+    # Non-creating, like load_intake_settings: the review path reads it and
+    # must not flush.
+    setting = (
+        db.query(AppSetting)
+        .filter(AppSetting.key == INTAKE_PLAN_KEY)
+        .first()
+    )
+
+    return normalize_intake_plan(setting.value if setting else None)
+
+
+def save_intake_plan(db, plan):
+    normalized = normalize_intake_plan(plan)
+    stored = {
+        key: value
+        for key, value in normalized.items()
+        if key != "arranged"
+    }
+    setting = (
+        db.query(AppSetting)
+        .filter(AppSetting.key == INTAKE_PLAN_KEY)
+        .first()
+    )
+
+    if not setting:
+        db.add(AppSetting(key=INTAKE_PLAN_KEY, value=stored))
+    else:
+        setting.value = stored
+
+    return normalize_intake_plan(stored)
 
 
 def normalize_scheduler_tuning_settings(value):

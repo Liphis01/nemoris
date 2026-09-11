@@ -9,15 +9,15 @@ vi.mock("../../../api/tags", () => ({
 }));
 
 vi.mock("../../../api/review", () => ({
-  getReviewIntakeQueue: vi.fn(() => Promise.resolve({
-    quota: 0,
-    today_ids: [],
-    active_ids: [],
-    suspended_ids: [],
-    counts: { today: 0, active: 0, suspended: 0, total: 0 }
+  getIntakePlan: vi.fn(() => Promise.resolve({
+    revision: 0,
+    settings: { focus: 2, new_decks: "end" },
+    counts: { waiting: 0, paused: 0, suspended: 0, decks: 0, paused_decks: 0 },
+    today: { quota: 0, count: 0, by_deck: [], breakdown: null },
+    decks: []
   })),
-  updateReviewIntakeOrder: vi.fn(),
-  updateReviewIntakeSuspension: vi.fn()
+  getIntakePlanDeck: vi.fn(),
+  applyIntakePlanActions: vi.fn()
 }));
 
 
@@ -83,8 +83,6 @@ function renderSidebar(props = {}) {
     setViewMode: vi.fn(),
     requestManageTransition: vi.fn((action) => action()),
     allQuestions: [],
-    tagParents: {},
-    tagLabels: {},
     patchQuestionsInCache: vi.fn(),
     availableTags: ["linux"]
   };

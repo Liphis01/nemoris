@@ -30,6 +30,7 @@ const collectionMutationRules = [
   ["PATCH", /^\/text-groups\/\d+\/items\/?$/],
   ["PATCH", /^\/sequence-groups\/\d+\/items\/?$/],
   ["PUT", /^\/review\/settings\/?$/],
+  ["POST", /^\/review\/intake\/plan\/actions\/?$/],
   ["POST", /^\/answer\/?$/],
   ["POST", /^\/answer\/revise\/?$/],
   ["POST", /^\/answer\/relearning_graduate\/?$/],

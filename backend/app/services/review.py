@@ -2,7 +2,7 @@ from datetime import date
 import random
 
 from fastapi import HTTPException
-from sqlalchemy import case, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from ..models import Progress, Question, QuestionGroup
@@ -84,6 +84,11 @@ from .map_eligibility import (
     reviewable_question_filter
 )
 from .intake import compute_intake_quota
+from .intake_plan import (
+    build_intake_feed,
+    intake_pool_counts,
+    planned_new_question_ids
+)
 from .progress import progress_has_started, progress_is_new
 from .settings import get_review_settings, load_scheduler_tuning_settings
 
@@ -431,50 +436,6 @@ def _due_questions(db, today):
     ]
 
 
-def _progress_row_has_started(row):
-    return (
-        (row.reps or 0) > 0 or
-        bool(row.last_review) or
-        len(row.history or []) > 0
-    )
-
-
-
-def _new_question_ids(db, limit=None):
-    # One global pool: manual intake ordering comes first, then the historical
-    # creation-order fallback for questions that have never been arranged.
-    ids = []
-    rows = (
-        db.query(
-            Question.id,
-            Question.type_q,
-            Question.data,
-            Progress.reps,
-            Progress.last_review,
-            Progress.history
-        )
-        .outerjoin(Progress, Question.id == Progress.question_id)
-        .filter(reviewable_question_filter())
-        .order_by(
-            case((Question.intake_order == None, 1), else_=0),
-            Question.intake_order,
-            Question.id
-        )
-        .all()
-    )
-
-    for row in rows:
-        if _progress_row_has_started(row) or cloze_is_buried(row, date.today()):
-            continue
-
-        ids.append(row.id)
-
-        if limit is not None and len(ids) >= limit:
-            break
-
-    return ids
-
-
 def _questions_by_ids(db, question_ids):
     if not question_ids:
         return []
@@ -493,8 +454,11 @@ def _questions_by_ids(db, question_ids):
     ]
 
 
-def _new_questions(db, limit=None):
-    return _questions_by_ids(db, _new_question_ids(db, limit=limit))
+def _new_questions(db, today, limit=None):
+    return _questions_by_ids(
+        db,
+        planned_new_question_ids(db, today=today, limit=limit)
+    )
 
 
 def _due_question_count(db, today):
@@ -520,7 +484,7 @@ def _due_question_count(db, today):
 
     return sum(
         1 for row in rows
-        if _progress_row_has_started(row) and not cloze_is_buried(row, today)
+        if progress_has_started(row) and not cloze_is_buried(row, today)
     )
 
 
@@ -538,12 +502,17 @@ def get_review_summary(db, today=None):
         today=today,
         due_count=due_count
     )["quota"]
-    new_count = len(_new_question_ids(db, limit=quota)) if quota else 0
+    feed = build_intake_feed(db, today)
+    new_count = len(feed["feed"][:max(0, quota)])
+    pool = intake_pool_counts(feed)
 
     return {
         "due_count": due_count,
         "has_due": due_count > 0,
         "new_count": new_count,
+        # Lets the menu tell "nothing new today" apart from "all paused".
+        "new_waiting": pool["waiting"],
+        "new_paused": pool["paused"],
         "session_count": due_count + new_count
     }
 
@@ -1408,7 +1377,7 @@ def get_review_items(db, today=None, intake_quota=None):
         intake_quota = compute_intake_quota(db, today=today)
 
     quota = max(0, intake_quota.get("quota", 0))
-    new_questions = _new_questions(db, limit=quota) if quota else []
+    new_questions = _new_questions(db, today, limit=quota) if quota else []
     questions = _unique_sorted_questions(due_questions, new_questions)
 
     # One serialization pass, not two: a group holding both a due zone and a

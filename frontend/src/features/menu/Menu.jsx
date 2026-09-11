@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { searchPackCatalog } from "../../api/packs";
 import { getProfile } from "../../api/profile";
 import { getStats } from "../../api/stats";
+import IntakePlanDialog from "../intake/components/IntakePlanDialog";
+import { menuIntakeLabel } from "../intake/intakePlanModel";
 import "./Menu.css";
 
 const PACK_CAROUSEL_MS = 7000;
@@ -570,8 +572,10 @@ export default function Menu({
   onOpenPack = null,
   onOpenStudy = null,
   onStartTraining = null,
-  onStartReview = null
+  onStartReview = null,
+  onRefreshReviewSummary = null
 }) {
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const [menuStats, setMenuStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState("");
@@ -627,6 +631,9 @@ export default function Menu({
   const reviewDialStyle = {
     "--menu-review-dial-angle": `${reviewDialAngle}deg`
   };
+  const intakeLabel = reviewSummaryLoading || reviewSummaryError
+    ? null
+    : menuIntakeLabel(reviewSummary);
 
   function startGlobalReview() {
     if (onStartReview) {
@@ -818,55 +825,70 @@ export default function Menu({
 
         <main className="menu-main" aria-label="Actions">
           <div className="menu-primary-row">
-            <button
-              type="button"
-              className={`menu-review${reviewSummaryError ? " menu-review-error" : ""}`}
-              aria-label={`${reviewTitle}: ${reviewCountValue} questions, ${reviewCountCaption}`}
-              onClick={startGlobalReview}
-            >
-              <span className="menu-review-content">
-                <span className="menu-pill menu-pill-amber">Réviser</span>
+            {/* The card is a single button, so the intake control sits beside
+                it in this wrapper rather than inside it. */}
+            <div className="menu-review-shell">
+              <button
+                type="button"
+                className={`menu-review${reviewSummaryError ? " menu-review-error" : ""}`}
+                aria-label={`${reviewTitle}: ${reviewCountValue} questions, ${reviewCountCaption}`}
+                onClick={startGlobalReview}
+              >
+                <span className="menu-review-content">
+                  <span className="menu-pill menu-pill-amber">Réviser</span>
 
-                <span>
-                  <span className="menu-review-title">{reviewTitle}</span>
-                  <span className="menu-review-text">
-                    {reviewText}
-                  </span>
-                </span>
-              </span>
-
-              <span className="menu-review-visual" aria-hidden="true">
-                <span className="menu-review-dial" style={reviewDialStyle}>
-                  <span className="menu-review-dial-core">
-                    <strong>{reviewCountValue}</strong>
-                    <span>{reviewCountCaption}</span>
-                  </span>
-                </span>
-
-                <span className="menu-review-lanes">
-                  <span />
-                  <span />
-                  <span />
-                </span>
-              </span>
-
-              <span className="menu-review-footer">
-                <span className="menu-review-session-cue">
-                  <span className="menu-review-session-icon" aria-hidden="true">
-                    {reviewIsClear ? "+" : "↻"}
-                  </span>
                   <span>
-                    <strong>{reviewFooterTitle}</strong>
-                    <span>{reviewFooterCaption}</span>
+                    <span className="menu-review-title">{reviewTitle}</span>
+                    <span className="menu-review-text">
+                      {reviewText}
+                    </span>
                   </span>
                 </span>
 
-                <span className="menu-review-action">
-                  <span>{reviewActionLabel}</span>
-                  <span className="menu-review-action-icon" aria-hidden="true">→</span>
+                <span className="menu-review-visual" aria-hidden="true">
+                  <span className="menu-review-dial" style={reviewDialStyle}>
+                    <span className="menu-review-dial-core">
+                      <strong>{reviewCountValue}</strong>
+                      <span>{reviewCountCaption}</span>
+                    </span>
+                  </span>
+
+                  <span className="menu-review-lanes">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
                 </span>
-              </span>
-            </button>
+
+                <span className="menu-review-footer">
+                  <span className="menu-review-session-cue">
+                    <span className="menu-review-session-icon" aria-hidden="true">
+                      {reviewIsClear ? "+" : "↻"}
+                    </span>
+                    <span>
+                      <strong>{reviewFooterTitle}</strong>
+                      <span>{reviewFooterCaption}</span>
+                    </span>
+                  </span>
+
+                  <span className="menu-review-action">
+                    <span>{reviewActionLabel}</span>
+                    <span className="menu-review-action-icon" aria-hidden="true">→</span>
+                  </span>
+                </span>
+              </button>
+
+              {intakeLabel && (
+                <button
+                  type="button"
+                  className="menu-review-intake"
+                  aria-haspopup="dialog"
+                  onClick={() => setIntakeOpen(true)}
+                >
+                  {intakeLabel}
+                </button>
+              )}
+            </div>
 
             <aside className="menu-context" aria-label="Résumé">
               <MenuPackCarousel
@@ -904,6 +926,21 @@ export default function Menu({
           </nav>
         </main>
       </div>
+
+      {intakeOpen && (
+        <IntakePlanDialog
+          onClose={({ changed }) => {
+            setIntakeOpen(false);
+
+            if (changed) onRefreshReviewSummary?.();
+          }}
+          onOpenPaceSettings={
+            onOpenSettingsSection
+              ? () => onOpenSettingsSection("settings-review")
+              : null
+          }
+        />
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import {
   groupTypeFilterOptions,
   questionTypeFilterOptions
 } from "../../../shared/questionTypes";
-import IntakeQueuePanel from "./IntakeQueuePanel";
+import IntakePlanEntry from "../../intake/components/IntakePlanEntry";
 import TagFilterControl from "./TagFilterControl";
 
 const sortOptions = [
@@ -74,8 +74,6 @@ export default function ManageSidebar({
   setViewMode,
   requestManageTransition,
   allQuestions = [],
-  tagParents = {},
-  tagLabels = {},
   availableTags = [],
   patchQuestionsInCache,
   onOpenTagTree
@@ -710,18 +708,15 @@ export default function ManageSidebar({
           <span>Gérer les tags</span>
         </button>
 
-        <IntakeQueuePanel
-          allQuestions={allQuestions}
-          search={viewMode === "questions" ? search : ""}
-          tagFilter={viewMode === "questions" ? tagFilter : ""}
-          tagParents={tagParents}
-          tagLabels={tagLabels}
-          questionTypeFilter={viewMode === "questions" ? questionTypeFilter : ""}
-          dueOnly={viewMode === "questions" ? dueOnly : false}
-          favoritesOnly={viewMode === "questions" ? favoritesOnly : false}
-          suspendedOnly={viewMode === "questions" ? suspendedOnly : false}
-          patchQuestionsInCache={patchQuestionsInCache}
-          setSelectedItem={setSelectedItem}
+        <IntakePlanEntry
+          onQuestionsChanged={patchQuestionsInCache}
+          onOpenQuestion={(questionId) => {
+            const question = allQuestions.find(
+              item => Number(item.id) === Number(questionId)
+            );
+
+            if (question) setSelectedItem(question);
+          }}
         />
 
       </div>

@@ -26,7 +26,7 @@ from app.routers.review import (
 from app.routers.groups import suspend_group
 from app.services.intake import PRESSURE_DOWN_MIN, schedule_pressure
 from app.services.questions import update_question as update_question_service
-from app.services.review import _new_question_ids
+from app.services.intake_plan import planned_new_question_ids
 from app.services.startup import run_startup_rebalance
 from app.services.settings import REVIEW_MAINTENANCE_KEY
 from app.services.fsrs_migration import migrate_progress_to_fsrs_v6
@@ -1810,8 +1810,8 @@ class ReviewRouteSmoothingTests(unittest.TestCase):
         # session still carries it, alongside whatever intake introduces.
         due_response = get_review(db=self.db)
         self.assertIn(1, [item["question_id"] for item in due_response])
-        self.assertNotIn(1, _new_question_ids(self.db))
-        self.assertIn(2, _new_question_ids(self.db))
+        self.assertNotIn(1, planned_new_question_ids(self.db))
+        self.assertIn(2, planned_new_question_ids(self.db))
 
     def test_relearning_retries_are_shown_after_the_rest_of_the_queue(self):
         # Question 1's lower id would otherwise sort it first; failing it must

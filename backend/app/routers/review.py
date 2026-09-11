@@ -13,9 +13,8 @@ from ..schemas import (
     NumericAnswerRequest,
     MapAnswerRequest,
     MediaAnswerRequest,
+    IntakePlanActionsRequest,
     RelearningGraduateRequest,
-    ReviewIntakeOrderRequest,
-    ReviewIntakeSuspensionRequest,
     ReviewSettings,
     SequenceAnswerRequest,
     TextAnswerRequest,
@@ -58,10 +57,11 @@ from ..services.intake import (
     tune_intake_rate,
     unstarted_question_count
 )
-from ..services.intake_queue import (
-    get_intake_queue,
-    set_intake_order,
-    set_intake_suspension
+from ..services.intake_plan import (
+    IntakePlanConflict,
+    apply_intake_plan_actions,
+    build_intake_deck_detail,
+    build_intake_plan_snapshot
 )
 from ..services.review import (
     get_review_items,
@@ -286,31 +286,41 @@ def get_intake(db: Session = Depends(get_db)):
     return compute_intake_quota(db)
 
 
-@router.get("/review/intake/queue")
-def get_intake_queue_route(db: Session = Depends(get_db)):
-    return get_intake_queue(db)
+@router.get("/review/intake/plan")
+def get_intake_plan(db: Session = Depends(get_db)):
+    ensure_review_calendar_current(db)
+
+    return build_intake_plan_snapshot(db)
 
 
-@router.patch("/review/intake/queue/order")
-def update_intake_queue_order(
-    payload: ReviewIntakeOrderRequest,
+@router.get("/review/intake/plan/decks/{deck_key}")
+def get_intake_plan_deck(deck_key: str, db: Session = Depends(get_db)):
+    return build_intake_deck_detail(db, deck_key)
+
+
+@router.post("/review/intake/plan/actions")
+def update_intake_plan(
+    payload: IntakePlanActionsRequest,
     db: Session = Depends(get_db)
 ):
-    result = set_intake_order(db, payload.question_ids)
-    db.commit()
-    return result
+    try:
+        result = apply_intake_plan_actions(
+            db,
+            payload.base_revision,
+            [action.model_dump() for action in payload.actions]
+        )
+    except IntakePlanConflict as error:
+        db.rollback()
+        # Same contract as /tags/actions: the client adopts the snapshot
+        # instead of retrying blind.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(error),
+                "snapshot": build_intake_plan_snapshot(db)
+            }
+        ) from error
 
-
-@router.patch("/review/intake/queue/suspension")
-def update_intake_queue_suspension(
-    payload: ReviewIntakeSuspensionRequest,
-    db: Session = Depends(get_db)
-):
-    result = set_intake_suspension(
-        db,
-        payload.question_ids,
-        payload.suspended
-    )
     db.commit()
     return result
 
