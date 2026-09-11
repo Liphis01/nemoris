@@ -651,6 +651,10 @@ export default function TextGroupReview({
       return undefined;
     }
 
+    // Sole owner of Enter in this flow, including Enter typed in the answer
+    // input. A second handler on the input would reveal first, re-arm this
+    // listener as "revealed" before the same keystroke bubbles up here, and
+    // that Enter would then grade the default Bon on the learner's behalf.
     function handleKeyDown(event) {
       if (!selfGradeAnswerVisible) {
         if (event.key === "Enter") {
@@ -1166,11 +1170,6 @@ export default function TextGroupReview({
                   aria-label="Réponse facultative"
                   value={inputs[item.question_id] || ""}
                   onChange={(event) => handleInputChange(item.question_id, event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    revealSelfGradeAnswer();
-                  }}
                   placeholder="Réponse facultative…"
                   style={inputStyle}
                 />

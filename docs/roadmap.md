@@ -51,6 +51,8 @@
 - type_all media n'a pas de inline quality et type_prompt non plus
 - everytime i go back to the main menu, I see that the rebalancing added a few questions to today's queue.
 - menu study à améliorer
+- les type_prompt avec des valeurs différentes d'erreurs devraient être demandées en même temps dans la review
+- forcer vraiment pour mettre un mode facile dans le relearning s'il n'y a pas assez de questions pour refaire le même mode (ou prendre d'autres questions du même groupe)
 
 
 ## quick fixes
